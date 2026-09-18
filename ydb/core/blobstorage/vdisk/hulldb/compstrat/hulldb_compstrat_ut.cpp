@@ -418,6 +418,7 @@ namespace NKikimr {
             TStrategyExplicit explicitStrategy(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
 
             AssertAction(explicitStrategy.Select(), NHullComp::ActCompactSsts);
+            AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Explicit);
             UNIT_ASSERT_VALUES_EQUAL(CountSstsToDelete(task), 1u);
             UNIT_ASSERT_VALUES_EQUAL(task.CompactSsts.TargetLevel, f.Hull.LastPhysicalLevel());
             // The rest of the request is still outstanding.
@@ -434,6 +435,7 @@ namespace NKikimr {
             TStrategyExplicit explicitStrategy(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
 
             AssertAction(explicitStrategy.Select(), NHullComp::ActCompactSsts);
+            AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Explicit);
             UNIT_ASSERT_VALUES_EQUAL(CountSstsToDelete(task), 3u);
         }
 
@@ -448,6 +450,7 @@ namespace NKikimr {
             TStrategyExplicit explicitStrategy(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
 
             AssertAction(explicitStrategy.Select(), NHullComp::ActCompactSsts);
+            AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Explicit);
             UNIT_ASSERT_VALUES_EQUAL(CountSstsToDelete(task), 3u);
         }
 
@@ -463,6 +466,7 @@ namespace NKikimr {
             TStrategyExplicit explicitStrategy(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
 
             AssertAction(explicitStrategy.Select(), NHullComp::ActNothing);
+            AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::None);
             UNIT_ASSERT(!task.FullCompactionInfo.second);
         }
 
@@ -478,6 +482,7 @@ namespace NKikimr {
             TStrategyExplicit explicitStrategy(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
 
             AssertAction(explicitStrategy.Select(), NHullComp::ActNothing);
+            AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::None);
             UNIT_ASSERT(task.FullCompactionInfo.second);
         }
 
@@ -495,6 +500,7 @@ namespace NKikimr {
 
             TStrategyEmergency emergency(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
             AssertAction(emergency.Select(), NHullComp::ActCompactSsts);
+            AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Emergency);
             UNIT_ASSERT_VALUES_EQUAL(task.CompactSsts.TargetLevel, hull.LastPhysicalLevel());
             UNIT_ASSERT_VALUES_EQUAL(CountSstsToDelete(task), 2u);
         }
@@ -532,6 +538,7 @@ namespace NKikimr {
             params.EmergencyMode = true;
             TStrategyEmergency emergency(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
             AssertAction(emergency.Select(), NHullComp::ActNothing);
+            AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::None);
         }
 
         Y_UNIT_TEST(EmergencySkipsWideCrossLevelAndPacksLastLevel) {
@@ -551,6 +558,7 @@ namespace NKikimr {
             params.EmergencyMode = true;
             TStrategyEmergency emergency(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
             AssertAction(emergency.Select(), NHullComp::ActCompactSsts);
+            AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Emergency);
             UNIT_ASSERT_VALUES_EQUAL(task.CompactSsts.TargetLevel, hull.LastPhysicalLevel());
             UNIT_ASSERT(CountSstsToDelete(task) >= 2);
             UNIT_ASSERT(CountSstsToDelete(task) <= 8);

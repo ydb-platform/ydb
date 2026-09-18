@@ -1233,21 +1233,36 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     info->SetMaintenanceStatus("LONG_TERM_MAINTENANCE_PLANNED");
                     AddSysViewPDisk(x, runtime.GetNodeId(0), 1);
                     info = record.MutableEntries(1)->MutableInfo();
+                    info->SetGuid(1001);
                     info->SetDecommitStatus("DECOMMIT_NONE");
                     info->SetMaintenanceStatus("NO_NEW_VDISKS");
                     AddSysViewPDisk(x, runtime.GetNodeId(0), 3);
                     record.MutableEntries(2)->MutableInfo()->ClearStatusV2();
+                    for (ui32 pdiskId : {5, 6}) {
+                        AddSysViewPDisk(x, runtime.GetNodeId(0), pdiskId);
+                        info = record.MutableEntries(record.EntriesSize() - 1)->MutableInfo();
+                        info->SetDecommitStatus("DECOMMIT_NONE");
+                        info->SetMaintenanceStatus("NO_NEW_VDISKS");
+                        if (pdiskId == 5) {
+                            info->SetGuid(5000); // Whiteboard describes a different disk.
+                        } else {
+                            info->ClearGuid(); // Keep matching by PDiskId when BSC has no Guid.
+                        }
+                    }
                     break;
                 }
                 case TEvWhiteboard::EvPDiskStateResponse: {
                     auto* x = reinterpret_cast<TEvWhiteboard::TEvPDiskStateResponse::TPtr*>(&ev);
                     auto& record = (*x)->Get()->Record;
                     record.ClearPDiskStateInfo();
-                    for (ui32 pdiskId : {1, 2, 3, 4}) {
+                    for (ui32 pdiskId : {1, 2, 3, 4, 5, 6}) {
                         auto* pdisk = record.AddPDiskStateInfo();
                         pdisk->SetPDiskId(pdiskId);
                         pdisk->SetPath(Sprintf("/dev/whiteboard-%u", pdiskId));
                         pdisk->SetState(NKikimrBlobStorage::TPDiskState::Normal);
+                        if (pdiskId == 1 || pdiskId == 5 || pdiskId == 6) {
+                            pdisk->SetGuid(pdiskId * 1000 + 1);
+                        }
                     }
                     break;
                 }
@@ -1267,21 +1282,24 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& nodes = json.GetMap().at("Nodes").GetArray();
         UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 1);
         const auto& pdisks = nodes[0].GetMap().at("PDisks").GetArray();
-        UNIT_ASSERT_VALUES_EQUAL(pdisks.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(pdisks.size(), 6);
         for (const auto& pdisk : pdisks) {
             const auto& fields = pdisk.GetMap();
             const ui32 pdiskId = fields.at("PDiskId").GetUInteger();
             UNIT_ASSERT_VALUES_EQUAL(fields.at("State").GetString(), "Normal");
             UNIT_ASSERT_VALUES_EQUAL(fields.at("Path").GetString(), Sprintf("/dev/whiteboard-%u", pdiskId));
             UNIT_ASSERT(!fields.contains("StatusV2"));
-            if (pdiskId >= 3) {
+            if (pdiskId == 5) {
+                UNIT_ASSERT_VALUES_EQUAL(fields.at("Guid").GetString(), "5001");
+            }
+            if (pdiskId == 3 || pdiskId == 4 || pdiskId == 5) {
                 UNIT_ASSERT(!fields.contains("Status"));
                 UNIT_ASSERT(!fields.contains("DecommitStatus"));
                 UNIT_ASSERT(!fields.contains("MaintenanceStatus"));
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(fields.at("Status").GetString(), pdiskId == 1 ? "ACTIVE" : "INACTIVE");
-                UNIT_ASSERT_VALUES_EQUAL(fields.at("DecommitStatus").GetString(), pdiskId == 1 ? "DECOMMIT_NONE" : "DECOMMIT_PENDING");
-                UNIT_ASSERT_VALUES_EQUAL(fields.at("MaintenanceStatus").GetString(), pdiskId == 1 ? "NO_NEW_VDISKS" : "LONG_TERM_MAINTENANCE_PLANNED");
+                UNIT_ASSERT_VALUES_EQUAL(fields.at("Status").GetString(), pdiskId == 2 ? "INACTIVE" : "ACTIVE");
+                UNIT_ASSERT_VALUES_EQUAL(fields.at("DecommitStatus").GetString(), pdiskId == 2 ? "DECOMMIT_PENDING" : "DECOMMIT_NONE");
+                UNIT_ASSERT_VALUES_EQUAL(fields.at("MaintenanceStatus").GetString(), pdiskId == 2 ? "LONG_TERM_MAINTENANCE_PLANNED" : "NO_NEW_VDISKS");
             }
         }
     }

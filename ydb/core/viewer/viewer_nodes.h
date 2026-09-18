@@ -3449,6 +3449,10 @@ public:
                         jsonPDisk = std::move(pDisk);
                         if (auto it = sysViewPDisks.find(jsonPDisk.GetPDiskId()); it != sysViewPDisks.end()) {
                             const auto& info = *it->second;
+                            // A PDiskId can be reused after replacing a disk.
+                            if (info.HasGuid() && jsonPDisk.HasGuid() && info.GetGuid() != jsonPDisk.GetGuid()) {
+                                continue;
+                            }
                             if (info.HasStatusV2()) {
                                 jsonPDisk.SetStatus(info.GetStatusV2());
                             }

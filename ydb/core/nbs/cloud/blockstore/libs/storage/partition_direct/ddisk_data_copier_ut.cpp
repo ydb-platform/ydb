@@ -64,9 +64,23 @@ struct TFixture: public TBaseFixture
     {
         TBaseFixture::Init();
 
-        VChunkConfig.PromoteHost(3);
+        // Copier tests exercise range synchronization after the VChunk has
+        // already started writing to DDisks.
+        DirtyMap = std::make_shared<TBlocksDirtyMap>(
+            CreateArenaAllocatorPool(),
+            VChunkConfig,
+            true,
+            TDirtyMapStateProto{},
+            BlockSize,
+            VChunkBlockCount);
+
+        VChunkConfig.PromoteHost(3, true);
         VChunkConfig.SetWatermark(3, BlockSize * VChunkBlockCount);
+<<<<<<< HEAD
         DirtyMap.UpdateConfig(VChunkConfig);
+=======
+        DirtyMap->UpdateConfig(VChunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         Copier = std::make_shared<TDDiskDataCopier>(
             Runtime->GetActorSystem(0),

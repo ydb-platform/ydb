@@ -25,7 +25,13 @@ public:
         IPartitionDirectService* partitionDirectService,
         ui32 regionIndex,
         const TVector<IDirectBlockGroupPtr>& directBlockGroups,
+<<<<<<< HEAD
         const TVChunkConfigByIndex& vChunkConfigs,
+=======
+        const TVChunkConfigs& vChunkConfigs,
+        TRegionVChunks touchedVChunks,
+        const TDirtyMapStateProtos& dirtyMapStates,
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
         NMonitoring::TDynamicCounterPtr counters);

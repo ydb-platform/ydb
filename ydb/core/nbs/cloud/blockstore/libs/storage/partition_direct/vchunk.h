@@ -38,6 +38,11 @@ public:
         NActors::TActorSystem* actorSystem,
         IPartitionDirectService* partitionDirectService,
         const TVChunkConfig& vChunkConfig,
+<<<<<<< HEAD
+=======
+        bool touched,
+        const TDirtyMapStateProto& dirtyMapState,
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
@@ -114,6 +119,16 @@ public:
 private:
     friend struct TBaseFixture;
 
+    enum class ETouchedState
+    {
+        // No writes to the VChunk's DDisks have been observed.
+        NotTouched,
+        // A write was observed and the touched marker is being persisted.
+        Persisting,
+        // The touched marker was successfully persisted.
+        Persisted
+    };
+
     using TPrepareConfigFunc = std::function<TVChunkConfig()>;
     using TApplyPersistedConfigFunc = std::function<void()>;
 
@@ -147,6 +162,18 @@ private:
     void OnEraseBelatedResponse(
         const TEraseRequestExecutor::TResponse& response);
 
+<<<<<<< HEAD
+=======
+    void DoPersistDirtyMap();
+    void OnDirtyMapPersisted(ui32 stateGeneration);
+
+    // VDisk touch state.
+    void Touch();
+    [[nodiscard]] bool IsTouched() const;
+    void DoPersistTouched();
+    void OnTouchedPersisted();
+
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
     void ScheduleCleaningUp();
     void CleaningUp();
 
@@ -187,7 +214,13 @@ private:
     TLogTitle LogTitle;
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
+<<<<<<< HEAD
     TBlocksDirtyMap BlocksDirtyMap;
+=======
+    bool DirtyMapStatePersisting = false;
+    ETouchedState TouchedState = ETouchedState::NotTouched;
+    TBlocksDirtyMapPtr BlocksDirtyMap;
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
     // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
     NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;

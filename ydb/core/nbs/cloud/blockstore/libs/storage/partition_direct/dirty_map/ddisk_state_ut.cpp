@@ -18,10 +18,10 @@ struct TTestBlockFieldMonitor: public IBehindAheadMonitor
 {
     void OnBehindAheadChanged() override
     {
-        ++BehindAheadGeneration;
+        ++StateGeneration;
     }
 
-    ui64 BehindAheadGeneration = 0;
+    ui64 StateGeneration = 0;
 };
 
 }   // namespace
@@ -390,25 +390,25 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             /*totalBlockCount=*/100,
             /*operationalBlockCount=*/100);
 
-        UNIT_ASSERT_VALUES_EQUAL(0u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(0u, monitor.StateGeneration);
 
         // First missed flush → Behind changes → monitor called.
         ddisk.StartLagging();
         ddisk.OnRangeFlushed(
             TBlockRange16::WithLength(10, 10),
             TDDiskState::EFlushCompletion::Missed);
-        UNIT_ASSERT_VALUES_EQUAL(1u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(1u, monitor.StateGeneration);
 
         // Identical range already covered → no change → monitor NOT called.
         ddisk.OnRangeFlushed(
             TBlockRange16::WithLength(10, 10),
             TDDiskState::EFlushCompletion::Missed);
-        UNIT_ASSERT_VALUES_EQUAL(1u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(1u, monitor.StateGeneration);
 
         // Leave lagging and synchronize the range successfully.
         ddisk.StopLagging();
         ddisk.RangeSynced(TBlockRange16::WithLength(10, 10));
-        UNIT_ASSERT_VALUES_EQUAL(2u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(2u, monitor.StateGeneration);
         UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
 
         // The DDisk starts lagging again and the range becomes dirty again.
@@ -416,24 +416,24 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         ddisk.OnRangeFlushed(
             TBlockRange16::WithLength(10, 10),
             TDDiskState::EFlushCompletion::Missed);
-        UNIT_ASSERT_VALUES_EQUAL(3u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(3u, monitor.StateGeneration);
         UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintBehind());
 
         // A sync completed while the DDisk was lagging is stale and must be
         // ignored.
         ddisk.RangeSynced(TBlockRange16::WithLength(10, 10));
-        UNIT_ASSERT_VALUES_EQUAL(3u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(3u, monitor.StateGeneration);
         UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintBehind());
 
         // After lagging ends, the same sync can be applied successfully.
         ddisk.StopLagging();
         ddisk.RangeSynced(TBlockRange16::WithLength(10, 10));
-        UNIT_ASSERT_VALUES_EQUAL(4u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(4u, monitor.StateGeneration);
         UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
 
         // Syncing an empty field → no change → monitor NOT called.
         ddisk.RangeSynced(TBlockRange16::WithLength(0, 10));
-        UNIT_ASSERT_VALUES_EQUAL(4u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(4u, monitor.StateGeneration);
     }
 }
 

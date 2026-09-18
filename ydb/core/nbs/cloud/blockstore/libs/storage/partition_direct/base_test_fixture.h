@@ -64,6 +64,8 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
         CreateArenaAllocatorPool(),
         VChunkConfig,
+        false,
+        DirtyMapStateProto,
         BlockSize,
         VChunkBlockCount);
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
@@ -113,6 +115,26 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         return vchunk.DirtyMapReady.HasValue();
     }
 
+<<<<<<< HEAD
+=======
+    static bool IsDirtyMapStatePersisting(TVChunk& vchunk)
+    {
+        return vchunk.DirtyMapStatePersisting;
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokePersistDirtyMap(TVChunk& vchunk)
+    {
+        vchunk.DoPersistDirtyMap();
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokeFlush(TVChunk& vchunk)
+    {
+        vchunk.DoFlush(false);
+    }
+
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
     static auto& AccessDirtyMapReadyPromise(TVChunk& vchunk)
     {
         return vchunk.DirtyMapReady;

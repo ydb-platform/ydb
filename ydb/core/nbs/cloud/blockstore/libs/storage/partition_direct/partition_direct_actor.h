@@ -10,6 +10,12 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_events_private.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/public.h>
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
@@ -105,7 +111,13 @@ private:
     TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests
         PendingUpdateDirtyMapStateRequests;
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h
 >>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h
+=======
+    // A bit is set after its vchunk is touched and is never cleared.
+    TTouchedVChunks TouchedVChunks;
+
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h
 public:
     TPartitionActor(
         const NActors::TActorId& tablet,
@@ -216,6 +228,17 @@ private:
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h
+=======
+    void HandleUpdateDirtyMapState(
+        const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleSetVChunkTouched(
+        const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h
     void HandleFastPathServiceReady(
         const TEvPartitionDirectPrivate::TEvFastPathServiceReady::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -272,6 +295,10 @@ private:
 
     void HandleUpdateDirtyMapStateDuringDelete(
         const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleSetVChunkTouchedDuringDelete(
+        const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceShutdownDuringDelete(

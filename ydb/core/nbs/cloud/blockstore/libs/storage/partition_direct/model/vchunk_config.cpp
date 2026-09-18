@@ -128,7 +128,7 @@ void TVChunkConfig::AppendHost()
     ++HostCount;
 }
 
-TString TVChunkConfig::EvacuateHost(THostIndex hostIndex)
+TString TVChunkConfig::EvacuateHost(THostIndex hostIndex, bool fresh)
 {
     DisableHost(hostIndex);
 
@@ -149,7 +149,7 @@ TString TVChunkConfig::EvacuateHost(THostIndex hostIndex)
                                 << PrintHostIndex(hostIndex);
     }
 
-    PromoteHost(to);
+    PromoteHost(to, fresh);
     Y_ABORT_UNLESS(EnabledHosts.Get(to) == true);
 
     return TStringBuilder() << PrintHostIndex(hostIndex) << " demoted, "
@@ -170,15 +170,41 @@ TString TVChunkConfig::DemoteHost(THostIndex hostIndex)
     return {};
 }
 
-void TVChunkConfig::PromoteHost(THostIndex hostIndex)
+void TVChunkConfig::PromoteHost(THostIndex hostIndex, bool fresh)
 {
     PBufferHosts.SetRole(hostIndex, EHostRole::Primary);
     if (DDiskHosts.GetRole(hostIndex) != EHostRole::Primary) {
         DDiskHosts.SetRole(hostIndex, EHostRole::Primary);
-        Watermarks[hostIndex] = 0;
+        if (fresh) {
+            Watermarks[hostIndex] = 0;
+        }
     }
 }
 
+<<<<<<< HEAD
+=======
+TString TVChunkConfig::PromoteHostIfNeeded(bool fresh)
+{
+    TStringBuilder result;
+    auto enabledDDisks = GetEnabledDDisks();
+    if (enabledDDisks.Count() >= QuorumDirectBlockGroupHostCount) {
+        result << "Enabled DDisks already enough " << DebugPrint();
+        return result;
+    }
+    const THostIndex hostToPromote =
+        GetPrimaryCandidate(DDiskHosts, EnabledHosts);
+    if (hostToPromote == InvalidHostIndex) {
+        result << "Can't find primary candidate " << DebugPrint();
+        return result;
+    }
+
+    result << "Promote " << PrintHostIndex(hostToPromote) << " "
+           << DebugPrint();
+    PromoteHost(hostToPromote, fresh);
+    return result;
+}
+
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 EHostRole TVChunkConfig::GetPBufferRole(THostIndex hostIndex) const
 {
     return PBufferHosts.GetRole(hostIndex);

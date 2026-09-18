@@ -213,6 +213,7 @@ TTabletInfo TPartitionActor::MakeMonTabletInfo() const
         .BlockCount = VolumeConfig.GetPartitions(0).GetBlockCount(),
         .VChunkSize = StorageConfig->GetVChunkSize(),
         .VolumeDirectBlockGroupCount = DefaultVolumeDirectBlockGroupCount,
+        .TouchedVChunkCount = TouchedVChunks.GetCount(),
         .DiskId = VolumeConfig.GetDiskId(),
         .State = FastPathService ? "WORK" : "INIT",
     };

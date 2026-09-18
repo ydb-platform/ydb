@@ -236,12 +236,14 @@ public:
     TBlocksDirtyMap(
         TArenaAllocatorPoolPtr arenaAllocatorPool,
         const TVChunkConfig& vChunkConfig,
+        bool isTouched,
+        const TDirtyMapStateProto& state,
         ui32 blockSize,
         ui16 blockCount);
     ~TBlocksDirtyMap() override;
 
     // Note. Fresh watermarks are not applying for exists DDisks.
-    void UpdateConfig(const TVChunkConfig& vChunkConfig);
+    void UpdateConfig(const TVChunkConfig& vChunkConfig, bool isTouched);
 
 <<<<<<< HEAD
     void ResizeHosts(size_t newHostCount);
@@ -390,6 +392,7 @@ public:
     void StatePersisted(ui32 persistGeneration);
     [[nodiscard]] ui32 GetCurrentGeneration() const;
 
+    // Memory management
     void Trim();
 
     // Stats
@@ -548,6 +551,13 @@ private:
 
     // DDisks freshness state.
     TVector<TDDiskState> DDiskStates;
+<<<<<<< HEAD
+=======
+    // Changes when behind/ahead map changes.
+    ui32 StateGeneration = 0;
+    // Last persisted DDisks states generation.
+    ui32 PersistedStateGeneration = 0;
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
     // PBuffers space usage counters.
     TVector<TPBufferCounters> PBufferCounters;

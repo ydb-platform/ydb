@@ -103,6 +103,7 @@ std::shared_ptr<TVChunk> StartVChunk(
             vChunkIndex,
             DirectBlockGroupHostCount,
             DefaultPrimaryCount),
+        false,
         TDirtyMapStateProto{},
         dbg,
         1000,   // syncRequestsBatchSize
@@ -1523,6 +1524,11 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 100,
                 DirectBlockGroupHostCount,
                 DefaultPrimaryCount),
+<<<<<<< HEAD
+=======
+            false,
+            TDirtyMapStateProto(),
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
             dbg,
             3,
             vChunkSize,
@@ -1585,6 +1591,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             Service.get(),
             DiskDescription,
             config,
+            false,
             TDirtyMapStateProto(),
             dbg,
             3,
@@ -1646,6 +1653,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             Service.get(),
             DiskDescription,
             config,
+            true,
             TDirtyMapStateProto(),
             dbg,
             3,

@@ -99,7 +99,8 @@ public:
         const TWriteRequestResponse& response) override;
     void OnBelatedWriteBlocksResponse(
         std::shared_ptr<TWriteRequestBundle> bundle,
-        THostMask completedWrites) override;
+        THostMask completedWrites,
+        THostMask failedWrites) override;
 
     // IRangeSyncClient implementation
     [[nodiscard]] std::optional<TBlockRange16> GetFreshRange(
@@ -152,10 +153,8 @@ private:
     void DoFlush(bool force);
     void OnFlushResponse(const TFlushRequestExecutor::TResponse& response);
 
-    void DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType);
+    void DoErase(bool force);
     void OnEraseResponse(const TEraseRequestExecutor::TResponse& response);
-    void OnEraseBelatedResponse(
-        const TEraseRequestExecutor::TResponse& response);
 
     void DoPersistDirtyMap();
     void OnDirtyMapPersisted(ui32 stateGeneration);

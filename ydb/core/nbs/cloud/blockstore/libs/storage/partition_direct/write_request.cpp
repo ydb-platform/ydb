@@ -138,6 +138,7 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
     THostMask completedWritesOfCurrentResponse;
+    THostMask failedWritesOfCurrentResponse;
     for (const auto& pbufferResponse: response.Responses) {
         const auto host = pbufferResponse.HostIndex;
 
@@ -160,6 +161,7 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
                 FormatError(pbufferResponse.Error).Quote().c_str());
 
             FailedWrites.Set(host);
+            failedWritesOfCurrentResponse.Set(host);
             // The error will be set and replied below.
         }
     }
@@ -167,7 +169,10 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
     CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
 
     if (IsReplied || IsQuorumReached()) {
-        ReplyOrNotifyBelated(MakeError(S_OK), completedWritesOfCurrentResponse);
+        ReplyOrNotifyBelated(
+            MakeError(S_OK),
+            completedWritesOfCurrentResponse,
+            failedWritesOfCurrentResponse);
         return;
     }
 
@@ -321,7 +326,10 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
             // A write that lands after the client has been answered is
             // reported as belated even when the quorum was never reached: the
             // data is on the PBuffer and has to be erased from there.
-            ReplyOrNotifyBelated(MakeError(S_OK), THostMask::MakeOne(host));
+            ReplyOrNotifyBelated(
+                MakeError(S_OK),
+                THostMask::MakeOne(host),
+                THostMask::MakeEmpty());
         }
         return;
     }
@@ -330,6 +338,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
     auto ender = TEndSpanWithError(std::move(span), response.Error);
 
     if (IsReplied) {
+        NotifyBelated(THostMask::MakeEmpty(), THostMask::MakeOne(host));
         return;
     }
 
@@ -368,13 +377,14 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
 
 void TWriteRequestExecutor::ReplyOrNotifyBelated(
     NProto::TError error,
-    THostMask completedOnCurrentResponse)
+    THostMask completedOnCurrentResponse,
+    THostMask failedOnCurrentResponse)
 {
     if (!IsReplied) {
         Reply(std::move(error));
         return;
     }
-    NotifyBelated(completedOnCurrentResponse);
+    NotifyBelated(completedOnCurrentResponse, failedOnCurrentResponse);
 }
 
 void TWriteRequestExecutor::Reply(NProto::TError error)
@@ -417,12 +427,15 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
     Bundle->Reply(
         std::move(error),
         RequestedDirectWrites.Include(RequestedIndirectWrites),
-        CompletedWrites);
+        CompletedWrites,
+        FailedWrites);
 }
 
-void TWriteRequestExecutor::NotifyBelated(THostMask completedOnCurrentResponse)
+void TWriteRequestExecutor::NotifyBelated(
+    THostMask completedOnCurrentResponse,
+    THostMask failedOnCurrentResponse)
 {
-    if (completedOnCurrentResponse.Empty()) {
+    if (completedOnCurrentResponse.Empty() && failedOnCurrentResponse.Empty()) {
         return;
     }
 
@@ -434,7 +447,7 @@ void TWriteRequestExecutor::NotifyBelated(THostMask completedOnCurrentResponse)
         ExtendedDebugState().c_str(),
         completedOnCurrentResponse.Print().c_str());
 
-    Bundle->NotifyBelated(completedOnCurrentResponse);
+    Bundle->NotifyBelated(completedOnCurrentResponse, failedOnCurrentResponse);
 }
 
 void TWriteRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
@@ -514,7 +527,10 @@ void TWriteRequestExecutor::OnRequestTimeout()
         LogTitle.GetWithTime().c_str(),
         ExtendedDebugState().c_str());
 
-    ReplyOrNotifyBelated(MakeError(E_TIMEOUT, "Write request timeout"), {});
+    ReplyOrNotifyBelated(
+        MakeError(E_TIMEOUT, "Write request timeout"),
+        THostMask::MakeEmpty(),
+        THostMask::MakeEmpty());
 }
 
 bool TWriteRequestExecutor::IsQuorumReached() const

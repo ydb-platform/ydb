@@ -54,9 +54,12 @@ private:
 
     void ReplyOrNotifyBelated(
         NProto::TError error,
-        THostMask completedOnCurrentResponse);
+        THostMask completedOnCurrentResponse,
+        THostMask failedOnCurrentResponse);
     void Reply(NProto::TError error);
-    void NotifyBelated(THostMask completedOnCurrentResponse);
+    void NotifyBelated(
+        THostMask completedOnCurrentResponse,
+        THostMask failedOnCurrentResponse);
 
     void ScheduleHedging(TDuration hedgingDelay);
     void ScheduleRequestTimeout();

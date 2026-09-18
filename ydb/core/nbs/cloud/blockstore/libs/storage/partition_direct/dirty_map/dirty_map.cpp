@@ -323,22 +323,6 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
     return result;
 }
 
-TEraseHints TBlocksDirtyMap::MakeEraseBelatedHint()
-{
-    TEraseHints result;
-
-    TInfoEraseBelatedSet readyToEraseBelated{ArenaAllocatorPool.get()};
-    readyToEraseBelated.swap(ReadyToEraseBelated);
-    for (const auto& item: readyToEraseBelated) {
-        auto hostMask = item.Hosts;
-        for (auto host: hostMask) {
-            result.AddHint(host, item.PBufferKey);
-        }
-    }
-
-    return result;
-}
-
 void TBlocksDirtyMap::RegisterInflightWrite(
     TPBufferKey pBufferKey,
     TBlockRange16 range)
@@ -354,7 +338,8 @@ void TBlocksDirtyMap::WriteFinished(
     TPBufferKey pBufferKey,
     TBlockRange16 range,
     THostMask requested,
-    THostMask confirmed)
+    THostMask confirmed,
+    THostMask failed)
 {
     // Every write is pre-registered as pending at generation time (see
     // RegisterInflightWrite), so the entry always exists here.
@@ -365,11 +350,15 @@ void TBlocksDirtyMap::WriteFinished(
     auto& inflightItem = item->Value;
 
     if (confirmed.Count() < QuorumDirectBlockGroupHostCount) {
-        // The write request did not reach the quorum. We responded to the
-        // client with an error. The written PBuffers will be cleared through a
-        // barrier garbage collection later. For now, we will forget about this
-        // request as if it never existed.
-        RemovePBuffer(pBufferKey);
+        // The write request did not reach the quorum and the client got an
+        // error. The record is kept until the copies that did land are erased:
+        // forgetting it right away leaves a copy that a restart would restore
+        // and flush over newer data.
+        inflightItem.OnWriteWithoutQuorum(requested, confirmed, failed);
+        if (inflightItem.GetState() == TInflightInfo::EState::PBufferErased) {
+            ReadyToErase.erase(pBufferKey);
+            RemovePBuffer(pBufferKey);
+        }
         return;
     }
 
@@ -451,22 +440,32 @@ void TBlocksDirtyMap::EraseFinished(
     }
 }
 
-void TBlocksDirtyMap::UpdateBelatedEraseQueue(
-    THostMask completedWrites,
-    TPBufferKey pBufferKey)
+bool TBlocksDirtyMap::OnBelatedWrite(
+    TPBufferKey pBufferKey,
+    THostMask completed,
+    THostMask failed)
 {
-    const auto item = Inflight.GetValue(pBufferKey);
-    const bool unknownLsn = item == std::nullopt;
-    const bool erasingInProgress =
-        item &&
-        (item->Value.GetState() == TInflightInfo::EState::PBufferErasing ||
-         item->Value.GetState() == TInflightInfo::EState::PBufferErased);
-
-    if (unknownLsn || erasingInProgress) {
-        ReadyToEraseBelated.emplace(TInfoEraseBelated{
-            .PBufferKey = pBufferKey,
-            .Hosts = completedWrites});
+    auto item = Inflight.GetValue(pBufferKey);
+    if (!item) {
+        // Every host had answered and every copy had been erased, so the
+        // record was forgotten. A copy that lands now comes from a host that
+        // was disabled meanwhile.
+        return false;
     }
+
+    auto& inflight = item->Value;
+    for (auto host: completed) {
+        inflight.OnBelatedWrite(host, true);
+    }
+    for (auto host: failed) {
+        inflight.OnBelatedWrite(host, false);
+    }
+
+    if (inflight.GetState() == TInflightInfo::EState::PBufferErased) {
+        ReadyToErase.erase(pBufferKey);
+        RemovePBuffer(pBufferKey);
+    }
+    return true;
 }
 
 void TBlocksDirtyMap::UpdateWatermarkDebugOnly(
@@ -556,11 +555,6 @@ size_t TBlocksDirtyMap::GetFlushPendingCount() const
 size_t TBlocksDirtyMap::GetErasePendingCount() const
 {
     return ReadyToErase.size();
-}
-
-size_t TBlocksDirtyMap::GetEraseBelatedCount() const
-{
-    return ReadyToEraseBelated.size();
 }
 
 ui64 TBlocksDirtyMap::GetMinFlushPendingLsn() const
@@ -777,7 +771,7 @@ bool TBlocksDirtyMap::NeedFlush() const
 
 bool TBlocksDirtyMap::NeedErase() const
 {
-    return !ReadyToErase.empty() || !ReadyToEraseBelated.empty();
+    return !ReadyToErase.empty();
 }
 
 bool TBlocksDirtyMap::NeedPersist() const
@@ -1118,7 +1112,8 @@ bool TBlocksDirtyMap::HasOlderUnflushedOverlap(
             const bool onDDisk =
                 state == TInflightInfo::EState::PBufferFlushed ||
                 state == TInflightInfo::EState::PBufferErasing ||
-                state == TInflightInfo::EState::PBufferErased;
+                state == TInflightInfo::EState::PBufferErased ||
+                state == TInflightInfo::EState::PBufferOrphaned;
             if (overlap.Key < pBufferKey && !onDDisk) {
                 found = true;
                 return TInflightMap::EEnumerateContinuation::Stop;
@@ -1211,19 +1206,6 @@ void TBlocksDirtyMap::RemovePBuffer(TPBufferKey pBufferKey)
 
     const bool removed = Inflight.RemoveRange(pBufferKey);
     Y_ABORT_UNLESS(removed);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
-    const TInfoEraseBelated& other) const
-{
-    auto makeTuple = [](const TInfoEraseBelated& info)
-    {
-        return std::tie(info.PBufferKey, info.Hosts);
-    };
-
-    return makeTuple(*this) < makeTuple(other);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

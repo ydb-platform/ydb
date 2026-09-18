@@ -142,7 +142,7 @@ void BM_DirtyMapInflightMemory(benchmark::State& state)
             const auto range = TBlockRange16::MakeOneBlock(i % BlockCount);
             auto& dirtyMap = *dirtyMaps[rng.Uniform(dirtyMaps.size())];
             dirtyMap.RegisterInflightWrite(key, range);
-            dirtyMap.WriteFinished(key, range, hosts, hosts);
+            dirtyMap.WriteFinished(key, range, hosts, hosts, THostMask{});
         }
 
         state.counters["usedPerInflight"] =

@@ -75,6 +75,24 @@ release-notes links. Verify the draft's club, visibility, title, text, image,
 and links after creation. Do not publish beyond Club YDB without explicit
 approval.
 
+Before writing or editing the draft, ask the owner for approved wording about
+internal availability or installation. Do not claim the release is installed
+on all internal, production, or preproduction clusters based on an old template
+or the OSS release status. When the owner has already supplied the wording,
+use it without asking again.
+
+Every Club YDB release draft must also explain how to identify the database
+version. Include this text and query without asking the owner whether to add
+it:
+
+```text
+Версию базы данных можно узнать, выполнив запрос:
+```
+
+```sql
+SELECT Version();
+```
+
 ## Handoff
 
 Report the release-notes PR, every backport PR, `docs_release` run, published

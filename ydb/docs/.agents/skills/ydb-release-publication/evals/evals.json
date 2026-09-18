@@ -43,6 +43,33 @@
         "Проверяет created release body, tag, public state and URL after mutation"
       ],
       "covers": "GitHub Release body and post-mutation verification"
+    },
+    {
+      "id": 4,
+      "prompt": "Обнови MODERATORS-черновик в Club YDB для OSS YDB Server 26.2.1.14. Старый шаблон утверждает, что релиз установлен на всех prod и preprod кластерах. В Tier A сейчас 25.4, кластеры Млечного Пути уже на 26.3 и не откатываются. Владелец согласовал формулировку: «Мы выпустили новую версию YDB Server 26.2.1.14 в OSS».",
+      "expected_output": "Убирает неверное утверждение об установке во внутренних кластерах, использует согласованную OSS-формулировку и всегда добавляет запрос версии базы данных.",
+      "files": ["fixtures/release-publication-state.json"],
+      "expectations": [
+        "Не утверждает, что версия установлена на всех prod, preprod или внутренних кластерах",
+        "Использует уже согласованную владельцем формулировку про OSS, не запрашивая её повторно",
+        "Если формулировка про внутреннее развёртывание не дана, запрашивает у владельца approved wording до создания или редактирования черновика",
+        "Всегда добавляет текст о проверке версии и SQL-запрос SELECT Version();",
+        "Сохраняет MODERATORS visibility, approved template image и проверяет черновик после изменения"
+      ],
+      "covers": "Club YDB announcement does not infer internal rollout status and always includes a version query"
+    },
+    {
+      "id": 5,
+      "prompt": "Подготовь MODERATORS-черновик в Club YDB для OSS YDB Server 26.2.1.14. В старом шаблоне сказано, что релиз установлен на всех prod и preprod кластерах. Другой информации о внутреннем развёртывании нет.",
+      "expected_output": "До создания или редактирования черновика запрашивает у владельца согласованную формулировку о внутренней доступности и не использует утверждение из старого шаблона.",
+      "files": ["fixtures/release-publication-state.json"],
+      "expectations": [
+        "Не создаёт и не редактирует черновик до получения approved wording",
+        "Не переносит утверждение о prod, preprod или всех внутренних кластерах из старого шаблона",
+        "Явно запрашивает у владельца формулировку о внутренней доступности или установке",
+        "После получения формулировки добавит обязательный текст и SQL-запрос SELECT Version();"
+      ],
+      "covers": "Club YDB announcement asks for missing internal-rollout wording before mutation"
     }
   ]
 }

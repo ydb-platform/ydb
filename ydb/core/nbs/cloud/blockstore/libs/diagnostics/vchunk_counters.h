@@ -40,10 +40,9 @@ private:
     TVChunkRequestCounters Write;
     TVChunkRequestCounters Flush;
     TVChunkRequestCounters Erase;
-    TVChunkRequestCounters EraseBelated;
 
 public:
-    // Binds to operation=Read|Write|Flush|Erase|EraseBelated subgroups.
+    // Binds to operation=Read|Write|Flush|Erase subgroups.
     explicit TVChunkCounters(NMonitoring::TDynamicCounterPtr parent);
 
     // Publishes the disk-wide aggregate.

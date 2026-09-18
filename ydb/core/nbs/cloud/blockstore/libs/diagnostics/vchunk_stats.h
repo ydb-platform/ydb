@@ -18,10 +18,8 @@ enum class EVChunkOperation
     Write,
     // Flush of dirty blocks from PBuffer to DDisk.
     Flush,
-    // Erase of PBuffer records that have been flushed.
+    // Erase of PBuffer records that have been flushed or discarded.
     Erase,
-    // Erase of PBuffer records superseded by a later write.
-    EraseBelated,
 
     MAX
 };

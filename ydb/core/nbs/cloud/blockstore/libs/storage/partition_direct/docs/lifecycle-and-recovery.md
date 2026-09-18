@@ -99,8 +99,9 @@ the persist-before-erase condition.
 Explicit erase batches target the PB positions where writes were requested,
 including handoffs. They are separate requests to each PB. Failed erases are
 eligible for retry. Disabled hosts can be accounted as erased locally, with
-barrier cleanup responsible for their residual records. Belated successful
-writes have a separate erase queue. For the disk-level meaning of exact
+barrier cleanup responsible for their residual records. A record stays in the
+dirty map until every host it was asked to write to has answered and every copy
+has been erased, so a belated write is erased by the same path. For the disk-level meaning of exact
 erases, compact erase records and barriers, use the shared PB page.
 
 ## Persisted DDisk state and repair

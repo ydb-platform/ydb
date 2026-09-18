@@ -519,6 +519,67 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
             UndeliveryErrorMessage);
     }
 
+    // An undelivered indirect write answers for every disk in the request,
+    // not only for the coordinator: the dirty map counts an answer per host
+    // and would keep the record forever otherwise.
+    Y_UNIT_TEST_F(
+        DirectPathWriteToManyPBuffersUndeliveredAnswersEveryDisk,
+        TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport =
+            std::make_shared<TICStorageTransportTestAdapter>(Runtime.get());
+        auto* transportPtr = transport.get();
+        transportPtr->EnableFakeDirectSession();
+
+        // Service id for the coordinator is never registered.
+        const NBsController::TDDiskId missingId(
+            transportPtr->GetNodeId(),
+            /*pdiskId=*/999,
+            /*ddiskSlotId=*/999);
+        auto connection = MakePBufferConnection(missingId, /*guid=*/1);
+
+        const auto& pbufferIds = transportPtr->GetPBufferIds();
+        UNIT_ASSERT(pbufferIds.size() >= 2);
+        TVector<NKikimrBlobStorage::NDDisk::TDDiskId> protoIds;
+        protoIds.push_back(ToProto(missingId));
+        protoIds.push_back(ToProto(pbufferIds[0]));
+        protoIds.push_back(ToProto(pbufferIds[1]));
+
+        TString writeBuf(DefaultBlockSize, 'U');
+        THashSet<TString> failedIds;
+        auto done = NewPromise<void>();
+
+        transportPtr->WriteToManyPBuffers(
+            connection,
+            NDDisk::TBlockSelector{0, 0, DefaultBlockSize},
+            /*lsn=*/9,
+            NDDisk::TWriteInstruction(0),
+            protoIds,
+            TDuration::Seconds(1),
+            MakeSgList(writeBuf),
+            nullptr,
+            [&](const auto& result, auto)
+            {
+                for (const auto& single: result.GetResult()) {
+                    UNIT_ASSERT(
+                        single.GetResult().GetStatus() ==
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+                    UNIT_ASSERT_STRINGS_EQUAL(
+                        single.GetResult().GetErrorReason(),
+                        UndeliveryErrorMessage);
+                    failedIds.insert(
+                        single.GetPersistentBufferId().ShortDebugString());
+                }
+                if (failedIds.size() >= protoIds.size()) {
+                    done.TrySetValue();
+                }
+            });
+
+        WaitFuture(executor, done.GetFuture(), WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(failedIds.size(), protoIds.size());
+    }
+
     // Actor-path fallback: a held PBuffer read must be rejected on node
     // disconnect via RejectAllSessionRequestsForNode (not only DDisk maps).
     Y_UNIT_TEST_F(ActorPathPBufferReadRejectedOnDisconnect, TDBGFixture)

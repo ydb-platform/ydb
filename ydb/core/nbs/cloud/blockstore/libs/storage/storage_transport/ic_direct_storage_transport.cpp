@@ -168,7 +168,6 @@ public:
     {
         Y_ABORT_UNLESS(Callback);
         Y_ABORT_UNLESS(!persistentBufferIds.empty());
-        CoordinatorId = persistentBufferIds[0];
         for (const auto& diskId: persistentBufferIds) {
             WaitingReplies.emplace(diskId);
         }
@@ -212,14 +211,16 @@ public:
         }
 
         if (ev->GetTypeRewrite() == TEvents::TEvUndelivered::EventType) {
-            // Mirror the actor path: report undelivery only for the
-            // coordinator.
+            // The request never reached the coordinator, so no PBuffer got
+            // the data. Every disk still waited for is answered: the caller
+            // counts an answer per disk and would wait for them forever.
+            TVector<NKikimrBlobStorage::NDDisk::TDDiskId> remaining(
+                WaitingReplies.begin(),
+                WaitingReplies.end());
             auto response = MakeWritePersistentBuffersResult(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
                 UndeliveryErrorMessage,
-                std::span<const NKikimrBlobStorage::NDDisk::TDDiskId>(
-                    &CoordinatorId,
-                    1));
+                remaining);
             Finish(response->Record);
             return true;
         }
@@ -237,7 +238,6 @@ private:
     }
 
     TCallback Callback;
-    NKikimrBlobStorage::NDDisk::TDDiskId CoordinatorId;
     TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess> WaitingReplies;
     std::atomic<bool> Finished{false};
 };

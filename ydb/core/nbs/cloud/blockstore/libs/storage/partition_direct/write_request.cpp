@@ -48,7 +48,9 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetWriteRequestTimeout())
     , IndirectWriteReplyTimeout(
           DirectBlockGroup->GetOracle()->GetIndirectWriteReplyTimeout())
-{}
+{
+    Y_ABORT_UNLESS(Bundle->GetInflightWriteCount() > 0);
+}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
 {

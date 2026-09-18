@@ -2340,7 +2340,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NActors::NLog::PRI_DEBUG);
 
         // Set maxInflightWritesForDirectWrite=1,
-        // first write whould be DirectWrite,
+        // first write should be DirectWrite,
         // second one should be IndirectWrite.
         auto scopedService = SetupStorage(
             env,
@@ -2418,6 +2418,52 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         heldWrites.clear();
 
         for (size_t i = 0; i < 2; ++i) {
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
+        }
+
+        auto readBlock = [&](ui64 startIndex, char fill)
+        {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(startIndex);
+            request->Record.SetBlocksCount(1);
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                res->Get()->Record.GetBlocks().BuffersSize());
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.GetBlocks().GetBuffers(0),
+                TString(4096, fill));
+        };
+
+        readBlock(1, 'A');
+        readBlock(100, 'B');
+
+        const size_t pluralBeforeThird = pluralWriteCount;
+        singularWriteCount = 0;
+        sendWrite(200, 'C');
+        runtime->Sim([&] { return singularWriteCount < 3; });
+        UNIT_ASSERT_VALUES_EQUAL(pluralBeforeThird, pluralWriteCount);
+        UNIT_ASSERT(singularWriteCount >= 3);
+
+        {
             auto res =
                 env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
                     edge,

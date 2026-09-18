@@ -87,11 +87,12 @@ It requires at least three desired PB hosts before starting.
 
 The oracle chooses the mode from the disk-wide in-flight write count captured
 at `OnWriteStarted` (including this write). When
-`MaxInflightWritesForDirectWrite` is unset the default is 16. Explicit 0 keeps
-the configured static `WriteMode`. Otherwise a count at or below the threshold
-selects `DirectWrite` for low-load latency, and a higher count selects
-`IndirectWrite`. Each DBG has its own oracle, so the count is stored on
-`TWriteRequestBundle` and read by the executor rather than shared between
+`MaxInflightWritesForDirectWrite` is unset the default is 16, so adaptive
+mode is on. Explicit 0 keeps the configured static `WriteMode`; `WriteMode`
+applies only when the threshold is 0. Otherwise a count at or below the
+threshold selects `DirectWrite` for low-load latency, and a higher count
+selects `IndirectWrite`. Each DBG has its own oracle, so the count is stored
+on `TWriteRequestBundle` and read by the executor rather than shared between
 oracles.
 
 - `DirectWrite` sends individual writes from the partition to desired PBs.

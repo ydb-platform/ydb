@@ -1,5 +1,7 @@
 #include "oracle.h"
 
+#include "oracle_config.h"
+
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -1136,10 +1138,10 @@ Y_UNIT_TEST_SUITE(TOracle)
             oracle.GetWriteMode(1));
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::DirectWrite,
-            oracle.GetWriteMode(16));
+            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite));
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::IndirectWrite,
-            oracle.GetWriteMode(17));
+            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite + 1));
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::IndirectWrite,
             oracle.GetWriteMode(132));
@@ -1159,7 +1161,7 @@ Y_UNIT_TEST_SUITE(TOracle)
             oracle.GetWriteMode(1));
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::IndirectWrite,
-            oracle.GetWriteMode(16));
+            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite));
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::IndirectWrite,
             oracle.GetWriteMode(132));
@@ -1169,7 +1171,8 @@ Y_UNIT_TEST_SUITE(TOracle)
     {
         NProto::TStorageServiceConfig rawConfig;
         rawConfig.SetWriteMode(NProto::EWriteMode::IndirectWrite);
-        rawConfig.MutableOracleConfig()->SetMaxInflightWritesForDirectWrite(16);
+        rawConfig.MutableOracleConfig()->SetMaxInflightWritesForDirectWrite(
+            DefaultMaxInflightWritesForDirectWrite);
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
         TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
@@ -1179,10 +1182,10 @@ Y_UNIT_TEST_SUITE(TOracle)
             oracle.GetWriteMode(1));
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::DirectWrite,
-            oracle.GetWriteMode(16));
+            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite));
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::IndirectWrite,
-            oracle.GetWriteMode(17));
+            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite + 1));
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::IndirectWrite,
             oracle.GetWriteMode(132));

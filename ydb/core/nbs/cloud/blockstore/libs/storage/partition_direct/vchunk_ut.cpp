@@ -314,6 +314,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            true,
             DirtyMapStateProto,
             DirectBlockGroup,
             // Keep the batch above the three overlapping writes so completing

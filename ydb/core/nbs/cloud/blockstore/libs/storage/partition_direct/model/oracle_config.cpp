@@ -99,7 +99,7 @@ ui32 TOracleConfig::GetMaxInflightWritesForDirectWrite() const
     // GetFromConfig treats 0 as unset, so it cannot express "adaptive off".
     const auto& cfg = StorageConfig->GetOracleConfig();
     if (!cfg.HasMaxInflightWritesForDirectWrite()) {
-        return 16;
+        return DefaultMaxInflightWritesForDirectWrite;
     }
     return cfg.GetMaxInflightWritesForDirectWrite();
 }

@@ -404,7 +404,17 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
         bool hasLeaderRole = false;
         bool hasFollowerRole = false;
         for (const auto& roleCounters : record.GetDetailedCounters()) {
-            const bool isFollower = roleCounters.GetService() == NKikimrSysView::TABLETS_FOLLOWERS;
+            const auto service = roleCounters.GetService();
+            // The aggregator keys a node's contributions by {nodeId, isFollowerRole} and
+            // replaces that set wholesale, so at most one entry per role may arrive. Only
+            // TABLETS and TABLETS_FOLLOWERS register detailed counters today
+            // (ydb/core/tablet/tablet_counters_aggregator.cpp), and the sender keys them by
+            // service, so each role appears at most once. A new service on this channel has
+            // to update this assert in the same change.
+            Y_ABORT_UNLESS(service == NKikimrSysView::TABLETS || service == NKikimrSysView::TABLETS_FOLLOWERS,
+                "unexpected detailed counters service %d from node %" PRIu64,
+                static_cast<int>(service), static_cast<ui64>(nodeId));
+            const bool isFollower = service == NKikimrSysView::TABLETS_FOLLOWERS;
             if (isFollower) {
                 hasFollowerRole = true;
             } else {
@@ -412,6 +422,8 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
             }
             aggregator->ApplyFromNode(nodeId, isFollower, roleCounters.GetTables());
         }
+        // An empty table list for a role the node stayed silent about retires whatever it
+        // last reported for that role.
         if (!hasLeaderRole) {
             aggregator->ApplyFromNode(nodeId, /* isFollowerRole = */ false, {});
         }

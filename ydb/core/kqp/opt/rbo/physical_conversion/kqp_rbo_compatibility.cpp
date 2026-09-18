@@ -11,6 +11,29 @@ namespace {
 
 using namespace NYql;
 
+TExprNode::TPtr ExpandExtractMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto arg = ctx.NewArgument(node->Pos(), "extract_members_arg");
+    TExprNode::TListType fields;
+    fields.reserve(node->Tail().ChildrenSize());
+    for (const auto& member : node->Tail().Children()) {
+        fields.emplace_back(ctx.NewList(node->Pos(), {
+            member,
+            ctx.NewCallable(node->Pos(), "Member", {arg, member})
+        }));
+    }
+
+    auto body = ctx.NewCallable(node->Pos(), "AsStruct", std::move(fields));
+    auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), {std::move(arg)}), std::move(body));
+    // Preserve ordering when constraints have not been computed for the newly built input yet.
+    return ctx.NewCallable(node->Pos(), "OrderedMap", {node->HeadPtr(), std::move(lambda)});
+}
+
+TExprNode::TPtr ExpandOptionalIf(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto item = ctx.NewCallable(node->Pos(), "Just", {node->TailPtr()});
+    auto empty = ctx.NewCallable(node->Pos(), "EmptyFrom", {item});
+    return ctx.NewCallable(node->Pos(), "If", {node->HeadPtr(), std::move(item), std::move(empty)});
+}
+
 bool IsSqlScalar(const TTypeAnnotationNode* type) {
     return type && (IsDataOrOptionalOfData(type) || type->GetKind() == ETypeAnnotationKind::Null);
 }
@@ -208,7 +231,7 @@ TExprNode::TPtr ExpandScalarHasNull(
 
 TExprNode::TPtr FindCompatibilityNode(const TExprNode::TPtr& root) {
     return FindNode(root, [](const TExprNode::TPtr& node) {
-        return node->IsCallable({"StrictCast", "HasNull", "SqlIn", "RangeEmpty", "AsRange", "RangeFor"}) ||
+        return node->IsCallable({"ExtractMembers", "OptionalIf", "StrictCast", "HasNull", "SqlIn", "RangeEmpty", "AsRange", "RangeFor"}) ||
             IsComplexComparison(node);
     });
 }
@@ -223,6 +246,12 @@ NYql::TExprNode::TPtr RewriteRboCompatibilityNode(
     const NYql::TExprNode::TPtr& node,
     NYql::TExprContext& ctx,
     const NYql::TTypeAnnotationContext& types) {
+    if (node->IsCallable("ExtractMembers")) {
+        return ExpandExtractMembers(node, ctx);
+    }
+    if (node->IsCallable("OptionalIf")) {
+        return ExpandOptionalIf(node, ctx);
+    }
     if (node->IsCallable("StrictCast")) {
         return NPhysicalConvertionUtils::ExpandScalarStrictCast(node, ctx);
     }

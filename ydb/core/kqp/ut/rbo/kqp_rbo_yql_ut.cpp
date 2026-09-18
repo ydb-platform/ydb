@@ -4446,7 +4446,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST(IndexLookupJoinChains) {
+    Y_UNIT_TEST_TWIN(IndexLookupJoinChains, PhysicalStagePeephole) {
         const TString schema = R"(
             CREATE TABLE `/Root/t1` (
                 a Int32,
@@ -4759,7 +4759,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto runQueries = [&](bool newRbo) {
             NKikimrConfig::TAppConfig appConfig;
             appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
-            appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
+            if (!PhysicalStagePeephole) {
+                appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
+            }
             appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
             appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
             appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
@@ -7063,6 +7065,36 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("key")) != readOutput.end());
         UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("value")) != readOutput.end());
         UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("dead_value")) == readOutput.end());
+    }
+
+    Y_UNIT_TEST(PhysicalCrossJoinDefersProjectionLowering) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto left = MakeTestRead({TInfoUnit("a"), TInfoUnit("unused_left")}, pos);
+        auto right = MakeTestRead({TInfoUnit("b"), TInfoUnit("unused_right")}, pos);
+        SetTestListType(left, left->GetOutputIUs(), testContext.ExprCtx);
+        SetTestListType(right, right->GetOutputIUs(), testContext.ExprCtx);
+
+        auto join = MakeIntrusive<TOpJoin>(
+            left, right, pos, "Cross", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        TOpRoot root(join, pos, {"a", "b"});
+        ComputeLogicalTestProps(root);
+
+        auto physical = TPhysicalJoinBuilder(join, testContext.ExprCtx, pos)
+            .BuildPhysicalOp(
+                testContext.ExprCtx.NewArgument(pos, "left_input"),
+                testContext.ExprCtx.NewArgument(pos, "right_input"),
+                false,
+                testContext.TypeCtx);
+
+        // Keep projections available to the full peephole until the selected lowering pass runs.
+        TExprNode::TListType projections;
+        CollectCallableNodes(physical, "ExtractMembers", projections);
+        UNIT_ASSERT_VALUES_EQUAL_C(projections.size(), 2, KqpExprToPrettyString(TExprBase(physical), testContext.ExprCtx));
+        for (const auto& projection : projections) {
+            UNIT_ASSERT_VALUES_EQUAL(projection->Tail().ChildrenSize(), 1);
+        }
     }
 
     Y_UNIT_TEST(PhysicalSemiJoinUsesPerEdgeLiveIn) {

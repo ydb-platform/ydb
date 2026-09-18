@@ -78,7 +78,7 @@ private:
             return {};
         }
         NUri::TUri uri;
-        if (uri.ParseUri(balancer) != NUri::TState::ParsedOK
+        if (uri.ParseUri(balancer, NUri::TFeature::FeaturesDefaultOrSchemeKnown) != NUri::TState::ParsedOK
                 || (uri.GetScheme() != NUri::TScheme::SchemeHTTP && uri.GetScheme() != NUri::TScheme::SchemeHTTPS)
                 || uri.GetField(NUri::TField::FieldHost).empty()
                 || (uri.GetFieldMask() & (NUri::TField::FlagAuth | NUri::TField::FlagQuery | NUri::TField::FlagFragment))) {

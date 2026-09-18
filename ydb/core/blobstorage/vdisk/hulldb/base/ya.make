@@ -3,11 +3,13 @@ LIBRARY()
 PEERDIR(
     library/cpp/monlib/service/pages
     ydb/core/base
+    ydb/core/blobstorage/base
     ydb/core/blobstorage/pdisk
     ydb/core/blobstorage/vdisk/protos
 )
 
 SRCS(
+    blobstorage_blob.cpp
     blobstorage_blob.h
     blobstorage_hulldefs.cpp
     blobstorage_hulldefs.h

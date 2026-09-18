@@ -60,6 +60,7 @@
 #include <ydb/services/metadata/service.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/mapfindptr.h>
 #include <util/generic/object_counter.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
@@ -1709,14 +1710,15 @@ public:
         }
 
         for (const auto& portion : portions) {
-            auto it = Constructors.find(portion->GetAddress());
-            if (it != Constructors.end() && it->second.IsReady()) {
-                FetchedAccessors.emplace_back(std::move(it->second));
+            if (auto* constructor = MapFindPtr(Constructors, portion->GetAddress()); constructor && constructor->IsReady()) {
+                FetchedAccessors.emplace_back(std::move(*constructor));
             }
         }
 
         YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump stage",
             {"stage", "finished"});
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(
+            std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)), 0);
         TDuration transactionTime = TInstant::Now() - startTransactionTime;
         TDuration totalTime = TInstant::Now() - StartTime;
         LWPROBE(TxAskPortionChunks, Self->TabletID(), transactionTime, totalTime, PortionsByPath.size());
@@ -1724,8 +1726,6 @@ public:
     }
 
     void Complete(const TActorContext& /*ctx*/) override {
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(
-            std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)), 0);
     }
 
     TTxType GetTxType() const override {

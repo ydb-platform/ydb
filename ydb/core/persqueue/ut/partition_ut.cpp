@@ -2,6 +2,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition_blob_encoder.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition_util.h>
@@ -174,6 +175,179 @@ void TPartitionTestWrapper::LoadMeta(const NKikimrPQ::TPartitionCounterData& cou
 
 
 Y_UNIT_TEST_SUITE(TPartitionTests) {
+
+void CheckOrdinaryMixedKeyCompaction(bool legacyFirst) {
+    TKeyLevel level(100);
+    // Both keys contain exactly one ordinary, complete message.
+    auto first = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), 100, 0, 1, 0);
+    auto second = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), 101, 0, 1, 0);
+    (legacyFirst ? second : first).SetOffsetDelta(1);
+    level.AddKey(first, 60);
+    level.AddKey(second, 60);
+
+    UNIT_ASSERT(level.NeedCompaction());
+    const auto [key, size] = level.Compact();
+    UNIT_ASSERT_VALUES_EQUAL(size, 120u);
+    UNIT_ASSERT_VALUES_EQUAL(key.GetOffset(), 100u);
+    UNIT_ASSERT_VALUES_EQUAL(key.GetCount(), 2u);
+    UNIT_ASSERT(!key.HasOffsetDelta());
+    UNIT_ASSERT(key.IsHead());
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMixedKeyCompactionAfterEnable) {
+    CheckOrdinaryMixedKeyCompaction(true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMixedKeyCompactionAfterDisable) {
+    CheckOrdinaryMixedKeyCompaction(false);
+}
+
+std::pair<TKey, TString> MakeMultipartHeadForKeyCompaction(ui64 offset, ui16 firstPart, bool withOffsetDelta) {
+    constexpr ui16 totalParts = 3;
+    constexpr ui32 partSize = 512 * 1024;
+    const auto ts = TInstant::Seconds(1);
+    THead head;
+    head.Offset = offset;
+    head.PartNo = firstPart;
+    TString value;
+    for (ui16 part = firstPart; part < totalParts; ++part) {
+        TBatch batch(offset, part);
+        batch.AddBlob(TClientBlob(
+            TString("src"), offset, TString(partSize, 'a' + part),
+            TPartData{part, totalParts, totalParts * partSize},
+            ts, ts, totalParts * partSize, "", "", 1, false));
+        if (withOffsetDelta) {
+            batch.SetOffsetDelta(1);
+        }
+        batch.Pack();
+        batch.SerializeTo(value);
+        head.AddBatch(batch);
+    }
+
+    // The key may start with a continuation, but always includes the last part.
+    UNIT_ASSERT_VALUES_EQUAL(head.GetCount(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(head.GetInternalPartsCount(), totalParts - firstPart - 1);
+    auto key = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), offset, firstPart,
+                             head.GetCount(), head.GetInternalPartsCount());
+    if (withOffsetDelta) {
+        key.SetOffsetDelta(1);
+    }
+    TClientBlob::CheckBlob(key, value);
+    return {std::move(key), std::move(value)};
+}
+
+void CheckMultipartMixedKeyCompaction(bool legacyFirst, bool startsWithContinuation) {
+    const ui16 firstPart = startsWithContinuation ? 1 : 0;
+    auto [first, firstValue] = MakeMultipartHeadForKeyCompaction(100, firstPart, !legacyFirst);
+    auto [second, secondValue] = MakeMultipartHeadForKeyCompaction(101, 0, legacyFirst);
+    UNIT_ASSERT_VALUES_EQUAL(first.HasOffsetDelta(), !legacyFirst);
+    UNIT_ASSERT_VALUES_EQUAL(second.HasOffsetDelta(), legacyFirst);
+
+    const ui32 totalSize = firstValue.size() + secondValue.size();
+    TKeyLevel level(totalSize);
+    level.AddKey(first, firstValue.size());
+    UNIT_ASSERT(!level.NeedCompaction());
+    level.AddKey(second, secondValue.size());
+    UNIT_ASSERT(level.NeedCompaction());
+    const auto [key, size] = level.Compact();
+
+    UNIT_ASSERT_VALUES_EQUAL(size, totalSize);
+    UNIT_ASSERT(key.IsHead());
+    UNIT_ASSERT_VALUES_EQUAL(key.GetOffset(), 100u);
+    UNIT_ASSERT_VALUES_EQUAL(key.GetPartNo(), firstPart);
+    UNIT_ASSERT_VALUES_EQUAL(key.GetCount(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(key.GetInternalPartsCount(), 4u - firstPart);
+
+    // Validate the compacted key against real serialized parts of two messages.
+    const auto batches = GetUnpackedBatches(key, firstValue + secondValue);
+    UNIT_ASSERT_VALUES_EQUAL(batches.size(), 6u - firstPart);
+    for (const auto& batch : batches) {
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.front().LogicalMessageCount, 1u);
+        UNIT_ASSERT(!batch.Blobs.front().IsBatch);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(batches.front().Blobs.front().GetPartNo(), firstPart);
+    UNIT_ASSERT(batches.back().Blobs.back().IsLastPart());
+    UNIT_ASSERT(!key.HasOffsetDelta());
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartMixedKeyCompactionAfterEnable) {
+    CheckMultipartMixedKeyCompaction(true, false);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartMixedKeyCompactionAfterDisable) {
+    CheckMultipartMixedKeyCompaction(false, false);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartContinuationMixedKeyCompactionAfterEnable) {
+    CheckMultipartMixedKeyCompaction(true, true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartContinuationMixedKeyCompactionAfterDisable) {
+    CheckMultipartMixedKeyCompaction(false, true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingKeyLevelAllKeysHaveDelta) {
+    TKeyLevel level(100);
+    level.AddKey(TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), 100, 0, 1, 0, 1), 60);
+    level.AddKey(TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), 101, 0, 1, 0, 1), 60);
+    const auto [key, size] = level.Compact();
+    UNIT_ASSERT_VALUES_EQUAL(size, 120u);
+    UNIT_ASSERT_VALUES_EQUAL(key.GetCount(), 2u);
+    UNIT_ASSERT(key.HasOffsetDelta());
+    UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 2u);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingKeyLevelClearAfterLegacyKey) {
+    TKeyLevel level(100);
+    level.AddKey(TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), 100, 0, 1, 0), 60);
+    level.Clear();
+    level.AddKey(TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), 101, 0, 1, 0, 1), 60);
+    level.AddKey(TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), 102, 0, 1, 0, 1), 60);
+    const auto [key, size] = level.Compact();
+    UNIT_ASSERT_VALUES_EQUAL(size, 120u);
+    UNIT_ASSERT_VALUES_EQUAL(key.GetOffset(), 101u);
+    UNIT_ASSERT_VALUES_EQUAL(key.GetCount(), 2u);
+    UNIT_ASSERT(key.HasOffsetDelta());
+    UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 2u);
+}
+
+void CheckMixedKeyLevelAfterPop(bool popFront) {
+    for (bool removeLegacy : {false, true}) {
+        TKeyLevel level(100);
+        auto first = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), 100, 0, 1, 0);
+        auto second = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), 101, 0, 1, 0);
+        const bool firstHasDelta = popFront != removeLegacy;
+        (firstHasDelta ? first : second).SetOffsetDelta(1);
+        level.AddKey(first, 60);
+        level.AddKey(second, 60);
+        const auto removed = popFront ? level.PopFront() : level.PopBack();
+        UNIT_ASSERT_VALUES_EQUAL(removed.first.HasOffsetDelta(), !removeLegacy);
+        // Removing a known delta from a mixed level must not underflow the sum.
+        UNIT_ASSERT(!level.OffsetDelta().Defined() || *level.OffsetDelta() <= 1u);
+        const auto [key, size] = level.Compact();
+        UNIT_ASSERT_VALUES_EQUAL(size, 60u);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetOffset(), popFront ? 101u : 100u);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetCount(), 1u);
+        if (!removeLegacy) {
+            UNIT_ASSERT(!key.HasOffsetDelta());
+        } else if (key.HasOffsetDelta()) {
+            // A level may conservatively omit delta until Clear(), even after
+            // the last legacy key is removed. If present, it must be correct.
+            UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 1u);
+        }
+    }
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingKeyLevelPopFrontMixedKeys) {
+    CheckMixedKeyLevelAfterPop(true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingKeyLevelPopBackMixedKeys) {
+    CheckMixedKeyLevelAfterPop(false);
+}
+
 using TSrcIdMap = THashMap<TString, std::pair<ui64, ui64>>;
 
 

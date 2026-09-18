@@ -58,7 +58,7 @@ public:
         return RecsCount_;
     }
 
-    ui64 OffsetDelta() const {
+    TMaybe<ui64> OffsetDelta() const {
         return OffsetDelta_;
     }
 
@@ -75,8 +75,10 @@ public:
         TKey tmp(Keys_.front().first);
         tmp.SetCount(RecsCount_);
         tmp.SetInternalPartsCount(InternalPartsCount_);
-        if (OffsetDelta_ > 0) {
-            tmp.SetOffsetDelta(OffsetDelta_);
+        if (OffsetDelta_.Defined()) {
+            tmp.SetOffsetDelta(*OffsetDelta_);
+        } else {
+            tmp.ClearOffsetDelta();
         }
         std::pair<TKey, ui32> res(tmp, Sum_);
         Clear();
@@ -88,8 +90,8 @@ public:
         Sum_ -= Keys_.front().second;
         RecsCount_ -= Keys_.front().first.GetCount();
         InternalPartsCount_ -= Keys_.front().first.GetInternalPartsCount();
-        if (Keys_.front().first.HasOffsetDelta()) {
-            OffsetDelta_ -= *Keys_.front().first.GetOffsetDelta();
+        if (Keys_.front().first.HasOffsetDelta() && OffsetDelta_.Defined()) {
+            (*OffsetDelta_) -= *Keys_.front().first.GetOffsetDelta();
         }
         auto res = Keys_.front();
         Keys_.pop_front();
@@ -101,8 +103,8 @@ public:
         Sum_ -= Keys_.back().second;
         RecsCount_ -= Keys_.back().first.GetCount();
         InternalPartsCount_ -= Keys_.back().first.GetInternalPartsCount();
-        if (Keys_.back().first.HasOffsetDelta()) {
-            OffsetDelta_ -= *Keys_.back().first.GetOffsetDelta();
+        if (Keys_.back().first.HasOffsetDelta() && OffsetDelta_.Defined()) {
+            (*OffsetDelta_) -= *Keys_.back().first.GetOffsetDelta();
         }
         auto res = Keys_.back();
         Keys_.pop_back();
@@ -124,8 +126,10 @@ public:
     }
 
     void SetNewOffsetDelta(const TKey& key) {
-        if (key.HasOffsetDelta()) {
-            OffsetDelta_ += *key.GetOffsetDelta();
+        if (key.HasOffsetDelta() && OffsetDelta_.Defined()) {
+            (*OffsetDelta_) += *key.GetOffsetDelta();
+        } else if (!key.HasOffsetDelta() && OffsetDelta_.Defined()) {
+            OffsetDelta_ = Nothing();
         }
     }
 
@@ -155,7 +159,7 @@ private:
     ui32 Sum_;
     ui32 RecsCount_;
     ui16 InternalPartsCount_;
-    ui64 OffsetDelta_;
+    TMaybe<ui64> OffsetDelta_{0};
 };
 
 struct TPartition::THasDataReq {

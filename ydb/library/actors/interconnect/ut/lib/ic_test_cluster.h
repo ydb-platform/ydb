@@ -23,6 +23,7 @@ public:
         USE_ZC = 1,
         USE_TLS = 1 << 1,
         RDMA_POLLING_CQ = 1 << 2,
+        DISABLE_RDMA = 1 << 3,
     };
 
     using TCheckerFactory = std::function<IActor*(ui32)>;
@@ -87,12 +88,16 @@ public:
                 /*numDynamicNodes=*/0, NumThreads, LoggerSettings, inflight,
                 flags & USE_ZC ? ESocketSendOptimization::IC_MSG_ZEROCOPY : ESocketSendOptimization::DISABLED,
                 flags & USE_TLS, checkerFactory, flags & RDMA_POLLING_CQ ? NInterconnect::NRdma::ECqMode::POLLING : NInterconnect::NRdma::ECqMode::EVENT,
-                settingsCustomizer, LogBackendFactory));
+                settingsCustomizer, LogBackendFactory, !(flags & DISABLE_RDMA)));
         }
     }
 
     TNode* GetNode(ui32 id) {
         return Nodes[id].Get();
+    }
+
+    NMonitoring::TDynamicCounterPtr GetCounters() const {
+        return Counters;
     }
 
     void StartBlackhole(ui32 nodeId) {

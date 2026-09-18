@@ -13,19 +13,22 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/util/affinity.h>
-#include <ydb/library/actors/util/cpu_topology.h>
 #include <ydb/library/actors/util/cpumask.h>
 
 #include <library/cpp/getopt/small/last_getopt.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/datetime/base.h>
+#include <util/folder/path.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
+#include <util/stream/file.h>
 #include <util/stream/output.h>
+#include <util/string/cast.h>
 #include <util/string/printf.h>
+#include <util/string/strip.h>
 #include <util/system/rusage.h>
 
 #include <condition_variable>
@@ -190,32 +193,70 @@ namespace {
         return out.Str();
     }
 
+    TString ReadSysfs(const TString& path) {
+        try {
+            return Strip(TFileInput(path).ReadAll());
+        } catch (...) {
+            return {};
+        }
+    }
+
+    TCpuMask ReadCpuList(const TString& path) {
+        const TString list = ReadSysfs(path);
+        return list.empty() ? TCpuMask() : TCpuMask(list);
+    }
+
+    TVector<ui32> ListNumaNodeIds() {
+        TVector<TString> names;
+        try {
+            TFsPath("/sys/devices/system/node").ListNames(names);
+        } catch (...) {
+            return {};
+        }
+        TVector<ui32> ids;
+        for (const TString& name : names) {
+            ui32 id = 0;
+            if (name.StartsWith("node") && TryFromString(name.substr(4), id)) {
+                ids.push_back(id);
+            }
+        }
+        Sort(ids);
+        return ids;
+    }
+
     // Keep one logical CPU per physical core: the lowest-numbered sibling of each ThreadSiblings group.
     // Sharing a core with an SMT sibling is a common source of run-to-run jitter on busy boxes.
-    TCpuMask PreferPhysicalCores(const TCpuMask& mask, const TCpuTopology& topology) {
+    TCpuMask PreferPhysicalCores(const TCpuMask& mask) {
         TCpuMask result;
         THashSet<ui32> seenCores;
+        THashSet<TCpuId> skip;
         for (TCpuId cpu = 0; cpu < mask.Size(); ++cpu) {
-            if (!mask.IsSet(cpu)) {
+            if (!mask.IsSet(cpu) || skip.contains(cpu)) {
                 continue;
             }
-            const TLogicalCpuInfo* info = topology.FindCpu(cpu);
-            if (!info) {
-                result.Set(cpu);
-                continue;
+
+            TCpuMask siblings;
+            const TString siblingList = ReadSysfs(Sprintf("/sys/devices/system/cpu/cpu%" PRIu32 "/topology/thread_siblings_list", cpu));
+            if (!siblingList.empty()) {
+                siblings = TCpuMask(siblingList);
+            } else {
+                siblings.Set(cpu);
             }
-            // Pick the lowest sibling that is also in the requested mask; skip the rest of the group.
+
             TCpuId representative = Max<TCpuId>();
-            for (TCpuId sibling = 0; sibling < info->ThreadSiblings.Size(); ++sibling) {
-                if (info->ThreadSiblings.IsSet(sibling) && mask.IsSet(sibling)) {
+            for (TCpuId sibling = 0; sibling < siblings.Size(); ++sibling) {
+                if (siblings.IsSet(sibling) && mask.IsSet(sibling)) {
                     representative = Min(representative, sibling);
+                    skip.insert(sibling);
                 }
             }
             if (representative == Max<TCpuId>()) {
                 representative = cpu;
             }
-            if (info->CoreId != UnknownCpuTopologyId) {
-                if (!seenCores.insert(info->CoreId).second) {
+
+            const TString coreStr = ReadSysfs(Sprintf("/sys/devices/system/cpu/cpu%" PRIu32 "/topology/core_id", cpu));
+            if (!coreStr.empty()) {
+                if (!seenCores.insert(FromString<ui32>(coreStr)).second) {
                     continue;
                 }
             } else if (cpu != representative) {
@@ -226,41 +267,37 @@ namespace {
         return result;
     }
 
-    TCpuMask ResolveCpuMask(const TConfig& cfg, const TCpuTopology& topology) {
+    TCpuMask ResolveCpuMask(const TConfig& cfg) {
         if (!cfg.CpuMask.empty()) {
             return TCpuMask(cfg.CpuMask);
         }
 
         std::optional<ui32> numaNode = cfg.NumaNode;
         if (!numaNode && cfg.Pin) {
-            if (topology.NumaNodes.empty()) {
+            const TVector<ui32> nodes = ListNumaNodeIds();
+            if (nodes.empty()) {
                 ythrow yexception() << "CPU topology has no NUMA nodes; pass --cpu-mask explicitly";
             }
-            numaNode = topology.NumaNodes.front().Id;
+            numaNode = nodes.front();
         }
         if (!numaNode) {
             return {};
         }
 
-        const TCpuTopologyGroup* group = nullptr;
-        for (const auto& node : topology.NumaNodes) {
-            if (node.Id == *numaNode) {
-                group = &node;
-                break;
-            }
-        }
-        if (!group) {
+        const TCpuMask group = ReadCpuList(Sprintf("/sys/devices/system/node/node%" PRIu32 "/cpulist", *numaNode));
+        if (group.IsEmpty()) {
             TStringStream available;
-            for (size_t i = 0; i < topology.NumaNodes.size(); ++i) {
+            const TVector<ui32> nodes = ListNumaNodeIds();
+            for (size_t i = 0; i < nodes.size(); ++i) {
                 if (i) {
                     available << ',';
                 }
-                available << topology.NumaNodes[i].Id;
+                available << nodes[i];
             }
             ythrow yexception() << "NUMA node " << *numaNode << " not found; available: " << available.Str();
         }
 
-        return cfg.AllowSmt ? group->Cpus : PreferPhysicalCores(group->Cpus, topology);
+        return cfg.AllowSmt ? group : PreferPhysicalCores(group);
     }
 
     // Must run before any actor-system / uring threads are created: sched_setaffinity on the process is
@@ -272,12 +309,7 @@ namespace {
             return;
         }
 
-        auto topology = ParseCpuTopology();
-        if (!topology) {
-            ythrow yexception() << "failed to parse CPU topology: " << topology.error();
-        }
-
-        const TCpuMask mask = ResolveCpuMask(cfg, *topology);
+        const TCpuMask mask = ResolveCpuMask(cfg);
         if (mask.IsEmpty()) {
             ythrow yexception() << "resolved CPU mask is empty";
         }

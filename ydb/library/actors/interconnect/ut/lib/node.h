@@ -41,7 +41,8 @@ public:
           bool withTls = false, std::function<IActor*(ui32)> checkerFactory = {},
           NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT,
           std::function<void(ui32, TInterconnectSettings&)> settingsCustomizer = {},
-          TLogBackendFactory logBackendFactory = {}) {
+          TLogBackendFactory logBackendFactory = {},
+          bool withRdma = true) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -89,7 +90,9 @@ public:
         }
 
         #if !defined(_msan_enabled_)
-        common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+        if (withRdma) {
+            common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+        }
         #endif
 
         if (withTls) {

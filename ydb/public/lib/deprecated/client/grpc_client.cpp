@@ -215,9 +215,11 @@ namespace NKikimr {
                 return Channel->GetState(false);
             }
 
-            void SetAuthToken(const TString& token) {
-                AuthToken = token;
-            }
+void SetAuthToken(const TString& token) {
+    with_lock (Mutex) {
+        AuthToken = token;
+    }
+}
 
             template<typename TRequest, typename TResponse>
             void Issue(const TRequest& request, TCallback<TResponse>&& callback,

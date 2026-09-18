@@ -18,7 +18,7 @@ namespace NKikimr::NPathAliasing {
     } // namespace
 
     Y_UNIT_TEST_SUITE(PathNormalizerCompact) {
-        Y_UNIT_TEST(DisabledEmptyAndUnmatchedInputsAreUnchanged) {
+        Y_UNIT_TEST(DisabledEmptyAndUnmatchedInputsArePreservedByteForByte) {
             const TPathNormalizer disabled;
             const TPathNormalizer empty{NKikimrConfig::TPathRewriteConfig{}};
 
@@ -26,7 +26,19 @@ namespace NKikimr::NPathAliasing {
             AddRule(unmatchedConfig, R"(^/alias(/|$))", R"(/Root\1)");
             const TPathNormalizer unmatched(unmatchedConfig);
 
-            for (const TString& path : {TString{}, TString("/"), TString("/Other"), TString("/Root/Table")}) {
+            for (const TString& path : {
+                     TString{},
+                     TString("/"),
+                     TString("relative/path"),
+                     TString("Root/Table"),
+                     TString("./relative/../path"),
+                     TString("relative//path"),
+                     TString("/Root//Table"),
+                     TString("/Root/./Table"),
+                     TString("/Root/../Table"),
+                     TString("/Other"),
+                     TString("/Root/Table"),
+                 }) {
                 UNIT_ASSERT_VALUES_EQUAL(disabled.NormalizePath(path), path);
                 UNIT_ASSERT_VALUES_EQUAL(empty.NormalizePath(path), path);
                 UNIT_ASSERT_VALUES_EQUAL(unmatched.NormalizePath(path), path);
@@ -35,6 +47,15 @@ namespace NKikimr::NPathAliasing {
             NKikimrConfig::TPathRewriteConfig emptyMatchConfig;
             AddRule(emptyMatchConfig, "", "/unexpected");
             UNIT_ASSERT_VALUES_EQUAL(TPathNormalizer(emptyMatchConfig).NormalizePath(""), "");
+        }
+
+        Y_UNIT_TEST(MatchesRawInputWithoutPathReconstruction) {
+            NKikimrConfig::TPathRewriteConfig config;
+            AddRule(config, R"(^/raw//\.\./alias$)", "/target//./resource");
+            const TPathNormalizer normalizer(config);
+
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/raw//../alias"), "/target//./resource");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/raw/../alias"), "/raw/../alias");
         }
 
         Y_UNIT_TEST(PrefixReplacementPreservesTheUnmatchedSuffix) {

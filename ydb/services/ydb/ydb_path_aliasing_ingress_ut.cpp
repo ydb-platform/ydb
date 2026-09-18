@@ -11,6 +11,7 @@
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 
+#include <array>
 #include <chrono>
 #include <memory>
 #include <set>
@@ -32,9 +33,12 @@ namespace NKikimr::NGRpcService {
             rule->SetReplacement(replacement);
         }
 
-        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false) {
+        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true) {
             NKikimrConfig::TAppConfig config;
             config.MutableGRpcConfig()->SetSkipSchemeCheck(useSimpleProxy);
+            if (!enablePathAliasing) {
+                return config;
+            }
             AddRule(config, "^/alias$", "/Root/kfront");
             AddRule(config, "^/discovery-alias$", "/Root/kfront");
             AddRule(config, "^/Root/kfront$", "/Root/missing");
@@ -46,11 +50,16 @@ namespace NKikimr::NGRpcService {
         template <class TStub, class TRequest, class TResponse>
         TResponse Call(TStub& stub,
                        grpc::Status (TStub::*method)(grpc::ClientContext*, const TRequest&, TResponse*),
-                       TRequest request, TStringBuf database)
+                       TRequest request, TStringBuf database,
+                       bool addDatabaseHeader = true, bool addAuthTicket = true)
         {
             grpc::ClientContext context;
-            context.AddMetadata("x-ydb-database", std::string(database.data(), database.size()));
-            context.AddMetadata("x-ydb-auth-ticket", "root@builtin");
+            if (addDatabaseHeader) {
+                context.AddMetadata("x-ydb-database", std::string(database.data(), database.size()));
+            }
+            if (addAuthTicket) {
+                context.AddMetadata("x-ydb-auth-ticket", "root@builtin");
+            }
             context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
             if constexpr (requires { request.mutable_operation_params(); }) {
                 request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
@@ -88,8 +97,8 @@ namespace NKikimr::NGRpcService {
             NYdb::TKikimrWithGrpcAndRootSchema Server;
             std::shared_ptr<grpc::Channel> Channel;
 
-            explicit TFixture(bool useSimpleProxy = false)
-                : Server(MakeConfig(useSimpleProxy), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
+            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true)
+                : Server(MakeConfig(useSimpleProxy, enablePathAliasing), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
                     settings.AddStoragePoolType("hdd");
                     settings.RegisterGrpcService<TKeyValueGRpcServiceV1>("keyvalue");
                 })
@@ -153,7 +162,7 @@ namespace NKikimr::NGRpcService {
             Success(Call(*stub, &TTable::DeleteSession, close, "/alias"));
         }
 
-        Y_UNIT_TEST(DiscoveryNormalizesBodySeparatelyAndPreservesHeaderPrecedence) {
+        Y_UNIT_TEST(DiscoveryKeepsHeaderAndBodySeparate) {
             TFixture fixture;
             auto stub = Ydb::Discovery::V1::DiscoveryService::NewStub(fixture.Channel);
 
@@ -167,8 +176,56 @@ namespace NKikimr::NGRpcService {
             const auto expected = EndpointIdentities(list("/alias", "/discovery-alias"));
             UNIT_ASSERT(!expected.empty());
             UNIT_ASSERT(EndpointIdentities(list("/alias", "/alias")) == expected);
-            UNIT_ASSERT(EndpointIdentities(list("", "/discovery-alias")) == expected);
+
+            Ydb::Discovery::ListEndpointsRequest missing;
+            missing.set_database("/Root/missing");
+            UNIT_ASSERT_VALUES_EQUAL(
+                Status(Call(*stub, &TDiscovery::ListEndpoints, missing, "/alias")), Ydb::StatusIds::NOT_FOUND);
             UNIT_ASSERT(EndpointIdentities(list("/discovery-alias", "/alias")) == expected);
+        }
+
+        Y_UNIT_TEST(UnmatchedInputsPreserveDisabledIngressBehavior) {
+            auto observe = [](bool enablePathAliasing) {
+                TFixture fixture(false, enablePathAliasing);
+                auto discovery = Ydb::Discovery::V1::DiscoveryService::NewStub(fixture.Channel);
+                auto keyValue = Ydb::KeyValue::V1::KeyValueService::NewStub(fixture.Channel);
+
+                auto discoveryStatus = [&](bool addDatabaseHeader, bool addAuthTicket) {
+                    Ydb::Discovery::ListEndpointsRequest request;
+                    request.set_database("/Root");
+                    return Status(Call(*discovery, &TDiscovery::ListEndpoints, request, "",
+                        addDatabaseHeader, addAuthTicket));
+                };
+
+                Ydb::KeyValue::CreateVolumeRequest relative;
+                relative.set_path("relative-volume");
+                relative.set_partition_count(1);
+                for (ui32 index = 0; index < 3; ++index) {
+                    relative.mutable_storage_config()->add_channel()->set_media("hdd");
+                }
+
+                auto slashless = relative;
+                slashless.set_path("Root/legacy-volume");
+
+                return std::array{
+                    discoveryStatus(false, false),
+                    discoveryStatus(true, false),
+                    discoveryStatus(false, true),
+                    discoveryStatus(true, true),
+                    Status(Call(*keyValue, &TKeyValue::CreateVolume, relative, "/Root")),
+                    Status(Call(*keyValue, &TKeyValue::CreateVolume, slashless, "/Root")),
+                };
+            };
+
+            const auto disabled = observe(false);
+            const auto unmatched = observe(true);
+            UNIT_ASSERT(disabled == unmatched);
+            UNIT_ASSERT_VALUES_EQUAL(disabled[0], Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(disabled[1], Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(disabled[2], Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(disabled[3], Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(disabled[4], Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(disabled[5], Ydb::StatusIds::SUCCESS);
         }
 
         Y_UNIT_TEST(NativeStorageRewritesOnlyExplicitResourcePaths) {
@@ -179,7 +236,7 @@ namespace NKikimr::NGRpcService {
             create.set_path("/volume-alias");
             create.set_partition_count(1);
             for (ui32 index = 0; index < 3; ++index) {
-                create.mutable_storage_config()->add_channel()->set_media("ssd");
+                create.mutable_storage_config()->add_channel()->set_media("hdd");
             }
             Success(Call(*stub, &TKeyValue::CreateVolume, create, "/alias"));
 

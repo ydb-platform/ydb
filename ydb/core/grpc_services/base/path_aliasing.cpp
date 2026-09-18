@@ -31,16 +31,14 @@ namespace NKikimr::NGRpcService {
     void IRequestProxyCtx::InitializePathNormalization(
         std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer)
     {
-        if (PathNormalizationInitialized_) {
+        if (PathNormalizationInitialized_ || !IsPathNormalizationEnabled()) {
             return;
         }
 
         auto database = GetDatabaseNameFromRequest();
-        if (IsPathNormalizationEnabled()) {
-            SetPathNormalizer(std::move(normalizer));
-            if (database) {
-                database = NormalizePath(*database);
-            }
+        SetPathNormalizer(std::move(normalizer));
+        if (database) {
+            database = NormalizePath(*database);
         }
 
         EffectiveDatabaseName_ = std::move(database);

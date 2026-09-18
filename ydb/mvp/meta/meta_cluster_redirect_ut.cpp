@@ -46,7 +46,8 @@ public:
         if (Timeout) {
             Send(SelfId(), new NActors::TEvents::TEvWakeup());
         } else {
-            Send(SelfId(), new NMVP::THandlerActorYdb::TEvPrivate::TEvDataQueryResult(std::move(Result)));
+            Send(SelfId(), new NMVP::NClusterRedirect::TEvBalancer::TEvResult(
+                NMVP::NClusterRedirect::ExtractBalancer(Result)));
         }
     }
 };

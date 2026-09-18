@@ -1,14 +1,8 @@
 #pragma once
 
-#include "meta_cluster_info.h"
-#include "mvp.h"
-
-#include <ydb/mvp/core/core_ydb_impl.h>
+#include "meta_cluster_balancer.h"
 
 #include <library/cpp/string_utils/quote/quote.h>
-#include <library/cpp/uri/uri.h>
-
-#include <util/string/ascii.h>
 
 namespace NMVP {
 
@@ -19,21 +13,8 @@ protected:
     TString ClusterName;
 
 private:
+    const NActors::TActorId BalancerCache;
     TStringBuf Target;
-    TMaybe<NYdb::NTable::TSession> Session;
-
-    static bool IsValidUrlText(TStringBuf value) {
-        for (size_t i = 0; i < value.size(); ++i) {
-            const unsigned char c = value[i];
-            if (c <= ' ' || c == 0x7f || c == '\\' || c == '#') {
-                return false;
-            }
-            if (c == '%' && (i + 2 >= value.size() || !IsAsciiHex(value[i + 1]) || !IsAsciiHex(value[i + 2]))) {
-                return false;
-            }
-        }
-        return true;
-    }
 
     static bool IsValidPathSegment(TStringBuf value) {
         const TString decoded = UrlUnescapeRet(value);
@@ -50,7 +31,7 @@ private:
 
     bool ParseRequest() {
         TStringBuf url = Request.Request->URL;
-        if (!IsValidUrlText(url) || !url.SkipPrefix("/cluster/")) {
+        if (!NClusterRedirect::IsValidUrlText(url) || !url.SkipPrefix("/cluster/")) {
             return false;
         }
         TStringBuf path = url.Before('?');
@@ -73,25 +54,6 @@ private:
         return true;
     }
 
-    static TString BuildRedirectLocation(TStringBuf balancer, TStringBuf target) {
-        if (!IsValidUrlText(balancer)) {
-            return {};
-        }
-        NUri::TUri uri;
-        if (uri.ParseUri(balancer, NUri::TFeature::FeaturesDefaultOrSchemeKnown) != NUri::TState::ParsedOK
-                || (uri.GetScheme() != NUri::TScheme::SchemeHTTP && uri.GetScheme() != NUri::TScheme::SchemeHTTPS)
-                || uri.GetField(NUri::TField::FieldHost).empty()
-                || (uri.GetFieldMask() & (NUri::TField::FlagAuth | NUri::TField::FlagQuery | NUri::TField::FlagFragment))) {
-            return {};
-        }
-        balancer.ChopSuffix("/");
-        // The stored balancer points to the viewer API; the request contains its own full path.
-        if (!balancer.ChopSuffix("/viewer/json")) {
-            balancer.ChopSuffix("/viewer");
-        }
-        return TStringBuilder() << balancer << target;
-    }
-
     void ReplyAndPassAway(const NHttp::THttpOutgoingResponsePtr& response) {
         Send(Request.Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
         PassAway();
@@ -99,9 +61,10 @@ private:
 
 public:
     TMetaClusterRedirectActor(const TYdbLocation& location, const NActors::TActorId& sender,
-            const NHttp::THttpIncomingRequestPtr& request)
+            const NHttp::THttpIncomingRequestPtr& request, NActors::TActorId balancerCache = {})
         : Location(location)
         , Request(sender, request)
+        , BalancerCache(balancerCache)
     {}
 
     void Bootstrap() {
@@ -114,55 +77,22 @@ public:
     }
 
     virtual void RequestClusterInfo() {
-        auto* actorSystem = NActors::TActivationContext::ActorSystem();
-        auto actorId = SelfId();
-        // Query parameters belong to the target cluster, including `database` and `timeout`.
-        auto clientSettings = TMVP::GetStrictMetaDatabaseClientSettings(Request, Location);
-        // Concurrent clients can share driver state before its initial discovery finishes.
-        // Async discovery waits for endpoints instead of failing with an empty endpoint list.
-        clientSettings.DiscoveryMode(NYdb::EDiscoveryMode::Async);
-        Location.GetTableClient(clientSettings)
-            .CreateSession().Subscribe([actorId, actorSystem](NYdb::NTable::TAsyncCreateSessionResult result) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(result.ExtractValue()));
-            });
+        TString userToken = TMVP::MetaDatabaseTokenName.empty() ? Request.GetAuthToken() : TString();
+        Send(BalancerCache, new NClusterRedirect::TEvBalancer::TEvGet({ClusterName, std::move(userToken)}));
     }
 
-    void Handle(TEvPrivate::TEvCreateSessionResult::TPtr event) {
+    void Handle(NClusterRedirect::TEvBalancer::TEvResult::TPtr event) {
         const auto& result = event->Get()->Result;
-        if (!result.IsSuccess()) {
-            ReplyAndPassAway(CreateStatusResponse(Request.Request, result));
+        if (!result.Status.IsSuccess()) {
+            ReplyAndPassAway(CreateStatusResponse(Request.Request, result.Status));
             return;
         }
-        Session = result.GetSession();
-        auto* actorSystem = NActors::TActivationContext::ActorSystem();
-        auto actorId = SelfId();
-        Session->ExecuteDataQuery(
-            BuildClusterInfoQuery(Location.RootDomain),
-            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::OnlineRO()).CommitTx(),
-            BuildClusterInfoQueryParams(ClusterName))
-            .Subscribe([actorId, actorSystem, session = Session](NYdb::NTable::TAsyncDataQueryResult result) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvDataQueryResult(result.ExtractValue()));
-            });
-    }
-
-    void Handle(TEvPrivate::TEvDataQueryResult::TPtr event) {
-        const auto& result = event->Get()->Result;
-        if (!result.IsSuccess()) {
-            ReplyAndPassAway(CreateStatusResponse(Request.Request, result));
-            return;
-        }
-        THashMap<TString, TString> clusterInfo;
-        if (!TryExtractClusterInfo(result.GetResultSet(0), clusterInfo)) {
+        if (!result.Found) {
             ReplyAndPassAway(Request.Request->CreateResponseNotFound("Cluster not found", "text/plain"));
             return;
         }
-        const TString location = BuildRedirectLocation(clusterInfo.Value("balancer", TString()), Target);
-        if (location.empty()) {
-            ReplyAndPassAway(Request.Request->CreateResponseServiceUnavailable("Cluster balancer is not configured as an HTTP(S) URL", "text/plain"));
-            return;
-        }
         NHttp::THeadersBuilder headers;
-        headers.Set("Location", location);
+        headers.Set("Location", TStringBuilder() << result.Balancer << Target);
         headers.Set("Cache-Control", "no-store");
         ReplyAndPassAway(Request.Request->CreateResponse("307", "Temporary Redirect", headers));
     }
@@ -173,24 +103,28 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvCreateSessionResult, Handle);
-            hFunc(TEvPrivate::TEvDataQueryResult, Handle);
+            hFunc(NClusterRedirect::TEvBalancer::TEvResult, Handle);
             cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 };
 
-class THandlerActorMetaClusterRedirect : public NActors::TActor<THandlerActorMetaClusterRedirect> {
+class THandlerActorMetaClusterRedirect : public NActors::TActorBootstrapped<THandlerActorMetaClusterRedirect> {
     const TYdbLocation& Location;
+    NActors::TActorId BalancerCache;
 
 public:
     explicit THandlerActorMetaClusterRedirect(const TYdbLocation& location)
-        : TActor(&THandlerActorMetaClusterRedirect::StateWork)
-        , Location(location)
+        : Location(location)
     {}
 
+    void Bootstrap() {
+        BalancerCache = Register(new NClusterRedirect::TBalancerCacheActor(Location));
+        Become(&THandlerActorMetaClusterRedirect::StateWork);
+    }
+
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
-        Register(new TMetaClusterRedirectActor(Location, event->Sender, event->Get()->Request));
+        Register(new TMetaClusterRedirectActor(Location, event->Sender, event->Get()->Request, BalancerCache));
     }
 
     STFUNC(StateWork) {

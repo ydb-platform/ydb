@@ -34,11 +34,25 @@ apply. Meta does not proxy the cluster response or add a service token.
 Through the website's `/api/meta` route, the example starts with
 `/api/meta/cluster/testing-global/viewer/json/nodes?limit=80`.
 
-Each request reads the cluster description from the meta database; redirect
-responses use `Cache-Control: no-store`. Target query parameters such as
+Each pod caches the cluster name to balancer mapping in memory. Concurrent
+requests for a cluster with an empty cache share one database lookup. After
+the first successful lookup, the pod refreshes the entry in the background
+60 seconds after each completed attempt, without requiring another request.
+Requests use the saved address during refreshes and after lookup errors,
+including an invalid balancer URL. A successful lookup that no longer finds
+the cluster replaces its saved address with a `404` result. Entries are removed
+after seven days without requests; restarting the pod clears the cache.
+
+The cache holds only routing information, not request bodies or cluster API
+responses. Each redirect uses the current request's path and query. The service
+token is obtained again for each lookup; if meta uses caller credentials instead,
+cache entries are separated by token. This cache is local regardless of `MetaCache`.
+
+Redirect responses use `Cache-Control: no-store`. Target query parameters such as
 `database` do not change which database meta reads. Unknown clusters return
-`404`; missing or invalid balancer URLs return `503`; a meta lookup timeout
-returns `504`. Invalid paths, including parent-directory traversal, return `400`.
+`404`; without a cached address, missing or invalid balancer URLs return `503`
+and a meta lookup timeout returns `504`. Invalid paths, including
+parent-directory traversal, return `400`.
 
 ## Config Examples
 

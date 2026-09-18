@@ -1,34 +1,33 @@
-# Kafka API usage examples
+# Examples of reading and writing via Kafka API
+
 <!-- markdownlint-disable blanks-around-fences -->
 
-This example shows a code snippet for reading data from a topic via Kafka API without a consumer group (Manual Partition Assignment).
-You don't need to create a consumer for this reading mode.
+This article provides examples of reading and writing to [topics](../../concepts/datamodel/topic.md) using Kafka API.
 
-Before proceeding with the examples:
+Before running the examples:
 
 1. [Create a topic](../ydb-cli/topic-create.md).
-1. [Add a consumer](../ydb-cli/topic-consumer-add.md).
-1. If authentication is enabled, [create a user](../../security/authorization.md#user).
+2. [Add a reader](../ydb-cli/topic-consumer-add.md).
+3. If authentication is enabled, [create a user](../../yql/reference/syntax/create-user.md).
 
-## How to try the Kafka API {#how-to-try-kafka-api}
+## Getting started {#how-to-try-kafka-api}
 
 ### In Docker {#how-to-try-kafka-api-in-docker}
 
-Run Docker following [the quickstart guide](../../quickstart.md#install), and the Kafka API will be available on port 9092.
+Run Docker according to [this](../../quickstart#install) instruction. Kafka API will be available on port 9092.
 
-## Kafka API usage examples
+## Kafka API examples
 
 ### Reading
 
-{{ ydb-short-name }} Topics Kafka API lacks support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option. Therefore, the following parameter must always be specified in the reader configuration: `check.crcs=false`.
+When reading, a distinctive feature of Kafka API is the lack of support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option. Therefore, in the reader configuration, you always need to specify the parameter: `check.crcs=false`.
 
-
-Below are examples of reading using the Kafka protocol for various applications, programming languages, and frameworks without authentication.
-For examples of how to set up authentication, see [Authentication examples](#authentication-examples).
+Below are examples of reading via the Kafka protocol for different applications, programming languages, and connection frameworks without authentication.
+For examples of how to configure authentication, see the section [Examples with authentication](#authentication-examples).
 
 {% list tabs %}
 
-- Built-in Kafka CLI tools
+- Kafka console utilities
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
@@ -60,7 +59,7 @@ For examples of how to set up authentication, see [Authentication examples](#aut
 
 {% list tabs %}
 
-- Built-in Kafka CLI tools
+- Kafka console utilities
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
@@ -96,33 +95,33 @@ For examples of how to set up authentication, see [Authentication examples](#aut
 
 {% endlist %}
 
-### Authentication examples {#authentication-examples}
+### Examples with authentication {#authentication-examples}
 
-For more details on authentication, see the [Authentication](./auth.md) section. Below are examples of authentication in a cloud database and a local database.
+For more details on authentication, see the section [Authentication](./auth.md). Below are examples of authentication in a cloud database
+and in a local database.
 
 {% note info %}
 
-Currently, the only available authentication mechanism with Kafka API in {{ ydb-short-name }} Topics is `SASL_PLAIN`.
+Currently, the only available authentication mechanism with Kafka API in YDB Topics is `SASL_PLAIN`.
 
 {% endnote %}
 
-#### Authentication examples in on-prem YDB
+#### Examples of authentication in a self-hosted YDB
 
-To use authentication in a multinode self-deployed database:
+To test authentication in a local database:
 
-1. Create a user. [How to do this in YQL](../../yql/reference/syntax/create-user.md). [How to execute YQL from CLI](../ydb-cli/sql.md).
-2. Connect to the Kafka API as shown in the examples below. In all examples, it is assumed that:
+1. Create a user. [How to do this in YQL](../../yql/reference/syntax/create-user.md). [How to run YQL from the CLI](../ydb-cli/sql.md).
+2. Connect to Kafka API as in the examples below. All examples assume that:
 
-   - YDB is running locally with the environment variable `YDB_KAFKA_PROXY_PORT=9092`, meaning that the Kafka API is available at `localhost:9092`. For example, you can run YDB in Docker as described [here](../../quickstart.md#install).
+- YDB is running locally with the environment variable YDB_KAFKA_PROXY_PORT=9092, meaning Kafka API is available at localhost:9092. For example, you can run YDB in Docker as described [here](../../quickstart.md#install).
+- <username> is the username you specified when creating the user.
+- <password> is the user password you specified when creating the user.
 
-   - <username> is the username you specified when creating the user.
-   - <password> is the user's password you specified when creating the user.
-
-Examples are shown for reading, but the same configuration parameters work for writing to a topic as well.
+The examples are shown for reading, but the same configuration parameters also work for writing to a topic.
 
 {% list tabs %}
 
-- Built-in Kafka CLI tools
+- Kafka console utilities
 
   {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 

@@ -1,0 +1,13 @@
+items:
+- name: Query execution plan
+  href: plans.md
+- name: Графический план запроса
+  items:
+    - name: Location of information in the query plan
+      href: layout.md
+    - name: Structure of the actual query plan
+      href: structure.md
+    - name: Visualization of query metrics
+      href: metrics.md
+- name: Optimizer hints
+  href: hints.md

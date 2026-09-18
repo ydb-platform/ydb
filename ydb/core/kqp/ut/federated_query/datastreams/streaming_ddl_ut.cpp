@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
-        const auto checkpointId = GetStreamingQueryCheckpointId(queryName);
+        auto checkpointId = GetStreamingQueryCheckpointId(queryName);
         WaitCheckpointUpdate(checkpointId);
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // not checkpointed yet makes the message replay (at-least-once). Wait for two
         // checkpoint updates: the first may belong to a checkpoint whose barrier was injected
         // before the message was consumed, the second is guaranteed to be injected after it.
-        const auto& checkpointId = GetStreamingQueryCheckpointId(queryName);
+        checkpointId = GetStreamingQueryCheckpointId(queryName);
         WaitCheckpointUpdate(checkpointId);
         WaitCheckpointUpdate(checkpointId);
 

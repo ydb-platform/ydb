@@ -40,4 +40,13 @@ void TNativeTypeSupport<TString>::AppendToString(const TString& value, TStringBu
     stringBuffer.append(value);
 }
 
+TString TNativeTypeSupport<bool>::ToString(const bool& value) {
+    return value?"true":"false";
+}
+
+void TNativeTypeSupport<bool>::AppendToString(const bool& value, TStringBuilder& stringBuffer) {
+    stringBuffer << ToString(value);
+}
+
+
 }  // namespace NActors::NStructuredLog

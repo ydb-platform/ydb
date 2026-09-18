@@ -24,6 +24,7 @@
 #include <ydb/library/actors/struct_log/json_writer.h>
 #include <ydb/library/actors/struct_log/meta_writer.h>
 #include <ydb/library/actors/struct_log/text_writer.h>
+#include <ydb/library/actors/struct_log/log_sink.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/actors/struct_log/structured_message.h>
 #include <ydb/library/actors/memory_log/memlog.h>

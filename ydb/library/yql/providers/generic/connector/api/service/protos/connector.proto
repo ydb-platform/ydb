@@ -397,6 +397,11 @@ message TExpression {
         uint64 field = 2;
     }
 
+    message TVariantGuess {
+        TExpression operand = 1;
+        string field = 2;
+    }
+
     oneof payload {
         // A scalar value
         Ydb.TypedValue typed_value = 1;
@@ -426,6 +431,8 @@ message TExpression {
         TStructMember struct_member = 13;
 
         TTupleNth tuple_nth = 14;
+
+        TVariantGuess variant_guess = 15;
     }
 }
 

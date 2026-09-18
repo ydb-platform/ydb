@@ -240,9 +240,9 @@ private:
         return false;
     }
 
-    bool IsMemberColumn(const TExprBase& node) {
-        if (const auto member = node.Maybe<TCoMember>()) {
-            return IsMemberColumn(member.Cast());
+    bool IsSupportedGuess(const TCoGuess& guess) {
+        if (Settings.IsEnabled(EFlag::StructOperators)) {
+            return CheckExpressionNodeForPushdown(guess.Variant());
         }
         return false;
     }
@@ -346,6 +346,9 @@ public:
         }
         if (auto maybeNth = node.Maybe<TCoNth>()) {
             return IsSupportedNth(maybeNth.Cast());
+        }
+        if (auto maybeGuess = node.Maybe<TCoGuess>()) {
+            return IsSupportedGuess(maybeGuess.Cast());
         }
         if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
             return IsSupportedSafeCast(maybeSafeCast.Cast());
@@ -665,7 +668,18 @@ private:
     }
 
     bool ExistsCanBePushed(const TCoExists& exists) {
-        return IsMemberColumn(exists.Optional());
+        const auto& node = exists.Optional();
+
+        if (const auto member = node.Maybe<TCoMember>()) {
+            return IsMemberColumn(member.Cast());
+        }
+        if (auto maybeNth = node.Maybe<TCoNth>()) {
+            return IsSupportedNth(maybeNth.Cast());
+        }
+        if (auto maybeGuess = node.Maybe<TCoGuess>()) {
+            return IsSupportedGuess(maybeGuess.Cast());
+        }
+        return false;
     }
 
     bool UdfCanBePushed(const TCoUdf& udf, const TExprNode::TListType& children) {

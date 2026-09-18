@@ -59,6 +59,7 @@ void TColumnShard::Handle(TEvPrivate::TEvContinueCutHistory::TPtr&, const TActor
         return;
     }
     if (!SharingSessionsManager->CanCutHistory()) {
+        Counters.GetCSCounters().OnCutHistoryScanAborted();
         CutHistoryScan.reset();
         return;
     }
@@ -99,6 +100,7 @@ void TColumnShard::FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& resu
     auto& scan = *CutHistoryScan;
     if (!SharingSessionsManager->CanCutHistory() || result.HasErrors() || result.HasRemovedData() ||
         result.GetPortions().size() != scan.Pending) {
+        Counters.GetCSCounters().OnCutHistoryScanAborted();
         CutHistoryScan.reset();
         return;
     }

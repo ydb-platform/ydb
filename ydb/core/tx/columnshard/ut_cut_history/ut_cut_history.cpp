@@ -167,6 +167,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
     Y_UNIT_TEST(EmptyClosedInterval) {
         TFixture f;
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
+        const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
+        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
         ui32 cuts = 0;
         ui32 batches = 0;
         bool holdGC = true;
@@ -206,6 +208,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 2u, "persisted covering barrier must suffice without fresh GC");
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 2u);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("ScanToSend"), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
         UNIT_ASSERT_VALUES_EQUAL(f.Counters()->GetCounter("Deriviative/CutHistory/RequestsSent/Count", true)->Val(), 2u);
         f.Runtime.SendToPipe(
             TabletId, f.Sender, new NMon::TEvRemoteHttpInfo("/app?TabletID=" + ToString(TabletId)), 0, GetPipeConfigWithRetries());
@@ -296,7 +299,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(metadataRequests, 0u);
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 0u, "queued old blob must be the sole remaining cut blocker");
         f.Controller->EnableBackground(EBackground::GC);
-        for (ui32 i = 0; i < 10; ++i) {
+        for (ui32 i = 0; i < 60 && cuts == 0; ++i) {
             ForwardToTablet(f.Runtime, TabletId, f.Sender, new TEvPrivate::TEvPeriodicWakeup());
             f.Runtime.SimulateSleep(TDuration::Seconds(1));
         }
@@ -322,6 +325,9 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         ui32 misses = 0;
         ui32 cuts = 0;
         bool linksApplied = false;
+        bool failMetadata = false;
+        ui32 metadataResults = 0;
+        const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
         auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
             if (!ev->HasEvent()) {
                 return;
@@ -337,6 +343,16 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                 ++batches;
                 UNIT_ASSERT(!continuation);
                 continuation = ev.Release();
+            } else if (auto* info = dynamic_cast<TEvPrivate::TEvMetadataAccessorsInfo*>(ev->GetBase()); failMetadata && info) {
+                auto result = info->ExtractResult();
+                auto data = result.ExtractValue();
+                UNIT_ASSERT(!data.GetPortions().empty());
+                data.AddError(data.GetPortions().begin()->second->GetPortionInfo().GetPathId(), "injected metadata failure");
+                auto* failed = new TEvPrivate::TEvMetadataAccessorsInfo(info->GetProcessor(), info->GetGeneration(),
+                    NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(data), result.ExtractResourcesGuard()));
+                ev.Reset(new IEventHandle(ev->Recipient, ev->Sender, failed, ev->Flags, ev->Cookie));
+                failMetadata = false;
+                ++metadataResults;
             } else if (const auto* ask = dynamic_cast<TEvPrivate::TEvAskTabletDataAccessors*>(ev->GetBase())) {
                 for (const auto& [_, portions] : ask->GetPortions()) {
                     misses += portions.GetPortionsCount();
@@ -368,6 +384,25 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_C(batches >= 3, "scan must yield between bounded batches");
         UNIT_ASSERT_C(misses <= 1, "scan must reuse metadata warmed by the foreground read");
         UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
+
+        f.Restart();
+        UNIT_ASSERT(continuation);
+        failMetadata = true;
+        misses = 0;
+        const ui64 scans = f.Samples("Scan");
+        resume();
+        for (ui32 i = 0; i < 60 && metadataResults == 0; ++i) {
+            f.Drive(1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(metadataResults, 1u);
+        UNIT_ASSERT(misses > 0);
+        UNIT_ASSERT(!continuation);
+        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 1u);
+        f.Drive();
+        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), scans);
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
 
         f.Restart();
         UNIT_ASSERT(continuation);
@@ -377,7 +412,9 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Drive();
         UNIT_ASSERT(linksApplied);
         resume();
+        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 2u);
         f.Drive();
+        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 2u);
         UNIT_ASSERT(!continuation);
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 1u, "an actual sharing admission must invalidate the unsent boot proof");
     }

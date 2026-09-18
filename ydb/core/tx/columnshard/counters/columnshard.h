@@ -103,6 +103,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr IndexationInputBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryRequestsSent;
+    NMonitoring::TDynamicCounters::TCounterPtr CutHistoryScansAborted;
     NMonitoring::THistogramPtr CutHistoryScanDurationMs;
     NMonitoring::THistogramPtr CutHistoryWaitDurationMs;
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
@@ -263,6 +264,10 @@ public:
 
     void IndexationInput(const ui64 size) const {
         IndexationInputBytes->Add(size);
+    }
+
+    void OnCutHistoryScanAborted() const {
+        CutHistoryScansAborted->Inc();
     }
 
     void OnCutHistoryScanFinished(const TDuration duration) const {

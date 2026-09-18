@@ -514,7 +514,7 @@ namespace NKikimr {
                         RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
                     } else {
                         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: requesting compaction token", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
-                        TryStartCompaction(ctx, CompactionTask->MaxRatio);
+                        TryStartCompaction(ctx, CompactionTask->Priority);
                         CompactionTask->Clear();
                         ScheduleCompactionWakeup(ctx);
                         UpdateStorageRatio(RTCtx->LevelIndex->CurSlice);
@@ -545,7 +545,7 @@ namespace NKikimr {
             }
         }
 
-        void TryStartCompaction(const TActorContext &ctx, double maxRatio) {
+        void TryStartCompaction(const TActorContext &ctx, TCompactionPriority priority) {
             Y_VERIFY_S(CompactionTokenState == ECompactionTokenState::Idle ||
                        CompactionTokenState == ECompactionTokenState::Requested,
                 HullDs->HullCtx->VCtx->VDiskLogPrefix << " Unexpected compaction token state: " << (int)CompactionTokenState);
@@ -556,9 +556,9 @@ namespace NKikimr {
 
             CompactionTokenState = ECompactionTokenState::Requested;
             ctx.Send(MakeBlobStorageCompBrokerID(), new TEvCompactionTokenRequest(
-                Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, maxRatio),
+                Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, priority),
                 IEventHandle::FlagTrackDelivery);
-            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: compaction requested with ratio %f", PDiskSignatureForHullDbKey<TKey>().ToString().data(), maxRatio));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: compaction requested with priority %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), priority.ToString().data()));
 
         }
 

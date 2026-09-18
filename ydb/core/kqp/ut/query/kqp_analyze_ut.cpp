@@ -121,6 +121,8 @@ void CheckAnalyzeWithNewRbo(bool persistStatistics) {
 
     Analyze(runtime, table.SaTabletId, {table.PathId}, "newRbo", "/Root/Database");
     UNIT_ASSERT_GT(scanRequests, 0);
+    // Statistics-save queries still use new RBO and its normal fallback.
+    UNIT_ASSERT_GT(failedCompilations(), failedBefore);
 
     CheckMultiColumnStatisticsProbes(env, runtime, table.PathId, {2, 3});
     const auto summary = GetStatistics(runtime, table.PathId, EStatType::TABLE_SUMMARY, {std::nullopt});

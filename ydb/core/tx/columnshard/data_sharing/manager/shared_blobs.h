@@ -53,7 +53,8 @@ public:
     bool HasBlobsInRange(const ui32 channel, const ui32 from, const ui32 to) const {
         const auto matches = [&](const auto& blob) {
             const auto& id = blob.first.GetLogoBlobId();
-            return id.TabletID() == (ui64)SelfTabletId && id.Channel() == channel && id.Generation() >= from && id.Generation() < to;
+            return id.TabletID() == static_cast<ui64>(SelfTabletId) && id.Channel() == channel && id.Generation() >= from &&
+                   id.Generation() < to;
         };
         return AnyOf(BorrowedBlobIds, matches) || AnyOf(SharedBlobIds, matches);
     }

@@ -52,16 +52,16 @@ public:
 };
 
 class TColumnShard::TCutHistoryResultProcessor: public NOlap::IMetadataAccessorResultProcessor {
-    TColumnShard* const Shard;
+    TColumnShard* const Owner;
 
     void DoApplyResult(
         NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>&& result, NOlap::TColumnEngineForLogs&) override {
-        Shard->FinishCutHistoryBatch(result.GetValue());
+        Owner->FinishCutHistoryBatch(result.GetValue());
     }
 
 public:
-    explicit TCutHistoryResultProcessor(TColumnShard* shard)
-        : Shard(shard)
+    explicit TCutHistoryResultProcessor(TColumnShard* owner)
+        : Owner(owner)
     {
     }
 };
@@ -218,7 +218,7 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
         ctx.Send(LauncherID(), event.release());
     }
     if (!requests.empty()) {
-        // A crash before this diagnostic transaction commits can lose the newest send attempts.
+        // Requests are already sent; a crash before commit can omit them from the diagnostic journal.
         Execute(new TTxSaveCutHistoryRequests(this, std::move(requests)), ctx);
     }
 }

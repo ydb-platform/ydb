@@ -511,7 +511,7 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
 
 bool TBlobManager::HasBlobsInRange(const ui32 channel, const ui32 from, const ui32 to) const {
     const auto matches = [&](const TLogoBlobID& id) {
-        return id.TabletID() == (ui64)SelfTabletId && id.Channel() == channel && id.Generation() >= from && id.Generation() < to;
+        return id.TabletID() == static_cast<ui64>(SelfTabletId) && id.Channel() == channel && id.Generation() >= from && id.Generation() < to;
     };
     const auto deletedMatches = [&](const auto& blob) {
         return matches(blob.first.GetLogoBlobId());

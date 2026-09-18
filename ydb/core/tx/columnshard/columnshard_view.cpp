@@ -8,6 +8,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json.h>
 #include <util/datetime/base.h>
+#include <util/generic/algorithm.h>
 
 #include <limits>
 
@@ -664,7 +665,7 @@ bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
         return false;
     }
     const auto page = HttpInfoEvent->Get()->Cgi().Get("page");
-    if (page != "compaction" && page != "portions") {
+    if (!EqualToOneOf(page, "compaction", "portions")) {
         using T = Schema::CutHistoryRequests;
         NIceDb::TNiceDb db(txc.DB);
         auto row = db.Table<T>().Range().Select();

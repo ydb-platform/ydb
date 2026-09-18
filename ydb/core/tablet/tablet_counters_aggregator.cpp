@@ -369,7 +369,10 @@ public:
             }
 
             db.DatabasePath = CanonizePath(entry.Path);
-            CreateDetailedMetricsAggregator(db, ctx);
+            // A late duplicate reply must not replace a live aggregator
+            if (!db.Aggregator) {
+                CreateDetailedMetricsAggregator(db, ctx);
+            }
         }
     }
 

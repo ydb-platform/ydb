@@ -100,6 +100,15 @@ inline bool SendToBSProxy(const TActorContext &ctx, TGroupId groupId, IEventBase
     return ctx.Send(CreateEventForBSProxy(ctx.SelfID, groupId, ev, cookie, std::move(traceId)));
 }
 
+// A block with generation Max<ui32>() is the persistent tombstone of a complete tablet deletion:
+// Hive sets it (see THive::BlockStorageForDelete) right before collecting the tablet's data, and
+// afterwards nothing can ever be written for that tablet again. So whoever stores data for this
+// tablet may drop all of it, along with any barrier bookkeeping, without waiting for the hard
+// barrier that Hive sends next -- that barrier may legitimately never be observed.
+inline constexpr bool IsCompleteTabletDeletionBlock(ui32 blockedGeneration) {
+    return blockedGeneration == Max<ui32>();
+}
+
 struct TEvBlobStorage {
     enum EEv {
         // user <-> proxy interface

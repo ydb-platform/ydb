@@ -64,6 +64,16 @@ namespace NKikimr {
         bool Find(ui64 tabletId, ui32 *outGen) const;
         bool IsInFlight() const { return !InFlightBlocks.empty() || !InFlightBlocksQueue.empty(); }
 
+        template <typename TCallback>
+        void ForEachDeletedTablet(TCallback&& callback) const {
+            Y_ABORT_UNLESS(Initialized);
+            for (const auto& [tabletId, gen] : PersistentBlocks) {
+                if (NGc::CompleteDelBlock(gen.Generation)) {
+                    callback(tabletId);
+                }
+            }
+        }
+
         void UpdateLegacy(ui64 tabletId, TBlockedGen gen) { UpdatePersistent(tabletId, gen); }
         // for log replay
         void UpdatePersistent(ui64 tabletId, TBlockedGen gen);

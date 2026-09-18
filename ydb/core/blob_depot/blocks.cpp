@@ -1,4 +1,6 @@
 #include "blocks.h"
+#include "data.h"
+#include "garbage_collection.h"
 #include "schema.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
@@ -12,6 +14,7 @@ namespace NKikimr::NBlobDepot {
         const ui64 IssuerGuid;
         const TInstant Timestamp;
         std::unique_ptr<IEventHandle> Response;
+        bool TabletDeleted = false;
 
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_UPDATE_BLOCK; }
@@ -32,8 +35,7 @@ namespace NKikimr::NBlobDepot {
             if (BlockedGeneration <= block.BlockedGeneration) {
                 Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.SetStatus(NKikimrProto::ALREADY);
             } else {
-                // update block value in memory
-                auto& block = Self->BlocksManager->Blocks[TabletId];
+                TabletDeleted = IsCompleteTabletDeletionBlock(BlockedGeneration);
                 block.BlockedGeneration = BlockedGeneration;
                 block.IssuerGuid = IssuerGuid;
 
@@ -50,6 +52,9 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
+            if (TabletDeleted) {
+                Self->BlocksManager->OnTabletDeleted(TabletId);
+            }
             if (Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.GetStatus() != NKikimrProto::OK) {
                 TActivationContext::Send(Response.release());
             } else {
@@ -94,6 +99,43 @@ namespace NKikimr::NBlobDepot {
         void Complete(const TActorContext&) override {
             if (Response) {
                 TActivationContext::Send(Response.release());
+            }
+        }
+    };
+
+    // Drops the data of a tablet that has been deleted for good (Max<ui32>() block). This is what the
+    // hard barrier issued by Hive right after the block would have done, but that barrier may never
+    // arrive -- in particular, a VDisk that has seen the block is allowed to drop the barrier records
+    // for this tablet, so decommission may bring us the block without any barriers.
+    class TBlobDepot::TBlocksManager::TTxDeleteTabletData : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+        const ui64 TabletId;
+        bool Finished = false;
+
+    public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DELETE_TABLET_DATA; }
+
+        TTxDeleteTabletData(TBlobDepot *self, ui64 tabletId)
+            : TTransactionBase(self)
+            , TabletId(tabletId)
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            ui32 maxItems = 10'000;
+            Finished = Self->Data->OnTabletDeleted(TabletId, maxItems, txc, this);
+            if (Finished) {
+                // the data is gone, so the barriers that used to guard it are not needed either
+                Self->BarrierServer->OnTabletDeleted(TabletId, txc);
+            }
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            Self->Data->CommitTrash(this);
+            if (Finished) {
+                Self->BlocksManager->DeleteTabletDataInFlight = false;
+                Self->BlocksManager->ProcessTabletsToDelete();
+            } else {
+                Self->Execute(std::make_unique<TTxDeleteTabletData>(Self, TabletId));
             }
         }
     };
@@ -339,17 +381,53 @@ namespace NKikimr::NBlobDepot {
             .BlockedGeneration = blockedGeneration,
             .IssuerGuid = issuerGuid,
         };
+        if (IsCompleteTabletDeletionBlock(blockedGeneration)) {
+            // data is not loaded yet, so this only enqueues the tablet; OnDataLoaded starts the purge
+            OnTabletDeleted(tabletId);
+        }
+    }
+
+    void TBlobDepot::TBlocksManager::OnTabletDeleted(ui64 tabletId) {
+        if (!TabletsToDelete.insert(tabletId).second) {
+            return; // already queued
+        }
+        YDB_LOG_DEBUG("Tablet deleted for good",
+            {"marker", "BDT86"},
+            {"id", Self->GetLogId()},
+            {"blockedTabletId", tabletId});
+        ProcessTabletsToDelete();
+    }
+
+    void TBlobDepot::TBlocksManager::ProcessTabletsToDelete() {
+        if (DeleteTabletDataInFlight || TabletsToDelete.empty() || !Self->Data->IsLoaded()) {
+            return;
+        }
+        const auto it = TabletsToDelete.begin();
+        const ui64 tabletId = *it;
+        TabletsToDelete.erase(it);
+        DeleteTabletDataInFlight = true;
+        Self->Execute(std::make_unique<TTxDeleteTabletData>(Self, tabletId));
+    }
+
+    void TBlobDepot::TBlocksManager::OnDataLoaded() {
+        ProcessTabletsToDelete();
     }
 
     void TBlobDepot::TBlocksManager::AddBlockOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlock& block,
             NTabletFlatExecutor::TTransactionContext& txc) {
-        AddBlockOnLoad(block.TabletId, block.BlockedGeneration, 0);
+        TBlock& item = Blocks[block.TabletId];
+        const bool wasDeleted = IsCompleteTabletDeletionBlock(item.BlockedGeneration);
+        item.BlockedGeneration = Max(item.BlockedGeneration, block.BlockedGeneration);
+        item.IssuerGuid = 0;
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Blocks>().Key(block.TabletId).Update(
-            NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(block.BlockedGeneration),
+            NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(item.BlockedGeneration),
             NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(0)
         );
+        if (!wasDeleted && IsCompleteTabletDeletionBlock(item.BlockedGeneration)) {
+            OnTabletDeleted(block.TabletId);
+        }
 
         YDB_LOG_DEBUG("Adding block through decommission",
             {"marker", "BDT44"},

@@ -2,6 +2,7 @@
 #include "barriers_tree.h"
 #include "barriers_essence.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap_it.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it.h>
 
 namespace NKikimr {
     namespace NBarriers {
@@ -71,6 +72,22 @@ namespace NKikimr {
         void TBarriersDs::LoadCompleted() {
             TBase::LoadCompleted();
             BuildMemView();
+        }
+
+        void TBarriersDs::MarkTabletDeleted(ui64 tabletId) {
+            MemView->MarkTabletDeleted(tabletId);
+        }
+
+        void TBarriersDs::MarkTabletsDeleted(const THashSet<ui64> &tabletIds) {
+            MemView->MarkTabletsDeleted(tabletIds);
+        }
+
+        void TBarriersDs::UpdateMemView(const TBarriersSst &sst) {
+            Y_VERIFY_S(sst.IsLoaded(), VDiskLogPrefix);
+            TBarriersSst::TMemIterator it(&sst);
+            for (it.SeekToFirst(); it.Valid(); it.Next()) {
+                MemView->Update(it.GetCurKey(), it.GetMemRec());
+            }
         }
 
         TBarriersDsSnapshot TBarriersDs::GetSnapshot(TActorSystem *as) {

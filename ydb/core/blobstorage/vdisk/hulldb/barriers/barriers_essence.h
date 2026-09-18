@@ -61,9 +61,10 @@ namespace NGcOpt {
                               TKeepFlagStat /*keepFlagStat*/,
                               bool /*allowKeepFlags*/,
                               bool /*allowGarbageCollection*/) const {
-            // NOTE: We never delete block records, we only merge them. Merge rules are
-            //       very simple, i.e. last block wins. As a result, after full merge
-            //       blocks db size is equal to number of tablets on this vdisk.
+            // We never delete block records, we only merge them (last block wins). After
+            // a full merge there is one record per tablet. A Max<ui32>() generation block
+            // is the complete-tablet-deletion tombstone: compaction may drop every barrier
+            // for that tablet, but this block itself must be kept.
             return NGc::TKeepStatus(true);
         }
 

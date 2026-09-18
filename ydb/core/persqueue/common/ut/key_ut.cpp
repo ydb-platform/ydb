@@ -92,6 +92,42 @@ Y_UNIT_TEST(MakeKeyPrefixRangeService) {
 
 Y_UNIT_TEST_SUITE(TKeyTest) {
 
+void CheckClearOffsetDeltaRoundtrip(TKey key) {
+    const auto original = key.ToString();
+    const auto suffix = key.GetSuffix();
+    key.SetOffsetDelta(42);
+    key = TKey::FromString(key.ToString());
+    UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 42u);
+    key.ClearOffsetDelta();
+    UNIT_ASSERT(!key.HasOffsetDelta());
+    UNIT_ASSERT(!key.GetOffsetDelta().Defined());
+    UNIT_ASSERT(key.GetSuffix() == suffix);
+    UNIT_ASSERT_VALUES_EQUAL(key.ToString(), original);
+
+    const auto restored = TKey::FromString(key.ToString());
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetOffset(), 100u);
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetCount(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetPartNo(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetInternalPartsCount(), 4u);
+    UNIT_ASSERT(restored.GetSuffix() == suffix);
+    UNIT_ASSERT(!restored.HasOffsetDelta());
+    // Clearing an already absent field must preserve the key as well.
+    key.ClearOffsetDelta();
+    UNIT_ASSERT_VALUES_EQUAL(key.ToString(), original);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingClearBodyKeyRoundtrip) {
+    CheckClearOffsetDeltaRoundtrip(TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(9), 100, 3, 2, 4));
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingClearHeadKeyRoundtrip) {
+    CheckClearOffsetDeltaRoundtrip(TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(9), 100, 3, 2, 4));
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingClearFastWriteKeyRoundtrip) {
+    CheckClearOffsetDeltaRoundtrip(TKey::ForFastWrite(TKeyPrefix::TypeData, TPartitionId(9), 100, 3, 2, 4));
+}
+
 Y_UNIT_TEST(StoreAndRestoreBodyHeadFastWrite) {
     auto body = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
     UNIT_ASSERT_VALUES_EQUAL(body.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005");

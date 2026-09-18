@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/public/write_id.h>
@@ -1817,6 +1818,21 @@ void SetOffsetDeltaWithoutBatching(TTestContext& tc, bool enabled) {
     InitMaxHeaderSize(tc.Runtime->GetAppData(0).FeatureFlags);
 }
 
+TString MakeOrdinaryTestPayload(size_t size, ui32 seed, bool pseudorandom) {
+    TString payload(size, static_cast<char>('a' + seed % 26));
+    if (pseudorandom) {
+        // Fixed-seed xorshift32: reproducible bytes without long repeated runs.
+        ui32 state = 0x9e3779b9u ^ seed;
+        for (char& byte : payload) {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            byte = static_cast<char>(state & 0xff);
+        }
+    }
+    return payload;
+}
+
 void AssertOrdinaryMessage(TTestContext& tc, ui64 readOffset, ui64 expectedOffset,
                           ui64 seqNo, const TString& payload) {
     TPQCmdReadSettings settings{"", 0, static_cast<i64>(readOffset), 1, 64_MB, 1, false, {}, 0, 0, "user1"};
@@ -1848,7 +1864,7 @@ void CompactOrdinaryMessages(TTestContext& tc) {
     UNIT_ASSERT_C(completed, "forced compaction did not complete");
 }
 
-void CheckOrdinaryMessagesReadTail(bool enableOffsetDelta) {
+void CheckOrdinaryMessagesReadTail(bool enableOffsetDelta, bool pseudorandom = false) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(50000);
@@ -1862,7 +1878,7 @@ void CheckOrdinaryMessagesReadTail(bool enableOffsetDelta) {
     TVector<std::pair<ui64, TString>> data;
     for (ui64 i = 0; i < 10; ++i) {
         // Exceed the internal 500 KiB packing boundary in one write request.
-        data.emplace_back(i + 1, TString(100_KB, static_cast<char>('a' + i)));
+        data.emplace_back(i + 1, MakeOrdinaryTestPayload(100_KB, i + 1, pseudorandom));
     }
     CmdWrite({.Partition = 0, .SourceId = "sourceid_ordinary_tail", .Data = data, .TestContext = tc, .Offset = 100});
     PQGetPartInfo(100, 110, tc);
@@ -1889,7 +1905,15 @@ Y_UNIT_TEST(OffsetDeltaWithoutBatchingReadTailFlagEnabled) {
     CheckOrdinaryMessagesReadTail(true);
 }
 
-void CheckOrdinaryMessagesFlagToggle(bool withGaps) {
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingReadTailRandomDataFlagDisabled) {
+    CheckOrdinaryMessagesReadTail(false, true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingReadTailRandomDataFlagEnabled) {
+    CheckOrdinaryMessagesReadTail(true, true);
+}
+
+void CheckOrdinaryMessagesFlagToggle(bool withGaps, bool pseudorandom = false) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(50000);
@@ -1910,7 +1934,7 @@ void CheckOrdinaryMessagesFlagToggle(bool withGaps) {
         TVector<std::pair<ui64, TString>> data;
         for (ui64 i = 0; i < 8; ++i) {
             const ui64 seqNo = messages.size() + 1;
-            data.emplace_back(seqNo, TString(100_KB, static_cast<char>('a' + seqNo)));
+            data.emplace_back(seqNo, MakeOrdinaryTestPayload(100_KB, seqNo, pseudorandom));
             messages.push_back(data.back());
             offsets.push_back(nextOffset + i);
         }
@@ -1945,7 +1969,15 @@ Y_UNIT_TEST(OffsetDeltaWithoutBatchingToggleWithGaps) {
     CheckOrdinaryMessagesFlagToggle(true);
 }
 
-void CheckOrdinaryMultipartMessages(bool acrossBlobs) {
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingToggleRandomData) {
+    CheckOrdinaryMessagesFlagToggle(false, true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingToggleWithGapsRandomData) {
+    CheckOrdinaryMessagesFlagToggle(true, true);
+}
+
+void CheckOrdinaryMultipartMessages(bool acrossBlobs, bool pseudorandom = false) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(50000);
@@ -1958,9 +1990,9 @@ void CheckOrdinaryMultipartMessages(bool acrossBlobs) {
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
     const TVector<std::pair<ui64, TString>> data = {
-        {1, TString(1_KB, 'a')},
-        {2, TString(acrossBlobs ? 10_MB : 700_KB, 'b')},
-        {3, TString(1_KB, 'c')},
+        {1, MakeOrdinaryTestPayload(1_KB, 1, pseudorandom)},
+        {2, MakeOrdinaryTestPayload(acrossBlobs ? 10_MB : 700_KB, 2, pseudorandom)},
+        {3, MakeOrdinaryTestPayload(1_KB, 3, pseudorandom)},
     };
     CmdWrite({.Partition = 0, .SourceId = "sourceid_ordinary_multipart", .Data = data, .TestContext = tc, .Offset = 100});
     PQGetPartInfo(100, 103, tc);
@@ -1997,6 +2029,146 @@ Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartInOneBlob) {
 
 Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartAcrossBlobs) {
     CheckOrdinaryMultipartMessages(true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartInOneBlobRandomData) {
+    CheckOrdinaryMultipartMessages(false, true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartAcrossBlobsRandomData) {
+    CheckOrdinaryMultipartMessages(true, true);
+}
+
+TVector<TKey> GetOrdinaryDataKeys(TTestContext& tc) {
+    TVector<TKey> keys;
+    const auto prefix = TKeyPrefix(TKeyPrefix::TypeData, TPartitionId(0)).ToString();
+    for (const auto& rawKey : GetTabletKeys(tc)) {
+        if (rawKey.StartsWith(prefix)) {
+            keys.push_back(TKey::FromString(rawKey));
+        }
+    }
+    return keys;
+}
+
+TKey FindOrdinaryHeadKey(TTestContext& tc, ui64 offset, ui32 count) {
+    TMaybe<TKey> found;
+    for (const auto& key : GetOrdinaryDataKeys(tc)) {
+        if (key.IsHead() && key.GetOffset() == offset && key.GetCount() == count) {
+            UNIT_ASSERT_C(!found, "Multiple matching head keys");
+            found = key;
+        }
+    }
+    UNIT_ASSERT_C(found, "No head key with offset=" << offset << ", count=" << count);
+    return *found;
+}
+
+TString ReadOrdinaryStoredBlob(TTestContext& tc, const TKey& key) {
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    request->Record.AddCmdRead()->SetKey(key.ToString());
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+    TAutoPtr<IEventHandle> handle;
+    const auto* response = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.ReadResultSize(), 1);
+    const auto& result = response->Record.GetReadResult(0);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), static_cast<ui32>(NKikimrProto::OK));
+    return result.GetValue();
+}
+
+void CheckPersistedMixedHeadCompaction(bool enableAfterFirstWrite, bool multipart) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+    const auto previousFlags = tc.Runtime->GetAppData(0).FeatureFlags;
+    Y_DEFER { InitMaxHeaderSize(previousFlags); };
+    SetOffsetDeltaWithoutBatching(tc, !enableAfterFirstWrite);
+    auto& config = tc.Runtime->GetAppData(0).PQConfig;
+    config.MutableCompactionConfig()->SetBlobsCount(1000);
+    config.MutableCompactionConfig()->SetBlobsSize(32_MB);
+    if (multipart) {
+        // Put the tail of the 9 MiB message below the 2 MiB level boundary.
+        // The following 1 MiB write will cross it, merging both head keys.
+        config.SetMaxBlobsPerLevel(256);
+    }
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TVector<std::pair<ui64, TString>> first = {
+        {1, MakeOrdinaryTestPayload(multipart ? 9_MB : 100_KB, 1, true)},
+    };
+    const TVector<std::pair<ui64, TString>> second = {
+        {2, MakeOrdinaryTestPayload(multipart ? 1_MB : 100_KB, 2, true)},
+    };
+    CmdWrite({.Partition = 0, .SourceId = "sourceid_mixed_head", .Data = first, .TestContext = tc, .Offset = 100});
+    CompactOrdinaryMessages(tc);
+    PQGetPartInfo(100, 101, tc);
+    const auto firstKey = FindOrdinaryHeadKey(tc, 100, 1);
+    UNIT_ASSERT_VALUES_EQUAL(firstKey.HasOffsetDelta(), !enableAfterFirstWrite);
+    UNIT_ASSERT_VALUES_EQUAL(firstKey.GetPartNo() > 0, multipart);
+    const TString firstBlob = ReadOrdinaryStoredBlob(tc, firstKey);
+    if (multipart) {
+        bool hasBeginning = false;
+        for (const auto& key : GetOrdinaryDataKeys(tc)) {
+            hasBeginning |= !key.HasSuffix() && key.GetOffset() == 100 && key.GetPartNo() == 0;
+        }
+        UNIT_ASSERT_C(hasBeginning, "The first message must span a body blob and a head blob");
+    }
+
+    SetOffsetDeltaWithoutBatching(tc, enableAfterFirstWrite);
+    PQTabletRestart(tc);
+    CmdWrite({.Partition = 0, .SourceId = "sourceid_mixed_head", .Data = second, .TestContext = tc, .Offset = 101});
+    bool hasNewKey = false;
+    for (const auto& key : GetOrdinaryDataKeys(tc)) {
+        if (key.IsFastWrite() && key.GetOffset() == 101 && key.GetCount() == 1) {
+            UNIT_ASSERT_VALUES_EQUAL(key.HasOffsetDelta(), enableAfterFirstWrite);
+            hasNewKey = true;
+        }
+    }
+    UNIT_ASSERT(hasNewKey);
+    UNIT_ASSERT(FindOrdinaryHeadKey(tc, 100, 1) == firstKey);
+
+    CompactOrdinaryMessages(tc);
+    PQGetPartInfo(100, 102, tc);
+    const auto mergedKey = FindOrdinaryHeadKey(tc, 100, 2);
+    UNIT_ASSERT(!mergedKey.HasOffsetDelta());
+    UNIT_ASSERT_VALUES_EQUAL(mergedKey.GetPartNo(), firstKey.GetPartNo());
+    const TString mergedBlob = ReadOrdinaryStoredBlob(tc, mergedKey);
+    // This is the path that copies packed head batches without rewriting them.
+    UNIT_ASSERT(mergedBlob.StartsWith(firstBlob));
+    bool hasOldHeader = false;
+    bool hasNewHeader = false;
+    for (TBlobIterator it(mergedKey, mergedBlob); it.IsValid(); it.Next()) {
+        const auto batch = it.GetBatch();
+        UNIT_ASSERT(batch.GetOffset() == 100 || batch.GetOffset() == 101);
+        const bool old = batch.GetOffset() == 100;
+        UNIT_ASSERT_VALUES_EQUAL(batch.HasOffsetDelta(), old ? !enableAfterFirstWrite : enableAfterFirstWrite);
+        hasOldHeader |= old;
+        hasNewHeader |= !old;
+    }
+    UNIT_ASSERT(hasOldHeader && hasNewHeader);
+
+    const auto check = [&] {
+        AssertOrdinaryMessage(tc, 101, 101, 2, second[0].second);
+        AssertOrdinaryMessage(tc, 100, 100, 1, first[0].second);
+    };
+    check();
+    PQTabletRestart(tc);
+    UNIT_ASSERT(FindOrdinaryHeadKey(tc, 100, 2) == mergedKey);
+    check();
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingPersistedMixedHeadAfterEnable) {
+    CheckPersistedMixedHeadCompaction(true, false);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingPersistedMixedHeadAfterDisable) {
+    CheckPersistedMixedHeadCompaction(false, false);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingPersistedMultipartMixedHeadAfterEnable) {
+    CheckPersistedMixedHeadCompaction(true, true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingPersistedMultipartMixedHeadAfterDisable) {
+    CheckPersistedMixedHeadCompaction(false, true);
 }
 
 Y_UNIT_TEST(OffsetDeltaInKeysCanBeDisabledAfterWrites) {

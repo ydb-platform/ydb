@@ -348,6 +348,35 @@ Y_UNIT_TEST(OffsetDeltaWithoutBatchingKeyLevelPopBackMixedKeys) {
     CheckMixedKeyLevelAfterPop(false);
 }
 
+void CheckKeyLevelWithKnownDeltaAfterPop(bool popFront) {
+    TKeyLevel level(100);
+    // Unequal spans catch subtracting the wrong end of the level.
+    const auto first = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), 100, 0, 2, 0, 2);
+    const auto second = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(0), 102, 0, 3, 0, 3);
+    level.AddKey(first, 60);
+    level.AddKey(second, 70);
+    UNIT_ASSERT(level.OffsetDelta().Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*level.OffsetDelta(), 5u);
+
+    const auto removed = popFront ? level.PopFront() : level.PopBack();
+    UNIT_ASSERT(removed.first == (popFront ? first : second));
+    UNIT_ASSERT_VALUES_EQUAL(removed.second, popFront ? 60u : 70u);
+    const auto& remaining = popFront ? second : first;
+    UNIT_ASSERT(level.OffsetDelta().Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*level.OffsetDelta(), *remaining.GetOffsetDelta());
+    const auto [key, size] = level.Compact();
+    UNIT_ASSERT(key == remaining);
+    UNIT_ASSERT_VALUES_EQUAL(size, popFront ? 70u : 60u);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingKeyLevelPopFrontKnownDelta) {
+    CheckKeyLevelWithKnownDeltaAfterPop(true);
+}
+
+Y_UNIT_TEST(OffsetDeltaWithoutBatchingKeyLevelPopBackKnownDelta) {
+    CheckKeyLevelWithKnownDeltaAfterPop(false);
+}
+
 using TSrcIdMap = THashMap<TString, std::pair<ui64, ui64>>;
 
 

@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/reader.h>
@@ -86,10 +87,20 @@ private:
     ui64 PendingRows = 0;
 };
 
+// The Arrow writer stores some types differently from how it reads them back.
+// With Parquet format 1.0 (the writer default, used by the exporter) there is
+// no unsigned 32-bit annotation, so uint32 (YDB Uint32, Datetime) is written
+// as INT64 and comes back as int64. Such columns are cast back before
+// conversion; any other mismatch is an error.
+bool IsWriterCoercion(const arrow::DataType& fileType, const arrow::DataType& expectedType) {
+    return fileType.id() == arrow::Type::INT64 && expectedType.id() == arrow::Type::UINT32;
+}
+
 struct TParquetFileSession {
     std::shared_ptr<arrow::io::RandomAccessFile> Source;
     std::unique_ptr<parquet::arrow::FileReader> FileReader;
     std::vector<int> ColumnIndices; // parquet leaf columns to decode, in scheme order
+    std::vector<std::pair<std::string, std::shared_ptr<arrow::DataType>>> CastColumns; // see IsWriterCoercion
     std::unique_ptr<arrow::RecordBatchReader> BatchReader;
     std::shared_ptr<arrow::RecordBatch> HeldBatch; // rows [HeldOffset, num_rows) not yet emitted
     i64 HeldOffset = 0;
@@ -225,10 +236,13 @@ public:
 
             const auto& fileType = schema->field(fieldIndex)->type();
             if (!fileType->Equals(*col.ArrowType)) {
-                return std::unexpected(TStringBuilder()
-                    << "column '" << col.Name << "' has parquet type " << fileType->ToString()
-                    << ", expected " << col.ArrowType->ToString()
-                    << " for " << NScheme::TypeName(col.TypeInfo));
+                if (!IsWriterCoercion(*fileType, *col.ArrowType)) {
+                    return std::unexpected(TStringBuilder()
+                        << "column '" << col.Name << "' has parquet type " << fileType->ToString()
+                        << ", expected " << col.ArrowType->ToString()
+                        << " for " << NScheme::TypeName(col.TypeInfo));
+                }
+                session->CastColumns.emplace_back(std::string(col.Name), col.ArrowType);
             }
 
             // Leaf column index for the reader; a primitive column's path is its name.
@@ -293,7 +307,11 @@ public:
                     return false;
                 }
                 if (batch->num_rows() > 0) {
-                    Session->HeldBatch = std::move(batch);
+                    auto casted = CastCoercedColumns(std::move(batch));
+                    if (!casted) {
+                        return std::unexpected(std::move(casted.error()));
+                    }
+                    Session->HeldBatch = std::move(*casted);
                     Session->HeldOffset = 0;
                 }
             }
@@ -391,6 +409,33 @@ public:
     }
 
 private:
+    // Restores the expected Arrow type of columns the writer coerced. The cast
+    // is checked: a value that does not fit the YDB type fails the import.
+    std::expected<std::shared_ptr<arrow::RecordBatch>, TString> CastCoercedColumns(
+        std::shared_ptr<arrow::RecordBatch> batch) const
+    {
+        for (const auto& [name, type] : Session->CastColumns) {
+            const int index = batch->schema()->GetFieldIndex(name);
+            if (index < 0) {
+                return std::unexpected(TStringBuilder() << "column '" << name << "' is missing in a parquet record batch");
+            }
+
+            auto casted = arrow::compute::Cast(*batch->column(index), type, arrow::compute::CastOptions::Safe());
+            if (!casted.ok()) {
+                return std::unexpected(TStringBuilder() << "column '" << name << "': cannot convert parquet type "
+                    << batch->column(index)->type()->ToString() << " to " << type->ToString()
+                    << ": " << casted.status().ToString());
+            }
+
+            auto updated = batch->SetColumn(index, arrow::field(name, type), *casted);
+            if (!updated.ok()) {
+                return std::unexpected(TStringBuilder() << "column '" << name << "': " << updated.status().ToString());
+            }
+            batch = std::move(*updated);
+        }
+        return batch;
+    }
+
     std::expected<void, TString> OpenRowGroups(std::vector<int> rowGroupIndices) {
         ResetRowGroup();
 

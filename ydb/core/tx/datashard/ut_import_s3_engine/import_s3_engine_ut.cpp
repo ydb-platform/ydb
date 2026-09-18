@@ -45,6 +45,12 @@ NKikimrSchemeOp::TTableDescription MakeUtf8TableScheme() {
     return scheme;
 }
 
+NKikimrSchemeOp::TTableDescription MakeUint32KeyTableScheme() {
+    auto scheme = MakeUtf8TableScheme();
+    scheme.MutableColumns(0)->SetTypeId(NScheme::NTypeIds::Uint32);
+    return scheme;
+}
+
 void AssertSuccess(std::expected<void, TString> result) {
     UNIT_ASSERT_C(result, result.error());
 }
@@ -57,8 +63,8 @@ T ExtractValue(std::expected<T, TString> result) {
 
 class TEngineFixture {
 public:
-    TEngineFixture()
-        : Scheme(MakeUtf8TableScheme())
+    explicit TEngineFixture(NKikimrSchemeOp::TTableDescription scheme = MakeUtf8TableScheme())
+        : Scheme(std::move(scheme))
         , UserTable(new TUserTable(1, Scheme, 0))
         , TableInfo(1, UserTable)
     {
@@ -173,6 +179,46 @@ TString BuildSmallParquet(i64 rowGroupSize = 4, size_t valueSize = 24_KB) {
     UNIT_ASSERT_C(writeStatus.ok(), writeStatus.ToString());
 
     auto buffer = sink->Finish().ValueOrDie();
+    return TString(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+}
+
+// Written the way the exporter does it: default writer properties (Parquet
+// format 1.0) and the Arrow schema stored in the file.
+TString BuildUint32KeyParquet(const TVector<ui32>& keys) {
+    arrow::UInt32Builder keyBuilder;
+    arrow::StringBuilder valueBuilder;
+    for (const ui32 key : keys) {
+        UNIT_ASSERT_C(keyBuilder.Append(key).ok(), "failed to append key " << key);
+        UNIT_ASSERT_C(valueBuilder.Append("v", 1).ok(), "failed to append value for key " << key);
+    }
+
+    std::shared_ptr<arrow::Array> keyArray;
+    std::shared_ptr<arrow::Array> valueArray;
+    UNIT_ASSERT_C(keyBuilder.Finish(&keyArray).ok(), "failed to finish key array");
+    UNIT_ASSERT_C(valueBuilder.Finish(&valueArray).ok(), "failed to finish value array");
+
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{
+        arrow::field("key", arrow::uint32()),
+        arrow::field("value", arrow::utf8()),
+    });
+    auto table = arrow::Table::Make(schema, {keyArray, valueArray});
+    auto sink = arrow::io::BufferOutputStream::Create(0).ValueOrDie();
+
+    auto arrowPropertiesBuilder = parquet::ArrowWriterProperties::Builder();
+    arrowPropertiesBuilder.store_schema();
+    const auto writeStatus = parquet::arrow::WriteTable(
+        *table,
+        arrow::default_memory_pool(),
+        sink,
+        /*chunk_size=*/2,
+        parquet::WriterProperties::Builder().build(),
+        arrowPropertiesBuilder.build());
+    UNIT_ASSERT_C(writeStatus.ok(), writeStatus.ToString());
+
+    auto buffer = sink->Finish().ValueOrDie();
+    const auto metadata = parquet::ReadMetaData(std::make_shared<arrow::io::BufferReader>(buffer));
+    UNIT_ASSERT_C(metadata->schema()->Column(0)->physical_type() == parquet::Type::INT64,
+        "the premise of the test changed: uint32 is no longer stored as INT64");
     return TString(reinterpret_cast<const char*>(buffer->data()), buffer->size());
 }
 
@@ -555,6 +601,84 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         UNIT_FAIL("Parquet import engine did not finish within 1024 state transitions");
+    }
+
+    Y_UNIT_TEST(ParquetReadsUint32StoredAsInt64) {
+        // More than one row and values above 2^31: reading the INT64 storage
+        // through a 32-bit array would return garbage from the second row on.
+        const TVector<ui32> keys = {1, 2, 70000, Max<ui32>()};
+        const TString source = BuildUint32KeyParquet(keys);
+
+        TEngineFixture fixture(MakeUint32KeyTableScheme());
+        auto engine = fixture.MakeEngine(EDataFormat::Parquet, source, /*readBatchSize=*/8_KB);
+
+        TMemoryPool pool(256);
+        TVector<ui32> importedKeys;
+        const auto addRow = [&](const TVector<TCell>& rowKeys, const TVector<TCell>&) {
+            UNIT_ASSERT_VALUES_EQUAL(rowKeys.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rowKeys.front().Size(), sizeof(ui32));
+            importedKeys.push_back(rowKeys.front().AsValue<ui32>());
+        };
+        const auto unexpectedChecksum = [](TStringBuf) {
+            UNIT_FAIL("checksum callback was called with validation disabled");
+        };
+
+        bool finished = false;
+        for (ui32 step = 0; step < 1024 && !finished; ++step) {
+            auto data = ExtractValue(engine->GetData(pool, addRow, unexpectedChecksum));
+            switch (data.Status) {
+            case IImportS3Engine::EDataStatus::NeedInput: {
+                const auto range = ExtractValue(engine->NextRange());
+                UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
+                AssertSuccess(engine->PutRange(range.Range, Slice(source, range.Range)));
+                break;
+            }
+            case IImportS3Engine::EDataStatus::Ready:
+                AssertSuccess(engine->Commit(data.Batch.Id));
+                break;
+            case IImportS3Engine::EDataStatus::Finished:
+                finished = true;
+                break;
+            case IImportS3Engine::EDataStatus::WaitingForCommit:
+                UNIT_FAIL("unexpected batch waiting for commit");
+            }
+        }
+
+        UNIT_ASSERT_C(finished, "Parquet import engine did not finish");
+        UNIT_ASSERT(importedKeys == keys);
+    }
+
+    Y_UNIT_TEST(ParquetRejectsIncompatibleColumnType) {
+        const TString source = BuildSmallParquet(); // key is utf8 in the file
+
+        TEngineFixture fixture(MakeUint32KeyTableScheme());
+        auto engine = fixture.MakeEngine(EDataFormat::Parquet, source, /*readBatchSize=*/64_KB);
+
+        TMemoryPool pool(256);
+        const auto unexpectedRow = [](const TVector<TCell>&, const TVector<TCell>&) {
+            UNIT_FAIL("a row was produced from a file with an incompatible schema");
+        };
+        const auto unexpectedChecksum = [](TStringBuf) {
+            UNIT_FAIL("checksum callback was called with validation disabled");
+        };
+
+        for (ui32 step = 0; step < 64; ++step) {
+            auto data = engine->GetData(pool, unexpectedRow, unexpectedChecksum);
+            if (!data) {
+                UNIT_ASSERT_STRING_CONTAINS(data.error(), "column 'key' has parquet type string, expected uint32");
+                return;
+            }
+            UNIT_ASSERT(data->Status == IImportS3Engine::EDataStatus::NeedInput);
+
+            const auto range = ExtractValue(engine->NextRange());
+            UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
+            if (auto result = engine->PutRange(range.Range, Slice(source, range.Range)); !result) {
+                UNIT_ASSERT_STRING_CONTAINS(result.error(), "column 'key' has parquet type string, expected uint32");
+                return;
+            }
+        }
+
+        UNIT_FAIL("the incompatible Parquet schema was not rejected");
     }
 
     Y_UNIT_TEST(ParquetResumesFromCommittedRowGroup) {

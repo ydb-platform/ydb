@@ -194,22 +194,18 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
     Y_UNIT_TEST(OverviewRendersDbgTableColumnsAndRows)
     {
         TMonPageData data = MakeData();
-        data.Dbgs = {
-            TDbgSnapshot{
-                .Index = 0,
-                .Connections = {TConnectionSnapshot{
-                    .DDiskId = {20, 100, 1},
-                    .PBufferId = {{10, 100, 2}},
-                }},
-            },
-            TDbgSnapshot{
-                .Index = 32,
-                .Connections = {TConnectionSnapshot{
-                    .DDiskId = {30, 200, 1},
-                    .PBufferId = {{20, 200, 2}},
-                }},
-            },
-        };
+        data.Dbgs.resize(33);
+        for (size_t i = 0; i < data.Dbgs.size(); ++i) {
+            data.Dbgs[i].Index = i;
+        }
+        data.Dbgs[0].Connections = {TConnectionSnapshot{
+            .DDiskId = {20, 100, 1},
+            .PBufferId = {{10, 100, 2}},
+        }};
+        data.Dbgs[32].Connections = {TConnectionSnapshot{
+            .DDiskId = {30, 200, 1},
+            .PBufferId = {{20, 200, 2}},
+        }};
 
         const TString html =
             RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
@@ -228,6 +224,22 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT(node10 < node20);
         UNIT_ASSERT(node20 < node30);
         UNIT_ASSERT_VALUES_EQUAL(35, CountOccurrences(html, "<th>"));
+    }
+
+    Y_UNIT_TEST(OverviewReadsTouchedVChunksByRegion)
+    {
+        TMonPageData data = MakeData();
+        for (size_t i = 0; i < VChunkPerRegionCount; ++i) {
+            data.Dbgs.push_back(TDbgSnapshot{.Index = i});
+        }
+
+        TTestTouchedProvider touchedProvider;
+        touchedProvider.Touched = {0, 31, 32, 63};
+
+        RenderMonPage(data, EmptyVChunkConfigs, touchedProvider);
+
+        UNIT_ASSERT_VALUES_EQUAL(0, touchedProvider.GetCallCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, touchedProvider.GetRegionCallCount);
     }
 
     Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)

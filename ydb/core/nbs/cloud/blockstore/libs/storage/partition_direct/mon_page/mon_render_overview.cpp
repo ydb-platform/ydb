@@ -26,7 +26,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 using TNodeId = ui32;
-using TVchunkId = ui32;
+using TVChunkId = size_t;
 using TDbgId = size_t;
 
 // Per-node DDisk and PBuffer counters within one rendered column.
@@ -54,7 +54,7 @@ using TDbgConfigRow = std::array<TDbgTableCell, VChunkPerRegionCount>;
 using TDbgConfigTable = THashMap<TNodeId, TDbgConfigRow>;
 using TDefaultConfigs =
     std::array<TDefaultConfigEntry, DirectBlockGroupHostCount>;
-using TDefaultConfigCache = THashMap<TDbgId, TDefaultConfigs>;
+using TDefaultConfigCache = TVector<TDefaultConfigs>;
 
 // Contains the fixed columns and node rows of the DBG table.
 struct TDbgConfigTableData
@@ -64,11 +64,10 @@ struct TDbgConfigTableData
     TDefaultConfigCache DefaultConfigs;
 
     // Returns the cached default config entry matching the VChunk placement.
-    TDefaultConfigEntry& GetDefaultConfig(TDbgId dbgId, TVchunkId vChunkId)
+    TDefaultConfigEntry& GetDefaultConfig(TDbgId dbgId, TVChunkId vChunkId)
     {
-        auto* configs = DefaultConfigs.FindPtr(dbgId);
-        Y_ABORT_UNLESS(configs);
-        return (*configs)[vChunkId % DirectBlockGroupHostCount];
+        Y_ABORT_UNLESS(dbgId < DefaultConfigs.size());
+        return DefaultConfigs[dbgId][vChunkId % DirectBlockGroupHostCount];
     }
 };
 
@@ -112,7 +111,7 @@ TCountAndSize GetPBuffersUsage(const TVector<TDbgSnapshot>& dbgs)
 TDefaultConfigs BuildDefaultConfigCache(const TDbgSnapshot& dbg)
 {
     TDefaultConfigs result;
-    for (TVchunkId vChunkId = 0; vChunkId < DirectBlockGroupHostCount;
+    for (TVChunkId vChunkId = 0; vChunkId < DirectBlockGroupHostCount;
          ++vChunkId)
     {
         auto config = TVChunkConfig::MakeDefault(
@@ -125,14 +124,36 @@ TDefaultConfigs BuildDefaultConfigCache(const TDbgSnapshot& dbg)
     return result;
 }
 
+// Counts touched VChunks matching every cached default config.
+void FillDefaultConfigs(
+    size_t regionCount,
+    size_t directBlockGroupCount,
+    const ITouchedProvider& touchedProvider,
+    TDbgConfigTableData* tableData)
+{
+    for (ui32 regionIndex = 0; regionIndex < regionCount; ++regionIndex) {
+        const auto touchedVChunks =
+            touchedProvider.GetTouchedVChunks(regionIndex);
+        Y_FOR_EACH_BIT(vChunkIndexInRegion, touchedVChunks)
+        {
+            const TVChunkId vChunkId =
+                GetVChunkIndex(regionIndex, vChunkIndexInRegion);
+            const TDbgId dbgId =
+                GetDirectBlockGroupIndex(vChunkId, directBlockGroupCount);
+            ++tableData->GetDefaultConfig(dbgId, vChunkId).VChunkCount;
+        }
+    }
+}
+
 // Builds table columns and node rows without calculating cell contents.
 TDbgConfigTableData BuildDbgConfigTable(const TVector<TDbgSnapshot>& dbgs)
 {
     TDbgConfigTableData result;
+    result.DefaultConfigs.resize(dbgs.size());
     for (const auto& dbg: dbgs) {
         result.Headers[dbg.Index % VChunkPerRegionCount].DbgIds.push_back(
             dbg.Index);
-        result.DefaultConfigs.emplace(dbg.Index, BuildDefaultConfigCache(dbg));
+        result.DefaultConfigs[dbg.Index] = BuildDefaultConfigCache(dbg);
         for (const auto& connection: dbg.Connections) {
             result.Table[connection.DDiskId.NodeId];
             result.Table[connection.PBufferId.NodeId];
@@ -235,9 +256,19 @@ void RenderDbgConfigCell(
 void RenderDbgConfigTable(
     IOutputStream& str,
     const TVector<TDbgSnapshot>& dbgs,
-    ui64 tabletId)
+    const TTabletInfo& tabletInfo,
+    const ITouchedProvider& touchedProvider)
 {
-    const auto tableData = BuildDbgConfigTable(dbgs);
+    auto tableData = BuildDbgConfigTable(dbgs);
+    const size_t regionCount = GetRegionCount(
+        tabletInfo.BlockCount,
+        tabletInfo.BlockSize,
+        tabletInfo.VChunkSize);
+    FillDefaultConfigs(
+        regionCount,
+        tabletInfo.VolumeDirectBlockGroupCount,
+        touchedProvider,
+        &tableData);
 
     TVector<TNodeId> nodeIds;
     nodeIds.reserve(tableData.Table.size());
@@ -267,7 +298,10 @@ void RenderDbgConfigTable(
                     }
                     for (const auto& headerCell: tableData.Headers) {
                         TABLEH () {
-                            RenderDbgConfigHeader(str, tabletId, headerCell);
+                            RenderDbgConfigHeader(
+                                str,
+                                tabletInfo.TabletId,
+                                headerCell);
                         }
                     }
                     TABLEH () {
@@ -462,14 +496,13 @@ void RenderOverview(
     const ITouchedProvider& touchedProvider)
 {
     Y_UNUSED(vChunkConfigs);
-    Y_UNUSED(touchedProvider);
 
     RenderOverviewInfo(
         str,
         data.TabletInfo,
         data.FastPathServiceInfo,
         GetPBuffersUsage(data.Dbgs));
-    RenderDbgConfigTable(str, data.Dbgs, data.TabletInfo.TabletId);
+    RenderDbgConfigTable(str, data.Dbgs, data.TabletInfo, touchedProvider);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

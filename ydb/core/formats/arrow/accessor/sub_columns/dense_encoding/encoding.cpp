@@ -209,13 +209,14 @@ struct TParsedPrefix {
 TParsedPrefix ParsePrefix(const std::shared_ptr<arrow::Buffer>& raw, const ui32 recordsCount) {
     TParsedPrefix result;
     AFL_VERIFY(raw->size() >= 1);
+    const size_t rawSize = static_cast<size_t>(raw->size());
     size_t pos = 0;
     const char hasNulls = reinterpret_cast<const char*>(raw->data())[pos++];
     AFL_VERIFY(hasNulls == 0 || hasNulls == 1)("has_nulls", hasNulls);
     if (hasNulls) {
         const size_t bmBytes = GetBitmapSize(recordsCount);
-        AFL_VERIFY(bmBytes <= raw->size() - pos)("size", raw->size())("pos", pos)("bitmap_size", bmBytes);
-        result.NullBitmap = arrow::SliceBuffer(raw, pos, bmBytes);
+        AFL_VERIFY(bmBytes <= rawSize - pos)("size", raw->size())("pos", pos)("bitmap_size", bmBytes);
+        result.NullBitmap = arrow::SliceBuffer(raw, static_cast<i64>(pos), static_cast<i64>(bmBytes));
         result.PresentCount = arrow::internal::CountSetBits(result.NullBitmap->data(), 0, recordsCount);
         pos += bmBytes;
     } else {
@@ -227,10 +228,12 @@ TParsedPrefix ParsePrefix(const std::shared_ptr<arrow::Buffer>& raw, const ui32 
 
 std::shared_ptr<arrow::Buffer> DecodeDenseValues(
     const std::shared_ptr<arrow::Buffer>& raw, const TParsedPrefix& prefix, const ui32 recordsCount, const ui32 width) {
-    const TStringBuf encoded(reinterpret_cast<const char*>(raw->data()) + prefix.Position, raw->size() - prefix.Position);
+    const size_t rawSize = static_cast<size_t>(raw->size());
+    AFL_VERIFY(prefix.Position <= rawSize)("size", raw->size())("pos", prefix.Position);
+    const TStringBuf encoded(reinterpret_cast<const char*>(raw->data()) + prefix.Position, rawSize - prefix.Position);
     if (!prefix.NullBitmap) {
         if (width == sizeof(ui8)) {
-            return arrow::SliceBuffer(raw, prefix.Position, encoded.size());
+            return arrow::SliceBuffer(raw, static_cast<i64>(prefix.Position), static_cast<i64>(encoded.size()));
         }
         // Wider index values require proper alignment, so copy to arrow-allocated buffer.
         auto values = TStatusValidator::GetValid(arrow::AllocateBuffer(encoded.size()));

@@ -10,6 +10,7 @@ SRCS(
     kqp_scan_fetcher_ut.cpp
     scheduler/kqp_compute_scheduler_service_ut.cpp
     scheduler/kqp_compute_scheduler_ut.cpp
+    streaming/kqp_streaming_aggregation_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

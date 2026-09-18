@@ -11,7 +11,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 struct TMonPageData;
 
-// Renders the Overview page.
+// Renders the Overview summary and node-by-DBG table.
 void RenderOverview(
     IOutputStream& str,
     const TMonPageData& data,

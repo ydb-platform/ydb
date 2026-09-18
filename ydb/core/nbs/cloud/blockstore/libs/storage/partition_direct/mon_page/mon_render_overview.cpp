@@ -10,15 +10,60 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
+#include <util/generic/map.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
+
+#include <array>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+using TNodeId = ui32;
+using TVchunkId = ui32;
+using TDbgId = size_t;
+
+// Per-node DDisk and PBuffer counters within one rendered column.
+struct TDbgTableCell
+{
+    TMap<TVChunkConfig::EHostHumanReadableState, size_t> DDiskStates;
+    size_t PBufferCount = 0;
+};
+
+// DBG indices represented by one rendered column.
+struct TDbgHeaderCell
+{
+    TVector<TDbgId> DbgIds;
+};
+
+using TDbgConfigHeaders = std::array<TDbgHeaderCell, VChunkPerRegionCount>;
+using TDbgConfigRow = std::array<TDbgTableCell, VChunkPerRegionCount>;
+using TDbgConfigTable = THashMap<TNodeId, TDbgConfigRow>;
+
+// Contains the fixed columns and node rows of the DBG table.
+struct TDbgConfigTableData
+{
+    TDbgConfigHeaders Headers;
+    TDbgConfigTable Table;
+};
+
+enum class EDbgConfigCellKind
+{
+    Placement,   // A node placement in one rendered column.
+    Total,       // An aggregate across nodes or rendered columns.
+};
+
+enum class EDDiskStatesFormat
+{
+    Brief,   // Omits the Primary state name when it is the only state.
+    Full,    // Prints every state name for a tooltip.
+};
 
 void RenderValue(IOutputStream& str, TStringBuf name, const TString& value)
 {
@@ -41,6 +86,194 @@ TCountAndSize GetPBuffersUsage(const TVector<TDbgSnapshot>& dbgs)
         result += dbg.PBuffersUsage;
     }
     return result;
+}
+
+// Builds table columns and node rows without calculating cell contents.
+TDbgConfigTableData BuildDbgConfigTable(const TVector<TDbgSnapshot>& dbgs)
+{
+    TDbgConfigTableData result;
+    for (const auto& dbg: dbgs) {
+        result.Headers[dbg.Index % VChunkPerRegionCount].DbgIds.push_back(
+            dbg.Index);
+        for (const auto& connection: dbg.Connections) {
+            result.Table[connection.DDiskId.NodeId];
+            result.Table[connection.PBufferId.NodeId];
+        }
+    }
+    return result;
+}
+
+void RenderDbgConfigHeader(
+    IOutputStream& str,
+    ui64 tabletId,
+    const TDbgHeaderCell& cell)
+{
+    if (cell.DbgIds.empty()) {
+        str << "-";
+        return;
+    }
+
+    for (size_t i = 0; i < cell.DbgIds.size(); ++i) {
+        if (i != 0) {
+            str << "<br>";
+        }
+        const TDbgId dbgIndex = cell.DbgIds[i];
+        str << "<a href='?TabletID=" << tabletId << "&page=dbg&dbg=" << dbgIndex
+            << "'>DBG #" << dbgIndex << "</a>";
+    }
+}
+
+bool IsEmpty(const TDbgTableCell& cell)
+{
+    return cell.DDiskStates.empty() && cell.PBufferCount == 0;
+}
+
+TStringBuf GetDbgConfigCellClass(
+    const TDbgTableCell& cell,
+    EDbgConfigCellKind kind)
+{
+    if (kind == EDbgConfigCellKind::Total) {
+        return "dbg-config-cell dbg-config-total";
+    }
+
+    const bool hasDDisks = !cell.DDiskStates.empty();
+    const bool hasPBuffers = cell.PBufferCount != 0;
+    if (hasDDisks && hasPBuffers) {
+        return "dbg-config-cell dbg-config-both";
+    }
+    if (hasDDisks) {
+        return "dbg-config-cell dbg-config-ddisk";
+    }
+    if (hasPBuffers) {
+        return "dbg-config-cell dbg-config-pbuffer";
+    }
+    return "dbg-config-cell";
+}
+
+TString BuildDDisksStates(const TDbgTableCell& cell, EDDiskStatesFormat format)
+{
+    if (format == EDDiskStatesFormat::Brief && cell.DDiskStates.size() == 1 &&
+        cell.DDiskStates.begin()->first ==
+            TVChunkConfig::EHostHumanReadableState::Primary)
+    {
+        return ToString(cell.DDiskStates.begin()->second);
+    }
+
+    TStringBuilder result;
+    for (const auto& [state, count]: cell.DDiskStates) {
+        result << Print(state, format == EDDiskStatesFormat::Brief) << ":"
+               << count << "&#10;";
+    }
+    return result;
+}
+
+TString BuildDbgConfigTooltip(const TDbgTableCell& cell)
+{
+    TStringBuilder result;
+    result << "DDisk:&#10;"
+           << BuildDDisksStates(cell, EDDiskStatesFormat::Full);
+    result << "PBuffer: " << cell.PBufferCount;
+    return result;
+}
+
+void RenderDbgConfigCell(
+    IOutputStream& str,
+    const TDbgTableCell& cell,
+    EDbgConfigCellKind kind)
+{
+    str << "<td class=\"" << GetDbgConfigCellClass(cell, kind) << "\"";
+    if (!IsEmpty(cell)) {
+        str << " title=\"" << BuildDbgConfigTooltip(cell) << "\"";
+    }
+    str << ">";
+    if (IsEmpty(cell)) {
+        str << "-";
+    } else {
+        str << BuildDDisksStates(cell, EDDiskStatesFormat::Brief);
+    }
+    str << "</td>";
+}
+
+void RenderDbgConfigTable(
+    IOutputStream& str,
+    const TVector<TDbgSnapshot>& dbgs,
+    ui64 tabletId)
+{
+    const auto tableData = BuildDbgConfigTable(dbgs);
+
+    TVector<TNodeId> nodeIds;
+    nodeIds.reserve(tableData.Table.size());
+    for (const auto& [nodeId, row]: tableData.Table) {
+        Y_UNUSED(row);
+        nodeIds.push_back(nodeId);
+    }
+    Sort(nodeIds);
+
+    const TDbgTableCell emptyCell;
+
+    HTML (str) {
+        TAG (TH3) {
+            str << "Direct Block Group config";
+        }
+        if (dbgs.empty()) {
+            DIV_CLASS ("alert alert-info") {
+                str << "No Direct Block Groups.";
+            }
+            return;
+        }
+        TABLE_CLASS ("table table-condensed table-bordered") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "Node";
+                    }
+                    for (const auto& headerCell: tableData.Headers) {
+                        TABLEH () {
+                            RenderDbgConfigHeader(str, tabletId, headerCell);
+                        }
+                    }
+                    TABLEH () {
+                        str << "Total";
+                    }
+                }
+            }
+            TABLEBODY () {
+                for (const TNodeId nodeId: nodeIds) {
+                    const auto& row = *tableData.Table.FindPtr(nodeId);
+                    TABLER () {
+                        TABLED () {
+                            str << "Node " << nodeId;
+                        }
+                        for (const auto& cell: row) {
+                            RenderDbgConfigCell(
+                                str,
+                                cell,
+                                EDbgConfigCellKind::Placement);
+                        }
+                        RenderDbgConfigCell(
+                            str,
+                            emptyCell,
+                            EDbgConfigCellKind::Total);
+                    }
+                }
+                TABLER_CLASS ("dbg-config-total-row") {
+                    TABLEH () {
+                        str << "Total";
+                    }
+                    for (size_t i = 0; i < VChunkPerRegionCount; ++i) {
+                        RenderDbgConfigCell(
+                            str,
+                            emptyCell,
+                            EDbgConfigCellKind::Total);
+                    }
+                    RenderDbgConfigCell(
+                        str,
+                        emptyCell,
+                        EDbgConfigCellKind::Total);
+                }
+            }
+        }
+    }
 }
 
 void RenderOverviewInfo(
@@ -198,6 +431,7 @@ void RenderOverview(
         data.TabletInfo,
         data.FastPathServiceInfo,
         GetPBuffersUsage(data.Dbgs));
+    RenderDbgConfigTable(str, data.Dbgs, data.TabletInfo.TabletId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

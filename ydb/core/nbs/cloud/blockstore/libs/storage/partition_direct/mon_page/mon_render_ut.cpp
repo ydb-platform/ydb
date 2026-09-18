@@ -37,6 +37,18 @@ public:
     }
 };
 
+// Counts non-overlapping occurrences of needle in text.
+size_t CountOccurrences(TStringBuf text, TStringBuf needle)
+{
+    size_t result = 0;
+    size_t position = 0;
+    while ((position = text.find(needle, position)) != TStringBuf::npos) {
+        ++result;
+        position += needle.size();
+    }
+    return result;
+}
+
 const TVChunkConfigs EmptyVChunkConfigs;
 const TTestTouchedProvider EmptyTouchedProvider;
 
@@ -176,6 +188,45 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "Used PBuffers size</td><td>8.00 KiB 2 (count)</td>");
+    }
+
+    Y_UNIT_TEST(OverviewRendersDbgTableColumnsAndRows)
+    {
+        TMonPageData data = MakeData();
+        data.Dbgs = {
+            TDbgSnapshot{
+                .Index = 0,
+                .Connections = {TConnectionSnapshot{
+                    .DDiskId = {20, 100, 1},
+                    .PBufferId = {{10, 100, 2}},
+                }},
+            },
+            TDbgSnapshot{
+                .Index = 32,
+                .Connections = {TConnectionSnapshot{
+                    .DDiskId = {30, 200, 1},
+                    .PBufferId = {{20, 200, 2}},
+                }},
+            },
+        };
+
+        const TString html =
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Direct Block Group config");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "dbg=0'>DBG #0</a><br><a href='?TabletID=42&page=dbg&dbg=32'>"
+            "DBG #32");
+
+        const size_t node10 = html.find("Node 10");
+        const size_t node20 = html.find("Node 20");
+        const size_t node30 = html.find("Node 30");
+        UNIT_ASSERT(node10 != TString::npos);
+        UNIT_ASSERT(node20 != TString::npos);
+        UNIT_ASSERT(node30 != TString::npos);
+        UNIT_ASSERT(node10 < node20);
+        UNIT_ASSERT(node20 < node30);
+        UNIT_ASSERT_VALUES_EQUAL(35, CountOccurrences(html, "<th>"));
     }
 
     Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)

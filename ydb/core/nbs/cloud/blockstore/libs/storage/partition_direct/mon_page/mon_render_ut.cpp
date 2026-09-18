@@ -214,7 +214,9 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
         const TString html =
             RenderMonPage(MakeData(), configs, EmptyTouchedProvider);
-        UNIT_ASSERT_STRING_CONTAINS(html, "Customized VChunks</td><td>2</td>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "Customized VChunks</td><td>2 / 64</td>");
         UNIT_ASSERT(
             html.find("Touched VChunks") < html.find("Customized VChunks"));
     }
@@ -315,10 +317,12 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
                 "4"));
         UNIT_ASSERT_STRING_CONTAINS(
             html,
-            "class=\"dbg-config-cell dbg-config-both dbg-config-rotten\"");
+            "class=\"dbg-config-cell dbg-config-both dbg-config-fresh "
+            "dbg-config-rotten\"");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
-            "class=\"dbg-config-cell dbg-config-total dbg-config-rotten\"");
+            "class=\"dbg-config-cell dbg-config-total dbg-config-fresh "
+            "dbg-config-rotten\"");
     }
 
     Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)

@@ -21,6 +21,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
                  .BlockCount = 16384,
                  .VChunkSize = 1_MB,
                  .VolumeDirectBlockGroupCount = 32,
+                 .TouchedVChunkCount = 17,
                  .DiskId = "vol-1",
                  .State = "WORK"},
             .FastPathServiceInfo = TFastPathServiceInfo{.LsnCounter = 100},
@@ -103,6 +104,9 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "VChunk count</td><td>64 = 2(region) * 32(vpr)");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "Touched VChunks</td><td>17 / 64</td>");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "Disk size</td><td>64.00 MiB = 4.00 KiB * 16384(block) = "
@@ -285,6 +289,32 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT(!html.Contains("action=addhost"));
     }
 
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST(DbgListShowsFreshDDisksByVChunk)
+    {
+        constexpr ui32 BlockSize = 4096;
+        auto dbg = MakeDbg(0);
+        auto config = TVChunkConfig::MakeDefault(
+            /*vChunkIndex*/ 17,
+            /*hostCount*/ 5,
+            /*primaryCount*/ 3);
+        config.PromoteHost(3, true);
+        config.SetWatermark(3, 42 * BlockSize);
+        dbg.VChunkConfigs.emplace(config.GetVChunkIndex(), std::move(config));
+
+        const TMonPageData data{
+            .Page = EMonPage::Dbg,
+            .TabletInfo = {.TabletId = 42, .BlockSize = BlockSize},
+            .Dbgs = {std::move(dbg)},
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Fresh");
+        UNIT_ASSERT_STRING_CONTAINS(html, "17[H3:42]");
+    }
+
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
     Y_UNIT_TEST(DbgDetailShowsHostsTable)
     {
         const TMonPageData data{

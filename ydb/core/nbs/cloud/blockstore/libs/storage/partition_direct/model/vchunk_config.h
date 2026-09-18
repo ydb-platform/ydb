@@ -39,13 +39,19 @@ public:
 
     // Disables the host. Demote ddisk and pbuffer. If possible, adds ddisk on
     // the new host. Returns the text of the error or message to be logged.
-    TString EvacuateHost(THostIndex hostIndex);
+    TString EvacuateHost(THostIndex hostIndex, bool fresh);
 
     // Removes ddisk from the host. Demote pbuffer to handoff. Returns error
     // message or empty string when demote executed successfully.
     TString DemoteHost(THostIndex hostIndex);
+<<<<<<< HEAD
     // Adds ddisk to the host.
     void PromoteHost(THostIndex hostIndex);
+=======
+    // Adds ddisk to the host. Set watermark to 0 if it fresh.
+    void PromoteHost(THostIndex hostIndex, bool fresh);
+    TString PromoteHostIfNeeded(bool fresh);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;
     [[nodiscard]] EHostRole GetDDiskRole(THostIndex hostIndex) const;

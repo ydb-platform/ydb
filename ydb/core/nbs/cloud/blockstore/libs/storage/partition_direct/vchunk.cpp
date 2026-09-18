@@ -54,6 +54,11 @@ TVChunk::TVChunk(
     NActors::TActorSystem* actorSystem,
     IPartitionDirectService* partitionDirectService,
     const TVChunkConfig& vChunkConfig,
+<<<<<<< HEAD
+=======
+    bool touched,
+    const TDirtyMapStateProto& dirtyMapState,
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
@@ -76,18 +81,34 @@ TVChunk::TVChunk(
      }}
     , VChunkConfig(vChunkConfig)
 <<<<<<< HEAD
+<<<<<<< HEAD
     , BlocksDirtyMap(VChunkConfig, BlockSize, BlocksCount)
     , Counters(std::move(counters))
 =======
+=======
+    , TouchedState(
+          touched ? ETouchedState::Persisted : ETouchedState::NotTouched)
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
     , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(
           DirectBlockGroup->GetArenaAllocatorPool(),
           VChunkConfig,
+          IsTouched(),
+          dirtyMapState,
           BlockSize,
           BlocksCount))
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
     // ActorSystem thread
+<<<<<<< HEAD
+=======
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Create",
+        LogTitle.GetWithTime().c_str());
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 }
 
 TVChunk::~TVChunk() = default;
@@ -741,6 +762,11 @@ void TVChunk::DoFlush(bool force)
         return;
     }
 
+    Touch();
+    if (TouchedState != ETouchedState::Persisted) {
+        return;
+    }
+
     auto flushBatch =
         BlocksDirtyMap.MakeFlushHint(force ? 1 : SyncRequestsBatchSize);
 
@@ -911,6 +937,123 @@ void TVChunk::OnEraseBelatedResponse(
     ScheduleCleaningUp();
 }
 
+<<<<<<< HEAD
+=======
+void TVChunk::DoPersistDirtyMap()
+{
+    if (DirtyMapStatePersisting) {
+        return;
+    }
+    if (!BlocksDirtyMap->NeedPersist()) {
+        return;
+    }
+    DirtyMapStatePersisting = true;
+
+    auto state = BlocksDirtyMap->GetStateForPersist();
+    const ui32 stateGeneration = BlocksDirtyMap->GetCurrentGeneration();
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Will persist dirty map. State generation %u",
+        LogTitle.GetWithTime().c_str(),
+        stateGeneration);
+
+    auto future = PartitionDirectService->UpdateDirtyMapState(
+        VChunkConfig.GetVChunkIndex(),
+        std::move(state));
+    future.Subscribe(
+        [weakSelf = weak_from_this(),
+         executor = Executor,
+         stateGeneration]   //
+        (const TPersistResultFuture& f) mutable
+        {
+            if (f.GetValue() != EPersistResult::Success) {
+                return;
+            }
+            executor->ExecuteSimple(
+                [weakSelf = std::move(weakSelf), stateGeneration]()
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnDirtyMapPersisted(stateGeneration);
+                    }
+                });
+        });
+}
+
+void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Dirty map persisted. State generation: %u",
+        LogTitle.GetWithTime().c_str(),
+        stateGeneration);
+
+    DirtyMapStatePersisting = false;
+    BlocksDirtyMap->StatePersisted(stateGeneration);
+    ScheduleCleaningUp();
+}
+
+void TVChunk::Touch()
+{
+    if (TouchedState == ETouchedState::NotTouched) {
+        TouchedState = ETouchedState::Persisting;
+        DoPersistTouched();
+    }
+}
+
+bool TVChunk::IsTouched() const
+{
+    return TouchedState != ETouchedState::NotTouched;
+}
+
+void TVChunk::DoPersistTouched()
+{
+    Y_ABORT_UNLESS(TouchedState == ETouchedState::Persisting);
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Will persist touched",
+        LogTitle.GetWithTime().c_str());
+
+    auto future =
+        PartitionDirectService->SetVChunkTouched(VChunkConfig.GetVChunkIndex());
+    future.Subscribe(
+        [weakSelf = weak_from_this(),
+         executor = Executor]   //
+        (const TPersistResultFuture& f) mutable
+        {
+            if (f.GetValue() != EPersistResult::Success) {
+                return;
+            }
+            executor->ExecuteSimple(
+                [weakSelf = std::move(weakSelf)]()
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnTouchedPersisted();
+                    }
+                });
+        });
+}
+
+void TVChunk::OnTouchedPersisted()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Touched persisted.",
+        LogTitle.GetWithTime().c_str());
+
+    TouchedState = ETouchedState::Persisted;
+    ScheduleCleaningUp();
+}
+
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 void TVChunk::ScheduleCleaningUp()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1037,7 +1180,91 @@ void TVChunk::OnConfigPersisted()
     auto apply = std::move(pending.ApplyPersisted);
     PendingVChunkConfigs.pop_front();
     PersistNextPendingConfig();
+<<<<<<< HEAD
     apply();
+=======
+    DemoteUnavailableHostsIfNeeded();
+}
+
+void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Applying new config %s %s -> %s",
+        LogTitle.GetWithTime().c_str(),
+        message.Quote().c_str(),
+        VChunkConfig.DebugPrint().c_str(),
+        newConfig.DebugPrint().c_str());
+
+    VChunkConfig = std::move(newConfig);
+    BlocksDirtyMap->UpdateConfig(VChunkConfig, IsTouched());
+
+    for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
+         ++hostIndex)
+    {
+        const bool needCopier =
+            BlocksDirtyMap->GetFreshRange(hostIndex) != std::nullopt &&
+            VChunkConfig.GetDisabledHosts().Get(hostIndex) == false;
+        const auto* copier = Copiers.FindPtr(hostIndex);
+
+        if (needCopier && !copier) {
+            // Add new copier
+
+            LOG_INFO(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s Copier %s started",
+                LogTitle.GetWithTime().c_str(),
+                PrintHostAndNode(hostIndex).c_str());
+
+            auto newCopier = Copiers[hostIndex] =
+                std::make_shared<TDDiskDataCopier>(
+                    ActorSystem,
+                    TraceService,
+                    PartitionDirectService,
+                    DiskDescription,
+                    VChunkConfig,
+                    DirectBlockGroup,
+                    this,
+                    hostIndex);
+
+            newCopier->Start().Subscribe(
+                [weakSelf = weak_from_this(), hostIndex]   //
+                (const TFuture<TDDiskDataCopier::EResult>& f)
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnCopyComplete(hostIndex, f.GetValue());
+                    }
+                });
+        }
+        if (!needCopier && copier) {
+            // Remove unnecessary copier
+
+            LOG_INFO(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s Copier %s stopping",
+                LogTitle.GetWithTime().c_str(),
+                PrintHostAndNode(hostIndex).c_str());
+
+            (*copier)->Stop().Subscribe(
+                [weakSelf = weak_from_this(), hostIndex]   //
+                (const TFuture<TDDiskDataCopier::EResult>& f)
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnCopierStopped(hostIndex, f.GetValue());
+                    }
+                });
+            Copiers.erase(hostIndex);
+
+            // Just in case, clear the locks of the deleted copier.
+            BlocksDirtyMap->ClearRangeSyncs(hostIndex);
+        }
+    }
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 }
 
 TVChunkConfig TVChunk::PrepareNewConfig(
@@ -1056,7 +1283,12 @@ TVChunkConfig TVChunk::PrepareNewConfig(
             break;
         }
         case EHostState::Offline: {
+<<<<<<< HEAD
             const TString message = newConfig.EvacuateHost(hostIndex);
+=======
+            newConfig.DisableHost(hostIndex);
+            const TString message = newConfig.PromoteHostIfNeeded(IsTouched());
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
             if (!message.empty()) {
                 LOG_WARN(
                     *ActorSystem,

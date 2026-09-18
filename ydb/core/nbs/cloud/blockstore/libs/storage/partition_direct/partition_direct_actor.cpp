@@ -146,7 +146,8 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
          executingDirtyMapPromises =
              std::move(ExecutingUpdateDirtyMapStatePromises),
          pendingDirtyMapRequests =
-             std::move(PendingUpdateDirtyMapStateRequests)]() mutable
+             std::move(PendingUpdateDirtyMapStateRequests),
+         touchedVChunks = std::move(TouchedVChunks)]() mutable
     {
         for (auto& promise: executingConfigPromises) {
             promise.TrySetValue(EPersistResult::Cancelled);
@@ -161,6 +162,8 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
         for (auto& req: pendingDirtyMapRequests) {
             req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
         }
+
+        touchedVChunks.OnSaveInterrupted();
     };
 
     if (FastPathService) {
@@ -338,7 +341,26 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
     return directBlockGroups;
+=======
+    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
+    return std::make_shared<TFastPathService>(
+        TActivationContext::ActorSystem(),
+        SelfId(),
+        DiskDescription,
+        blockCount,
+        VolumeConfig.GetBlockSize(),
+        std::move(directBlockGroups),
+        std::move(chaosInjectorControls),
+        vChunkConfigs,
+        &TouchedVChunks,
+        dirtyMapStates,
+        StorageConfig,
+        nbsService->Scheduler,
+        nbsService->Timer,
+        AppData()->Counters);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -794,6 +816,18 @@ void TPartitionActor::HandleUpdateVChunkConfig(
     ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
 }
 
+void TPartitionActor::HandleSetVChunkTouched(
+    const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    if (TouchedVChunks.Add(
+            ev->Get()->VChunkIndex,
+            std::move(ev->Get()->UpdateCompleted)))
+    {
+        ExecuteTx(ctx, CreateTx<TSetVChunkTouched>(TouchedVChunks.BeginSave()));
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 <<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
@@ -881,6 +915,15 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
             HandleUpdateVChunkConfig);
         HFunc(
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
+=======
+            TEvPartitionDirectPrivate::TEvUpdateDirtyMapState,
+            HandleUpdateDirtyMapState);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvSetVChunkTouched,
+            HandleSetVChunkTouched);
+        HFunc(
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
         HFunc(TEvPartitionDirectPrivate::TEvAddHostToDBG, HandleAddHostToDBG);

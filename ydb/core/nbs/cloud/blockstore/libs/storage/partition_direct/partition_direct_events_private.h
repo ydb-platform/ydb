@@ -29,6 +29,11 @@ struct TEvPartitionDirectPrivate
                   LocalEventsOffset,
 
         EvUpdateVChunkConfig,
+<<<<<<< HEAD
+=======
+        EvUpdateDirtyMapState,
+        EvSetVChunkTouched,
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         EvFastPathServiceReady,
 
         EvFastPathServiceShutdown,
@@ -56,6 +61,36 @@ struct TEvPartitionDirectPrivate
         {}
     };
 
+<<<<<<< HEAD
+=======
+    struct TEvUpdateDirtyMapState
+        : public NActors::
+              TEventLocal<TEvUpdateDirtyMapState, EvUpdateDirtyMapState>
+    {
+        ui32 VChunkIndex;
+        TDirtyMapStateProto State;
+        TPersistResultPromise UpdateCompleted =
+            NThreading::NewPromise<EPersistResult>();
+
+        TEvUpdateDirtyMapState(ui32 vChunkIndex, TDirtyMapStateProto state)
+            : VChunkIndex(vChunkIndex)
+            , State(std::move(state))
+        {}
+    };
+
+    struct TEvSetVChunkTouched
+        : public NActors::TEventLocal<TEvSetVChunkTouched, EvSetVChunkTouched>
+    {
+        const ui32 VChunkIndex;
+        TPersistResultPromise UpdateCompleted =
+            NThreading::NewPromise<EPersistResult>();
+
+        explicit TEvSetVChunkTouched(ui32 vChunkIndex)
+            : VChunkIndex(vChunkIndex)
+        {}
+    };
+
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
     // Signals that FastPathServiceReady (and its DBGs) are ready.
     struct TEvFastPathServiceReady
         : public NActors::

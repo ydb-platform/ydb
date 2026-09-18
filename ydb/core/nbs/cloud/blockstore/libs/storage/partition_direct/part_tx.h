@@ -3,6 +3,11 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_tx.h
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_tx.h
 
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
@@ -34,6 +39,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(StorePartitionIds, __VA_ARGS__)                                        \
     xxx(UpdateVChunkConfig, __VA_ARGS__)                                       \
     xxx(UpdateDirtyMapState, __VA_ARGS__)                                      \
+    xxx(SetVChunkTouched, __VA_ARGS__)                                         \
     xxx(StartAddHost, __VA_ARGS__)                                             \
     xxx(AddHostToDBG, __VA_ARGS__)                                             \
     xxx(StartRemoveHost, __VA_ARGS__)                                          \
@@ -75,7 +81,13 @@ struct TTxPartition
     {
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_tx.h
         TVector<TVChunkConfig> VChunkConfigs;
+=======
+        TVChunkConfigs VChunkConfigs;
+        TDirtyMapStateProtos DirtyMapStates;
+        TTouchedVChunks TouchedVChunks;
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_tx.h
         TMaybe<TAddHostInProgress> AddHostInProgress;
         TMaybe<TRemoveHostInProgress> RemoveHostInProgress;
 
@@ -87,6 +99,11 @@ struct TTxPartition
             VolumeConfig.Clear();
             DirectBlockGroupsConnections.Clear();
             VChunkConfigs.clear();
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_tx.h
+=======
+            DirtyMapStates.clear();
+            TouchedVChunks = {};
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_tx.h
             AddHostInProgress.Clear();
             RemoveHostInProgress.Clear();
         }
@@ -139,6 +156,23 @@ struct TTxPartition
 
         explicit TUpdateVChunkConfig(TVChunkConfig vChunkConfig)
             : VChunkConfig(std::move(vChunkConfig))
+        {}
+
+        void Clear()
+        {
+            // nothing to do
+        }
+    };
+
+    //
+    // SetVChunkTouched
+    //
+    struct TSetVChunkTouched
+    {
+        TVector<TTouchedVChunks::TChunk> Chunks;
+
+        explicit TSetVChunkTouched(TVector<TTouchedVChunks::TChunk> chunks)
+            : Chunks(std::move(chunks))
         {}
 
         void Clear()

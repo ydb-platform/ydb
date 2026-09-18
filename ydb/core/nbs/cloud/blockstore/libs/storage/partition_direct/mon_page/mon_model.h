@@ -59,7 +59,11 @@ struct TTabletInfo
 =======
     ui64 VChunkSize = 0;
     ui32 VolumeDirectBlockGroupCount = 0;
+<<<<<<< HEAD
 >>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
+=======
+    size_t TouchedVChunkCount = 0;
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
     TString DiskId;
     TString State;   // "INIT" / "WORK"
 };

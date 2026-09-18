@@ -55,6 +55,26 @@ TDirectBlockGroupsConnections MakeSampleDirectBlockGroupsConnections()
     return msg;
 }
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_database_ut.cpp
+=======
+TDirtyMapStateProto MakeSampleDirtyMapState()
+{
+    TDirtyMapStateProto state;
+
+    auto* ddiskState = state.AddDDiskStates();
+    auto* ahead = ddiskState->MutableAhead();
+    ahead->SetRunLengthEncoding("ahead-rle");
+    auto* behind = ddiskState->MutableBehind();
+    behind->SetBitMask("behind-bit-mask");
+
+    auto* secondDDiskState = state.AddDDiskStates();
+    auto* secondAhead = secondDDiskState->MutableAhead();
+    secondAhead->SetRunLengthEncoding("second-ahead-rle");
+
+    return state;
+}
+
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_database_ut.cpp
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -374,7 +394,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             5,
             DirectBlockGroupHostCount,
             DefaultPrimaryCount);
-        updated.EvacuateHost(0);
+        updated.EvacuateHost(0, true);
 
         executor.WriteTx(
             [&](NKikimr::NTable::TDatabase& db)
@@ -447,6 +467,128 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                     connections->SerializeAsString());
             });
     }
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_database_ut.cpp
+=======
+
+    Y_UNIT_TEST(ShouldReturnEmptyDirtyMapStatesWhenAbsent)
+    {
+        TTestExecutor executor;
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMap<ui32, TDirtyMapStateProto> loaded;
+                UNIT_ASSERT(partitionDb.ReadAllDirtyMapStates(loaded));
+                UNIT_ASSERT(loaded.empty());
+            });
+    }
+
+    Y_UNIT_TEST(ShouldStoreAndReadDirtyMapState)
+    {
+        TTestExecutor executor;
+        const auto written = MakeSampleDirtyMapState();
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.StoreDirtyMapState(42, written);
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMap<ui32, TDirtyMapStateProto> loaded;
+                UNIT_ASSERT(partitionDb.ReadAllDirtyMapStates(loaded));
+                UNIT_ASSERT_VALUES_EQUAL(1u, loaded.size());
+                UNIT_ASSERT(loaded.contains(42));
+
+                const auto& state = loaded.at(42);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    written.SerializeAsString(),
+                    state.SerializeAsString());
+                UNIT_ASSERT_VALUES_EQUAL(2, state.DDiskStatesSize());
+            });
+    }
+
+    Y_UNIT_TEST(ShouldStoreDirtyMapStatePerVChunkIndependently)
+    {
+        TTestExecutor executor;
+        const auto first = MakeSampleDirtyMapState();
+        const auto second = MakeSampleDirtyMapState();
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.StoreDirtyMapState(0, first);
+                partitionDb.StoreDirtyMapState(1, second);
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMap<ui32, TDirtyMapStateProto> loaded;
+                UNIT_ASSERT(partitionDb.ReadAllDirtyMapStates(loaded));
+                UNIT_ASSERT_VALUES_EQUAL(2u, loaded.size());
+
+                UNIT_ASSERT(loaded.contains(0));
+                UNIT_ASSERT(loaded.contains(1));
+
+                // A vchunk that was never written must be absent from the map.
+                UNIT_ASSERT(!loaded.contains(2));
+            });
+    }
+
+    Y_UNIT_TEST(ShouldOverwriteDirtyMapStateOnRepeatedStore)
+    {
+        TTestExecutor executor;
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.StoreDirtyMapState(5, MakeSampleDirtyMapState());
+            });
+
+        const auto updated = MakeSampleDirtyMapState();
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.StoreDirtyMapState(5, updated);
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMap<ui32, TDirtyMapStateProto> loaded;
+                UNIT_ASSERT(partitionDb.ReadAllDirtyMapStates(loaded));
+                UNIT_ASSERT_VALUES_EQUAL(1u, loaded.size());
+                UNIT_ASSERT(loaded.contains(5));
+
+                const auto& state = loaded.at(5);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    updated.SerializeAsString(),
+                    state.SerializeAsString());
+            });
+    }
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_database_ut.cpp
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

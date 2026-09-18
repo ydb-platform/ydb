@@ -79,7 +79,14 @@ public:
         ui64 blockCount,
         ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
+<<<<<<< HEAD
         TVChunkConfigByIndex vChunkConfigs,
+=======
+        TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
+        const TVChunkConfigs& vChunkConfigs,
+        ITouchedProvider* touchedProvider,
+        const TDirtyMapStateProtos& dirtyMapStates,
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
         ITimerPtr timer,
@@ -124,7 +131,19 @@ public:
 
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
+<<<<<<< HEAD
     void RequestAddHost(size_t directBlockGroupId) override;
+=======
+    TPersistResultFuture UpdateDirtyMapState(
+        ui32 vChunkIndex,
+        TDirtyMapStateProto state) override;
+
+    TPersistResultFuture SetVChunkTouched(ui32 vChunkIndex) override;
+
+    void QueryAddHost(
+        size_t directBlockGroupId,
+        ui32 dbgConnectionsConfigGeneration) override;
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
     void QueryRemoveHost(
         size_t directBlockGroupId,

@@ -23,6 +23,29 @@ TVChunkConfig MakeTestVChunkConfig()
         DefaultPrimaryCount);
 }
 
+std::shared_ptr<TBlocksDirtyMap> MakeUntouchedDirtyMap(
+    const TVChunkConfig& vchunkConfig)
+{
+    return std::make_shared<TBlocksDirtyMap>(
+        CreateArenaAllocatorPool(),
+        vchunkConfig,
+        false,
+        TDirtyMapStateProto{},
+        DefaultBlockSize,
+        GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+}
+
+std::shared_ptr<TBlocksDirtyMap> MakeDirtyMap(const TVChunkConfig& vchunkConfig)
+{
+    return std::make_shared<TBlocksDirtyMap>(
+        CreateArenaAllocatorPool(),
+        vchunkConfig,
+        true,
+        TDirtyMapStateProto{},
+        DefaultBlockSize,
+        GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 THostMask MakePrimaryHosts()
@@ -66,11 +89,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldKeepTotalPBufferCountersAfterRelease)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         constexpr THostIndex Host = 0;
         constexpr size_t ByteCount = 4096;
@@ -99,6 +118,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReadWithoutWrites)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
+<<<<<<< HEAD
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
 <<<<<<< HEAD
             CreateArenaAllocator(),
@@ -109,6 +129,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768,32768};"
@@ -132,7 +155,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Disable host 0
         vchunkConfig.DisableHost(0);
+<<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
@@ -147,6 +174,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldResizeHosts)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
+<<<<<<< HEAD
 <<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
@@ -165,6 +193,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         const auto newIdx = static_cast<THostIndex>(5);
         dirtyMap.ResizeHosts(vchunkConfig.GetHostCount());
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        vchunkConfig.AppendHost();
+        const auto newIdx = static_cast<THostIndex>(5);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         UNIT_ASSERT_VALUES_EQUAL(
             0u,
@@ -181,6 +216,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(2, 40 * DefaultBlockSize);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -193,6 +229,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh,30,30};"
@@ -203,9 +242,56 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
     }
 
+    Y_UNIT_TEST(ShouldIgnoreWatermarksUntilDDiskTouched)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        vchunkConfig.SetWatermark(0, 30 * DefaultBlockSize);
+        vchunkConfig.SetWatermark(2, 40 * DefaultBlockSize);
+
+        auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3+{Disabled,0};"
+            "H4+{Disabled,0};",
+            dirtyMap->DebugPrintDDiskState());
+
+        vchunkConfig.PromoteHost(3, false);
+        vchunkConfig.SetWatermark(3, 40 * DefaultBlockSize);
+        dirtyMap->UpdateConfig(vchunkConfig, false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            dirtyMap->DebugPrintDDiskState());
+
+        const auto range = TBlockRange16::MakeOneBlock(0);
+        dirtyMap->RegisterInflightWrite(MakeKey(1), range);
+        dirtyMap->WriteFinished(
+            MakeKey(1),
+            range,
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        vchunkConfig.PromoteHost(4, true);
+        vchunkConfig.SetWatermark(4, 50 * DefaultBlockSize);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4*{Fresh+,50};",
+            dirtyMap->DebugPrintDDiskState());
+    }
+
     Y_UNIT_TEST(ShouldRespectWatermarksForAddedDDisks)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
+<<<<<<< HEAD
 <<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
@@ -219,11 +305,18 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(0, 30 * DefaultBlockSize);
         vchunkConfig.SetWatermark(3, 40 * DefaultBlockSize);
+<<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768,32768};"
             "H1*{Operational,32768,32768};"
@@ -237,8 +330,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         // Offline H1
-        vchunkConfig.EvacuateHost(1);
+        vchunkConfig.EvacuateHost(1, true);
 
+<<<<<<< HEAD
 <<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
@@ -252,6 +346,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768,32768};"
@@ -262,8 +359,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
 
         // Offline H0
+<<<<<<< HEAD
         vchunkConfig.EvacuateHost(0);
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        vchunkConfig.EvacuateHost(0, true);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
@@ -273,8 +375,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
 
         // Can't switch H2 offline
+<<<<<<< HEAD
         vchunkConfig.EvacuateHost(2);
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        vchunkConfig.EvacuateHost(2, true);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
@@ -284,8 +391,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
 
         // Offline H3
+<<<<<<< HEAD
         vchunkConfig.EvacuateHost(3);
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        vchunkConfig.EvacuateHost(3, true);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
@@ -295,8 +407,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
 
         // Offline H4
+<<<<<<< HEAD
         vchunkConfig.EvacuateHost(4);
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        vchunkConfig.EvacuateHost(4, true);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
@@ -307,7 +424,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Enable H4
         vchunkConfig.EnableHost(4);
+<<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
@@ -318,7 +439,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Enable H0
         vchunkConfig.EnableHost(0);
+<<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh,0,0};"
             "H1-{Disabled,0,0};"
@@ -329,7 +454,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Enable H1
         vchunkConfig.EnableHost(1);
+<<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh,0,0};"
             "H1+{Disabled,0,0};"
@@ -340,7 +469,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Enable H2
         vchunkConfig.EnableHost(2);
+<<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh,0,0};"
             "H1+{Disabled,0,0};"
@@ -351,7 +484,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Enable H3
         vchunkConfig.EnableHost(3);
+<<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh,0,0};"
             "H1+{Disabled,0,0};"
@@ -361,8 +498,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.DebugPrintDDiskState());
 
         // Can't switch H2 offline
+<<<<<<< HEAD
         vchunkConfig.EvacuateHost(2);
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        vchunkConfig.EvacuateHost(2, true);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh,0,0};"
             "H1+{Disabled,0,0};"
@@ -382,6 +524,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(THostIndex{0}, 30 * DefaultBlockSize);
         vchunkConfig.SetWatermark(THostIndex{2}, 40 * DefaultBlockSize);
 
+<<<<<<< HEAD
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
 <<<<<<< HEAD
             CreateArenaAllocator(),
@@ -392,6 +535,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         dirtyMap.MarkFresh(THostIndex{0}, 30 * DefaultBlockSize);
         dirtyMap.MarkFresh(THostIndex{2}, 40 * DefaultBlockSize);
@@ -450,6 +596,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -462,6 +609,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
@@ -493,7 +643,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Disable host 0.
         vchunkConfig.DisableHost(0);
+<<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
@@ -526,6 +680,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -538,6 +693,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
@@ -584,7 +742,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Disable host 0
         vchunkConfig.DisableHost(0);
+<<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
@@ -629,6 +791,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -641,6 +804,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // Without write, we should not get flush hints
         auto flushHint = dirtyMap.MakeFlushHint(1);
@@ -782,6 +948,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -794,6 +961,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -860,6 +1030,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -872,6 +1043,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         const auto range = TBlockRange16::WithLength(10, 10);
 
@@ -902,11 +1076,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldIgnoreLateEraseAckForForgottenLsn)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const auto range = TBlockRange16::WithLength(10, 10);
         dirtyMap->RegisterInflightWrite(MakeKey(100), range);
@@ -939,11 +1109,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldIgnoreLateEraseAckAfterHostDisabled)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const auto range = TBlockRange16::WithLength(10, 10);
         dirtyMap->RegisterInflightWrite(MakeKey(100), range);
@@ -969,7 +1135,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // The host gets disabled; the re-queued erase is confirmed on its
         // behalf and the record leaves the inflight map.
         vchunkConfig.DisableHost(2);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         auto retryHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT(retryHints.Empty());
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
@@ -984,6 +1150,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -996,11 +1163,18 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // Promote hand-off H3 to primary.
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
+<<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768,32768};"
             "H1*{Operational,32768,32768};"
@@ -1065,18 +1239,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldTrackAheadRangeOnFreshDDiskAfterFlush)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // Promote hand-off H3 to primary and make it Fresh with a low
         // watermark so tracking is enabled and writes above the watermark are
         // recorded as "ahead".
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
             "H1*{Operational,32768};"
@@ -1128,12 +1298,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
 
         // Host 0 disabled, hosts 1,2,3 primary, host 4 hand-off.
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         TString error;
-        vchunkConfig.EvacuateHost(0);
+        vchunkConfig.EvacuateHost(0, true);
         UNIT_ASSERT_VALUES_EQUAL("", error);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
 
+<<<<<<< HEAD
 <<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
@@ -1147,6 +1318,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // Written to two primary and one hand-off
         const THostMask requested =
@@ -1201,13 +1375,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Hosts 0,1 disabled; hosts 2,3,4 are primary.
         TString error;
-        vchunkConfig.EvacuateHost(0);
+        vchunkConfig.EvacuateHost(0, true);
         UNIT_ASSERT_VALUES_EQUAL("", error);
-        vchunkConfig.EvacuateHost(1);
+        vchunkConfig.EvacuateHost(1, true);
         UNIT_ASSERT_VALUES_EQUAL("", error);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
         vchunkConfig.SetWatermark(4, DefaultBlockSize * 1024);
 
+<<<<<<< HEAD
 <<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
@@ -1221,6 +1396,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
@@ -1280,9 +1458,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         // Host 0 disabled; hosts 1,2,3 primary; host 4 hand-off.
-        vchunkConfig.EvacuateHost(0);
+        vchunkConfig.EvacuateHost(0, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
 
+<<<<<<< HEAD
 <<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
@@ -1296,6 +1475,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
             "H1*{Operational,32768,32768};"
@@ -1359,6 +1541,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
         // Enable 4 DDisks (hosts 0,1,2,3 primary)
         // Available DDisks is enough for a quorum.
+<<<<<<< HEAD
         vchunkConfig.PromoteHost(3);
 <<<<<<< HEAD
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
@@ -1375,6 +1558,12 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        vchunkConfig.DisableHost(2);
+        vchunkConfig.PromoteHost(3, true);
+        vchunkConfig.SetWatermark(3, 100);
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         dirtyMap.SetFlushWatermark(THostIndex{2}, 100 * DefaultBlockSize);
 
@@ -1446,6 +1635,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -1458,6 +1648,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         // Only 3 DDisks available by default. For some requests, ddisk will not
@@ -1506,6 +1699,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -1518,6 +1712,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
@@ -1560,6 +1757,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -1572,6 +1770,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         const THostMask mask = MakePrimaryHosts();
 
         // Lock range on DDisk (for reading).
@@ -1614,6 +1815,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -1626,6 +1828,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RestorePBuffer(
@@ -1669,6 +1874,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -1681,6 +1887,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // Block written to four PBuffers
 <<<<<<< HEAD
@@ -1753,6 +1962,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -1765,6 +1975,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // Block written to two primary PBuffers and one hand-off PBuffer
 <<<<<<< HEAD
@@ -1819,6 +2032,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -1831,6 +2045,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(0, 100));
@@ -1915,6 +2132,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -1927,6 +2145,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RestorePBuffer(
@@ -1991,6 +2212,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2003,6 +2225,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
@@ -2057,6 +2282,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2069,6 +2295,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 41));
@@ -2146,6 +2375,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2158,6 +2388,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 21));
@@ -2209,6 +2442,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2221,6 +2455,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 41));
@@ -2291,6 +2528,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2303,6 +2541,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
@@ -2337,6 +2578,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2349,6 +2591,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 100));
@@ -2401,6 +2646,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2413,6 +2659,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         const int lsnsCount = 100;
         for (int i = 1; i <= lsnsCount; ++i) {
@@ -2461,6 +2710,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2473,6 +2723,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 21));
@@ -2541,6 +2794,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2553,6 +2807,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 6));
@@ -2625,6 +2882,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2637,6 +2895,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 91));
@@ -2725,6 +2986,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2737,6 +2999,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
 <<<<<<< HEAD
         auto inflightCounterBeforeWrite = dirtyMap.GetInflightCount();
@@ -2804,6 +3069,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2816,6 +3082,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // Register a pending write (no PBuffer acknowledgement yet).
 <<<<<<< HEAD
@@ -2866,6 +3135,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2878,6 +3148,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // First write completes normally.
 <<<<<<< HEAD
@@ -2945,6 +3218,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -2957,6 +3231,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -2985,7 +3262,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Disable host 0 before erase.
         vchunkConfig.DisableHost(0);
+<<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // Erase hints should only include enabled hosts.
         auto eraseHints = dirtyMap.MakeEraseHint(1);
@@ -3008,6 +3289,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -3020,6 +3302,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // No writes yet — no barrier.
         UNIT_ASSERT(!dirtyMap.GetSafeBarrierForErase().has_value());
@@ -3081,6 +3366,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -3093,6 +3379,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -3135,9 +3424,16 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.GetPBufferCounters(THostIndex{1}).CurrentBytesCount);
 
         // Evacuate host 1 — this promotes host 3 as replacement.
+<<<<<<< HEAD
         // DDisk set changes from {0,1,2} to {0,2,3}, making host 1 "removed".
         vchunkConfig.EvacuateHost(1);
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        // DDisk set changes from {0, 1, 2} to {0, 2, 3}, making host 1
+        // "removed".
+        vchunkConfig.EvacuateHost(1, true);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // Host 1 bytes should be released by RemoveHosts.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -3163,6 +3459,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -3175,6 +3472,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -3219,9 +3519,15 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Inflight item still present — host 1 erase pending.
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap.GetInflightCount());
 
+<<<<<<< HEAD
         // Evacuate host 1 — RemoveHosts completes the erase.
         vchunkConfig.EvacuateHost(1);
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        // Evacuate host 1
+        vchunkConfig.EvacuateHost(1, true);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // The inflight item should be fully erased and removed from the map.
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
@@ -3230,6 +3536,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReleasePBufferCountersOnHostEvacuation)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
+<<<<<<< HEAD
 <<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
@@ -3243,6 +3550,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -3269,9 +3579,15 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             UNIT_ASSERT_VALUES_EQUAL(40960, counters.CurrentBytesCount);
         }
 
+<<<<<<< HEAD
         // Evacuate host 2 — host 3 gets promoted; DDisk set becomes {0,1,3}.
         vchunkConfig.EvacuateHost(2);
         dirtyMap.UpdateConfig(vchunkConfig);
+=======
+        // Evacuate host 2 — host 3 gets promoted; DDisk set becomes {0, 1, 3}.
+        vchunkConfig.EvacuateHost(2, true);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // Host 2 byte counter should be released.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -3296,6 +3612,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
+<<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
@@ -3308,6 +3625,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             vchunkConfig,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -3375,11 +3695,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldReleaseEvacuatedHostOnWriteFinished)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const THostMask requested = MakePrimaryHosts();   // {0, 1, 2}
         const THostMask confirmed = MakePrimaryHosts();   // {0, 1, 2}
@@ -3395,8 +3711,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // out of the DDisk set (promoting host 3 as replacement). The write is
         // still pending (WriteRequested is empty), so UpdateConfig's
         // RemoveHosts is a no-op and the inflight item survives.
-        vchunkConfig.EvacuateHost(0);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        vchunkConfig.EvacuateHost(0, true);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
 
         // The write response finally arrives, confirming all three hosts,
@@ -3438,11 +3754,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldKeepTemporarilyDisabledDDiskOnWriteFinished)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const THostMask requested = MakePrimaryHosts();   // {0, 1, 2}
         const THostMask confirmed = MakePrimaryHosts();   // {0, 1, 2}
@@ -3456,7 +3768,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Host 0 is only temporarily disabled: it stays in the DDisk set, so
         // DesiredDDisks is unchanged and UpdateConfig runs no RemoveHosts.
         vchunkConfig.DisableHost(0);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
 
         // The write response finally arrives, confirming all three hosts,
@@ -3500,11 +3812,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Make H0 partially fresh: only the first 30 blocks are up to date.
         vchunkConfig.SetWatermark(THostIndex{0}, 30 * DefaultBlockSize);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const ui64 totalBlocks =
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize);
@@ -3543,11 +3851,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Make H0 completely fresh (nothing synced yet).
         vchunkConfig.SetWatermark(THostIndex{0}, 0);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
@@ -3604,11 +3908,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Make H0 completely fresh.
         vchunkConfig.SetWatermark(THostIndex{0}, 0);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const auto range = TBlockRange16::MakeClosedInterval(0, 255);
 
@@ -3637,11 +3937,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Make H0 completely fresh (nothing synced yet).
         vchunkConfig.SetWatermark(THostIndex{0}, 0);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
@@ -3681,15 +3977,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // H3 is fresh; writes above watermark populate its Ahead field.
         // H1 is lagging; writes populate Behind field.
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
         vchunkConfig.DisableHost(1);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // Initially no changes.
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
@@ -3714,13 +4006,12 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL("", eraseHints.DebugPrint());
 
-        // GetStateForPersist captures current generation.
-        // Saves one entry per host slot (DirectBlockGroupHostCount = 5).
+        // GetStateForPersist saves one entry per host slot
+        // (DirectBlockGroupHostCount = 5).
         UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap->NeedPersist());
         const ui32 gen = dirtyMap->GetCurrentGeneration();
         UNIT_ASSERT(gen > 0);
         auto state = dirtyMap->GetStateForPersist();
-        UNIT_ASSERT_VALUES_EQUAL(gen, state.GetStateGeneration());
         UNIT_ASSERT_VALUES_EQUAL(5, state.DDiskStatesSize());
 
         // StatePersisted() resets the persist flag.
@@ -3748,15 +4039,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // H3 is fresh; writes above watermark populate its Ahead field.
         // H1 is lagging; writes populate Behind field.
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
         vchunkConfig.DisableHost(1);
 
-        auto source = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto source = MakeDirtyMap(vchunkConfig);
 
         const THostMask requested = MakeHostMask(true, true, true, true, false);
         source->RegisterInflightWrite(
@@ -3782,20 +4069,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         const auto persisted = source->GetStateForPersist();
         UNIT_ASSERT_VALUES_EQUAL(5, persisted.DDiskStatesSize());
 
-        // Load into a freshly constructed dirty map with the same config.
         auto target = std::make_shared<TBlocksDirtyMap>(
             CreateArenaAllocatorPool(),
             vchunkConfig,
+            true,
+            persisted,
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
-
-        // Before load the target contains the unsynced fresh tail.
-        UNIT_ASSERT_VALUES_EQUAL("", target->DebugPrintAhead());
-        UNIT_ASSERT_VALUES_EQUAL(
-            "  H3: [5..32767]\n",
-            target->DebugPrintBehind());
-
-        target->Load(persisted);
 
         // After load the target mirrors the source's Ahead/Behind fields.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -3806,25 +4086,54 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             target->DebugPrintBehind());
     }
 
-    // Loading a default-constructed (empty) proto must be a no-op: no DDisk
-    // states are present, so the target keeps its freshly constructed state
-    // with no tracked Ahead/Behind ranges.
-    Y_UNIT_TEST(ShouldLoadEmptyStateAsNoOp)
+    // A default-constructed proto keeps the initial DDisk state derived from
+    // the VChunk config.
+    Y_UNIT_TEST(ShouldConstructFromEmptyState)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
 
         const auto before = dirtyMap->DebugPrintDDiskState();
-
-        dirtyMap->Load(TDirtyMapStateProto());
 
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
         UNIT_ASSERT_VALUES_EQUAL(before, dirtyMap->DebugPrintDDiskState());
+    }
+
+    Y_UNIT_TEST(ShouldMakeFlushHintsWithoutTouchedState)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
+
+        const auto pBufferKey = MakeKey(123);
+        const auto range = TBlockRange16::WithLength(10, 10);
+        const auto requested = MakePrimaryHosts();
+        dirtyMap->RegisterInflightWrite(pBufferKey, range);
+        dirtyMap->WriteFinished(pBufferKey, range, requested, requested);
+
+        UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
+        UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->MakeFlushHint(1).Empty());
+    }
+
+    Y_UNIT_TEST(ShouldUseWatermarkOnlyForTouchedVChunk)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        vchunkConfig.PromoteHost(3, true);
+        vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
+
+        auto untouched = MakeUntouchedDirtyMap(vchunkConfig);
+        auto touched = MakeDirtyMap(vchunkConfig);
+
+        UNIT_ASSERT(!untouched->GetFreshRange(3));
+
+        const auto freshRange = touched->GetFreshRange(3);
+        UNIT_ASSERT(freshRange);
+        UNIT_ASSERT_VALUES_EQUAL(5, freshRange->Start);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize),
+            freshRange->End + 1);
     }
 
     Y_UNIT_TEST(ShouldNotEraseUntaggedLsn)
@@ -3832,19 +4141,15 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
 
         // Promote hand-off H3 to a primary DDisk so we have 4 desired DDisks.
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, std::nullopt);
 
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // Disable H3 while it stays a desired DDisk -> it starts lagging and
         // will record ranges it misses as Behind.
         vchunkConfig.DisableHost(3);
-        dirtyMap->UpdateConfig(vchunkConfig);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
 
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
         UNIT_ASSERT_VALUES_EQUAL(0u, dirtyMap->GetCurrentGeneration());

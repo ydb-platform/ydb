@@ -96,7 +96,46 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
         using StoragePolicy = TStoragePolicy<IndexChannel>;
     };
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_schema.h
     using TTables = SchemaTables<TabletInfo, VChunkConfigs>;
+=======
+    // Persisted dirty map state, keyed by vchunk index. Only vchunks whose
+    // dirty map was explicitly updated have a row here.
+    struct DirtyMapStates: public TTableSchema<3>
+    {
+        struct VChunkIndex: public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
+        {
+        };
+
+        struct State: public Column<2, NKikimr::NScheme::NTypeIds::String>
+        {
+            using Type = ::NYdb::NBS::PartitionDirect::NProto::TDirtyMapState;
+        };
+
+        using TKey = TableKey<VChunkIndex>;
+        using TColumns = TableColumns<VChunkIndex, State>;
+    };
+
+    // Persisted masks of touched vchunks. A mask covers 1024 consecutive
+    // vchunks and can only gain set bits.
+    struct TouchedVChunks: public TTableSchema<4>
+    {
+        struct VChunkStartIndex
+            : public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
+        {
+        };
+
+        struct Mask: public Column<2, NKikimr::NScheme::NTypeIds::String>
+        {
+        };
+
+        using TKey = TableKey<VChunkStartIndex>;
+        using TColumns = TableColumns<VChunkStartIndex, Mask>;
+    };
+
+    using TTables =
+        SchemaTables<TabletInfo, VChunkConfigs, DirtyMapStates, TouchedVChunks>;
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_schema.h
 
     using TSettings =
         SchemaSettings<ExecutorLogBatching<true>, ExecutorLogFlushPeriod<0>>;

@@ -137,7 +137,9 @@ bool TPartitionDatabase::ReadAllVChunkConfigs(TVector<TVChunkConfig>& out)
         if (it.HaveValue<TTable::Config>()) {
             out.push_back(FromProto(it.GetValue<TTable::Config>()));
         }
-        it.Next();
+        if (!it.Next()) {
+            return false;   // not ready
+        }
     }
 
     return true;
@@ -179,6 +181,85 @@ void TPartitionDatabase::StoreVChunkConfig(const TVChunkConfig& cfg)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_database.cpp
+=======
+bool TPartitionDatabase::ReadAllDirtyMapStates(TDirtyMapStateProtos& out)
+{
+    using TTable = TPartitionSchema::DirtyMapStates;
+
+    auto it =
+        Table<TTable>().Range().Select<TTable::VChunkIndex, TTable::State>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    while (it.IsValid()) {
+        if (it.HaveValue<TTable::State>()) {
+            out[it.GetValue<TTable::VChunkIndex>()] =
+                it.GetValue<TTable::State>();
+        }
+        if (!it.Next()) {
+            return false;   // not ready
+        }
+    }
+
+    return true;
+}
+
+void TPartitionDatabase::StoreDirtyMapState(
+    ui32 vChunkIndex,
+    const TDirtyMapStateProto& state)
+{
+    using TTable = TPartitionSchema::DirtyMapStates;
+
+    Table<TTable>()
+        .Key(vChunkIndex)
+        .Update(NKikimr::NIceDb::TUpdate<TTable::State>(state));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TPartitionDatabase::ReadAllTouchedVChunks(TTouchedVChunks& out)
+{
+    using TTable = TPartitionSchema::TouchedVChunks;
+
+    auto it = Table<TTable>()
+                  .Range()
+                  .Select<TTable::VChunkStartIndex, TTable::Mask>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    while (it.IsValid()) {
+        if (it.HaveValue<TTable::Mask>()) {
+            out.Load({
+                .VChunkStartIndex = it.GetValue<TTable::VChunkStartIndex>(),
+                .Mask = it.GetValue<TTable::Mask>(),
+            });
+        }
+        if (!it.Next()) {
+            return false;   // not ready
+        }
+    }
+
+    return true;
+}
+
+void TPartitionDatabase::StoreTouchedVChunkMask(
+    const TTouchedVChunks::TChunk& chunk)
+{
+    using TTable = TPartitionSchema::TouchedVChunks;
+
+    Table<TTable>()
+        .Key(chunk.VChunkStartIndex)
+        .Update(NKikimr::NIceDb::TUpdate<TTable::Mask>(chunk.Mask));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_database.cpp
 bool TPartitionDatabase::ReadAddHostInProgress(
     TMaybe<TAddHostInProgress>& addHostInProgress)
 {

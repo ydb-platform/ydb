@@ -113,9 +113,16 @@ TVector<TRegionPtr> CreateRegions(
     ui64 blockCount,
     ui32 blockSize,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
+<<<<<<< HEAD
     const TVChunkConfigByIndex& vChunkConfigs,
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
+=======
+    const TVChunkConfigs& vChunkConfigs,
+    ITouchedProvider* touchedProvider,
+    const TDirtyMapStateProtos& dirtyMapStates,
+    const TStorageConfig& storageConfig)
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 {
 <<<<<<< HEAD
     const size_t regionCount = RegionCount(blockCount, blockSize);
@@ -135,6 +142,11 @@ TVector<TRegionPtr> CreateRegions(
             i,
             directBlockGroups,
             vChunkConfigs,
+<<<<<<< HEAD
+=======
+            touchedProvider->GetTouchedVChunks(i * VChunkPerRegionCount),
+            dirtyMapStates,
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
             storageConfig.GetSyncRequestsBatchSize(),
             storageConfig.GetVChunkSize(),
             regionCounters);
@@ -155,7 +167,14 @@ TFastPathService::TFastPathService(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
+<<<<<<< HEAD
     TVChunkConfigByIndex vChunkConfigs,
+=======
+    TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
+    const TVChunkConfigs& vChunkConfigs,
+    ITouchedProvider* touchedProvider,
+    const TDirtyMapStateProtos& dirtyMapStates,
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
     TStorageConfigPtr storageConfig,
     ISchedulerPtr scheduler,
     ITimerPtr timer,
@@ -179,11 +198,23 @@ TFastPathService::TFastPathService(
           blockSize,
           DirectBlockGroups,
           vChunkConfigs,
+<<<<<<< HEAD
           *StorageConfig,
           MakeCountersChain(
               counters,
               StorageConfig->GetDDiskPoolName(),
               tabletId)))
+=======
+          touchedProvider,
+          dirtyMapStates,
+          *StorageConfig))
+    , LogTitle(
+          GetCycleCount(),
+          TLogTitle::TFastPathService{
+              .DiskId = DiskDescription.DiskId,
+              .TabletId = DiskDescription.TabletId,
+              .Generation = DiskDescription.Generation})
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
     , TraceSamplePeriod(StorageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
           std::move(counters),
@@ -419,7 +450,36 @@ void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
+<<<<<<< HEAD
 void TFastPathService::RequestAddHost(size_t directBlockGroupId)
+=======
+TPersistResultFuture TFastPathService::UpdateDirtyMapState(
+    ui32 vChunkIndex,
+    TDirtyMapStateProto state)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>(
+            vChunkIndex,
+            std::move(state));
+    auto result = event->UpdateCompleted.GetFuture();
+    ActorSystem->Send(PartitionActorId, event.release());
+    return result;
+}
+
+TPersistResultFuture TFastPathService::SetVChunkTouched(ui32 vChunkIndex)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvSetVChunkTouched>(
+            vChunkIndex);
+    auto result = event->UpdateCompleted.GetFuture();
+    ActorSystem->Send(PartitionActorId, event.release());
+    return result;
+}
+
+void TFastPathService::QueryAddHost(
+    size_t directBlockGroupId,
+    ui32 dbgConnectionsConfigGeneration)
+>>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 {
     auto event = std::make_unique<TEvPartitionDirectPrivate::TEvAddHostToDBG>(
         directBlockGroupId);

@@ -7,10 +7,10 @@ Release date: TBD.
 ### Functionality
 
 * Backup export and import are available for column-oriented tables, including S3-compatible storage.
-* Streaming writes are available for secondary indexes, `RETURNING`, and `DEFAULT`, reducing memory consumption and latency for large write operations.
-* Added authentication through external OpenID Connect (OIDC) identity providers. {{ ydb-short-name }} validates JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
 * Min-max indexes are enabled for column-oriented tables. ColumnShard skips data portions outside query ranges, reducing disk reads and query latency.
 * Added [storage group decommissioning](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data moves to virtual groups in the background while applications continue reading and writing data.
+* Streaming writes are available for secondary indexes, `RETURNING`, and `DEFAULT`, reducing memory consumption and latency for large write operations.
+* Added authentication through external OpenID Connect (OIDC) identity providers. {{ ydb-short-name }} validates JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
 * Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
 * Removed the experimental PostgreSQL wire protocol and PostgreSQL SQL syntax from `ydbd`. PostgreSQL-compatible types, `Pg::` functions, and federated queries to external PostgreSQL databases are not affected.
 * `DISTINCT` and `DISTINCT LIMIT` are pushed down to ColumnShard for column-oriented tables, reducing intermediate data and query execution time.

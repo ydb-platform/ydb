@@ -2,8 +2,6 @@
 
 #include <yt/yt/core/misc/persistent_queue.h>
 
-#include <atomic>
-#include <stdexcept>
 #include <thread>
 
 namespace NYT {

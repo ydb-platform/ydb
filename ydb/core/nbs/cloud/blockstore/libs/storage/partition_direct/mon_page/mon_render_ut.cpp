@@ -249,9 +249,12 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
         UNIT_ASSERT_VALUES_EQUAL(0, touchedProvider.GetCallCount);
         UNIT_ASSERT_VALUES_EQUAL(2, touchedProvider.GetRegionCallCount);
-        UNIT_ASSERT_STRING_CONTAINS(
-            html,
-            "DDisk:&#10;Primary:6&#10;PBuffer: 10");
+        UNIT_ASSERT_VALUES_EQUAL(
+            4,
+            CountOccurrences(html, "DDisk:&#10;Primary:6&#10;PBuffer: 10"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            2,
+            CountOccurrences(html, "DDisk:&#10;Primary:12&#10;PBuffer: 20"));
     }
 
     Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)

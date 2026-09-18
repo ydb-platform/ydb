@@ -464,12 +464,19 @@ public:
                         options.PlainDataChunks = cfg->PlainDataChunks;
                         options.EnableFormatAndMetadataEncryption = cfg->EnableFormatAndMetadataEncryption;
                         options.EnableSectorEncryption = cfg->FeatureFlags.GetEnablePDiskDataEncryption();
+                        if (cfg->PhysicalChunkSize) {
+                            options.PhysicalChunkSizeBytes = cfg->PhysicalChunkSize;
+                        }
 
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
                                 options);
                         } catch (NPDisk::TPDiskFormatBigChunkException) {
+                            // Keep the configured mode, only shrink the chunk to fit a small disk.
+                            if (options.PhysicalChunkSizeBytes) {
+                                options.PhysicalChunkSizeBytes = NPDisk::SmallDiskMaximumChunkSize;
+                            }
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
                                 options);
@@ -990,7 +997,7 @@ public:
     // the block device thread is doing concurrently.
     void Handle(NPDisk::TEvDeviceOverestimationSamples::TPtr &ev) {
         for (const auto& sample : ev->Get()->Samples) {
-            PDisk->Mon.DeviceOverestimationMerged.Push(sample);
+            PDisk->Mon.DeviceOverestimationMerged->Push(sample);
         }
     }
 
@@ -1692,9 +1699,19 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainK
     return new NPDisk::TPDiskActor(cfg, mainKey, counters);
 }
 
-void TRealPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
-        const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId) {
-    CreatePDiskActor(ctx.ExecutorThread, AppData(ctx)->Counters, cfg, mainKey, pDiskID, poolId, nodeId);
+namespace {
+    class TPDiskSubsystem final : public IPDiskSubsystem {
+    public:
+        void Start(const TActorContext& ctx, ui32 pdiskId, const TIntrusivePtr<TPDiskConfig>& config,
+                const NPDisk::TMainKey& mainKey, ui32 poolId, ui32 nodeId) override {
+            CreatePDiskActor(ctx.ExecutorThread, AppData(ctx)->Counters, config, mainKey, pdiskId, poolId, nodeId);
+        }
+    };
 }
+
+std::unique_ptr<IPDiskSubsystem> CreatePDiskSubsystem() {
+    return std::make_unique<TPDiskSubsystem>();
+}
+
 
 } // NKikimr

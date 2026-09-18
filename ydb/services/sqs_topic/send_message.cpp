@@ -182,7 +182,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void Handle(NPQ::NMLP::TEvWriteResponse::TPtr& ev) {
             WriterActor_ = {};
 
-            if (ev->Get()->DescribeStatus != NPQ::NDescriber::EStatus::SUCCESS) {
+            if (ev->Get()->DescribeStatus != NPQ::NDescriber::EStatus::Success) {
                 auto describerStatus = MapDescriberStatus(FullTopicPath_, ev->Get()->DescribeStatus);
                 this->ReplyWithError(*describerStatus.Error);
                 return;

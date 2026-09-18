@@ -15,7 +15,6 @@
 namespace NKikimr::NUdfStore::NWasm {
 
 struct TWasmModuleArtifact {
-    TString Md5;
     TString ModuleName;
     TWasmManifest Manifest;
     NYdb::NWasm::TModuleBytecode ModuleBytecode;
@@ -24,12 +23,14 @@ struct TWasmModuleArtifact {
 
 using TWasmModuleArtifactPtr = std::shared_ptr<const TWasmModuleArtifact>;
 
+//! Modules currently loaded on this node, keyed by the name YQL calls them by.
+//! A name identifies exactly one module, so registering replaces whatever was
+//! loaded under that name before.
 class TWasmModuleCatalog {
 public:
     void Register(TWasmModuleArtifactPtr artifact);
-    void Unregister(const TString& md5);
+    void Unregister(const TString& moduleName);
 
-    TWasmModuleArtifactPtr FindByMd5(const TString& md5) const;
     TWasmModuleArtifactPtr FindByModuleName(const TString& moduleName) const;
 
     //! Names of all modules currently registered in the catalog.
@@ -39,7 +40,6 @@ public:
 
 private:
     mutable TMutex Mutex_;
-    THashMap<TString, TWasmModuleArtifactPtr> ByMd5_;
     THashMap<TString, TWasmModuleArtifactPtr> ByModuleName_;
 };
 

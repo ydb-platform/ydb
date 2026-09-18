@@ -32,7 +32,7 @@ $ss_items = (
                     FROM
                         `/Root/test/ds/date_dim`
                     WHERE
-                        d_date == CAST('1998-02-19' AS Date)
+                        CAST(d_date AS Date) == CAST('1998-02-19' AS Date)
                 )
         )
         AND ss_sold_date_sk == d_date_sk
@@ -64,7 +64,7 @@ $cs_items = (
                     FROM
                         `/Root/test/ds/date_dim`
                     WHERE
-                        d_date == CAST('1998-02-19' AS Date)
+                        CAST(d_date AS Date) == CAST('1998-02-19' AS Date)
                 )
         )
         AND cs_sold_date_sk == d_date_sk
@@ -96,7 +96,7 @@ $ws_items = (
                     FROM
                         `/Root/test/ds/date_dim`
                     WHERE
-                        d_date == CAST('1998-02-19' AS Date)
+                        CAST(d_date AS Date) == CAST('1998-02-19' AS Date)
                 )
         )
         AND ws_sold_date_sk == d_date_sk

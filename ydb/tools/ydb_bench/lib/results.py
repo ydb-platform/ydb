@@ -55,14 +55,17 @@ def load_manifest(path):
 class ResultStore:
     """Own a manifest and ensure each published version is atomically replaced."""
 
-    def __init__(self, path, manifest):
+    def __init__(self, path, manifest, on_write=None):
         self.path = Path(path)
+        self.on_write = on_write
         self.manifest = deepcopy(manifest)
         self.manifest["schema_version"] = SCHEMA_VERSION
 
     def write(self):
         # atomic_write_json fsyncs the temporary file before replacement.
         atomic_write_json(self.path, self.manifest)
+        if self.on_write is not None:
+            self.on_write(self.path)
 
     def transition_step(self, step_id, state, **fields):
         for index, record in enumerate(self.manifest["steps"]):

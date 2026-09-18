@@ -92,6 +92,7 @@ NbsDbgLikeLoad {
       EraseBatchSize: 10000
       SyncRequestsBatchSize: 10
       PBufferReplyTimeoutMicroseconds: 50000
+      EnableChecksums: true
     }
   }
 }
@@ -150,6 +151,7 @@ curl --fail-with-body \
 | `SyncRequestsBatchSize` | `10` | Порог числа готовых LSN в отдельной DBG, необходимого для планирования сброса или удаления. Установите `1`, чтобы остаток очереди обрабатывался без задержки. Проверка порога остаётся включённой после остановки генерации нагрузки. |
 | `PBufferReplyTimeoutMicroseconds` | `50000` | Тайм-аут, передаваемый координатору записи в несколько PB. |
 | `DisableReplication` | `false` | Записывать только в PB-координатор, возвращать ответ после его подтверждения и удалять запись без копирования в DDisk. Требует `ReadRatio: 0`. |
+| `EnableChecksums` | `true` | Вычислять в нагружающем акторе одну контрольную сумму на каждый блок полезной нагрузки размером 4 КиБ и передавать контрольные суммы через нагружающую таблетку в PersistentBuffer. Значение должно соответствовать режиму контрольных сумм DDisk/PersistentBuffer. |
 
 Прокси устанавливает `TabletConfig.IoSizeBytes` из `ReadWriteSizeKiB`, а `TabletConfig.NumDirectBlockGroupsToUse` — из выбранного числа DBG. Настраивайте их через поля нагрузки, а не через внутренние поля таблетки.
 

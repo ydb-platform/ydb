@@ -130,6 +130,7 @@ TDqConfiguration::TDqConfiguration() {
                 CliqueValidator(value);
             }
         });
+    REGISTER_SETTING(*this, _EnableSortConstraintProcessing);
 }
 
 } // namespace NYql

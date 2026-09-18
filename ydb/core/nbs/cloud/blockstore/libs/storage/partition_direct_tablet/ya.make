@@ -1,16 +1,20 @@
 LIBRARY()
 
 SRCS(
+    bsc_proxy.cpp
     delete_partition.cpp
     load_actor_adapter.cpp
     part_add_host_to_dbg.cpp
+    part_remove_host_from_dbg.cpp
     part_database.cpp
     part_initschema.cpp
     part_loadstate.cpp
     part_monitoring.cpp
+    part_persist_host_health.cpp
     part_storepartitionids.cpp
     part_storevolumeconfig.cpp
     part_updatedirtymapstate.cpp
+    part_setvchunktouched.cpp
     part_updatevchunkconfig.cpp
     partition_cleanup_actor.cpp
     partition_direct.cpp
@@ -27,6 +31,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model
     ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
     ydb/core/nbs/cloud/storage/core/libs/coroutine
 

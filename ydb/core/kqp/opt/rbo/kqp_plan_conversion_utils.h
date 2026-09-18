@@ -19,7 +19,7 @@ class PlanConverter {
     PlanConverter(TTypeAnnotationContext &typeCtx, TExprContext &ctx) : TypeCtx(typeCtx), Ctx(ctx) {}
 
     // Convert KqpOpRoot to OpRoot.
-    TIntrusivePtr<TOpRoot> ConvertRoot(TExprNode::TPtr node);
+    TIntrusivePtr<TOpRoot> ConvertRoot(TExprNode::TPtr node, TExprNode::TPtr queryColumns);
     TIntrusivePtr<IOperator> ExprNodeToOperator(TExprNode::TPtr node);
 
     TIntrusivePtr<IOperator> ConvertTKqpOpMap(TExprNode::TPtr node);
@@ -31,6 +31,7 @@ class PlanConverter {
     TIntrusivePtr<IOperator> ConvertTKqpOpSort(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpAggregate(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpGroupingSets(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpWindow(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpInfuseDependents(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpReplaceAlias(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpReplaceColumns(TExprNode::TPtr node);

@@ -14,6 +14,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -313,15 +314,24 @@ template <typename Source> class TInMemoryHashJoin {
             return EFetchResult::Finish;
         }
 
+        auto lookupProbeRow = [&](TSingleTuple probeTuple) {
+            return Table_.Lookup(probeTuple, BuildCursor_,
+                                 [&](TSingleTuple buildTuple) {
+                                     consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
+                                 },
+                                 isFull);
+        };
+
         if (FetchedPack_.has_value()) {
             ui32 idx = 0;
             for (TSingleTuple probeTuple : *FetchedPack_) {
                 if (idx++ < ResumeIndex_) {
                     continue;
                 }
-                Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
-                    consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
-                });
+                if (!lookupProbeRow(probeTuple)) {
+                    ResumeIndex_ = idx - 1;
+                    return EFetchResult::One;
+                }
                 if (isFull()) {
                     ResumeIndex_ = idx;
                     return EFetchResult::One;
@@ -341,9 +351,10 @@ template <typename Source> class TInMemoryHashJoin {
                 ui32 idx = 0;
                 for (TSingleTuple probeTuple : *FetchedPack_) {
                     idx++;
-                    Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
-                        consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
-                    });
+                    if (!lookupProbeRow(probeTuple)) {
+                        ResumeIndex_ = idx - 1;
+                        return EFetchResult::One;
+                    }
                     if (isFull()) {
                         ResumeIndex_ = idx;
                         return EFetchResult::One;
@@ -368,6 +379,7 @@ template <typename Source> class TInMemoryHashJoin {
     TMKQLVector<IBlockLayoutConverter::TPackResult> BuildChunks_;
     std::optional<IBlockLayoutConverter::TPackResult> FetchedPack_;
     ui32 ResumeIndex_ = 0;
+    size_t BuildCursor_ = 0;
 };
 
 template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class THybridHashJoin {
@@ -602,7 +614,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             if constexpr (HasFilter) {
                 filter->StartProbeRow(probeRow);
             }
-            [[maybe_unused]] bool found = false;
+            // A non-zero cursor means this probe already emitted a match on a previous call
+            [[maybe_unused]] bool found = buildCursor > 0;
             auto onMatch = [&](TSingleTuple tableMatch) {
                 if constexpr (HasFilter) {
                     if (!filter->PairPasses(tableMatch)) {
@@ -629,7 +642,9 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     return true;
                 });
             } else {
-                table.Lookup(probeRow, onMatch);
+                if (!table.Lookup(probeRow, buildCursor, onMatch, isFull)) {
+                    return false;
+                }
             }
             if constexpr (!PreservedRowsInBuildTable()) {
                 if constexpr (Join.Kind == EJoinKind::Left || Join.Kind == EJoinKind::LeftOnly) {
@@ -962,6 +977,23 @@ struct TParsedHashJoinArgs {
     TDqUserRenames UserRenames;
 };
 
+inline TBlockHashJoinSettings ParseHashJoinSettingsTuple(TRuntimeNode node) {
+    TBlockHashJoinSettings settings;
+    const auto* settingsTuple = AS_VALUE(TTupleLiteral, node);
+    if (settingsTuple->GetValuesCount() >= 1) {
+        settings.BuildSide =
+            static_cast<EBuildSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>());
+    }
+    if (settingsTuple->GetValuesCount() >= 2) {
+        const auto* keys = AS_VALUE(TTupleLiteral, settingsTuple->GetValue(1));
+        settings.EqualNullsKeys.reserve(keys->GetValuesCount());
+        for (ui32 i = 0; i < keys->GetValuesCount(); ++i) {
+            settings.EqualNullsKeys.push_back(AS_VALUE(TDataLiteral, keys->GetValue(i))->AsValue().Get<ui32>());
+        }
+    }
+    return settings;
+}
+
 inline TParsedHashJoinArgs ParseCommonHashJoinArgs(TCallable& callable) {
     TParsedHashJoinArgs res;
     res.Kind = GetJoinKind(AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().Get<ui32>());
@@ -1122,6 +1154,10 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
         return Output_.SelectSide(Join.Preserved).NTuples;
     }
 
+    i64 SizeBytes() const {
+        return Output_.Build.AllocatedBytes() + Output_.Probe.AllocatedBytes();
+    }
+
     auto MakeConsumeFn() {
         struct ConsumeFn {
             TPackedTupleOutputBase& Self;
@@ -1168,10 +1204,11 @@ protected:
     BuildNullIfNeeded Nulls_;
 };
 
-template <i64 MaxOutputRows, typename JoinType, typename OutputType, typename FlushSink>
+template <typename JoinType, typename OutputType, typename FlushSink>
 EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, OutputType& output, FlushSink&& onFlush,
                                     TPackedTuplePairFilter* filter = nullptr) {
-    auto outputIsFull = [&]() { return output.SizeTuples() >= MaxOutputRows; };
+    // Bound the batch in bytes, not rows: rows say nothing about memory once overflow columns are fat
+    auto outputIsFull = [&]() { return output.SizeBytes() >= static_cast<i64>(MaxBlockSizeInBytes); };
     while (!outputIsFull()) {
         switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull, filter)) {
         case EFetchResult::Finish:

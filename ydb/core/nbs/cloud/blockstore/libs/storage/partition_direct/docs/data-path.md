@@ -20,7 +20,8 @@ within a stripe as follows, using block counts:
 
 ```text
 stripeIndex         = regionBlockOffset / blocksPerStripe
-vChunksPerRegion    = RegionSize / vChunkSize
+regionSize          = vChunkSize * numberOfDBGs
+vChunksPerRegion    = numberOfDBGs
 vChunkInRegion      = stripeIndex % vChunksPerRegion
 stripeInVChunk      = stripeIndex / vChunksPerRegion
 vChunkBlockOffset   = stripeInVChunk * blocksPerStripe

@@ -24,7 +24,8 @@ WAVM::IR::Module ParseWasmModule(TStringBuf wasmBytes, NYdb::NWasm::EBytecodeFor
         case NYdb::NWasm::EBytecodeFormat::HumanReadable: {
             WAVM::IR::Module irModule(featureSpec);
             std::vector<WAVM::WAST::Error> errors;
-            if (!WAVM::WAST::parseModule(wasmBytes.data(), wasmBytes.size() + 1, irModule, errors)) {
+            const TString text(wasmBytes);
+            if (!WAVM::WAST::parseModule(text.c_str(), text.size() + 1, irModule, errors)) {
                 ythrow yexception() << "Failed to parse WAST module for object-code compilation";
             }
             return irModule;
@@ -58,15 +59,15 @@ NYdb::NWasm::EBytecodeFormat DetectBytecodeFormat(TStringBuf extension) {
 
 NYdb::NWasm::EBytecodeFormat DetectBytecodeFormatFromBody(TStringBuf body) {
     // WASM binary magic: 0x00 0x61 0x73 0x6d ("\0asm").
-    if (body.size() >= 4
-        && body[0] == '\0'
-        && body[1] == 'a'
-        && body[2] == 's'
-        && body[3] == 'm')
+    if (body.size() >= 4 && body[0] == '\0' && body[1] == 'a' && body[2] == 's' && body[3] == 'm')
     {
         return NYdb::NWasm::EBytecodeFormat::Binary;
     }
     return NYdb::NWasm::EBytecodeFormat::HumanReadable;
+}
+
+void ValidateModuleSource(TStringBuf bytes, NYdb::NWasm::EBytecodeFormat format) {
+    ParseWasmModule(bytes, format);
 }
 
 TString CompileModuleObjectCode(TStringBuf wasmBytes, NYdb::NWasm::EBytecodeFormat format) {

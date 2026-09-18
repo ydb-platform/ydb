@@ -13,6 +13,7 @@ SRCS(
     ydb_secret.cpp
     ydb_scripting.cpp
     ydb_table.cpp
+    ydb_udf.cpp
     ydb_object_storage.cpp
 )
 
@@ -28,6 +29,7 @@ PEERDIR(
     ydb/core/grpc_streaming
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/udf_api
     ydb/library/aclib
     ydb/public/api/grpc
     ydb/public/api/grpc/draft

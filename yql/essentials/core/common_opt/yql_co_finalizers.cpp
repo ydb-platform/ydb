@@ -146,12 +146,14 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
             if (!pushdownPreds.empty()) {
                 ++pushdownCount;
                 restPreds.push_back(
+                    // clang-format off
                     ctx.Builder(pos)
                         .Callable("Member")
                             .Add(0, lambdaArg.Ptr())
                             .Atom(1, consumer.ColumnName)
                         .Seal()
                         .Build());
+                    // clang-format on
                 auto restPred = ctx.NewCallable(pos, "And", std::move(restPreds));
                 auto pushdownPred = ctx.NewCallable(pos, "And", std::move(pushdownPreds));
 
@@ -181,6 +183,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
     TExprNodeList filterPreds;
     for (const auto& consumer : consumers) {
         if (consumer.PushdownLambda) {
+            // clang-format off
             mapBody = ctx.Builder(mapBody->Pos())
                 .Callable("AddMember")
                     .Add(0, mapBody)
@@ -195,16 +198,20 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
+        // clang-format off
         filterPreds.push_back(ctx.Builder(node->Pos())
             .Apply(consumer.FilterLambda)
                 // CastStruct is not needed here, since FilterLambda is AND over column references
                 .With(0, filterArg)
             .Seal()
             .Build());
+        // clang-format on
     }
 
+    // clang-format off
     auto newNode = ctx.Builder(node->Pos())
         .Callable(hasOrdered ? "OrderedFilter" : "Filter")
             .Callable(0, hasOrdered ? "OrderedMap" : "Map")
@@ -214,6 +221,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
             .Add(1, ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { filterArg }), ctx.NewCallable(node->Pos(), "Or", std::move(filterPreds))))
         .Seal()
         .Build();
+    // clang-format on
 
     for (size_t i = 0; i < immediateParents.size(); ++i) {
         const TExprNode* curr = immediateParents[i];
@@ -238,6 +246,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
         TCoFlatMapBase flatMap(curr);
         TCoConditionalValueBase cond = flatMap.Lambda().Body().Cast<TCoConditionalValueBase>();
         TExprNode::TPtr input = flatMap.Input().Ptr();
+        // clang-format off
         toOptimize[consumer.OriginalFlatMap] = ctx.Builder(curr->Pos())
             .Callable(flatMap.CallableName())
                 .Add(0, resultNode)
@@ -259,6 +268,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 }
 
@@ -365,6 +375,7 @@ void OptimizeForMemberConsumers(const TCoFlatMapBase& self, TNodeOnNodeOwnedMap&
             restMembers.insert(memberNode);
         } else {
             ++separableMembersCount;
+            // clang-format off
             toOptimize[memberNode] = ctx.Builder(memberNode->Pos())
                 .Callable(self.CallableName())
                     .Add(0, self.Input().Ptr())
@@ -374,28 +385,35 @@ void OptimizeForMemberConsumers(const TCoFlatMapBase& self, TNodeOnNodeOwnedMap&
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
             structItems.erase(it);
         }
     }
 
     if (separableMembersCount && !restMembers.empty()) {
+        // clang-format off
         auto restBody = ctx.Builder(self.Lambda().Body().Pos())
             .Callable("Just")
                 .Callable(0, "AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        // clang-format on
                         ui32 i = 0U;
                         for (const auto& [name, value] : structItems) {
+                            // clang-format off
                             parent.List(i)
                                 .Atom(0, name)
                                 .Add(1, value)
                             .Seal();
+                            // clang-format on
                             ++i;
                         }
                         return parent;
+                    // clang-format off
                     })
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
         auto restFlatMap = ctx.ChangeChild(self.Ref(), TCoFlatMapBase::idx_Lambda,
             ctx.DeepCopyLambda(*ctx.ChangeChild(self.Lambda().Ref(), TCoLambda::idx_Body, std::move(restBody))));
         for (auto restMember : restMembers) {
@@ -436,6 +454,7 @@ TExprNode::TPtr FuseFilterWithCalcOverWindow(const TCoFlatMapBase& node, TExprCo
     auto filterLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, body.Predicate().Ptr());
 
     auto frames = calc.Frames().Ref().ChildrenList();
+    // clang-format off
     frames.push_back(ctx.Builder(filterLambda->Pos())
         .Callable("WinFilter")
             .Add(0, MakeRowsUPCRFrameSpec(filterLambda->Pos(), ctx.NewCallable(filterLambda->Pos(), "Void", {}), ctx, *optCtx.Types))
@@ -448,11 +467,14 @@ TExprNode::TPtr FuseFilterWithCalcOverWindow(const TCoFlatMapBase& node, TExprCo
             .Seal()
         .Seal()
         .Build());
+    // clang-format on
 
+    // clang-format off
     calcs.back() = Build<TCoCalcOverWindowTuple>(ctx, calc.Pos())
         .InitFrom(calc)
         .Frames(ctx.NewList(calc.Frames().Pos(), std::move(frames)))
         .Done().Ptr();
+    // clang-format on
 
     auto newCalc = BuildCalcOverWindowGroup(node.Input().Pos(), calcInput, calcs, ctx);
 
@@ -460,11 +482,13 @@ TExprNode::TPtr FuseFilterWithCalcOverWindow(const TCoFlatMapBase& node, TExprCo
     auto flatmapLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, std::move(flatmapBody));
 
     YQL_CLOG(DEBUG, Core) << "Fuse Filter with " << node.Input().Ref().Content();
+    // clang-format off
     return Build<TCoFlatMapBase>(ctx, node.Pos())
         .InitFrom(node)
         .Input(newCalc)
         .Lambda(ctx.DeepCopyLambda(*flatmapLambda))
         .Done().Ptr();
+    // clang-format on
 }
 
 } // namespace

@@ -418,6 +418,10 @@ struct TEvBlobStorage {
         EvGetLogoBlobIndexStatResponseAck,
         EvHugeQueryStripeChunks,
         EvHugeStripeChunks,
+        EvGetVDiskSpaceReportRequest,
+        EvHugeSpaceStat,
+        EvSyncLogSpaceStat,
+        EvChunkKeeperSpaceStat,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -489,6 +493,10 @@ struct TEvBlobStorage {
         EvCompactionTokenRequest,
         EvCompactionTokenResult,
         EvReleaseCompactionToken,
+        EvGetVDiskSpaceReportResponse,
+        EvHugeSpaceStatResult,
+        EvSyncLogSpaceStatResult,
+        EvChunkKeeperSpaceStatResult,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184
@@ -517,6 +525,7 @@ struct TEvBlobStorage {
         EvProxySessionsState,
         EvBunchOfEvents,
         EvDeadline,
+        EvSetProxyDormant,
 
         // blobstorage controller interface
         EvControllerRegisterNode                    = 0x10031602,
@@ -1485,7 +1494,7 @@ struct TEvBlobStorage {
         const TInstant Deadline;
         const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
         const TWriteSource WriteSource;
-        const ui32 Version;
+        const std::optional<ui32> Version;
         bool IsMonitored = true;
 
         TEvBlock(TCloneEventPolicy, const TEvBlock& origin)
@@ -1500,7 +1509,7 @@ struct TEvBlobStorage {
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
-                TWriteSource writeSource = UnknownWriteSource(), ui32 version = 0)
+                TWriteSource writeSource = UnknownWriteSource(), std::optional<ui32> version = std::nullopt)
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
@@ -1509,7 +1518,7 @@ struct TEvBlobStorage {
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline, ui64 issuerGuid,
-                TWriteSource writeSource = UnknownWriteSource(), ui32 version = 0)
+                TWriteSource writeSource = UnknownWriteSource(), std::optional<ui32> version = std::nullopt)
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
@@ -1522,9 +1531,11 @@ struct TEvBlobStorage {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvBlock {TabletId# " << TabletId
-                << " Generation# " << Generation
-                << " Version# " << Version
-                << " Deadline# " << Deadline.MilliSeconds()
+                << " Generation# " << Generation;
+            if (Version) {
+                str << " Version# " << *Version;
+            }
+            str << " Deadline# " << Deadline.MilliSeconds()
                 << " IsMonitored# " << IsMonitored
                 << "}";
             return str.Str();

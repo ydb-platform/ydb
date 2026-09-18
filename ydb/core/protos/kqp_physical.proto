@@ -634,6 +634,7 @@ message TKqpPhyResult {
 message TKqpAnalyzeOperation {
     string TablePath = 1;
     repeated string Columns = 2;
+    double SampleRate = 3;
 }
 
 message TKqpPhyMetadataOperation {
@@ -807,5 +808,6 @@ message TKqpPhyQuery {
     optional bool DisableCheckpoints = 17;
     optional bool EnableWatermarks = 18  [deprecated=true];
     optional EIsolationLevel DefaultTxMode = 19;
-    optional uint64 MaxTasksPerStage = 20;
+    optional bool DisablePessimisticLocks = 20;
+    optional uint64 MaxTasksPerStage = 21;
 }

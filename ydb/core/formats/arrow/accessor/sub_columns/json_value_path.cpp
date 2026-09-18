@@ -11,24 +11,49 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-TString QuoteJsonItem(TStringBuf item) {
-    TStringBuilder builder;
+namespace {
 
-    builder << '"';
+void AppendQuotedJsonItem(TString& result, const TStringBuf item) {
+    result.append("\"");
 
     for (char ch : item) {
         if (ch == '"') {
-            builder << "\\\"";
+            result.append("\\\"");
         } else if (ch == '\\') {
-            builder << "\\\\";
+            result.append("\\\\");
         } else {
-            builder << ch;
+            result.append(1, ch);
         }
     }
 
-    builder << '"';
+    result.append("\"");
+}
 
-    return builder;
+}
+
+TString QuoteJsonItem(const TStringBuf item) {
+    TString result;
+    result.reserve(item.size() + 2);
+    AppendQuotedJsonItem(result, item);
+    return result;
+}
+
+void AppendSubcolumnName(TString& currentPrefix, const TStringBuf item) {
+    if (!currentPrefix.empty()) {
+        currentPrefix.append(".");
+    }
+    AppendQuotedJsonItem(currentPrefix, item);
+}
+
+TString BuildSubcolumnName(const TStringBuf currentPrefix, const TStringBuf item) {
+    TString result(currentPrefix);
+    AppendSubcolumnName(result, item);
+    return result;
+}
+
+size_t EstimateSubcolumnNameSize(const TStringBuf path, const size_t pathItemsCount) {
+    // Every canonical member adds a pair of quotes.
+    return path.size() + 2 * pathItemsCount;
 }
 
 TJsonPath ToJsonPath(TStringBuf path) {
@@ -37,6 +62,13 @@ TJsonPath ToJsonPath(TStringBuf path) {
     }
     return TString("$.") + path;
 }
+
+namespace {
+
+struct TJsonPathSplitSettings {
+    bool FillTypes = false;
+    bool FillStartPositions = false;
+};
 
 TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonPathSplitSettings& settings) {
     NYql::TIssues issues;
@@ -88,6 +120,16 @@ TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonP
     return result;
 }
 
+} // namespace
+
+TConclusion<TParsedJsonPath> ParseJsonPath(const TJsonPathBuf jsonPath) {
+    auto result = SplitJsonPath(jsonPath, TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = true});
+    if (result.IsFail()) {
+        return TConclusionStatus::Fail(result.GetErrorMessage());
+    }
+    return TParsedJsonPath{jsonPath, result.DetachResult()};
+}
+
 TConclusionStatus ValidateJsonPath(TJsonPathBuf jsonPath) {
     const auto result = SplitJsonPath(jsonPath, TJsonPathSplitSettings{.FillTypes = false, .FillStartPositions = false});
     if (result.IsSuccess()) {
@@ -97,36 +139,31 @@ TConclusionStatus ValidateJsonPath(TJsonPathBuf jsonPath) {
 }
 
 TString ToSubcolumnName(TStringBuf path) {
-    auto pathItemsResult = SplitJsonPath(path, NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
+    auto pathItemsResult = SplitJsonPath(path, TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
     if (pathItemsResult.IsFail()) {
-        pathItemsResult = SplitJsonPath(ToJsonPath(path), NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
+        pathItemsResult = SplitJsonPath(ToJsonPath(path), TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
         if (pathItemsResult.IsFail()) {
             return TString(path);
         }
     }
     auto [pathItems, pathTypes, _] = pathItemsResult.DetachResult();
     TString result;
-    result.reserve(path.size() + 2 * pathItems.size());
+    result.reserve(EstimateSubcolumnNameSize(path, pathItems.size()));
     for (decltype(pathItems)::size_type i = 0; i < pathItems.size(); ++i) {
         if (pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::ArrayAccess) {
             result.append(pathItems[i]);
         } else {
-            if (!result.empty()) {
-                result.append(".");
-            }
-            result.append(QuoteJsonItem(pathItems[i]));
+            AppendSubcolumnName(result, pathItems[i]);
         }
     }
 
     return result;
 }
 
-TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const EValueType valueType,
-    const std::optional<ui64>& cookie)
+TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const EValueType valueType)
     : ChunkedArrayAccessor(std::move(accessor))
     , RemainingPath(std::move(remainingPath))
-    , ValueType(valueType)
-    , Cookie(cookie) {
+    , ValueType(valueType) {
     if (!RemainingPath.empty()) {
         NYql::TIssues issues;
         RemainingPathPtr = NYql::NJsonPath::ParseJsonPath(RemainingPath, issues, 5);
@@ -136,7 +173,9 @@ TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TS
 
 std::shared_ptr<IChunkedArray> TJsonPathAccessor::GetNativeStringArray() const {
     if (!RemainingPath.empty() || ValueType != EValueType::String || !ChunkedArrayAccessor ||
-        ChunkedArrayAccessor->GetType() != IChunkedArray::EType::Array || ChunkedArrayAccessor->GetDataType()->id() != arrow::Type::STRING) {
+        (ChunkedArrayAccessor->GetType() != IChunkedArray::EType::Array &&
+            ChunkedArrayAccessor->GetType() != IChunkedArray::EType::Dictionary) ||
+        ChunkedArrayAccessor->GetDataType()->id() != arrow::Type::STRING) {
         return nullptr;
     }
     return ChunkedArrayAccessor;
@@ -200,61 +239,6 @@ void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {
             }
         }
     });
-}
-
-TConclusionStatus TJsonPathAccessorTrie::Insert(TJsonPathBuf jsonPath, std::shared_ptr<IChunkedArray> accessor, const EValueType valueType,
-    const std::optional<ui64>& cookie) {
-    auto splittedPathResult = NSubColumns::SplitJsonPath(jsonPath, NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
-    if (!splittedPathResult.IsSuccess()) {
-        return splittedPathResult;
-    }
-
-    auto [pathItems, pathTypes, _] = splittedPathResult.DetachResult();
-    AFL_VERIFY(pathItems.size() == pathTypes.size());
-
-    auto currentNode = &Root;
-    for (decltype(pathItems)::size_type i = 0; i < pathItems.size(); ++i) {
-        AFL_VERIFY(pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::MemberAccess);
-        if (auto found = currentNode->Children.find(pathItems[i]); found != currentNode->Children.end()) {
-            currentNode = found->second.get();
-        } else {
-            currentNode = currentNode->Children.emplace(pathItems[i], std::make_unique<TrieNode>()).first->second.get();
-        }
-    }
-
-    AFL_VERIFY(!currentNode->Accessor);
-
-    currentNode->Accessor = std::move(accessor);
-    currentNode->ValueType = valueType;
-    currentNode->Cookie = cookie;
-
-    return TConclusionStatus::Success();
-}
-
-TConclusion<std::shared_ptr<TJsonPathAccessor>> TJsonPathAccessorTrie::GetAccessor(TJsonPathBuf jsonPath) const {
-    auto splittedPathResult = SplitJsonPath(jsonPath, NSubColumns::TJsonPathSplitSettings{.FillTypes = false, .FillStartPositions = true});
-    if (!splittedPathResult.IsSuccess()) {
-        return splittedPathResult;
-    }
-
-    auto [pathItems, _, startPositions] = splittedPathResult.DetachResult();
-    AFL_VERIFY(pathItems.size() == startPositions.size());
-    auto currentNode = &Root;
-    for (decltype(pathItems)::size_type i = 0; i < pathItems.size(); ++i) {
-        if (auto found = currentNode->Children.find(pathItems[i]); found != currentNode->Children.end()) {
-            currentNode = found->second.get();
-        } else if (currentNode->Accessor || currentNode->Cookie) {
-            auto remainingPath = jsonPath.substr(startPositions[i]);
-            // strict is required, because there is a memory problem in NYql::NJsonPath::ExecuteJsonPath with lax and BinaryJson
-            return std::make_shared<TJsonPathAccessor>(currentNode->Accessor,
-                remainingPath.empty() ? TString{} : "strict $" + TString(remainingPath.data(), remainingPath.size()),
-                currentNode->ValueType, currentNode->Cookie);
-        } else {
-            return std::make_shared<TJsonPathAccessor>(nullptr, TString{}, EValueType::BinaryJson);
-        }
-    }
-
-    return std::make_shared<TJsonPathAccessor>(currentNode->Accessor, TString{}, currentNode->ValueType, currentNode->Cookie);
 }
 
 } // namespace NKikimr::NArrow::NAccessor::NSubColumns

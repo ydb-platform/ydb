@@ -102,12 +102,19 @@ class ClickHouseDialect(DefaultDialect):
             return dict(stmt_formats)
         return {**stmt_formats, **{k: v for k, v in merged.items() if k not in stmt_formats}}
 
+    def _ch_pyformat_encoded(self, context: Any) -> bool:
+        compiled = getattr(context, "compiled", None)
+        if compiled is None:
+            return True
+        return bool(getattr(compiled.preparer, "_double_percents", True))
+
     def do_execute(self, cursor, statement, parameters, context=None):
         cast(Cursor, cursor).execute(
             statement,
             parameters,
             settings=self._ch_query_settings(context),
             query_formats=self._ch_query_formats(context),
+            pyformat_encoded=self._ch_pyformat_encoded(context),
         )
 
     def do_executemany(self, cursor, statement, parameters, context=None):
@@ -123,6 +130,7 @@ class ClickHouseDialect(DefaultDialect):
             statement,
             settings=self._ch_query_settings(context),
             query_formats=self._ch_query_formats(context),
+            pyformat_encoded=self._ch_pyformat_encoded(context),
         )
 
     # SQA 1 compatibility

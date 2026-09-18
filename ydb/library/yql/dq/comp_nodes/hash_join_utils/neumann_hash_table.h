@@ -68,7 +68,7 @@ template <class T> class TBloomFilterMasks {
 
 template <bool ConsecutiveDuplicates = false, bool Prefetch = true>
 class TNeumannHashTable {
-    /// hash = [...] [directory_bits] [...] [bloom_filter_bits]
+    /// hash = [bloom_filter_bits] [directory_bits] [bucket_bits]
     using Hash = ui32;
     using TBloom = ui16;
 
@@ -107,13 +107,13 @@ class TNeumannHashTable {
             return reinterpret_cast<const T &>(*this);
         }
 
-        T BloomTagSlot : kBloomHashBits;
         T DirSlotHash : sizeof(T) * 8 - kBloomHashBits;
+        T BloomTagSlot : kBloomHashBits;
     };
     static_assert(sizeof(THash) == sizeof(typename THash::T));
 
     Hash getDirectorySlot(THash thash) const {
-        return (*thash >> DirectoryHashShift_) & DirectoryHashMask_;
+        return (*thash >> Log2Buckets) & DirectoryHashMask_;
     }
 
     static constexpr ui32 kEmbeddedSize = 16;
@@ -212,11 +212,8 @@ class TNeumannHashTable {
         Overflow_ = overflow;
 
         DirectoryHashBits_ = *  estimatedLogSize;
-        DirectoryHashShift_ = sizeof(Hash) * 8 - kBloomHashBits >= DirectoryHashBits_
-                                ? kBloomHashBits
-                                : sizeof(Hash) * 8 - DirectoryHashBits_;
         DirectoryHashMask_ = (1ul << DirectoryHashBits_) - 1;
-        
+
         const ui32 dirsSize = (1ul << DirectoryHashBits_) + 1;
         Directories_.resize(dirsSize, TDirectory{});
         for (auto& directory : Directories_) {
@@ -455,7 +452,15 @@ class TNeumannHashTable {
     }
 
     void Apply(const ui8 *const row, const ui8 *const overflow,
-               std::invocable<const ui8*> auto onMatch) const {
+               std::predicate<const ui8*> auto onMatch) const {
+        size_t slot = 0;
+        Apply(row, overflow, slot, onMatch);
+    }
+
+    // slot is the next directory slot of this key. onMatch returns false to stop the scan,
+    // leaving slot at the slot to continue from
+    void Apply(const ui8 *const row, const ui8 *const overflow, size_t& slot,
+               std::predicate<const ui8*> auto onMatch) const {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");
         MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
 
@@ -479,12 +484,16 @@ class TNeumannHashTable {
         const ui8 *matchedRow;
 
         if constexpr (!ConsecutiveDuplicates) {
-            for (auto it = begin; it != end; it += BufferSlotSize_) {
-                if (GetRowMatch(it, row, overflow, &matchedRow)) {
-                    onMatch(matchedRow);
+            const ui8* it = begin + slot * BufferSlotSize_;
+            MKQL_ENSURE(it <= end, "Apply resume past the end of the directory");
+            for (; it != end; it += BufferSlotSize_) {
+                if (GetRowMatch(it, row, overflow, &matchedRow) && !onMatch(matchedRow)) {
+                    slot = (it - begin) / BufferSlotSize_ + 1;
+                    return;
                 }
             }
         } else {
+            MKQL_ENSURE(slot == 0, "Apply cannot resume over consecutive duplicates");
             ui32 size = 0;
             for (auto it = begin; it != end; it += size * BufferSlotSize_) {
                 size = ReadUnaligned<ui32>(it + RowIndexSize_);
@@ -493,7 +502,9 @@ class TNeumannHashTable {
                 }
 
                 for (; size; --size, it += BufferSlotSize_) {
-                    onMatch(it);
+                    if (!onMatch(GetRow(it))) {
+                        return;
+                    }
                 }
                 break;
             }
@@ -564,7 +575,6 @@ class TNeumannHashTable {
     ui32 RowIndexSize_;
 
     unsigned DirectoryHashBits_;
-    unsigned DirectoryHashShift_;
     Hash DirectoryHashMask_;
 
     TMKQLVector<TDirectory> Directories_;

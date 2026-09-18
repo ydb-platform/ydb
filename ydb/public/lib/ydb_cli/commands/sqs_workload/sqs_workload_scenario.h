@@ -3,6 +3,8 @@
 #include "sqs_workload_stats_collector.h"
 
 #include <aws/core/Aws.h>
+#include <aws/core/client/ClientConfiguration.h>
+#include <aws/core/utils/logging/LogLevel.h>
 #include <aws/core/utils/threading/Executor.h>
 #include <aws/sqs/SQSClient.h>
 #include <library/cpp/logger/log.h>
@@ -38,11 +40,14 @@ namespace NYdb::NConsoleClient {
         ui32 GroupsAmount;
         ui32 WorkersCount;
         ui32 RequestTimeoutMs;
+        bool AwsSdkLog = false;
         bool UseXmlAPI;
         bool ValidateMessagesOrder;
 
         void InitAwsSdk();
         void DestroyAwsSdk();
+        Aws::Utils::Logging::LogLevel GetAwsSdkLogLevel() const;
+        Aws::Client::ClientConfiguration CreateSqsClientConfiguration() const;
         void InitStatsCollector(size_t writerCount, size_t readerCount);
         void InitSqsClient(const TClientCommand::TConfig& config);
         void DestroySqsClient();

@@ -44,6 +44,7 @@ class Session(BaseSession):
         row_limit=None,
         settings=None,
         use_snapshot=None,
+        return_not_null_data_as_optional=None,
     ):  # pylint: disable=W0236
         request = _session_impl.read_table_request_factory(
             self._state,
@@ -53,6 +54,7 @@ class Session(BaseSession):
             ordered,
             row_limit,
             use_snapshot=use_snapshot,
+            return_not_null_data_as_optional=return_not_null_data_as_optional,
         )
         stream_it = await self._driver(
             request,

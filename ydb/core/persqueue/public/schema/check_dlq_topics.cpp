@@ -2,11 +2,12 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
@@ -17,9 +18,7 @@
 #include <algorithm>
 #include <optional>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_SCHEMA
-
-#define LOG_PREFIX NActors::TlsActivationContext->AsActorContext().SelfID
+#define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ::NSchema {
 
@@ -63,7 +62,8 @@ TString AccessDeniedMessage(const TIntrusiveConstPtr<NACLib::TUserToken>& userTo
         << " with any of access rights AlterSchema or UpdateRow";
 }
 
-class TCheckDlqTopicsActor : public TActorBootstrapped<TCheckDlqTopicsActor> {
+class TCheckDlqTopicsActor : public TBaseActor<TCheckDlqTopicsActor>
+                             , public TConstantLogPrefix {
 public:
     TCheckDlqTopicsActor(
         const TActorId& parent,
@@ -71,11 +71,17 @@ public:
         absl::flat_hash_set<TString>&& dlqPaths,
         const TCheckDlqTopicsSettings& settings
     )
-        : Parent(parent)
+        : TBaseActor(NKikimrServices::PQ_SCHEMA)
+        , Parent(parent)
         , DatabasePath(databasePath)
         , DlqPaths(std::move(dlqPaths))
         , Settings(settings)
     {
+    }
+
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"database", DatabasePath});
     }
 
     void Bootstrap() {
@@ -85,9 +91,7 @@ public:
             return ReplyAndDie(Ydb::StatusIds::SUCCESS, {});
         }
 
-        YDB_LOG_DEBUG("Check DLQ topics",
-            {"logPrefix", LOG_PREFIX},
-            {"database", DatabasePath},
+        LOG_D("Check DLQ topics",
             {"paths", JoinRange(", ", DlqPaths.begin(), DlqPaths.end())});
 
         Register(NDescriber::CreateDescriberActor(
@@ -116,8 +120,7 @@ public:
         for (const auto& path : paths) {
             const auto& info = ev->Get()->Topics.at(path);
             if (auto error = MapStatus(path, info); error) {
-                YDB_LOG_DEBUG("DLQ check failed",
-                    {"logPrefix", LOG_PREFIX},
+                LOG_D("DLQ check failed",
                     {"path", path},
                     {"status", error->first},
                     {"errorMessage", error->second});
@@ -139,7 +142,7 @@ private:
 
     std::optional<TStatusAndMessage> MapStatus(const TString& path, const NDescriber::TTopicInfo& info) const {
         switch (info.Status) {
-            case NDescriber::EStatus::SUCCESS:
+            case NDescriber::EStatus::Success:
                 if (IsCdcDlqTarget(info)) {
                     return TStatusAndMessage{
                         Ydb::StatusIds::BAD_REQUEST,
@@ -147,28 +150,28 @@ private:
                     };
                 }
                 return std::nullopt;
-            case NDescriber::EStatus::NOT_TOPIC:
+            case NDescriber::EStatus::NotTopic:
                 return TStatusAndMessage{
                     Ydb::StatusIds::BAD_REQUEST,
                     TStringBuilder() << "Dead letter queue path must be a topic, got " << path
                 };
-            case NDescriber::EStatus::NOT_FOUND:
+            case NDescriber::EStatus::NotFound:
                 return TStatusAndMessage{
                     Ydb::StatusIds::SCHEME_ERROR,
                     TStringBuilder() << "Path `" << path << "` does not exist"
                 };
-            case NDescriber::EStatus::UNAUTHORIZED:
-            case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+            case NDescriber::EStatus::Unauthorized:
+            case NDescriber::EStatus::UnauthorizedWithDescribeAccess:
                 return TStatusAndMessage{
                     Ydb::StatusIds::UNAUTHORIZED,
                     AccessDeniedMessage(Settings.UserToken, path)
                 };
-            case NDescriber::EStatus::BAD_REQUEST:
+            case NDescriber::EStatus::BadRequest:
                 return TStatusAndMessage{
                     Ydb::StatusIds::BAD_REQUEST,
                     NDescriber::Description(path, info.Status)
                 };
-            case NDescriber::EStatus::UNKNOWN_ERROR:
+            case NDescriber::EStatus::UnknownError:
                 return TStatusAndMessage{
                     Ydb::StatusIds::INTERNAL_ERROR,
                     NDescriber::Description(path, info.Status)

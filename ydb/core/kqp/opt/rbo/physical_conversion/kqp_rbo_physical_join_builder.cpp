@@ -481,6 +481,9 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 
     if (!Join->JoinFilters.empty() && joinAlgo == NKikimr::NKqp::EJoinAlgoType::MapJoin) {
         Y_ENSURE(useBlockHashJoin, "Join filters are supported only with BlockHashJoin.");
+    }
+
+    if (joinAlgo == NKikimr::NKqp::EJoinAlgoType::MapJoin && useBlockHashJoin) {
         joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
     }
 

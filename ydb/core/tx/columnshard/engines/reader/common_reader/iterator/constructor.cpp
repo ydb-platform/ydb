@@ -9,6 +9,10 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+void TBlobsReadingJob::Start() {
+    NActors::TActivationContext::AsActorContext().Register(new NBlobOperations::NRead::TActor(Task));
+}
+
 void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("fbf"));
     Source->MutableStageData().AddBlobs(Source->DecodeBlobAddresses(ExtractBlobsData()));

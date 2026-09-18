@@ -22,8 +22,6 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/string/join.h>
 
-#include <atomic>
-
 namespace NKikimr::NOlap {
 class IDataReader;
 }
@@ -43,64 +41,26 @@ private:
 
     std::optional<TFetchingScriptCursor> CursorStep;
 
-private:
-    struct TPrevNodeState {
-        ui32 NodeId = 0;
-        NArrow::NSSA::IResourceProcessor::EExecutionResult Result = NArrow::NSSA::IResourceProcessor::EExecutionResult::Success;
-        bool Failed = false;
-        bool Defined = false;
-    };
-
-    static_assert(std::atomic<TPrevNodeState>::is_always_lock_free);
-
-    // Prev-node tracing state is written by every finished program-step frame; a continuation frame may
-    // still be unwinding concurrently (issue #49169), so mutable TStrings are not allowed here. The
-    // whole state fits into one lock-free atomic struct; the category name is resolved on read through
-    // the immutable compiled graph.
-    TString StartCategoryName;
-    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
-    std::atomic<TPrevNodeState> PrevNode = {};
-
-    TString RenderCategoryName(const TPrevNodeState& state) const {
-        if (!state.Defined) {
-            return StartCategoryName;
-        }
-        AFL_VERIFY(Program);
-        auto it = Program->GetNodes().find(state.NodeId);
-        AFL_VERIFY(it != Program->GetNodes().end())("node_id", state.NodeId);
-        return it->second->GetProcessor()->GetSignalCategoryName();
-    }
-
 public:
-    void SetStartCategoryName(TString&& name) {
-        StartCategoryName = std::move(name);
-    }
-
-    void SetPrevNodeTracing(const ui32 nodeId, const TConclusion<NArrow::NSSA::IResourceProcessor::EExecutionResult>& conclusion) {
-        PrevNode.store(TPrevNodeState{ .NodeId = nodeId,
-                           .Result = conclusion.IsFail() ? NArrow::NSSA::IResourceProcessor::EExecutionResult::Success : *conclusion,
-                           .Failed = conclusion.IsFail(),
-                           .Defined = true }, std::memory_order_release);
-    }
-
-    TString GetPrevCategoryName() const {
-        return RenderCategoryName(PrevNode.load(std::memory_order_acquire));
-    }
-
     struct TPrevNodeTracing {
         TString CategoryName;
         TString ExecutionResult;
     };
 
-    // CategoryName/ExecutionResult are coupled only in the program-step transition tracing; a single
-    // load keeps the pair consistent.
-    TPrevNodeTracing GetPrevNodeTracing() const {
-        const TPrevNodeState state = PrevNode.load(std::memory_order_acquire);
-        TString executionResult;
-        if (state.Defined) {
-            executionResult = state.Failed ? "Fail" : ::ToString(state.Result);
-        }
-        return TPrevNodeTracing{ .CategoryName = RenderCategoryName(state), .ExecutionResult = std::move(executionResult) };
+private:
+    TPrevNodeTracing PrevNode;
+
+public:
+    void SetPrevNodeTracing(const TString& categoryName, const TString& executionResult) {
+        PrevNode = TPrevNodeTracing{ .CategoryName = categoryName, .ExecutionResult = executionResult };
+    }
+
+    const TString& GetPrevCategoryName() const {
+        return PrevNode.CategoryName;
+    }
+
+    const TPrevNodeTracing& GetPrevNodeTracing() const {
+        return PrevNode;
     }
 
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
@@ -122,14 +82,6 @@ public:
 
     bool HasProgramIterator() const {
         return !!ProgramIterator;
-    }
-
-    bool HasExecutionVisitor() const {
-        return !!ExecutionVisitor;
-    }
-
-    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> GetExecutionVisitorOptional() const {
-        return ExecutionVisitor;
     }
 
     void SetProgramIterator(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& it,
@@ -192,13 +144,13 @@ private:
     virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
 
-    virtual TConclusion<bool> DoStartFetchImpl(
+    virtual TConclusion<TExecutionResult> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchersExt) = 0;
 
-    virtual TConclusion<bool> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
+    virtual TConclusion<TExecutionResult> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
 
-    virtual bool DoStartFetchingColumns(
+    virtual TExecutionResult DoStartFetchingColumns(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
@@ -256,34 +208,28 @@ public:
                                 : GetStageResult().GetBatch()->num_rows();
     }
 
-    NO_SANITIZE_THREAD
     void AddExecutionDuration(const TDuration d) {
         TotalExecutionDuration += d;
     }
 
-    NO_SANITIZE_THREAD
     void AddBytesRead(const ui64 bytes) {
         TotalBytesRead += bytes;
     }
 
     void OnStartProcessing();
 
-    NO_SANITIZE_THREAD
     TDuration GetTotalDuration() const {
         return SourceCreatedTimestamp ? (TMonotonic::Now() - SourceCreatedTimestamp) : TDuration::Zero();
     }
 
-    NO_SANITIZE_THREAD
     TDuration GetTotalExecutionDuration() const {
         return TotalExecutionDuration;
     }
 
-    NO_SANITIZE_THREAD
     ui64 GetTotalBytesRead() const {
         return TotalBytesRead;
     }
 
-    NO_SANITIZE_THREAD
     ui64 ExtractTotalBytesRead() {
         const ui64 result = TotalBytesRead;
         TotalBytesRead = 0;
@@ -430,7 +376,8 @@ public:
 
     void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false);
 
-    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
+    TExecutionResult StartFetchingColumns(
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 

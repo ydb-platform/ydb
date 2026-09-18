@@ -6,6 +6,10 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+void TAccessorsRequestJob::Start() {
+    Manager->AskData(Request);
+}
+
 void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResult&& result) {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("facc"));
     if (result.HasErrors()) {

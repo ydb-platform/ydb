@@ -29,6 +29,7 @@ private:
     ui64 CachedTotalReservedBytes = 0;
 
     void CacheSourceStats();
+    void OnFinished();
 
 protected:
     virtual bool DoApply(IDataReader& owner) override;
@@ -73,18 +74,37 @@ public:
         const bool changeSyncSection);
 };
 
+class TSendEventJob: public IAsyncJob {
+private:
+    const NActors::TActorId Recipient;
+    std::unique_ptr<NActors::IEventBase> Event;
+
+public:
+    TSendEventJob(const NActors::TActorId& recipient, std::unique_ptr<NActors::IEventBase>&& event)
+        : Recipient(recipient)
+        , Event(std::move(event))
+    {
+        AFL_VERIFY(Event);
+    }
+
+    virtual void Start() override {
+        NActors::TActivationContext::AsActorContext().Send(Recipient, Event.release());
+    }
+};
+
 class TProgramStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     THashMap<ui32, std::shared_ptr<TFetchingStepSignals>> Signals;
     const std::shared_ptr<TFetchingStepSignals>& GetSignals(const ui32 nodeId) const;
-    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult,
-        const ui32 nodeId, const TString& currentCategoryName, const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor,
-        const ui64 reservedMemory) const;
+    void ReportTracing(const std::shared_ptr<IDataSource>& source, const NArrow::NAccessor::TAccessorsCollection& resources,
+        const TDuration executionDurationMs, const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
+        const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor) const;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
+        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TProgramStep(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
         : TBase("PROGRAM_EXECUTION")

@@ -124,7 +124,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         {"columns", columnIds.size()});
 }
 
-bool TPortionDataSource::DoStartFetchingColumns(
+NCommon::TExecutionResult TPortionDataSource::DoStartFetchingColumns(
     const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
     YDB_LOG_DEBUG("",
         {"event", step.GetName()});
@@ -144,13 +144,12 @@ bool TPortionDataSource::DoStartFetchingColumns(
 
     auto readActions = action.GetReadingActions();
     if (!readActions.size()) {
-        return false;
+        return NCommon::TExecutionResult::Done();
     }
 
     auto constructor =
         std::make_shared<NCommon::TBlobsFetcherTask>(readActions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
-    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
-    return true;
+    return NCommon::TExecutionResult::Pending(std::make_shared<NCommon::TBlobsReadingJob>(std::move(constructor)));
 }
 
 void TPortionDataSource::DoAbort() {
@@ -177,7 +176,8 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }
 
-bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
+NCommon::TExecutionResult TPortionDataSource::DoStartFetchingAccessor(
+    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
     AFL_VERIFY(!HasPortionAccessor());
     YDB_LOG_DEBUG("",
         {"event", step.GetName()},
@@ -187,8 +187,8 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
         std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
     request->AddPortion(Portion);
     request->RegisterSubscriber(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber>(step, sourcePtr));
-    GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
-    return true;
+    return NCommon::TExecutionResult::Pending(
+        std::make_shared<NCommon::TAccessorsRequestJob>(GetContext()->GetCommonContext()->GetDataAccessorsManager(), std::move(request)));
 }
 
 bool TPortionDataSource::DoAddTxConflict() {

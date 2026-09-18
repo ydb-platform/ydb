@@ -174,7 +174,7 @@ TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
             if (conclusion.IsFail()) {
                 return conclusion;
             } else {
-                AFL_VERIFY(*conclusion != IResourceProcessor::EExecutionResult::InBackground);
+                AFL_VERIFY(!conclusion->IsPending());
             }
         }
         if (visitor->MutableContext().GetResources().HasDataAndResultIsEmpty()) {

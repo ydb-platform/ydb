@@ -52,7 +52,7 @@ public:
         return !Script->IsFinished(++CurrentStepIdx);
     }
 
-    TConclusion<bool> Execute(const std::shared_ptr<IDataSource>& source);
+    TConclusion<TExecutionResult> Execute(const std::shared_ptr<IDataSource>& source);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

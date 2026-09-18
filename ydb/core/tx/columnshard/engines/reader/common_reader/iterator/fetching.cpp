@@ -32,24 +32,26 @@ bool TStepAction::DoApply(IDataReader& owner) {
 TConclusion<bool> TStepAction::DoExecuteImpl() {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("step_action"));
     if (Source->GetContext()->IsAborted()) {
-        AFL_VERIFY(!FinishedFlag);
-        FinishedFlag = true;
-        CacheSourceStats();
+        OnFinished();
         return true;
     }
-    auto executeResult = Cursor.Execute(Source);
-    if (executeResult.IsFail()) {
-        AFL_VERIFY(!FinishedFlag);
-        FinishedFlag = true;
-        CacheSourceStats();
-        return executeResult;
+    auto result = Cursor.Execute(Source);
+    if (result.IsFail()) {
+        OnFinished();
+        return result.GetError();
     }
-    if (*executeResult) {
-        AFL_VERIFY(!FinishedFlag);
-        FinishedFlag = true;
-        CacheSourceStats();
+    if (result->IsPending()) {
+        result->ExtractPendingJob()->Start();
+        return false;
     }
-    return FinishedFlag;
+    OnFinished();
+    return true;
+}
+
+void TStepAction::OnFinished() {
+    AFL_VERIFY(!FinishedFlag);
+    FinishedFlag = true;
+    CacheSourceStats();
 }
 
 void TStepAction::CacheSourceStats() {
@@ -74,13 +76,9 @@ TStepAction::TStepAction(
     }
 }
 
-NO_SANITIZE_THREAD
-void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs,
-    const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
-    const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const ui64 reservedMemory) const {
-    if (!processor) {
-        return;
-    }
+void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const NArrow::NAccessor::TAccessorsCollection& resources,
+    const TDuration executionDurationMs, const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
+    const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor) const {
     const auto& scanOrbit = source->GetContext()->GetCommonContext()->GetScanOrbit();
     if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit()) && !(scanOrbit && NLWTrace::HasShuttles(*scanOrbit)) &&
         !LWPROBE_ENABLED(ProgramConst) && !LWPROBE_ENABLED(ProgramCalculation) && !LWPROBE_ENABLED(ProgramProjection) &&
@@ -90,24 +88,17 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
         return;
     }
     const auto& step = source->GetExecutionContext().GetCursorStep();
-    const auto prevTracing = source->GetExecutionContext().GetPrevNodeTracing();
+    const auto& prevTracing = source->GetExecutionContext().GetPrevNodeTracing();
     const TString tracingName = prevTracing.CategoryName + " - " + currentCategoryName;
     const TString tracingExecutionResult = prevTracing.ExecutionResult + " - " + currentExecutionResult;
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
+    const ui64 reservedMemory = source->GetReservedMemory();
     const auto processorType = processor->GetProcessorType();
     const TString details = processor->DebugJson().GetStringRobust();
 
-    // Pin the visitor for the duration of this function so Stop() on ExecutionContext cannot free it under us.
-    // Snapshot scalars only — do not keep references into Resources across further work.
-    // Never call GetReservedMemory() here: Execute() may have started a concurrent continuation that
-    // mutates ResourceGuards (RegisterAllocationGuard / ClearMemoryGuards) on another worker.
-    const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
-    ui32 filteredRows = source->GetRecordsCount();
+    const ui32 filteredRows = resources.GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
     TString indexStatus = "Unknown";
     ui32 indexFilteredRows = source->GetRecordsCount();
-    if (const auto* resources = visitor ? visitor->MutableContext().GetResourcesOptional() : nullptr) {
-        filteredRows = resources->GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
-    }
     if (processorType == NArrow::NSSA::EProcessorType::CheckIndexData) {
         auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
         if (indexProcessor && source->GetSourceSchemaOptional()) {
@@ -125,10 +116,9 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
             if (skipIndexes.empty() || !hasActualIndexData) {
                 indexStatus = "NoIndex";
                 indexFilteredRows = source->GetRecordsCount();
-            } else if (const auto* resources = visitor ? visitor->MutableContext().GetResourcesOptional() : nullptr) {
-                // Re-read resources after non-resource work — concurrent ExtractResources may have cleared them.
+            } else {
                 const ui32 outputColumnId = indexProcessor->GetOutputColumnIdOnce();
-                const auto& outputAccessor = resources->GetAccessorOptional(outputColumnId);
+                const auto& outputAccessor = resources.GetAccessorOptional(outputColumnId);
                 if (outputAccessor) {
                     auto* sparsed = dynamic_cast<const NArrow::NAccessor::TSparsedArray*>(outputAccessor.get());
                     if (sparsed && sparsed->GetDefaultValue() && sparsed->GetDefaultValue()->is_valid) {
@@ -146,7 +136,7 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                     }
                 } else {
                     indexStatus = "Partial";
-                    indexFilteredRows = resources->GetFilter().GetFilteredCount().value_or(source->GetRecordsCount());
+                    indexFilteredRows = resources.GetFilter().GetFilteredCount().value_or(source->GetRecordsCount());
                 }
             }
         }
@@ -246,17 +236,18 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
 #undef PROGRAM_PROBE_TAIL
 }
 
-NO_SANITIZE_THREAD
-TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-    const bool started = !source->GetExecutionContext().HasProgramIterator();
-    if (!source->GetExecutionContext().HasProgramIterator()) {
-        source->MutableExecutionContext().Start(source, Program, step);
+TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(
+    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    auto& executionContext = source->MutableExecutionContext();
+    if (executionContext.HasProgramIterator()) {
+        executionContext.GetProgramIteratorVerified()->Next();
+        executionContext.OnFinishProgramStepExecution();
+    } else {
+        executionContext.Start(source, Program, step);
     }
-    auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
-    if (!started) {
-        iterator->Next();
-        source->MutableExecutionContext().OnFinishProgramStepExecution();
-    }
+    const auto iterator = executionContext.GetProgramIteratorVerified();
+    const auto visitor = executionContext.GetExecutionVisitorVerified();
+    const auto& counters = source->GetContext()->GetCommonContext()->GetCounters();
     while (iterator->IsValid()) {
         {
             auto conclusion = iterator->Next();
@@ -264,68 +255,50 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
                 return conclusion;
             }
         }
-        if (!source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutionNode()) {
+        if (!visitor->GetExecutionNode()) {
             if (iterator->IsValid()) {
                 GetSignals(iterator->GetCurrentNodeId())->OnSkipGraphNode(source->GetRecordsCount());
-                source->GetContext()->GetCommonContext()->GetCounters().OnSkipGraphNode(iterator->GetCurrentNode().GetIdentifier());
+                counters.OnSkipGraphNode(iterator->GetCurrentNode().GetIdentifier());
             }
             continue;
         }
-        AFL_VERIFY(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutionNode()->GetIdentifier() == iterator->GetCurrentNodeId());
-        const ui32 tracingNodeId = iterator->GetCurrentNodeId();
-        const TString tracingCategoryName = iterator->GetCurrentNode().GetSignalCategoryName();
-        const auto tracingProcessor = iterator->GetProcessorVerified();
-        source->MutableExecutionContext().OnStartProgramStepExecution(tracingNodeId, GetSignals(tracingNodeId));
-        auto signals = GetSignals(tracingNodeId);
+        const ui32 nodeId = iterator->GetCurrentNodeId();
+        AFL_VERIFY(visitor->GetExecutionNode()->GetIdentifier() == nodeId);
+        const TString categoryName = iterator->GetCurrentNode().GetSignalCategoryName();
+        const auto processor = iterator->GetProcessorVerified();
+        const auto& signals = GetSignals(nodeId);
+        executionContext.OnStartProgramStepExecution(nodeId, signals);
 
-        // Snapshot before Execute(): allocation callbacks may mutate ResourceGuards concurrently afterwards.
-        const ui64 reservedMemoryBeforeExecute = source->GetReservedMemory();
         const TMonotonic start = TMonotonic::Now();
-        auto conclusion = source->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
-        const TDuration executionDurationMs = TMonotonic::Now() - start;
-        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionDurationMs);
-        signals->AddExecutionDuration(executionDurationMs);
-        source->AddExecutionDuration(executionDurationMs);
+        auto conclusion = visitor->Execute();
+        const TDuration executionDuration = TMonotonic::Now() - start;
+        counters.AddExecutionDuration(executionDuration);
+        signals->AddExecutionDuration(executionDuration);
+        source->AddExecutionDuration(executionDuration);
 
-        const TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
-        ReportTracing(source, executionDurationMs, currentExecutionResult, tracingNodeId, tracingCategoryName, tracingProcessor,
-            reservedMemoryBeforeExecute);
-        source->MutableExecutionContext().SetPrevNodeTracing(tracingNodeId, conclusion);
+        const TString executionResult = conclusion.IsFail() ? "Fail" : conclusion->DebugString();
+        ReportTracing(source, visitor->MutableContext().GetResources(), executionDuration, executionResult, nodeId, categoryName, processor);
+        executionContext.SetPrevNodeTracing(categoryName, executionResult);
         if (conclusion.IsFail()) {
-            source->MutableExecutionContext().OnFailedProgramStepExecution();
+            executionContext.OnFailedProgramStepExecution();
             return conclusion;
         }
-        // A nested continuation may have finished the shared program (extracted resources / stopped visitor)
-        // while Execute() was in progress. Do not keep mutating that shared state from this frame.
-        // Pin visitor once — HasExecutionVisitor + GetExecutionVisitorVerified is a TOCTOU with Stop().
-        const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
-        if (!visitor || !visitor->MutableContext().HasResources()) {
-            return false;
+        if (conclusion->IsPending()) {
+            return conclusion;
         }
-
-        if (*conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
-            return false;
-        }
-        source->MutableExecutionContext().OnFinishProgramStepExecution();
-        GetSignals(iterator->GetCurrentNodeId())->OnExecuteGraphNode(source->GetRecordsCount());
-        source->GetContext()->GetCommonContext()->GetCounters().OnExecuteGraphNode(iterator->GetCurrentNode().GetIdentifier());
-        if (const auto* resources = visitor->MutableContext().GetResourcesOptional();
-            resources && resources->GetRecordsCountActualOptional() == 0) {
+        executionContext.OnFinishProgramStepExecution();
+        signals->OnExecuteGraphNode(source->GetRecordsCount());
+        counters.OnExecuteGraphNode(iterator->GetCurrentNode().GetIdentifier());
+        if (visitor->MutableContext().GetResources().GetRecordsCountActualOptional() == 0) {
             visitor->MutableContext().MutableResources().Clear();
             break;
         }
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fgraph"));
-    const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
-    if (!visitor || !visitor->MutableContext().HasResources()) {
-        // Nested continuation already took ownership of progress — do not advance this cursor.
-        return false;
-    }
     YDB_LOG_DEBUG_COMP(NKikimrServices::SSA_GRAPH_EXECUTION, "",
         {"graphConstructed", Program->DebugDOT(visitor->GetExecutedIds())});
     source->MutableStageData().ReturnTable(visitor->MutableContext().ExtractResources());
-
-    return true;
+    return TExecutionResult::Done();
 }
 
 const std::shared_ptr<TFetchingStepSignals>& TProgramStep::GetSignals(const ui32 nodeId) const {

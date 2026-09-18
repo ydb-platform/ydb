@@ -5,6 +5,26 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+class TMemoryAllocationJob: public IAsyncJob {
+private:
+    const std::shared_ptr<TSpecialReadContext> Context;
+    const ui64 GroupId;
+    const std::shared_ptr<NGroupedMemoryManager::IAllocation> Allocation;
+    const NArrow::NSSA::IMemoryCalculationPolicy::EStage Stage;
+
+public:
+    TMemoryAllocationJob(const std::shared_ptr<TSpecialReadContext>& context, const ui64 groupId,
+        const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage)
+        : Context(context)
+        , GroupId(groupId)
+        , Allocation(allocation)
+        , Stage(stage)
+    {
+    }
+
+    virtual void Start() override;
+};
+
 class TAllocateMemoryStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
@@ -31,7 +51,8 @@ private:
         const ui64 size) const;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
+        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
 
     virtual TString DoDebugString() const override {
@@ -53,15 +74,13 @@ public:
         NColumnShard::TCounterGuard TasksGuard;
         const NArrow::NSSA::IMemoryCalculationPolicy::EStage StageIndex;
         const bool NeedNextStep;
-        const bool ScheduleContinuation;
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
 
     public:
         TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step,
-            const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep = true,
-            const bool scheduleContinuation = true);
+            const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep = true);
     };
 
     void AddAllocation(const TColumnsSetIds& ids, const EMemType memType) {
@@ -107,7 +126,8 @@ private:
 
 public:
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
+        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
@@ -123,7 +143,8 @@ private:
     using TBase = IFetchingStep;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
+        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const override;
 
     TBuildStageResultStep()
         : TBase("BUILD_STAGE_RESULT")
@@ -143,7 +164,8 @@ private:
 public:
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
 
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
+        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TOptionalAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
         : TBase("OPTIONAL_ASSEMBLER" + (specName ? "::" + specName : ""))
@@ -162,7 +184,8 @@ private:
         const ui64 blobBytes, const ui64 rawBytes) const;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
+        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "columns=" << Columns.DebugString() << ";";
@@ -179,8 +202,7 @@ public:
     }
 };
 
-// Shared by simple/trivial DoStartReserveMemory: sync vs async path with matching scheduleContinuation.
-TConclusion<bool> StartProgramStepReserveMemory(
+TExecutionResult StartProgramStepReserveMemory(
     const std::shared_ptr<IDataSource>& source, const ui64 sizeToReserve, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage);
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

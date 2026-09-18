@@ -3,7 +3,29 @@
 
 #include <ydb/core/tx/columnshard/data_accessor/request.h>
 
+namespace NKikimr::NOlap::NDataAccessorControl {
+class IDataAccessorsManager;
+}
+
 namespace NKikimr::NOlap::NReader::NCommon {
+
+class TAccessorsRequestJob: public IAsyncJob {
+private:
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> Manager;
+    const std::shared_ptr<TDataAccessorsRequest> Request;
+
+public:
+    TAccessorsRequestJob(
+        const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& manager, std::shared_ptr<TDataAccessorsRequest>&& request)
+        : Manager(manager)
+        , Request(std::move(request))
+    {
+        AFL_VERIFY(Manager);
+        AFL_VERIFY(Request);
+    }
+
+    virtual void Start() override;
+};
 
 class TPortionAccessorFetchingSubscriber: public IDataAccessorRequestsSubscriber {
 private:

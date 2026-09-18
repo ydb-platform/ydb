@@ -43,11 +43,9 @@ void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,
     NArrow::NSSA::TProcessorContext context(
         source, source->MutableStageData().ExtractTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
     auto visitor = std::make_shared<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(std::move(context));
-    AFL_VERIFY(!Program);
-    Program = program;
     SetProgramIterator(program->BuildIterator(visitor), visitor);
     SetCursorStep(step);
-    SetStartCategoryName(step.GetPrevName());
+    PrevNode = TPrevNodeTracing{ .CategoryName = step.GetPrevName() };
 }
 
 const TFetchingStepSignals& TExecutionContext::GetCurrentStepSignalsVerified() const {
@@ -98,14 +96,14 @@ ui64 IDataSource::DoGetSourceRecordsCount() const {
     }
 }
 
-TConclusion<bool> IDataSource::DoStartFetch(
+TConclusion<TExecutionResult> IDataSource::DoStartFetch(
     const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) {
     std::vector<std::shared_ptr<IKernelFetchLogic>> fetchers;
     for (auto&& i : fetchersExt) {
         fetchers.emplace_back(std::static_pointer_cast<IKernelFetchLogic>(i));
     }
     if (fetchers.empty()) {
-        return false;
+        return TExecutionResult::Done();
     }
     return DoStartFetchImpl(context, fetchers);
 }

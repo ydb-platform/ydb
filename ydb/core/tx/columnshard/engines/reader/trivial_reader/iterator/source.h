@@ -79,7 +79,8 @@ protected:
         return NJson::JSON_MAP;
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
+    virtual NCommon::TExecutionResult DoStartFetchingAccessor(
+        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
     static bool CheckTypeCast(const EType type) {
@@ -195,7 +196,7 @@ public:
     virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
 
-    bool StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
+    NCommon::TExecutionResult StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
@@ -254,17 +255,17 @@ private:
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
-    virtual bool DoStartFetchingColumns(
+    virtual NCommon::TExecutionResult DoStartFetchingColumns(
         const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
 
     std::shared_ptr<NIndexes::TSkipIndex> SelectOptimalIndex(
         const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::TIndexCheckOperation& op) const;
 
-    virtual TConclusion<bool> DoStartFetchImpl(
+    virtual TConclusion<NCommon::TExecutionResult> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) override;
 
-    virtual TConclusion<bool> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
+    virtual TConclusion<NCommon::TExecutionResult> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
         const THashMap<ui32, IDataSource::TDataAddress>& columns, const THashMap<ui32, IDataSource::TFetchIndexContext>& indexes,
         const THashMap<ui32, IDataSource::TFetchHeaderContext>& headers,
         const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& policy) override;
@@ -311,7 +312,8 @@ private:
         return Portion->GetPathId();
     }
 
-    virtual bool DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
+    virtual NCommon::TExecutionResult DoStartFetchingAccessor(
+        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
     virtual void InitUsedRawBytes() override {
@@ -411,16 +413,16 @@ public:
         return Portion;
     }
 
-    void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
+    TConclusion<NCommon::TExecutionResult> StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
         auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
         const auto duplicatesManager = context->GetDuplicatesManager();
         if (!duplicatesManager) {
             // Scan abort raced with this step: UnregisterActors already dropped the manager.
             AFL_VERIFY(!context->IsActive());
-            return;
+            return TConclusionStatus::Fail("duplicates manager is unregistered by scan abort");
         }
-        NActors::TActivationContext::AsActorContext().Send(
-            duplicatesManager, new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
+        auto event = std::make_unique<NDuplicateFiltering::TEvRequestFilter>(*this, std::move(subscriber));
+        return NCommon::TExecutionResult::Pending(std::make_shared<NCommon::TSendEventJob>(duplicatesManager, std::move(event)));
     }
 
     std::optional<ui64> GetPortionIdOptional() const override {
@@ -450,22 +452,22 @@ private:
         AFL_VERIFY(false);
     }
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/,
-        const TColumnsSetIds& /*columns*/) override {
+    virtual NCommon::TExecutionResult DoStartFetchingColumns(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/,
+        const TFetchingScriptCursor& /*step*/, const TColumnsSetIds& /*columns*/) override {
         AFL_VERIFY(false);
-        return true;
+        return NCommon::TExecutionResult::Done();
     }
 
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& /*columns*/, const bool /*sequential*/) override {
         AFL_VERIFY(false);
     }
 
-    virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<NCommon::TExecutionResult> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
         return TConclusionStatus::Fail("not implemented DoStartFetchImpl for TAggregationDataSource");
     }
 
-    virtual TConclusion<bool> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<NCommon::TExecutionResult> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& /*context*/,
         const THashMap<ui32, IDataSource::TDataAddress>& /*columns*/, const THashMap<ui32, IDataSource::TFetchIndexContext>& /*indexes*/,
         const THashMap<ui32, IDataSource::TFetchHeaderContext>& /*headers*/,
         const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& /*policy*/) override {
@@ -516,10 +518,10 @@ private:
         return Sources.front()->GetAs<IDataSource>()->GetPathId();
     }
 
-    virtual bool DoStartFetchingAccessor(
+    virtual NCommon::TExecutionResult DoStartFetchingAccessor(
         const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
         AFL_VERIFY(false);
-        return false;
+        return NCommon::TExecutionResult::Done();
     }
 
     static ui32 CalcInputRecordsCount(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources) {

@@ -21,6 +21,7 @@ using TStepAction = NCommon::TStepAction;
 
 class IDataSource;
 class TSpecialReadContext;
+using TExecutionResult = NCommon::TExecutionResult;
 
 class IFetchingStep: public NCommon::IFetchingStep {
 private:
@@ -35,7 +36,7 @@ private:
     using TBase = IFetchingStep;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
 public:
@@ -51,7 +52,7 @@ private:
     const TColumnsSetIds Columns;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     virtual TString DoDebugString() const override {
@@ -74,7 +75,7 @@ private:
     using TBase = IFetchingStep;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     virtual TString DoDebugString() const override {
@@ -95,7 +96,7 @@ private:
     const bool Reverse;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TFilterCutLimit(const ui32 limit, const bool reverse)
@@ -112,7 +113,7 @@ private:
     using TBase = IFetchingStep;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TPredicateFilter()
@@ -126,7 +127,7 @@ private:
     using TBase = IFetchingStep;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TSnapshotFilter()
@@ -141,7 +142,7 @@ private:
     TColumnsSetIds Columns;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TDetectInMem(const TColumnsSetIds& columns)
@@ -156,7 +157,7 @@ private:
     using TBase = IFetchingStep;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TDeletionFilter()
@@ -170,7 +171,7 @@ private:
     using TBase = IFetchingStep;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TShardingFilter()

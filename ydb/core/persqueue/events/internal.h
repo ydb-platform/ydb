@@ -1847,16 +1847,25 @@ struct TEvPQ {
             const TString& topic,
             const TString& consumer,
             ui32 partitionId,
-            NKikimrPQ::TEvResetOffsetRequest::EPosition position,
+            NKikimrPQ::TEvResetOffsetRequest::PositionCase position,
             ui64 timestampMs = 0,
             ui64 cookie = 0)
         {
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
-            Record.SetPosition(position);
-            if (timestampMs) {
-                Record.SetTimestampMs(timestampMs);
+            switch (position) {
+                case NKikimrPQ::TEvResetOffsetRequest::kEarliest:
+                    Record.MutableEarliest();
+                    break;
+                case NKikimrPQ::TEvResetOffsetRequest::kLatest:
+                    Record.MutableLatest();
+                    break;
+                case NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt:
+                    Record.MutableFromWrittenAt()->SetTimestampMs(timestampMs);
+                    break;
+                case NKikimrPQ::TEvResetOffsetRequest::POSITION_NOT_SET:
+                    break;
             }
             if (cookie) {
                 Record.SetCookie(cookie);

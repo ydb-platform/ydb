@@ -53,7 +53,7 @@ Ydb::StatusIds::StatusCode TPartition::PqErrorToYdbStatus(NPersQueue::NErrorCode
 }
 
 TInstant TPartition::ResetOffsetTimestamp(const NKikimrPQ::TEvResetOffsetRequest& rec) const {
-    TInstant timestamp = TInstant::MilliSeconds(rec.GetTimestampMs());
+    TInstant timestamp = TInstant::MilliSeconds(rec.GetFromWrittenAt().GetTimestampMs());
     if (AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
         timestamp = TInstant::Seconds(timestamp.Seconds());
     }
@@ -75,10 +75,10 @@ ui64 TPartition::GetAcceptedEndOffset() const {
 }
 
 ui64 TPartition::ResolveResetOffset(const NKikimrPQ::TEvResetOffsetRequest& rec) const {
-    switch (rec.GetPosition()) {
-        case NKikimrPQ::TEvResetOffsetRequest::EARLIEST:
+    switch (rec.GetPositionCase()) {
+        case NKikimrPQ::TEvResetOffsetRequest::kEarliest:
             return GetStartOffset();
-        case NKikimrPQ::TEvResetOffsetRequest::LATEST:
+        case NKikimrPQ::TEvResetOffsetRequest::kLatest:
             return GetAcceptedEndOffset();
         default:
             return GetAcceptedEndOffset();
@@ -338,7 +338,7 @@ void TPartition::BeginResetOffset(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
     const ui32 partitionId = Partition.OriginalPartitionId;
     const ui64 replyCookie = rec.HasCookie() ? rec.GetCookie() : ev->Cookie;
 
-    if (rec.GetPosition() == NKikimrPQ::TEvResetOffsetRequest::POSITION_UNSPECIFIED) {
+    if (rec.GetPositionCase() == NKikimrPQ::TEvResetOffsetRequest::POSITION_NOT_SET) {
         ReplyResetOffset(ev->Sender, partitionId, Ydb::StatusIds::BAD_REQUEST, "Position is required", replyCookie);
         return;
     }
@@ -353,7 +353,7 @@ void TPartition::BeginResetOffset(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
         return;
     }
 
-    if (rec.GetPosition() == NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT) {
+    if (rec.HasFromWrittenAt()) {
         RequestResetOffsetBlobs(ev, ResetOffsetTimestamp(rec));
         return;
     }

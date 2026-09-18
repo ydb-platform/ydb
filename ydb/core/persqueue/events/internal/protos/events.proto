@@ -236,16 +236,23 @@ message TEvResetOffsetRequest {
     optional string Topic = 1;
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
+    optional uint64 Cookie = 4;
 
-    enum EPosition {
-        POSITION_UNSPECIFIED = 0;
-        EARLIEST = 1;
-        LATEST = 2;
-        FROM_WRITTEN_AT = 3;
+    message TEarliest {
     }
-    optional EPosition Position = 4;
-    optional uint64 TimestampMs = 5;
-    optional uint64 Cookie = 6;
+
+    message TLatest {
+    }
+
+    message TFromWrittenAt {
+        optional uint64 TimestampMs = 1;
+    }
+
+    oneof Position {
+        TEarliest Earliest = 5;
+        TLatest Latest = 6;
+        TFromWrittenAt FromWrittenAt = 7;
+    }
 }
 
 // From PQTablet

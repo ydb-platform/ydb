@@ -2340,7 +2340,7 @@ Y_UNIT_TEST_F(ResetOffsetDoesNotStealSetOffsetReply, TPartitionFixture)
 
     SendEvent(new TEvPQ::TEvResetOffsetRequest(
         "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::EARLIEST, 0, 1));
+        NKikimrPQ::TEvResetOffsetRequest::kEarliest, 0, 1));
 
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=0}}}});
@@ -2472,7 +2472,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtCommitsInsideBlob, TPartitionFixture)
 
     SendEvent(new TEvPQ::TEvResetOffsetRequest(
         "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT, ts1.MilliSeconds(), 1));
+        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, ts1.MilliSeconds(), 1));
 
     auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
     UNIT_ASSERT(blobRequest);
@@ -2521,7 +2521,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtSkipsReadOfSingleMessageBlob, TPartitionFi
 
     SendEvent(new TEvPQ::TEvResetOffsetRequest(
         "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT,
+        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
         TInstant::Seconds(50).MilliSeconds(), 1));
     WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=0}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
@@ -2534,7 +2534,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtSkipsReadOfSingleMessageBlob, TPartitionFi
 
     SendEvent(new TEvPQ::TEvResetOffsetRequest(
         "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT,
+        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
         TInstant::Seconds(200).MilliSeconds(), 2));
     WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=1}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
@@ -2570,7 +2570,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtHonorsOffsetGapsInsideBlob, TPartitionFixt
 
     SendEvent(new TEvPQ::TEvResetOffsetRequest(
         "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT, tsLate.MilliSeconds(), 1));
+        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, tsLate.MilliSeconds(), 1));
 
     auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
     UNIT_ASSERT(blobRequest);
@@ -2625,7 +2625,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtBeforeAndAfterPartitionRange, TPartitionFi
     auto runAt = [&](TInstant ts, ui64 cookie, ui64 expectedOffset) {
         SendEvent(new TEvPQ::TEvResetOffsetRequest(
             "topic", client, partition.OriginalPartitionId,
-            NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT, ts.MilliSeconds(), cookie));
+            NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, ts.MilliSeconds(), cookie));
 
         auto blobRequest = waitResetOffsetBlobRequest();
         SendEvent(MakeResetOffsetBlobResponse(*blobRequest, packed).Release());
@@ -2703,7 +2703,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtKafkaBatchIsAtomic, TPartitionFixture)
     auto runAt = [&](TInstant ts, ui64 cookie, ui64 expectedOffset) {
         SendEvent(new TEvPQ::TEvResetOffsetRequest(
             "topic", client, partition.OriginalPartitionId,
-            NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT, ts.MilliSeconds(), cookie));
+            NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, ts.MilliSeconds(), cookie));
 
         auto blobRequest = waitResetOffsetBlobRequest();
         UNIT_ASSERT_VALUES_EQUAL_C(
@@ -2803,7 +2803,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtLargeMessagePartsInOneBlob, TPartitionFixt
     auto runAt = [&](TInstant ts, ui64 cookie, ui64 expectedOffset) {
         SendEvent(new TEvPQ::TEvResetOffsetRequest(
             "topic", client, partition.OriginalPartitionId,
-            NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT, ts.MilliSeconds(), cookie));
+            NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, ts.MilliSeconds(), cookie));
 
         auto blobRequest = waitResetOffsetBlobRequest();
         UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs.size(), 1u);
@@ -2887,7 +2887,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtLargeMessagePartsAcrossBlobs, TPartitionFi
 
     SendEvent(new TEvPQ::TEvResetOffsetRequest(
         "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT, tsLarge.MilliSeconds(), 1));
+        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt, tsLarge.MilliSeconds(), 1));
 
     auto blobRequest = waitResetOffsetBlobRequest();
     UNIT_ASSERT_VALUES_EQUAL(blobRequest->Blobs.size(), 1u);
@@ -2907,7 +2907,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtLargeMessagePartsAcrossBlobs, TPartitionFi
 
     SendEvent(new TEvPQ::TEvResetOffsetRequest(
         "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT,
+        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
         (tsLarge + TDuration::Seconds(1)).MilliSeconds(), 2));
 
     WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=1}}}});
@@ -2960,7 +2960,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtSeesNewHead, TPartitionFixture)
 
     SendEvent(new TEvPQ::TEvResetOffsetRequest(
         "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT,
+        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
         TInstant::Seconds(150).MilliSeconds(), 1));
 
     WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=2}}}});
@@ -2991,7 +2991,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtSeesUnpackedNewHead, TPartitionFixture)
 
     SendEvent(new TEvPQ::TEvResetOffsetRequest(
         "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT,
+        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
         TInstant::Seconds(150).MilliSeconds(), 1));
 
     WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=2}}}});
@@ -3021,7 +3021,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtPastNewHeadUsesAcceptedEnd, TPartitionFixt
 
     SendEvent(new TEvPQ::TEvResetOffsetRequest(
         "topic", client, partition.OriginalPartitionId,
-        NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT,
+        NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt,
         TInstant::Seconds(250).MilliSeconds(), 1));
 
     WaitCmdWrite({.UserInfos={{0, {.Consumer=client, .Offset=3}}}});

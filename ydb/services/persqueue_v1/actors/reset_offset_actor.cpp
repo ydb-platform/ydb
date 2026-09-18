@@ -38,13 +38,13 @@ public:
 
         switch (proto->position_case()) {
             case Ydb::Topic::ResetOffsetRequest::kEarliest:
-                settings.Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST;
+                settings.Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest;
                 break;
             case Ydb::Topic::ResetOffsetRequest::kLatest:
-                settings.Position = NKikimrPQ::TEvResetOffsetRequest::LATEST;
+                settings.Position = NKikimrPQ::TEvResetOffsetRequest::kLatest;
                 break;
             case Ydb::Topic::ResetOffsetRequest::kFromWrittenAt: {
-                settings.Position = NKikimrPQ::TEvResetOffsetRequest::FROM_WRITTEN_AT;
+                settings.Position = NKikimrPQ::TEvResetOffsetRequest::kFromWrittenAt;
                 const i64 timestampMs = ::google::protobuf::util::TimeUtil::TimestampToMilliseconds(
                     proto->from_written_at().written_at());
                 settings.TimestampMs = timestampMs < 0 ? 0 : static_cast<ui64>(timestampMs);

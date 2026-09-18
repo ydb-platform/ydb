@@ -20,7 +20,7 @@ struct TResetOffsetSettings {
     TString DatabasePath;
     TString TopicName;
     TString Consumer;
-    NKikimrPQ::TEvResetOffsetRequest::EPosition Position = NKikimrPQ::TEvResetOffsetRequest::POSITION_UNSPECIFIED;
+    NKikimrPQ::TEvResetOffsetRequest::PositionCase Position = NKikimrPQ::TEvResetOffsetRequest::POSITION_NOT_SET;
     ui64 TimestampMs = 0;
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;

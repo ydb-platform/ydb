@@ -230,7 +230,7 @@ Y_UNIT_TEST(StaleSuccessAcceptedRegardlessOfCookie) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest,
     });
     NActors::TDispatchOptions opts;
     opts.CustomFinalCondition = [&] { return requested; };
@@ -256,7 +256,7 @@ Y_UNIT_TEST(SuccessAfterPipeBreakAccepted) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest,
     });
     NActors::TDispatchOptions opts;
     opts.CustomFinalCondition = [&] { return pipeBreak.BrokenCount() >= 1; };
@@ -294,7 +294,7 @@ Y_UNIT_TEST(LateSuccessDuringWaitRetry) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest,
     });
     NActors::TDispatchOptions opts;
     opts.CustomFinalCondition = [&] { return pipeBreak.BrokenCount() >= 1 && requestCookie != 0; };
@@ -324,7 +324,7 @@ Y_UNIT_TEST(PoisonDuringDescribe) {
         .DatabasePath = "/Root",
         .TopicName = "/Root/missing",
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest,
     });
     runtime.Send(new IEventHandle(actor.Actor, TActorId(), new NActors::TEvents::TEvPoison()));
     ExpectNoResetResult(runtime, actor.Edge);
@@ -347,7 +347,7 @@ Y_UNIT_TEST(PoisonDuringReset) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest,
     });
     NActors::TDispatchOptions opts;
     opts.CustomFinalCondition = [&] { return requested; };
@@ -375,7 +375,7 @@ Y_UNIT_TEST(UnhandledException) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest,
     });
     auto result = WaitResult(runtime, actor);
     UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::INTERNAL_ERROR);
@@ -391,7 +391,7 @@ Y_UNIT_TEST(PipeBreakThenSuccess) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest,
     });
     AssertAllPartitionsSuccess(WaitResult(runtime, actor));
     UNIT_ASSERT_GE(pipeBreak.BrokenCount(), 1u);
@@ -406,7 +406,7 @@ Y_UNIT_TEST(PipeBreakExhausted) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest,
     });
     auto result = WaitResult(runtime, actor, TDuration::Seconds(30));
     UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
@@ -438,7 +438,7 @@ Y_UNIT_TEST(SchemeErrorFailsWholeRequest) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest,
     });
     UNIT_ASSERT(DispatchUntil(runtime, [&] { return requestCookie != 0; }));
 
@@ -468,7 +468,7 @@ Y_UNIT_TEST(UnknownPartitionResponseIgnored) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest,
     });
     UNIT_ASSERT(DispatchUntil(runtime, [&] { return requested; }));
 
@@ -501,7 +501,7 @@ Y_UNIT_TEST(StaleDeliveryProblemIgnored) {
         .DatabasePath = "/Root",
         .TopicName = SharedSimulatedTopic(),
         .Consumer = "consumer",
-        .Position = NKikimrPQ::TEvResetOffsetRequest::EARLIEST,
+        .Position = NKikimrPQ::TEvResetOffsetRequest::kEarliest,
     });
     UNIT_ASSERT(DispatchUntil(runtime, [&] { return forwards >= 1 && tabletId != 0; }));
     UNIT_ASSERT_VALUES_EQUAL(forwards, 1u);

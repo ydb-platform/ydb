@@ -38,6 +38,7 @@ struct TTestEnvSettings {
     bool EnableLocalBloomNgramFilterIndex = false;
     bool EnableLocalIndexAsSchemeObject = false;
     bool EnableLocalMinMaxIndex = false;
+    bool EnableDataShardDetailedMetrics = false;
     NKikimrProto::TAuthConfig AuthConfig = {};
     TMaybe<ui32> DataShardStatsReportIntervalSeconds;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;

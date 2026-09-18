@@ -1,11 +1,13 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
@@ -348,6 +350,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
     // description on the wire so the DataShard-side handling can be exercised
     // without a control-plane surface for the database attribute.
     Y_UNIT_TEST(TestSetTableInfoUsesSubDomainMetricsLevel) {
+        using TMetricsSettings = NKikimrSchemeOp::TTableDetailedMetricsSettings;
+
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -360,18 +364,38 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
 
         InitRoot(server, sender);
 
+        auto databaseLevel = TMetricsSettings::MetricsLevelTable;
+        TPathId subdomainPathId;
+        NSchemeCache::TDescribeResult::TCPtr subdomainDescription;
+
         // Installed before the shard exists, so the very first subdomain
         // notification it gets already carries the database default.
         auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
             [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
                 auto *msg = ev->Get();
+                if (msg->Path != "/Root") {
+                    return;
+                }
                 NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
                 record.MutablePathDescription()->MutableDomainDescription()->SetTablesMetricsLevel(
-                    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable);
+                    databaseLevel);
                 msg->Result = NSchemeCache::TDescribeResult::Create(record);
+                subdomainPathId = msg->PathId;
+                subdomainDescription = msg->Result;
             });
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Indexes({{"by_value", {"value"}}}));
+
+        const TVector<TString> tablePaths = {
+            "/Root/table-1", "/Root/table-1/by_value/indexImplTable"
+        };
+        TVector<ui64> shards;
+        for (const auto &path : tablePaths) {
+            for (ui64 shard : GetTableShards(server, sender, path)) {
+                shards.push_back(shard);
+            }
+        }
 
         TVector<TReportedTableInfo> reported;
         auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
@@ -379,21 +403,69 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                 reported.push_back(TReportedTableInfo(*ev->Get()));
             });
 
-        SimulateSleep(server, TDuration::Seconds(6));
+        auto checkLevel = [&](TMetricsSettings::EMetricsLevel expected) {
+            reported.clear();
+            SimulateSleep(server, TDuration::Seconds(6));
 
-        UNIT_ASSERT(!reported.empty());
-        UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
-            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+            THashMap<TString, ui32> levels;
+            for (const auto &info : reported) {
+                levels[info.TablePath] = info.MetricsLevel;
+            }
+            for (const auto &path : tablePaths) {
+                auto it = levels.find(path);
+                UNIT_ASSERT_C(it != levels.end(), "No metrics level report for " << path);
+                UNIT_ASSERT_VALUES_EQUAL_C(it->second, ui32(expected), path);
+            }
+        };
+
+        checkLevel(TMetricsSettings::MetricsLevelTable);
 
         // A per-table override wins over the database default.
         WaitTxNotification(server, sender, AsyncAlterSetMetricsLevel(server, "/Root", "table-1",
-            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+            TMetricsSettings::MetricsLevelPartition));
+        checkLevel(TMetricsSettings::MetricsLevelPartition);
 
-        reported.clear();
-        SimulateSleep(server, TDuration::Seconds(6));
-        UNIT_ASSERT(!reported.empty());
-        UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
-            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+        // Public DATABASE is an explicit internal Disabled override, including on indexes.
+        WaitTxNotification(server, sender, AsyncAlterSetMetricsLevel(server, "/Root", "table-1",
+            TMetricsSettings::MetricsLevelDisabled));
+        checkLevel(TMetricsSettings::MetricsLevelDisabled);
+
+        for (ui64 shard : shards) {
+            RebootTablet(runtime, shard, sender);
+        }
+        checkLevel(TMetricsSettings::MetricsLevelDisabled);
+
+        // Updating the database default must not enable metrics on explicitly disabled tables.
+        databaseLevel = TMetricsSettings::MetricsLevelPartition;
+        UNIT_ASSERT(subdomainDescription);
+        for (ui64 shard : shards) {
+            ForwardToTablet(runtime, shard, sender,
+                new TEvTxProxySchemeCache::TEvWatchNotifyUpdated(
+                    0, "/Root", subdomainPathId, subdomainDescription));
+        }
+        checkLevel(TMetricsSettings::MetricsLevelDisabled);
+
+        // Reset removes the override on the base table and index, restoring the new default.
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        request->Record.SetExecTimeoutPeriod(Max<ui64>());
+        auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        tx.SetWorkingDir("/Root");
+        tx.MutableAlterTable()->SetName("table-1");
+        tx.MutableAlterTable()->MutableDetailedMetricsSettings()->MutableNotConfigured();
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+
+        auto response = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(),
+            TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress,
+            response->Get()->Record.GetIssues());
+        WaitTxNotification(server, sender, response->Get()->Record.GetTxId());
+        checkLevel(TMetricsSettings::MetricsLevelPartition);
+
+        for (ui64 shard : shards) {
+            RebootTablet(runtime, shard, sender);
+        }
+        checkLevel(TMetricsSettings::MetricsLevelPartition);
     }
 
     // The database-wide default is persisted, so a restarted shard keeps

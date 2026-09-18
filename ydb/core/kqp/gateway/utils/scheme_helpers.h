@@ -50,7 +50,7 @@ bool Validate(const NYql::TAlterDatabaseSettings& settings, NYql::TIssue& error)
 
 void FillAlterDatabaseOwner(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& name, const TString& newOwner);
 
-void FillAlterDatabaseSchemeLimits(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& name, const NKikimrSubDomains::TSchemeLimits& in);
+void FillAlterDatabaseSettings(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& name, const NYql::TAlterDatabaseSettings& settings);
 
 std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path);
 

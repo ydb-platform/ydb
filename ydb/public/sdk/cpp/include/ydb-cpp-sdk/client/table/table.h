@@ -247,17 +247,22 @@ public:
      */
     enum class EMetricsLevel {
         /**
-         * The metrics level is not specified.
+         * The metrics level is not specified. Within explicitly supplied
+         * metrics settings, this means Database. Omitting metrics settings
+         * on CreateTable inherits the database default.
          */
         Unspecified = 0,
 
         /**
-         * All metrics are disabled.
+         * All metrics are disabled. This level is not supported; use
+         * Database to disable detailed metrics only.
          */
         Disabled = 1,
 
         /**
          * Metrics are aggregated and reported for the entire database.
+         * Disables detailed metrics for the table even when they are enabled
+         * by the database-wide default. Drop the settings to restore inheritance.
          */
         Database = 2,
 

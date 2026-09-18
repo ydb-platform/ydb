@@ -347,6 +347,23 @@ class CoverageEvalTest(unittest.TestCase):
         self.assertTrue(any("Linux table missing RC row" in error for error in errors))
         self.assertTrue(any("Docker RC row missing artifact" in error for error in errors))
 
+    def test_rejects_rc_row_after_the_next_version_group(self):
+        downloads = valid_downloads().replace(
+            "|| v.26.3.1.16 | 18.09.26 | [Binary file]",
+            "|| **v26.2** | > | > | > ||\n"
+            "|| v.26.3.1.16 | 18.09.26 | [Binary file]",
+            1,
+        )
+        errors = coverage_eval._check_downloads(
+            downloads,
+            "26.3.1.16",
+            "26.3",
+            "26-3-rc",
+            "en",
+        )
+
+        self.assertTrue(any("Linux table missing RC row" in error for error in errors))
+
     def test_accepts_exact_bilingual_bijection_and_rendered_files(self):
         errors = coverage_eval.evaluate(
             valid_manifest(), valid_tracker_export(), valid_en(), valid_ru()

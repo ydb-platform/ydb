@@ -180,16 +180,24 @@ def _check_downloads(
             continue
         section = match.group(1)
         group_match = re.search(rf"^{re.escape(group)}$", section, re.MULTILINE)
-        row_match = row_pattern.search(section)
         if not group_match:
             errors.append(f"{label} {title} table missing version group: {group}")
+            errors.append(f"{label} {title} table missing RC row: v.{release_tag}")
+            continue
+        next_group = re.search(
+            r"^\|\| \*\*v[0-9]+\.[0-9]+\*\* \|",
+            section[group_match.end() :],
+            re.MULTILINE,
+        )
+        group_end = (
+            group_match.end() + next_group.start() if next_group else len(section)
+        )
+        row_match = row_pattern.search(section, group_match.end(), group_end)
         if not row_match:
             errors.append(f"{label} {title} table missing RC row: v.{release_tag}")
             continue
-        if not group_match or group_match.start() > row_match.start():
-            errors.append(f"{label} {title} RC row is not under its version group")
         version_groups = list(re.finditer(r"^\|\| \*\*v[0-9]+\.[0-9]+\*\* \|", section, re.MULTILINE))
-        if version_groups and group_match and version_groups[0].start() != group_match.start():
+        if version_groups and version_groups[0].start() != group_match.start():
             errors.append(f"{label} {title} RC group is not above the preceding release")
         payload = row_match.group("payload")
         if artifact not in payload:

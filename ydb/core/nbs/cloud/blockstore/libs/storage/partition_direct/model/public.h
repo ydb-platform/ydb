@@ -27,6 +27,8 @@ class ITouchedProvider
 public:
     virtual ~ITouchedProvider() = default;
 
+    [[nodiscard]] virtual bool Get(ui32 vChunkIndex) const = 0;
+
     [[nodiscard]] virtual TRegionVChunks GetTouchedVChunks(
         ui32 startVChunkIndex) const = 0;
 };

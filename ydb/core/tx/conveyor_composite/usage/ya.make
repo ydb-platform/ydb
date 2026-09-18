@@ -8,14 +8,11 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/conveyor_composite/common
     ydb/library/actors/core
-    ydb/library/services
     ydb/services/metadata/request
-    ydb/core/base
     ydb/core/protos
     ydb/core/tx/conveyor/usage
 )
-
-GENERATE_ENUM_SERIALIZATION(common.h)
 
 END()

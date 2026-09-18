@@ -383,7 +383,10 @@ namespace {
 
         return TAnalyzeSettings{
             .TablePath = TString(analyze.Table()),
-            .Columns = std::move(columns)
+            .Columns = std::move(columns),
+            .SampleRate = analyze.SampleRate()
+                ? FromString<double>(analyze.SampleRate().Cast<TCoDouble>().Literal().Value())
+                : 1.0,
         };
     }
 
@@ -738,13 +741,19 @@ namespace {
         for (const auto& setting : topicSettings) {
             auto name = setting.Name().Value();
             if (name == "setMinPartitions") {
-                request->mutable_partitioning_settings()->set_min_active_partitions(
-                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
-                );
+                ui32 value = 0;
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                if (!TryFromString<ui32>(literal, value)) {
+                    ythrow yexception() << "min_active_partitions value is out of Uint32 range: " << literal;
+                }
+                request->mutable_partitioning_settings()->set_min_active_partitions(value);
             } else if (name == "setMaxPartitions") {
-                request->mutable_partitioning_settings()->set_max_active_partitions(
-                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
-                );
+                ui32 value = 0;
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                if (!TryFromString<ui32>(literal, value)) {
+                    ythrow yexception() << "max_active_partitions value is out of Uint32 range: " << literal;
+                }
+                request->mutable_partitioning_settings()->set_max_active_partitions(value);
             } else if (name == "setRetentionPeriod") {
                 auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
                 request->mutable_retention_period()->set_seconds(
@@ -810,17 +819,22 @@ namespace {
     }
 
     void AddAlterTopicSettingsToRequest(Ydb::Topic::AlterTopicRequest* request, const TCoNameValueTupleList& topicSettings) {
-    //ToDo [RESET]: Add reset options once supported.
         for (const auto& setting : topicSettings) {
             auto name = setting.Name().Value();
             if (name == "setMinPartitions") {
-                request->mutable_alter_partitioning_settings()->set_set_min_active_partitions(
-                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
-                );
+                ui32 value = 0;
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                if (!TryFromString<ui32>(literal, value)) {
+                    ythrow yexception() << "min_active_partitions value is out of Uint32 range: " << literal;
+                }
+                request->mutable_alter_partitioning_settings()->set_set_min_active_partitions(value);
             } else if (name == "setMaxPartitions") {
-                request->mutable_alter_partitioning_settings()->set_set_max_active_partitions(
-                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
-                );
+                ui32 value = 0;
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                if (!TryFromString<ui32>(literal, value)) {
+                    ythrow yexception() << "max_active_partitions value is out of Uint32 range: " << literal;
+                }
+                request->mutable_alter_partitioning_settings()->set_set_max_active_partitions(value);
             } else if (name == "setRetentionPeriod") {
                 auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
                 request->mutable_set_retention_period()->set_seconds(
@@ -880,9 +894,30 @@ namespace {
                 request->set_set_metrics_level(metricsLevel);
             } else if (name == "resetMetricsLevel") {
                 request->mutable_reset_metrics_level();
+            } else if (name == "resetRetentionPeriod") {
+                request->mutable_set_retention_period()->set_seconds(TDuration::Days(1).Seconds());
+            } else if (name == "resetRetentionStorage") {
+                request->set_set_retention_storage_mb(0);
+            } else if (name == "resetPartitionWriteSpeed") {
+                request->set_set_partition_write_speed_bytes_per_second(0);
+            } else if (name == "resetPartitionWriteBurstSpeed") {
+                request->set_set_partition_write_burst_bytes(0);
+            } else if (name == "resetSupportedCodecs") {
+                request->mutable_set_supported_codecs();
+            } else if (name == "resetAutoPartitioningStabilizationWindow") {
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()
+                    ->mutable_set_partition_write_speed()->mutable_set_stabilization_window()->set_seconds(300);
+            } else if (name == "resetAutoPartitioningUpUtilizationPercent") {
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()
+                    ->mutable_set_partition_write_speed()->set_set_up_utilization_percent(90);
+            } else if (name == "resetAutoPartitioningDownUtilizationPercent") {
+                request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()
+                    ->mutable_set_partition_write_speed()->set_set_down_utilization_percent(30);
             } else if (name == "setContentBasedDeduplication") {
                 auto value = FromString<bool>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 request->set_set_content_based_deduplication(value);
+            } else if (name == "resetContentBasedDeduplication") {
+                request->set_set_content_based_deduplication(false);
             }
         }
     }
@@ -3116,9 +3151,9 @@ public:
                                         setting.Value().Cast<TCoInterval>().Literal().Value()
                                     );
 
-                                    if (value <= 0) {
+                                    if (value < static_cast<i64>(TDuration::Seconds(1).MicroSeconds())) {
                                         ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                            TStringBuilder() << name << " must be positive"));
+                                            TStringBuilder() << name << " must be at least 1 second"));
                                         return SyncError();
                                     }
 

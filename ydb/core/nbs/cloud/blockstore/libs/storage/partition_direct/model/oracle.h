@@ -48,6 +48,8 @@ public:
     virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnDDiskBroken(THostIndex hostIndex) = 0;
 
+    virtual void OnHostRemoved(THostIndex hostIndex) = 0;
+
     virtual TDuration GetHostReconnectDelay(THostIndex hostIndex) = 0;
 
     // Picks the best host (by lowest inflight count) out of the provided set
@@ -86,7 +88,8 @@ class TOracle: public IOracle
 public:
     TOracle(
         TStorageConfigPtr storageConfig,
-        IHostStateController* hostStateController);
+        IHostStateController* hostStateController,
+        const TVector<EHostHealth>& hostHealths);
     ~TOracle() override;
 
     void Think(TInstant now);
@@ -116,6 +119,8 @@ public:
         THostIndex hostIndex) override;
     // Device is permanently broken, so force the host offline.
     void OnDDiskBroken(THostIndex hostIndex) override;
+
+    void OnHostRemoved(THostIndex hostIndex) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,

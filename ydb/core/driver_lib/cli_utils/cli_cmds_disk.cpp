@@ -153,6 +153,7 @@ public:
     TString Path;
     NSize::TSize DiskSize;
     NSize::TSize ChunkSize;
+    NSize::TSize PhysicalChunkSize;
     NSize::TSize SectorSize;
     ui64 Guid;
     TVector<NPDisk::TKey> MainKeyTmp;
@@ -164,6 +165,7 @@ public:
         MainKey = {};
         DiskSize = 0;
         ChunkSize = 128 << 20;
+        PhysicalChunkSize = 0;
         SectorSize = 4 << 10;
         Guid = 0;
         IsErasureEncode = false;
@@ -176,6 +178,11 @@ public:
             "kikimr needs chunks of at least 32 MiB, but was designed to work with 128 MiB chunks in mind.\n"
             "It is not recommended to format disks with more than 64000 chunks.")
             .OptionalArgument("BYTES").StoreResult(&ChunkSize);
+        config.Opts->AddLongOption("physical-chunk-size", "physical chunk size to set (supports K/M/G/T suffixes)\n"
+            "unlike --chunk-size, this is the space a chunk occupies on the device, including the per-sector\n"
+            "PDisk metadata; the user-accessible size is derived from it and is slightly smaller.\n"
+            "Mutually exclusive with --chunk-size, must be a multiple of 2 MiB and of the sector size.")
+            .OptionalArgument("BYTES").StoreResult(&PhysicalChunkSize);
         config.Opts->AddLongOption('s', "sector-size", "sector size to set (suppords K/M/G/T suffixes, default = 4k)\n"
             "you must specify here the actual sector size of the physical device!")
             .OptionalArgument("BYTES").StoreResult(&SectorSize);
@@ -214,6 +221,16 @@ public:
         if (!hasMainOption && !hasMasterOption && !hasKOption)
             ythrow yexception() << "missing main-key param";
 
+        if (config.ParseResult->Has("physical-chunk-size") &&
+                (config.ParseResult->Has("chunk-size") || config.ParseResult->Has('c'))) {
+            ythrow yexception() << "chunk-size and physical-chunk-size are mutually exclusive";
+        }
+        if (config.ParseResult->Has("physical-chunk-size") &&
+                (!PhysicalChunkSize || PhysicalChunkSize.GetValue() > Max<ui32>())) {
+            ythrow yexception() << "physical-chunk-size must be non-zero and fit in uint32, got "
+                << PhysicalChunkSize.GetValue();
+        }
+
         for (auto& key : MainKeyTmp) {
             MainKey.Keys.push_back(key);
         }
@@ -222,6 +239,9 @@ public:
     virtual int Run(TConfig&) override {
         TFormatOptions options;
         options.IsErasureEncodeUserLog = IsErasureEncode;
+        if (PhysicalChunkSize) {
+            options.PhysicalChunkSizeBytes = static_cast<ui32>(PhysicalChunkSize.GetValue());
+        }
         FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey,
                 MainKey.Keys.back(), TextMessage, options);
         return 0;

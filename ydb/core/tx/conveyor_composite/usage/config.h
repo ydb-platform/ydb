@@ -9,6 +9,7 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 
+#include <cmath>
 #include <util/datetime/base.h>
 
 namespace NKikimr::NConveyorComposite::NConfig {
@@ -21,6 +22,8 @@ private:
 public:
     TWorkerPoolCategoryUsage() = default;
 
+    bool operator==(const TWorkerPoolCategoryUsage&) const = default;
+
     TWorkerPoolCategoryUsage(const ESpecialTaskCategory cat)
         : Category(cat) {
     }
@@ -32,7 +35,7 @@ public:
             return TConclusionStatus::Fail("cannot parse category link: " + proto.GetCategory());
         }
         if (proto.HasWeight()) {
-            if (proto.GetWeight() <= 0) {
+            if (!std::isfinite(proto.GetWeight()) || proto.GetWeight() <= 0) {
                 return TConclusionStatus::Fail("incorrect category link weight: " + ::ToString(proto.GetWeight()));
             }
             Weight = proto.GetWeight();
@@ -50,13 +53,15 @@ public:
     TThreadsCountInfo() = default;
     TThreadsCountInfo(const std::optional<double> count, const std::optional<double> fraction);
 
+    bool operator==(const TThreadsCountInfo&) const = default;
+
     TString DebugString() const;
 
-    ui32 GetThreadsCount(const ui32 totalThreadsCount) const {
+    ui64 GetThreadsCount(const ui64 totalThreadsCount) const {
         return std::ceil(GetCPUUsageDouble(totalThreadsCount));
     }
 
-    double GetCPUUsageDouble(const ui32 totalThreadsCount) const;
+    double GetCPUUsageDouble(const ui64 totalThreadsCount) const;
 
     TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& poolInfo);
 };
@@ -67,6 +72,8 @@ private:
     YDB_READONLY(ui32, ThreadLimit, 0);
 
 public:
+    bool operator==(const THeavyLimit&) const = default;
+
     TString DebugString() const;
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::THeavyLimit& proto);
 };
@@ -74,17 +81,19 @@ public:
 class TWorkersPool {
 private:
     TString PoolName;
-    YDB_READONLY(ui32, WorkersPoolId, 0);
+    YDB_READONLY(ui64, WorkersPoolId, 0);
     YDB_READONLY_DEF(TThreadsCountInfo, WorkersCountInfo);
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
     YDB_READONLY(ui64, MaxBatchSize, 30);
     YDB_READONLY_DEF(std::vector<THeavyLimit>, HeavyLimits);
 
 public:
+    bool operator==(const TWorkersPool&) const = default;
+
     const TString& GetName() const;
 
-    double GetWorkerCPUUsage(const ui32 workerIdx, const ui32 totalThreadsCount) const;
-    ui32 GetWorkersCount(const ui32 totalThreadsCount) const;
+    double GetWorkerCPUUsage(const ui64 workerIdx, const ui64 totalThreadsCount) const;
+    ui64 GetWorkersCount(const ui64 totalThreadsCount) const;
 
     bool AddLink(const ESpecialTaskCategory cat) {
         for (auto&& i : Links) {
@@ -112,9 +121,11 @@ class TCategory {
 private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
     YDB_READONLY(ui32, QueueSizeLimit, 256 * 1024);
-    YDB_READONLY_DEF(std::vector<ui32>, WorkerPools);
+    YDB_READONLY_DEF(std::vector<ui64>, WorkerPools);
 
 public:
+    bool operator==(const TCategory&) const = default;
+
     TString DebugString() const;
 
     [[nodiscard]] bool AddWorkerPool(const ui32 id) {
@@ -152,6 +163,9 @@ private:
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config);
 
 public:
+    bool operator==(const TConfig&) const = default;
+
+    static NKikimrConfig::TCompositeConveyorConfig BuildDefaultProto();
     static TConfig BuildDefault();
 
     // Overlay YAML worker_pools onto synthesized defaults: pools with no links apply heavy_limits
@@ -172,8 +186,6 @@ public:
 
     TString DebugString() const;
 };
-
-TConclusion<EActorSystemPool> ParseActorSystemPool(const TString& name);
 
 }   // namespace NKikimr::NConveyorComposite::NConfig
 

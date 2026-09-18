@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>:1:19: Error: Regexp compilation failed. Regexp: "[". Original error is: "missing ]: ["
+	$invalidRe = Re2::FindAndConsume("[");
+	                  ^

@@ -13,6 +13,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/threading/future/future.h>
@@ -49,6 +50,7 @@ void TPartitionActor::HandleDeletePartition(
 // Start partition teardown, stop FastPathService first
 void TPartitionActor::StartPartitionTeardown(const NActors::TActorContext& ctx)
 {
+    UnregisterFrontendVolume(ctx);
     Become(&TThis::StateDelete);
 
     LOG_INFO(
@@ -57,12 +59,9 @@ void TPartitionActor::StartPartitionTeardown(const NActors::TActorContext& ctx)
         "%s Become StateDelete",
         LogTitle.GetWithTime().c_str());
 
-    // A request already accepted by BSC can still allocate after our
-    // deallocate (residual leak, follow-up).
-    if (AddHostInFlight) {
-        NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
-        AddHostInFlight.reset();
-    }
+    StopBscProxy(ctx);
+    AddHostInFlight.reset();
+    RemoveHostInFlight.reset();
 
     // Idempotent: no-op when the endpoint was never started.
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
@@ -140,7 +139,7 @@ void TPartitionActor::StartCleanupActor(
         .DDiskPoolName = StorageConfig->GetDDiskPoolName(),
         .PersistentBufferDDiskPoolName =
             StorageConfig->GetPersistentBufferDDiskPoolName(),
-        .DirectBlockGroupsCount = DirectBlockGroupsCount,
+        .DirectBlockGroupsCount = DefaultVolumeDirectBlockGroupCount,
     }));
 }
 
@@ -219,12 +218,6 @@ void TPartitionActor::HandleAllocateResultDuringDelete(
         "%s Ignore AllocateDDiskBlockGroupResult during delete: %s",
         LogTitle.GetWithTime().c_str(),
         ev->Get()->Record.ShortDebugString().c_str());
-
-    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
-    if (AddHostInFlight) {
-        NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
-        AddHostInFlight.reset();
-    }
 }
 
 // Ignore update volume config during delete
@@ -276,6 +269,22 @@ void TPartitionActor::HandleUpdateDirtyMapStateDuringDelete(
     ev->Get()->UpdateCompleted.SetValue(EPersistResult::Cancelled);
 }
 
+void TPartitionActor::HandleSetVChunkTouchedDuringDelete(
+    const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Drop SetVChunkTouched during delete: vchunk %u",
+        LogTitle.GetWithTime().c_str(),
+        msg->VChunkIndex);
+
+    msg->UpdateCompleted.SetValue(EPersistResult::Cancelled);
+}
+
 // Ignore fast path service shutdown during delete
 void TPartitionActor::HandleFastPathServiceShutdownDuringDelete(
     const TEvPartitionDirectPrivate::TEvFastPathServiceShutdown::TPtr& ev,
@@ -325,6 +334,25 @@ void TPartitionActor::HandlePersistHostHealthDuringDelete(
         LogTitle.GetWithTime().c_str());
 }
 
+void TPartitionActor::HandleRemoveHostFromDBGDuringDelete(
+    const TEvPartitionDirectPrivate::TEvRemoveHostFromDBG::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const size_t dbgId = ev->Get()->DirectBlockGroupId;
+    const size_t hostIndex = ev->Get()->HostIndex;
+    if (FastPathService) {
+        RejectRemoveHost(ctx, dbgId, hostIndex, "partition is being deleted");
+        return;
+    }
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Drop RemoveHost during delete (dbgId=%lu): FastPathService stopped",
+        LogTitle.GetWithTime().c_str(),
+        dbgId);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TPartitionActor::StateDelete)
@@ -363,6 +391,9 @@ STFUNC(TPartitionActor::StateDelete)
         HFunc(
             TEvPartitionDirectPrivate::TEvUpdateDirtyMapState,
             HandleUpdateDirtyMapStateDuringDelete);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvSetVChunkTouched,
+            HandleSetVChunkTouchedDuringDelete);
         // Ignore fast path service shutdown during delete
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceShutdown,
@@ -371,6 +402,12 @@ STFUNC(TPartitionActor::StateDelete)
         HFunc(
             TEvPartitionDirectPrivate::TEvAddHostToDBG,
             HandleAddHostToDBGDuringDelete);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvPersistHostHealth,
+            HandlePersistHostHealthDuringDelete);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvRemoveHostFromDBG,
+            HandleRemoveHostFromDBGDuringDelete);
         // The Run() future is not cancelled by Stop(); ignore a late ready
         // signal
         IgnoreFunc(TEvPartitionDirectPrivate::TEvFastPathServiceReady);

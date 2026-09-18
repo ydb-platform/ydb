@@ -1,10 +1,13 @@
 #include "analyze_actor.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <cmath>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
@@ -19,10 +22,12 @@ enum {
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 TAnalyzeActor::TAnalyzeActor(const TString& database, const TString& tablePath,
-    const TVector<TString>& columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise)
+    const TVector<TString>& columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise,
+    double sampleRate)
     : Database(database)
     , TablePath(tablePath)
     , Columns(columns)
+    , SampleRate(sampleRate)
     , Promise(promise)
     , OperationId(UlidGen.Next(TActivationContext::Now()).ToBinary())
 {}
@@ -112,7 +117,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 
     if (navigate->Cookie == SecondRoundCookie) {
         if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
-            SendStatisticsAggregatorAnalyze(entry, ctx);
+            SendStatisticsAggregatorAnalyze(entry);
         } else {
             Promise.SetValue(
                 NYql::NCommon::ResultFromIssues<NYql::IKikimrGateway::TGenericResult>(
@@ -125,13 +130,25 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         return;
     }
 
+    if (SampleRate != 1.0 && !entry.ColumnTableInfo) {
+        Promise.SetValue(NYql::NCommon::ResultFromIssues<NYql::IKikimrGateway::TGenericResult>(
+            NYql::TIssuesIds::KIKIMR_UNSUPPORTED,
+            "ANALYZE SAMPLE is supported only for column tables", {}));
+        this->Die(ctx);
+        return;
+    }
+
     PathId = entry.TableId.PathId;
+
+    if (!BuildAnalyzeRequest(entry, ctx)) {
+        return;
+    }
 
     auto& domainInfo = entry.DomainInfo;
 
     auto navigateDomainKey = [this] (TPathId domainKey) {
         auto navigate = std::make_unique<TNavigate>();
-        navigate->DatabaseName = Database;
+        navigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         auto& entry = navigate->ResultSet.emplace_back();
         entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
         entry.Operation = TNavigate::EOp::OpPath;
@@ -144,7 +161,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 
     if (!domainInfo->IsServerless()) {
         if (domainInfo->Params.HasStatisticsAggregator()) {
-            SendStatisticsAggregatorAnalyze(entry, ctx);
+            SendStatisticsAggregatorAnalyze(entry);
             return;
         }
 
@@ -167,7 +184,9 @@ TDuration TAnalyzeActor::CalcBackoffTime() {
 }
 
 void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx) {
-    Y_UNUSED(ev, ctx);
+    if (ev->Get()->TabletId != StatisticsAggregatorId) {
+        return;
+    }
 
     if (RetryCount >= MaxRetryCount) {
         Promise.SetValue(
@@ -186,9 +205,7 @@ void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TAc
     Schedule(CalcBackoffTime(), new TEvAnalyzePrivate::TEvAnalyzeRetry());
 }
 
-void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const TActorContext& ctx) {
-    Y_UNUSED(ev, ctx);
-
+void TAnalyzeActor::SendAnalyzeRequest() {
     auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
     analyzeRequest->Record = Request.Record;
     Send(
@@ -198,11 +215,7 @@ void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const T
     );
 }
 
-void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& entry, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(entry.DomainInfo->Params.HasStatisticsAggregator());
-
-    StatisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
-
+bool TAnalyzeActor::BuildAnalyzeRequest(const TNavigate::TEntry& entry, const TActorContext& ctx) {
     auto& record = Request.Record;
     record.SetOperationId(OperationId);
     record.SetDatabase(Database);
@@ -210,6 +223,9 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& ent
 
     PathId.ToProto(table->MutablePathId());
     table->SetPath(TablePath);
+    if (SampleRate != 1.0) {
+        table->SetSampleRate(SampleRate);
+    }
 
     THashMap<TString, ui32> tagByColumnName;
     for (const auto& [_, tableInfo]: entry.Columns) {
@@ -227,19 +243,19 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& ent
                 )
             );
             this->Die(ctx);
-            return;
+            return false;
         }
 
         *table->MutableColumnTags()->Add() = tagByColumnName[columnName];
     }
+    return true;
+}
 
-    auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
-    analyzeRequest->Record = Request.Record;
-    Send(
-        MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
-        new TEvPipeCache::TEvForward(analyzeRequest.release(), entry.DomainInfo->Params.GetStatisticsAggregator(), true),
-        IEventHandle::FlagTrackDelivery
-    );
+void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& entry) {
+    Y_ABORT_UNLESS(entry.DomainInfo->Params.HasStatisticsAggregator());
+
+    StatisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
+    SendAnalyzeRequest();
 }
 
 void TAnalyzeActor::Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {

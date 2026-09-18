@@ -31,10 +31,12 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     , ConveyorProcessGuard(
           NConveyorComposite::TScanServiceOperator::StartProcess(ScanId, cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits,
               [&]() {
-                  if (const auto configured = NConveyorComposite::GetScanDefaultActorSystemPool()) {
-                      return *configured == NConveyorComposite::EActorSystemPool::Batch;
+                  // ANALYZE / UseBatchPool already put the scan actor on Batch; keep that conveyor.
+                  if (HasAppData() && scanActorId.PoolID() != AppDataVerified().UserPoolId) {
+                      return true;
                   }
-                  return HasAppData() && scanActorId.PoolID() != AppDataVerified().UserPoolId;
+                  return HasAppData() && AppDataVerified().ColumnShardConfig.HasScanDefaultPool() &&
+                         AppDataVerified().ColumnShardConfig.GetScanDefaultPool() == "Batch";
               }()))
     , ScanOrbit(scanOrbit)
 {

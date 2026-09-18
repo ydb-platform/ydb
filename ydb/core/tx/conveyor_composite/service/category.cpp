@@ -6,8 +6,13 @@ bool TProcessCategory::HasTasks() const {
     return WeightedProcesses.size();
 }
 
+void TProcessCategory::ApplyConfig(const NConfig::TCategory& config) {
+    Y_ENSURE(config.GetCategory() == Category, "category config type mismatch");
+    Counters->WaitingQueueSizeLimit->Set(config.GetQueueSizeLimit());
+}
+
 std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds,
-    const ui32 workerIdx, const std::vector<NConfig::THeavyLimit>& heavyLimits) {
+    const ui64 workerIdx, const std::vector<NConfig::THeavyLimit>& heavyLimits) {
     std::shared_ptr<TProcess> pMin;
     for (auto it = WeightedProcesses.begin(); it != WeightedProcesses.end(); ++it) {
         for (ui32 i = 0; i < it->second.size(); ++i) {

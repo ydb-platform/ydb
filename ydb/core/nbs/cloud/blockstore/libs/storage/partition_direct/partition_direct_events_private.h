@@ -34,12 +34,14 @@ struct TEvPartitionDirectPrivate
 
         EvUpdateVChunkConfig,
         EvUpdateDirtyMapState,
+        EvSetVChunkTouched,
         EvFastPathServiceReady,
 
         EvFastPathServiceShutdown,
         EvFastPathServiceStopped,
         EvPoisonByBlockedGeneration,
         EvAddHostToDBG,
+        EvRemoveHostFromDBG,
         EvPartitionCleanupCompleted,
 
         EvPersistHostHealth,
@@ -72,6 +74,18 @@ struct TEvPartitionDirectPrivate
         TEvUpdateDirtyMapState(ui32 vChunkIndex, TDirtyMapStateProto state)
             : VChunkIndex(vChunkIndex)
             , State(std::move(state))
+        {}
+    };
+
+    struct TEvSetVChunkTouched
+        : public NActors::TEventLocal<TEvSetVChunkTouched, EvSetVChunkTouched>
+    {
+        const ui32 VChunkIndex;
+        TPersistResultPromise UpdateCompleted =
+            NThreading::NewPromise<EPersistResult>();
+
+        explicit TEvSetVChunkTouched(ui32 vChunkIndex)
+            : VChunkIndex(vChunkIndex)
         {}
     };
 
@@ -116,6 +130,24 @@ struct TEvPartitionDirectPrivate
 
         TEvAddHostToDBG(size_t dbgId, ui32 dbgConnectionsConfigGeneration)
             : DirectBlockGroupId(dbgId)
+            , DBGConnectionsConfigGeneration(dbgConnectionsConfigGeneration)
+        {}
+    };
+
+    // Asks the partition to durably remove the host from the group.
+    struct TEvRemoveHostFromDBG
+        : public NActors::TEventLocal<TEvRemoveHostFromDBG, EvRemoveHostFromDBG>
+    {
+        const size_t DirectBlockGroupId;
+        const size_t HostIndex;
+        const ui32 DBGConnectionsConfigGeneration;
+
+        TEvRemoveHostFromDBG(
+            size_t dbgId,
+            size_t hostIndex,
+            ui32 dbgConnectionsConfigGeneration)
+            : DirectBlockGroupId(dbgId)
+            , HostIndex(hostIndex)
             , DBGConnectionsConfigGeneration(dbgConnectionsConfigGeneration)
         {}
     };

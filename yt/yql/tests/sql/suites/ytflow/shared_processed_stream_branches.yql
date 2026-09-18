@@ -1,0 +1,25 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$lambda = ($row) -> {
+    return AsStruct(
+        $row.string_field as string_field,
+        $row.int64_field as int64_field
+    );
+};
+
+$stream = process Input using $lambda(TableRow());
+
+insert into OutputA
+select * from $stream
+where string_field = "foo";
+
+insert into OutputB
+select * from $stream
+where int64_field >= 10;

@@ -34,7 +34,7 @@ THolder<TActorSystemSetup> BuildActorSystemSetup(const ui32 threads, const ui32 
 
     setup->ExecutorsCount = pools;
     setup->Executors.Reset(new TAutoPtr<NActors::IExecutorPool>[pools]);
-    for (ui32 idx : xrange(pools)) {
+    for (auto idx : xrange(pools)) {
         setup->Executors[idx] = new NActors::TBasicExecutorPool(idx, threads, 50);
     }
 
@@ -576,24 +576,6 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     };
     Y_UNIT_TEST(TestUniformDistribution) {
         TTestingExecutorUniformDistribution().Execute();
-    }
-
-    Y_UNIT_TEST(ParseActorSystemPool) {
-        {
-            auto parsed = NConfig::ParseActorSystemPool("User");
-            UNIT_ASSERT(parsed.IsSuccess());
-            UNIT_ASSERT(*parsed == EActorSystemPool::User);
-        }
-        {
-            auto parsed = NConfig::ParseActorSystemPool("Batch");
-            UNIT_ASSERT(parsed.IsSuccess());
-            UNIT_ASSERT(*parsed == EActorSystemPool::Batch);
-        }
-        UNIT_ASSERT(NConfig::ParseActorSystemPool("user").IsFail());
-        UNIT_ASSERT(NConfig::ParseActorSystemPool("USER").IsFail());
-        UNIT_ASSERT(NConfig::ParseActorSystemPool("batch").IsFail());
-        UNIT_ASSERT(NConfig::ParseActorSystemPool("System").IsFail());
-        UNIT_ASSERT(NConfig::ParseActorSystemPool("").IsFail());
     }
 
     Y_UNIT_TEST(HeavyLimitsParseErrors) {

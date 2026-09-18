@@ -1,3 +1,6 @@
+# lfalloc crashes on Windows.
+NO_BUILD_IF(OS_WINDOWS)
+
 Y_BENCHMARK()
 
 ALLOCATOR(B)

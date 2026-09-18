@@ -14,6 +14,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 #include <util/generic/scope.h>
 
 #ifdef _linux_
@@ -791,6 +792,31 @@ Y_UNIT_TEST(ColumnShardCaches_Config) {
     server->ProcessMemoryInfo->CGroupLimit = currentHardMemoryLimit;
     runtime.SimulateSleep(TDuration::Seconds(2));
     checkMemoryLimits();
+}
+
+Y_UNIT_TEST(QueryExecutionConsumptionIsMmappedBytes) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(1000_MB);
+    TControllerFixture fixture(config);
+
+    // Above the largest pooled block, so the release unmaps it instead of parking it in a free list
+    constexpr ui64 BlockBytes = 128_MB;
+    const i64 before = GetTotalMmapedBytes();
+    void* block = GetAlignedPage(BlockBytes);
+    Y_DEFER {
+        if (block) {
+            ReleaseAlignedPage(block, BlockBytes);
+        }
+    };
+
+    // A block a query holds is not in the free lists, the consumption must still see it
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/QueryExecution/Consumption"), before + static_cast<i64>(BlockBytes));
+
+    ReleaseAlignedPage(block, BlockBytes);
+    block = nullptr;
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/QueryExecution/Consumption"), before);
 }
 
 Y_UNIT_TEST(ConsumerReportDegradedCoefficient) {

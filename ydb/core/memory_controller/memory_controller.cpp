@@ -709,7 +709,8 @@ private:
         }
 
         // TODO: counters and logs for all column table queues
-        ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
+        // The free-list size misses the pages queries hold, the mmapped bytes cover both
+        ui64 queryExecutionConsumption = Max<i64>(0, GetTotalMmapedBytes());
         YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
             {"consumption", HumanReadableBytes(queryExecutionConsumption)},
             {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});

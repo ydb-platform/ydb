@@ -291,18 +291,20 @@ void TSysViewProcessor::FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db) {
     const auto minuteMetrics = RankMinuteQueryMetrics();
     PersistMinuteQueryMetrics(db, minuteMetrics);
 
-    const auto hourEnd = EndOfHourInterval(IntervalEnd);
-    MergeCurrentHourQueryMetrics(db, hourEnd);
+    if (AppData()->FeatureFlags.GetCollectHourMetric()) {
+        const auto hourEnd = EndOfHourInterval(IntervalEnd);
+        MergeCurrentHourQueryMetrics(db, hourEnd);
 
-    const auto hourMetrics = RankCurrentHourQueryMetrics();
-    const ui32 persistedHourMetrics =
-        PersistCurrentHourQueryMetrics(db, hourEnd, hourMetrics);
+        const auto hourMetrics = RankCurrentHourQueryMetrics();
+        const ui32 persistedHourMetrics =
+            PersistCurrentHourQueryMetrics(db, hourEnd, hourMetrics);
+
+        UpdateAndLogQueryMetricsCoverage(hourEnd, persistedHourMetrics);
+    }
 
     LastMergedQueryMetricsIntervalEnd = IntervalEnd;
     PersistLastMergedQueryMetricsIntervalEnd(
         db, LastMergedQueryMetricsIntervalEnd);
-
-    UpdateAndLogQueryMetricsCoverage(hourEnd, persistedHourMetrics);
 }
 
 void TSysViewProcessor::PersistQueryResults(NIceDb::TNiceDb& db) {

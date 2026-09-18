@@ -12,6 +12,7 @@ namespace NKikimr {
             const ui32 AvailabilityDomainId;
             const bool IgnoreGroupSanityChecks;
             const bool IgnoreGroupFailModelChecks;
+            const bool IgnoreGroupLayoutChecks;
             const bool IgnoreDegradedGroupsChecks;
             const bool IgnoreVSlotQuotaCheck;
             const bool AllowUnusableDisks;
@@ -38,6 +39,7 @@ namespace NKikimr {
                 , AvailabilityDomainId(availabilityDomainId)
                 , IgnoreGroupSanityChecks(cmd.GetIgnoreGroupSanityChecks())
                 , IgnoreGroupFailModelChecks(cmd.GetIgnoreGroupFailModelChecks())
+                , IgnoreGroupLayoutChecks(cmd.GetIgnoreGroupLayoutChecks())
                 , IgnoreDegradedGroupsChecks(cmd.GetIgnoreDegradedGroupsChecks())
                 , IgnoreVSlotQuotaCheck(cmd.GetIgnoreVSlotQuotaCheck())
                 , AllowUnusableDisks(cmd.GetAllowUnusableDisks())
@@ -239,6 +241,7 @@ namespace NKikimr {
                 TGroupMapper::TGroupDefinition group;
                 TVector<TGroupMapper::TVDiskPlacement> groupDisks;
                 bool layoutIsValid = true;
+                bool hasExplicitTarget = false;
 
                 if (allocate) {
                     TGroupInfo *groupInfo = State.Groups.FindForUpdate(groupId);
@@ -305,6 +308,7 @@ namespace NKikimr {
                     const auto it = State.ExplicitReconfigureMap.find(vslot->VSlotId);
                     bool replace = it != State.ExplicitReconfigureMap.end();
                     const TPDiskId targetPDiskId = replace ? it->second : TPDiskId();
+                    hasExplicitTarget |= targetPDiskId != TPDiskId();
 
                     if (!replace) {
                         // check status
@@ -355,8 +359,7 @@ namespace NKikimr {
                     if (replace) {
                         auto& g = getGroup();
                         if (targetPDiskId != TPDiskId() && IgnoreGroupSanityChecks) {
-                            // Preserve the legacy override semantics when layout correctness checks are explicitly
-                            // disabled for the whole request.
+                            // Preserve the broad legacy allocator override. The final layout is checked separately.
                             g[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = targetPDiskId;
                         } else {
                             // Explicit target PDisk must go through the same allocation checks as automatically
@@ -417,8 +420,9 @@ namespace NKikimr {
 
                         ui32 groupSizeInUnits = groupInfo->GroupSizeInUnits;
 
-                        if ((State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1 && hasMissingSlots && !layoutIsValid) ||
-                                (replacedSlots.empty() && sanitizingRequest)) {
+                        if ((State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1
+                             && hasMissingSlots && !layoutIsValid && !hasExplicitTarget)
+                            || (replacedSlots.empty() && sanitizingRequest)) {
 
                             YDB_LOG_INFO_COMP(BS_CONTROLLER, "Attempt to sanitize group layout",
                                 {"marker", "BSCFG01"},
@@ -448,6 +452,7 @@ namespace NKikimr {
                             request.ForbiddenPDisks = std::move(forbid);
                             request.GroupSizeInUnits = groupSizeInUnits;
                             request.TryToRelocateLocallyFirst = State.Self.TryToRelocateBrokenDisksLocallyFirst;
+                            request.IgnoreGroupLayoutChecks = IgnoreGroupLayoutChecks;
                             request.BridgePileId = groupInfo->BridgePileId;
 
                             EnsureGroupMapper();
@@ -499,6 +504,9 @@ namespace NKikimr {
                     State.GroupFailureModelChanged.insert(groupId);
 
                     if (replacedSlots) {
+                        if (!IgnoreGroupLayoutChecks && !groupInfo->LayoutCorrect) {
+                            throw TExGroupLayoutIncorrect(groupId.GetRawId());
+                        }
                         if (!IgnoreGroupFailModelChecks) {
                             // process only groups with changed content; check the failure model
                             if (!checker.CheckFailModelForGroup(failed)) {

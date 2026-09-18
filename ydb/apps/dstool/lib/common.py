@@ -838,6 +838,8 @@ def create_bsc_request(args):
         request.IgnoreDisintegratedGroupsChecks = args.ignore_disintegrated_group_check
     if hasattr(args, 'ignore_failure_model_group_check') and args.ignore_failure_model_group_check:
         request.IgnoreGroupFailModelChecks = True
+    if getattr(args, 'ignore_group_layout_check', False):
+        request.IgnoreGroupLayoutChecks = True
     if hasattr(args, 'ignore_vslot_quotas') and args.ignore_vslot_quotas:
         request.IgnoreVSlotQuotaCheck = True
     if hasattr(args, 'move_only_to_operational_pdisks') and args.move_only_to_operational_pdisks:
@@ -1479,6 +1481,11 @@ def add_ignore_failure_model_group_check_option(p):
 
 def add_ignore_vslot_quotas_option(p):
     p.add_argument('--ignore-vslot-quotas', action='store_true', help='Ignore results of VSlot quota checks')
+
+
+def add_ignore_group_layout_check_option(p):
+    p.add_argument('--ignore-group-layout-check', action='store_true',
+                   help='Allow reassignment to leave an incorrect group layout; other safety and target checks still apply')
 
 
 def apply_args(args):

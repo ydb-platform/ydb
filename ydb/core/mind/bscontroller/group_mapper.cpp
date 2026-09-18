@@ -407,9 +407,25 @@ namespace NKikimr::NBsController {
         struct TAllocator : public TDiskManager {
             using TDiskManager::TDiskManager;
 
-            bool FillInGroup(double maxScore, TUndoLog& undo, TGroup& group, ui32 groupSizeInUnits, const TGroupConstraints& constraints) {
+            bool FillInGroup(double maxScore, TUndoLog& undo, TGroup& group, ui32 groupSizeInUnits,
+                             const TGroupConstraints& constraints, bool ignoreGroupLayoutChecks) {
                 // determine PDisks that fit our requirements (including score)
                 auto v = SetupMatchingDisks(maxScore, groupSizeInUnits);
+
+                if (ignoreGroupLayoutChecks) {
+                    for (ui32 index = 0; index < group.size(); ++index) {
+                        if (!group[index] && constraints[index].PDiskId) {
+                            const auto it = Self.PDisks.find(*constraints[index].PDiskId);
+                            if (it == Self.PDisks.end() || !it->second.Matching
+                                || !CheckConstraints(it->second, constraints[index])) {
+                                Revert(undo, group, 0);
+                                return false;
+                            }
+                            AddDiskViaUndoLog(undo, group, index, &it->second);
+                            it->second.Matching = false;
+                        }
+                    }
+                }
 
                 // find which entities we need to allocate -- whole group, some realms, maybe some domains within specific realms?
                 bool isEmptyGroup = true;
@@ -1229,7 +1245,7 @@ namespace NKikimr::NBsController {
         bool AllocateGroup(ui32 groupId, TGroupDefinition& groupDefinition, TGroupMapper::TGroupConstraintsDefinition& constraints,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid,
                 ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational,
-                TBridgePileId bridgePileId, TGroupMapperError& error) {
+                TBridgePileId bridgePileId, TGroupMapperError& error, bool ignoreGroupLayoutChecks = false) {
             if (Dirty) {
                 std::sort(PDiskByPosition.begin(), PDiskByPosition.end());
                 Dirty = false;
@@ -1276,7 +1292,7 @@ namespace NKikimr::NBsController {
             while (begin < end) {
                 const ui32 mid = begin + (end - begin) / 2;
                 TAllocator::TUndoLog undo;
-                if (allocator.FillInGroup(scores[mid], undo, group, groupSizeInUnits, groupConstraints)) {
+                if (allocator.FillInGroup(scores[mid], undo, group, groupSizeInUnits, groupConstraints, ignoreGroupLayoutChecks)) {
                     result = group;
                     allocator.Revert(undo, group, 0);
                     end = mid;
@@ -1398,10 +1414,12 @@ namespace NKikimr::NBsController {
 
             auto allocate = [&](TGroupConstraintsDefinition& constraints) {
                 bool allocated = AllocateGroup(request.GroupId, group, constraints, replacedDisks, request.ForbiddenPDisks,
-                                               request.GroupSizeInUnits, requiredSpace, true, request.BridgePileId, error);
+                                               request.GroupSizeInUnits, requiredSpace, true, request.BridgePileId, error,
+                                               request.IgnoreGroupLayoutChecks);
                 if (!allocated && !settleOnlyOnOperationalDisks) {
                     allocated = AllocateGroup(request.GroupId, group, constraints, replacedDisks, request.ForbiddenPDisks,
-                                              request.GroupSizeInUnits, requiredSpace, false, request.BridgePileId, error);
+                                              request.GroupSizeInUnits, requiredSpace, false, request.BridgePileId, error,
+                                              request.IgnoreGroupLayoutChecks);
                 }
                 return allocated;
             };
@@ -1412,6 +1430,14 @@ namespace NKikimr::NBsController {
             }
             if (allocated) {
                 error = {};
+                const TBlobStorageGroupInfo::TTopology topology(Geom.GetType(), Geom.GetNumFailRealms(),
+                                                               Geom.GetNumFailDomainsPerFailRealm(), Geom.GetNumVDisksPerFailDomain(), true);
+                TGroupLayout layout(topology);
+                TGroupMapper::Traverse(group, [&](TVDiskIdShort id, TPDiskId pdiskId) {
+                    const auto& pdisk = PDisks.at(pdiskId);
+                    layout.AddDisk(pdisk.Position, topology.GetOrderNumber(id), pdisk.Decommitted);
+                });
+                outcome.LayoutCorrect = layout.IsCorrect();
             }
             outcome.Group = std::move(group);
             outcome.RequiredSpace = requiredSpace;

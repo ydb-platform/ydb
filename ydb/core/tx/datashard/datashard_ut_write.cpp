@@ -5494,5 +5494,56 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
     }
 
+    Y_UNIT_TEST(WriteToDroppingShardReturnsWrongShardState) {
+        // Regression: an atomic secondary-index replace (RENAME INDEX ... with replace) drops the
+        // old index impl table. A write that races this drop hits a datashard whose
+        // Pipeline.HasDrop() is already true (the drop scheme tx has been planned) but
+        // which has not yet advanced to the PreOffline state. Such writes used to be
+        // rejected with a fatal, non-retryable STATUS_INTERNAL_ERROR (surfacing as
+        // INTERNAL_ERROR 400030 to the client), even though the condition is transient:
+        // the client only needs to re-resolve and retry against the swapped-in table.
+        //
+        // The drop-in-progress rejection must instead be reported as a retryable
+        // STATUS_WRONG_SHARD_STATE, exactly like the pre/offline shard state.
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards.at(0);
+        const TActorId shardActor = ResolveTablet(runtime, shard);
+
+        const auto columns = TVector<TShardedTableOptions::TColumn>{
+            {"key", "Uint32", true, false},
+            {"value", "Uint32", false, false},
+        };
+
+        // Pause the shard right after the drop scheme tx is planned (HasDrop() == true)
+        // but before it executes and moves the shard to PreOffline, by blocking the
+        // shard's TEvPrivate::TEvProgressTransaction.
+        TBlockEvents<IEventHandle> blockedProgress(runtime,
+            [&](const TAutoPtr<IEventHandle>& ev) {
+                return ev->GetRecipientRewrite() == shardActor &&
+                    ev->GetTypeRewrite() == EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0;
+            });
+
+        const ui64 dropTxId = AsyncDropTable(server, sender, "/Root", "table-1");
+
+        runtime.WaitFor("drop reached the shard", [&]{ return blockedProgress.size() >= 1; });
+
+        // A concurrent immediate write now hits the shard in the drop-in-progress window.
+        Upsert(runtime, sender, shard, tableId, columns, 1, std::nullopt,
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+
+        blockedProgress.Unblock();
+        WaitTxNotification(server, sender, dropTxId);
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

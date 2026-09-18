@@ -1537,6 +1537,24 @@ struct TCachedSdkImage
 
 using TCachedSdkImagePtr = NYT::TIntrusivePtr<TCachedSdkImage>;
 
+// The static SDK cache intentionally survives process teardown: destroying its
+// remaining images then races WAVM Module shutdown in unittests. WAVM keeps
+// part of their image graphs through GCPointers that LSan cannot trace, so mark
+// only construction of the persistent image as ignored. Clones returned to
+// callers remain fully checked by LSan.
+static TCachedSdkImagePtr CreateLeakyCachedSdkImage(const TModuleBytecode& bytecode)
+{
+#if defined(_asan_enabled_) || defined(_lsan_enabled_)
+    __lsan_disable();
+    Y_DEFER {
+        __lsan_enable();
+    };
+#endif
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(bytecode);
+    return New<TCachedSdkImage>(std::move(compartment));
+}
+
 class TSdkImageCache
     : public NYT::TRefCounted
 {
@@ -1580,9 +1598,7 @@ public:
         }
 
         try {
-            auto compartment = CreateEmptyImage();
-            compartment->AddSdk(bytecode);
-            auto cachedImage = New<TCachedSdkImage>(std::move(compartment));
+            auto cachedImage = CreateLeakyCachedSdkImage(bytecode);
 
             with_lock (Lock_) {
                 if (Cache_.size() >= DefaultCapacity) {

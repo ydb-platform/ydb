@@ -196,11 +196,11 @@ __attribute__((visibility("default"))) void echo_string(
     free(buf);
 }
 
-//! Utf8 is read with string intrinsics; BridgeMakeString returns String bytes.
+//! Preserve the Utf8 kind: BridgeMakeString creates a String, not Utf8.
 __attribute__((visibility("default"))) void echo_utf8(
     TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
 {
-    echo_string(/*ctx*/ nullptr, result, arg);
+    *result = arg;
 }
 
 // ---- leaf scalars (read-only makers: widen to Uint64 / checksum) ----

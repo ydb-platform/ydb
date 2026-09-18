@@ -529,6 +529,13 @@ protected:
             return false;
         }
 
+        // Pragma names arrive here normalized (lowercase, no underscores).
+        if (name == "kqpdisablepessimisticlocks" && !SessionCtx->Query().IsolateEffects) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED, TStringBuilder()
+                << "Pragma kikimr.KqpDisablePessimisticLocks is only supported for ReadCommittedRW isolation level"));
+            return false;
+        }
+
         if (GetDispatcher()->IsRuntime(name)) {
             bool pragmaAllowed = false;
 

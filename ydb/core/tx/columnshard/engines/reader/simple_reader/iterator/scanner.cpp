@@ -43,7 +43,7 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
     } else if (readMetadataContext->IsSorted()) {
         // Physical-row LimitControl stops after LIMIT source rows. DistinctLimit needs LIMIT distinct keys,
         // which may sit past that prefix (duplicate runs in PK order). Skip the row-limit collection then.
-        if (readMetadataContext->HasLimit() && readMetadataContext->OrderByLimitAllowed() && !distinctLimit) {
+        if (readMetadataContext->IsSortedScanWithLimit() && !distinctLimit) {
             auto collection = std::make_shared<TOrderedResultWithLimitCollection>(Context, std::move(sourcesConstructor));
             SourcesCollection = collection;
             SyncPoints.emplace_back(std::make_shared<TSyncPointLimitControl>(

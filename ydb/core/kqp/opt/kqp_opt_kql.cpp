@@ -831,7 +831,7 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
         withSystemColumns,
         del.Filter(),
         del.IsBatch(),
-        kqpCtx.UsePessimisticLocks,
+        kqpCtx.NeedPessimisticLocks(),
         del.Pos(),
         ctx);
     auto keysToDelete = ProjectColumns(rowsToDelete, tableData.Metadata->KeyColumnNames, ctx);
@@ -853,7 +853,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
         withSystemColumns,
         del.Filter(),
         del.IsBatch(),
-        kqpCtx.UsePessimisticLocks,
+        kqpCtx.NeedPessimisticLocks(),
         del.Pos(),
         ctx);
 
@@ -1135,7 +1135,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
         withSystemColumns,
         update.Filter(),
         update.IsBatch(),
-        kqpCtx.UsePessimisticLocks,
+        kqpCtx.NeedPessimisticLocks(),
         update.Pos(),
         ctx);
 
@@ -1179,7 +1179,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         withSystemColumns,
         update.Filter(),
         update.IsBatch(),
-        kqpCtx.UsePessimisticLocks,
+        kqpCtx.NeedPessimisticLocks(),
         update.Pos(),
         ctx);
 

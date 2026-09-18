@@ -227,6 +227,7 @@ public:
     STFUNC(StateGet) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
             default:
                 break;
         }
@@ -235,6 +236,7 @@ public:
     STFUNC(StatePut) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvPutResult, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
             default:
                 break;
         }

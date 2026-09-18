@@ -98,6 +98,37 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
     }
 
     Y_UNIT_TEST_F(
+        ShouldNotifyBelatedWriteWithoutQuorum,
+        TWriteRequestTestFixture)
+    {
+        Init();
+
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::DirectWrite);
+        writeRequest->Run();
+
+        UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
+
+        // Run timeout callback: the client gets an error and the quorum is
+        // never reached.
+        Scheduled[0].second();
+
+        UNIT_ASSERT_VALUES_EQUAL(true, WriteClient->Response.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(
+            E_TIMEOUT,
+            WriteClient->Response->Error.GetCode());
+        UNIT_ASSERT_VALUES_EQUAL(0, WriteClient->AllCompletedWrites.Count());
+
+        DirectWritePromises[1].SetValue(CreateOkDirectResponse());
+
+        UNIT_ASSERT_VALUES_EQUAL(1, WriteClient->AllCompletedWrites.Count());
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WriteClient->AllCompletedWrites.Get(THostIndex{1}));
+    }
+
+    Y_UNIT_TEST_F(
         ShouldSucceedWithHedgingWhenPrimariesHangAndHandoffsOk,
         TWriteRequestTestFixture)
     {

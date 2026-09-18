@@ -231,7 +231,7 @@ void TKafkaProduceActor::CleanWriters(const TActorContext& ctx) {
         while (itPartWriters != partitionWriters.end()) {
             auto itCopy = itPartWriters++;
             if (itCopy->second.LastAccessed < earliestAllowedTs) {
-                CleanWriter({topicPath, itCopy->first}, itCopy->second.ActorId);
+                CleanWriter({topicPath, itCopy->first}, itCopy->second.ActorId, "idle");
                 partitionWriters.erase(itCopy);
             }
         }
@@ -241,7 +241,7 @@ void TKafkaProduceActor::CleanWriters(const TActorContext& ctx) {
     while (itTransWriters != TransactionalWriters.end()) {
         auto itCopy = itTransWriters++;
         if (itCopy->second.LastAccessed < earliestAllowedTs) {
-            CleanWriter(itCopy->first, itCopy->second.ActorId);
+            CleanWriter(itCopy->first, itCopy->second.ActorId, "idle");
             TransactionalWriters.erase(itCopy);
         }
     }
@@ -250,11 +250,12 @@ void TKafkaProduceActor::CleanWriters(const TActorContext& ctx) {
         {LogPrefix()});
 }
 
-void TKafkaProduceActor::CleanWriter(const TTopicPartition& topicPartition, const TActorId& writerId) {
-    YDB_LOG_DEBUG("Produce actor: Destroing inactive PartitionWriter. Topic='",
+void TKafkaProduceActor::CleanWriter(const TTopicPartition& topicPartition, const TActorId& writerId, TStringBuf reason) {
+    YDB_LOG_DEBUG("Produce actor: Destroying PartitionWriter",
         {LogPrefix()},
         {"topicPath", topicPartition.TopicPath},
-        {"partition", topicPartition.PartitionId});
+        {"partition", topicPartition.PartitionId},
+        {"reason", reason});
     Send(writerId, new TEvents::TEvPoison());
 }
 
@@ -311,29 +312,11 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
     StartPendingRequest(ctx);
 }
 
-void TKafkaProduceActor::FailPendingWritesForTopic(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage) {
+void TKafkaProduceActor::FailPendingWrites(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage, std::optional<ui32> partitionId) {
     for (auto it = Cookies.begin(); it != Cookies.end();) {
         const ui64 cookie = it->first;
         auto& info = it->second;
-        if (info.TopicPath != path) {
-            ++it;
-            continue;
-        }
-
-        auto& result = info.Request->Results[info.Position];
-        result.ErrorCode = errorCode;
-        result.ErrorMessage = TString{errorMessage};
-        info.Request->WaitAcceptingCookies.erase(cookie);
-        info.Request->WaitResultCookies.erase(cookie);
-        it = Cookies.erase(it);
-    }
-}
-
-void TKafkaProduceActor::FailPendingWritesForPartition(const TString& path, ui32 partitionId, EKafkaErrors errorCode, TStringBuf errorMessage) {
-    for (auto it = Cookies.begin(); it != Cookies.end();) {
-        const ui64 cookie = it->first;
-        auto& info = it->second;
-        if (info.TopicPath != path || info.PartitionId != partitionId) {
+        if (info.TopicPath != path || (partitionId && info.PartitionId != *partitionId)) {
             ++it;
             continue;
         }
@@ -352,14 +335,14 @@ void TKafkaProduceActor::DropPartitionWriter(const TString& topicPath, ui32 part
     if (wit != NonTransactionalWriters.end()) {
         auto pit = wit->second.find(partitionId);
         if (pit != wit->second.end()) {
-            CleanWriter({topicPath, partitionId}, pit->second.ActorId);
+            CleanWriter({topicPath, partitionId}, pit->second.ActorId, "write error");
             wit->second.erase(pit);
         }
     }
 
     auto txnIt = TransactionalWriters.find({topicPath, partitionId});
     if (txnIt != TransactionalWriters.end()) {
-        CleanWriter(txnIt->first, txnIt->second.ActorId);
+        CleanWriter(txnIt->first, txnIt->second.ActorId, "write error");
         TransactionalWriters.erase(txnIt);
     }
 }
@@ -374,7 +357,7 @@ void TKafkaProduceActor::InvalidateTopic(const TString& path, bool deleted, cons
 
     // Close cookies before dropping writers. Poisoning first makes WriterDied miss the maps,
     // leaving WaitResultCookies stuck until the 30s produce timeout (HOL).
-    FailPendingWritesForTopic(path, error, errorMessage);
+    FailPendingWrites(path, error, errorMessage);
 
     if (deleted) {
         auto it = NonTransactionalWriters.find(path);
@@ -770,7 +753,7 @@ bool TKafkaProduceActor::WriterDied(const TActorId& writerId, EKafkaErrors error
         for (auto it = TransactionalWriters.begin(); it != TransactionalWriters.end(); ++it) {
             if (it->second.ActorId == writerId) {
                 auto id = it->first;
-                CleanWriter(id, writerId);
+                CleanWriter(id, writerId, "disconnected");
                 TransactionalWriters.erase(it);
                 return {id.TopicPath, id.PartitionId};
             }
@@ -780,7 +763,7 @@ bool TKafkaProduceActor::WriterDied(const TActorId& writerId, EKafkaErrors error
             for (auto it = partitionWriters.begin(); it != partitionWriters.end(); ++it) {
                 if (it->second.ActorId == writerId) {
                     auto id = it->first;
-                    CleanWriter({topicPath, static_cast<ui32>(id)}, writerId);
+                    CleanWriter({topicPath, static_cast<ui32>(id)}, writerId, "disconnected");
                     partitionWriters.erase(it);
                     return {topicPath, static_cast<ui32>(id)};
                 }
@@ -795,7 +778,7 @@ bool TKafkaProduceActor::WriterDied(const TActorId& writerId, EKafkaErrors error
         return false;
     }
 
-    FailPendingWritesForPartition(topicPath, partitionId, errorCode, errorMessage);
+    FailPendingWrites(topicPath, errorCode, errorMessage, partitionId);
     SendResults(ActorContext());
     return true;
 }
@@ -843,7 +826,7 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
         // Close remaining cookies before dropping the writer. Poisoning first
         // makes WriterDied miss the maps, leaving WaitResultCookies stuck
         // until the 30s produce timeout (HOL).
-        FailPendingWritesForPartition(topicPath, partitionId, Convert(r->GetError().Code), r->GetError().Reason);
+        FailPendingWrites(topicPath, Convert(r->GetError().Code), r->GetError().Reason, partitionId);
         DropPartitionWriter(topicPath, partitionId);
     }
 

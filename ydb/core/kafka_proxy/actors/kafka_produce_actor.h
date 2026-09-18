@@ -9,6 +9,8 @@
 
 #include "actors.h"
 
+#include <optional>
+
 namespace NKafka {
 
 using namespace NKikimr;
@@ -61,8 +63,7 @@ private:
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
-    void FailPendingWritesForTopic(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage);
-    void FailPendingWritesForPartition(const TString& path, ui32 partitionId, EKafkaErrors errorCode, TStringBuf errorMessage);
+    void FailPendingWrites(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage, std::optional<ui32> partitionId = std::nullopt);
     void DropPartitionWriter(const TString& topicPath, ui32 partitionId);
     void InvalidateTopic(const TString& path, bool deleted, const TActorContext& ctx);
 
@@ -199,7 +200,7 @@ private:
                             bool& ruPerRequest,
                             const TActorContext& ctx
                         );
-    void CleanWriter(const TTopicPartition& topicPartition, const TActorId& writerId);
+    void CleanWriter(const TTopicPartition& topicPartition, const TActorId& writerId, TStringBuf reason);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateNonTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TActorContext& ctx);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);

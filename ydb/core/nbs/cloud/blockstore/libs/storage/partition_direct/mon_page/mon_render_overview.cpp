@@ -52,6 +52,7 @@ struct TDefaultConfigEntry
 using TDbgConfigHeaders = std::array<TDbgHeaderCell, VChunkPerRegionCount>;
 using TDbgConfigRow = std::array<TDbgTableCell, VChunkPerRegionCount>;
 using TDbgConfigTable = THashMap<TNodeId, TDbgConfigRow>;
+using TDbgRowTotals = THashMap<TNodeId, TDbgTableCell>;
 using TDefaultConfigs =
     std::array<TDefaultConfigEntry, DirectBlockGroupHostCount>;
 using TDefaultConfigCache = TVector<TDefaultConfigs>;
@@ -61,6 +62,9 @@ struct TDbgConfigTableData
 {
     TDbgConfigHeaders Headers;
     TDbgConfigTable Table;
+    TDbgRowTotals RowTotals;
+    TDbgConfigRow ColumnTotals;
+    TDbgTableCell GrandTotal;
     TDefaultConfigCache DefaultConfigs;
 
     // Returns the cached default config entry matching the VChunk placement.
@@ -193,6 +197,28 @@ TDbgConfigTableData BuildDbgConfigTable(const TVector<TDbgSnapshot>& dbgs)
     return result;
 }
 
+void AddTableCell(const TDbgTableCell& source, TDbgTableCell* destination)
+{
+    for (const auto& [state, count]: source.DDiskStates) {
+        destination->DDiskStates[state] += count;
+    }
+    destination->PBufferCount += source.PBufferCount;
+}
+
+// Calculates totals after all table cells have been filled.
+void CalculateTableTotals(TDbgConfigTableData* tableData)
+{
+    for (auto& [nodeId, row]: tableData->Table) {
+        auto& rowTotal = tableData->RowTotals[nodeId];
+        for (size_t columnIndex = 0; columnIndex < row.size(); ++columnIndex) {
+            const auto& cell = row[columnIndex];
+            AddTableCell(cell, &rowTotal);
+            AddTableCell(cell, &tableData->ColumnTotals[columnIndex]);
+        }
+        AddTableCell(rowTotal, &tableData->GrandTotal);
+    }
+}
+
 void RenderDbgConfigHeader(
     IOutputStream& str,
     ui64 tabletId,
@@ -301,6 +327,7 @@ void RenderDbgConfigTable(
         touchedProvider,
         &tableData);
     TransferDefaultConfigsToTable(dbgs, &tableData);
+    CalculateTableTotals(&tableData);
 
     TVector<TNodeId> nodeIds;
     nodeIds.reserve(tableData.Table.size());
@@ -309,8 +336,6 @@ void RenderDbgConfigTable(
         nodeIds.push_back(nodeId);
     }
     Sort(nodeIds);
-
-    const TDbgTableCell emptyCell;
 
     HTML (str) {
         TAG (TH3) {
@@ -356,7 +381,7 @@ void RenderDbgConfigTable(
                         }
                         RenderDbgConfigCell(
                             str,
-                            emptyCell,
+                            *tableData.RowTotals.FindPtr(nodeId),
                             EDbgConfigCellKind::Total);
                     }
                 }
@@ -364,15 +389,15 @@ void RenderDbgConfigTable(
                     TABLEH () {
                         str << "Total";
                     }
-                    for (size_t i = 0; i < VChunkPerRegionCount; ++i) {
+                    for (const auto& cell: tableData.ColumnTotals) {
                         RenderDbgConfigCell(
                             str,
-                            emptyCell,
+                            cell,
                             EDbgConfigCellKind::Total);
                     }
                     RenderDbgConfigCell(
                         str,
-                        emptyCell,
+                        tableData.GrandTotal,
                         EDbgConfigCellKind::Total);
                 }
             }

@@ -1052,7 +1052,8 @@ void TExecutor::DriveVacuumGc(bool collect) {
         VacuumLogic->OnCollectedGarbage(OwnerCtx());
     }
     // N.B. PassAway may have already been called
-    if (Owner && VacuumLogic->NeedLogSnaphot()) {
+    // A barrier may be released inside an open sync commit, which then takes the snapshot itself
+    if (Owner && !CommitManager->InSyncCommit() && VacuumLogic->NeedLogSnaphot()) {
         MakeLogSnapshot();
     }
 }
@@ -2917,7 +2918,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
         }
 
-        if (NeedLogSnapshot || LogicSnap->MayFlush(false))
+        if (NeedLogSnapshot || LogicSnap->MayFlush(false) || VacuumLogic->NeedLogSnaphot())
             MakeLogSnapshot();
 
         CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());

@@ -1,0 +1,453 @@
+{
+  "metadata": {
+    "kind": "MainConfig",
+    "cluster": "block82-local",
+    "version": 0
+  },
+  "config": {
+    "yaml_config_enabled": true,
+    "erasure": "block-8-2",
+    "fail_domain_type": "rack",
+    "default_disk_type": "SSD",
+    "self_management_config": {
+      "enabled": true
+    },
+    "host_configs": [
+      {
+        "host_config_id": 1,
+        "drive": [
+          {
+            "path": "/data/pdisk.dat",
+            "type": "SSD"
+          }
+        ]
+      }
+    ],
+    "hosts": [
+      {
+        "host": "storage-1",
+        "node_id": 1,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "1",
+          "body": 1
+        }
+      },
+      {
+        "host": "storage-2",
+        "node_id": 2,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "2",
+          "body": 2
+        }
+      },
+      {
+        "host": "storage-3",
+        "node_id": 3,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "3",
+          "body": 3
+        }
+      },
+      {
+        "host": "storage-4",
+        "node_id": 4,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "4",
+          "body": 4
+        }
+      },
+      {
+        "host": "storage-5",
+        "node_id": 5,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "5",
+          "body": 5
+        }
+      },
+      {
+        "host": "storage-6",
+        "node_id": 6,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "6",
+          "body": 6
+        }
+      },
+      {
+        "host": "storage-7",
+        "node_id": 7,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "7",
+          "body": 7
+        }
+      },
+      {
+        "host": "storage-8",
+        "node_id": 8,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "8",
+          "body": 8
+        }
+      },
+      {
+        "host": "storage-9",
+        "node_id": 9,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "9",
+          "body": 9
+        }
+      },
+      {
+        "host": "storage-10",
+        "node_id": 10,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "10",
+          "body": 10
+        }
+      },
+      {
+        "host": "storage-11",
+        "node_id": 11,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "11",
+          "body": 11
+        }
+      },
+      {
+        "host": "storage-12",
+        "node_id": 12,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "12",
+          "body": 12
+        }
+      },
+      {
+        "host": "storage-13",
+        "node_id": 13,
+        "port": 19001,
+        "host_config_id": 1,
+        "location": {
+          "data_center": "local",
+          "rack": "13",
+          "body": 13
+        }
+      }
+    ],
+    "blob_storage_config": {
+      "service_set": {
+        "groups": [
+          {
+            "group_id": 0,
+            "group_generation": 1,
+            "erasure_species": "block-8-2",
+            "rings": [
+              {
+                "fail_domains": [
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 1,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  },
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 2,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  },
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 3,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  },
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 4,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  },
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 5,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  },
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 6,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  },
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 7,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  },
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 8,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  },
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 9,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  },
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 10,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  },
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 11,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  },
+                  {
+                    "vdisk_locations": [
+                      {
+                        "node_id": 12,
+                        "path": "/data/pdisk.dat",
+                        "pdisk_category": "SSD"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "domains_config": {
+      "domain": [
+        {
+          "name": "Root",
+          "storage_pool_types": [
+            {
+              "kind": "ssd-block42",
+              "pool_config": {
+                "box_id": 1,
+                "kind": "ssd-block42",
+                "erasure_species": "block-4-2",
+                "vdisk_kind": "Default",
+                "pdisk_filter": [
+                  {
+                    "property": [
+                      {
+                        "type": "SSD"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "kind": "ssd-block82",
+              "pool_config": {
+                "box_id": 1,
+                "kind": "ssd-block82",
+                "erasure_species": "block-8-2",
+                "vdisk_kind": "Default",
+                "pdisk_filter": [
+                  {
+                    "property": [
+                      {
+                        "type": "SSD"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "state_storage": [
+        {
+          "ssid": 1,
+          "ring": {
+            "node": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ],
+            "nto_select": 5
+          }
+        }
+      ]
+    },
+    "channel_profile_config": {
+      "profile": [
+        {
+          "profile_id": 0,
+          "channel": [
+            {
+              "erasure_species": "block-8-2",
+              "pdisk_category": 1,
+              "storage_pool_kind": "ssd-block82"
+            },
+            {
+              "erasure_species": "block-8-2",
+              "pdisk_category": 1,
+              "storage_pool_kind": "ssd-block82"
+            },
+            {
+              "erasure_species": "block-8-2",
+              "pdisk_category": 1,
+              "storage_pool_kind": "ssd-block82"
+            }
+          ]
+        }
+      ]
+    },
+    "actor_system_config": {
+      "executor": [
+        {
+          "type": "BASIC",
+          "threads": 2,
+          "spin_threshold": 0,
+          "name": "System"
+        },
+        {
+          "type": "BASIC",
+          "threads": 2,
+          "spin_threshold": 0,
+          "name": "User"
+        },
+        {
+          "type": "BASIC",
+          "threads": 1,
+          "spin_threshold": 0,
+          "name": "Batch"
+        },
+        {
+          "type": "IO",
+          "threads": 1,
+          "name": "IO"
+        },
+        {
+          "type": "BASIC",
+          "threads": 1,
+          "spin_threshold": 0,
+          "name": "IC"
+        }
+      ],
+      "scheduler": {
+        "resolution": 1024,
+        "spin_threshold": 0,
+        "progress_threshold": 10000
+      },
+      "sys_executor": 0,
+      "user_executor": 1,
+      "batch_executor": 2,
+      "io_executor": 3,
+      "service_executor": [
+        {
+          "service_name": "Interconnect",
+          "executor_id": 4
+        }
+      ]
+    },
+    "interconnect_config": {
+      "start_tcp": true
+    },
+    "grpc_config": {
+      "port": 2135,
+      "services_enabled": [
+        "legacy"
+      ]
+    },
+    "monitoring_config": {
+      "monitoring_port": 8765,
+      "monitoring_address": "0.0.0.0"
+    },
+    "log_config": {
+      "default_level": 5,
+      "sys_log": false
+    },
+    "pqconfig": {
+      "check_acl": false,
+      "require_credentials_in_new_protocol": false
+    }
+  }
+}

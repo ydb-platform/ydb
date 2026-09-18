@@ -3,12 +3,28 @@
 #include "yaml_config_helpers.h"
 
 #include <ydb/core/protos/key.pb.h>
+#include <ydb/core/erasure/erasure.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr::NYaml;
 
 Y_UNIT_TEST_SUITE(YamlConfigParser) {
+    Y_UNIT_TEST(ErasureNamesAndNumbers) {
+        using NKikimr::TErasureType;
+        for (ui32 species = 0; species < TErasureType::ErasureSpeciesCount; ++species) {
+            const auto type = static_cast<TErasureType::EErasureSpecies>(species);
+            UNIT_ASSERT_VALUES_EQUAL(ErasureStrToNum(TErasureType::ErasureSpeciesName(type)), species);
+            UNIT_ASSERT_VALUES_EQUAL(ErasureStrToNum(ToString(species)), species);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ErasureStrToNum("block-8-2"), 19);
+        UNIT_ASSERT_EXCEPTION(ErasureStrToNum("unknown"), yexception);
+        UNIT_ASSERT_EXCEPTION(ErasureStrToNum("-1"), yexception);
+        UNIT_ASSERT_EXCEPTION(ErasureStrToNum("4294967295"), yexception);
+        UNIT_ASSERT_EXCEPTION(ErasureStrToNum("4294967296"), yexception);
+        UNIT_ASSERT_EXCEPTION(ErasureStrToNum(ToString(TErasureType::ErasureSpeciesCount)), yexception);
+    }
+
     Y_UNIT_TEST(Iterate) {
         NJson::TJsonValue e1;
         e1.SetType(NJson::EJsonValueType::JSON_MAP);

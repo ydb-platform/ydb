@@ -1,5 +1,7 @@
 # Deploying {{ ydb-short-name }} Cluster Manually
 
+A new `block-8-2` deployment needs at least twelve independent failure domains and the `block-8-2.yaml` example shipped with the chosen supporting YDB build. Use that same build on storage and database nodes. This does not convert an existing static group. See [Block82 prerequisites](../../../concepts/block-8-2.md).
+
 <!-- markdownlint-disable blanks-around-fences -->
 
 This document describes how to deploy a multi-tenant {{ ydb-short-name }} cluster on multiple bare-metal or virtual servers.

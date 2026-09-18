@@ -104,7 +104,7 @@ namespace NKikimr {
         , HullCompReadBatchEfficiencyThreshold(hullCompReadBatchEfficiencyThreshold)
         , HullCompStorageRatioCalcPeriod(hullCompStorageRatioCalcPeriod)
         , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration)
-        , AddHeader(addHeader)
+        , AddHeader(addHeader && VCtx->EffectiveAddHeader)
         , CompactionStrategyGroup(VCtx->VDiskCounters, "subsystem", "compstrategy")
         , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull")
         , LsmHullSpaceGroup(VCtx->VDiskCounters, "subsystem", "outofspace")

@@ -23,10 +23,10 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         return env.Invoke(request);
     }
 
-    Y_UNIT_TEST(ReadOnlyNotAllowed) {
+    void RunReadOnlyNotAllowed(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env({
-            .NodeCount = 10,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+            .NodeCount = erasure.BlobSubgroupSize() + 2,
+            .Erasure = erasure
         });
 
         std::unordered_map<TPDiskId, ui64> diskGuids;
@@ -101,11 +101,11 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         UNIT_ASSERT(stateIt->second->IsDiskReadOnly());
     }
 
-    Y_UNIT_TEST(RestartAndReadOnlyConsecutive) {
+    void RunRestartAndReadOnlyConsecutive(TBlobStorageGroupType erasure) {
         // This test ensures that restart that sets disk to read-only is not lost when regular restart is in progress.
         TEnvironmentSetup env({
-            .NodeCount = 10,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+            .NodeCount = erasure.BlobSubgroupSize() + 2,
+            .Erasure = erasure
         });
 
         std::unordered_map<TPDiskId, ui64> diskGuids;
@@ -174,10 +174,10 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         CheckDiskIsReadOnly(env, diskId);
     }
 
-    Y_UNIT_TEST(ReadOnlyOneByOne) {
+    void RunReadOnlyOneByOne(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env({
-            .NodeCount = 10,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+            .NodeCount = erasure.BlobSubgroupSize() + 2,
+            .Erasure = erasure
         });
 
         std::unordered_map<TPDiskId, ui64> diskGuids;
@@ -276,10 +276,10 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         return vdisks;
     }
 
-    Y_UNIT_TEST(SetBrokenDiskInBrokenGroupReadOnly) {
+    void RunSetBrokenDiskInBrokenGroupReadOnly(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env({
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure
         });
 
         env.UpdateSettings(false, false);
@@ -325,10 +325,10 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         CheckDiskIsReadOnly(env, {targetNodeId, targetPDiskId});
     }
 
-    Y_UNIT_TEST(SetGoodDiskInBrokenGroupReadOnlyNotAllowed) {
+    void RunSetGoodDiskInBrokenGroupReadOnlyNotAllowed(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env({
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure
         });
 
         env.UpdateSettings(false, false);
@@ -362,11 +362,11 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "Disintegrated");
     }
 
-    Y_UNIT_TEST(ReadOnlySlay) {
+    void RunReadOnlySlay(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env{{
-            .NodeCount = 8,
+            .NodeCount = erasure.BlobSubgroupSize(),
             .VDiskReplPausedAtStart = true,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Erasure = erasure,
         }};
         auto& runtime = env.Runtime;
 
@@ -393,8 +393,8 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
 
         // Move slot out the disk.
         auto info = env.GetGroupInfo(groupId);
-        const TVDiskID& vdiskId = info->GetVDiskId(0);
-        const TActorId& vdiskActorId = info->GetActorId(0);
+        const TVDiskID& vdiskId = info->GetVDiskId(erasure.BlobSubgroupSize() - 1);
+        const TActorId& vdiskActorId = info->GetActorId(erasure.BlobSubgroupSize() - 1);
 
         ui32 targetNodeId, targetPDiskId;
         std::tie(targetNodeId, targetPDiskId, std::ignore) = DecomposeVDiskServiceId(vdiskActorId);
@@ -497,4 +497,16 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
 
         UNIT_ASSERT(gotNodeReport);
     }
+    Y_UNIT_TEST(ReadOnlyNotAllowed) { RunReadOnlyNotAllowed(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(ReadOnlyNotAllowedBlock82) { RunReadOnlyNotAllowed(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(RestartAndReadOnlyConsecutive) { RunRestartAndReadOnlyConsecutive(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(RestartAndReadOnlyConsecutiveBlock82) { RunRestartAndReadOnlyConsecutive(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(ReadOnlyOneByOne) { RunReadOnlyOneByOne(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(ReadOnlyOneByOneBlock82) { RunReadOnlyOneByOne(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(SetBrokenDiskInBrokenGroupReadOnly) { RunSetBrokenDiskInBrokenGroupReadOnly(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(SetBrokenDiskInBrokenGroupReadOnlyBlock82) { RunSetBrokenDiskInBrokenGroupReadOnly(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(SetGoodDiskInBrokenGroupReadOnlyNotAllowed) { RunSetGoodDiskInBrokenGroupReadOnlyNotAllowed(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(SetGoodDiskInBrokenGroupReadOnlyNotAllowedBlock82) { RunSetGoodDiskInBrokenGroupReadOnlyNotAllowed(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(ReadOnlySlay) { RunReadOnlySlay(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(ReadOnlySlayBlock82) { RunReadOnlySlay(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

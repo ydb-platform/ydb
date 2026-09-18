@@ -22,6 +22,147 @@ namespace NKikimr {
 namespace NBlobStorageNodeWardenTest{
 
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
+    NKikimrBlobStorage::TStorageConfig MakeBlock82Config(ui32 nodes) {
+        NKikimrBlobStorage::TStorageConfig config;
+        auto* hostConfig = config.MutableBlobStorageConfig()->AddDefineHostConfig();
+        hostConfig->SetHostConfigId(1);
+        auto* drive = hostConfig->AddDrive();
+        drive->SetPath("/dev/disk1");
+        drive->SetType(NKikimrBlobStorage::SSD);
+        for (ui32 id = 1; id <= nodes; ++id) {
+            auto* node = config.AddAllNodes();
+            node->SetNodeId(id);
+            node->SetHost(TStringBuilder() << "storage-" << id);
+            node->SetPort(19001);
+            node->MutableLocation()->SetDataCenter("dc-1");
+            node->MutableLocation()->SetRack(ToString(id));
+            node->MutableLocation()->SetUnit(ToString(id));
+            auto* host = config.MutableBlobStorageConfig()->MutableDefineBox()->AddHost();
+            host->SetHostConfigId(1);
+            host->SetEnforcedNodeId(id);
+        }
+        return config;
+    }
+
+    Y_UNIT_TEST(Block82StaticBootstrapValidationAndQuorum) {
+        for (const ui32 nodes : {11, 12}) {
+            auto config = MakeBlock82Config(nodes);
+            NStorage::TDistributedConfigKeeper keeper(nullptr, config, true);
+            auto allocate = [&] {
+                keeper.AllocateStaticGroup(&config, 0, 1, TBlobStorageGroupType::Erasure8Plus2Block,
+                    {}, {}, NKikimrBlobStorage::SSD, {}, {}, 0, nullptr, false, false, false);
+            };
+            if (nodes == 11) {
+                UNIT_ASSERT_EXCEPTION(allocate(), NStorage::TDistributedConfigKeeper::TExConfigError);
+                continue;
+            }
+            allocate();
+            UNIT_ASSERT(!NStorage::ValidateConfig(config));
+            const auto& ss = config.GetBlobStorageConfig().GetServiceSet();
+            UNIT_ASSERT_VALUES_EQUAL(ss.GroupsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ss.VDisksSize(), 12);
+            UNIT_ASSERT_VALUES_EQUAL(ss.GetGroups(0).GetErasureSpecies(), 19);
+            UNIT_ASSERT_VALUES_EQUAL(ss.GetGroups(0).RingsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ss.GetGroups(0).GetRings(0).FailDomainsSize(), 12);
+            TNodeWardenConfig nwConfig(nullptr);
+            for (ui32 missing = 0; missing <= 3; ++missing) {
+                auto successful = [&](auto callback) {
+                    for (ui32 i = 0; i != 12 - missing; ++i) {
+                        const auto& location = ss.GetGroups(0).GetRings(0).GetFailDomains(i).GetVDiskLocations(0);
+                        callback(NStorage::TNodeIdentifier(config.GetAllNodes(location.GetNodeID() - 1)),
+                            TString("/dev/disk1"), std::make_optional(location.GetPDiskGuid()));
+                    }
+                };
+                UNIT_ASSERT_VALUES_EQUAL(NStorage::HasConfigQuorum(config, successful, nwConfig), missing <= 2);
+            }
+            NKikimrBlobStorage::TStorageConfig reloaded;
+            UNIT_ASSERT(reloaded.ParseFromString(config.SerializeAsString()));
+            UNIT_ASSERT(!NStorage::ValidateConfig(reloaded));
+            reloaded.SetGeneration(config.GetGeneration() + 1);
+            UNIT_ASSERT(!NStorage::ValidateConfigUpdate(config, reloaded));
+            reloaded.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0)->SetErasureSpecies(4);
+            UNIT_ASSERT(NStorage::ValidateConfigUpdate(config, reloaded));
+            for (ui32 species : {ui32(TErasureType::ErasureSpeciesCount), Max<ui32>()}) {
+                reloaded.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0)->SetErasureSpecies(species);
+                const auto error = NStorage::ValidateConfig(reloaded);
+                UNIT_ASSERT(error);
+                UNIT_ASSERT_STRING_CONTAINS(*error, "unknown ErasureSpecies");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(Block82StaticHighDomainReassignWithDonor) {
+        for (ui32 domain : {10, 11}) {
+            auto config = MakeBlock82Config(13);
+            NStorage::TDistributedConfigKeeper keeper(nullptr, config, true);
+            keeper.AllocateStaticGroup(&config, 0, 1, TBlobStorageGroupType::Erasure8Plus2Block,
+                {}, {}, NKikimrBlobStorage::SSD, {}, {NBsController::TPDiskId(13, 1)}, 0, nullptr, false, false, false);
+            UNIT_ASSERT(!NStorage::ValidateConfig(config));
+            auto proposed = config;
+            proposed.SetGeneration(config.GetGeneration() + 1);
+            NKikimrBlobStorage::TBaseConfig baseConfig;
+            auto* spare = baseConfig.AddPDisk();
+            spare->SetNodeId(13);
+            spare->SetPDiskId(1);
+            spare->SetPath("/dev/disk1");
+            spare->SetType(NKikimrBlobStorage::SSD);
+            spare->SetGuid(13);
+            spare->SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+            spare->SetDecommitStatus(NKikimrBlobStorage::DECOMMIT_NONE);
+            keeper.AllocateStaticGroup(&proposed, 0, 2, TBlobStorageGroupType::Erasure8Plus2Block,
+                {}, {}, NKikimrBlobStorage::SSD, {{TVDiskIdShort(0, domain, 0), NBsController::TPDiskId(13, 1)}},
+                {}, 0, &baseConfig, true, false, false);
+            const auto error = NStorage::ValidateConfigUpdate(config, proposed);
+            UNIT_ASSERT_C(!error, error.value_or(""));
+            const auto& ss = proposed.GetBlobStorageConfig().GetServiceSet();
+            UNIT_ASSERT_VALUES_EQUAL(ss.GetGroups(0).GetGroupGeneration(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(ss.GetGroups(0).GetRings(0).GetFailDomains(domain).GetVDiskLocations(0).GetNodeID(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(ss.VDisksSize(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(CountIf(ss.GetVDisks(), [](const auto& disk) { return disk.HasDonorMode(); }), 1);
+            NKikimrBlobStorage::TStorageConfig reloaded;
+            UNIT_ASSERT(reloaded.ParseFromString(proposed.SerializeAsString()));
+            UNIT_ASSERT(!NStorage::ValidateConfig(reloaded));
+
+            // Reassign another position before the first donor has been removed.
+            // The untouched active position must keep its new location, and its
+            // donor must keep the old generation referenced by the acceptor.
+            const auto& oldLocation = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0)
+                .GetRings(0).GetFailDomains(domain).GetVDiskLocations(0);
+            auto* oldPDisk = baseConfig.AddPDisk();
+            oldPDisk->SetNodeId(oldLocation.GetNodeID());
+            oldPDisk->SetPDiskId(oldLocation.GetPDiskID());
+            oldPDisk->SetPath("/dev/disk1");
+            oldPDisk->SetType(NKikimrBlobStorage::SSD);
+            oldPDisk->SetGuid(oldLocation.GetPDiskGuid());
+            oldPDisk->SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+            oldPDisk->SetDecommitStatus(NKikimrBlobStorage::DECOMMIT_NONE);
+            const ui32 nextDomain = domain == 10 ? 11 : 10;
+            for (bool retiredDonor : {false, true}) {
+                auto previous = proposed;
+                if (retiredDonor) {
+                    for (auto& disk : *previous.MutableBlobStorageConfig()->MutableServiceSet()->MutableVDisks()) {
+                        if (disk.HasDonorMode()) {
+                            disk.ClearDonorMode();
+                            disk.SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+                        }
+                        disk.ClearDonors();
+                    }
+                }
+                auto next = previous;
+                next.SetGeneration(previous.GetGeneration() + 1);
+                keeper.AllocateStaticGroup(&next, 0, 3, TBlobStorageGroupType::Erasure8Plus2Block,
+                    {}, {}, NKikimrBlobStorage::SSD,
+                    {{TVDiskIdShort(0, nextDomain, 0), NBsController::TPDiskId(oldLocation.GetNodeID(), oldLocation.GetPDiskID())}},
+                    {}, 0, &baseConfig, true, false, false);
+                const auto nextError = NStorage::ValidateConfigUpdate(previous, next);
+                UNIT_ASSERT_C(!nextError, nextError.value_or(""));
+                const auto& nextGroup = next.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+                UNIT_ASSERT_VALUES_EQUAL(nextGroup.GetRings(0).GetFailDomains(domain).GetVDiskLocations(0).GetNodeID(), 13);
+                UNIT_ASSERT_VALUES_EQUAL(nextGroup.GetRings(0).GetFailDomains(nextDomain).GetVDiskLocations(0).GetNodeID(), oldLocation.GetNodeID());
+            }
+        }
+    }
+
 
     Y_UNIT_TEST(AllocateStaticGroupRespectsExpectedSlotSizeFromBaseConfig) {
         NKikimrBlobStorage::TStorageConfig config;
@@ -167,6 +308,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         CheckStateStorage(GenerateSimpleStateStorage(3), 3, {1, 2, 3});
         CheckStateStorage(GenerateSimpleStateStorage(8), 5, {1, 2, 3, 4, 5, 6, 7, 8});
         CheckStateStorage(GenerateSimpleStateStorage(9), 5, {1, 2, 3, 4, 5, 6, 7, 8});
+        CheckStateStorage(GenerateSimpleStateStorage(12), 5, {1, 2, 3, 4, 5, 6, 7, 8});
         CheckStateStorage(GenerateDCStateStorage(1, 1, 20), 5, {1, 2, 3, 4, 5, 6, 7, 8});
         CheckStateStorage(GenerateDCStateStorage(1, 10, 5), 5, {1, 6, 11, 16, 21, 26, 31, 36});
     }

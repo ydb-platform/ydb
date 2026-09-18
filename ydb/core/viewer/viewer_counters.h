@@ -168,11 +168,13 @@ public:
 
     template<typename ResponseType>
     void RenderStats(TStringStream& json,
-                     ResponseType& response,
+                     ResponseType response,
                      const TEvInterconnect::TNodeInfo& nodeInfo,
                      const TString& subsystem,
                      const TVector<const FieldDescriptor*>& groupFields) {
 
+        // GroupResponse replaces individual records with aggregates. Keep the
+        // original records for group health and disk-space histograms below.
         TWhiteboardGrouper<ResponseType>::GroupResponse(response, groupFields, true);
         auto& stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(response);
         TStringBuf host(nodeInfo.Host);
@@ -323,9 +325,9 @@ public:
         NKikimrWhiteboard::TEvBSGroupStateResponse mergedBSGroupInfo;
         MergeWhiteboardResponses(mergedBSGroupInfo, BSGroupInfo);
 
-        std::array<int, 9> bsGroupUnavaiableHistogram = {};
-        std::array<int, 9> bsGroupGreenHistogram = {};
-        std::array<int, 9> bsGroupNotGreenHistogram = {};
+        std::array<int, 17> bsGroupUnavaiableHistogram = {};
+        std::array<int, 17> bsGroupGreenHistogram = {};
+        std::array<int, 17> bsGroupNotGreenHistogram = {};
         std::unordered_map<ui64, int> bsGroupVDisks;
         std::unordered_map<ui64, int> bsGroupGreenVDisks;
         std::unordered_map<ui64, int> bsGroupNotGreenVDisks;

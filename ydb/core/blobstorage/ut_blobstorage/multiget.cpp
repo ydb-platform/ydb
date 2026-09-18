@@ -1,9 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 Y_UNIT_TEST_SUITE(MultiGet) {
-
-    Y_UNIT_TEST(SequentialGet) {
-        TEnvironmentSetup env(false, TBlobStorageGroupType::Erasure4Plus2Block);
+    void RunSequentialGet(TBlobStorageGroupType::EErasureSpecies erasure) {
+        TEnvironmentSetup env(false, erasure);
         auto& runtime = env.Runtime;
         env.CreateBoxAndPool();
         const ui32 groupId = env.GetGroups().front();
@@ -55,5 +54,8 @@ Y_UNIT_TEST_SUITE(MultiGet) {
 
         Cerr << rssOnBegin << " -> " << rssOnEnd << Endl;
     }
+
+    Y_UNIT_TEST(SequentialGet) { RunSequentialGet(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(SequentialGetBlock82) { RunSequentialGet(TBlobStorageGroupType::Erasure8Plus2Block); }
 
 }

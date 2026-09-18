@@ -1,4 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/random/fast.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_hullreplwritesst.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
@@ -14,7 +15,7 @@ std::shared_ptr<TReplCtx> CreateReplCtx(TVector<TVDiskID>& vdisks, const TIntrus
     auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
     auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(0, 1, 0, 0, 0),
         nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
-    auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(nullptr, true);
+    auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(nullptr, vctx->EffectiveAddHeader);
     auto dsk = MakeIntrusive<TPDiskParams>(ui8(1), 1u, 128u << 20, 4096u, 0u, 1000000000u, 1000000000u, 65536u, 65536u, 65536u,
             NPDisk::DEVICE_TYPE_UNKNOWN);
     auto pdiskCtx = std::make_shared<TPDiskCtx>(dsk, TActorId(), TString());
@@ -51,15 +52,21 @@ TIntrusivePtr<THullDs> CreateHullDs(const TBlobStorageGroupInfo& info) {
 }
 
 Y_UNIT_TEST_SUITE(HullReplWriteSst) {
-    Y_UNIT_TEST(Basic) {
+    void RunSstWriter(TBlobStorageGroupType::EErasureSpecies species, ui32 maxRecords = 0,
+            TErasureType::ECrcMode crc = TErasureType::CrcModeNone) {
         TVector<TVDiskID> vdisks;
-        auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3);
+        auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(species);
         auto replCtx = CreateReplCtx(vdisks, groupInfo);
         auto hullDs = CreateHullDs(*groupInfo);
         TReplSstStreamWriter writer(replCtx, hullDs);
         ui64 index = 1;
         ui32 chunkIdx = 1;
         std::deque<TLogoBlobID> checkQ;
+        std::map<TLogoBlobID, std::pair<NMatrix::TVectorType, TRope>> expected;
+        ui32 seenParts = 0;
+        ui32 commits = 0;
+        TReallyFastRng32 rng(0x82557);
+        auto random = [&](ui32 bound) { return maxRecords ? rng() % bound : RandomNumber(bound); };
         std::map<ui32, TString> chunks;
         TRopeArena arena(TRopeArenaBackend::Allocate);
         std::deque<std::unique_ptr<NPDisk::TEvChunkWrite>> writeMsgs;
@@ -88,9 +95,9 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
             const TString& s = it->second;
             return s.substr(p.Offset, p.Size);
         };
-        for (THPTimer timer; TDuration::Seconds(timer.Passed()) < TDuration::Minutes(5); ) {
-            if (!writeMsgs.empty() && RandomNumber(1000u) == 999) {
-                const size_t index = RandomNumber(writeMsgs.size());
+        for (THPTimer timer; maxRecords ? !commits : TDuration::Seconds(timer.Passed()) < TDuration::Minutes(5); ) {
+            if (!writeMsgs.empty() && random(1000u) == 999) {
+                const size_t index = random(writeMsgs.size());
                 handleWrite(*writeMsgs[index]);
                 writeMsgs.erase(writeMsgs.begin() + index);
             }
@@ -100,13 +107,19 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                     break;
 
                 case TReplSstStreamWriter::EState::COLLECT: {
+                    if (maxRecords && index > maxRecords) {
+                        writer.Finish();
+                        break;
+                    }
                     // generate random size for this blob
-                    const ui32 size = 1 + RandomNumber(256u);
+                    const ui32 size = 1 + random(256u);
                     TString data = TString::Uninitialized(size);
                     memset(data.Detach(), '*', size);
 
                     // generate blob id
-                    TLogoBlobID id(index++, 1, 1, 0, size, 0);
+                    TLogoBlobID id(index++, 1, 1, 0, size, 0, 0, crc);
+                    TDataPartSet encoded;
+                    groupInfo->Type.SplitData(crc, data, encoded);
 
                     // find possible local part for current vdisk
                     TRope rope;
@@ -115,16 +128,22 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                         if (TIngress::CreateIngressWithLocal(&groupInfo->GetTopology(), replCtx->VCtx->ShortSelfVDisk,
                                 TLogoBlobID(id, partIdx + 1))) {
                             vec.Set(partIdx);
-                            rope = TDiskBlob::Create(size, partIdx + 1, vec.GetSize(), TRope(std::move(data)), arena, true);
+                            rope = TDiskBlob::Create(size, partIdx + 1, vec.GetSize(),
+                                TRope(encoded.Parts[partIdx].OwnedString), arena, replCtx->GetAddHeader());
+                            seenParts |= 1u << partIdx;
                             break;
                         }
                     }
 
                     // write it
                     TReplSstStreamWriter::TRecoveredBlobInfo info(id, std::move(rope), false, vec);
+                    const TRope originalRecord = info.Data;
                     const bool success = writer.AddRecoveredBlob(info);
                     if (success) {
                         checkQ.push_back(info.Id);
+                        if (maxRecords) {
+                            expected.emplace(info.Id, std::make_pair(vec, originalRecord));
+                        }
                     }
                     break;
                 }
@@ -139,7 +158,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                         }
                         writer.Apply(&res);
                     } else if (auto *x = dynamic_cast<NPDisk::TEvChunkWrite*>(msg.get())) {
-                        if (RandomNumber(100u) >= 95) {
+                        if (random(100u) >= 95) {
                             handleWrite(*x);
                         } else {
                             writeMsgs.emplace_back(static_cast<NPDisk::TEvChunkWrite*>(msg.release()));
@@ -152,7 +171,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
 
                 case TReplSstStreamWriter::EState::NOT_READY: {
                     Y_ABORT_UNLESS(!writeMsgs.empty());
-                    const size_t index = RandomNumber(writeMsgs.size());
+                    const size_t index = random(writeMsgs.size());
                     handleWrite(*writeMsgs[index]);
                     writeMsgs.erase(writeMsgs.begin() + index);
                     break;
@@ -187,6 +206,18 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                             UNIT_ASSERT(!checkQ.empty());
                             UNIT_ASSERT_VALUES_EQUAL(key->LogoBlobID(), checkQ.front());
                             checkQ.pop_front();
+                            if (maxRecords) {
+                                const auto it = expected.find(key->LogoBlobID());
+                                UNIT_ASSERT(it != expected.end());
+                                UNIT_ASSERT_EQUAL(memrec->GetLocalParts(groupInfo->Type), it->second.first);
+                                TDiskDataExtractor extractor;
+                                memrec->GetDiskData(&extractor, nullptr);
+                                const TDiskPart& location = extractor.SwearOne();
+                                UNIT_ASSERT_VALUES_EQUAL(location.Size, TDiskBlob::CalculateBlobSize(
+                                    groupInfo->Type, key->LogoBlobID(), it->second.first, false));
+                                UNIT_ASSERT_EQUAL(TRope(read(location)), it->second.second);
+                                expected.erase(it);
+                            }
                             ++numItems;
                         }
                         Cerr << numItems << Endl;
@@ -199,6 +230,7 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                         UNIT_ASSERT_VALUES_EQUAL(num, 1);
                     }
                     writer.ApplyCommit();
+                    ++commits;
                     break;
                 }
 
@@ -206,5 +238,23 @@ Y_UNIT_TEST_SUITE(HullReplWriteSst) {
                     Y_ABORT();
             }
         }
+        if (maxRecords) {
+            UNIT_ASSERT(expected.empty());
+            UNIT_ASSERT_VALUES_EQUAL(seenParts, (1u << groupInfo->Type.TotalPartCount()) - 1);
+            UNIT_ASSERT(!replCtx->GetAddHeader());
+            UNIT_ASSERT(!hullDs->HullCtx->AddHeader);
+        }
+    }
+
+    Y_UNIT_TEST(Basic) {
+        RunSstWriter(TBlobStorageGroupType::ErasureMirror3);
+    }
+
+    Y_UNIT_TEST(HeaderlessBlock82) {
+        RunSstWriter(TBlobStorageGroupType::Erasure8Plus2Block, 512);
+    }
+
+    Y_UNIT_TEST(HeaderlessWholePartCrcBlock82) {
+        RunSstWriter(TBlobStorageGroupType::Erasure8Plus2Block, 512, TErasureType::CrcModeWholePart);
     }
 }

@@ -753,8 +753,9 @@ namespace NKikimr {
                 std::move(ev->TraceId));
             const ui64 bufSize = info.Buffer.GetSize();
 
+            Y_ABORT_UNLESS(!ev->Get()->RewriteHugeBlob || ev->Get()->RewriteBlob);
             try {
-                info.IsHugeBlob = ev->Get()->RewriteBlob || // if we are rewriting a huge blob, keep it that way
+                info.IsHugeBlob = ev->Get()->RewriteHugeBlob || // if we are rewriting a huge blob, keep it that way
                     HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinHugeBlobInBytes);
             } catch (yexception ex) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what()  << " Marker# BSVS41");

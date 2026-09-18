@@ -286,6 +286,8 @@ namespace NKikimr::NStorage {
                 return "GroupGeneration field missing";
             } else if (!group.HasErasureSpecies()) {
                 return "ErasureSpecies field missing";
+            } else if (group.GetErasureSpecies() >= TBlobStorageGroupType::ErasureSpeciesCount) {
+                return "unknown ErasureSpecies";
             }
 
             const ui32 groupId = group.GetGroupID();

@@ -1,5 +1,7 @@
 # Deploying {{ ydb-short-name }} Cluster with Ansible
 
+A `block-8-2` inventory must describe at least twelve independent failure domains and pin the same supporting build for storage and database processes. The eight-node example is insufficient; do not extrapolate its group-count rule to twelve-VDisk groups. External Ansible templates require separate adaptation. See [Block82 geometry and capacity](../../../concepts/block-8-2.md).
+
 <!-- markdownlint-disable blanks-around-fences -->
 
 This guide outlines the process of deploying a {{ ydb-short-name }} cluster on a group of servers using [Ansible](https://www.ansible.com/). The recommended setup to get started is 3 servers with 3 disk drives for user data each. For reliability purposes each server should have as independent infrastructure as possible: they'd better be each in a separate datacenter or availability zone, or at least in different server racks.

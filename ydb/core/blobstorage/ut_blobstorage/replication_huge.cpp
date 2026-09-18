@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/lifecycle_checks.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <util/system/info.h>
 
@@ -15,14 +16,17 @@ struct TReplTestSettings {
     ui32 MinHugeBlobSizeInRepl;
 };
 
-void DoTestCase(const TReplTestSettings& settings) {
+void DoTestCase(const TReplTestSettings& settings, TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block) {
     using E = EState;
-    std::vector<EState> states = {E::OK, E::FORMAT, E::FORMAT, E::OK, E::OK, E::OK, E::OK, E::OK};
+    std::vector<EState> states(erasure.BlobSubgroupSize(), E::OK);
+    states[1] = states[2] = E::FORMAT;
     ui32 nodeCount = states.size();
     TEnvironmentSetup env(TEnvironmentSetup::TSettings{
         .NodeCount = nodeCount,
-        .Erasure = TBlobStorageGroupType::EErasureSpecies::Erasure4Plus2Block,
+        .Erasure = erasure,
         .ControllerNodeId = 1,
+        // Match CreateBoxAndPool's media type so performance updates reach the VDisks.
+        .DiskType = NPDisk::DEVICE_TYPE_ROT,
         .MinHugeBlobInBytes = settings.MinHugeBlobSize,
         .UseFakeConfigDispatcher = true,
     });
@@ -35,7 +39,37 @@ void DoTestCase(const TReplTestSettings& settings) {
     memset(data.Detach(), 1, data.size());
     TLogoBlobID id(1, 1, 1, 0, data.size(), 0);
     env.PutBlob(groupId, id, data);
-    env.WaitForSync(env.GetGroupInfo(groupId), id);
+    auto info = env.GetGroupInfo(groupId);
+    env.WaitForSync(info, id);
+    auto checkRecordKind = [&](ui32 threshold) {
+        using T = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
+        const auto expected = erasure.PartSize(TLogoBlobID(id, 1)) >= threshold
+            ? T::ERecordType::HugeBlob : T::ERecordType::InplaceBlob;
+        for (ui32 partIdx = erasure.DataParts(); partIdx < erasure.TotalPartCount(); ++partIdx) {
+            const auto actor = info->GetActorId(NBlobStorageLifecycle::SubgroupDisk(info, id, partIdx));
+            env.CompactVDisk(actor);
+            auto layout = env.SyncQuery<T, TEvBlobStorage::TEvCaptureVDiskLayout>(actor);
+            bool found = false;
+            for (const auto& item : layout->Layout) {
+                if (item.Database == T::EDatabase::LogoBlobs && item.BlobId.FullID() == id &&
+                        item.RecordType != T::ERecordType::IndexRecord) {
+                    UNIT_ASSERT_C(item.RecordType == expected,
+                        "threshold# " << threshold << " expectedRecordType# " << int(expected) << ' ' << item.ToString());
+                    found = true;
+                }
+            }
+            UNIT_ASSERT(found);
+        }
+    };
+    if (erasure.TotalPartCount() > 8) {
+        checkRecordKind(settings.MinHugeBlobSize);
+        std::fill(states.begin(), states.end(), E::OK);
+        // Format the main disks carrying the two high parity parts.
+        for (ui32 partIdx = erasure.DataParts(); partIdx < erasure.TotalPartCount(); ++partIdx) {
+            const auto disk = NBlobStorageLifecycle::SubgroupDisk(info, id, partIdx);
+            states[info->GetActorId(disk).NodeId() - 1] = E::FORMAT;
+        }
+    }
 
     auto checkBlob = [&] {
         TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
@@ -46,6 +80,9 @@ void DoTestCase(const TReplTestSettings& settings) {
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge);
         auto *msg = res->Get();
         Y_ABORT_UNLESS(msg->ResponseSz == 1);
+        if (msg->Responses[0].Status == NKikimrProto::OK) {
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Buffer.ConvertToString(), data);
+        }
         return msg->Responses[0].Status;
     };
 
@@ -95,7 +132,36 @@ void DoTestCase(const TReplTestSettings& settings) {
     // waiting for replication to complete 
     env.WaitForSync(env.GetGroupInfo(groupId), id);
         
-    UNIT_ASSERT_EQUAL(checkBlob(),  NKikimrProto::OK);
+    UNIT_ASSERT_EQUAL(checkBlob(), NKikimrProto::OK);
+    if (erasure.TotalPartCount() > 8) {
+        // The running replication job captured its old threshold before the
+        // detained TEvReplStarted. Compaction preserves Huge-only input even if
+        // the new threshold would select inline storage.
+        checkRecordKind(Min(settings.MinHugeBlobSize, settings.MinHugeBlobSizeInRepl));
+        // Only the repaired parity disks have been compacted at this point;
+        // the other inline parts can still be in Fresh after recovery.
+        NBlobStorageLifecycle::CheckMainParts(env, info, id, data);
+        const ui32 partSize = erasure.PartSize(TLogoBlobID(id, 1));
+        if (partSize >= settings.MinHugeBlobSize && partSize < settings.MinHugeBlobSizeInRepl) {
+            // Add fresh input under the new policy to exercise real Huge-to-inline
+            // merging, with the same bytes on both repaired parity positions.
+            TDataPartSet parts;
+            erasure.SplitData(TErasureType::CrcModeNone, data, parts);
+            for (ui32 partIdx = erasure.DataParts(); partIdx < erasure.TotalPartCount(); ++partIdx) {
+                env.PutBlob(NBlobStorageLifecycle::SubgroupDisk(info, id, partIdx),
+                    TLogoBlobID(id, partIdx + 1), parts.Parts[partIdx].OwnedString.ConvertToString());
+            }
+            checkRecordKind(settings.MinHugeBlobSizeInRepl);
+        }
+        for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+            env.CompactVDisk(info->GetActorId(i));
+        }
+        NBlobStorageLifecycle::CheckMainParts(env, info, id, data, true);
+        env.Cleanup();
+        env.Initialize();
+        NBlobStorageLifecycle::CheckGroupBlob(env, info, id, data);
+        NBlobStorageLifecycle::CheckMainParts(env, info, id, data, true);
+    }
 }
 
 Y_UNIT_TEST_SUITE(MinHugeChangeOnReplication) {
@@ -114,6 +180,14 @@ Y_UNIT_TEST_SUITE(MinHugeChangeOnReplication) {
             .MinHugeBlobSize = 512u << 10,
             .MinHugeBlobSizeInRepl = 10u << 10,
         });
+    }
+
+    Y_UNIT_TEST(MinHugeDecreasedBlock82) {
+        DoTestCase({800u << 10, 64u << 10, 512u << 10}, TBlobStorageGroupType::Erasure8Plus2Block);
+    }
+
+    Y_UNIT_TEST(MinHugeIncreasedBlock82) {
+        DoTestCase({400u << 10, 512u << 10, 10u << 10}, TBlobStorageGroupType::Erasure8Plus2Block);
     }
 
 }

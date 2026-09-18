@@ -27,7 +27,7 @@ class AbstractLocalClusterTest(object):
 
     @classmethod
     def setup_class(cls):
-        nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+        nodes_count = cls.erasure.min_fail_domains * (3 if cls.erasure == Erasure.MIRROR_3_DC else 1)
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
@@ -67,7 +67,7 @@ class AbstractTestCmsStateStorageRestarts(AbstractLocalClusterTest):
 
         for partition_id, tablet_id in enumerate(tablet_ids):
             resp = kv_client.kv_write(table_path, partition_id, "key", utils.value_for("key", tablet_id))
-            assert_that(resp.operation.status, StatusIds.SUCCESS)
+            assert_that(resp.operation.status == StatusIds.SUCCESS)
 
         for node in restart_nodes:
             self.cluster.nodes[node].start()
@@ -93,3 +93,11 @@ class TestCmsStateStorageRestartsMirrorMax(AbstractTestCmsStateStorageRestarts):
 class TestCmsStateStorageRestartsMirrorKeep(AbstractTestCmsStateStorageRestarts):
     erasure = Erasure.MIRROR_3_DC
     mode = EAvailabilityMode.MODE_KEEP_AVAILABLE
+
+
+class TestCmsStateStorageRestartsBlock82Max(TestCmsStateStorageRestartsBlockMax):
+    erasure = Erasure.BLOCK_8_2
+
+
+class TestCmsStateStorageRestartsBlock82Keep(TestCmsStateStorageRestartsBlockKeep):
+    erasure = Erasure.BLOCK_8_2

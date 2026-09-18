@@ -15,7 +15,9 @@ PEERDIR(
 
 SRCS(
     blobstorage_ingress_matrix_ut.cpp
+    blobstorage_ingress_widevector_ut.cpp
     blobstorage_ingress_ut.cpp
+    blobstorage_ingress_block82_ut.cpp
 )
 
 END()

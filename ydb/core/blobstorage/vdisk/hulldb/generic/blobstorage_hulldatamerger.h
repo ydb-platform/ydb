@@ -117,7 +117,11 @@ namespace NKikimr {
 
                 if (memRec.GetType() == TBlobType::DiskBlob) {
                     const TDiskPart& location = extr.SwearOne();
-                    ui32 offset = AddHeader ? TDiskBlob::HeaderSize : 0;
+                    const ui32 payloadSize = TDiskBlob::CalculateBlobSize(GType, fullId, parts, false);
+                    Y_ABORT_UNLESS(location.Size == payloadSize ||
+                        (GType.CanUseLegacyHeader() && location.Size == payloadSize + TDiskBlob::HeaderSize));
+                    // Input records may predate the current output policy.
+                    ui32 offset = location.Size - payloadSize;
                     for (ui8 partIdx : parts) {
                         const ui32 partSize = GType.PartSize(TLogoBlobID(fullId, partIdx + 1));
                         Y_DEBUG_ABORT_UNLESS(partIdx < Parts.size());
@@ -195,7 +199,8 @@ namespace NKikimr {
                             TDiskPart location;
                             if (part.HugeBlob.Size == partSize) {
                                 location = part.HugeBlob;
-                            } else if (part.HugeBlob.Size == partSize + TDiskBlob::HeaderSize) {
+                            } else if (GType.CanUseLegacyHeader() &&
+                                    part.HugeBlob.Size == partSize + TDiskBlob::HeaderSize) {
                                 location = TDiskPart(part.HugeBlob.ChunkIdx, part.HugeBlob.Offset + TDiskBlob::HeaderSize,
                                     part.HugeBlob.Size - TDiskBlob::HeaderSize);
                             } else {

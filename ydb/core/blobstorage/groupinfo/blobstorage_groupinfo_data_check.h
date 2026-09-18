@@ -24,189 +24,101 @@ public:
     }
 };
 
-class TDataIntegrityCheckerBlock42 : public TDataIntegrityCheckerBase {
+class TDataIntegrityCheckerParityBlock : public TDataIntegrityCheckerBase {
 public:
     using TDataIntegrityCheckerBase::TDataIntegrityCheckerBase;
 
     TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const override {
-        Y_ABORT_UNLESS(partsData.Parts.size() == 6);
-
-        TPartsState partsState;
-
-        struct TSeenPart {
-            TRope Data;
-            std::vector<ui32> DiskIdxs;
-        };
-        std::array<std::vector<TSeenPart>, 6> seenParts;
-
-        // find all distinct copies of each part
-        for (ui32 partId = 0; partId < 6; ++partId) {
-            auto& seen = seenParts[partId];
-            for (const auto& [diskIdx, data] : partsData.Parts[partId]) {
-                bool isNew = true;
-                for (auto& seenPart : seen) {
-                    if (!TRope::Compare(data, seenPart.Data)) {
-                        seenPart.DiskIdxs.push_back(diskIdx);
-                        isNew = false;
-                        break;
-                    }
-                }
-                if (isNew) {
-                    seen.push_back({data, {diskIdx}});
-                }
+        const auto& type = Top->GType;
+        const ui32 total = type.TotalPartCount();
+        const ui32 required = type.DataParts();
+        TPartsState state;
+        TStringStream report;
+        auto fail = [&](TStringBuf reason, ui32 partId = 0) {
+            state.IsOk = false;
+            report << "ERROR: " << reason;
+            if (partId) {
+                report << " part " << partId;
             }
-        }
-
-        // checking layout
-        TStringStream layoutReport;
-        layoutReport << "Layout info:" << separator;
-
-        TStringStream str;
-        bool hasUnequalParts = false;
-        for (ui32 partId = 0; partId < 6; ++partId) {
-            const auto& seen = seenParts[partId];
-            if (seen.size() > 1) {
-                hasUnequalParts = true;
-            }
-            str << "part " << partId + 1 << ": ";
-            ui32 ver = 0;
-            for (const auto& seenPart : seen) {
-                if (ver > 0) {
-                    str << ", ";
-                }
-                str << "ver" << ver << " disks [ ";
-                for (const auto& diskIdx : seenPart.DiskIdxs) {
-                    str << diskIdx << " ";
-                }
-                str << "]";
-                ++ver;
-            }
-            str << separator;
-        }
-
-        layoutReport << str.Str();
-        if (hasUnequalParts) {
-            partsState.IsOk = false;
-            layoutReport << "ERROR: There are unequal parts" << separator;
-        }
-        partsState.DataInfo = layoutReport.Str();
-
-        // checking erasure
-        TStringStream erasureReport;
-        erasureReport << "Erasure info:" << separator;
-
-        std::vector<ui32> partIds;
-        partIds.reserve(6);
-        bool erasureError = false;
-
-        TErasureType::ECrcMode crcMode = (TErasureType::ECrcMode)id.CrcMode();
-
-        auto checkCombination = [&]() {
-            // iterate over combinations of part versions
-            for (const auto& seen0 : seenParts[partIds[0]]) {
-            for (const auto& seen1 : seenParts[partIds[1]]) {
-            for (const auto& seen2 : seenParts[partIds[2]]) {
-            for (const auto& seen3 : seenParts[partIds[3]]) {
-                std::array<TRope, 6> data;
-                data[partIds[0]] = seen0.Data;
-                data[partIds[1]] = seen1.Data;
-                data[partIds[2]] = seen2.Data;
-                data[partIds[3]] = seen3.Data;
-
-                ui32 restoreMask = 0;
-                restoreMask |= (1 << partIds[4]);
-                if (partIds.size() == 6) {
-                    restoreMask |= (1 << partIds[5]);
-                }
-
-                ErasureRestore(crcMode, TErasureType::Erasure4Plus2Block, id.BlobSize(), nullptr, data, restoreMask);
-
-                std::array<std::vector<ui32>, 4> diskIdxs{
-                    seen0.DiskIdxs, seen1.DiskIdxs, seen2.DiskIdxs, seen3.DiskIdxs};
-
-                auto checkOnePart = [&](ui32 partId) {
-                    for (const auto& seen : seenParts[partId]) {
-                        TStringStream str;
-                        str << "{ ";
-                        for (ui32 part = 0; part < 4; ++part) {
-                            str << "part " << partIds[part] + 1 << " disks [ ";
-                            for (const auto& diskIdx : diskIdxs[part]) {
-                                str << diskIdx << " ";
-                            }
-                            str << "]; ";
-                        }
-                        str << "} CHECK part " << partId + 1 << " disks [ ";
-                        for (const auto& diskIdx : seen.DiskIdxs) {
-                            str << diskIdx << " ";
-                        }
-                        str << "] -> ";
-
-                        int cmp = TRope::Compare(seen.Data, data[partId]);
-                        if (cmp) {
-                            erasureError = true;
-                        } else {
-                            str << "OK" << separator;
-                            erasureReport << str.Str(); // report only succesful restore
-                        }
-                    }
-                };
-
-                checkOnePart(partIds[4]);
-                if (partIds.size() == 6) {
-                    checkOnePart(partIds[5]);
-                }
-            }}}}
+            report << separator;
+            state.DataInfo = report.Str();
+            return state;
         };
 
-        for (ui32 partId = 0; partId < 6; ++partId) {
-            if (!seenParts[partId].empty()) {
-                partIds.push_back(partId);
-            }
+        if (partsData.Parts.size() != total || total > MaxTotalPartCount) {
+            return fail("invalid part count");
         }
-        if (partIds.size() <= 4) { // 4 or less parts total, nothing to check
-            return partsState;
+        if (!TErasureType::IsCrcModeValid(id.CrcMode())) {
+            return fail("invalid CRC mode");
         }
+        const auto crcMode = static_cast<TErasureType::ECrcMode>(id.CrcMode());
+        const ui64 expectedSize = type.TErasureType::PartSize(crcMode, id.BlobSize());
+        std::array<TRope, MaxTotalPartCount> basis;
+        ui32 available = 0;
+        ui32 restoreMask = 0;
 
-        // fast path: there's no unequal parts; if simple check is ok, return
-        if (!hasUnequalParts) {
-            checkCombination();
-            if (!erasureError) {
-                partsState.DataInfo += erasureReport.Str();
-                return partsState;
+        // Validate every physical copy before entering the codec. The report has
+        // at most one line per PartId, independent of the number of copies.
+        for (ui32 part = 0; part < total; ++part) {
+            const auto& copies = partsData.Parts[part];
+            if (copies.empty()) {
+                continue;
             }
-        }
-
-        if (partIds.size() == 5) {
-            checkCombination();
-        } else { // partIds.size() == 6
-            // iterate over different combinations to find good parts
-            for (ui8 gap1 = 0; gap1 < 5; ++gap1) {
-                for (ui8 gap2 = gap1 + 1; gap2 < 6; ++gap2) {
-                    ui8 idx = 0;
-                    for (ui8 p = 0; p < 6; ++p) {
-                        if (p == gap1) {
-                            partIds[4] = p;
-                        } else if (p == gap2) {
-                            partIds[5] = p;
-                        } else {
-                            partIds[idx] = p;
-                            ++idx;
-                        }
-                    }
-                    checkCombination();
+            const TRope& first = copies.front().second;
+            for (const auto& [diskIdx, data] : copies) {
+                Y_UNUSED(diskIdx);
+                if (data.size() != expectedSize) {
+                    return fail("invalid size", part + 1);
+                }
+                bool validCrc;
+                if (crcMode == TErasureType::CrcModeWholePart && expectedSize == sizeof(ui32)) {
+                    // Parity codes retain a CRC suffix for an empty blob. The
+                    // generic helper requires at least one payload byte.
+                    ui32 storedCrc;
+                    auto it = data.Begin();
+                    it.ExtractPlainDataAndAdvance(&storedCrc, sizeof(storedCrc));
+                    validCrc = storedCrc == 0; // CRC32C of an empty payload.
+                } else {
+                    validCrc = CheckCrcAtTheEnd(crcMode, data);
+                }
+                if (!validCrc) {
+                    return fail("invalid CRC", part + 1);
+                }
+                if (TRope::Compare(first, data)) {
+                    return fail("unequal copies", part + 1);
                 }
             }
+            report << "part " << part + 1 << ": " << copies.size() << " equal copies" << separator;
+            if (available++ < required) {
+                basis[part] = first;
+            } else {
+                restoreMask |= 1u << part;
+            }
         }
 
-        if (erasureError) {
-            partsState.IsOk = false;
-            erasureReport << "ERROR: There are erasure restore fails" << separator;
+        if (available <= required) {
+            report << "No independent redundancy: checked copies, sizes and CRC only" << separator;
+        } else if (!id.BlobSize()) {
+            // Empty headerless parts cannot represent presence in the codec's
+            // rope API. Sizes and CRC already validate an empty codeword.
+            report << "Empty codeword OK" << separator;
+        } else {
+            // An MDS K+2 codeword is determined by any K distinct parts. Checking
+            // every other observed part against one basis is sufficient.
+            ErasureRestore(crcMode, type, id.BlobSize(), nullptr,
+                std::span<TRope>(basis.data(), total), restoreMask);
+            for (ui32 part = 0; part < total; ++part) {
+                if ((restoreMask >> part & 1u) && TRope::Compare(basis[part], partsData.Parts[part].front().second)) {
+                    return fail("inconsistent codeword", part + 1);
+                }
+            }
+            report << "Codeword OK" << separator;
         }
-
-        partsState.DataInfo += erasureReport.Str();
-        return partsState;
+        state.DataInfo = report.Str();
+        return state;
     }
 };
+
 
 class TDataIntegrityCheckerMirror : public TDataIntegrityCheckerBase {
 private:

@@ -51,8 +51,11 @@ namespace NKikimr {
     void TScrubCoroImpl::Run() {
         // unpack entrypoint
         for (const auto& item : ScrubEntrypoint.GetUnreadableBlobs()) {
+            const ui32 unreadableParts = item.GetUnreadableParts();
+            Y_ABORT_UNLESS(unreadableParts <= Max<NMatrix::TVectorType::TRaw>(),
+                "persisted unreadable part mask exceeds TVectorType capacity");
             UnreadableBlobs.emplace(LogoBlobIDFromLogoBlobID(item.GetBlobId()), TUnreadableBlobState(
-                NMatrix::TVectorType(item.GetUnreadableParts(), Info->Type.TotalPartCount()),
+                NMatrix::TVectorType(static_cast<NMatrix::TVectorType::TRaw>(unreadableParts), Info->Type.TotalPartCount()),
                 item.GetCorruptedPart()));
         }
 

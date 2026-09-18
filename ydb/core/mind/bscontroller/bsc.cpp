@@ -139,6 +139,8 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
     // create storage pool stats monitor
     StoragePoolStat = std::make_unique<TStoragePoolStat>(GetServiceCounters(AppData()->Counters, "storage_pool_stat"));
 
+    ErasureCounters = std::make_unique<TStorageErasureCounters>(GetServiceCounters(AppData()->Counters, "storage_pool_stat"));
+
     // initiate timer
     ScrubState.HandleTimer();
 
@@ -209,6 +211,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     if (Loaded) {
         ApplyStorageConfig();
+        UpdateStaticErasureCounters();
     }
 
     PushStaticGroupsToSelfHeal();
@@ -525,7 +528,6 @@ void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
 void TBlobStorageController::OnHostRecordsInitiate() {
     if (auto *appData = AppData()) {
         if (appData->Icb) {
-            EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
             appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
                 "BlobStorageControllerControls.EnableSelfHealWithDegraded");
         }

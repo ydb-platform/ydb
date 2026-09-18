@@ -451,18 +451,22 @@ Y_UNIT_TEST_SUITE(Acceleration) {
     TEST_ACCELERATE(Mirror3dc, Put, AsyncBlob, 1);
 //    TEST_ACCELERATE(Mirror3of4, Put, AsyncBlob, 1);
     TEST_ACCELERATE(4Plus2Block, Put, AsyncBlob, 1);
+    Y_UNIT_TEST(TestAccelerationBlock82PutAsyncBlob1Slow) { TestAcceleratePut(TBlobStorageGroupType::Erasure8Plus2Block, 1, NKikimrBlobStorage::AsyncBlob, TDuration::Seconds(1), TDuration::Seconds(5), TDuration::Seconds(1), TDuration::Seconds(4), 1); }
 
     TEST_ACCELERATE(Mirror3dc, Put, AsyncBlob, 2);
 //    TEST_ACCELERATE(Mirror3of4, Put, AsyncBlob, 2);
     TEST_ACCELERATE(4Plus2Block, Put, AsyncBlob, 2);
+    Y_UNIT_TEST(TestAccelerationBlock82PutAsyncBlob2Slow) { TestAcceleratePut(TBlobStorageGroupType::Erasure8Plus2Block, 2, NKikimrBlobStorage::AsyncBlob, TDuration::Seconds(1), TDuration::Seconds(5), TDuration::Seconds(1), TDuration::Seconds(4), 1); }
 
     TEST_ACCELERATE(Mirror3dc, Get, AsyncRead, 1);
 //    TEST_ACCELERATE(Mirror3of4, Get, AsyncRead, 1);
     TEST_ACCELERATE(4Plus2Block, Get, AsyncRead, 1);
+    Y_UNIT_TEST(TestAccelerationBlock82GetAsyncRead1Slow) { TestAccelerateGet(TBlobStorageGroupType::Erasure8Plus2Block, 1, NKikimrBlobStorage::AsyncRead, TDuration::Seconds(1), TDuration::Seconds(5), TDuration::Seconds(1), TDuration::Seconds(4), 1); }
 
     TEST_ACCELERATE(Mirror3dc, Get, AsyncRead, 2);
 //    TEST_ACCELERATE(Mirror3of4, Get, AsyncRead, 2);
     TEST_ACCELERATE(4Plus2Block, Get, AsyncRead, 2);
+    Y_UNIT_TEST(TestAccelerationBlock82GetAsyncRead2Slow) { TestAccelerateGet(TBlobStorageGroupType::Erasure8Plus2Block, 2, NKikimrBlobStorage::AsyncRead, TDuration::Seconds(1), TDuration::Seconds(5), TDuration::Seconds(1), TDuration::Seconds(4), 1); }
 
     #define TEST_ACCELERATE_PARAMS(param, method, erasure, slowDisks)               \
     Y_UNIT_TEST(Test##param##method##erasure##slowDisks##Slow) {                    \
@@ -471,36 +475,47 @@ Y_UNIT_TEST_SUITE(Acceleration) {
 
     TEST_ACCELERATE_PARAMS(Threshold, Put, Mirror3dc, 1);
     TEST_ACCELERATE_PARAMS(Threshold, Put, 4Plus2Block, 1);
+    Y_UNIT_TEST(TestThresholdPutBlock821Slow) { TestThresholdPut(TBlobStorageGroupType::Erasure8Plus2Block, 1); }
 
     TEST_ACCELERATE_PARAMS(Threshold, Put, Mirror3dc, 2);
     TEST_ACCELERATE_PARAMS(Threshold, Put, 4Plus2Block, 2);
+    Y_UNIT_TEST(TestThresholdPutBlock822Slow) { TestThresholdPut(TBlobStorageGroupType::Erasure8Plus2Block, 2); }
 
     TEST_ACCELERATE_PARAMS(Threshold, Get, Mirror3dc, 1);
     TEST_ACCELERATE_PARAMS(Threshold, Get, 4Plus2Block, 1);
+    Y_UNIT_TEST(TestThresholdGetBlock821Slow) { TestThresholdGet(TBlobStorageGroupType::Erasure8Plus2Block, 1); }
 
     TEST_ACCELERATE_PARAMS(Threshold, Get, Mirror3dc, 2);
     TEST_ACCELERATE_PARAMS(Threshold, Get, 4Plus2Block, 2);
+    Y_UNIT_TEST(TestThresholdGetBlock822Slow) { TestThresholdGet(TBlobStorageGroupType::Erasure8Plus2Block, 2); }
 
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Put, Mirror3dc, 1);
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Put, 4Plus2Block, 1);
+    Y_UNIT_TEST(TestDelayMultiplierPutBlock821Slow) { TestDelayMultiplierPut(TBlobStorageGroupType::Erasure8Plus2Block, 1); }
 
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Put, Mirror3dc, 2);
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Put, 4Plus2Block, 2);
+    Y_UNIT_TEST(TestDelayMultiplierPutBlock822Slow) { TestDelayMultiplierPut(TBlobStorageGroupType::Erasure8Plus2Block, 2); }
 
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Get, Mirror3dc, 1);
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Get, 4Plus2Block, 1);
+    Y_UNIT_TEST(TestDelayMultiplierGetBlock821Slow) { TestDelayMultiplierGet(TBlobStorageGroupType::Erasure8Plus2Block, 1); }
 
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Get, Mirror3dc, 2);
     TEST_ACCELERATE_PARAMS(DelayMultiplier, Get, 4Plus2Block, 2);
+    Y_UNIT_TEST(TestDelayMultiplierGetBlock822Slow) { TestDelayMultiplierGet(TBlobStorageGroupType::Erasure8Plus2Block, 2); }
 
     TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Get, Mirror3dc, 1);
     TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Get, 4Plus2Block, 1);
+    Y_UNIT_TEST(TestMaxNumOfSlowDisksGetBlock821Slow) { TestMaxNumOfSlowDisksGet(TBlobStorageGroupType::Erasure8Plus2Block, 1); }
 
     TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Put, Mirror3dc, 1);
     TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Put, 4Plus2Block, 1);
+    Y_UNIT_TEST(TestMaxNumOfSlowDisksPutBlock821Slow) { TestMaxNumOfSlowDisksPut(TBlobStorageGroupType::Erasure8Plus2Block, 1); }
 
     TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Put, Mirror3dc, 2);
     TEST_ACCELERATE_PARAMS(MaxNumOfSlowDisks, Put, 4Plus2Block, 2);
+    Y_UNIT_TEST(TestMaxNumOfSlowDisksPutBlock822Slow) { TestMaxNumOfSlowDisksPut(TBlobStorageGroupType::Erasure8Plus2Block, 2); }
 
     #undef TEST_ACCELERATE
     #undef TEST_ACCELERATE_PARAMS

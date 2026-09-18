@@ -4,6 +4,7 @@
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
@@ -79,7 +80,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies, 
 
     const ui32 groupId = 0;
     TBlobStorageGroupType groupType(erasureSpecies);
-    const ui32 domainCount = groupType.BlobSubgroupSize();;
+    const ui32 domainCount = groupType.BlobSubgroupSize();
 
     TGroupMock group(groupId, erasureSpecies, 1, domainCount, 1);
     TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
@@ -122,17 +123,49 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies, 
     for (ui32 idx = 0; idx < domainCount; ++idx) {
         group.SetPredictedDelayNs(idx, 1);
     }
-    group.SetPredictedDelayNs(7, 10);
+    group.SetPredictedDelayNs(domainCount - 1, 10);
 
     TPutImpl::TPutResultVec putResults;
 
     putImpl.GenerateInitialRequests(logCtx, partSetSingleton);
     putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()}, false);
     auto vPuts = putImpl.GeneratePutRequests();
+    ui32 emittedHandoffParts = 0;
+    TVector<ui32> handoffPartMasks(domainCount, 0);
+    auto checkIssuedRequests = [&](const auto& requests) {
+        for (const auto& event : requests) {
+            const auto& put = *std::get<0>(event);
+            const auto id = LogoBlobIDFromLogoBlobID(put.Record.GetBlobID());
+            UNIT_ASSERT(id.PartId() && id.PartId() <= totalParts);
+            UNIT_ASSERT_EQUAL(put.GetBuffer().ConvertToString(),
+                partSetSingleton[0][id.PartId() - 1].ConvertToString());
+            const auto disk = VDiskIDFromVDiskID(put.Record.GetVDiskID());
+            const ui32 idx = group.GetInfo()->GetIdxInSubgroup(disk, blobId.Hash());
+            if (idx >= totalParts) {
+                const ui32 bit = ui32{1} << (id.PartId() - 1);
+                UNIT_ASSERT_C(!(handoffPartMasks[idx] & bit), "duplicate part sent to handoff " << idx);
+                handoffPartMasks[idx] |= bit;
+                ++emittedHandoffParts;
+            }
+        }
+    };
+    checkIssuedRequests(vPuts);
+    TSubgroupPartLayout acknowledgedLayout;
+    ui32 errors = 0;
     group.SetError(0, NKikimrProto::ERROR);
 
-    TVector<ui32> diskSequence = {0, 7, 7, 7, 7, 6, 3, 4, 5, 1, 2};
-    TVector<ui32> slowDiskSequence = {3, 4, 5, 6, 1, 2};
+    TVector<ui32> diskSequence{0};
+    for (ui32 i = 0; i < groupType.DataParts(); ++i) {
+        diskSequence.push_back(domainCount - 1);
+    }
+    diskSequence.push_back(totalParts);
+    TVector<ui32> slowDiskSequence;
+    for (ui32 i = 3; i < totalParts; ++i) {
+        diskSequence.push_back(i);
+        slowDiskSequence.push_back(i);
+    }
+    diskSequence.insert(diskSequence.end(), {1, 2});
+    slowDiskSequence.insert(slowDiskSequence.end(), {totalParts, 1, 2});
     const char* const zero = GetZeroDataAddrForTestOnly();
     ui32 zeroPageCount = 0;
 
@@ -171,7 +204,8 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies, 
                 }
             }
         }
-        if (zeroPages) {
+        // Block82 owns its canonical zero padding; shared zero pages are a legacy optimization.
+        if (zeroPages && erasureSpecies != TErasureType::Erasure8Plus2Block) {
             UNIT_ASSERT(zeroPageCount > 0);
         }
         CTEST << "vdisk exp# " << (diskSequence.size() ? diskSequence.front() : -1) << " get# " << group.VDiskIdx(VDiskIDFromVDiskID(std::get<0>(vPuts[nextVPut])->Record.GetVDiskID())) << Endl;
@@ -191,11 +225,21 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies, 
         TActorId sender;
         TEvBlobStorage::TEvVPutResult vPutResult;
         NKikimrProto::EReplyStatus status = group.OnVPut(vPut);
+        if (status == NKikimrProto::OK || status == NKikimrProto::ALREADY) {
+            const auto id = LogoBlobIDFromLogoBlobID(vPut.Record.GetBlobID());
+            const auto disk = VDiskIDFromVDiskID(vPut.Record.GetVDiskID());
+            acknowledgedLayout.AddItem(group.GetInfo()->GetIdxInSubgroup(disk, blobId.Hash()),
+                id.PartId() - 1, groupType);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::ERROR);
+            ++errors;
+        }
         vPutResult.MakeError(status, TString(), vPut.Record);
 
         putImpl.ProcessResponse(vPutResult);
         putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()}, false);
         auto nextVPuts = putImpl.GeneratePutRequests();
+        checkIssuedRequests(nextVPuts);
 
         if (putResults.size()) {
             break;
@@ -207,15 +251,30 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies, 
     auto& [_, result] = putResults.front();
     UNIT_ASSERT(result->Status == NKikimrProto::OK);
     UNIT_ASSERT(result->Id == blobId);
-    UNIT_ASSERT_VALUES_EQUAL(putImpl.GetHandoffPartsSent(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(errors, 1);
+    UNIT_ASSERT_VALUES_EQUAL(acknowledgedLayout.CountEffectiveReplicas(groupType), totalParts);
+    UNIT_ASSERT_VALUES_EQUAL(putImpl.GetHandoffPartsSent(), emittedHandoffParts);
+    // This is the cumulative count for the rotating slow-disk schedule above,
+    // not a cap per handoff. Wider placement adds a second proactive copy to
+    // the replacement for the failed main; no (handoff, part) is sent twice.
+    const ui32 expectedHandoffParts = erasureSpecies == TErasureType::Erasure8Plus2Block ? 3 : 2;
+    UNIT_ASSERT_VALUES_EQUAL_C(emittedHandoffParts, expectedHandoffParts, putImpl.PrintHistory());
 }
 
 Y_UNIT_TEST(TestBlock42MaxPartCountOnHandoff) {
     TestPutMaxPartCountOnHandoff(TErasureType::Erasure4Plus2Block, false);
 }
 
+Y_UNIT_TEST(TestBlock82MaxPartCountOnHandoff) {
+    TestPutMaxPartCountOnHandoff(TErasureType::Erasure8Plus2Block, false);
+}
+
 Y_UNIT_TEST(TestBlock42MaxPartCountOnHandoffWithZeropages) {
     TestPutMaxPartCountOnHandoff(TErasureType::Erasure4Plus2Block, true);
+}
+
+Y_UNIT_TEST(TestBlock82MaxPartCountOnHandoffWithDefaultAllocator) {
+    TestPutMaxPartCountOnHandoff(TErasureType::Erasure8Plus2Block, true);
 }
 
 enum ETestPutAllOkMode {
@@ -229,7 +288,8 @@ struct TTestPutAllOk {
     static constexpr i32 DataSize = 100500;
     static constexpr bool IsVPut = TestMode == TPAOM_VPUT;
     static constexpr ui64 BlobCount = IsVPut ? 1 : 2;
-    static constexpr ui32 MaxIterations = 10000;
+    static constexpr bool IsWide = ErasureSpecies == TErasureType::Erasure8Plus2Block;
+    static constexpr ui32 MaxIterations = IsWide ? 64 : 10000;
 
     using TPutResultEvent = std::variant<std::unique_ptr<TEvBlobStorage::TEvVPutResult>,
                                          std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult>>;
@@ -251,6 +311,7 @@ struct TTestPutAllOk {
     TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> PartSets;
 
     TStackVec<ui32, 16> CheckStack;
+    ui64 ReplyOrderSeed = 0x82422026;
 
     TTestPutAllOk()
         : GroupType(ErasureSpecies)
@@ -322,6 +383,15 @@ struct TTestPutAllOk {
     }
 
     void PermutateVPutResults(ui64 resIdx, bool &isAborted, TDeque<TPutResultEvent> &vPutResults) {
+        if constexpr (IsWide) {
+            // Keep a reproducible sample instead of enumerating 10! reply orders.
+            ReplyOrderSeed ^= ReplyOrderSeed << 13;
+            ReplyOrderSeed ^= ReplyOrderSeed >> 7;
+            ReplyOrderSeed ^= ReplyOrderSeed << 17;
+            const ui64 target = resIdx + ReplyOrderSeed % (vPutResults.size() - resIdx);
+            std::swap(vPutResults[resIdx], vPutResults[target]);
+            return;
+        }
         // select result in range [resIdx, vPutResults.size())
         if (resIdx + 1 < CheckStack.size()) {
             ui32 tgt = CheckStack[resIdx];
@@ -392,7 +462,7 @@ struct TTestPutAllOk {
             putImpl->GenerateInitialRequests(LogCtx, PartSets);
             putImpl->Step(LogCtx, putResults, &Group.GetInfo()->GetTopology(), false);
             auto vPuts = putImpl->GeneratePutRequests();
-            UNIT_ASSERT(vPuts.size() == 6 || !IsVPut);
+            UNIT_ASSERT(vPuts.size() == GroupType.TotalPartCount() || !IsVPut);
             TDeque<TPutResultEvent> vPutResults;
             InitVPutResults(vPuts, vPutResults);
 
@@ -410,7 +480,7 @@ struct TTestPutAllOk {
             }
         }
 
-        UNIT_ASSERT(i != MaxIterations || !IsVPut);
+        UNIT_ASSERT(i != MaxIterations || !IsVPut || IsWide);
     }
 };
 
@@ -418,8 +488,16 @@ Y_UNIT_TEST(TestBlock42PutAllOk) {
     TTestPutAllOk<TErasureType::Erasure4Plus2Block, TPAOM_VPUT>().Run();
 }
 
+Y_UNIT_TEST(TestBlock82PutAllOk) {
+    TTestPutAllOk<TErasureType::Erasure8Plus2Block, TPAOM_VPUT>().Run();
+}
+
 Y_UNIT_TEST(TestBlock42MultiPutAllOk) {
     TTestPutAllOk<TErasureType::Erasure4Plus2Block, TPAOM_VMULTIPUT>().Run();
+}
+
+Y_UNIT_TEST(TestBlock82MultiPutAllOk) {
+    TTestPutAllOk<TErasureType::Erasure8Plus2Block, TPAOM_VMULTIPUT>().Run();
 }
 
 Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
@@ -485,7 +563,9 @@ void TestPutResultWithVDiskResults(TBlobStorageGroupType type, TMap<TVDiskID, NK
 
     TGroupMock &groupMock = testState.GetGroupMock();
     for (const auto& status : vdiskStatuses) {
-        groupMock.SetError(status.first, status.second);
+        const TVDiskID disk = type.GetErasure() == TErasureType::Erasure8Plus2Block
+            ? env.Info->GetVDiskInSubgroup(status.first.FailDomain, blobId.Hash()) : status.first;
+        groupMock.SetError(disk, status.second);
     }
 
 
@@ -512,60 +592,74 @@ void TestPutResultWithVDiskResults(TBlobStorageGroupType type, TMap<TVDiskID, NK
     };
     testState.ReceivePutResults(1, expectedStatus);
 }
-
-Y_UNIT_TEST(TestBlock42PutStatusOkWith_0_0_VdiskErrors) {
-    TestPutResultWithVDiskResults({TErasureType::Erasure4Plus2Block}, {}, 6, NKikimrProto::OK);
+void RunTestParityBlockPutStatusOkWith_0_0_VdiskErrors(TBlobStorageGroupType type, ui32 requests) {
+    TestPutResultWithVDiskResults(type, {}, requests, NKikimrProto::OK);
 }
 
-Y_UNIT_TEST(TestBlock42PutStatusOkWith_1_0_VdiskErrors) {
+Y_UNIT_TEST(TestBlock42PutStatusOkWith_0_0_VdiskErrors) { RunTestParityBlockPutStatusOkWith_0_0_VdiskErrors(TErasureType::Erasure4Plus2Block, 6); }
+Y_UNIT_TEST(TestBlock82PutStatusOkWith_0_0_VdiskErrors) { RunTestParityBlockPutStatusOkWith_0_0_VdiskErrors(TErasureType::Erasure8Plus2Block, 10); }
+void RunTestParityBlockPutStatusOkWith_1_0_VdiskErrors(TBlobStorageGroupType type, ui32 requests) {
     TMap<TVDiskID, NKikimrProto::EReplyStatus> vdiskStatuses {
         {TVDiskID(0, 1, 0, 0, 0), NKikimrProto::ERROR},
     };
-    TestPutResultWithVDiskResults({TErasureType::Erasure4Plus2Block}, vdiskStatuses, 7, NKikimrProto::OK);
+    TestPutResultWithVDiskResults(type, vdiskStatuses, requests, NKikimrProto::OK);
 }
 
-Y_UNIT_TEST(TestBlock42PutStatusOkWith_1_1_VdiskErrors) {
+Y_UNIT_TEST(TestBlock42PutStatusOkWith_1_0_VdiskErrors) { RunTestParityBlockPutStatusOkWith_1_0_VdiskErrors(TErasureType::Erasure4Plus2Block, 7); }
+Y_UNIT_TEST(TestBlock82PutStatusOkWith_1_0_VdiskErrors) { RunTestParityBlockPutStatusOkWith_1_0_VdiskErrors(TErasureType::Erasure8Plus2Block, 11); }
+void RunTestParityBlockPutStatusOkWith_1_1_VdiskErrors(TBlobStorageGroupType type, ui32 requests) {
     TMap<TVDiskID, NKikimrProto::EReplyStatus> vdiskStatuses {
         {TVDiskID(0, 1, 0, 0, 0), NKikimrProto::ERROR},
-        {TVDiskID(0, 1, 0, 6, 0), NKikimrProto::ERROR},
+        {TVDiskID(0, 1, 0, type.TotalPartCount(), 0), NKikimrProto::ERROR},
     };
-    TestPutResultWithVDiskResults({TErasureType::Erasure4Plus2Block}, vdiskStatuses, 8, NKikimrProto::OK);
+    TestPutResultWithVDiskResults(type, vdiskStatuses, requests, NKikimrProto::OK);
 }
 
-Y_UNIT_TEST(TestBlock42PutStatusOkWith_2_0_VdiskErrors) {
-    TMap<TVDiskID, NKikimrProto::EReplyStatus> vdiskStatuses {
-        {TVDiskID(0, 1, 0, 0, 0), NKikimrProto::ERROR},
-        {TVDiskID(0, 1, 0, 1, 0), NKikimrProto::ERROR},
-    };
-    TestPutResultWithVDiskResults({TErasureType::Erasure4Plus2Block}, vdiskStatuses, 8, NKikimrProto::OK);
-}
-
-Y_UNIT_TEST(TestBlock42PutStatusErrorWith_2_1_VdiskErrors) {
+Y_UNIT_TEST(TestBlock42PutStatusOkWith_1_1_VdiskErrors) { RunTestParityBlockPutStatusOkWith_1_1_VdiskErrors(TErasureType::Erasure4Plus2Block, 8); }
+Y_UNIT_TEST(TestBlock82PutStatusOkWith_1_1_VdiskErrors) { RunTestParityBlockPutStatusOkWith_1_1_VdiskErrors(TErasureType::Erasure8Plus2Block, 12); }
+void RunTestParityBlockPutStatusOkWith_2_0_VdiskErrors(TBlobStorageGroupType type, ui32 requests) {
     TMap<TVDiskID, NKikimrProto::EReplyStatus> vdiskStatuses {
         {TVDiskID(0, 1, 0, 0, 0), NKikimrProto::ERROR},
         {TVDiskID(0, 1, 0, 1, 0), NKikimrProto::ERROR},
-        {TVDiskID(0, 1, 0, 6, 0), NKikimrProto::ERROR},
     };
-    TestPutResultWithVDiskResults({TErasureType::Erasure4Plus2Block}, vdiskStatuses, 8, NKikimrProto::ERROR);
+    TestPutResultWithVDiskResults(type, vdiskStatuses, requests, NKikimrProto::OK);
 }
 
-Y_UNIT_TEST(TestBlock42PutStatusErrorWith_3_0_VdiskErrors) {
+Y_UNIT_TEST(TestBlock42PutStatusOkWith_2_0_VdiskErrors) { RunTestParityBlockPutStatusOkWith_2_0_VdiskErrors(TErasureType::Erasure4Plus2Block, 8); }
+Y_UNIT_TEST(TestBlock82PutStatusOkWith_2_0_VdiskErrors) { RunTestParityBlockPutStatusOkWith_2_0_VdiskErrors(TErasureType::Erasure8Plus2Block, 12); }
+void RunTestParityBlockPutStatusErrorWith_2_1_VdiskErrors(TBlobStorageGroupType type, ui32 requests) {
+    TMap<TVDiskID, NKikimrProto::EReplyStatus> vdiskStatuses {
+        {TVDiskID(0, 1, 0, 0, 0), NKikimrProto::ERROR},
+        {TVDiskID(0, 1, 0, 1, 0), NKikimrProto::ERROR},
+        {TVDiskID(0, 1, 0, type.TotalPartCount(), 0), NKikimrProto::ERROR},
+    };
+    TestPutResultWithVDiskResults(type, vdiskStatuses, requests, NKikimrProto::ERROR);
+}
+
+Y_UNIT_TEST(TestBlock42PutStatusErrorWith_2_1_VdiskErrors) { RunTestParityBlockPutStatusErrorWith_2_1_VdiskErrors(TErasureType::Erasure4Plus2Block, 8); }
+Y_UNIT_TEST(TestBlock82PutStatusErrorWith_2_1_VdiskErrors) { RunTestParityBlockPutStatusErrorWith_2_1_VdiskErrors(TErasureType::Erasure8Plus2Block, 12); }
+void RunTestParityBlockPutStatusErrorWith_3_0_VdiskErrors(TBlobStorageGroupType type, ui32 requests) {
     TMap<TVDiskID, NKikimrProto::EReplyStatus> vdiskStatuses {
         {TVDiskID(0, 1, 0, 0, 0), NKikimrProto::ERROR},
         {TVDiskID(0, 1, 0, 1, 0), NKikimrProto::ERROR},
         {TVDiskID(0, 1, 0, 2, 0), NKikimrProto::ERROR},
     };
-    TestPutResultWithVDiskResults({TErasureType::Erasure4Plus2Block}, vdiskStatuses, 6, NKikimrProto::ERROR);
+    TestPutResultWithVDiskResults(type, vdiskStatuses, requests, NKikimrProto::ERROR);
 }
 
-Y_UNIT_TEST(TestBlock42PutStatusErrorWith_1_2_VdiskErrors) {
+Y_UNIT_TEST(TestBlock42PutStatusErrorWith_3_0_VdiskErrors) { RunTestParityBlockPutStatusErrorWith_3_0_VdiskErrors(TErasureType::Erasure4Plus2Block, 6); }
+Y_UNIT_TEST(TestBlock82PutStatusErrorWith_3_0_VdiskErrors) { RunTestParityBlockPutStatusErrorWith_3_0_VdiskErrors(TErasureType::Erasure8Plus2Block, 10); }
+void RunTestParityBlockPutStatusErrorWith_1_2_VdiskErrors(TBlobStorageGroupType type, ui32 requests) {
     TMap<TVDiskID, NKikimrProto::EReplyStatus> vdiskStatuses {
         {TVDiskID(0, 1, 0, 0, 0), NKikimrProto::ERROR},
-        {TVDiskID(0, 1, 0, 6, 0), NKikimrProto::ERROR},
-        {TVDiskID(0, 1, 0, 7, 0), NKikimrProto::ERROR},
+        {TVDiskID(0, 1, 0, type.TotalPartCount(), 0), NKikimrProto::ERROR},
+        {TVDiskID(0, 1, 0, type.TotalPartCount() + 1, 0), NKikimrProto::ERROR},
     };
-    TestPutResultWithVDiskResults({TErasureType::Erasure4Plus2Block}, vdiskStatuses, 8, NKikimrProto::ERROR);
+    TestPutResultWithVDiskResults(type, vdiskStatuses, requests, NKikimrProto::ERROR);
 }
+
+Y_UNIT_TEST(TestBlock42PutStatusErrorWith_1_2_VdiskErrors) { RunTestParityBlockPutStatusErrorWith_1_2_VdiskErrors(TErasureType::Erasure4Plus2Block, 8); }
+Y_UNIT_TEST(TestBlock82PutStatusErrorWith_1_2_VdiskErrors) { RunTestParityBlockPutStatusErrorWith_1_2_VdiskErrors(TErasureType::Erasure8Plus2Block, 12); }
 
 Y_UNIT_TEST(TestMirror3dcPutStatusOkWith_0_0_0_VdiskErrors) {
     TestPutResultWithVDiskResults({TErasureType::ErasureMirror3dc}, {}, 3, NKikimrProto::OK);

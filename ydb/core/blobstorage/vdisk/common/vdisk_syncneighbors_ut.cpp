@@ -5,8 +5,9 @@ using namespace NKikimr;
 using namespace NSync;
 
 namespace {
-    TIntrusivePtr<TBlobStorageGroupInfo> CreateTestGroup(ui32 numDomains, ui32 numFailRealms) {
-        return new TBlobStorageGroupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 5, numDomains, numFailRealms);
+    TIntrusivePtr<TBlobStorageGroupInfo> CreateTestGroup(ui32 numDomains, ui32 numFailRealms, bool wide = false) {
+        return new TBlobStorageGroupInfo(wide ? TBlobStorageGroupType::Erasure8Plus2Block
+            : TBlobStorageGroupType::Erasure4Plus2Block, wide ? 2 : 5, numDomains, numFailRealms);
     }
 
     TVector<TVDiskID> GetVDisks(const TIntrusivePtr<TBlobStorageGroupInfo>& info) {
@@ -70,11 +71,17 @@ namespace {
 
 }
 
+#define VDISK_GEOMETRY_TEST(name) \
+    void name(bool wide); \
+    Y_UNIT_TEST(name) { name(false); } \
+    Y_UNIT_TEST(name##Block82) { name(true); } \
+    void name(bool wide)
+
 Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
 
-    Y_UNIT_TEST(IterateOverAllDisks) {
-        const ui32 numDomains = 8;
-        TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
+    VDISK_GEOMETRY_TEST(IterateOverAllDisks) {
+        const ui32 numDomains = wide ? 12 : 8;
+        TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, wide ? 1 : 2, wide);
         TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
         TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology());
@@ -87,9 +94,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         UNIT_ASSERT_VALUES_EQUAL(temp.size(), 0);
     }
 
-    Y_UNIT_TEST(CheckRevLookup) {
-        const ui32 numDomains = 8;
-        TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
+    VDISK_GEOMETRY_TEST(CheckRevLookup) {
+        const ui32 numDomains = wide ? 12 : 8;
+        TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, wide ? 1 : 2, wide);
         TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
         TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology());
@@ -99,9 +106,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         }
     }
 
-    Y_UNIT_TEST(CheckIsMyDomain) {
-        const ui32 numDomains = 8;
-        TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
+    VDISK_GEOMETRY_TEST(CheckIsMyDomain) {
+        const ui32 numDomains = wide ? 12 : 8;
+        TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, wide ? 1 : 2, wide);
         TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
         TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology());
@@ -116,9 +123,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         }
     }
 
-    Y_UNIT_TEST(SerDes) {
-        const ui32 numDomains = 8;
-        TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
+    VDISK_GEOMETRY_TEST(SerDes) {
+        const ui32 numDomains = wide ? 12 : 8;
+        TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, wide ? 1 : 2, wide);
         TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
         TVDiskNeighborsSerializable<TPayload> neighbors(self, info->PickTopology());
@@ -142,8 +149,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         }
     }
 
-    Y_UNIT_TEST(CheckVDiskIterators) {
-        TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 2, 3, 3);
+    VDISK_GEOMETRY_TEST(CheckVDiskIterators) {
+        TBlobStorageGroupInfo info(wide ? TBlobStorageGroupType::Erasure8Plus2Block
+            : TBlobStorageGroupType::ErasureMirror3dc, 2, wide ? 12 : 3, wide ? 1 : 3);
         const TBlobStorageGroupInfo::TTopology& topo = info.GetTopology();
         for (ui32 i = 0; i < topo.GetTotalVDisksNum(); ++i) {
             const TVDiskIdShort& self = topo.GetVDiskId(i);
@@ -160,8 +168,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         }
     }
 
-    Y_UNIT_TEST(CheckFailDomainsIterators) {
-        TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 2, 3, 3);
+    VDISK_GEOMETRY_TEST(CheckFailDomainsIterators) {
+        TBlobStorageGroupInfo info(wide ? TBlobStorageGroupType::Erasure8Plus2Block
+            : TBlobStorageGroupType::ErasureMirror3dc, 2, wide ? 12 : 3, wide ? 1 : 3);
         const TBlobStorageGroupInfo::TTopology& topo = info.GetTopology();
         for (ui32 i = 0; i < topo.GetTotalVDisksNum(); ++i) {
             const TVDiskIdShort& self = topo.GetVDiskId(i);
@@ -187,8 +196,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         }
     }
 
-    Y_UNIT_TEST(CheckVDiskDistance) {
-        TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 2, 3, 3);
+    VDISK_GEOMETRY_TEST(CheckVDiskDistance) {
+        TBlobStorageGroupInfo info(wide ? TBlobStorageGroupType::Erasure8Plus2Block
+            : TBlobStorageGroupType::ErasureMirror3dc, 2, wide ? 12 : 3, wide ? 1 : 3);
         const TBlobStorageGroupInfo::TTopology& topo = info.GetTopology();
         const TVDiskIdShort& self = topo.GetVDiskId(0);
         TVDiskNeighbors<TPayload> neighbors(self, info.PickTopology());
@@ -202,3 +212,5 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
     }
 
 }
+
+#undef VDISK_GEOMETRY_TEST

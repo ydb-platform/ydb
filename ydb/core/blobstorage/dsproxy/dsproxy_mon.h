@@ -205,7 +205,7 @@ public:
     TBlobStorageGroupProxyTimeStats TimeStats;
 
     // handoff use reason
-    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, 8> HandoffPartsSent;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, 17> HandoffPartsSent;
 
     TAtomic PutSamplePPM = 0;
     TAtomic GetSamplePPM = 0;

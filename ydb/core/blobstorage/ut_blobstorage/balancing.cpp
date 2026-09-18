@@ -1,5 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/lifecycle_checks.h>
 #include <ydb/core/util/random.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
 #include <library/cpp/iterator/enumerate.h>
 
@@ -183,6 +185,28 @@ struct TTestEnv {
         Queues.clear();
     }
 
+    void WaitForReplication(ui32 position) {
+        const auto actor = GroupInfo->GetActorId(position);
+        const auto edge = Env.Runtime->AllocateEdgeActor(actor.NodeId(), __FILE__, __LINE__);
+        const auto deadline = Env.Now() + TDuration::Minutes(5);
+        bool replicated = false;
+        while (Env.Now() < deadline) {
+            Env.Runtime->Send(new IEventHandle(actor, edge,
+                new TEvBlobStorage::TEvVStatus(GroupInfo->GetVDiskId(position)),
+                IEventHandle::FlagTrackDelivery), actor.NodeId());
+            auto reply = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(edge, false,
+                Min(deadline, Env.Now() + TDuration::Seconds(5)));
+            if (reply && reply->Get()->Record.GetStatus() == NKikimrProto::OK &&
+                    reply->Get()->Record.GetReplicated()) {
+                replicated = true;
+                break;
+            }
+            Env.Sim(TDuration::Seconds(1));
+        }
+        Env.Runtime->DestroyActor(edge);
+        UNIT_ASSERT_C(replicated, "replication did not finish for position " << position);
+    }
+
     void SetVDiskReadOnly(ui32 position, bool value) {
         const TVDiskID& someVDisk = GroupInfo->GetVDiskId(position);
         auto baseConfig = Env.FetchBaseConfig();
@@ -309,6 +333,7 @@ struct TRandomTest {
 
     void RunTest() {
         srand(123456);
+        const bool wide = Env.GroupInfo->Type.TotalPartCount() > 8;
         TVector<TString> data(Reserve(NumIters));
 
         TVector<ui32> successfulSteps;
@@ -351,7 +376,16 @@ struct TRandomTest {
             // Wipe random node
             if (random() % 100 == 1) {
                 ui32 pos = random() % Env->Settings.NodeCount;
-                if (Env.RunningNodes.contains(pos) && Env.RunningNodes.contains(0)) {
+                if (Env.RunningNodes.contains(pos) && Env.RunningNodes.contains(0) &&
+                        (!wide || Env.RunningNodes.size() == Env->Settings.NodeCount)) {
+                    // A wipe while two other domains are stopped exceeds H=2.
+                    // Finish outstanding recovery before adding a destructive
+                    // fault; otherwise repeated wipes can permanently lose data.
+                    if (wide) {
+                        for (ui32 running = 0; running < Env->Settings.NodeCount; ++running) {
+                            Env.WaitForReplication(running);
+                        }
+                    }
                     Cerr << "Wipe node " << pos << Endl;
                     auto baseConfig = Env->FetchBaseConfig();
                     const auto& someVSlot = baseConfig.GetVSlot(pos);
@@ -360,6 +394,9 @@ struct TRandomTest {
                         TVDiskID(someVSlot.GetGroupId(), someVSlot.GetGroupGeneration(), someVSlot.GetFailRealmIdx(),
                         someVSlot.GetFailDomainIdx(), someVSlot.GetVDiskIdx()));
                     Env->Sim(TDuration::Seconds(10));
+                    if (wide) {
+                        Env.WaitForReplication(pos);
+                    }
                 }
             }
         }
@@ -408,7 +445,9 @@ struct TTwoPartsOnOneNodeTest {
 
         auto blobId = MakeLogoBlobId(++step, data.size());
         auto expectedLocations = Env.GetExpectedPartsLocations(blobId);
-        TVector<ui32> partIdxToNodeId(6);
+        TVector<ui32> partIdxToNodeId(Env.GroupInfo->Type.TotalPartCount());
+        const ui32 firstPart = Env.GroupInfo->Type.TotalPartCount() > 8 ? Env.GroupInfo->Type.DataParts() : 0;
+        const ui32 secondPart = firstPart + 1;
         TVector<ui32> handoffNodeIds;
         for (ui32 nodeId = 0; nodeId < expectedLocations.size(); ++nodeId) {
             if (expectedLocations[nodeId].empty()) {
@@ -422,15 +461,27 @@ struct TTwoPartsOnOneNodeTest {
         UNIT_ASSERT_VALUES_EQUAL(handoffNodeIds.size(), 2);
 
         // stop one main node and one handoff node, and send put, so that we have 1 part on handoff
-        Env.StopNode(partIdxToNodeId[0]);
+        Env.StopNode(partIdxToNodeId[firstPart]);
         Env.StopNode(handoffNodeIds[1]);
         Env.SendPut(step, data, NKikimrProto::OK);
         printActualBlobLocations(blobId);
 
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> pendingDeletes;
+        if (Env.GroupInfo->Type.TotalPartCount() > 8) {
+            Env.Env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvDelLogoBlobDataSyncLog::EventType &&
+                        ev->Get<TEvDelLogoBlobDataSyncLog>()->Id.FullID() == blobId) {
+                    pendingDeletes.emplace_back(nodeId, std::move(ev));
+                    return false;
+                }
+                return true;
+            };
+        }
+
         // start main node we stopped before, and stop another main node
         // so after get with restore we should have 2 parts on handoff
-        Env.StartNode(partIdxToNodeId[0]);
-        Env.StopNode(partIdxToNodeId[1]);
+        Env.StartNode(partIdxToNodeId[firstPart]);
+        Env.StopNode(partIdxToNodeId[secondPart]);
         Env->Sim(TDuration::Seconds(10));
         auto res = Env.SendGet(step, data.size(), true);
         printActualBlobLocations(blobId);
@@ -441,9 +492,30 @@ struct TTwoPartsOnOneNodeTest {
         UNIT_ASSERT_VALUES_EQUAL(actualLocations[handoffNodeIds[0]].size(), 2);
 
         // start all stopped nodes
-        Env.StartNode(partIdxToNodeId[1]);
+        Env.StartNode(partIdxToNodeId[secondPart]);
         Env.StartNode(handoffNodeIds[1]);
         Env->Sim(TDuration::Seconds(30));
+        if (Env.GroupInfo->Type.TotalPartCount() > 8) {
+            TDataPartSet parts;
+            Env.GroupInfo->Type.SplitData(TErasureType::CrcModeNone, data, parts);
+            const auto handoffDisk = Env.GroupInfo->GetVDiskId(handoffNodeIds[0]);
+            const ui32 handoffIdx = Env.GroupInfo->GetIdxInSubgroup(handoffDisk, blobId.Hash());
+            UNIT_ASSERT(handoffIdx == 10 || handoffIdx == 11);
+            // Deletion is held until both the source and the new main copies
+            // have been read byte-for-byte through VGet.
+            for (ui32 partIdx : {firstPart, secondPart}) {
+                NBlobStorageLifecycle::CheckPart(Env.Env, Env.GroupInfo, partIdx, blobId, partIdx,
+                    parts.Parts[partIdx].OwnedString);
+                NBlobStorageLifecycle::CheckPart(Env.Env, Env.GroupInfo, handoffIdx, blobId, partIdx,
+                    parts.Parts[partIdx].OwnedString);
+            }
+            UNIT_ASSERT(!pendingDeletes.empty());
+            Env.Env.Runtime->FilterFunction = {};
+            for (auto& [nodeId, ev] : pendingDeletes) {
+                Env.Env.Runtime->Send(ev.release(), nodeId);
+            }
+            Env->Sim(TDuration::Seconds(30));
+        }
 
         // run compactions
         Cerr << "Start compaction 1" << Endl;
@@ -455,6 +527,16 @@ struct TTwoPartsOnOneNodeTest {
 
         Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));
         UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data.size())->Get()->Responses[0].Buffer.ConvertToString(), data);
+        if (Env.GroupInfo->Type.TotalPartCount() > 8) {
+            NBlobStorageLifecycle::CheckMainParts(Env.Env, Env.GroupInfo, blobId, data, true);
+            Env.Env.Cleanup();
+            Env.Env.Initialize();
+            Env.Queues.clear();
+            Env->Sim(TDuration::Seconds(60));
+            Env.CheckPartsLocations(blobId);
+            NBlobStorageLifecycle::CheckGroupBlob(Env.Env, Env.GroupInfo, blobId, data);
+            NBlobStorageLifecycle::CheckMainParts(Env.Env, Env.GroupInfo, blobId, data, true);
+        }
     }
 };
 
@@ -465,11 +547,17 @@ Y_UNIT_TEST_SUITE(VDiskBalancing) {
     Y_UNIT_TEST(TestStopOneNode_Block42) {
         TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(100)}.RunTest();
     }
+    Y_UNIT_TEST(TestStopOneNode_Block82) {
+        TStopOneNodeTest{TTestEnv(12, TBlobStorageGroupType::Erasure8Plus2Block), GenRandomBuffer(100)}.RunTest();
+    }
     Y_UNIT_TEST(TestStopOneNode_Mirror3dc) {
         TStopOneNodeTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), GenRandomBuffer(100)}.RunTest();
     }
     Y_UNIT_TEST(TestStopOneNode_Block42_HugeBlob) {
         TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(521_KB * 6)}.RunTest();
+    }
+    Y_UNIT_TEST(TestStopOneNode_Block82_HugeBlob) {
+        TStopOneNodeTest{TTestEnv(12, TBlobStorageGroupType::Erasure8Plus2Block), GenRandomBuffer(521_KB * 8)}.RunTest();
     }
     Y_UNIT_TEST(TestStopOneNode_Mirror3dc_HugeBlob) {
         TStopOneNodeTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), GenRandomBuffer(521_KB)}.RunTest();
@@ -478,6 +566,9 @@ Y_UNIT_TEST_SUITE(VDiskBalancing) {
     Y_UNIT_TEST(TestRandom_Block42) {
         TRandomTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), 1000, 521_KB * 6}.RunTest();
     }
+    Y_UNIT_TEST(TestRandom_Block82) {
+        TRandomTest{TTestEnv(12, TBlobStorageGroupType::Erasure8Plus2Block), 1000, 521_KB * 8}.RunTest();
+    }
     Y_UNIT_TEST(TestRandom_Mirror3dc) {
         TRandomTest{TTestEnv(9, TBlobStorageGroupType::ErasureMirror3dc), 1000, 521_KB}.RunTest();
     }
@@ -485,11 +576,20 @@ Y_UNIT_TEST_SUITE(VDiskBalancing) {
     Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block42) {
         TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(100)}.RunTest();
     }
+    Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block82) {
+        TTwoPartsOnOneNodeTest{TTestEnv(12, TBlobStorageGroupType::Erasure8Plus2Block), GenRandomBuffer(100)}.RunTest();
+    }
     Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block42_HugeBlob) {
         TTwoPartsOnOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(521_KB * 6)}.RunTest();
+    }
+    Y_UNIT_TEST(TwoPartsOnOneNodeTest_Block82_HugeBlob) {
+        TTwoPartsOnOneNodeTest{TTestEnv(12, TBlobStorageGroupType::Erasure8Plus2Block), GenRandomBuffer(521_KB * 8)}.RunTest();
     }
 
     Y_UNIT_TEST(TestDontSendToReadOnlyTest_Block42) {
         TDontSendToReadOnlyTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(100)}.RunTest();
+    }
+    Y_UNIT_TEST(TestDontSendToReadOnlyTest_Block82) {
+        TDontSendToReadOnlyTest{TTestEnv(12, TBlobStorageGroupType::Erasure8Plus2Block), GenRandomBuffer(100)}.RunTest();
     }
 }

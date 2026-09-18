@@ -14,7 +14,7 @@ namespace NKikimr {
         ui32 value = *begin++ & ~usedDiskMask;
         ui32 res = CountEffectiveReplicasGeneric(begin, end, usedDiskMask); // try skipping this disk
         while (value) {
-            const ui32 leastDiskMask = 1 << CountTrailingZeroBits(value); // obtain the least set bit as a bitmask
+            const ui32 leastDiskMask = ui32{1} << CountTrailingZeroBits(value); // obtain the least set bit as a bitmask
             res = Max(res, CountEffectiveReplicasGeneric(begin, end, usedDiskMask | leastDiskMask)); // try this disk for current part
             value &= ~leastDiskMask;
         }
@@ -22,6 +22,7 @@ namespace NKikimr {
     }
 
     ui32 TSubgroupPartLayout::CountEffectiveReplicas(const TBlobStorageGroupType &gtype) const {
+        ValidateGroup(gtype);
         switch (gtype.GetErasure()) {
             case TBlobStorageGroupType::ErasureMirror3dc:
             case TBlobStorageGroupType::ErasureMirror3of4:
@@ -41,7 +42,7 @@ namespace NKikimr {
                  * where M is the main disk for each part idx and the H[i] is the i-th handoff disk
                  */
                 const ui32 totalPartCount = gtype.TotalPartCount();
-                const ui32 mainMask = (1 << totalPartCount) - 1;
+                const ui32 mainMask = (ui32{1} << totalPartCount) - 1;
 
                 // calculate mask of main parts in place
                 ui32 total = 0;
@@ -57,10 +58,10 @@ namespace NKikimr {
                     // here we filter out handoff disks containing at least one of required parts (which are indicated
                     // by bits in total); each row in 'handoffs' table contains bitmask of handoff disks containing
                     // specific part
-                    TStackVec<ui32, MaxTotalPartCount> handoffDiskByPart;
+                    TStackVec<ui32, MaxParts> handoffDiskByPart;
                     for (ui32 i = 0; i < totalPartCount; ++i) {
                         const ui32 value = GetDisksWithPart(i) >> totalPartCount;
-                        if (~total & 1 << i && value) { // if there is no such part at main disk
+                        if (~total & ui32{1} << i && value) { // if there is no such part at main disk
                             handoffDiskByPart.push_back(value);
                         }
                     }
@@ -94,6 +95,7 @@ namespace NKikimr {
     }
 
     TSubgroupPartLayout TSubgroupPartLayout::CreateFromIngress(TIngress ingress, const TBlobStorageGroupType &gtype) {
+        ValidateGroup(gtype);
         TSubgroupPartLayout res;
         const ui8 subgroupSize = gtype.BlobSubgroupSize();
         for (ui8 i = 0; i < subgroupSize; ++i) {
@@ -106,6 +108,7 @@ namespace NKikimr {
     }
 
     TBlobStorageGroupInfo::TSubgroupVDisks TSubgroupPartLayout::GetInvolvedDisks(const TBlobStorageGroupInfo::TTopology *top) const {
+        ValidateGroup(top->GType);
         const ui32 totalPartCount = top->GType.TotalPartCount();
         ui32 mask = 0;
         for (ui32 i = 0; i < totalPartCount; ++i) {

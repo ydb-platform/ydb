@@ -8,10 +8,24 @@ description = 'List groups'
 
 
 def add_options(p):
+    p.add_argument('--include-static', action='store_true', help='Include static groups from Viewer; their health is reported in ViewerState')
     p.add_argument('--show-vdisk-status', action='store_true', help='Show columns with VDisk status')
     p.add_argument('--show-vdisk-usage', action='store_true', help='Show columns with VDisk usage')
     p.add_argument('--virtual-groups-only', action='store_true', help='Show only virtual groups')
     table.TableOutput([], col_units=[]).add_options(p)
+
+
+def static_group_rows(response):
+    return [{
+        'GroupId': int(group['GroupId']),
+        'PoolName': group['PoolName'],
+        'BoxId:PoolId': '-',
+        'Generation': int(group['GroupGeneration']),
+        'ErasureSpecies': group['ErasureSpecies'],
+        'OperatingStatus': '-',  # BSC OperatingStatus applies to dynamic groups.
+        'ViewerState': group['State'],
+        'VDisks_TOTAL': len(group['VDisks']),
+    } for group in response['StorageGroups'] if not common.is_dynamic_group(int(group['GroupId']))]
 
 
 def do(args):
@@ -49,6 +63,7 @@ def do(args):
         'BlobDepotId',
         'ErrorReason',
         'DecommitStatus',
+        'ViewerState',
     ]
     visible_columns = [
         'GroupId',
@@ -74,6 +89,10 @@ def do(args):
 
     if args.virtual_groups_only:
         visible_columns.extend(['VirtualGroupState', 'VirtualGroupName', 'BlobDepotId', 'ErrorReason', 'DecommitStatus'])
+    if args.include_static:
+        if args.virtual_groups_only:
+            raise ValueError('--include-static cannot be combined with --virtual-groups-only')
+        visible_columns.append('ViewerState')
 
     table_output = table.TableOutput(all_columns, col_units=col_units, default_visible_columns=visible_columns)
 
@@ -134,4 +153,6 @@ def do(args):
 
         rows.append(group_stat)
 
+    if args.include_static:
+        rows.extend(static_group_rows(common.fetch('storage/groups', dict(fields_required='all'))))
     table_output.dump(rows, args)

@@ -8,6 +8,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 SRCS(
     scrub.cpp
+    scrub_rewrite.cpp
 )
 
 PEERDIR(

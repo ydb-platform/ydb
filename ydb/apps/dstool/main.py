@@ -2,6 +2,7 @@
 
 from ydb.apps.dstool.lib.arg_parser import ArgumentParser
 import ydb.apps.dstool.lib.common as common
+from ydb.apps.dstool.lib.grouptool import UnsupportedErasureError
 import ydb.apps.dstool.lib.commands as commands
 
 import sys
@@ -22,6 +23,9 @@ def main():
         commands.run_command(command_map, args)
     except common.InvalidParameterError as e:
         e.print()
+        sys.exit(1)
+    except UnsupportedErasureError as e:
+        common.print_status(args, success=False, error_reason=str(e))
         sys.exit(1)
 
 

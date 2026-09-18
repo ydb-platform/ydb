@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
 
         bool CheckUniformPDisksPerNode() {
             for (const auto& [_, count]: CountVDisksPerNode()) {
-                if (count != 8 * NumDisksPerNode) {
+                if (count != NumGroups * GroupType.BlobSubgroupSize() / NumNodes) {
                     return false;
                 }
             }
@@ -256,6 +256,10 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
 
     Y_UNIT_TEST(SelfHealBlock4Plus2) {
         TTestSelfHeal(1, 32, 1, 2, 64, "block-4-2", TBlobStorageGroupType::Erasure4Plus2Block).RunTestCorrectMoves();
+    }
+
+    Y_UNIT_TEST(SelfHealBlock82) {
+        TTestSelfHeal(1, 32, 1, 2, 64, "block-8-2", TBlobStorageGroupType::Erasure8Plus2Block).RunTestCorrectMoves();
     }
 
     Y_UNIT_TEST(SelfHealMirror3dc) {

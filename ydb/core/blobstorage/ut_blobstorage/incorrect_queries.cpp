@@ -139,9 +139,8 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         blobId = LogoBlobIDFromLogoBlobID(pBlobId);
         SendPut(env,test, blobId, NKikimrProto::ERROR, 0);
     }
-
-    Y_UNIT_TEST(InvalidPartID) {
-        for(const auto& erasure : erasureTypes) {
+    void RunInvalidPartID(const TVector<TString>& erasures) {
+        for(const auto& erasure : erasures) {
             TEnvironmentSetup env(true, GetErasureTypeByString(erasure));
             TTestInfo test = InitTest(env);
 
@@ -150,6 +149,9 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
             SendPut(env, test, blobId, NKikimrProto::ERROR, size);
         }
     }
+
+    Y_UNIT_TEST(InvalidPartID) { RunInvalidPartID(erasureTypes); }
+    Y_UNIT_TEST(InvalidPartIDBlock82) { RunInvalidPartID({"block-8-2"}); }
 
     Y_UNIT_TEST(VeryBigBlob) {
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
@@ -187,9 +189,8 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         SendPut(env, test, blobId, NKikimrProto::ERROR, size + 42, true, true);
         SendPut(env, test, blobId, NKikimrProto::ERROR, 0, true, true);
     }
-
-    Y_UNIT_TEST(Proto) {
-       for(const auto& erasure : erasureTypes) {
+    void RunProto(const TVector<TString>& erasures) {
+       for(const auto& erasure : erasures) {
             TEnvironmentSetup env(true, GetErasureTypeByString(erasure));
             TTestInfo test = InitTest(env);
 
@@ -210,6 +211,9 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
             SendPut(env, test, blobId, NKikimrProto::ERROR, 42);
         }
     }
+
+    Y_UNIT_TEST(Proto) { RunProto(erasureTypes); }
+    Y_UNIT_TEST(ProtoBlock82) { RunProto({"block-8-2"}); }
 
     Y_UNIT_TEST(BaseReadingTest) {
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
@@ -249,9 +253,8 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         auto vdiskId = test.Info->GetVDiskInSubgroup(0, blobId.Hash());
         SendGet(env, test, vdiskId, blobId, "", NKikimrProto::OK);
     }
-
-    Y_UNIT_TEST(WrongVDiskID) {
-        TEnvironmentSetup env(true, GetErasureTypeByString("block-4-2"));
+    void RunWrongVDiskID(const TString& erasure) {
+        TEnvironmentSetup env(true, GetErasureTypeByString(erasure));
         TTestInfo test = InitTest(env);
 
         constexpr ui32 size = 100;
@@ -261,6 +264,9 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         auto vdiskId = test.Info->GetVDiskInSubgroup(1, blobId.Hash());
         SendGet(env, test, vdiskId, blobId, "", NKikimrProto::OK);
     }
+
+    Y_UNIT_TEST(WrongVDiskID) { RunWrongVDiskID("block-4-2"); }
+    Y_UNIT_TEST(WrongVDiskIDBlock82) { RunWrongVDiskID("block-8-2"); }
 
     Y_UNIT_TEST(ProtoBlobGet) {
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
@@ -289,10 +295,8 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         auto vdiskId = test.Info->GetVDiskId(0);
         SendGet(env, test, vdiskId, blobId, data, NKikimrProto::ERROR, true);
     }
-
-
-    Y_UNIT_TEST(WrongPartId) {
-        TEnvironmentSetup env(true, GetErasureTypeByString("block-4-2"));
+    void RunWrongPartId(const TString& erasure) {
+        TEnvironmentSetup env(true, GetErasureTypeByString(erasure));
         TTestInfo test = InitTest(env);
 
         constexpr ui32 size = 100;
@@ -302,6 +306,9 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         auto vdiskId = test.Info->GetVDiskInSubgroup(0, blobId.Hash());
         SendGet(env, test, vdiskId, blobId, "");
     }
+
+    Y_UNIT_TEST(WrongPartId) { RunWrongPartId("block-4-2"); }
+    Y_UNIT_TEST(WrongPartIdBlock82) { RunWrongPartId("block-8-2"); }
 
     Y_UNIT_TEST(ProtobufBlob) {
         TEnvironmentSetup env(true, GetErasureTypeByString("none"));
@@ -334,13 +341,15 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
         SendGet(env, test, vdiskId, BlobId2, data);
 
     }
-
-    Y_UNIT_TEST(WrongCrc) {
-        for(const auto& erasure : erasureTypes) {
+    void RunWrongCrc(const TVector<TString>& erasures) {
+        for(const auto& erasure : erasures) {
             MakeCrcTest(erasure, (1ull << 31) + 1);
             MakeCrcTest(erasure, (1ull << 30) + (1ull << 31) + 1);
         }
     }
+
+    Y_UNIT_TEST(WrongCrc) { RunWrongCrc(erasureTypes); }
+    Y_UNIT_TEST(WrongCrcBlock82) { RunWrongCrc({"block-8-2"}); }
 
 
     Y_UNIT_TEST(BasePutTest) {

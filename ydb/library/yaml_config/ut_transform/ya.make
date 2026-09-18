@@ -15,6 +15,7 @@ DEPENDS(
 )
 
 DATA(
+    arcadia/ydb/deploy/local/block-8-2/config.yaml
     arcadia/ydb/library/yaml_config/ut_transform/configs
     arcadia/ydb/library/yaml_config/ut_transform/simplified_configs
 )

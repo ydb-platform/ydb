@@ -55,7 +55,7 @@ class DistConfKiKiMRTest(object):
     @classmethod
     def setup_class(cls):
         if cls.nodes_count == 0:
-            cls.nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+            cls.nodes_count = cls.erasure.min_fail_domains * (3 if cls.erasure == Erasure.MIRROR_3_DC else 1)
         log_configs = {
             'BOARD_LOOKUP': LogLevels.DEBUG,
             'BS_NODE': LogLevels.DEBUG,
@@ -360,3 +360,8 @@ class TestDistConfWithAuth(DistConfKiKiMRTest):
             timeout_seconds=60,
             token=self.cluster.root_token
         )
+
+
+class TestDistConfBasicBlock82(TestKiKiMRDistConfBasic):
+    erasure = Erasure.BLOCK_8_2
+    nodes_count = 12

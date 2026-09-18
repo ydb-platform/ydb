@@ -210,14 +210,21 @@ namespace NKikimr {
             template <class TNumber>
             void EncodeVector(const TVector<TNumber> &v,
                               const ICodec &codec,
-                              IOutputStream &str)
+                              IOutputStream &str,
+                              bool plainPFor = false)
             {
                 const char *begin = (const char *)(&v[0]);
                 const char *end = begin + sizeof(v[0]) * v.size();
                 TStringBuf src(begin, end);
 
                 TBuffer encoded;
-                codec.Encode(src, encoded);
+                if (plainPFor) {
+                    // Existing PFor wire representation for an uncompressed vector.
+                    encoded.Append(ui8(-1));
+                    encoded.Append(src.data(), src.size());
+                } else {
+                    codec.Encode(src, encoded);
+                }
 
                 const ui32 bufSize = encoded.Size();
                 str.Write(&bufSize, 4);
@@ -276,7 +283,12 @@ namespace NKikimr {
                     EncodeVector(Steps, *StepsCodec, str);
                     EncodeVector(Cookies, *PFor32Codec, str); // TODO: optimize
                     EncodeVector(Sizes, *PFor32Codec, str);
-                    EncodeVector(Ingresses, *PFor64Codec, str);
+                    // PFor's compressed decoder reads at most 56 bits safely.
+                    // It encodes value+1, hence the inclusive boundary below.
+                    const bool plainIngress = AnyOf(Ingresses, [](ui64 value) {
+                        return value >= (ui64(1) << 56) - 1;
+                    });
+                    EncodeVector(Ingresses, *PFor64Codec, str, plainIngress);
                     EncodeVector(Counters, *PFor32Codec, str);
                 }
             }

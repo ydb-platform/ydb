@@ -112,6 +112,11 @@ SRCS(
 PEERDIR(
     contrib/libs/isa-l/erasure_code/aarch64
 )
+ELSE()
+SRCS(
+    ec_base.c
+    ec_base_aliases.c
+)
 ENDIF()
 
 END()

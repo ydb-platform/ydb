@@ -495,7 +495,7 @@ namespace NKikimr {
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
                     LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
-                    Config->AddHeader);
+                    LocRecCtx->VCtx->EffectiveAddHeader);
             HugeKeeperInitialized = true;
             return true;
         }
@@ -544,7 +544,7 @@ namespace NKikimr {
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,
-                        Config->AddHeader);
+                        LocRecCtx->VCtx->EffectiveAddHeader);
 
                 // create THullDbRecovery, which creates THullDs
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);

@@ -7,7 +7,7 @@ namespace NKikimr {
     struct TEvRecoverBlob : TEventLocal<TEvRecoverBlob, TEvBlobStorage::EvRecoverBlob> {
         struct TItem {
             TLogoBlobID BlobId;
-            TStackVec<TRope, 8> Parts;
+            TStackVec<TRope, MaxTotalPartCount> Parts;
             ui32 PartsMask = 0;
             NMatrix::TVectorType Needed; // needed parts
             TDiskPart CorruptedPart;
@@ -16,7 +16,7 @@ namespace NKikimr {
             TItem(const TItem&) = default;
             TItem(TItem&&) = default;
 
-            TItem(TLogoBlobID blobId, TStackVec<TRope, 8>&& parts, ui32 partsMask, NMatrix::TVectorType needed, TDiskPart corruptedPart, ui64 cookie = 0)
+            TItem(TLogoBlobID blobId, TStackVec<TRope, MaxTotalPartCount>&& parts, ui32 partsMask, NMatrix::TVectorType needed, TDiskPart corruptedPart, ui64 cookie = 0)
                 : BlobId(blobId)
                 , Parts(std::move(parts))
                 , PartsMask(partsMask)

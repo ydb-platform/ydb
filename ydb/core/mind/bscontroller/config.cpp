@@ -521,6 +521,7 @@ namespace NKikimr::NBsController {
             CommitSelfHealUpdates(state);
             CommitScrubUpdates(state, txc);
             CommitStoragePoolStatUpdates(state);
+            CommitErasureCounterUpdates(state);
             CommitSysViewUpdates(state);
             CommitVirtualGroupUpdates(state);
             CommitShredUpdates(state);
@@ -690,6 +691,60 @@ namespace NKikimr::NBsController {
                     StoragePoolStat->DeleteStoragePool(TStoragePoolStat::ConvertId(prev->first));
                 }
             }
+        }
+
+        void TBlobStorageController::UpdateGroupErasureCounter(TGroupId groupId, const TGroupInfo* group,
+                const TMap<TBoxStoragePoolId, TStoragePoolInfo>& pools) {
+            if (group && !group->VDisksInGroup.empty()) {
+                const auto pool = pools.find(group->StoragePoolId);
+                if (pool != pools.end() && pool->second.ErasureSpecies == group->ErasureSpecies) {
+                    ErasureCounters->SetGroup(groupId.GetRawId(), pool->second.Name, group->ErasureSpecies);
+                    return;
+                }
+            }
+            // Virtual/unmaterialized groups and inconsistent metadata have no usage mapping.
+            ErasureCounters->EraseGroup(groupId.GetRawId());
+        }
+
+        void TBlobStorageController::CommitErasureCounterUpdates(TConfigState& state) {
+            THashSet<TGroupId> affected;
+            for (const auto& [prev, cur] : Diff(&StoragePools, &state.StoragePools.Get())) {
+                if (cur) {
+                    ErasureCounters->SetPool(TStoragePoolStat::ConvertId(cur->first), cur->second.Name, cur->second.ErasureSpecies);
+                    if (prev && (prev->second.Name != cur->second.Name || prev->second.ErasureSpecies != cur->second.ErasureSpecies)) {
+                        const auto [begin, end] = state.StoragePoolGroups.Get().equal_range(cur->first);
+                        for (auto it = begin; it != end; ++it) {
+                            affected.insert(it->second);
+                        }
+                    }
+                } else {
+                    ErasureCounters->ErasePool(TStoragePoolStat::ConvertId(prev->first));
+                }
+            }
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                affected.insert(overlay->first);
+            }
+            for (const auto groupId : affected) {
+                UpdateGroupErasureCounter(groupId, state.Groups.Find(groupId), state.StoragePools.Get());
+            }
+        }
+
+        void TBlobStorageController::UpdateStaticErasureCounters() {
+            std::set<ui32> current;
+            for (const auto& group : StorageConfig.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                if (!group.HasGroupID()) {
+                    continue;
+                }
+                current.insert(group.GetGroupID());
+                ErasureCounters->SetGroup(group.GetGroupID(), group.GetStoragePoolName().empty() ? "static" : group.GetStoragePoolName(),
+                    group.HasErasureSpecies() ? group.GetErasureSpecies() : TErasureType::ErasureSpeciesCount);
+            }
+            for (const ui32 id : StaticErasureGroups) {
+                if (!current.contains(id)) {
+                    ErasureCounters->EraseGroup(id);
+                }
+            }
+            StaticErasureGroups = std::move(current);
         }
 
         void TBlobStorageController::CommitSysViewUpdates(TConfigState& state) {

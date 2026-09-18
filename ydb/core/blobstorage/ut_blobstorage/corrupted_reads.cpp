@@ -2,11 +2,10 @@
 #include <ydb/core/util/lz4_data_generator.h>
 
 Y_UNIT_TEST_SUITE(CorruptedReads) {
-
-    Y_UNIT_TEST(Compaction) {
+    void RunCompaction(TBlobStorageGroupType::EErasureSpecies erasure) {
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NodeCount = TBlobStorageGroupType(erasure).BlobSubgroupSize(),
+            .Erasure = erasure,
         });
 
         env.CreateBoxAndPool(1, 1, 0, NKikimrBlobStorage::EPDiskType::NVME);
@@ -109,4 +108,7 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
             }
         }
     }
+
+    Y_UNIT_TEST(Compaction) { RunCompaction(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(CompactionBlock82) { RunCompaction(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

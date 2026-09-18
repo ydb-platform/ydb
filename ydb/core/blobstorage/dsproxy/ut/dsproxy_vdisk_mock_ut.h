@@ -116,7 +116,7 @@ public:
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(query.GetId());
             ui64 partId = id.PartId();
             ui64 partBegin = partId ? partId : 1;
-            ui64 partEnd = partId ? partId : 7;
+            ui64 partEnd = partId ? partId : Info->Type.TotalPartCount();
 
             ui64 shift = (query.HasShift() ? query.GetShift() : 0);
             ui64 *cookie = nullptr;

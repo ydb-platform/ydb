@@ -1,7 +1,9 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/lifecycle_checks.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <bit>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
@@ -18,7 +20,13 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
         std::vector<TString> blobs;
         for (ui32 i = 0; i < 100; ++i) {
-            const ui32 size = RandomNumber(10u) == 0 ? RandomNumber<ui32>(3 << 20) + 1048576 : (RandomNumber<ui32>(65536) + 1); // 1 byte - 4 MB
+            const bool large = RandomNumber(10u) == 0;
+            ui32 size = large ? RandomNumber<ui32>(3 << 20) + 1048576 : (RandomNumber<ui32>(65536) + 1);
+            if (large && env.Settings.Erasure.TotalPartCount() > 8) {
+                // Preserve the legacy physical-part distribution. Unscaled
+                // 1--4 MiB Block82 blobs all fall below the ROT Huge threshold.
+                size *= env.Settings.Erasure.DataParts() / 4;
+            }
             TString data = TString::Uninitialized(size);
             memset(data.Detach(), RandomNumber<ui8>(), size);
             blobs.push_back(data);
@@ -217,6 +225,8 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
                     break;
             }
         }
+        UNIT_ASSERT_C(!inplaceBlobs.empty(), "Scrub corpus has no persisted inline records");
+        UNIT_ASSERT_C(!hugeBlobs.empty(), "Scrub corpus has no persisted Huge records");
 
         enum class ECheckpoint : ui32 {
             BROKEN_CHUNK_L0,
@@ -290,7 +300,9 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             auto pickBlob = [&](const auto& blobs) {
                 std::vector<const TLayout::TLayoutRecord*> recs;
                 for (ui64 sstId : brokenSstIds) {
-                    recs.insert(recs.end(), inplaceBlobs[sstId].begin(), inplaceBlobs[sstId].end());
+                    if (const auto it = blobs.find(sstId); it != blobs.end()) {
+                        recs.insert(recs.end(), it->second.begin(), it->second.end());
+                    }
                 }
                 if (recs.empty()) {
                     for (const auto& [key, value] : blobs) {
@@ -353,11 +365,14 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
                 }
             }
 
-            // terminate peer disks
+            // Read the repaired disk without assistance from peers. Stop the complete
+            // peer nodes: poisoning a managed VDisk directly bypasses NodeWarden's
+            // shutdown protocol and its TEvGone handler correctly rejects that.
+            UNIT_ASSERT_VALUES_EQUAL(vdiskActorId.NodeId(), env.Settings.ControllerNodeId);
             for (ui32 i = 1; i < info->GetTotalVDisksNum(); ++i) {
-                const TActorId& actorId = info->GetActorId(i);
-                Cerr << "*** terminating peer disk# " << actorId.ToString() << Endl;
-                runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0), actorId.NodeId());
+                const ui32 peerNodeId = info->GetActorId(i).NodeId();
+                UNIT_ASSERT_VALUES_UNEQUAL(peerNodeId, vdiskActorId.NodeId());
+                env.StopNode(peerNodeId);
             }
 
             Cerr << "*** blobIdsToValidate.size# " << blobIdsToValidate.size() << Endl;
@@ -404,6 +419,10 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
     Y_UNIT_TEST(block42) {
         ScrubTest(TBlobStorageGroupType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(Block82) {
+        ScrubTest(TBlobStorageGroupType::Erasure8Plus2Block);
     }
 }
 
@@ -475,28 +494,64 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
 
             TLogoBlobID blobId(tabletId, generation, step, channel, blobSize, cookie);
 
-            Env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-                if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVPut::EventType) {
-                    if (ev->Sender.NodeId() == ev->Recipient.NodeId()) {
-                        return true;
+            if (Erasure.TotalPartCount() > 8) {
+                TDataPartSet parts;
+                Erasure.SplitData(TErasureType::CrcModeNone, data, parts);
+                const ui32 p = Erasure.TotalPartCount();
+                for (ui32 partIdx = 0; partIdx < p; ++partIdx) {
+                    ui32 subgroupIdx = partIdx;
+                    bool corrupt = false;
+                    switch (PartCorruptionMask) {
+                        case Val_TwoCorrruptedMain:
+                            corrupt = partIdx == 0 || partIdx == p - 2;
+                            break;
+                        case Val_OneCorruptedMainOneCorruptedHandoff:
+                            corrupt = partIdx == 0 || partIdx == p - 2;
+                            if (partIdx == p - 2) {
+                                subgroupIdx = p;
+                            }
+                            break;
+                        case Val_TwoCorruptedHandoff:
+                            corrupt = partIdx >= p - 2;
+                            if (corrupt) {
+                                subgroupIdx = partIdx + 2;
+                            }
+                            break;
+                        default:
+                            Y_ABORT("unsupported Block82 corruption layout");
                     }
-                    auto* vput = ev->Get<TEvBlobStorage::TEvVPut>();
-                    TLogoBlobID partId = LogoBlobIDFromLogoBlobID(vput->Record.GetBlobID());
-                    if (PartCorruptionMask & (1 << partId.PartId())) {
-                        vput->Record.SetBuffer(MakeData(vput->GetBuffer().size(), 2));
-                        nodesWithCorruptedPartsMask |= (1 << (ev->Recipient.NodeId() - 1));
+                    const auto disk = NBlobStorageLifecycle::SubgroupDisk(groupInfo, blobId, subgroupIdx);
+                    TString part = parts.Parts[partIdx].OwnedString.ConvertToString();
+                    if (corrupt) {
+                        part.Detach()[0] ^= 0x5a;
+                        nodesWithCorruptedPartsMask |= 1u << (groupInfo->GetActorId(disk).NodeId() - 1);
                     }
+                    Env->PutBlob(disk, TLogoBlobID(blobId, partIdx + 1), part);
                 }
-                return true;
-            };
+            } else {
+                Env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                    if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVPut::EventType) {
+                        if (ev->Sender.NodeId() == ev->Recipient.NodeId()) {
+                            return true;
+                        }
+                        auto* vput = ev->Get<TEvBlobStorage::TEvVPut>();
+                        TLogoBlobID partId = LogoBlobIDFromLogoBlobID(vput->Record.GetBlobID());
+                        if (PartCorruptionMask & (1 << partId.PartId())) {
+                            vput->Record.SetBuffer(MakeData(vput->GetBuffer().size(), 2));
+                            nodesWithCorruptedPartsMask |= (1 << (ev->Recipient.NodeId() - 1));
+                        }
+                    }
+                    return true;
+                };
 
-            Env->Runtime->WrapInActorContext(Edge, [&] {
-                TString data = MakeData(blobSize, 1);
-                SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max()));
-            });
-            auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(Edge, false);
-            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
-            UNIT_ASSERT_VALUES_UNEQUAL(nodesWithCorruptedPartsMask, 0);
+                Env->Runtime->WrapInActorContext(Edge, [&] {
+                    TString data = MakeData(blobSize, 1);
+                    SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max()));
+                });
+                auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(Edge, false);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_UNEQUAL(nodesWithCorruptedPartsMask, 0);
+            }
 
             WriteCompressedData({
                 .GroupId = GroupId,
@@ -506,18 +561,27 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
 
             Env->Runtime->FilterFunction = {};
 
+            // Scrub inspects persisted records. Do not depend on a background
+            // compaction threshold or the controller's 30-day default period.
+            for (ui32 orderNumber = 0; orderNumber < Erasure.BlobSubgroupSize(); ++orderNumber) {
+                Env->CompactVDisk(groupInfo->GetActorId(orderNumber), true);
+            }
+            Env->SetScrubPeriodicity(TDuration::Seconds(60));
+
             // wait for full scrub cycle to finish
             for (ui32 orderNumber = 0; orderNumber < Erasure.BlobSubgroupSize(); ++orderNumber) {
                 TActorId vdiskActorId = groupInfo->GetActorId(orderNumber);
                 const ui32 nodeId = vdiskActorId.NodeId();
-                TActorId edge = Env->Runtime->AllocateEdgeActor(nodeId);
-                if ((1 << (nodeId - 1)) & nodesWithCorruptedPartsMask == 0) {
+                if (((1u << (nodeId - 1)) & nodesWithCorruptedPartsMask) == 0) {
                     continue;
                 }
+                const TInstant deadline = Env->Now() + TDuration::Minutes(10);
                 while (true) {
+                    const TActorId edge = Env->Runtime->AllocateEdgeActor(nodeId);
                     const ui64 cookie = RandomNumber<ui64>();
                     Env->Runtime->Send(new IEventHandle(TEvBlobStorage::EvScrubAwait, 0, vdiskActorId, edge, nullptr, cookie), nodeId);
-                    auto ev = Env->WaitForEdgeActorEvent<TEvScrubNotify>(edge);
+                    auto ev = Env->WaitForEdgeActorEvent<TEvScrubNotify>(edge, true, deadline);
+                    UNIT_ASSERT_C(ev, "Scrub did not finish before the test deadline");
                     UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, cookie);
                     if (ev->Get()->Success) {
                         break;
@@ -537,8 +601,25 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
                             GroupId, pdiskLayout, TAggregateScrubMetrics("DataIssues", isHuge, Erasure.GetErasure()));
 
             UNIT_ASSERT_VALUES_UNEQUAL_C(blobsScrubbed, 0, makePrefix());
-            UNIT_ASSERT_VALUES_UNEQUAL_C(dataIssues, 0, makePrefix()
-        );
+            UNIT_ASSERT_VALUES_UNEQUAL_C(dataIssues, 0, makePrefix());
+            if (Erasure.TotalPartCount() > 8) {
+                auto checkInconsistency = [&] {
+                    const TActorId edge = Env->Runtime->AllocateEdgeActor(Env->Settings.ControllerNodeId);
+                    const TInstant deadline = Env->Now() + TDuration::Seconds(30);
+                    Env->Runtime->WrapInActorContext(edge, [&] {
+                        SendToBSProxy(edge, GroupId, new TEvBlobStorage::TEvCheckIntegrity(blobId,
+                            deadline, NKikimrBlobStorage::FastRead));
+                    });
+                    auto result = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvCheckIntegrityResult>(edge, true, deadline);
+                    UNIT_ASSERT(result);
+                    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+                    UNIT_ASSERT(result->Get()->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
+                };
+                checkInconsistency();
+                Env->Cleanup();
+                Env->Initialize();
+                checkInconsistency();
+            }
         }
 
     private:
@@ -571,5 +652,125 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
     // DEEP_SCRUBBING_TEST(Mirror3dc, SmallBlob, TwoCorrruptedInSameDc);
     // DEEP_SCRUBBING_TEST(Mirror3dc, HugeBlob, TwoCorrruptedInSameDc);
 
+    #define DEEP_SCRUBBING_BLOCK82_TEST(blobSize, corruptionMask) \
+    Y_UNIT_TEST(TestBlock82##blobSize##corruptionMask) { \
+        Test(TBlobStorageGroupType::Erasure8Plus2Block, EBlobSize::Val_##blobSize, \
+            ECorruptionMask::Val_##corruptionMask); \
+    }
+
+    DEEP_SCRUBBING_BLOCK82_TEST(SmallBlob, TwoCorrruptedMain);
+    DEEP_SCRUBBING_BLOCK82_TEST(HugeBlob, TwoCorrruptedMain);
+    DEEP_SCRUBBING_BLOCK82_TEST(SmallBlob, OneCorruptedMainOneCorruptedHandoff);
+    DEEP_SCRUBBING_BLOCK82_TEST(HugeBlob, OneCorruptedMainOneCorruptedHandoff);
+    DEEP_SCRUBBING_BLOCK82_TEST(SmallBlob, TwoCorruptedHandoff);
+    DEEP_SCRUBBING_BLOCK82_TEST(HugeBlob, TwoCorruptedHandoff);
+
+    #undef DEEP_SCRUBBING_BLOCK82_TEST
     #undef DEEP_SCRUBBING_TEST
+}
+
+namespace {
+
+void Block82ScrubErasures(bool huge, ui32 missingParts) {
+    using namespace NBlobStorageLifecycle;
+    const TBlobStorageGroupType erasure(TBlobStorageGroupType::Erasure8Plus2Block);
+    TEnvironmentSetup env{{
+        .NodeCount = erasure.BlobSubgroupSize(),
+        .Erasure = erasure,
+        .MinHugeBlobInBytes = 64_KB,
+    }};
+    env.CreateBoxAndPool(1, 1);
+    const auto info = env.GetGroupInfo(env.GetGroups().front());
+    const TString data = env.GenerateRandomString(huge ? 1_MB + 17 : 799);
+    const TLogoBlobID id(812, 1, 1, 0, data.size(), 0, 0, TErasureType::CrcModeWholePart);
+    env.PutBlob(info->GroupID.GetRawId(), id, data);
+    for (ui32 disk = 0; disk < erasure.BlobSubgroupSize(); ++disk) {
+        env.CompactVDisk(info->GetActorId(disk));
+    }
+    CheckMainParts(env, info, id, data, true);
+    using T = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
+    ui32 damagedParts = 0;
+    for (ui32 partIdx = 0; partIdx < erasure.TotalPartCount(); ++partIdx) {
+        if (!(missingParts & (1u << partIdx))) {
+            continue;
+        }
+        const auto disk = SubgroupDisk(info, id, partIdx);
+        const TActorId actor = info->GetActorId(disk);
+        auto layout = env.SyncQuery<T, TEvBlobStorage::TEvCaptureVDiskLayout>(actor);
+        auto [node, pdisk, slot] = DecomposeVDiskServiceId(actor);
+        Y_UNUSED(slot);
+        for (const auto& item : layout->Layout) {
+            if (item.Database == T::EDatabase::LogoBlobs && item.RecordType != T::ERecordType::IndexRecord &&
+                    item.BlobId.FullID() == id) {
+                const auto& location = item.Location;
+                // PDisk identifies this extent as unreadable; the codec receives
+                // an erasure rather than being asked to locate unknown corruption.
+                env.PDiskMockStates.at({node, pdisk})->SetCorruptedArea(location.ChunkIdx,
+                    location.Offset, location.Offset + location.Size, true);
+                damagedParts |= 1u << partIdx;
+            }
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(damagedParts, missingParts);
+    const TInstant deadline = env.Now() + TDuration::Minutes(10);
+    env.SetScrubPeriodicity(TDuration::Seconds(60));
+    if (static_cast<ui32>(std::popcount(missingParts)) > erasure.ParityParts()) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
+        const TInstant readDeadline = env.Now() + TDuration::Seconds(30);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvGet(id, 0, 0, readDeadline,
+                NKikimrBlobStorage::FastRead));
+        });
+        // DSProxy checks request deadlines once per second. Let that check and
+        // its reply run before the fixture's independent bounded wait expires.
+        auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, true,
+            readDeadline + TDuration::Seconds(2));
+        UNIT_ASSERT_C(result, "Unrecoverable Block82 Get did not return by its deadline");
+        UNIT_ASSERT(result->Get()->Status != NKikimrProto::OK ||
+            (result->Get()->ResponseSz == 1 && result->Get()->Responses[0].Status != NKikimrProto::OK));
+        return;
+    }
+    for (ui32 partIdx = 0; partIdx < erasure.TotalPartCount(); ++partIdx) {
+        if (!(missingParts & (1u << partIdx))) {
+            continue;
+        }
+        const auto actor = info->GetActorId(SubgroupDisk(info, id, partIdx));
+        for (;;) {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(actor.NodeId());
+            env.Runtime->Send(new IEventHandle(TEvBlobStorage::EvScrubAwait, 0, actor, edge, nullptr, 82), actor.NodeId());
+            auto result = env.WaitForEdgeActorEvent<TEvScrubNotify>(edge, true, deadline);
+            UNIT_ASSERT_C(result, "Block82 scrub repair timed out");
+            if (result->Get()->Success) {
+                break;
+            }
+        }
+    }
+    for (ui32 disk = 0; disk < erasure.BlobSubgroupSize(); ++disk) {
+        env.CompactVDisk(info->GetActorId(disk));
+    }
+    CheckGroupBlob(env, info, id, data);
+    CheckMainParts(env, info, id, data, true);
+    env.Cleanup();
+    env.Initialize();
+    CheckGroupBlob(env, info, id, data);
+    CheckMainParts(env, info, id, data, true);
+}
+
+}
+
+Y_UNIT_TEST_SUITE(Block82ScrubRepair) {
+    Y_UNIT_TEST(InlineIdentifiedErasuresBlock82) {
+        for (ui32 mask : {1u, 1u << 9, 1u | (1u << 7), 1u | (1u << 8), (1u << 8) | (1u << 9)}) {
+            Block82ScrubErasures(false, mask);
+        }
+    }
+    Y_UNIT_TEST(HugeIdentifiedErasuresBlock82) {
+        for (ui32 mask : {1u, 1u << 9, 1u | (1u << 7), 1u | (1u << 8), (1u << 8) | (1u << 9)}) {
+            Block82ScrubErasures(true, mask);
+        }
+    }
+    Y_UNIT_TEST(ThreeIdentifiedErasuresBlock82) {
+        Block82ScrubErasures(false, 1u | (1u << 8) | (1u << 9));
+        Block82ScrubErasures(true, 1u | (1u << 8) | (1u << 9));
+    }
 }

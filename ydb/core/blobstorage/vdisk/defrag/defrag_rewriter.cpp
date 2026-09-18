@@ -138,7 +138,7 @@ namespace NKikimr {
                 memcpy(&fullDataSize, header, sizeof(fullDataSize));
                 header += sizeof(fullDataSize);
                 Y_ABORT_UNLESS(fullDataSize == rec.LogoBlobId.BlobSize());
-                Y_ABORT_UNLESS(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header));
+                Y_ABORT_UNLESS(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw8() == static_cast<ui8>(*header));
                 trim += TDiskBlob::HeaderSize;
             }
 
@@ -156,6 +156,7 @@ namespace NKikimr {
                 SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
                 TWriteSource::DefragRewrite);
             writeEvent->RewriteBlob = true;
+            writeEvent->RewriteHugeBlob = true;
             TEventsQuoter::QuoteMessage(DCtx->Throttler, std::make_unique<IEventHandle>(DCtx->SkeletonId, SelfId(), writeEvent.release()),
                 msgSize, DCtx->VCfg->DefragThrottlerBytesRate);
         }

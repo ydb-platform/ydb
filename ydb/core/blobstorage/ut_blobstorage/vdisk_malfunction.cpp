@@ -9,10 +9,10 @@
 #define Ctest Cnull
 
 Y_UNIT_TEST_SUITE(VDiskMalfunction) {
-    Y_UNIT_TEST(StuckInternalQueues) {
+    void RunStuckInternalQueues(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env({
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
         });
         env.CreateBoxAndPool(1, 1);
         env.Sim(TDuration::Minutes(1));
@@ -58,4 +58,7 @@ Y_UNIT_TEST_SUITE(VDiskMalfunction) {
                 edge, false, TAppData::TimeProvider->Now() + TDuration::Seconds(10));
         UNIT_ASSERT(res);
     }
+
+    Y_UNIT_TEST(StuckInternalQueues) { RunStuckInternalQueues(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(StuckInternalQueuesBlock82) { RunStuckInternalQueues(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

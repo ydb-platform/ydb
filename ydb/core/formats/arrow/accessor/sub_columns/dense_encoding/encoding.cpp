@@ -69,9 +69,11 @@ std::shared_ptr<arrow::Buffer> FrameDecompress(TStringBuf blob, const std::share
     ui32 rawSize;
     memcpy(&rawSize, blob.data(), sizeof(rawSize));
     const TStringBuf payload = blob.SubStr(sizeof(rawSize));
-    auto raw = TStatusValidator::GetValid(arrow::AllocateBuffer(rawSize));
     if (!codec) {
         AFL_VERIFY(payload.size() == rawSize)("payload", payload.size())("raw", rawSize);
+    }
+    auto raw = TStatusValidator::GetValid(arrow::AllocateBuffer(rawSize));
+    if (!codec) {
         if (rawSize) {
             memcpy(raw->mutable_data(), payload.data(), rawSize);
         }
@@ -307,7 +309,7 @@ TString SerializeBinaryLikeArray(const arrow::BinaryArray& array, const std::sha
     TString values;
     TStringBuf valuesData(values);
     // Null entries may have physical bytes in buffer. Borrow the values range only when it does not have any.
-    // Check this by comparing sum of individual non-null  lengths with total length.
+    // Check this by comparing sum of individual non-null lengths with total length.
     if (presentValuesLength == valuesLength) {
         if (valuesLength) {
             const auto valueData = array.value_data();

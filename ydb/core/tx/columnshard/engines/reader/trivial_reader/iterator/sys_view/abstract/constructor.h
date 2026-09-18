@@ -11,6 +11,7 @@ namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NAbstract {
 class TDataSourceConstructor: public NCommon::TDataSourceConstructor {
 private:
     YDB_READONLY_DEF(ui64, TabletId);
+    ESourcesSorting SourcesSorting;
 
     virtual ui64 DoGetSourceRecordsCount() const override {
         return 0;
@@ -21,10 +22,23 @@ private:
     }
 
 public:
-    TDataSourceConstructor(const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish)
-        : NCommon::TDataSourceConstructor(TReplaceKeyAdapter(std::move(start), false), TReplaceKeyAdapter(std::move(finish), false), false)
+    // DESC orders by the finish key in reverse, like the portion constructor, so sources are extracted in scan direction
+    TDataSourceConstructor(const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const ESourcesSorting sourcesSorting)
+        : NCommon::TDataSourceConstructor(
+              TReplaceKeyAdapter((sourcesSorting == ESourcesSorting::LastPkDesc) ? std::move(finish) : std::move(start),
+                  sourcesSorting == ESourcesSorting::LastPkDesc),
+              TReplaceKeyAdapter((sourcesSorting == ESourcesSorting::LastPkDesc) ? std::move(start) : std::move(finish),
+                  sourcesSorting == ESourcesSorting::LastPkDesc), false)
         , TabletId(tabletId)
+        , SourcesSorting(sourcesSorting)
     {
+    }
+
+    // the PK filter wants the range in key order; Start/Finish are swapped for DESC, so undo that here
+    bool IsUsedBy(const NOlap::TPKRangesFilter& filter) const {
+        const auto& lo = (SourcesSorting == ESourcesSorting::LastPkDesc) ? GetFinish() : GetStart();
+        const auto& hi = (SourcesSorting == ESourcesSorting::LastPkDesc) ? GetStart() : GetFinish();
+        return filter.IsUsed(lo.GetValue().BuildSortablePosition(), hi.GetValue().BuildSortablePosition());
     }
 };
 

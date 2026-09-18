@@ -467,9 +467,6 @@ void TKafkaProduceActor::Handle(TEvKafka::TEvProduceRequest::TPtr request, const
             {LogPrefix()},
             {"pendingCorrelationId", PendingRequest->Request->Get()->CorrelationId},
             {"correlationId", request->Get()->CorrelationId});
-        auto response = std::make_shared<TProduceResponseData>();
-        Send(Context->ConnectionId, new TEvKafka::TEvResponse(
-            request->Get()->CorrelationId, response, EKafkaErrors::UNKNOWN_SERVER_ERROR));
         return;
     }
 
@@ -829,6 +826,9 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
     // it means that we are writing in a new transaction and need to create a new partition writer (cause only partition writer in init state properly creates supportive partition)
     if (r->Record.GetErrorCode() == NPersQueue::NErrorCode::EErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION) {
         RecreatePartitionWriterAndRetry(cookie, ctx);
+        if (pendingRequest->WaitResultCookies.empty()) {
+            SendResults(ctx);
+        }
         return;
     }
 

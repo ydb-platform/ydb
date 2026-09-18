@@ -186,13 +186,11 @@ namespace {
                     const TString& owner = {},
                     const TString& effectiveAcl = {}) {
                 NKikimrScheme::TEvDescribeSchemeResult proto;
-                if (!partitionIds.empty()) {
-                    auto* pqGroup = proto.MutablePathDescription()->MutablePersQueueGroup();
-                    for (ui32 partitionId : partitionIds) {
-                        auto* partition = pqGroup->AddPartitions();
-                        partition->SetPartitionId(partitionId);
-                        partition->SetTabletId(Ctx->TabletId);
-                    }
+                auto* pqGroup = proto.MutablePathDescription()->MutablePersQueueGroup();
+                for (ui32 partitionId : partitionIds) {
+                    auto* partition = pqGroup->AddPartitions();
+                    partition->SetPartitionId(partitionId);
+                    partition->SetTabletId(Ctx->TabletId);
                 }
                 if (withSelf) {
                     auto* self = proto.MutablePathDescription()->MutableSelf();
@@ -325,6 +323,71 @@ namespace {
 
             UNIT_ASSERT_VALUES_UNEQUAL(firstWriteRequestReceiver, secondWriteRequestReceiver);
             UNIT_ASSERT_VALUES_EQUAL(firstWriteRequestReceiver, poisonPillReceiver);
+        }
+
+        Y_UNIT_TEST(OnSecondProduceWhileInFlight_ShouldNotSendResponse) {
+            ui32 writeRequests = 0;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                    ++writeRequests;
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            SendProduce();
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&writeRequests]() {
+                return writeRequests > 0;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+            SendProduce();
+            auto unexpected = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(TDuration::MilliSeconds(200));
+            UNIT_ASSERT(!unexpected);
+        }
+
+        Y_UNIT_TEST(OnMissingSupportivePartitionRetryFail_ShouldRespondImmediately) {
+            Ctx->Runtime->SetDispatchTimeout(TDuration::Seconds(5));
+
+            struct TCapturedWrite {
+                TActorId ProduceActor;
+                ui64 Cookie;
+            };
+            std::vector<TCapturedWrite> writes;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (auto* writeRequest = input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                    writes.push_back({input->Sender, writeRequest->GetCookie()});
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            SendProduce(TransactionalId, 1, 2);
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&writes]() {
+                return !writes.empty();
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+            // Empty PQ group: THashChooser indexes by partition id, so {1} alone
+            // is out of range. GetPartition(0) then returns null and Recreate fails locally.
+            SendWatchNotifyUpdated(MakeDescribeResult({}, false));
+            Ctx->Runtime->DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
+
+            NKikimrClient::TResponse record;
+            record.SetErrorCode(::NPersQueue::NErrorCode::EErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION);
+            record.MutablePartitionResponse()->SetCookie(writes[0].Cookie);
+            auto ev = MakeHolder<TEvPartitionWriter::TEvWriteResponse>("", "", std::move(record));
+            Ctx->Runtime->Send(new IEventHandle(writes[0].ProduceActor, Ctx->Edge, ev.Release()));
+
+            auto response = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+            UNIT_ASSERT_VALUES_EQUAL(
+                std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
         }
 
         Y_UNIT_TEST(OnProduceWithoutTransactionalId_shouldNotKillOldWriter) {

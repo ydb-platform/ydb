@@ -110,7 +110,7 @@ def seed_legacy_cluster_schema(driver):
     with ydb.QuerySessionPool(driver) as session_pool:
         session_pool.execute_with_retries(
             f"""
-            CREATE TABLE `{CLUSTER_TABLE}` (
+            CREATE TABLE IF NOT EXISTS `{CLUSTER_TABLE}` (
                 name Utf8,
                 balancer Utf8,
                 local Bool,
@@ -122,7 +122,7 @@ def seed_legacy_cluster_schema(driver):
         )
         session_pool.execute_with_retries(
             f"""
-            CREATE TABLE `{VERSIONS_TABLE}` (
+            CREATE TABLE IF NOT EXISTS `{VERSIONS_TABLE}` (
                 name Utf8,
                 version Int64,
                 PRIMARY KEY (name)

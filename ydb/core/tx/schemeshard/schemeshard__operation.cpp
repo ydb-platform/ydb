@@ -1345,7 +1345,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropTestShardSet(NextPartId(), txState);
 
     case TTxState::ETxType::TxTruncateColumnTable:
-        return CreateTruncateColumnTable(NextPartId(), txState);
+        return CreateTruncateTable(NextPartId(), txState);
 
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();

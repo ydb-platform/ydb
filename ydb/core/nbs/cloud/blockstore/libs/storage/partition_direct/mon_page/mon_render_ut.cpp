@@ -231,15 +231,27 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         TMonPageData data = MakeData();
         for (size_t i = 0; i < VChunkPerRegionCount; ++i) {
             data.Dbgs.push_back(TDbgSnapshot{.Index = i});
+            for (THostIndex host = 0; host < DirectBlockGroupHostCount; ++host)
+            {
+                data.Dbgs.back().Connections.push_back(TConnectionSnapshot{
+                    .HostIndex = host,
+                    .DDiskId = {1, 1, host},
+                    .PBufferId = {{1, 1, host}},
+                });
+            }
         }
 
         TTestTouchedProvider touchedProvider;
         touchedProvider.Touched = {0, 31, 32, 63};
 
-        RenderMonPage(data, EmptyVChunkConfigs, touchedProvider);
+        const TString html =
+            RenderMonPage(data, EmptyVChunkConfigs, touchedProvider);
 
         UNIT_ASSERT_VALUES_EQUAL(0, touchedProvider.GetCallCount);
         UNIT_ASSERT_VALUES_EQUAL(2, touchedProvider.GetRegionCallCount);
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "DDisk:&#10;Primary:6&#10;PBuffer: 10");
     }
 
     Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)

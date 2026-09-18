@@ -505,7 +505,6 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     StoragesManager->GetSharedBlobsManager()->GetStorageManagerVerified(NOlap::IStoragesManager::DefaultStorageId);
     Counters.GetCSCounters().OnStartBackground();
 
-    TryCutHistory(NActors::TActivationContext::AsActorContext());
     if (!TablesManager.HasPrimaryIndex()) {
         if (CutHistoryScan) {
             SetupGC();

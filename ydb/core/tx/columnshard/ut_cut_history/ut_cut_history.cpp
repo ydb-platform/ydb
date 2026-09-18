@@ -2,8 +2,10 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/sessions.h>
 #include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
@@ -212,6 +214,97 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "toGeneration=");
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "recipient=");
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, ToString(OldGroup));
+    }
+
+    Y_UNIT_TEST(CleanedPortionWaitsForQueuedBlob) {
+        TFixture f;
+        f.Controller->DisableBackground(EBackground::Compaction);
+        f.Controller->SetOverrideMaxReadStaleness(TDuration::Zero());
+        f.Schema();
+        f.Write(1, 0, 1000);
+        f.Drive();
+        const auto oldBlobs = f.LiveOldBlobs();
+        UNIT_ASSERT(!oldBlobs.empty());
+        TAutoPtr<IEventHandle> continuation;
+        bool holdScan = true;
+        ui32 cuts = 0;
+        ui32 metadataRequests = 0;
+        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
+            if (!ev->HasEvent()) {
+                return;
+            }
+            if (holdScan && dynamic_cast<TEvPrivate::TEvContinueCutHistory*>(ev->GetBase())) {
+                UNIT_ASSERT(!continuation);
+                continuation = ev.Release();
+            } else if (dynamic_cast<TEvPrivate::TEvAskTabletDataAccessors*>(ev->GetBase())) {
+                ++metadataRequests;
+            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase()); cut && cut->Record.GetChannel() == 2) {
+                UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetFromGeneration(), 0u);
+                UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetGroupID(), OldGroup);
+                ++cuts;
+                ev.Reset();
+            }
+        });
+        f.Restart(NewGroup);
+        UNIT_ASSERT(continuation);
+        const auto* shard = f.Controller->GetTheOnlyShard();
+        const ui32 generation = shard->Generation();
+        const ui32 to = f.History.back().first;
+        const auto storage =
+            std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(shard->GetStoragesManager()->GetDefaultOperator());
+        UNIT_ASSERT(storage);
+        const auto manager = std::dynamic_pointer_cast<NOlap::TBlobManager>(storage->GetBlobsTracker());
+        UNIT_ASSERT(manager);
+        f.Drive();
+        UNIT_ASSERT(manager->HasCollectedThrough(to));
+        UNIT_ASSERT(!storage->HasGCInFlight());
+        UNIT_ASSERT(!manager->HasBlobsInRange(2, 0, to));
+        f.Controller->DisableBackground(EBackground::GC);
+        const auto& index = shard->GetIndexAs<NOlap::TColumnEngineForLogs>();
+        UNIT_ASSERT(!index.GetTables().empty());
+        bool hadPortion = false;
+        for (const auto& [_, granule] : index.GetTables()) {
+            hadPortion |= !granule->GetPortions().empty();
+        }
+        UNIT_ASSERT(hadPortion);
+        const auto dropStep = SetupSchema(f.Runtime, f.Sender, TTestSchema::DropTableTxBody(TableId, 2), 1001);
+        for (ui32 i = 0; i < 60 && !manager->HasBlobsInRange(2, 0, to); ++i) {
+            PlanCommit(f.Runtime, f.Sender, TPlanStep{ dropStep.Val() + i + 1 }, TSet<ui64>{});
+            f.Drive(1);
+        }
+        for (const auto& [_, granule] : index.GetTables()) {
+            UNIT_ASSERT(granule->GetPortions().empty());
+            UNIT_ASSERT(granule->GetInsertedPortions().empty());
+        }
+        bool oldBlobQueued = false;
+        for (const auto& id : oldBlobs) {
+            oldBlobQueued |= storage->HasToDelete(NOlap::TUnifiedBlobId(OldGroup, id), (NOlap::TTabletId)TabletId);
+        }
+        UNIT_ASSERT(oldBlobQueued);
+        UNIT_ASSERT(manager->HasBlobsInRange(2, 0, to));
+        UNIT_ASSERT(manager->HasCollectedThrough(to));
+        UNIT_ASSERT(!storage->HasGCInFlight());
+        UNIT_ASSERT(!storage->GetStopped());
+        UNIT_ASSERT(shard->GetSharingSessionsManager()->CanCutHistory());
+        UNIT_ASSERT(!storage->GetSharedBlobs()->HasBlobsInRange(2, 0, to));
+        UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
+        metadataRequests = 0;
+        holdScan = false;
+        f.Runtime.Send(continuation.Release(), 0, true);
+        f.Drive();
+        UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(metadataRequests, 0u);
+        UNIT_ASSERT_VALUES_EQUAL_C(cuts, 0u, "queued old blob must be the sole remaining cut blocker");
+        f.Controller->EnableBackground(EBackground::GC);
+        for (ui32 i = 0; i < 10; ++i) {
+            ForwardToTablet(f.Runtime, TabletId, f.Sender, new TEvPrivate::TEvPeriodicWakeup());
+            f.Runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(!storage->HasGCInFlight());
+        UNIT_ASSERT(!manager->HasBlobsInRange(2, 0, to));
+        UNIT_ASSERT(storage->CanCutHistory(2, 0, to));
+        UNIT_ASSERT_VALUES_EQUAL(f.Controller->GetTheOnlyShard()->Generation(), generation);
+        UNIT_ASSERT_VALUES_EQUAL_C(cuts, 1u, "periodic wakeup must retry after the delete queue drains in the same boot");
     }
 
     Y_UNIT_TEST(ColdCacheBatchingAndLateSharing) {

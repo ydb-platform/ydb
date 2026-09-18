@@ -2066,6 +2066,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(baseConfig.PDiskSize(), 1);
             const ui32 pdiskNodeId = baseConfig.GetPDisk(0).GetNodeId();
             const ui32 pdiskId = baseConfig.GetPDisk(0).GetPDiskId();
+            const ui32 configuredSlotCount = baseConfig.GetPDisk(0).GetExpectedSlotCount();
+            UNIT_ASSERT(configuredSlotCount != slotCount);
             UNIT_ASSERT_VALUES_EQUAL(pdiskNodeId, env.Runtime->GetNodeId(0));
 
             // The PDisk starts reporting ExpectedSlotSize and the materialized SlotCount in
@@ -2100,7 +2102,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 UNIT_ASSERT_VALUES_EQUAL(syncBaseConfig.PDiskSize(), 1);
                 const auto& syncPDisk = syncBaseConfig.GetPDisk(0);
                 UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetPDiskMetrics().GetExpectedSlotSize(), expectedSlotSize);
-                UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetExpectedSlotCount(), slotCount);
+                UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetPDiskMetrics().GetSlotCount(), slotCount);
+                UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetExpectedSlotCount(), configuredSlotCount);
                 UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetExpectedSlotSize(), expectedSlotSize);
             }
 

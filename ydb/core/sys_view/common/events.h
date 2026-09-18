@@ -85,6 +85,7 @@ struct TEvSysView {
         EvRosterUpdateFinished,
 
         EvRegisterDbDetailedCounters,
+        EvUnregisterDbDetailedCounters,
 
         EvEnd,
     };
@@ -433,6 +434,21 @@ struct TEvSysView {
             : Database(database)
             , Service(service)
             , Counters(counters)
+        {}
+    };
+
+    struct TEvUnregisterDbDetailedCounters : public TEventLocal<
+        TEvUnregisterDbDetailedCounters,
+        EvUnregisterDbDetailedCounters>
+    {
+        TString Database;
+        NKikimrSysView::EDbCountersService Service;
+
+        TEvUnregisterDbDetailedCounters(
+            const TString& database,
+            NKikimrSysView::EDbCountersService service)
+            : Database(database)
+            , Service(service)
         {}
     };
 

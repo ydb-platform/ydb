@@ -177,6 +177,7 @@ public:
             hFunc(TEvPrivate::TEvRemoveDatabase, Handle);
             hFunc(TEvSysView::TEvRegisterDbCounters, Handle);
             hFunc(TEvSysView::TEvRegisterDbDetailedCounters, Handle);
+            hFunc(TEvSysView::TEvUnregisterDbDetailedCounters, Handle);
             hFunc(TEvSysView::TEvSendDbCountersResponse, Handle);
             hFunc(TEvSysView::TEvSendDbLabeledCountersResponse, Handle);
             hFunc(TEvSysView::TEvGetIntervalMetricsRequest, Handle);
@@ -732,6 +733,21 @@ private:
         it->second.DetailedStates[service] = ev->Get()->Counters;
 
         YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbDetailedCounters: registering detailed counters",
+            {"actorId", SelfId()},
+            {"database", database},
+            {"service", static_cast<int>(service)});
+    }
+
+    void Handle(TEvSysView::TEvUnregisterDbDetailedCounters::TPtr& ev) {
+        const auto& database = ev->Get()->Database;
+        const auto service = ev->Get()->Service;
+
+        auto it = DatabaseCounters.find(database);
+        if (it != DatabaseCounters.end()) {
+            it->second.DetailedStates.erase(service);
+        }
+
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvUnregisterDbDetailedCounters: unregistering detailed counters",
             {"actorId", SelfId()},
             {"database", database},
             {"service", static_cast<int>(service)});

@@ -599,17 +599,23 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::T
         return;
     }
 
+    TString cloudId, folderId, databaseId, monitoringProjectId;
     for (const auto& [key, value] : entry.Attributes) {
         if (key == "cloud_id") {
-            CloudId = value;
+            cloudId = value;
         } else if (key == "folder_id") {
-            FolderId = value;
+            folderId = value;
         } else if (key == "database_id") {
-            DatabaseId = value;
+            databaseId = value;
         } else if (key == "monitoring_project_id") {
-            MonitoringProjectId = value;
+            monitoringProjectId = value;
         }
     }
+
+    CloudId = cloudId;
+    FolderId = folderId;
+    DatabaseId = databaseId;
+    MonitoringProjectId = monitoringProjectId;
 
     AttachExternalCounters();
     AttachInternalCounters();

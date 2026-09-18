@@ -14,8 +14,7 @@ using NWilson::TTraceSnapshot;
 namespace NTraceProto = NWilson::NTraceProto;
 
 inline void ClearUploader(TFakeWilsonUploader& uploader) {
-    uploader.Spans.clear();
-    uploader.Traces.clear();
+    uploader.Clear();
 }
 
 inline bool SpanNameMatches(TStringBuf actual, TStringBuf expected) {

@@ -892,4 +892,64 @@ Y_UNIT_TEST_F(NamesFromConfigEmptyPathIsInvalid, TNameResolverFixture) {
     UNIT_ASSERT(!names.IsValid());
 }
 
+Y_UNIT_TEST_F(NamesFromConfigDoesNotAbortOnMalformedInput, TNameResolverFixture) {
+    auto expectInvalid = [](const NKikimrPQ::TPQTabletConfig& cfg, const TString& path, bool fcc) {
+        const auto names = NamesFromConfig(cfg, path, fcc);
+        UNIT_ASSERT_C(!names.IsValid(),
+            TStringBuilder() << "fcc=" << fcc << " path=" << path << " reason=" << names.GetReason());
+        UNIT_ASSERT_C(!names.GetReason().empty(), TStringBuilder() << "fcc=" << fcc << " path=" << path);
+    };
+
+    const TVector<TString> paths = {
+        TString(),
+        "nopath",
+        "/",
+        "//",
+        "account/",
+        "/Root/PQ/",
+        "/Root/PQ/rt3.dc1topic",
+        "/Root/PQ/account/topic/",
+        "/Root/PQ/account/topic",
+        "/lb/db/topic-mirrored-from",
+        "rt3.dc1--",
+        "/Root/PQ/rt3.--topic",
+    };
+
+    for (const bool fcc : {false, true}) {
+        SetFcc(fcc);
+        NKikimrPQ::TPQTabletConfig empty;
+        UNIT_ASSERT_C(!NamesFromConfig(empty).IsValid(), fcc);
+        for (const auto& path : paths) {
+            const auto names = NamesFromConfig(empty, path, fcc);
+            if (!names.IsValid()) {
+                UNIT_ASSERT_C(!names.GetReason().empty(), path);
+            }
+        }
+    }
+
+    NKikimrPQ::TPQTabletConfig empty;
+    expectInvalid(empty, TString(), true);
+    expectInvalid(empty, TString(), false);
+    expectInvalid(empty, TString("nopath"), true);
+    expectInvalid(empty, TString("nopath"), false);
+
+    NKikimrPQ::TPQTabletConfig rt3NoDash;
+    rt3NoDash.SetTopicPath("/Root/PQ/rt3.dc1topic");
+    expectInvalid(rt3NoDash, TString(), false);
+
+    NKikimrPQ::TPQTabletConfig trailing;
+    trailing.SetTopicPath("/Root/PQ/account/topic/");
+    expectInvalid(trailing, TString(), false);
+
+    NKikimrPQ::TPQTabletConfig noDc;
+    noDc.SetTopicPath("/Root/PQ/account/topic");
+    expectInvalid(noDc, TString(), false);
+
+    NKikimrPQ::TPQTabletConfig badMirror;
+    badMirror.SetTopicPath("/lb/db/topic-mirrored-from");
+    badMirror.SetYdbDatabasePath("/lb/db");
+    badMirror.SetFederationAccount("account");
+    expectInvalid(badMirror, TString(), false);
+}
+
 } // Y_UNIT_TEST_SUITE(TNameResolverTest)

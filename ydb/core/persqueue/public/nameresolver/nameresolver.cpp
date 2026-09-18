@@ -1069,6 +1069,11 @@ TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, bool first
 }
 
 TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath) {
+    if (!HasAppData()) {
+        TTopicNames names;
+        names.Reason = "AppData is not available.";
+        return names;
+    }
     const auto& pqConfig = AppData()->PQConfig;
     const bool firstClassCitizen = pqConfig.GetTopicsAreFirstClassCitizen() || !pqConfig.GetEnabled();
     TNameBuilder builder;

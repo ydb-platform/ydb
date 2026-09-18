@@ -158,6 +158,7 @@ inline TTopicNamesPtr MakeTopicNamesPtr(TTopicNames names) {
 /**
  * Tablet's only name entry. Reads firstClassCitizen, PQ Root and TestDatabaseRoot from AppData()->PQConfig.
  * SchemeCache fills TPQGroupInfo::Names with NamesFromConfig(config, schemePath).
+ * Never aborts or throws on malformed config: Valid=false and Reason is set.
  */
 TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config);
 

@@ -1640,6 +1640,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     FillTopicPartitioning(PQGroupInfo->Description, PQGroupInfo->Schema, PQGroupInfo->Partitioning);
                     PQGroupInfo->PartitionChooser = NPQ::CreatePartitionChooser(PQGroupInfo->Description);
                     PQGroupInfo->PartitionGraph = std::make_shared<NPQ::TPartitionGraph>(NPQ::MakePartitionGraph(PQGroupInfo->Description));
+                    // NamesFromConfig never aborts: bad tablet config yields Valid=false.
                     PQGroupInfo->Names = NPQ::NNameResolver::MakeTopicNamesPtr(
                         NPQ::NNameResolver::NamesFromConfig(
                             PQGroupInfo->Description.GetPQTabletConfig(),

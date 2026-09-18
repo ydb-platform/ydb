@@ -322,6 +322,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
+    TryCutHistory(ctx);
     if (ev->Get()->Manual) {
         YDB_LOG_DEBUG("",
             {"event", "TEvPrivate::TEvPeriodicWakeup::MANUAL"},

@@ -4,6 +4,7 @@ SRCS(
     grouper_ut.cpp
     group_mapper_ut.cpp
     mv_object_map_ut.cpp
+    storage_stats_calculator_ut.cpp
 )
 
 FORK_SUBTESTS()
@@ -17,6 +18,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/library/actors/testlib
     ydb/library/actors/util
     ydb/core/yql_testlib
 )

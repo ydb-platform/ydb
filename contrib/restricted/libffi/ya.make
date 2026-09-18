@@ -3,15 +3,15 @@
 LIBRARY()
 
 LICENSE(
-    CC-PDDC AND
+    CC0-1.0 AND
     MIT
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.5.2)
+VERSION(3.6.0)
 
-ORIGINAL_SOURCE(https://github.com/libffi/libffi/archive/v3.5.2.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libffi/libffi/archive/v3.6.0.tar.gz)
 
 PEERDIR(
     contrib/libs/libc_compat

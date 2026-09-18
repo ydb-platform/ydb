@@ -6332,6 +6332,118 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    void TimePerf_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo, const bool useCBO, int nIterations) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        if (!useCBO) {
+            appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
+        }
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        auto kikimrSettings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+
+        kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
+        TKikimrRunner kikimr(kikimrSettings);
+        
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
+
+        {
+            TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+            const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+            const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+            const TString round = R"($round = ($x,$y) -> {return $x;};)";
+
+            q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
+
+            auto queryClient = kikimr.GetQueryClient();
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+            clock_t the_time;
+            double elapsed_time;
+            the_time = clock();
+
+            for (int i=0; i<nIterations; i++) {
+                auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                                .ExtractValueSync();
+                    
+                Y_ENSURE(result.IsSuccess());
+            }
+
+            TString testName;
+            switch(type) {
+                case EBenchType::TPCH:
+                    testName = "tpch";
+                    break;
+                case EBenchType::TPCDS:
+                    testName = "tpcds";
+                    break;
+                case EBenchType::CLICKBENCH:
+                    testName = "clickbench";
+                    break;
+                default:
+                    Y_ENSURE(false, "Unknown benchmark");
+            }
+
+            elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
+            Cout << testName << "," << queryId << "," << newRbo << "," << elapsed_time / nIterations << "\n";
+        }
+    }
+
+    Y_UNIT_TEST(CompilationTimeBench_TPCH) {
+        const auto perfCompilationEnabled = GetTestParam("ENABLE_PERF_COMPILATION");
+        if (perfCompilationEnabled.empty()) {
+            return;
+        }
+
+        int nIterations = 2;
+
+        // TPCH
+        for (int i=1; i<=22; i++) {
+            TimePerf_YqlTest(EBenchType::TPCH, i, true, true, false, nIterations);
+            TimePerf_YqlTest(EBenchType::TPCH, i, true, false, false, nIterations);
+        }
+    }
+
+    Y_UNIT_TEST(CompilationTimeBench_TPCDS) {
+        const auto perfCompilationEnabled = GetTestParam("ENABLE_PERF_COMPILATION");
+        if (perfCompilationEnabled.empty()) {
+            return;
+        }
+
+        int nIterations = 2;
+
+        TVector<int> tpcdsQueries = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, /*17,*/ 18, 19, 20,
+                        21, 22, /*23,*/ 24, 25, 26, /*27,*/ 28, 29, 30, 31, 32, 33, 34, 35, /*36,*/ 37, 38, 39, 40,
+                        41, 42, 43, /*44,*/ 45, 46, /*47,*/ 48, 49, 50, /*51,*/ 52, 53, 54, 55, 56, /*57,*/ 58, 59, 60,
+                        61, 62, 63, 64, 65, 66, 67, 68, 69, /*70,*/ 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+                        81, 82, 83, 84, 85, /*86,*/ 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99};
+
+        for (size_t i=0; i<tpcdsQueries.size(); i++) {
+            TimePerf_YqlTest(EBenchType::TPCDS, tpcdsQueries[i], true, true, false, nIterations);
+            TimePerf_YqlTest(EBenchType::TPCDS, tpcdsQueries[i], true, false, false, nIterations);
+        }
+    }
+
+    Y_UNIT_TEST(CompilationTimeBench_CLICKBENCH) {
+        const auto perfCompilationEnabled = GetTestParam("ENABLE_PERF_COMPILATION");
+        if (perfCompilationEnabled.empty()) {
+            return;
+        }
+
+        int nIterations = 2;
+
+        TVector<int> clickQueries = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21,
+                                           22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 41, 42};
+        for (size_t i=0; i<clickQueries.size(); i++) {
+            TimePerf_YqlTest(EBenchType::CLICKBENCH, clickQueries[i], true, true, false, nIterations);
+            TimePerf_YqlTest(EBenchType::CLICKBENCH, clickQueries[i], true, false, false, nIterations);
+        }
+    }
+
     NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
         NKikimrKqp::TKqpSetting statsSetting;
         statsSetting.SetName("OptOverrideStatistics");

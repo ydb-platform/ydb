@@ -1245,6 +1245,7 @@ namespace NKikimr::NBsController {
                             ScrubState.UpdateVDiskState(slot);
                             if (wasReady) {
                                 NotReadyVSlotIds.insert(slot->VSlotId);
+                                DequeueCheckForGroup(group->ID, /*notifyOrchestrator=*/true);
                             }
                         }
                         timingQ.emplace_back(*slot);
@@ -1280,6 +1281,7 @@ namespace NKikimr::NBsController {
                     vslot.ReadySince = Min(vslot.ReadySince, mono + ReadyStablePeriod);
                 } else {
                     vslot.ReadySince = TMonotonic::Max();
+                    DequeueCheckForGroup(vdiskId.GroupID, /*notifyOrchestrator=*/true);
                 }
                 updates.push_back({
                     .VDiskId = vslot.VDiskId,

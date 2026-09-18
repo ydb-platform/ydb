@@ -73,7 +73,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const sourcePr = context.payload.pull_request.number;
-            const head = `${owner}:ydbdoc-review/pr-${sourcePr}`;
+            const branchPrefix = `ydbdoc-review/pr-${sourcePr}`;
             let translationPr = null;
 
             for (let attempt = 1; attempt <= 6; attempt++) {
@@ -81,12 +81,16 @@ jobs:
                 owner,
                 repo,
                 state: 'open',
-                head,
-                per_page: 1,
+                sort: 'created',
+                direction: 'desc',
+                per_page: 100,
               });
 
-              if (pulls[0]) {
-                translationPr = pulls[0];
+              translationPr = pulls.find(pr =>
+                pr.head.repo?.full_name === `${owner}/${repo}` &&
+                (pr.head.ref === branchPrefix || pr.head.ref.startsWith(`${branchPrefix}-`))
+              );
+              if (translationPr) {
                 break;
               }
 
@@ -98,7 +102,7 @@ jobs:
 
             if (!translationPr) {
               core.warning(
-                `Open translation PR not found for head ${head}. Labels were not added; CI can be triggered manually.`
+                `Open translation PR not found for source #${sourcePr}. Labels were not added; CI can be triggered manually.`
               );
               return;
             }

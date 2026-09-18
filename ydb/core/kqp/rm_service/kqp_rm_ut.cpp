@@ -1665,7 +1665,7 @@ void KqpRm::ArenaFollowsExternalMemory() {
 }
 
 // MinFree = 100, MaxFree = 300: the arena is resized to the demand plus 200 whenever its free part leaves the
-// band, and left alone inside it, an idle arena included
+// band, and left alone inside it
 void KqpRm::ArenaHysteresis() {
     StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;
@@ -1792,7 +1792,7 @@ void KqpRm::ArenaConfigReloadRepricesUnits() {
 }
 
 // The resource broker refuses the growth (queue limit 50'000, another task in flight): the request is satisfied
-// anyway, the deficit is charged to the node total, and a later free of per tx memory retries the growth
+// anyway, the deficit is charged to the node total, and the periodic pass asks again once there is room
 void KqpRm::ArenaDeficitWhenBrokerRefuses() {
     auto config = MakeKqpResourceManagerConfig();
     config.SetQueryMemoryLimit(100'000'000); // the node total does not refuse first, as it would in production
@@ -1842,7 +1842,7 @@ void KqpRm::ArenaDeficitWhenBrokerRefuses() {
 }
 
 // When the full growth (demand plus the hysteresis headroom) is refused, the arena asks for the deficit alone;
-// the headroom stays pending and is asked again when a free returns node memory
+// the headroom stays pending until the periodic pass asks again
 void KqpRm::ArenaGrowRetriesWithDeficitOnly() {
     auto config = MakeArenaConfig(0, 1'000, 3'000); // headroom 2'000
     config.SetQueryMemoryLimit(100'000'000);
@@ -2277,7 +2277,7 @@ void KqpRm::ArenaDemandPastNodeTotal() {
 }
 
 // The growth cap counts the memory the running queries hold, so the resource broker queue never holds the arena
-// plus the tx tasks past the node total; the growth stays pending until a free makes room for it
+// plus the tx tasks past the node total; what the cap withholds waits for the periodic pass
 void KqpRm::ArenaGrowthCapLeavesRoomForRunningQueries() {
     StartRms();
     NKikimr::TActorSystemStub stub;

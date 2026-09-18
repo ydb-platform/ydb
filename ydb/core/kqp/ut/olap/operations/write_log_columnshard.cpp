@@ -47,6 +47,7 @@ TString TColumnShardLogWriter::GetStoreDescription() {
         if (!column->Settings.Extra.empty()) {
             sb << " " << column->Settings.Extra;
         }
+        // Columns{ Name: "message" Type : "Utf8" DataAccessorConstructor{ ClassName: "DICTIONARY" } }
         sb << " }";
     }
 

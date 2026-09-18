@@ -4,11 +4,7 @@ For reading and writing messages to [topics](../datamodel/topic.md), the familia
 
 ## Local and external topics {#local-external-topics}
 
-<<<<<<< HEAD
-YQL queries to topics work the same regardless of whether the topic is in the current database or in another {{ ydb-short-name }} database. The source and receiver of messages can be either a topic **in the same database** where the query is executed, or a topic **in another database**.
-=======
 YQL queries to topics work the same regardless of whether the topic is in the current database or in another database {{ ydb-short-name }}. The source and destination of messages can be either a topic **in the same database** where the query is executed, or a topic **in another database**.
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
 ### Local topics {#local-topics}
 
@@ -33,11 +29,7 @@ INSERT INTO output_topic SELECT ...;
 
 Access to them is performed only through a pre-created [external data source](../datamodel/external_data_source.md) with the YDB source type.
 
-<<<<<<< HEAD
-After creating a source, for example named `ext_source`, accessing topic `input_topic` in an external database is written as follows:
-=======
 After creating a source, for example named `ext_source`, access to topic `input_topic` in the external database is written as follows:
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
 
 ```yql
@@ -49,19 +41,11 @@ The name `ext_source` in the documentation is **conventional** — in your datab
 
 ## Reading from a topic {#topic-read}
 
-<<<<<<< HEAD
-Reading from a topic can be performed in [table](#table-read) and [streaming](#streaming-read) modes (not to be confused with streaming queries).
-=======
 Reading from a topic can be limited to only the topic's current data, or it can wait for new written messages.
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
-### Table reading {#table-read}
+### Reading current data {#table-read}
 
-<<<<<<< HEAD
-In table mode, reading is performed from the first to the last offset stored in the topic at the time the query is started. If data continues to be written to the topic, the query will stop after reaching the last offset known at startup. Specifying filters on [Service fields](#system-metadata) speeds up reading, as reading occurs only over the specified ranges.
-=======
 In this mode, reading is performed from the first to the last offset stored in the topic at the time the query is started. If data continues to be written to the topic, the query will stop after reaching the last offset known at startup. Specifying filters by [service fields](#system-metadata) speeds up reading, as reading is performed only over the specified ranges.
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
 
 ```yql
@@ -73,13 +57,9 @@ LIMIT 10;
 ```
 
 
-### Streaming reading {#streaming-read}
+### Reading with data waiting {#streaming-read}
 
-<<<<<<< HEAD
-To read new messages, use the `WITH (STREAMING = "TRUE")` option — see more in the [Streaming reading of data from a topic](../../yql/reference/syntax/select/streaming.md) section. Reading starts from the current moment and continues until the number of messages specified in the `LIMIT` expression is read. The `LIMIT` parameter is required — without it, the query will not complete, as it will wait for new messages indefinitely.
-=======
 To wait for new messages, use the `WITH (STREAMING = "TRUE")` option. Reading starts from the current moment and continues until the number of messages specified in the `LIMIT` expression is read. The `LIMIT` parameter is required, without it the query will not finish, as it will wait for new messages indefinitely.
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
 
 ```yql
@@ -100,11 +80,7 @@ When reading from a topic, the message body can be obtained in two ways: [raw da
 
 #### Raw data {#raw-read}
 
-<<<<<<< HEAD
-Use when the message content does not need to be parsed — it is enough to read the body as is.
-=======
 Use it when the message content does not need to be parsed; it is enough to read the body as is.
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
 
 ```yql
@@ -128,11 +104,7 @@ The same result can be obtained without the `WITH` block: see [table reading](#t
 
 #### Formatted data {#formatted-read}
 
-<<<<<<< HEAD
-Use when messages are serialized in a known format (JSON, CSV, etc.). The `FORMAT` parameter specifies the parsing method, and `SCHEMA` specifies the names and types of fields that will appear in the `SELECT` result:
-=======
 Use it when messages are serialized in a known format (JSON, CSV, etc.). The `FORMAT` parameter sets the parsing method, and `SCHEMA` sets the names and types of fields that will appear in the `SELECT` result:
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
 
 ```yql
@@ -176,30 +148,17 @@ FROM
 
 ### Service fields {#system-metadata}
 
-<<<<<<< HEAD
-When reading, you can request service fields and [user message attributes](../datamodel/topic.md#message):
-=======
 When reading, you can request service fields and [user-defined message attributes](../datamodel/topic.md#message):
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
 | Field | [Type](../../yql/reference/types/index.md) | Description |
 | --- | --- | --- |
 | `__ydb_create_time` | `Timestamp` | Message creation time |
-<<<<<<< HEAD
-| `__ydb_write_time` | `Timestamp` | Message write time to topic |
-| `__ydb_offset` | `Uint64` | Message offset in partition |
-| `__ydb_partition_id` | `Uint64` | Partition number |
-| `__ydb_message_group_id` | `String` | Message group ID |
-| `__ydb_seq_no` | `Uint64` | Message sequence number within group |
-| `__ydb_user_attributes` | `Dict<String,String>` | [User message attributes](../datamodel/topic.md#message) |
-=======
 | `__ydb_write_time` | `Timestamp` | Time the message was written to the topic |
 | `__ydb_offset` | `Uint64` | Message offset in the partition |
 | `__ydb_partition_id` | `Uint64` | Partition number |
 | `__ydb_message_group_id` | `String` | Message group identifier |
 | `__ydb_seq_no` | `Uint64` | Message sequence number within the group |
 | `__ydb_user_attributes` | `Dict<String,String>` | [User-defined message attributes](../datamodel/topic.md#message) |
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
 Example of using service fields:
 
@@ -219,11 +178,7 @@ LIMIT 10;
 ```
 
 
-<<<<<<< HEAD
-Filters on service fields are evaluated before reading data from the topic and significantly reduce the volume of messages read. Supported are comparison operators (`=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`), logical conditions (`AND`, `OR`), and fields `partition_id`, `write_time`, `offset`. Predicates on other service fields do not limit the read volume.
-=======
 Filters on service fields are evaluated before reading data from the topic and significantly reduce the volume of messages read. Comparison operators (`=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`), logical conditions (`AND`, `OR`), and fields `partition_id`, `write_time`, `offset` are supported. Predicates on other service fields do not limit the read volume.
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
 
 ```yql
@@ -239,11 +194,7 @@ WHERE
 ```
 
 
-<<<<<<< HEAD
-Example of using custom attributes:
-=======
 Example of using user attributes:
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
 
 ```yql
@@ -289,11 +240,7 @@ FROM
 
 {% note warning %}
 
-<<<<<<< HEAD
-Writing [custom attributes](../datamodel/topic.md#message) via YQL is not supported.
-=======
 Writing [user attributes](../datamodel/topic.md#message) via YQL is not supported.
->>>>>>> c2bc19ed6fc (Auto-translate docs from PR #46863 (#53395))
 
 {% endnote %}
 

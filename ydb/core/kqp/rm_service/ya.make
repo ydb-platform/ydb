@@ -25,6 +25,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/node_whiteboard
     ydb/core/util
+    ydb/library/yql/dq/runtime/pattern_cache
 )
 
 YQL_LAST_ABI_VERSION()

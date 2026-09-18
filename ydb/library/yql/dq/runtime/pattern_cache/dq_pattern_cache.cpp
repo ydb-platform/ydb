@@ -1,10 +1,12 @@
-#include "mkql_computation_pattern_cache.h"
+#include "dq_pattern_cache.h"
 
 #include <util/generic/intrlist.h>
 
-namespace NKikimr::NMiniKQL {
+namespace NYql::NDq {
 
-class TComputationPatternLRUCache::TLRUPatternCacheImpl {
+using NKikimr::NMiniKQL::ECompileStatus;
+
+class TComputationPatternCache::TLRUPatternCacheImpl {
 public:
     TLRUPatternCacheImpl(size_t maxPatternsSize,
                          size_t maxPatternsSizeBytes,
@@ -254,8 +256,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr WastedCompilations_;
 };
 
-TComputationPatternLRUCache::TComputationPatternLRUCache(
-    const TComputationPatternLRUCache::TConfig& configuration,
+TComputationPatternCache::TComputationPatternCache(
+    const TComputationPatternCache::TConfig& configuration,
     NMonitoring::TDynamicCounterPtr counters)
     : Cache_(std::make_unique<TLRUPatternCacheImpl>(CacheMaxElementsSize,
                                                     configuration.MaxSizeBytes,
@@ -279,11 +281,11 @@ TComputationPatternLRUCache::TComputationPatternLRUCache(
     *MaxCompiledSizeBytesCounter_ = Configuration_.MaxCompiledSizeBytes;
 }
 
-TComputationPatternLRUCache::~TComputationPatternLRUCache() {
+TComputationPatternCache::~TComputationPatternCache() {
     CleanCache();
 }
 
-TPatternCacheEntryPtr TComputationPatternLRUCache::Find(const TProgramKey& key) {
+TPatternCacheEntryPtr TComputationPatternCache::Find(const TProgramKey& key) {
     std::lock_guard<std::mutex> lock(Mutex_);
     if (auto it = Cache_->Find(key)) {
         ++*Hits_;
@@ -299,7 +301,7 @@ TPatternCacheEntryPtr TComputationPatternLRUCache::Find(const TProgramKey& key) 
     return {};
 }
 
-TPatternCacheEntryFuture TComputationPatternLRUCache::FindOrSubscribe(const TProgramKey& key) {
+std::optional<TPatternCacheEntryFuture> TComputationPatternCache::FindOrSubscribe(const TProgramKey& key) {
     std::lock_guard lock(Mutex_);
     if (auto it = Cache_->Find(key)) {
         ++*Hits_;
@@ -313,8 +315,8 @@ TPatternCacheEntryFuture TComputationPatternLRUCache::FindOrSubscribe(const TPro
         std::forward_as_tuple());
     if (isNew) {
         ++*Misses_;
-        // First future is empty - so the subscriber can initiate the entry creation.
-        return {};
+        // Nothing to wait for - the caller is the one to create the entry.
+        return std::nullopt;
     }
 
     ++*Waits_;
@@ -322,11 +324,11 @@ TPatternCacheEntryFuture TComputationPatternLRUCache::FindOrSubscribe(const TPro
     auto& subscribers = notifyIt->second;
     subscribers.push_back(promise);
 
-    // Second and next futures are not empty - so subscribers can wait while first one creates the entry.
-    return promise;
+    // Somebody else is already creating the entry, so the caller just waits for them.
+    return promise.GetFuture();
 }
 
-void TComputationPatternLRUCache::EmplacePattern(const TProgramKey& key, TPatternCacheEntryPtr patternWithEnv) {
+void TComputationPatternCache::EmplacePattern(const TProgramKey& key, TPatternCacheEntryPtr patternWithEnv) {
     Y_DEBUG_ABORT_UNLESS(patternWithEnv && patternWithEnv->Pattern);
     TVector<NThreading::TPromise<TPatternCacheEntryPtr>> subscribers;
     TPatternCacheEntryPtr cachedEntry;
@@ -351,19 +353,19 @@ void TComputationPatternLRUCache::EmplacePattern(const TProgramKey& key, TPatter
     }
 }
 
-void TComputationPatternLRUCache::UpdatePatternCurrentUsageInfo() {
+void TComputationPatternCache::UpdatePatternCurrentUsageInfo() {
     *SizeItems_ = Cache_->PatternsSize();
     *SizeBytes_ = Cache_->PatternsSizeInBytes();
     *SizeCompiledItems_ = Cache_->CompiledPatternsSize();
     *SizeCompiledBytes_ = Cache_->PatternsCompiledCodeSizeInBytes();
 }
 
-void TComputationPatternLRUCache::NotifyPatternCompiled(const TProgramKey& key) {
+void TComputationPatternCache::NotifyPatternCompiled(const TProgramKey& key) {
     std::lock_guard lock(Mutex_);
     Cache_->NotifyPatternCompiled(key);
 }
 
-void TComputationPatternLRUCache::NotifyPatternMissing(const TProgramKey& key) {
+void TComputationPatternCache::NotifyPatternMissing(const TProgramKey& key) {
     TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>> subscribers;
     {
         std::lock_guard lock(Mutex_);
@@ -381,12 +383,12 @@ void TComputationPatternLRUCache::NotifyPatternMissing(const TProgramKey& key) {
     }
 }
 
-size_t TComputationPatternLRUCache::GetSize() const {
+size_t TComputationPatternCache::GetSize() const {
     std::lock_guard lock(Mutex_);
     return Cache_->PatternsSize();
 }
 
-void TComputationPatternLRUCache::CleanCache() {
+void TComputationPatternCache::CleanCache() {
     std::lock_guard lock(Mutex_);
     PatternsToCompile_.clear();
     Cache_->Clear();
@@ -397,7 +399,7 @@ void TComputationPatternLRUCache::CleanCache() {
     Y_DEBUG_ABORT_UNLESS(*SizeCompiledBytes_ == 0, "Cache is expected to be empty after the CleanCache call");
 }
 
-void TComputationPatternLRUCache::UpdateConfiguration(const TConfig& configuration) {
+void TComputationPatternCache::UpdateConfiguration(const TConfig& configuration) {
     std::lock_guard lock(Mutex_);
     Y_ABORT_UNLESS(Configuration_.PatternAccessTimesBeforeTryToCompile ==
                        configuration.PatternAccessTimesBeforeTryToCompile,
@@ -413,7 +415,7 @@ void TComputationPatternLRUCache::UpdateConfiguration(const TConfig& configurati
     UpdatePatternCurrentUsageInfo();
 }
 
-void TComputationPatternLRUCache::AccessPattern(const TProgramKey& key, TPatternCacheEntryPtr entry) {
+void TComputationPatternCache::AccessPattern(const TProgramKey& key, TPatternCacheEntryPtr entry) {
     if (!Configuration_.PatternAccessTimesBeforeTryToCompile || entry->CompilationIsNotRequired ||
         entry->Pattern->GetCompileStatus() != ECompileStatus::NoCompilationStarted) {
         return;
@@ -426,4 +428,4 @@ void TComputationPatternLRUCache::AccessPattern(const TProgramKey& key, TPattern
     }
 }
 
-} // namespace NKikimr::NMiniKQL
+} // namespace NYql::NDq

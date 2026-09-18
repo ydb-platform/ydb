@@ -393,7 +393,6 @@ void Init(TQueryExecutionStats& stats) {
             UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 8192);
             UNIT_ASSERT_VALUES_EQUAL(snapshot.CpuTimeUs, 400);
 
-            // Final reports may still contain allocated memory.
             stats.UpdateTaskStats(2, 2, second, nullptr, COMPUTE_STATE_FINISHED, TDuration::Max());
             snapshot = stats.GetCurrentExecStats(TInstant::Seconds(14));
             UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 0);
@@ -434,7 +433,6 @@ void Init(TQueryExecutionStats& stats) {
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadIngressBytes, 2300);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.ComputeMemoryBytes, 8192);
 
-        // Storage reports add deltas; compute reports replace cumulative counters.
         auto storage = MakeReport(0, 0, 0, 300, 0);
         stats.UpdateTaskStats(1, 0, storage, nullptr, COMPUTE_STATE_FINISHED, TDuration::Max());
         stats.UpdateTaskStats(1, 0, storage, nullptr, COMPUTE_STATE_FINISHED, TDuration::Max());
@@ -488,7 +486,6 @@ void Init(TQueryExecutionStats& stats) {
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 0);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 8192);
         UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 200);
-        // Task ids can repeat across physical executions.
         TQueryExecutionStats third(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
         Init(third);
         third.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());

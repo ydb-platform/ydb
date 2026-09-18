@@ -527,6 +527,8 @@ void TBaseCloudAuthRequestProxy::Bootstrap() {
         }
     } else if (FolderId_) {
         GetCloudIdAndAuthorize();
+    } else if (ActionClass_ == EActionClass::QueueSpecified) {
+        RetrieveCachedFolderId();
     } else {
         AuthenticateIamToken_ = true;
         Become(&TThis::ProcessAuthentication);

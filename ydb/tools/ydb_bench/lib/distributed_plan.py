@@ -7,10 +7,13 @@ own topology while the host is reserved, then the coordinator freezes the plan.
 from ydb.tools.ydb_bench.lib.cluster_templates import validate_affinity, validate_template
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 from ydb.tools.ydb_bench.lib.topology import plan_affinity
+from ydb.tools.ydb_bench.lib.cluster_config import execution_config, validate_placement, tenant_configs
 
 
 def execution_template(value, host_ids, target_tenant, multiple_cli=False):
     template = validate_template(value, host_ids)
+    execution_config(template.get("ydb_config", {}))
+    tenant_configs(template.get('ydb_tenant_configs', {}), [t['path'] for t in template['tenants']], execution=True)
     nodes = template["nodes"]
     cli_count = sum(node["role"] == "cli" for node in nodes)
     if not cli_count or (not multiple_cli and cli_count != 1):
@@ -29,6 +32,11 @@ def execution_template(value, host_ids, target_tenant, multiple_cli=False):
         if node["role"] == "dynamic" and not node["tenant"]:
             raise BenchmarkError("Dynamic node {} requires a tenant before execution".format(node["name"]))
     media = {disk["media"] for node in nodes if node["role"] == "static" for disk in node["disks"]}
+    validate_placement(template.get('ydb_config', {}), nodes)
+    domains = template.get('ydb_config', {}).get('domains_config', {}).get('domain', [{}])
+    pools = template.get('ydb_config', {}).get('storage_pool_types', domains[0].get('storage_pool_types', []))
+    if pools and any(t['storage_kind'] not in {p['kind'] for p in pools} for t in template['tenants']):
+        raise BenchmarkError('Tenant storage kind has no configured storage pool')
     if any(tenant["storage_kind"] not in media for tenant in template["tenants"]):
         raise BenchmarkError("Tenant storage kind has no matching disks")
     return template

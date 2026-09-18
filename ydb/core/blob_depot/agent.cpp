@@ -15,6 +15,7 @@ namespace NKikimr::NBlobDepot {
             {"serverId", ev->Get()->ServerId});
         const auto [it, inserted] = PipeServers.try_emplace(ev->Get()->ServerId);
         Y_ABORT_UNLESS(inserted);
+        it->second.ConnectionSeq = ++NextPipeServerSeq;
     }
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev) {
@@ -86,12 +87,30 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(!it->second.NodeId || *it->second.NodeId == nodeId);
         it->second.NodeId = nodeId;
         auto& agent = Agents[nodeId];
+
         if (agent.Connection && agent.Connection->PipeServerId != pipeServerId) {
-            // This registration supersedes an older connection. Its TEvServerDisconnected either has not been
-            // processed yet or never will be -- either way the handler above skips it once Connection has moved on,
-            // so nothing else would ever release what that connection held. Note that this covers a plain reconnect
-            // of the same agent instance too, not just an AgentInstanceId change, and that it deliberately runs
-            // before Connection is replaced so the resources are attributed to the connection that held them.
+            // A registration can wait in PostponeQ until the tablet is ready to serve agents, and ProcessRegisterAgentQ
+            // replays those in PipeServers order -- so this one may well predate the connection we are already using.
+            // Honouring it would point Connection at a dead pipe and strand the agent on its live one; note that the
+            // stale-connection guard in handleDelivery cannot catch this, as NodeId is only set once we get here.
+            const auto currentIt = PipeServers.find(agent.Connection->PipeServerId);
+            if (currentIt != PipeServers.end() && it->second.ConnectionSeq < currentIt->second.ConnectionSeq) {
+                YDB_LOG_WARN("dropping a TEvRegisterAgent replayed on a superseded pipe",
+                    {"marker", "BDT99"},
+                    {"id", GetLogId()},
+                    {"nodeId", nodeId},
+                    {"pipeServerId", pipeServerId},
+                    {"connectionSeq", it->second.ConnectionSeq},
+                    {"currentPipeServerId", agent.Connection->PipeServerId},
+                    {"currentConnectionSeq", currentIt->second.ConnectionSeq});
+                return;
+            }
+
+            // Otherwise this registration supersedes the older connection. Its TEvServerDisconnected either has not
+            // been processed yet or never will be -- either way that handler skips it once Connection has moved on,
+            // so nothing else would ever release what the old connection held. Note that this covers a plain
+            // reconnect of the same agent instance too, not just an AgentInstanceId change, and that it runs before
+            // Connection is replaced so the resources are attributed to the connection that held them.
             OnAgentDisconnect(agent);
         }
         if (!agent.Connection) {

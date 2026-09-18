@@ -112,8 +112,12 @@ namespace NKikimr::NBlobDepot {
             const ui8 channel = item.GetChannel();
             const ui32 step = item.GetInvalidatedStep();
 
-            ui32& expired = ExpiredSteps[channel];
-            expired = Max(expired, step);
+            auto& expired = ExpiredSteps[channel];
+            if (expired.Generation == BlobDepotGeneration) {
+                expired.Step = Max(expired.Step, step);
+            } else {
+                expired = {BlobDepotGeneration, step}; // a watermark from an older generation no longer applies
+            }
 
             YDB_LOG_INFO("BlobSeqIds reclaimed by BlobDepot while disconnected",
                 {"marker", "BDA66"},
@@ -198,7 +202,31 @@ namespace NKikimr::NBlobDepot {
         IsConnected = true;
         SwitchMode(EMode::Connected);
 
+        FlushSpoiledBlobSeqIdQ();
         HandlePendingEvent();
+    }
+
+    void TBlobDepotAgent::FlushSpoiledBlobSeqIdQ() {
+        if (SpoiledBlobSeqIdQ.empty()) {
+            return;
+        }
+
+        NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg;
+        for (const TBlobSeqId& blobSeqId : std::exchange(SpoiledBlobSeqIdQ, {})) {
+            // A different generation means the tablet restarted and dropped the whole range already, and an id it
+            // reclaimed while we were away is not ours to hand back either -- it holds no point for either of them.
+            if (blobSeqId.Generation == BlobDepotGeneration && !IsBlobSeqIdExpired(blobSeqId)) {
+                blobSeqId.ToProto(msg.AddItems());
+            }
+        }
+
+        if (msg.ItemsSize()) {
+            YDB_LOG_DEBUG("Returning BlobSeqIds spoiled while disconnected",
+                {"marker", "BDA67"},
+                {"agentId", LogId},
+                {"count", msg.ItemsSize()});
+            Issue(std::move(msg), this, nullptr);
+        }
     }
 
     void TBlobDepotAgent::OnDisconnect() {

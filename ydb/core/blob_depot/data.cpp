@@ -933,7 +933,16 @@ namespace NKikimr::NBlobDepot {
 
         const ui64 value = blobSeqId.ToSequentialNumber();
 
-        agent.GivenIdRanges[blobSeqId.Channel].RemovePoint(value);
+        // The agent may be committing an id we no longer hold: a put whose blobstorage write outlived a
+        // disconnect completes as soon as the proxy answers, which can be before the agent has applied the
+        // invalidations from TEvRegisterAgentResult. RemovePoint aborts on a point we do not have, so check
+        // first and let the caller turn this into an error for the item.
+        auto& agentGivenIdRange = agent.GivenIdRanges[blobSeqId.Channel];
+        if (!agentGivenIdRange.GetPoint(value) || !channel.GivenIdRanges.GetPoint(value)) {
+            return false;
+        }
+
+        agentGivenIdRange.RemovePoint(value);
         channel.GivenIdRanges.RemovePoint(value);
 
         const bool inserted = channel.SequenceNumbersInFlight.insert(value).second;

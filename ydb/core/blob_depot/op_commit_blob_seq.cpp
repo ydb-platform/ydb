@@ -38,8 +38,11 @@ namespace NKikimr::NBlobDepot {
                     if (!item.GetCommitNotify() && item.HasBlobLocator()) {
                         const auto blobSeqId = TBlobSeqId::FromProto(item.GetBlobLocator().GetBlobSeqId());
                         if (Self->Data->CanBeCollected(blobSeqId)) {
-                            // check for internal sanity -- we can't issue barriers on given ids without confirmed trimming
-                            Y_VERIFY_S(blobSeqId.Generation < generation, "committing trimmed BlobSeqId"
+                            // Check for internal sanity -- we can't issue barriers on given ids without confirmed
+                            // trimming, the one exception being a range we reclaimed from this agent while it was
+                            // away (TBlobDepot::ExpireAgent); such an id is answered with an error below.
+                            Y_VERIFY_S(blobSeqId.Generation < generation || Self->IsBlobSeqIdExpired(agent, blobSeqId),
+                                "committing trimmed BlobSeqId"
                                 << " BlobSeqId# " << blobSeqId.ToString()
                                 << " Id# " << Self->GetLogId());
                             CanBeCollectedBlobSeqIds.insert(blobSeqId);

@@ -44,6 +44,19 @@ namespace NKikimr::NBlobDepot {
                 if (IsInFlight) {
                     RemoveBlobSeqFromInFlight();
                 }
+
+                if (!Agent.PipeId) {
+                    // TEvClientDestroyed clears the pipe before it fails the queries, so anything issued from here
+                    // goes nowhere -- and we have just forgotten the id, leaving the tablet holding a point that
+                    // nobody would ever return. Hand it over to be resent on the next connection instead. S3 writes
+                    // in flight need no such care: the tablet releases those itself in OnAgentDisconnect.
+                    if (returnBlobSeqId) {
+                        Agent.EnqueueSpoiledBlobSeqId(BlobSeqId);
+                    }
+                    LocatorInFlight.reset();
+                    return;
+                }
+
                 NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg;
                 if (returnBlobSeqId) {
                     BlobSeqId.ToProto(msg.AddItems());

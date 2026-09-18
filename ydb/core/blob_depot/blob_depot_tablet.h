@@ -128,9 +128,11 @@ namespace NKikimr::NBlobDepot {
             ui64 NextExpectedMsgId = 1;
             std::deque<std::unique_ptr<IEventHandle>> PostponeQ;
             size_t InFlightDeliveries = 0;
+            ui64 ConnectionSeq = 0; // order in which this tablet saw the pipe servers appear
         };
 
         THashMap<TActorId, TPipeServerContext> PipeServers;
+        ui64 NextPipeServerSeq = 0;
         THashMap<ui32, TAgent> Agents; // NodeId -> Agent
 
         struct TChannelKind : NBlobDepot::TChannelKind {
@@ -193,6 +195,15 @@ namespace NKikimr::NBlobDepot {
         // Same as GetAgent(pipeServerId), but returns nullptr instead of aborting when the pipe server is already
         // gone or has been superseded by a newer connection of the same agent
         TAgent *FindAgent(const TActorId& pipeServerId);
+
+        // True when this id falls into a range we reclaimed from the agent while it was disconnected. The tablet's
+        // own ExpiredSteps are in-memory, so every entry belongs to the current generation.
+        bool IsBlobSeqIdExpired(const TAgent& agent, const TBlobSeqId& blobSeqId) const {
+            const auto it = agent.ExpiredSteps.find(blobSeqId.Channel);
+            return it != agent.ExpiredSteps.end()
+                && blobSeqId.Generation == Executor()->Generation()
+                && blobSeqId.Step <= it->second;
+        }
         void ResetAgent(ui32 nodeId, TAgent& agent);
         void ScheduleCheckExpiredAgents();
         void HandleCheckExpiredAgents();

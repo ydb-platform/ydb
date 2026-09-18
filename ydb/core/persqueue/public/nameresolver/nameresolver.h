@@ -94,41 +94,88 @@ std::optional<TFederationAccountTarget> TryFederationAccountTarget(
  * All names derived from a tablet config.
  * Value type; pass TTopicNamesPtr where a shared handle is needed.
  *
- * Federation example (local DC, TopicPath "/Root/PQ/rt3.dc1--account--topic"):
- *   Path="/Root/PQ/rt3.dc1--account--topic"
- *   ClientsideName="rt3.dc1--account--topic", ShortClientsideName="account--topic"
- *   ModernName="topic"
- *   FederationPath="account/topic", FederationPathWithDC="account/topic"
- *   Account="account", Cluster="dc1", LegacyProducer="account", LegacyLogtype="topic"
- *   InternalName="rt3.dc1--account--topic"
- *   TopicForSrcIdHash="account--topic"
- *
- * User-database federation (TopicPath "/lb/account-database/path/topic"):
- *   Path="/lb/account-database/path/topic"
- *   SecondaryPath="/Root/PQ/rt3.dc1--account@path--topic"
- *
- * FCC example (TopicPath "/lb/database/my-stream"):
- *   Path="/lb/database/my-stream", ClientsideName="my-stream"
- *   FederationPath=FederationPathWithDC="my-stream"
- *   TopicForSrcIdHash="lb/database/my-stream", InternalName="/lb/database/my-stream"
+ * Field comments use two federation topics and one FCC topic:
+ *   Fed:     "/Root/PQ/rt3.dc1--account--topic"
+ *   Fed dir: "/lb/account-database/path/topic"  (legacy leaf rt3.dc1--account@path--topic)
+ *   FCC:     "/lb/database/my-stream"
  */
 struct TTopicNames {
     // False if parsing failed; then only Reason is meaningful.
     bool Valid = false;
     TString Reason;
 
+    // Absolute scheme path of the topic object.
+    // Fed: "/Root/PQ/rt3.dc1--account--topic"
+    // Fed dir: "/lb/account-database/path/topic"
+    // FCC: "/lb/database/my-stream"
     TString Path;
+
+    // Name the client uses (legacy rt3 form in federation).
+    // Fed: "rt3.dc1--account--topic"
+    // Fed dir: "rt3.dc1--account@path--topic"
+    // FCC: "my-stream"
     TString ClientsideName;
+
+    // ClientsideName without "rt3.<dc>--". Solomon Topic label in federation.
+    // Fed: "account--topic"
+    // Fed dir: "account@path--topic"
+    // FCC: "my-stream"
     TString ShortClientsideName;
+
+    // Modern path relative to the account; includes "-mirrored-from-<dc>" when remote.
+    // Fed local: "topic"; Fed dir local: "path/topic"; remote: "path/topic-mirrored-from-dc2"
+    // FCC: "my-stream"
     TString ModernName;
+
+    // Logbroker path account[/dir]/topic without DC suffix.
+    // Fed: "account/topic"
+    // Fed dir: "account/path/topic"
+    // FCC: "my-stream" (same as ClientsideName)
     TString FederationPath;
+
+    // FederationPath with "-mirrored-from-<dc>" when the topic is remote.
+    // Fed local: "account/topic"
+    // Fed dir remote: "account/path/topic-mirrored-from-dc2"
+    // FCC: "my-stream"
     TString FederationPathWithDC;
+
+    // Federation account from tablet config.
+    // Fed / Fed dir: "account"
+    // FCC: empty
     TString Account;
+
+    // Origin DC from tablet config.
+    // Fed: "dc1"
+    // FCC: empty
     TString Cluster;
+
+    // Logbroker producer: account or account@dir. Solomon Producer label.
+    // Fed: "account"
+    // Fed dir: "account@path"
+    // FCC: empty
     TString LegacyProducer;
+
+    // Last component of the modern path (logtype).
+    // Fed / Fed dir: "topic"
+    // FCC: empty
     TString LegacyLogtype;
+
+    // Identity key: FullLegacyName in federation, scheme Path in FCC.
+    // Fed: "rt3.dc1--account--topic"
+    // Fed dir: "rt3.dc1--account@path--topic"
+    // FCC: "/lb/database/my-stream"
     TString InternalName;
+
+    // Key mixed into source-id hash (SrcIdMeta2). ShortLegacyName in federation.
+    // Fed: "account--topic"
+    // Fed dir: "account@path--topic"
+    // FCC: "lb/database/my-stream" (scheme path without leading slash)
     TString TopicForSrcIdHash;
+
+    // Alternate scheme path. Set for user-database federation (legacy PQ-root leaf).
+    // Fed PQ-root: empty
+    // Fed dir: "/Root/PQ/rt3.dc1--account@path--topic"
+    // FCC: empty
     TString SecondaryPath;
 
     bool IsValid() const { return Valid; }

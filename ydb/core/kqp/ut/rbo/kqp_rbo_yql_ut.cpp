@@ -6240,8 +6240,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // A RANGE frame runs to the last peer row, which a per-row chain cannot express.
         "range frame with ties",
         "named window shared by several functions over aggregates",
-        // Grouping() is not supported yet.
-        "rank with rollup partition expression",
     };
 
     Y_UNIT_TEST_TWIN(WindowFunctions, ColumnStore) {
@@ -9913,14 +9911,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                         /*queriesWithoutCboCheck=*/{13});
     }
 
-    // Compiled 89 from 99.
+    // Compiled 93 from 99.
     Y_UNIT_TEST(TPCDS_YQL) {
         RunPerf_YqlTest(EBenchType::TPCDS, /*columnstore=*/true,
                         {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, /*17,*/ 18, 19, 20,
-                        21, 22, /*23,*/ 24, 25, 26, /*27,*/ 28, 29, 30, 31, 32, 33, 34, 35, /*36,*/ 37, 38, 39, 40,
+                        21, 22, /*23,*/ 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
                         41, 42, 43, /*44,*/ 45, 46, /*47,*/ 48, 49, 50, /*51,*/ 52, 53, 54, 55, 56, /*57,*/ 58, 59, 60,
-                        61, 62, 63, 64, 65, 66, 67, 68, 69, /*70,*/ 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
-                        81, 82, 83, 84, 85, /*86,*/ 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99},
+                        61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+                        81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99},
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                         // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
                         // in the query or until the known gaps are fixed.
@@ -13975,6 +13973,92 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        }
+    }
+
+    Y_UNIT_TEST(RollupGrouping) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                d Int64,
+                e Int64,
+                primary key(a)
+            ) with (Store = Column);
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        InsertIntoSchema1(db, "/Root/t1", 4);
+
+        const std::vector<std::string> queries = {
+            R"(
+                SELECT count(t1.a), t1.b as b, grouping(t1.b) as g FROM `/Root/t1` as t1
+                group by rollup(t1.b)
+                order by b;
+            )",
+            R"(
+                SELECT count(t1.a), t1.b as b, t1.c as c, grouping(t1.b) as gb, grouping(t1.c) as gc,
+                       grouping(t1.b, t1.c) as gbc
+                FROM `/Root/t1` as t1
+                group by rollup(t1.b, t1.c)
+                order by b, c;
+            )",
+            R"(
+                SELECT count(t1.a), t1.b as b, grouping(t1.b) as g FROM `/Root/t1` as t1
+                group by t1.b
+                order by b;
+            )",
+            R"(
+                SELECT sum(t1.a), t1.b as b, t1.c as c, grouping(t1.b) + grouping(t1.c) as loch
+                FROM `/Root/t1` as t1
+                group by rollup(t1.b, t1.c)
+                order by loch desc, b, c;
+            )",
+            R"(
+                SELECT t1.b as b, t1.c as c, grouping(t1.c) as gc,
+                       rank() over (partition by grouping(t1.c) order by sum(t1.a) desc) as rnk
+                FROM `/Root/t1` as t1
+                group by rollup(t1.b, t1.c)
+                order by gc, rnk;
+            )",
+        };
+
+        const std::vector<std::string> results = {
+            R"([[4u;#;1u];[1u;[1];0u];[1u;[2];0u];[1u;[3];0u];[1u;[4];0u]])",
+            R"([[4u;#;#;1u;1u;3u];[1u;[1];#;0u;1u;1u];[1u;[1];[2];0u;0u;0u];[1u;[2];#;0u;1u;1u];[1u;[2];[3];0u;0u;0u];)"
+            R"([1u;[3];#;0u;1u;1u];[1u;[3];[4];0u;0u;0u];[1u;[4];#;0u;1u;1u];[1u;[4];[5];0u;0u;0u]])",
+            R"([[1u;[1];0u];[1u;[2];0u];[1u;[3];0u];[1u;[4];0u]])",
+            R"([[[6];#;#;2u];[[0];[1];#;1u];[[1];[2];#;1u];[[2];[3];#;1u];[[3];[4];#;1u];)"
+            R"([[0];[1];[2];0u];[[1];[2];[3];0u];[[2];[3];[4];0u];[[3];[4];[5];0u]])",
+            R"([[[4];[5];0u;1u];[[3];[4];0u;2u];[[2];[3];0u;3u];[[1];[2];0u;4u];)"
+            R"([#;#;1u;1u];[[4];#;1u;2u];[[3];#;1u;3u];[[2];#;1u;4u];[[1];#;1u;5u]])",
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "Query " << i << ": " << result.GetIssues().ToString());
+
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "Query " << i << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), results[i], "Query " << i);
         }
     }
 

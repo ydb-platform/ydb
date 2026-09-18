@@ -58,12 +58,9 @@ private:
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
-<<<<<<< HEAD
-=======
     void FailPendingWrites(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage, std::optional<ui32> partitionId = std::nullopt);
     void DropPartitionWriter(const TString& topicPath, ui32 partitionId);
     void InvalidateTopic(const TString& path, bool deleted, const TActorContext& ctx);
->>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
 
     // StateInit - describe topics
     void HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);

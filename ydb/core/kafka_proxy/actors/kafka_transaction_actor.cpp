@@ -90,13 +90,9 @@ namespace NKafka {
 
         bool txnAborted = !ev->Get()->Request->Committed;
         if (CommitStarted) {
-<<<<<<< HEAD
-            return; // we just ignore second and subsequent requests
-=======
             SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::CONCURRENT_TRANSACTIONS,
                 "Commit already in progress");
             return;
->>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
         } else if (txnAborted) {
             SendOkResponse<TEndTxnResponseData>(ev);
             Die(ctx);
@@ -105,16 +101,13 @@ namespace NKafka {
             Die(ctx);
         } else {
             CommitStarted = true;
-<<<<<<< HEAD
-            EndTxnRequestPtr = std::move(ev);
-=======
             PendingEndTxnRequest = std::move(ev);
->>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
             StartKqpSession(ctx);
         }
     }
 
     void TTransactionActor::Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
+        ReplyPendingEndTxn(EKafkaErrors::PRODUCER_FENCED, "Transaction actor poisoned");
         Die(ctx);
     }
 
@@ -122,7 +115,7 @@ namespace NKafka {
         YDB_LOG_DEBUG("KQP session created",
             {LogPrefix()});
         if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
+            ReplyPendingEndTxn(EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
             Die(ctx);
             return;
         }
@@ -140,7 +133,7 @@ namespace NKafka {
             YDB_LOG_WARN(error,
                 {LogPrefix()},
                 {"error", error});
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
+            ReplyPendingEndTxn(EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
             Die(ctx);
             return;
         }
@@ -225,6 +218,7 @@ namespace NKafka {
     void TTransactionActor::Die(const TActorContext &ctx) {
         YDB_LOG_DEBUG("Dying",
             {LogPrefix()});
+        ReplyPendingEndTxn(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "Transaction actor is stopping");
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);
         }
@@ -232,8 +226,6 @@ namespace NKafka {
         TBase::Die(ctx);
     }
 
-<<<<<<< HEAD
-=======
     void TTransactionActor::ReplyPendingEndTxn(EKafkaErrors errorCode, const TString& errorMessage) {
         if (!PendingEndTxnRequest) {
             return;
@@ -246,19 +238,6 @@ namespace NKafka {
         PendingEndTxnRequest.Reset();
     }
 
-    void TTransactionActor::FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage, EKafkaErrors errorCode) {
-        ReplyPendingEndTxn(errorCode, errorMessage);
-        ++KqpCookie;
-        if (Kqp) {
-            Kqp->CloseKqpSession(ctx);
-            Kqp.reset();
-        }
-        KqpSessionId = "";
-        LastSentToKqpRequest = EKafkaTxnKqpRequests::NO_REQUEST;
-        CommitStarted = false;
-    }
-
->>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
     bool TTransactionActor::TxnExpired() {
         return TAppData::TimeProvider->Now().MilliSeconds() - CreatedAt.MilliSeconds() > TxnTimeoutMs;
     }
@@ -358,7 +337,7 @@ namespace NKafka {
             TString error = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected " << expectedResultsSize << ", got " << resultsSize << ".";
             YDB_LOG_WARN(error,
                 {LogPrefix()});
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
+            ReplyPendingEndTxn(EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
             return;
         }
@@ -371,14 +350,14 @@ namespace NKafka {
             TString error = TStringBuilder() << "Error parsing producer state response from KQP. Reason: " << y.what();
             YDB_LOG_WARN(error,
                 {LogPrefix()});
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
+            ReplyPendingEndTxn(EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
             return;
         }
         if (auto error = GetErrorInProducerState(producerState)) {
             YDB_LOG_WARN(error,
                 {LogPrefix()});
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
+            ReplyPendingEndTxn(EKafkaErrors::PRODUCER_FENCED, error->data());
             Die(ctx);
             return;
         }
@@ -389,7 +368,7 @@ namespace NKafka {
             if (auto error = GetErrorInConsumersStates(consumerGenerationsByName)) {
                 YDB_LOG_WARN(error,
                     {LogPrefix()});
-                SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
+                ReplyPendingEndTxn(EKafkaErrors::PRODUCER_FENCED, error->data());
                 Die(ctx);
                 return;
             }
@@ -413,7 +392,7 @@ namespace NKafka {
     void TTransactionActor::HandleCommitResponse(const TActorContext& ctx) {
         YDB_LOG_DEBUG("Successfully committed transaction. Sending ok and dying",
             {LogPrefix()});
-        SendOkResponse<TEndTxnResponseData>(EndTxnRequestPtr);
+        ReplyPendingEndTxn(EKafkaErrors::NONE_ERROR);
         Die(ctx);
     }
 

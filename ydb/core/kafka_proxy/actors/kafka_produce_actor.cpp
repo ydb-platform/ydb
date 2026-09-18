@@ -294,8 +294,6 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
     StartPendingRequest(ctx);
 }
 
-<<<<<<< HEAD
-=======
 void TKafkaProduceActor::FailPendingWrites(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage, std::optional<ui32> partitionId) {
     for (auto it = Cookies.begin(); it != Cookies.end();) {
         const ui64 cookie = it->first;
@@ -364,43 +362,22 @@ void TKafkaProduceActor::InvalidateTopic(const TString& path, bool deleted, cons
         topicInfo.Status = NOT_FOUND;
         topicInfo.ExpirationTime = ctx.Now() + TOPIC_NOT_FOUND_EXPIRATION_INTERVAL;
         topicInfo.PartitionChooser.reset();
-        topicInfo.SecurityObject = nullptr;
     } else {
         // Keep in-flight partition writers alive so a late TEvWriteResponse/TEvDisconnected
-        // does not race with cookie completion. New produces are rejected via HasTopicAccess
-        // after the topic is re-described. Idle writers are collected by CleanWriters.
+        // does not race with cookie completion. Idle writers are collected by CleanWriters.
         Topics.erase(path);
     }
 
     SendResults(ctx);
 }
 
->>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
 void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx) {
     auto& path = ev->Get()->Path;
     YDB_LOG_INFO("Produce actor: Topic was deleted",
         {LogPrefix()},
         {"path", path});
 
-    auto it = NonTransactionalWriters.find(path);
-    if (it != NonTransactionalWriters.end()) {
-        auto itCopy = it++;
-        for(auto& [_, writer] : itCopy->second) {
-            Send(writer.ActorId, new TEvents::TEvPoison());
-        }
-        NonTransactionalWriters.erase(itCopy);
-    }
-    for (auto& [topicPartition, writer] : TransactionalWriters) {
-        if (topicPartition.TopicPath == path) {
-            Send(writer.ActorId, new TEvents::TEvPoison());
-        }
-        TransactionalWriters.erase(topicPartition);
-    }
-
-    auto& topicInfo = Topics[path];
-    topicInfo.Status = NOT_FOUND;
-    topicInfo.ExpirationTime = ctx.Now() + TOPIC_NOT_FOUND_EXPIRATION_INTERVAL;
-    topicInfo.PartitionChooser.reset();
+    InvalidateTopic(path, true, ctx);
 }
 
 void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {

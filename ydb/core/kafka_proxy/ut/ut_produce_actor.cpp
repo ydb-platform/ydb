@@ -1,6 +1,7 @@
 #include <ydb/core/kafka_proxy/actors/kafka_produce_actor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <limits>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
@@ -68,6 +69,7 @@ namespace {
             TActorId ActorId;
             const TString Database = "/Root/PQ";
             const TString TopicName = "topic"; // as specified in pq_ut_common
+            const TString TopicPath = "/Root/PQ/my-topic";
             const NKikimrConfig::TKafkaProxyConfig KafkaConfig = {};
             const TString KeyToProduce = "record-key";
             const TString ValueToProduce = "record-value";
@@ -77,11 +79,7 @@ namespace {
                 Ctx.ConstructInPlace();
 
                 Ctx->Prepare();
-<<<<<<< HEAD
-                PQTabletPrepare({.partitions=1}, {}, *Ctx);
-=======
                 PQTabletPrepare({.partitions=4}, {}, *Ctx);
->>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
                 Ctx->Runtime->SetScheduledLimit(5'000);
                 Ctx->Runtime->DisableBreakOnStopCondition();
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_TRACE);
@@ -100,9 +98,6 @@ namespace {
                 Ctx->Finalize();
             }
 
-<<<<<<< HEAD
-            void SendProduce(TMaybe<TString> transactionalId = {}, ui64 producerId = 0, ui16 producerEpoch = 0, i32 baseSequence = 0) {
-=======
             void SendProduce(TMaybe<TString> transactionalId = {}, ui64 producerId = 0, ui16 producerEpoch = 0, i32 baseSequence = 0, i32 partitionIndex = 0, i64 baseTimestamp = 0, i64 timestampDelta = 0, ECompressionType compression = ECompressionType::NONE) {
                 SendProduceToPartitions({partitionIndex}, transactionalId, producerId, producerEpoch, baseSequence, baseTimestamp, timestampDelta, compression);
             }
@@ -116,18 +111,12 @@ namespace {
                     i64 baseTimestamp = 0,
                     i64 timestampDelta = 0,
                     ECompressionType compression = ECompressionType::NONE) {
->>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
                 auto message = std::make_shared<NKafka::TProduceRequestData>();
                 if (transactionalId) {
                     message->TransactionalId = transactionalId->data();
                 }
                 NKafka::TProduceRequestData::TTopicProduceData topicData;
                 topicData.Name = "my-topic";
-<<<<<<< HEAD
-                NKafka::TProduceRequestData::TTopicProduceData::TPartitionProduceData partitionData;
-                partitionData.Index = 0;
-=======
->>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
                 NKafka::TKafkaRecords records(std::in_place);
                 records->ProducerId = producerId;
                 records->ProducerEpoch = producerEpoch;
@@ -135,7 +124,10 @@ namespace {
                 records->BaseOffset = 3;
                 records->BaseSequence = baseSequence;
                 records->Magic = 2; // Current supported
+                records->BaseTimestamp = baseTimestamp;
+                records->Attributes = static_cast<i16>(compression);
                 records->Records.resize(1);
+                records->Records[0].TimestampDelta = timestampDelta;
                 records->Records[0].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
                 records->Records[0].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
 
@@ -179,8 +171,6 @@ namespace {
                 auto ev = std::make_unique<TDummySchemeCacheActor::TEvReplyTopicNotFound>();
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(MakeSchemeCacheID(), Ctx->Edge, ev.release()));
             }
-<<<<<<< HEAD
-=======
 
             NSchemeCache::TDescribeResult::TPtr MakeDescribeResult(
                     const std::vector<ui32>& partitionIds,
@@ -218,7 +208,6 @@ namespace {
                 UNIT_ASSERT(response != nullptr);
                 return response;
             }
->>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
         };
 
     Y_UNIT_TEST_SUITE_F(ProduceActor, TProduceActorFixture) {
@@ -588,8 +577,6 @@ namespace {
                 NKafka::EKafkaErrors::NOT_LEADER_OR_FOLLOWER);
         }
 
-<<<<<<< HEAD
-=======
         Y_UNIT_TEST(OnWriteResponseError_ShouldFailRemainingCookiesOfSameWriter) {
             Ctx->Runtime->SetDispatchTimeout(TDuration::Seconds(5));
 
@@ -662,7 +649,6 @@ namespace {
             }
         }
 
->>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
         Y_UNIT_TEST(OnProduce_ManyRequests) {
             i64 producerId = 1;
             i32 producerEpoch = 2;

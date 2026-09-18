@@ -117,7 +117,11 @@ public:
         auto* actorSystem = NActors::TActivationContext::ActorSystem();
         auto actorId = SelfId();
         // Query parameters belong to the target cluster, including `database` and `timeout`.
-        Location.GetTableClient(TMVP::GetStrictMetaDatabaseClientSettings(Request, Location))
+        auto clientSettings = TMVP::GetStrictMetaDatabaseClientSettings(Request, Location);
+        // Concurrent clients can share driver state before its initial discovery finishes.
+        // Async discovery waits for endpoints instead of failing with an empty endpoint list.
+        clientSettings.DiscoveryMode(NYdb::EDiscoveryMode::Async);
+        Location.GetTableClient(clientSettings)
             .CreateSession().Subscribe([actorId, actorSystem](NYdb::NTable::TAsyncCreateSessionResult result) {
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(result.ExtractValue()));
             });

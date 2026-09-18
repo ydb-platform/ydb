@@ -61,13 +61,13 @@ public:
         auto info = MakeIntrusive<TTabletStorageInfo>();
         info->TabletID = TabletId;
         info->TabletType = TTabletTypes::ColumnShard;
-        info->Channels.resize(3);
-        for (ui32 channel = 0; channel < 3; ++channel) {
+        info->Channels.resize(FirstDataChannel + 1);
+        for (ui32 channel = 0; channel < info->Channels.size(); ++channel) {
             auto& ch = info->Channels[channel];
             ch.Channel = channel;
             ch.Type = TBlobStorageGroupType(BootGroupErasure);
             ch.History.emplace_back(0, OldGroup);
-            if (channel == 2) {
+            if (channel == FirstDataChannel) {
                 for (size_t i = 1; i < History.size(); ++i) {
                     ch.History.emplace_back(History[i].first, History[i].second);
                 }
@@ -138,7 +138,7 @@ public:
     std::vector<TLogoBlobID> LiveOldBlobs() const {
         std::vector<TLogoBlobID> result;
         for (const auto& [id, blob] : OldProxy->AllMyBlobs()) {
-            if (id.TabletID() == TabletId && id.Channel() >= 2 && !blob.DoNotKeep) {
+            if (id.TabletID() == TabletId && id.Channel() >= FirstDataChannel && !blob.DoNotKeep) {
                 result.push_back(id);
             }
         }
@@ -178,11 +178,12 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                 return;
             }
             if (const auto* gc = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(ev->GetBase());
-                holdGC && gc && gc->TabletId == TabletId && gc->Channel == 2) {
+                holdGC && gc && gc->TabletId == TabletId && gc->Channel == FirstDataChannel) {
                 held.emplace_back(ev.Release());
             } else if (dynamic_cast<TEvPrivate::TEvContinueCutHistory*>(ev->GetBase())) {
                 ++batches;
-            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase()); cut && cut->Record.GetChannel() == 2) {
+            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
+                       cut && cut->Record.GetChannel() == FirstDataChannel) {
                 UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetFromGeneration(), 0u);
                 UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetGroupID(), OldGroup);
                 ++cuts;
@@ -217,7 +218,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "toGeneration=");
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "recipient=");
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "TabletID: " + ToString(TabletId));
-        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "Channel: 2");
+        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "Channel: " + ToString(FirstDataChannel));
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "FromGeneration: 0");
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "GroupID: " + ToString(OldGroup));
         const auto journalStart = page->Get()->Html.find("<h3>Persisted CutHistory");
@@ -255,7 +256,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                 continuation = ev.Release();
             } else if (dynamic_cast<TEvPrivate::TEvAskTabletDataAccessors*>(ev->GetBase())) {
                 ++metadataRequests;
-            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase()); cut && cut->Record.GetChannel() == 2) {
+            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
+                       cut && cut->Record.GetChannel() == FirstDataChannel) {
                 UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetFromGeneration(), 0u);
                 UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetGroupID(), OldGroup);
                 ++cuts;
@@ -275,7 +277,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Drive();
         UNIT_ASSERT(manager->HasCollectedThrough(to));
         UNIT_ASSERT(!storage->HasGCInFlight());
-        UNIT_ASSERT(!manager->HasBlobsInRange(2, 0, to));
+        UNIT_ASSERT(!manager->HasBlobsInRange(FirstDataChannel, 0, to));
         f.Controller->DisableBackground(EBackground::GC);
         const auto& index = shard->GetIndexAs<NOlap::TColumnEngineForLogs>();
         UNIT_ASSERT(!index.GetTables().empty());
@@ -285,7 +287,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         }
         UNIT_ASSERT(hadPortion);
         const auto dropStep = SetupSchema(f.Runtime, f.Sender, TTestSchema::DropTableTxBody(TableId, 2), 1001);
-        for (ui32 i = 0; i < 60 && !manager->HasBlobsInRange(2, 0, to); ++i) {
+        for (ui32 i = 0; i < 60 && !manager->HasBlobsInRange(FirstDataChannel, 0, to); ++i) {
             PlanCommit(f.Runtime, f.Sender, TPlanStep{ dropStep.Val() + i + 1 }, TSet<ui64>{});
             f.Drive(1);
         }
@@ -298,12 +300,12 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             oldBlobQueued |= storage->HasToDelete(NOlap::TUnifiedBlobId(OldGroup, id), (NOlap::TTabletId)TabletId);
         }
         UNIT_ASSERT(oldBlobQueued);
-        UNIT_ASSERT(manager->HasBlobsInRange(2, 0, to));
+        UNIT_ASSERT(manager->HasBlobsInRange(FirstDataChannel, 0, to));
         UNIT_ASSERT(manager->HasCollectedThrough(to));
         UNIT_ASSERT(!storage->HasGCInFlight());
         UNIT_ASSERT(!storage->GetStopped());
         UNIT_ASSERT(shard->GetSharingSessionsManager()->CanCutHistory());
-        UNIT_ASSERT(!storage->GetSharedBlobs()->HasBlobsInRange(2, 0, to));
+        UNIT_ASSERT(!storage->GetSharedBlobs()->HasBlobsInRange(FirstDataChannel, 0, to));
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
         metadataRequests = 0;
         holdScan = false;
@@ -318,8 +320,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             f.Runtime.SimulateSleep(TDuration::Seconds(1));
         }
         UNIT_ASSERT(!storage->HasGCInFlight());
-        UNIT_ASSERT(!manager->HasBlobsInRange(2, 0, to));
-        UNIT_ASSERT(storage->CanCutHistory(2, 0, to));
+        UNIT_ASSERT(!manager->HasBlobsInRange(FirstDataChannel, 0, to));
+        UNIT_ASSERT(storage->CanCutHistory(FirstDataChannel, 0, to));
         UNIT_ASSERT_VALUES_EQUAL(f.Controller->GetTheOnlyShard()->Generation(), generation);
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 1u, "periodic wakeup must retry after the delete queue drains in the same boot");
     }
@@ -371,7 +373,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                 for (const auto& [_, portions] : ask->GetPortions()) {
                     misses += portions.GetPortionsCount();
                 }
-            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase()); cut && cut->Record.GetChannel() == 2) {
+            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
+                       cut && cut->Record.GetChannel() == FirstDataChannel) {
                 ++cuts;
                 ev.Reset();
             }
@@ -444,7 +447,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT(!f.LiveOldBlobs().empty());
         std::set<ui32> cutFrom;
         auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
-            if (ev->Get()->Record.GetChannel() == 2) {
+            if (ev->Get()->Record.GetChannel() == FirstDataChannel) {
                 UNIT_ASSERT_C(ev->Get()->Record.GetFromGeneration() != 0, "uncommitted old data must pin its interval");
                 cutFrom.emplace(ev->Get()->Record.GetFromGeneration());
                 ev.Reset();
@@ -501,7 +504,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         const auto oldBlobs = f.LiveOldBlobs();
         UNIT_ASSERT_C(!oldBlobs.empty(), "DEFAULT index must remain after column payload eviction");
         auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
-            UNIT_ASSERT_C(ev->Get()->Record.GetChannel() != 2, "tiered portion's DEFAULT index must pin history");
+            UNIT_ASSERT_C(ev->Get()->Record.GetChannel() != FirstDataChannel, "tiered portion's DEFAULT index must pin history");
             ev.Reset();
         });
         const ui64 scans = f.Samples("Scan");

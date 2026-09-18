@@ -6,13 +6,14 @@
 #include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/size_literals.h>
 
 #include <iterator>
 
 namespace NKikimr::NColumnShard {
 namespace {
 constexpr size_t CutHistoryScanBatchSize = 32;
-constexpr ui64 CutHistoryScanMemoryTarget = 8 * (1 << 20);
+constexpr ui64 CutHistoryScanMemoryTarget = 8_MB;
 constexpr TDuration CutHistoryContinuationDelay = TDuration::MilliSeconds(1);
 }   // namespace
 
@@ -35,11 +36,10 @@ public:
         }
         ui64 sequence = last.EndOfSet() ? 0 : last.GetValue<T::Sequence>();
         for (const auto& request : Requests) {
-            db.Table<T>().Key(++sequence).Update(NIceDb::TUpdate<T::TabletID>(request.Record.GetTabletID()),
-                NIceDb::TUpdate<T::Channel>(request.Record.GetChannel()), NIceDb::TUpdate<T::FromGeneration>(request.Record.GetFromGeneration()),
-                NIceDb::TUpdate<T::GroupID>(request.Record.GetGroupID()), NIceDb::TUpdate<T::TimestampUs>(request.Timestamp.MicroSeconds()),
-                NIceDb::TUpdate<T::Recipient>(request.Recipient), NIceDb::TUpdate<T::ToGeneration>(request.ToGeneration),
-                NIceDb::TUpdate<T::SendingGeneration>(request.SendingGeneration));
+            db.Table<T>().Key(++sequence).Update(NIceDb::TUpdate<T::TabletID>(request.TabletID), NIceDb::TUpdate<T::Channel>(request.Channel),
+                NIceDb::TUpdate<T::FromGeneration>(request.FromGeneration), NIceDb::TUpdate<T::GroupID>(request.GroupID),
+                NIceDb::TUpdate<T::TimestampUs>(request.Timestamp.MicroSeconds()), NIceDb::TUpdate<T::Recipient>(request.Recipient),
+                NIceDb::TUpdate<T::ToGeneration>(request.ToGeneration), NIceDb::TUpdate<T::SendingGeneration>(request.SendingGeneration));
             if (sequence > CutHistoryRequestLimit) {
                 db.Table<T>().Key(sequence - CutHistoryRequestLimit).Delete();
             }
@@ -72,7 +72,7 @@ void TColumnShard::StartCutHistoryScan(const TActorContext& ctx) {
     }
     TCutHistoryScan scan;
     scan.Started = ctx.Now();
-    for (ui32 channel = 2; channel < Info()->Channels.size(); ++channel) {
+    for (ui32 channel = FirstDataChannel; channel < Info()->Channels.size(); ++channel) {
         const auto& history = Info()->Channels[channel].History;
         for (size_t i = 0; i + 1 < history.size(); ++i) {
             scan.Intervals.push_back({ channel, history[i].FromGeneration, history[i + 1].FromGeneration, history[i].GroupID });
@@ -160,7 +160,7 @@ void TColumnShard::FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& resu
             }
             for (auto& interval : scan.Intervals) {
                 if (id.Channel() == interval.Channel && interval.From <= id.Generation() && id.Generation() < interval.To) {
-                    interval.NonEmpty = true;
+                    ++interval.BlobReferences;
                 }
             }
         }
@@ -183,7 +183,7 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     }
     std::vector<TCutHistoryRequest> requests;
     for (auto& interval : CutHistoryScan->Intervals) {
-        if (interval.NonEmpty || interval.Sent || interval.Channel >= Info()->Channels.size()) {
+        if (interval.BlobReferences != 0 || interval.Sent || interval.Channel >= Info()->Channels.size()) {
             continue;
         }
         const auto& history = Info()->Channels[interval.Channel].History;
@@ -205,7 +205,7 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
         event->Record.SetChannel(interval.Channel);
         event->Record.SetFromGeneration(interval.From);
         event->Record.SetGroupID(interval.Group);
-        requests.push_back({ event->Record, ctx.Now(), LauncherID(), interval.To, Generation() });
+        requests.push_back({ TabletID(), interval.Channel, interval.From, interval.Group, ctx.Now(), LauncherID(), interval.To, Generation() });
         interval.Sent = true;
         Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *CutHistoryScan->Finished);
         ctx.Send(LauncherID(), event.release());

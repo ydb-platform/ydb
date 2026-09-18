@@ -602,7 +602,7 @@ private:
         ui32 From;
         ui32 To;
         ui32 Group;
-        bool NonEmpty = false;
+        ui64 BlobReferences = 0;
         bool Sent = false;
     };
 
@@ -619,7 +619,10 @@ private:
     static constexpr ui64 CutHistoryRequestLimit = 64;
 
     struct TCutHistoryRequest {
-        NKikimrTabletBase::TEvCutTabletHistory Record;
+        ui64 TabletID;
+        ui32 Channel;
+        ui32 FromGeneration;
+        ui32 GroupID;
         TInstant Timestamp;
         TActorId Recipient;
         ui32 ToGeneration;

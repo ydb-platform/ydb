@@ -673,10 +673,10 @@ bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
         }
         while (!row.EndOfSet()) {
             auto& request = CutHistoryRequests.emplace_back();
-            request.Record.SetTabletID(row.GetValue<T::TabletID>());
-            request.Record.SetChannel(row.GetValue<T::Channel>());
-            request.Record.SetFromGeneration(row.GetValue<T::FromGeneration>());
-            request.Record.SetGroupID(row.GetValue<T::GroupID>());
+            request.TabletID = row.GetValue<T::TabletID>();
+            request.Channel = row.GetValue<T::Channel>();
+            request.FromGeneration = row.GetValue<T::FromGeneration>();
+            request.GroupID = row.GetValue<T::GroupID>();
             request.Timestamp = TInstant::MicroSeconds(row.GetValue<T::TimestampUs>());
             request.Recipient = row.GetValue<T::Recipient>();
             request.ToGeneration = row.GetValue<T::ToGeneration>();
@@ -823,7 +823,8 @@ TString TTxMonitoring::RenderMainPage() {
     for (const auto& request : CutHistoryRequests) {
         html << TEscapeHtml(TStringBuilder() << request.Timestamp << " recipient=" << request.Recipient
                                              << " toGeneration=" << request.ToGeneration << " sendingGeneration=" << request.SendingGeneration
-                                             << " " << request.Record.ShortDebugString())
+                                             << " TabletID: " << request.TabletID << " Channel: " << request.Channel
+                                             << " GroupID: " << request.GroupID << " FromGeneration: " << request.FromGeneration)
              << "\n";
     }
     html << "</pre>";

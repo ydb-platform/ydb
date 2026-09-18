@@ -252,7 +252,9 @@ TIntrusivePtr<IDbCounters> TSysViewProcessor::CreateCountersForService(
 }
 
 void TSysViewProcessor::AttachExternalCounters() {
-    if (!Database) {
+    // The navigate result handler runs whenever either EnableDbCounters or
+    // EnableDataShardDetailedMetrics is set, so the gate has to live here.
+    if (!Database || !AppData()->FeatureFlags.GetEnableDbCounters()) {
         return;
     }
 
@@ -272,7 +274,7 @@ void TSysViewProcessor::AttachExternalCounters() {
 }
 
 void TSysViewProcessor::AttachInternalCounters() {
-    if (!Database) {
+    if (!Database || !AppData()->FeatureFlags.GetEnableDbCounters()) {
         return;
     }
 
@@ -284,7 +286,7 @@ void TSysViewProcessor::AttachInternalCounters() {
 }
 
 void TSysViewProcessor::DetachExternalCounters() {
-    if (!Database) {
+    if (!Database || !AppData()->FeatureFlags.GetEnableDbCounters()) {
         return;
     }
 
@@ -296,7 +298,7 @@ void TSysViewProcessor::DetachExternalCounters() {
 }
 
 void TSysViewProcessor::DetachInternalCounters() {
-    if (!Database) {
+    if (!Database || !AppData()->FeatureFlags.GetEnableDbCounters()) {
         return;
     }
 

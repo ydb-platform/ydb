@@ -30,6 +30,9 @@ public:
     virtual void StartClientSession() = 0;
     virtual void AddDataToClient(ui64 offset, ui64 numberRows, ui64 rowSize, TMaybe<TInstant> watermark) = 0;
     virtual void UpdateClientOffset(ui64 offset) = 0;
+    virtual ui64 GetWatermarkGranularityUs() const {
+        return 1;
+    }
 };
 
 struct TDataBatch {

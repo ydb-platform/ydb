@@ -838,12 +838,6 @@ public:
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
                 return;
             }
-            // Keep the active request's metadata until its response reaches the
-            // proxy, even if the session actor has already become ready.
-            if (sessionInfo->State == TKqpSessionInfo::EXECUTING) {
-                ReplyProcessError(Ydb::StatusIds::SESSION_BUSY, "Session is busy", requestId);
-                return;
-            }
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
             ev->Get()->GetUserRequestContext()->CollectCurrentQueryStats = true;
 

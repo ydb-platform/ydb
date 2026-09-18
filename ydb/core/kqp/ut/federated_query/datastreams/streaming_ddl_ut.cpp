@@ -212,8 +212,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
+        const auto checkpointId = GetStreamingQueryCheckpointId(queryName);
+        WaitCheckpointUpdate(checkpointId);
+
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
+        WaitCheckpointUpdate(checkpointId);
 
         // Seeing the output only means the message was processed, not that its input offset
         // is durable. ALTER with a changed query text cancels the running execution and the

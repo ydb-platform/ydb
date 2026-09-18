@@ -12,6 +12,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -1639,6 +1640,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     FillTopicPartitioning(PQGroupInfo->Description, PQGroupInfo->Schema, PQGroupInfo->Partitioning);
                     PQGroupInfo->PartitionChooser = NPQ::CreatePartitionChooser(PQGroupInfo->Description);
                     PQGroupInfo->PartitionGraph = std::make_shared<NPQ::TPartitionGraph>(NPQ::MakePartitionGraph(PQGroupInfo->Description));
+                    PQGroupInfo->Names = NPQ::NNameResolver::MakeTopicNamesPtr(
+                        NPQ::NNameResolver::NamesFromConfig(
+                            PQGroupInfo->Description.GetPQTabletConfig(),
+                            Path));
                 }
                 break;
             case NKikimrSchemeOp::EPathTypeCdcStream:

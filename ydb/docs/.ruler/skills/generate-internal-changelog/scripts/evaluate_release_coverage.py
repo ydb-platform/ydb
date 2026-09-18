@@ -158,19 +158,45 @@ def _check_downloads(
     docker = f"cr.yandex/crptqonuodf51kdj7a7d/ydb:{release_tag}"
     source = f"https://github.com/ydb-platform/ydb/tree/{release_tag}"
     changelog = f"../changelog-server.md#{slug}"
-    expected = {
-        f"|| **v{docs_version}** | > | > | > ||": "version group",
-        f"|| v.{release_tag} |": "release row",
-        binary: "Linux archive",
-        docker: "Docker image",
-        source: "source tag",
-        changelog: "RC changelog anchor",
+    section_titles = {
+        "en": (("Linux", binary), ("Docker", docker), ("Source Code", source)),
+        "ru": (("Linux", binary), ("Docker", docker), ("Исходный код", source)),
     }
-    return [
-        f"{label} downloads missing {description}: {value}"
-        for value, description in expected.items()
-        if value not in text
-    ]
+    errors: list[str] = []
+    group = f"|| **v{docs_version}** | > | > | > ||"
+    row_pattern = re.compile(
+        rf"^\|\| v\.{re.escape(release_tag)}\s*\|\s*"
+        r"([0-3][0-9]\.[0-1][0-9]\.[0-9]{2})\s*\|(?P<payload>.*)\|\|$",
+        re.MULTILINE,
+    )
+    for title, artifact in section_titles[locale]:
+        match = re.search(
+            rf"^## {re.escape(title)}\s*$([\s\S]*?)(?=^##\s|\Z)",
+            text,
+            re.MULTILINE,
+        )
+        if not match:
+            errors.append(f"{label} downloads missing {title} table")
+            continue
+        section = match.group(1)
+        group_match = re.search(rf"^{re.escape(group)}$", section, re.MULTILINE)
+        row_match = row_pattern.search(section)
+        if not group_match:
+            errors.append(f"{label} {title} table missing version group: {group}")
+        if not row_match:
+            errors.append(f"{label} {title} table missing RC row: v.{release_tag}")
+            continue
+        if not group_match or group_match.start() > row_match.start():
+            errors.append(f"{label} {title} RC row is not under its version group")
+        version_groups = list(re.finditer(r"^\|\| \*\*v[0-9]+\.[0-9]+\*\* \|", section, re.MULTILINE))
+        if version_groups and group_match and version_groups[0].start() != group_match.start():
+            errors.append(f"{label} {title} RC group is not above the preceding release")
+        payload = row_match.group("payload")
+        if artifact not in payload:
+            errors.append(f"{label} {title} RC row missing artifact: {artifact}")
+        if changelog not in payload:
+            errors.append(f"{label} {title} RC row missing changelog anchor: {changelog}")
+    return errors
 
 
 def _derive_filter_keys(

@@ -14,6 +14,15 @@ This skill helps developers write documentation for YDB while following all stru
 
 ---
 
+## PR scope
+
+Keep implementation and documentation separate. A documentation PR changes only
+documentation files and must not include production code, code tests, or other
+implementation changes. Use the implementation PR as factual evidence, then
+open a separate documentation PR that references it.
+
+---
+
 ## Workflow
 
 ### Stage 0: Information Preparation (IMPORTANT!)

@@ -185,8 +185,8 @@ def valid_ru():
 """
 
 
-def valid_downloads():
-    return """# Downloads
+def valid_downloads(locale="en"):
+    downloads = """# Downloads
 
 ## Linux
 
@@ -203,6 +203,7 @@ def valid_downloads():
 || **v26.3** | > | > | > ||
 || v.26.3.1.16 | 18.09.26 | [Source code](https://github.com/ydb-platform/ydb/tree/26.3.1.16) | [See list](../changelog-server.md#26-3-rc) ||
 """
+    return downloads if locale == "en" else downloads.replace("Source Code", "Исходный код")
 
 
 class CoverageEvalTest(unittest.TestCase):
@@ -276,7 +277,7 @@ class CoverageEvalTest(unittest.TestCase):
             paths["en"].write_text(valid_en(), encoding="utf-8")
             paths["ru"].write_text(valid_ru(), encoding="utf-8")
             paths["en_downloads"].write_text(valid_downloads(), encoding="utf-8")
-            paths["ru_downloads"].write_text(valid_downloads(), encoding="utf-8")
+            paths["ru_downloads"].write_text(valid_downloads("ru"), encoding="utf-8")
 
             completed = subprocess.run(
                 [
@@ -312,17 +313,39 @@ class CoverageEvalTest(unittest.TestCase):
         )
 
     def test_rejects_missing_rc_download_artifact(self):
+        downloads = valid_downloads().replace(
+            "`cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16`", "``"
+        )
         errors = coverage_eval._check_downloads(
-            valid_downloads().replace(
-                "cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16", ""
-            ),
+            downloads,
             "26.3.1.16",
             "26.3",
             "26-3-rc",
             "en",
         )
 
-        self.assertTrue(any("Docker image" in error for error in errors))
+        self.assertTrue(any("Docker RC row missing artifact" in error for error in errors))
+
+    def test_rejects_wrong_table_and_placeholder_date(self):
+        downloads = valid_downloads().replace(
+            "`cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16`", "``"
+        ).replace(
+            "ydbd-26.3.1.16-linux-amd64.tar.gz)",
+            "ydbd-26.3.1.16-linux-amd64.tar.gz) `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16`",
+        ).replace(
+            "|| v.26.3.1.16 | 18.09.26 | [Binary file]",
+            "|| v.26.3.1.16 | TBD | [Binary file]",
+        )
+        errors = coverage_eval._check_downloads(
+            downloads,
+            "26.3.1.16",
+            "26.3",
+            "26-3-rc",
+            "en",
+        )
+
+        self.assertTrue(any("Linux table missing RC row" in error for error in errors))
+        self.assertTrue(any("Docker RC row missing artifact" in error for error in errors))
 
     def test_accepts_exact_bilingual_bijection_and_rendered_files(self):
         errors = coverage_eval.evaluate(

@@ -90,6 +90,10 @@ namespace NKikimr {
             return Runtime.get();
         }
 
+        const TActorId& GetVDiskServiceId() const {
+            return VDiskServiceId;
+        }
+
         TIntrusivePtr<TPDiskMockState> GetPDiskMockState() {
             return PDiskMockState;
         }

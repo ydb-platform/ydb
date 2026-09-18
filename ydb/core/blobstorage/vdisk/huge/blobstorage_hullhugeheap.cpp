@@ -212,6 +212,7 @@ namespace NKikimr {
                 if (it == LockedChunks.end()) {
                     return false;
                 }
+                FreeSlotsInLockedChunks -= it->second.NumFreeSlots;
                 FreeSpace.emplace(it->first, it->second);
                 LockedChunks.erase(it);
             }
@@ -268,12 +269,19 @@ namespace NKikimr {
 
             TFreeSpaceItem& item = it->second;
 
+            if (container == &LockedChunks) {
+                ++FreeSlotsInLockedChunks;
+            }
+
             Y_VERIFY_S(!item.FreeSlots.Get(slotId), VDiskLogPrefix << "TChain::Free: containerName# " <<
                 (container == &FreeSpace ? "FreeSpace" : "LockedChunks") << " id# " << id.ToString()
                 << " State# " << ToString());
 
             if (item.FreeSlots.Set(slotId); ++item.NumFreeSlots == SlotsInChunk) {
                 Y_VERIFY_DEBUG_S(item.FreeSlots == ConstMask, VDiskLogPrefix);
+                if (container == &LockedChunks) {
+                    FreeSlotsInLockedChunks -= SlotsInChunk;
+                }
                 container->erase(it);
                 FreeSlotsInFreeSpace -= SlotsInChunk;
                 return {chunkId, container == &LockedChunks};
@@ -285,6 +293,7 @@ namespace NKikimr {
 
         bool TChain::LockChunkForAllocation(TChunkID chunkId) {
             if (auto nh = FreeSpace.extract(chunkId)) {
+                FreeSlotsInLockedChunks += nh.mapped().NumFreeSlots;
                 LockedChunks.insert(std::move(nh));
                 return true;
             } else {
@@ -313,6 +322,23 @@ namespace NKikimr {
             return THeapStat(currentlyUsedChunks, canBeFreedChunks, std::move(lockedChunks));
         }
 
+        TSizeClassSpaceStat TChain::GetSpaceStat() const {
+            const ui64 chunksWithFreeSlots = FreeSpace.size() + LockedChunks.size();
+            const ui64 allocatedSlotsInThoseChunks = chunksWithFreeSlots * SlotsInChunk - FreeSlotsInFreeSpace;
+            Y_VERIFY_DEBUG_S(allocatedSlotsInThoseChunks <= AllocatedSlots, VDiskLogPrefix);
+            const ui64 fullChunks = (AllocatedSlots - allocatedSlotsInThoseChunks + SlotsInChunk - 1) / SlotsInChunk;
+
+            return {
+                .SlotSize = SlotSize,
+                .SlotsPerChunk = SlotsInChunk,
+                .ChunkCount = chunksWithFreeSlots + fullChunks,
+                .AllocatedSlots = AllocatedSlots,
+                .FreeSlots = FreeSlotsInFreeSpace,
+                .LockedChunkCount = LockedChunks.size(),
+                .LockedFreeSlots = FreeSlotsInLockedChunks,
+            };
+        }
+
         bool TChain::RecoveryModeAllocate(const NPrivate::TChunkSlot &id) {
             ui32 chunkId = id.GetChunkId();
             ui32 slotId = id.GetSlotId();
@@ -332,6 +358,9 @@ namespace NKikimr {
                 }
 
                 --FreeSlotsInFreeSpace;
+                if (map == &LockedChunks) {
+                    --FreeSlotsInLockedChunks;
+                }
                 ++AllocatedSlots;
                 return true;
             } else {
@@ -345,6 +374,9 @@ namespace NKikimr {
 
             (inLockedChunks ? LockedChunks : FreeSpace).emplace(chunkId, TFreeSpaceItem{ConstMask, SlotsInChunk});
             FreeSlotsInFreeSpace += SlotsInChunk;
+            if (inLockedChunks) {
+                FreeSlotsInLockedChunks += SlotsInChunk;
+            }
             bool res = RecoveryModeAllocate(id);
 
             Y_VERIFY_S(res, VDiskLogPrefix << "RecoveryModeAllocate:"
@@ -482,6 +514,7 @@ namespace NKikimr {
                     ++chunksIt;
                 }
                 if (chunksIt != chunksToShred.end() && *chunksIt == chunkId) {
+                    FreeSlotsInLockedChunks += it->second.NumFreeSlots;
                     LockedChunks.insert(FreeSpace.extract(it++));
                 } else {
                     ++it;
@@ -575,6 +608,15 @@ namespace NKikimr {
                 stat += chain.GetStat();
             }
             return stat;
+        }
+
+        std::vector<TSizeClassSpaceStat> TAllChains::GetSpaceStat() const {
+            std::vector<TSizeClassSpaceStat> result;
+            result.reserve(Chains.size());
+            for (const TChain& chain : Chains) {
+                result.push_back(chain.GetSpaceStat());
+            }
+            return result;
         }
 
         void TAllChains::Save(IOutputStream *s) const {
@@ -938,6 +980,15 @@ namespace NKikimr {
 
         THeapStat THeap::GetStat() const {
             return Chains.GetStat();
+        }
+
+        THeapSpaceStat THeap::GetSpaceStat() const {
+            return {
+                .SizeClasses = Chains.GetSpaceStat(),
+                .FreeChunkCount = FreeChunks.size(),
+                .FreeChunkReservation = FreeChunksReservation,
+                .ForbiddenChunkCount = ForbiddenChunks.size(),
+            };
         }
 
         void THeap::ShredNotify(const std::vector<ui32>& chunksToShred) {

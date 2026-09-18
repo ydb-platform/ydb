@@ -29,11 +29,11 @@ public:
         ui32 vChunkIndex,
         THostRoles pbufferHosts,
         THostRoles ddiskHosts,
-        THostMask enabledHosts,
-        TVector<std::optional<ui64>> watermarks);
+        THostMask enabledHosts);
 
     [[nodiscard]] EHostHumanReadableState GetHostHumanReadableState(
-        THostIndex hostIndex) const;
+        THostIndex hostIndex,
+        bool fresh) const;
     [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;
@@ -53,14 +53,14 @@ public:
 
     // Disables the host. Demote ddisk and pbuffer. If possible, adds ddisk on
     // the new host. Returns the text of the error or message to be logged.
-    TString EvacuateHost(THostIndex hostIndex, bool fresh);
+    TString EvacuateHost(THostIndex hostIndex);
 
     // Removes ddisk from the host. Demote pbuffer to handoff. Returns error
     // message or empty string when demote executed successfully.
     TString DemoteHost(THostIndex hostIndex);
-    // Adds ddisk to the host. Set watermark to 0 if it fresh.
-    void PromoteHost(THostIndex hostIndex, bool fresh);
-    TString PromoteHostIfNeeded(bool fresh);
+    // Adds ddisk to the host.
+    void PromoteHost(THostIndex hostIndex);
+    TString PromoteHostIfNeeded();
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;
     [[nodiscard]] EHostRole GetDDiskRole(THostIndex hostIndex) const;
@@ -79,21 +79,6 @@ public:
     [[nodiscard]] THostMask GetDDisks() const;
     // Get a list of all enabled DDisks.
     [[nodiscard]] THostMask GetEnabledDDisks() const;
-    // Get a list of all DDisks with full data (enabled or not).
-    [[nodiscard]] THostMask GetFullDDisks() const;
-    // Get a list of all healthy DDisks (enabled and full filed).
-    [[nodiscard]] THostMask GetHealthyDDisks() const;
-
-    // If std::nullopt is set, it means that the disk is fully filled with data
-    // and the waterline value is higher than the disk size. If the waterline
-    // value is set, it means that disk blocks less than this value can be read,
-    // and those that are equal to or higher than this value are not yet filled.
-    // In other words, if the value is 0, no disk blocks can be read.
-    void SetWatermark(
-        THostIndex hostIndex,
-        std::optional<ui64> watermarkBlockCount);
-    [[nodiscard]] std::optional<ui64> GetWatermark(THostIndex hostIndex) const;
-
     [[nodiscard]] THostMask GetDisabledHosts() const;
 
     [[nodiscard]] bool IsValid() const;
@@ -109,7 +94,6 @@ private:
     THostRoles PBufferHosts;
     THostRoles DDiskHosts;
     THostMask EnabledHosts;
-    TVector<std::optional<ui64>> Watermarks;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1648,14 +1648,11 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto initialReady = RunAndGetInitialReady(dbg);
         WaitReady(executor, initialReady);
 
-        auto config = TVChunkConfig::MakeDefault(
-            100,
-            grownHostCount,
-            DefaultPrimaryCount);
+        auto config =
+            TVChunkConfig::MakeDefault(0, grownHostCount, DefaultPrimaryCount);
         config.DisableHost(2);
-        // One primary replica is still catching up; the healthy-ddisk count
-        // drops below the quorum.
-        config.SetWatermark(*config.GetDDisks().begin(), 1024);
+        // Disabling one of three primary replicas drops the healthy DDisk
+        // count below the quorum.
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
             TraceService.get(),

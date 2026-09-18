@@ -1990,13 +1990,16 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 return false;
             }
             if (type ==
-                TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::EventType)
+                TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::EventType)
             {
-                const auto& config =
-                    ev->Get<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>()
-                        ->VChunkConfig;
-                if (config.GetVChunkIndex() == 0 &&
-                    config.GetHostCount() == 6 && config.GetFullDDisks().Get(5))
+                const auto* msg = ev->Get<
+                    TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>();
+                if (msg->VChunkIndex == 0 &&
+                    msg->State.DDiskStatesSize() == 6 &&
+                    msg->State.GetDDiskStates(5)
+                            .GetBehind()
+                            .GetEncodingCase() ==
+                        TBlockFieldProto::ENCODING_NOT_SET)
                 {
                     copyToSlot5Finished = true;
                 }

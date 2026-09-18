@@ -1862,7 +1862,7 @@ TString TDirectBlockGroup::ValidateRemoveHost(THostIndex hostIndex) const
         }
         // Removal is irreversible, so every vchunk must keep a quorum of
         // healthy ddisks. The disabled host is not in that set already.
-        const auto healthyCount = cfg.GetHealthyDDisks().Count();
+        const auto healthyCount = vChunk->GetHealthyDDisks().Count();
         if (healthyCount < QuorumDirectBlockGroupHostCount) {
             return TStringBuilder()
                    << "vchunk " << cfg.GetVChunkIndex() << " has "

@@ -352,8 +352,6 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                         cfg.GetTemporaryOfflinePBuffers());
                     UNIT_ASSERT(expected.GetDDisks() == cfg.GetDDisks());
                     UNIT_ASSERT(
-                        expected.GetHealthyDDisks() == cfg.GetHealthyDDisks());
-                    UNIT_ASSERT(
                         expected.GetDisabledHosts() == cfg.GetDisabledHosts());
                     UNIT_ASSERT_VALUES_EQUAL(
                         expected.DebugPrint(),
@@ -382,7 +380,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             vChunkIndex,
             DirectBlockGroupHostCount,
             DefaultPrimaryCount);
-        updated.EvacuateHost(0, true);
+        updated.EvacuateHost(0);
 
         executor.WriteTx(
             [&](NKikimr::NTable::TDatabase& db)
@@ -410,8 +408,6 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                     updated.GetTemporaryOfflinePBuffers() ==
                     stored.GetTemporaryOfflinePBuffers());
                 UNIT_ASSERT(updated.GetDDisks() == stored.GetDDisks());
-                UNIT_ASSERT(
-                    updated.GetHealthyDDisks() == stored.GetHealthyDDisks());
                 UNIT_ASSERT(
                     updated.GetDisabledHosts() == stored.GetDisabledHosts());
                 UNIT_ASSERT_VALUES_EQUAL(

@@ -72,6 +72,7 @@ public:
     void UpdateHostCount(size_t newHostCount);
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
+    [[nodiscard]] THostMask GetHealthyDDisks() const;
     [[nodiscard]] TExecutorPtr GetExecutor() const;
     [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
@@ -130,8 +131,6 @@ private:
     struct TPendingVChunkConfig
     {
         TPrepareConfigFunc PrepareConfig;
-        TVChunkConfig Config;
-        ui32 DirtyMapStateGeneration = 0;
         TString Message;
     };
 
@@ -159,7 +158,7 @@ private:
         const TEraseRequestExecutor::TResponse& response);
 
     void DoPersistDirtyMap();
-    void OnDirtyMapPersisted(ui32 stateGeneration);
+    void OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks);
 
     // VDisk touch state.
     void Touch();
@@ -176,8 +175,11 @@ private:
     // unchanged; the new value applies after config persisted.
     void UpdateConfig(TPrepareConfigFunc prepareConfig, TString message);
     void PersistNextPendingConfig();
-    void OnConfigPersisted();
-    void ApplyConfig(TVChunkConfig newConfig, const TString& message);
+    void OnConfigPersisted(
+        TVChunkConfig config,
+        ui32 stateGeneration,
+        THostMask freshDDisks);
+    void ApplyConfig(const TVChunkConfig& newConfig, const TString& message);
 
     TVChunkConfig PrepareNewConfig(
         THostIndex hostIndex,
@@ -213,6 +215,7 @@ private:
     bool DirtyMapStatePersisting = false;
     ETouchedState TouchedState = ETouchedState::NotTouched;
     TBlocksDirtyMapPtr BlocksDirtyMap;
+    THostMask PersistedFreshDDisks;
     // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
     NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;

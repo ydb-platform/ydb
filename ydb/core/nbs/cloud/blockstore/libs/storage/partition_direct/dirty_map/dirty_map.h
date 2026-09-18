@@ -92,6 +92,7 @@ public:
     // can read it from anywhere.
     [[nodiscard]] std::optional<TBlockRange16> GetFreshRange(
         THostIndex host) const;
+    [[nodiscard]] THostMask GetOutdatedDDisks() const;
     // See TSyncHint for details.
     // The BeginRangeSync and EndRangeSync calls must be paired.
     TSyncHint BeginRangeSync(THostIndex host, TBlockRange16 range);
@@ -147,12 +148,11 @@ public:
     // Persist
     [[nodiscard]] bool NeedPersist() const;
     [[nodiscard]] TDirtyMapStateProto GetStateForPersist() const;
-    // Returns the state after applying vChunkConfig without changing the
-    // in-memory state. Used to persist a config and its DDisk state atomically.
-    [[nodiscard]] TDirtyMapStateProto GetStateForConfigPersist(
+    // Predicts the future state after applying vChunkConfig without changing
+    // the current in-memory state.
+    [[nodiscard]] TDirtyMapStateProto MakeFutureState(
         const TVChunkConfig& vChunkConfig,
-        bool isTouched,
-        ui32* dirtyMapStateGeneration) const;
+        bool isTouched) const;
     void StatePersisted(ui32 persistGeneration);
     [[nodiscard]] ui32 GetCurrentGeneration() const;
 

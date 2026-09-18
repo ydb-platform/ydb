@@ -82,9 +82,8 @@ struct TFixture
             BlockSize,
             VChunkBlockCount);
 
-        VChunkConfig.PromoteHost(3, true);
-        VChunkConfig.SetWatermark(3, BlockSize * VChunkBlockCount);
-        DirtyMap->UpdateConfig(VChunkConfig, true);
+        VChunkConfig.PromoteHost(3);
+        DirtyMap->UpdateConfig(VChunkConfig, false);
 
         Copier = std::make_shared<TDDiskDataCopier>(
             Runtime->GetActorSystem(0),

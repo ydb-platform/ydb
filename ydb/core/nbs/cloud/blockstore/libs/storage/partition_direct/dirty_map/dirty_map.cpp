@@ -19,29 +19,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-void InitDDiskState(
-    TDDiskState& state,
-    IBehindMonitor* behindMonitor,
-    const TVChunkConfig& vChunkConfig,
-    THostIndex host,
-    bool isTouched,
-    ui32 blockSize,
-    ui16 blockCount)
-{
-    const auto watermark =
-        isTouched ? vChunkConfig.GetWatermark(host) : std::nullopt;
-    state.Init(
-        behindMonitor,
-        blockCount,
-        watermark ? IntegerCast<ui16>(*watermark / blockSize) : blockCount);
-}
-
-}   // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
 TBlocksDirtyMap::TBlocksDirtyMap(
     TArenaAllocatorPoolPtr arenaAllocatorPool,
     const TVChunkConfig& vChunkConfig,
@@ -53,6 +30,7 @@ TBlocksDirtyMap::TBlocksDirtyMap(
     , ArenaAllocator(ArenaAllocatorPool->GetAllocator())
     , BlockSize(blockSize)
     , BlockCount(blockCount)
+    , DesiredDDisks(vChunkConfig.GetDDisks())
     , Inflight(ArenaAllocatorPool.get())
     , PBufferCounters(vChunkConfig.GetHostCount())
 {
@@ -62,6 +40,9 @@ TBlocksDirtyMap::TBlocksDirtyMap(
         DDiskStates.emplace_back(ArenaAllocator, blockCount);
     }
 
+    for (THostIndex host: DesiredDDisks) {
+        DDiskStates[host].Init(this, BlockCount, BlockCount);
+    }
     UpdateConfig(vChunkConfig, isTouched);
 
     size_t ddisk = 0;   // TODO (drbasic). Reliable ddisk matching.
@@ -94,17 +75,10 @@ void TBlocksDirtyMap::UpdateConfig(
     DesiredDDisks = vChunkConfig.GetDDisks();
     DisabledHosts = vChunkConfig.GetDisabledHosts();
 
-    // When a new disk appears, it doesn't have all the data. Need to set its
-    // watermark level.
+    // A new DDisk in a touched vchunk needs a full copy. An untouched vchunk
+    // has no data, so its DDisk starts full.
     for (auto indx: added) {
-        InitDDiskState(
-            DDiskStates[indx],
-            this,
-            vChunkConfig,
-            indx,
-            isTouched,
-            BlockSize,
-            BlockCount);
+        DDiskStates[indx].Init(this, BlockCount, isTouched ? 0 : BlockCount);
     }
 
     for (THostIndex h = 0; h < GetHostCount(); ++h) {
@@ -510,6 +484,17 @@ std::optional<TBlockRange16> TBlocksDirtyMap::GetFreshRange(
     return DDiskStates[host].GetFreshRange();
 }
 
+THostMask TBlocksDirtyMap::GetOutdatedDDisks() const
+{
+    THostMask result;
+    for (THostIndex host: DesiredDDisks) {
+        if (DDiskStates[host].GetState() == TDDiskState::EState::Fresh) {
+            result.Set(host);
+        }
+    }
+    return result;
+}
+
 TSyncHint TBlocksDirtyMap::BeginRangeSync(THostIndex host, TBlockRange16 range)
 {
     TInflightDDiskSync inflightSync{.DestinationHost = host};
@@ -821,12 +806,10 @@ TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
     return result;
 }
 
-TDirtyMapStateProto TBlocksDirtyMap::GetStateForConfigPersist(
+TDirtyMapStateProto TBlocksDirtyMap::MakeFutureState(
     const TVChunkConfig& vChunkConfig,
-    bool isTouched,
-    ui32* dirtyMapStateGeneration) const
+    bool isTouched) const
 {
-    *dirtyMapStateGeneration = StateGeneration;
     TDirtyMapStateProto result = GetStateForPersist();
     while (result.DDiskStatesSize() < vChunkConfig.GetHostCount()) {
         result.AddDDiskStates();
@@ -838,14 +821,7 @@ TDirtyMapStateProto TBlocksDirtyMap::GetStateForConfigPersist(
 
     for (THostIndex host: added) {
         TDDiskState state(ArenaAllocator, BlockCount);
-        InitDDiskState(
-            state,
-            nullptr,
-            vChunkConfig,
-            host,
-            isTouched,
-            BlockSize,
-            BlockCount);
+        state.Init(nullptr, BlockCount, isTouched ? 0 : BlockCount);
         state.Save(result.MutableDDiskStates(host));
     }
     for (THostIndex host: removed) {

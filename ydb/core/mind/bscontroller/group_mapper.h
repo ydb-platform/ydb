@@ -237,11 +237,13 @@ namespace NKikimr {
                 i64 MinimumRequiredSpace = Min<i64>();
                 bool ExistingGroup = true;
                 bool TryToRelocateLocallyFirst = false;
+                bool IgnoreGroupLayoutChecks = false;
                 TBridgePileId BridgePileId;
             };
 
             struct TReassignmentOutcome {
                 bool Success = false;
+                bool LayoutCorrect = false;
                 TGroupDefinition Group;
                 i64 RequiredSpace = Min<i64>();
                 TGroupMapperError Error;

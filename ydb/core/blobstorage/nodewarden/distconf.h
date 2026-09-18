@@ -518,6 +518,7 @@ namespace NKikimr::NStorage {
             const NKikimrBlobStorage::TBaseConfig *BaseConfig = nullptr;
             bool ConvertToDonor = false;
             bool IgnoreVSlotQuotaCheck = false;
+            bool IgnoreGroupLayoutChecks = false;
             bool AllowUnusableDisks = false;
             bool SettleOnlyOnOperationalDisks = false;
             bool IsSelfHealReasonDecommit = false;

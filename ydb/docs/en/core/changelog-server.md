@@ -34,6 +34,7 @@ Release date: TBD.
 The following functionality is not enabled by default.
 
 * Added [hybrid search](./dev/hybrid-search.md?version=v26.3), combining full-text relevance and vector similarity into one ranked result.
+* Topics can be accessed through the [Amazon SQS API](./reference/sqs-api/index.md?version=v26.3), allowing SQS-compatible clients to read and write messages.
 * Added strict serializable isolation for read-write transactions, including real-time transaction ordering and commit timestamps.
 * Added [JSON indexes](./reference/configuration/feature_flags.md?version=v26.3) for accelerating `JSON_EXISTS` and `JSON_VALUE` queries.
 * Full-text indexes support [filter columns](./dev/fulltext-indexes.md?version=v26.3#filtered), allowing search within a logical table partition.

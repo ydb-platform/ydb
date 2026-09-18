@@ -28,6 +28,11 @@ size_t CountBits(TStringBuf mask)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+size_t TTouchedVChunks::GetCount() const
+{
+    return Count;
+}
+
 bool TTouchedVChunks::Get(ui32 vChunkIndex) const
 {
     const ui32 maskIndex = GetMaskIndex(vChunkIndex);
@@ -38,11 +43,6 @@ bool TTouchedVChunks::Get(ui32 vChunkIndex) const
     const ui32 bitIndex = vChunkIndex % VChunksPerMask;
     return static_cast<ui8>(Masks[maskIndex][bitIndex / 8]) &
            (1u << (bitIndex % 8));
-}
-
-size_t TTouchedVChunks::GetCount() const
-{
-    return Count;
 }
 
 TRegionVChunks TTouchedVChunks::GetTouchedVChunks(ui32 startVChunkIndex) const

@@ -6,26 +6,26 @@ Release date: TBD.
 
 ### Functionality
 
-* Added authentication through external OpenID Connect (OIDC) identity providers. {{ ydb-short-name }} validates JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
-* Added [storage group decommissioning](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data moves to virtual groups in the background while applications continue reading and writing data.
 * Streaming writes are available for secondary indexes, `RETURNING`, and `DEFAULT`, reducing memory consumption and latency for large write operations.
-* Added transfer metrics and statistics to `DescribeTransfer` for monitoring and diagnostics.
-* Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
-* Added a configurable limit for stored forced-compaction operations. Completed and cancelled operations can be removed automatically when the limit is reached.
-* Change Data Capture records can include the OpenTelemetry trace ID of the request that produced the change.
-* Added the Tiling++ compaction strategy for column-oriented tables. Select it with `default_compaction_preset`.
-* Removed the experimental PostgreSQL wire protocol and PostgreSQL SQL syntax from `ydbd`. PostgreSQL-compatible types, `Pg::` functions, and federated queries to external PostgreSQL databases are not affected.
-* Added an in-memory KQP level cache for vector indexes. Configure its maximum size with `resource_manager.kqp_level_cache_max_size_bytes`.
-* Local SyncLog data cutting is enabled by default, improving full VDisk synchronization.
+* Added authentication through external OpenID Connect (OIDC) identity providers. {{ ydb-short-name }} validates JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
 * Backup export and import are available for column-oriented tables, including S3-compatible storage.
 * Min-max indexes are enabled for column-oriented tables. ColumnShard skips data portions outside query ranges, reducing disk reads and query latency.
-* Database-level small-blob quotas are enforced for column-oriented tables. New writes are rejected after the quota derived from `data_size_hard_quota` is exhausted.
+* Added [storage group decommissioning](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data moves to virtual groups in the background while applications continue reading and writing data.
+* Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
+* Removed the experimental PostgreSQL wire protocol and PostgreSQL SQL syntax from `ydbd`. PostgreSQL-compatible types, `Pg::` functions, and federated queries to external PostgreSQL databases are not affected.
 * `DISTINCT` and `DISTINCT LIMIT` are pushed down to ColumnShard for column-oriented tables, reducing intermediate data and query execution time.
-* The Trivial Reader is enabled for applicable column-oriented table scans.
 * Column-oriented table columns support [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.3). Use `ENCODING(DICT)` for low-cardinality values.
+* Snapshot retention is enabled for long-running analytical queries, preventing column shards from removing data required by active reads.
+* Database-level small-blob quotas are enforced for column-oriented tables. New writes are rejected after the quota derived from `data_size_hard_quota` is exhausted.
+* Added the Tiling++ compaction strategy for column-oriented tables. Select it with `default_compaction_preset`.
+* Added an in-memory KQP level cache for vector indexes. Configure its maximum size with `resource_manager.kqp_level_cache_max_size_bytes`.
 * Bulk authorization requests to AccessService are enabled by default, reducing authorization request overhead.
 * Streaming YQL queries can [read user message attributes from topics](./concepts/query_execution/topics.md?version=v26.3#system-metadata) through `__ydb_user_attributes`.
-* Snapshot retention is enabled for long-running analytical queries, preventing column shards from removing data required by active reads.
+* Local SyncLog data cutting is enabled by default, improving full VDisk synchronization.
+* Added transfer metrics and statistics to `DescribeTransfer` for monitoring and diagnostics.
+* Added a configurable limit for stored forced-compaction operations. Completed and cancelled operations can be removed automatically when the limit is reached.
+* Change Data Capture records can include the OpenTelemetry trace ID of the request that produced the change.
+* The Trivial Reader is enabled for applicable column-oriented table scans.
 * Topic-only transactions use BufferActor when committing, optimizing processing when no tables participate.
 * Topic reads that start from a timestamp filter out messages with earlier write timestamps, including messages stored in the same blob as newer messages.
 
@@ -33,20 +33,20 @@ Release date: TBD.
 
 The following functionality is not enabled by default.
 
-* Added configurable throttling of synchronous VDisk writes based on the current amount of fresh data, limiting memory growth under intensive write workloads.
-* Literal `DEFAULT` values can be added to write query plans at compile time, avoiding runtime materialization.
-* Added [JSON indexes](./reference/configuration/feature_flags.md?version=v26.3) for accelerating `JSON_EXISTS` and `JSON_VALUE` queries.
-* Added strict serializable isolation for read-write transactions, including real-time transaction ordering and commit timestamps.
-* Backup restoration can write SST parts directly to DataShard, reducing CPU and disk use compared with row-by-row restoration.
-* Added a compact full-text index format that reduces storage consumption.
-* Full-text indexes support [filter columns](./dev/fulltext-indexes.md?version=v26.3#filtered), allowing search within a logical table partition.
-* Workload Manager resource-pool classifiers support `ACTION="reject"`, rejecting matching queries before routing them to a resource pool.
-* Full-text indexes can be created for tables with [arbitrary primary-key types](./dev/fulltext-indexes.md?version=v26.3#primary-key).
 * Added [hybrid search](./dev/hybrid-search.md?version=v26.3), combining full-text relevance and vector similarity into one ranked result.
-* `ANALYZE` creates a background-operation record for observability; listing, retrieving, cancelling, and forgetting it are available.
+* Added strict serializable isolation for read-write transactions, including real-time transaction ordering and commit timestamps.
+* Added [JSON indexes](./reference/configuration/feature_flags.md?version=v26.3) for accelerating `JSON_EXISTS` and `JSON_VALUE` queries.
+* Full-text indexes support [filter columns](./dev/fulltext-indexes.md?version=v26.3#filtered), allowing search within a logical table partition.
+* Full-text indexes can be created for tables with [arbitrary primary-key types](./dev/fulltext-indexes.md?version=v26.3#primary-key).
+* Added a compact full-text index format that reduces storage consumption.
+* Backup restoration can write SST parts directly to DataShard, reducing CPU and disk use compared with row-by-row restoration.
 * Local indexes are represented as schema objects, including prefix Bloom filters for row-oriented tables and local indexes for column-oriented tables.
-* Administrators can require non-administrative requests to static nodes to specify a database.
+* Added configurable throttling of synchronous VDisk writes based on the current amount of fresh data, limiting memory growth under intensive write workloads.
+* Workload Manager resource-pool classifiers support `ACTION="reject"`, rejecting matching queries before routing them to a resource pool.
 * Added AccessService V2, including batched authorization requests. Changing its configuration requires a server restart.
+* `ANALYZE` creates a background-operation record for observability; listing, retrieving, cancelling, and forgetting it are available.
+* Literal `DEFAULT` values can be added to write query plans at compile time, avoiding runtime materialization.
+* Administrators can require non-administrative requests to static nodes to specify a database.
 * Structured values in JSON logs can be emitted as separate JSON fields instead of being appended to `message`.
 
 ### Reliability

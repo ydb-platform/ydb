@@ -818,7 +818,6 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     RmArenaGrows = KqpGroup->GetCounter("RM/ArenaGrows", true);
     RmArenaShrinks = KqpGroup->GetCounter("RM/ArenaShrinks", true);
     RmArenaGrowFailures = KqpGroup->GetCounter("RM/ArenaGrowFailures", true);
-    RmArenaTaskLost = KqpGroup->GetCounter("RM/ArenaTaskLost", true);
     RmSnapshotLatency = KqpGroup->GetHistogram(
         "RM/SnapshotLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
 

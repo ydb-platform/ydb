@@ -22,20 +22,17 @@ TCoNameValueTuple BuildMemberTuple(const TString& name, const TString& sourceNam
 }
 
 TExprBase BuildOptionalIf(const TExprBase& predicate, const TExprBase& value, TExprContext& ctx, TPositionHandle pos) {
-    const auto item = ctx.NewCallable(pos, "Just", {value.Ptr()});
-    return TExprBase(ctx.Builder(pos)
-        .Callable("If")
-            .Callable(0, "Coalesce")
-                .Add(0, predicate.Ptr())
-                .Callable(1, "Bool")
-                    .Atom(0, "false")
-                .Seal()
-            .Seal()
-            .Add(1, item)
-            .Callable(2, "EmptyFrom")
-                .Add(0, item)
-            .Seal()
-        .Seal().Build());
+    // clang-format off
+    return Build<TCoOptionalIf>(ctx, pos)
+        .Predicate<TCoCoalesce>()
+            .Predicate(predicate)
+            .Value<TCoBool>()
+                .Literal().Build("false")
+            .Build()
+        .Build()
+        .Value(value)
+    .Done();
+    // clang-format on
 }
 
 } // anonymous namespace

@@ -418,8 +418,9 @@ message TSessionInfo {
     optional uint64 DurationUs = 23;
     optional uint64 CpuTimeUs = 24;
     optional uint64 ComputeMemoryBytes = 25;
-    optional uint64 TableReadBytes = 26;
-    optional uint64 SourceReadBytes = 27;
+    reserved 26;
+    reserved "TableReadBytes";
+    optional uint64 ReadIngressBytes = 27;
 }
 
 message TEvListSessionsRequest {
@@ -610,12 +611,9 @@ message TCurrentExecutionStats {
     optional uint64 ComputeMemoryBytes = 3;
     // These counters may overlap and must not be added together.
     optional uint64 TableReadBytes = 4;
-    optional uint64 SourceReadBytes = 5;
+    optional uint64 ReadIngressBytes = 5;
 }
 
-// 1. Executer fills progress stats from its own execution.
-// 2. Session adds stats from earlier executions and builds the complete plan.
-// CurrentExecutionStats remains a snapshot of the reporting execution.
 message TEvExecuterProgress {
     optional NActorsProto.TActorId ExecuterActorId = 1;
     optional string QueryPlan = 2;

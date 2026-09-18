@@ -120,23 +120,20 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
             proto->SetWmClassifiedBy(std::move(classifiedBy));
         }
     }
-    if (State == ESessionState::EXECUTING && CurrentQueryStats) {
+    if (State == ESessionState::EXECUTING) {
         if (fieldsMap.NeedField(VSessions::DurationUs::ColumnId)) {
             const auto now = TInstant::Now();
             proto->SetDurationUs(now >= QueryStartAt ? (now - QueryStartAt).MicroSeconds() : 0);
         }
-        if (auto current = CurrentQueryStats->Get()) {
+        if (const auto& current = CurrentQueryStats) {
             if (fieldsMap.NeedField(VSessions::CpuTimeUs::ColumnId)) {
                 proto->SetCpuTimeUs(current->CpuTimeUs);
             }
             if (fieldsMap.NeedField(VSessions::ComputeMemoryBytes::ColumnId)) {
                 proto->SetComputeMemoryBytes(current->ComputeMemoryBytes);
             }
-            if (fieldsMap.NeedField(VSessions::TableReadBytes::ColumnId)) {
-                proto->SetTableReadBytes(current->TableReadBytes);
-            }
-            if (fieldsMap.NeedField(VSessions::SourceReadBytes::ColumnId)) {
-                proto->SetSourceReadBytes(current->SourceReadBytes);
+            if (fieldsMap.NeedField(VSessions::ReadIngressBytes::ColumnId)) {
+                proto->SetReadIngressBytes(current->ReadIngressBytes);
             }
         }
     }

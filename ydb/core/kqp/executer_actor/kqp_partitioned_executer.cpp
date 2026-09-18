@@ -211,6 +211,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
+                hFunc(TEvKqpExecuter::TEvCurrentExecutionStats, HandleCurrentStats);
                 hFunc(TEvKqpExecuter::TEvTxDelayedExecution, HandleExecute)
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleExecute);
@@ -223,6 +224,35 @@ public:
         } catch (...) {
             AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
                 << "Got an unknown error in ExecuteState")}));
+        }
+    }
+
+    void PublishCurrentStats() {
+        if (const auto current = CurrentQueryStats.Get()) {
+            Send(SessionActorId, new TEvKqpExecuter::TEvCurrentExecutionStats({*current, ++CurrentStatsSequenceNo}));
+        }
+    }
+
+    void UpdateCurrentStats(TActorId executer, const TCurrentExecStatsReport& report) {
+        auto& previous = ChildCurrentStats[executer];
+        if (report.SequenceNo <= previous.SequenceNo) {
+            return;
+        }
+        CurrentQueryStats.Update(report.Stats, previous.Stats);
+        previous.SequenceNo = report.SequenceNo;
+        PublishCurrentStats();
+    }
+
+    void HandleCurrentStats(TEvKqpExecuter::TEvCurrentExecutionStats::TPtr& ev) {
+        if (ExecuterToPartition.contains(ev->Sender)) {
+            UpdateCurrentStats(ev->Sender, ev->Get()->Report);
+        }
+    }
+
+    void FillCurrentStats() {
+        if (auto current = CurrentQueryStats.Get()) {
+            current->ComputeMemoryBytes = 0;
+            ResponseEv->CurrentExecutionStats = TCurrentExecStatsReport{*current, ++CurrentStatsSequenceNo};
         }
     }
 
@@ -244,6 +274,9 @@ public:
             return TryFinishExecution();
         }
 
+        if (ev->Get()->CurrentExecutionStats) {
+            UpdateCurrentStats(ev->Sender, *ev->Get()->CurrentExecutionStats);
+        }
         auto [_, partInfo] = *it;
 
         YDB_LOG_TRACE("Got tx response",
@@ -372,6 +405,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleAbort);
+                hFunc(TEvKqpExecuter::TEvCurrentExecutionStats, HandleCurrentStats);
                 hFunc(TEvKqpExecuter::TEvTxDelayedExecution, HandleExecute)
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleAbort);
@@ -408,6 +442,9 @@ public:
             return TryFinishExecution();
         }
 
+        if (ev->Get()->CurrentExecutionStats) {
+            UpdateCurrentStats(ev->Sender, *ev->Get()->CurrentExecutionStats);
+        }
         auto [_, partInfo] = *it;
 
         YDB_LOG_TRACE("Got tx response",
@@ -726,6 +763,13 @@ private:
     }
 
     void ForgetExecuterAndBuffer(const TBatchPartitionInfo::TPtr& partInfo) {
+        if (auto it = ChildCurrentStats.find(partInfo->ExecuterId); it != ChildCurrentStats.end()) {
+            auto final = it->second.Stats;
+            final.ComputeMemoryBytes = 0;
+            CurrentQueryStats.Update(final, it->second.Stats);
+            ChildCurrentStats.erase(it);
+            PublishCurrentStats();
+        }
         YQL_ENSURE(ExecuterToPartition.erase(partInfo->ExecuterId) == 1);
         YQL_ENSURE(BufferToPartition.erase(partInfo->BufferId) == 1);
     }
@@ -970,6 +1014,7 @@ private:
         response.SetStatus(status);
         response.MutableIssues()->Swap(issues);
 
+        FillCurrentStats();
         Send(SessionActorId, ResponseEv.release());
         PassAway();
     }
@@ -978,6 +1023,7 @@ private:
         auto& response = *ResponseEv->Record.MutableResponse();
         response.SetStatus(ReturnStatus);
 
+        FillCurrentStats();
         Send(SessionActorId, ResponseEv.release());
         PassAway();
     }
@@ -988,6 +1034,9 @@ private:
     NBatchOperations::TSettings Settings;
 
     TBatchOperationExecutionStats Stats;
+    TCurrentQueryStats CurrentQueryStats;
+    THashMap<TActorId, TCurrentExecStatsReport> ChildCurrentStats;
+    ui64 CurrentStatsSequenceNo = 0;
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     NYql::TIssues ReturnIssues;
 

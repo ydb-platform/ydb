@@ -19,6 +19,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <atomic>
+
 namespace NKikimr::NKqp {
 using namespace NSchemeShard;
 using namespace NActors;
@@ -449,7 +451,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(SimpleQueryOlapMeta) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false)
+            .SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -461,16 +464,46 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             TStreamExecScanQuerySettings settings;
             settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                ORDER BY `resource_id`, `timestamp`
-            )", settings).GetValueSync();
+            std::atomic<ui64> reportedReadBytes = 0;
+            auto* runtime = kikimr.GetTestServer().GetRuntime();
+            runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                    const auto& stats = ev->Get<NYql::NDq::TEvDqCompute::TEvState>()->Record.GetStats();
+                    for (const auto& task : stats.GetTasks()) {
+                        bool columnShardSource = false;
+                        for (const auto& source : task.GetSources()) {
+                            columnShardSource |= source.GetIngressName() == "CS";
+                        }
+                        if (columnShardSource) {
+                            ui64 readBytes = 0;
+                            ui64 readRows = 0;
+                            for (const auto& table : task.GetTables()) {
+                                readBytes += table.GetReadBytes();
+                                readRows += table.GetReadRows();
+                            }
+                            UNIT_ASSERT_VALUES_EQUAL(task.GetIngressBytes(), readBytes);
+                            UNIT_ASSERT_VALUES_EQUAL(task.GetIngressRows(), readRows);
+                            reportedReadBytes.fetch_add(readBytes);
+                        }
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+            auto jsonMeta = kikimr.RunCall([&] {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    --!syntax_v1
+                    SELECT `resource_id`, `timestamp`
+                    FROM `/Root/olapStore/olapTable`
+                    ORDER BY `resource_id`, `timestamp`
+                )", settings).GetValueSync();
 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            NJson::TJsonValue jsonMeta;
-            CollectRows(it, nullptr, &jsonMeta);
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                NJson::TJsonValue jsonMeta;
+                CollectRows(it, nullptr, &jsonMeta);
+                return jsonMeta;
+            });
+            runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+            UNIT_ASSERT_GT(reportedReadBytes.load(), 0);
             UNIT_ASSERT_C(!jsonMeta.IsDefined(), "Query result meta should be empty, but it's not");
         }
 
@@ -478,16 +511,19 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TStreamExecScanQuerySettings settings;
             settings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                ORDER BY `resource_id`, `timestamp`
-            )", settings).GetValueSync();
+            auto jsonMeta = kikimr.RunCall([&] {
+                auto it = client.StreamExecuteScanQuery(R"(
+                    --!syntax_v1
+                    SELECT `resource_id`, `timestamp`
+                    FROM `/Root/olapStore/olapTable`
+                    ORDER BY `resource_id`, `timestamp`
+                )", settings).GetValueSync();
 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            NJson::TJsonValue jsonMeta;
-            CollectRows(it, nullptr, &jsonMeta);
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                NJson::TJsonValue jsonMeta;
+                CollectRows(it, nullptr, &jsonMeta);
+                return jsonMeta;
+            });
             UNIT_ASSERT(!jsonMeta.IsNull());
 
             UNIT_ASSERT_C(jsonMeta.IsMap(), "Incorrect Meta");

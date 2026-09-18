@@ -416,10 +416,14 @@ struct TQueryExecutionStats {
 private:
     struct TCurrentTaskStats {
         ui64 MemoryBytes = 0;
-        ui64 SourceReadBytes = 0;
+        ui64 ReadIngressBytes = 0;
     };
     std::vector<TCurrentTaskStats> CurrentTaskStats;
-    TCurrentExecStats LastReportedCurrentStats;
+    ui64 CurrentMemoryBytes = 0;
+    ui64 CurrentReadIngressBytes = 0;
+    ui64 CurrentTableReadBytes = 0;
+    ui64 ObservedPeakComputeMemoryBytes = 0;
+    ui64 CurrentStatsSequenceNo = 0;
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
     std::unordered_map<ui32, bool> UseLlvmByStageId;
     THashMap<ui32, TNodeExecutionStats> NodeStats;
@@ -518,7 +522,7 @@ public:
     ui64 EstimateFinishMem();
     void ExportAggExecStats(TAggExecStat* metrics);
     TCurrentExecStats GetCurrentExecStats(TInstant now) const;
-    void ReportCurrentStats(TCurrentQueryStats& queryStats, bool finished = false);
+    TCurrentExecStatsReport TakeCurrentStats(bool finished = false);
 };
 
 struct TTableStat {

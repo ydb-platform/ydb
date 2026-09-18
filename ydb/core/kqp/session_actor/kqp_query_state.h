@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kqp_query_stats.h"
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -181,6 +182,11 @@ public:
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
+    TCurrentQueryStats CurrentQueryStats;
+    TCurrentExecStats PreviousExecutionStats;
+    ui64 CurrentExecutionStatsSequenceNo = 0;
+    ui64 CurrentQueryStatsSequenceNo = 0;
+    bool CurrentQueryStatsPublishScheduled = false;
     TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;

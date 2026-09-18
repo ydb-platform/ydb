@@ -845,7 +845,7 @@ public:
                 return;
             }
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
-            ev->Get()->GetUserRequestContext()->CurrentQueryStats = sessionInfo->CurrentQueryStats;
+            ev->Get()->GetUserRequestContext()->CollectCurrentQueryStats = true;
 
             // Pass WmState from session to the event
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");
@@ -1478,6 +1478,18 @@ public:
         }
     }
 
+    void Handle(TEvKqp::TEvCurrentQueryStats::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        auto* info = LocalSessions->FindPtr(msg.SessionId);
+        if (!info || info->WorkerId != ev->Sender || info->State != TKqpSessionInfo::EXECUTING
+            || info->QueryRequestId != msg.RequestId || info->CurrentQueryStatsSequenceNo >= msg.SequenceNo) {
+            return;
+        }
+        auto* mutableInfo = const_cast<TKqpSessionInfo*>(info);
+        mutableInfo->CurrentQueryStats = msg.Stats;
+        mutableInfo->CurrentQueryStatsSequenceNo = msg.SequenceNo;
+    }
+
     void SendWhiteboardStats() {
         TActorId whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
         Send(whiteboardId, NNodeWhiteboard::TEvWhiteboard::CreateTotalSessionsUpdateRequest(LocalSessions->size()));
@@ -1498,6 +1510,7 @@ public:
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
+            hFunc(TEvKqp::TEvCurrentQueryStats, Handle);
             hFunc(TEvKqpExecuter::TEvExecuterProgress, ForwardProgress);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);

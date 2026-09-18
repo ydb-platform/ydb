@@ -307,7 +307,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
-    if (UserRequestContext->IsStreamingQuery || UserRequestContext->CurrentQueryStats) {
+    if (UserRequestContext->IsStreamingQuery || UserRequestContext->CollectCurrentQueryStats) {
         request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(1000);
         request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(5000);
     }
@@ -580,7 +580,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .TxInfo = TxInfo,
         .TaskQuotaManager = CreateTaskQuotaManager(ResourceManager_, TxInfo, taskId, initialMemoryLimit),
         .ChannelQuotaManager = nullptr,
-        .ReportStatsSettings = UserRequestContext->CurrentQueryStats
+        .ReportStatsSettings = UserRequestContext->CollectCurrentQueryStats
             ? TMaybe<NYql::NDq::TReportStatsSettings>(NYql::NDq::TReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(5)})
             : Nothing(),
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),

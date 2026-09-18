@@ -173,7 +173,8 @@ struct TKqpSessionInfo {
     TString QueryText;
     TString TraceId;
     ui64 QueryRequestId = 0;
-    std::shared_ptr<TCurrentQueryStats> CurrentQueryStats;
+    std::optional<TCurrentQueryStats::TSnapshot> CurrentQueryStats;
+    ui64 CurrentQueryStatsSequenceNo = 0;
     TString ClientApplicationName;
     TString ClientSID;
     TString ClientHost;
@@ -253,7 +254,8 @@ public:
 
     void AttachQueryText(const TKqpSessionInfo* sessionInfo, const TString& queryText, const TString& traceId, ui64 requestId) {
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryRequestId = requestId;
-        const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStats = std::make_shared<TCurrentQueryStats>();
+        const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStats.reset();
+        const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStatsSequenceNo = 0;
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = queryText;
         const_cast<TKqpSessionInfo*>(sessionInfo)->TraceId = traceId;
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryCount++;

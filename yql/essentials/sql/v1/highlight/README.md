@@ -1,8 +1,8 @@
-# YQL SQL Syntax Highlighting Specification
+# YQL SQL Syntax Highlighting Specfication
 
 ## Overview
 
-This document specifies the syntax highlighting system for the YQL. The system specifies how to identify and categorize different syntactic elements in queries for highlighting purposes.
+This document specifies the syntax highlighting system for the YQL. The system specifies how to identify and categorize different syntactic elements in queries for highlighting porposes.
 
 ## Terms
 

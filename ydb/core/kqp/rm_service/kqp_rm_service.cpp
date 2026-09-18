@@ -904,9 +904,6 @@ public:
                 stopped = Arena.Stopped;
                 // the arena task can only vanish behind the adjuster with the other tasks of the dead actor
                 Y_DEBUG_ABORT_UNLESS(!taskLost || stopped, "the arena task is gone");
-                if (taskLost && !stopped) {
-                    Counters->RmArenaTaskLost->Inc();
-                }
                 Arena.Size = stopped ? 0 : size;
                 Arena.TaskId = stopped ? 0 : taskId;
                 publish |= ReconcileArenaLocked();

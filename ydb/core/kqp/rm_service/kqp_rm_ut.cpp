@@ -1661,7 +1661,6 @@ void KqpRm::ArenaFollowsExternalMemory() {
     }
 
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
-    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaTaskLost"), 0);
 }
 
 // MinFree = 100, MaxFree = 300: the arena is resized to the demand plus 200 whenever its free part leaves the
@@ -2000,7 +1999,6 @@ void KqpRm::ArenaConcurrent() {
         AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
         AssertArenaSensors(0, 0, 0);
         UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
-        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaTaskLost"), 0);
     }
 
     AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
@@ -2139,7 +2137,6 @@ void KqpRm::ArenaStoppedAfterRmPoison() {
     AssertArenaSensors(0, 0, 0);
     AssertResourceManagerStats(rm_second, 1000, 100);
     UNIT_ASSERT_VALUES_EQUAL(rm_second->GetLocalResources().ExternalMemory, 0);
-    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaTaskLost"), 0);
 }
 
 // An external memory only request takes the Memory == 0 path of AllocateResources, whose only publish is the one

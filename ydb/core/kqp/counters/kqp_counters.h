@@ -420,7 +420,6 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaGrows;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaShrinks;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaGrowFailures;
-    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaTaskLost;
     NMonitoring::THistogramPtr RmSnapshotLatency;
     NMonitoring::THistogramPtr NodeServiceStartEventDelivery;
     NMonitoring::THistogramPtr NodeServiceProcessTime;

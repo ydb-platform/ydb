@@ -27,6 +27,7 @@ public:
         ui64 DiskSize = 0;
         EDiskMode DiskMode = EDiskMode::DM_NONE;
         ui32 ChunkSize = 128 * (1 << 20);
+        ui32 PhysicalChunkSize = 0; // 0 to derive the physical chunk size from ChunkSize
         bool SmallDisk = false;
         bool SuppressCompatibilityCheck = false;
         TString UsePath = {}; // If set, use this path instead of a one in a temp dir
@@ -58,10 +59,14 @@ public:
     // this pointer doesn't own the object (only Runtime does)
     NWilson::TFakeWilsonUploader *WilsonUploader = new NWilson::TFakeWilsonUploader;
 
+    std::optional<ui32> PhysicalChunkSizeOption() const {
+        return Settings.PhysicalChunkSize ? std::make_optional(Settings.PhysicalChunkSize) : std::nullopt;
+    }
+
     void DoFormatPDisk(ui64 guid, bool enableFormatAndMetadataEncryption = true, std::optional<bool> enableSectorEncryption = std::nullopt) {
         FormatPDiskForTest(TestCtx.Path, guid, Settings.ChunkSize, Settings.DiskSize,
             false, TestCtx.SectorMap, Settings.SmallDisk, Settings.PlainDataChunks, enableFormatAndMetadataEncryption,
-            enableSectorEncryption, Settings.RandomizeMagic);
+            enableSectorEncryption, Settings.RandomizeMagic, PhysicalChunkSizeOption());
     }
 
     TIntrusivePtr<TPDiskConfig> DefaultPDiskConfig(bool isBad) {
@@ -74,7 +79,7 @@ public:
             if (Settings.DiskSize) {
                 TestCtx.SectorMap->ForceSize(Settings.DiskSize);
             } else {
-                ui64 diskSizeHeuristic = (ui64)Settings.ChunkSize * 1000;
+                ui64 diskSizeHeuristic = (ui64)(Settings.PhysicalChunkSize ?: Settings.ChunkSize) * 1000;
                 TestCtx.SectorMap->ForceSize(diskSizeHeuristic);
             }
 
@@ -101,6 +106,7 @@ public:
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->ChunkSize = Settings.ChunkSize;
+        pDiskConfig->PhysicalChunkSize = Settings.PhysicalChunkSize;
         pDiskConfig->SectorMap = TestCtx.SectorMap;
         pDiskConfig->EnableFormatAndMetadataEncryption = *Settings.EnableFormatAndMetadataEncryption;
         pDiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(*Settings.EnableSectorEncryption);

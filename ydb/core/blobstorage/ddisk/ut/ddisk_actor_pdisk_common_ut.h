@@ -34,7 +34,7 @@ constexpr ui32 ChunkCount = 1000;
 constexpr ui64 DiskSize = (ui64)ChunkSize * ChunkCount;
 constexpr ui64 DefaultPDiskSequence = 0x7e5700007e570000;
 
-void FormatDisk(const TString& path, ui64 guid) {
+void FormatDisk(const TString& path, ui64 guid, std::optional<ui32> physicalChunkSize = std::nullopt) {
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
     NPDisk::TKey sysLogKey;
@@ -44,6 +44,7 @@ void FormatDisk(const TString& path, ui64 guid) {
 
     TFormatOptions options;
     options.EnableSmallDiskOptimization = true;
+    options.PhysicalChunkSizeBytes = physicalChunkSize;
     FormatPDisk(path, DiskSize, MinBlockSize, ChunkSize, guid,
         chunkKey, logKey, sysLogKey, DefaultPDiskSequence, "ddisk_pdisk_test", options);
 }
@@ -69,6 +70,7 @@ class TTestContext {
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     NDDisk::TDDiskConfig DDiskConfig;
     NPDisk::TMainKey PDiskMainKey{.Keys = {DefaultPDiskSequence}, .IsInitialized = true};
+    std::optional<ui32> PhysicalChunkSize;
 
 public:
     TActorId Edge;
@@ -78,7 +80,9 @@ public:
     ui32 NodeId = 0;
 
     explicit TTestContext(NDDisk::TDDiskConfig ddiskConfig = {}, NLog::EPriority ddiskLogPriority = NLog::PRI_ERROR,
-            ui32 numDisks = 1) {
+            ui32 numDisks = 1, std::optional<ui32> physicalChunkSize = std::nullopt)
+        : PhysicalChunkSize(physicalChunkSize)
+    {
         NActors::TTestActorRuntime::ResetFirstNodeId();
         Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         Runtime.Reset(new NActors::TTestActorRuntime(1, 1, true));
@@ -116,10 +120,11 @@ public:
             file.Resize(DiskSize);
             file.Close();
         }
-        FormatDisk(path, pdiskGuid);
+        FormatDisk(path, pdiskGuid, PhysicalChunkSize);
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig(path, pdiskGuid, pdiskId, 0);
         pdiskConfig->ChunkSize = ChunkSize;
+        pdiskConfig->PhysicalChunkSize = PhysicalChunkSize.value_or(0);
         pdiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pdiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pdiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(true);
@@ -1287,6 +1292,31 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         makeWrite(creds2, baseTabletId + 1, 1, 0).release());
     AssertStatus<NDDisk::TEvWriteResult>(rejected, TReplyStatus::SESSION_MISMATCH);
 
+}
+
+// A PDisk formatted with an explicit physical chunk size gives DDisk exactly that much usable
+// space per chunk: the last block of the chunk is writable and one block past it is out of bounds.
+[[maybe_unused]] void TestPhysicalChunkSizeFullChunkIo(NDDisk::TDDiskConfig ddiskConfig) {
+    TTestContext ctx(std::move(ddiskConfig), NLog::PRI_ERROR, 1, ChunkSize);
+    NDDisk::TQueryCredentials creds = Connect(ctx, 1101, 1);
+
+    const TString data = MakeData('P', MinBlockSize);
+    const ui32 lastBlockOffset = ChunkSize - MinBlockSize;
+
+    auto w = std::make_unique<NDDisk::TEvWrite>(creds,
+        NDDisk::TBlockSelector(0, lastBlockOffset, MinBlockSize), NDDisk::TWriteInstruction(0));
+    w->AddPayloadThenChecksum(MakeAlignedRope(data));
+    AssertStatus<NDDisk::TEvWriteResult>(ctx.SendAndGrab<NDDisk::TEvWriteResult>(w.release()), TReplyStatus::OK);
+
+    auto rr = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+        new NDDisk::TEvRead(creds, {0, lastBlockOffset, MinBlockSize}, {true}));
+    AssertReadResult(rr, data);
+
+    auto beyond = std::make_unique<NDDisk::TEvWrite>(creds,
+        NDDisk::TBlockSelector(0, ChunkSize, MinBlockSize), NDDisk::TWriteInstruction(0));
+    beyond->AddPayloadThenChecksum(MakeAlignedRope(data));
+    AssertStatus<NDDisk::TEvWriteResult>(ctx.SendAndGrab<NDDisk::TEvWriteResult>(beyond.release()),
+        TReplyStatus::INCORRECT_REQUEST);
 }
 
 // Write from 2 tablets to multiple VChunks, free all chunks of one tablet, verify the other

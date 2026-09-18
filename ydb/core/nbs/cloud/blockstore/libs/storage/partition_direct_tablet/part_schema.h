@@ -99,7 +99,25 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
         using TColumns = TableColumns<VChunkIndex, State>;
     };
 
-    using TTables = SchemaTables<TabletInfo, VChunkConfigs, DirtyMapStates>;
+    // Persisted masks of touched vchunks. A mask covers 1024 consecutive
+    // vchunks and can only gain set bits.
+    struct TouchedVChunks: public TTableSchema<4>
+    {
+        struct VChunkStartIndex
+            : public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
+        {
+        };
+
+        struct Mask: public Column<2, NKikimr::NScheme::NTypeIds::String>
+        {
+        };
+
+        using TKey = TableKey<VChunkStartIndex>;
+        using TColumns = TableColumns<VChunkStartIndex, Mask>;
+    };
+
+    using TTables =
+        SchemaTables<TabletInfo, VChunkConfigs, DirtyMapStates, TouchedVChunks>;
 
     using TSettings =
         SchemaSettings<ExecutorLogBatching<true>, ExecutorLogFlushPeriod<0>>;

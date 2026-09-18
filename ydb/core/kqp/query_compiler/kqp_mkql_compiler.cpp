@@ -12,8 +12,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <cstdlib>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -208,7 +207,7 @@ TKqpKeyRanges MakeComputedKeyRanges(const TKqlReadTableRangesBase& readTable, co
     return ranges;
 }
 
-} // namespace
+} // anonymous namespace
 
 const TKikimrTableMetadata& TKqlCompileContext::GetTableMeta(const TKqpTable& table) const {
     auto& tableData = TablesData_->ExistingTable(Cluster_, table.Path());
@@ -561,8 +560,173 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return ctx.PgmBuilder().KqpStreamEnumerate(input);
         });
 
+    compiler->AddCallable(TKqpStreamingAggregation::CallableName(),
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 4, "KqpStreamingAggregation expects 4 args: input, keys, handlers, settings");
+
+            auto inputFlow = MkqlBuildExpr(*node.Child(TKqpStreamingAggregation::idx_Input), buildCtx);
+            const auto* keysList = node.Child(TKqpStreamingAggregation::idx_Keys);
+            const auto* handlersList = node.Child(TKqpStreamingAggregation::idx_Handlers);
+            const auto* settingsList = node.Child(TKqpStreamingAggregation::idx_Settings);
+
+            TString stateTablePath;
+            for (const auto& setting : settingsList->Children()) {
+                if (setting->ChildrenSize() >= 1 && setting->Child(0)->IsAtom() && setting->Child(0)->Content() == "state_table_path") {
+                    if (setting->ChildrenSize() >= 2 && setting->Child(1)->IsAtom()) {
+                        stateTablePath = TString(setting->Child(1)->Content());
+                    }
+                    break;
+                }
+            }
+            auto stateTablePathArg = ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(stateTablePath);
+
+            const auto stateName = [](const TExprNode& handler) {
+                const auto& names = handler.Head();
+                return names.IsAtom() ? names.Content() : names.Head().Content();
+            };
+
+            auto keyExtractor = [&](TRuntimeNode item) -> TRuntimeNode {
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(keysList->ChildrenSize());
+                for (const auto& keyAtom : keysList->Children()) {
+                    members.emplace_back(keyAtom->Content(), ctx.PgmBuilder().Member(item, keyAtom->Content()));
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            const auto projectItem = [&](TRuntimeNode item, const TExprNode& trait) {
+                const auto* const rowType = trait.Child(TCoAggregationTraits::idx_ItemType)->GetTypeAnn()
+                    ->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                if (IsSameAnnotation(*rowType, GetSeqItemType(*node.Head().GetTypeAnn()))) {
+                    return item;
+                }
+
+                // A handler can use the whole argument as state, so extra input columns must not leak into it.
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(rowType->GetSize());
+                for (const auto* member : rowType->GetItems()) {
+                    members.emplace_back(member->GetName(), ctx.PgmBuilder().Member(item, member->GetName()));
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            auto initLambda = [&](TRuntimeNode item) -> TRuntimeNode {
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(handlersList->ChildrenSize());
+                for (ui32 i = 0; i < handlersList->ChildrenSize(); ++i) {
+                    const auto* handler = handlersList->Child(i);
+                    const auto& trait = *handler->Child(1);
+                    const auto& init = *trait.Child(TCoAggregationTraits::idx_InitHandler);
+                    TRuntimeNode::TList args = {projectItem(item, trait)};
+                    if (init.Head().ChildrenSize() == 2) {
+                        args.push_back(ctx.PgmBuilder().NewDataLiteral<ui32>(i));
+                    }
+                    auto initCall = MkqlBuildLambda(init, buildCtx, args);
+                    members.emplace_back(stateName(*handler), initCall);
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            auto updateLambda = [&](TRuntimeNode state, TRuntimeNode item) -> TRuntimeNode {
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(handlersList->ChildrenSize());
+                for (ui32 i = 0; i < handlersList->ChildrenSize(); ++i) {
+                    const auto* handler = handlersList->Child(i);
+                    const auto colName = stateName(*handler);
+                    const auto& trait = *handler->Child(1);
+                    auto prev = ctx.PgmBuilder().Member(state, colName);
+                    const auto& update = *trait.Child(TCoAggregationTraits::idx_UpdateHandler);
+                    TRuntimeNode::TList args = {projectItem(item, trait), prev};
+                    if (update.Head().ChildrenSize() == 3) {
+                        args.push_back(ctx.PgmBuilder().NewDataLiteral<ui32>(i));
+                    }
+                    auto updateCall = MkqlBuildLambda(update, buildCtx, args);
+                    members.emplace_back(colName, updateCall);
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            auto finishLambda = [&](TRuntimeNode key, TRuntimeNode state) -> TRuntimeNode {
+                const auto* resultType = GetSeqItemType(*node.GetTypeAnn()).Cast<TStructExprType>();
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(resultType->GetSize());
+                for (const auto& keyAtom : keysList->Children()) {
+                    if (resultType->FindItemType(keyAtom->Content())) {
+                        members.emplace_back(keyAtom->Content(), ctx.PgmBuilder().Member(key, keyAtom->Content()));
+                    }
+                }
+
+                TRuntimeNode::TList finishes;
+                for (const auto& handler : handlersList->Children()) {
+                    const auto& names = handler->Head();
+                    const auto& trait = *handler->Child(TCoAggregateTuple::idx_Trait);
+                    const auto& finish = *trait.Child(TCoAggregationTraits::idx_FinishHandler);
+                    auto value = MkqlBuildLambda(finish, buildCtx, {ctx.PgmBuilder().Member(state, stateName(*handler))});
+                    const TTypeAnnotationNode* finishType = finish.GetTypeAnn();
+                    bool used = false;
+
+                    if (names.IsAtom()) {
+                        if (resultType->FindItemType(names.Content())) {
+                            if (!keysList->ChildrenSize()) {
+                                const auto& defaultValue = *trait.Child(TCoAggregationTraits::idx_DefVal);
+                                if (!defaultValue.IsCallable("Null")) {
+                                    value = ctx.PgmBuilder().Coalesce(value, MkqlBuildExpr(defaultValue, buildCtx));
+                                } else if (!finishType->IsOptionalOrNull()) {
+                                    value = ctx.PgmBuilder().NewOptional(value);
+                                }
+                            }
+                            members.emplace_back(names.Content(), value);
+                            used = true;
+                        }
+                    } else {
+                        const bool optional = finishType->GetKind() == ETypeAnnotationKind::Optional;
+                        const auto* tupleType = (optional ? finishType->Cast<TOptionalExprType>()->GetItemType() : finishType)->Cast<TTupleExprType>();
+                        for (TExprNode::TListType::size_type i = 0; i < names.ChildrenSize(); ++i) {
+                            const auto name = names.Child(i)->Content();
+                            if (resultType->FindItemType(name)) {
+                                auto element = ctx.PgmBuilder().Nth(value, i);
+                                if (!keysList->ChildrenSize() && !optional && !tupleType->GetItems()[i]->IsOptionalOrNull()) {
+                                    element = ctx.PgmBuilder().NewOptional(element);
+                                }
+                                members.emplace_back(name, element);
+                                used = true;
+                            }
+                        }
+                    }
+
+                    if (!used && finish.HasSideEffects()) {
+                        finishes.push_back(value);
+                    }
+                }
+
+                auto result = ctx.PgmBuilder().NewStruct(members);
+                if (finishes.empty()) {
+                    return result;
+                }
+
+                finishes.push_back(result);
+                return ctx.PgmBuilder().Seq(finishes, result.GetStaticType());
+            };
+
+            const auto stateLambda = [&](ui32 handlerIndex) {
+                return [&, handlerIndex](TRuntimeNode state) {
+                    TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                    members.reserve(handlersList->ChildrenSize());
+                    for (const auto& handler : handlersList->Children()) {
+                        const auto name = stateName(*handler);
+                        const auto& trait = *handler->Child(TCoAggregateTuple::idx_Trait);
+                        members.emplace_back(name, MkqlBuildLambda(*trait.Child(handlerIndex), buildCtx,
+                            {ctx.PgmBuilder().Member(state, name)}));
+                    }
+                    return ctx.PgmBuilder().NewStruct(members);
+                };
+            };
+
+            return ctx.PgmBuilder().KqpStreamingAggregation(inputFlow, keyExtractor, initLambda, updateLambda, finishLambda,
+                stateTablePathArg, stateLambda(TCoAggregationTraits::idx_SaveHandler), stateLambda(TCoAggregationTraits::idx_LoadHandler));
+        });
+
     return compiler;
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

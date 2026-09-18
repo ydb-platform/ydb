@@ -135,7 +135,25 @@ TConclusion<NBinaryJson::TBinaryJson> ToBinaryJson(const TJsonRestorer& restorer
         NBinaryJson::SerializeToBinaryJson(WriteJsonRoundTripSafe(restorer.GetResult())));
 }
 
+namespace {
+
+std::vector<NSubColumns::TSplittedJsonPath> BuildResolvedPathsByIndex(const NSubColumns::TDictStats& stats) {
+    std::vector<NSubColumns::TSplittedJsonPath> result;
+    result.reserve(stats.GetColumnsCount());
+    for (ui32 index = 0; index < stats.GetColumnsCount(); ++index) {
+        const auto path = stats.GetColumnName(index);
+        auto parsedResult = NSubColumns::ParseJsonPath(NSubColumns::ToJsonPath(path.empty() ? "\"\"" : path));
+        AFL_VERIFY(parsedResult.IsSuccess())("error", parsedResult.GetErrorMessage())("path", path);
+        result.emplace_back(std::move(parsedResult.DetachResult().Items));
+    }
+    return result;
+}
+
+} // namespace
+
 std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnConstructionContext& context) const {
+    const auto columnsPaths = BuildResolvedPathsByIndex(ColumnsData.GetStats());
+    const auto othersPaths = BuildResolvedPathsByIndex(OthersData.GetStats());
     auto it = BuildUnorderedIterator();
     auto builder = NArrow::MakeBuilder(GetDataType());
     const ui32 start = context.GetStartIndex().value_or(0);
@@ -162,15 +180,15 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
             }
         };
 
-        const auto addValueToJson = [&](const TString& path, const NJson::TJsonValue& jsonValue) {
+        const auto addValueToJson = [&](const NSubColumns::TSplittedJsonPath& path, const NJson::TJsonValue& jsonValue) {
             value.SetValueByPath(path, jsonValue);
         };
 
         auto onRecordKV = [&](const ui32 index, const NJson::TJsonValue& jsonValue, const bool isColumn) {
             if (isColumn) {
-                addValueToJson(ColumnsData.GetStats().GetColumnNameString(index), jsonValue);
+                addValueToJson(columnsPaths[index], jsonValue);
             } else {
-                addValueToJson(OthersData.GetStats().GetColumnNameString(index), jsonValue);
+                addValueToJson(othersPaths[index], jsonValue);
             }
         };
         it.ReadRecord(recordIndex, onStartRecord, onRecordKV, onFinishRecord);
@@ -200,15 +218,13 @@ const NJson::TJsonValue& TJsonRestorer::GetResult() const {
     return Result;
 }
 
-void TJsonRestorer::SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue) {
-    // Path may be empty (for backward compatibility), so make it $."" in this case
-    auto parsedResult = NSubColumns::ParseJsonPath(NSubColumns::ToJsonPath(path.empty() ? "\"\"" : path));
-    AFL_VERIFY(parsedResult.IsSuccess())("error", parsedResult.GetErrorMessage())("path", path);
-    const auto [pathItems, pathTypes, _] = parsedResult.DetachResult().Items;
+void TJsonRestorer::SetValueByPath(const NSubColumns::TSplittedJsonPath& path, const NJson::TJsonValue& jsonValue) {
+    const auto& pathItems = path.PathItems;
+    const auto& pathTypes = path.PathTypes;
     AFL_VERIFY(pathItems.size() > 0);
     AFL_VERIFY(pathItems.size() == pathTypes.size());
     NJson::TJsonValue* current = &Result;
-    for (decltype(pathItems)::size_type i = 0; i < pathItems.size() - 1; ++i) {
+    for (decltype(path.PathItems)::size_type i = 0; i < pathItems.size() - 1; ++i) {
         AFL_VERIFY(pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::MemberAccess);
         NJson::TJsonValue* currentNext = nullptr;
         if (current->GetValuePointer(pathItems[i], &currentNext)) {

@@ -73,6 +73,12 @@ namespace NKikimr {
                 return {true};
             }
 
+            if (MemViewSnap.IsTabletDeleted(id.TabletID())) {
+                // Max generation block is the tombstone; none of the tablet's data is needed any
+                // more, on any channel, and no barrier has to be issued to say so.
+                return false;
+            }
+
             // extract gen and step
             const ui32 gen = id.Generation();
             const ui32 step = id.Step();

@@ -1,5 +1,6 @@
 #include "blocks.h"
 #include "data.h"
+#include "garbage_collection.h"
 #include "schema.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
@@ -132,6 +133,10 @@ namespace NKikimr::NBlobDepot {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             ui32 maxItems = 10'000;
             Finished = Self->Data->OnTabletDeleted(TabletId, maxItems, txc, this);
+            if (Finished) {
+                // the data is gone, so the barriers that used to guard it are not needed either
+                Self->BarrierServer->OnTabletDeleted(TabletId, txc);
+            }
             return true;
         }
 

@@ -158,15 +158,11 @@ namespace NKikimr {
                 TMaybe<TCurrentBarrier> &soft,
                 TMaybe<TCurrentBarrier> &hard) const
         {
+            // A completely deleted tablet (Max generation block) has no barriers here at all: the
+            // records were dropped by MarkTabletDeleted and Update ignores any that arrive later.
+            // That is a fact about the tablet, not a barrier value, so it is not made up here --
+            // IsTabletDeleted() reports it and TBarriersEssence acts on it.
             LockRead();
-
-            if (DeadTablets.contains(tabletId)) {
-                // complete tablet deletion: treat every channel as collected
-                soft = TCurrentBarrier(Max<ui32>(), Max<ui32>(), Max<ui32>(), Max<ui32>());
-                hard = TCurrentBarrier(Max<ui32>(), Max<ui32>(), Max<ui32>(), Max<ui32>());
-                UnlockRead();
-                return;
-            }
 
             TIndexKey indexKey(tabletId, channel);
             auto deadIt = Dead.find(indexKey);

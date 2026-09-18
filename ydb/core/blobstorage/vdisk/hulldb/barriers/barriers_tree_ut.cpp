@@ -145,12 +145,13 @@ namespace NKikimr {
 
             NBarriers::TMemViewSnap snap = memView.GetSnapshot();
             UNIT_ASSERT(snap.IsTabletDeleted(tabletId));
+            // the barrier records are gone, and no barrier is made up in their place
             snap.GetBarrier(tabletId, channel, soft, hard);
-            UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
-            // channel that never had a barrier is still treated as collected
+            UNIT_ASSERT(soft.Empty() && hard.Empty());
             snap.GetBarrier(tabletId, 0, soft, hard);
-            UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
+            UNIT_ASSERT(soft.Empty() && hard.Empty());
 
+            // ...yet nothing of this tablet is kept, on any channel, barriers included
             NGcOpt::TBarriersEssence essence(snap, writer.GetGType());
             UNIT_ASSERT(!essence.Keep(currentSoft, barrierMemRec, {}, false, true).KeepIndex);
             UNIT_ASSERT(!essence.Keep(oldSoft, barrierMemRec, {}, false, true).KeepIndex);
@@ -158,6 +159,10 @@ namespace NKikimr {
             UNIT_ASSERT(!essence.Keep(blobAbove, blobMemRec, {}, false, true).KeepIndex);
             UNIT_ASSERT(!essence.Keep(blobOtherChannel, blobMemRec, {}, false, true).KeepIndex);
             UNIT_ASSERT(essence.Keep(TKeyBlock(tabletId), TMemRecBlock(Max<ui32>()), {}, false, true).KeepIndex);
+
+            // blobs are still protected while garbage collection is not permitted yet
+            UNIT_ASSERT(essence.Keep(blobBelow, blobMemRec, {}, false, false).KeepIndex);
+            UNIT_ASSERT(essence.Keep(blobAbove, blobMemRec, {}, false, false).KeepIndex);
         }
 
         Y_UNIT_TEST(MarkTabletsDeletedBulk) {
@@ -186,14 +191,21 @@ namespace NKikimr {
             UNIT_ASSERT(snap.IsTabletDeleted(deletedTablet2));
             UNIT_ASSERT(!snap.IsTabletDeleted(aliveTablet));
 
+            const TMemRecLogoBlob blobMemRec;
+            NGcOpt::TBarriersEssence essence(snap, writer.GetGType());
             for (ui64 tabletId : {deletedTablet1, deletedTablet2}) {
+                // both the soft and the hard entry have been purged from the index
                 snap.GetBarrier(tabletId, channel, soft, hard);
-                UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
+                UNIT_ASSERT(soft.Empty() && hard.Empty());
+                const TKeyLogoBlob blob(TLogoBlobID(tabletId, 20, 1, channel, 100, 0));
+                UNIT_ASSERT(!essence.Keep(blob, blobMemRec, {}, false, true).KeepIndex);
             }
 
             snap.GetBarrier(aliveTablet, channel, soft, hard);
             UNIT_ASSERT(soft && *soft == NBarriers::TCurrentBarrier(15, 1, 14, 100));
             UNIT_ASSERT(hard.Empty());
+            const TKeyLogoBlob aliveBlob(TLogoBlobID(aliveTablet, 20, 1, channel, 100, 0));
+            UNIT_ASSERT(essence.Keep(aliveBlob, blobMemRec, {}, false, true).KeepIndex);
         }
 
         Y_UNIT_TEST(MarkTabletDeletedIgnoresLaterBarriers) {
@@ -208,8 +220,10 @@ namespace NKikimr {
             tree.MarkTabletDeleted(tabletId);
             UNIT_ASSERT(tree.IsTabletDeleted(tabletId));
             writer.Write(tree, TKeyBarrier(tabletId, channel, 1, 1, false), 1, 1);
+            // the barrier is dropped on arrival rather than indexed, so the tree stays empty for it
             tree.GetBarrier(tabletId, channel, soft, hard);
-            UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
+            UNIT_ASSERT(soft.Empty() && hard.Empty());
+            UNIT_ASSERT(tree.IsTabletDeleted(tabletId));
         }
     }
 

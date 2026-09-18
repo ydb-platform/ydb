@@ -289,6 +289,16 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->ResponseSz, 1);
         UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Responses[0].Status, NKikimrProto::NODATA,
             getResult->Get()->ToString());
+
+        // The hard barrier Hive sends after the block is redundant by now and must not be recorded:
+        // Hive retries it, and each retry would otherwise bring back a barrier row we have purged.
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            SendTEvCollectGarbage(env, sender, groupId, tabletId, Max<ui32>(), Max<ui32>(), id.Channel(),
+                true, Max<ui32>(), Max<ui32>(), nullptr, nullptr, false, true);
+            auto collectResult = CaptureTEvCollectGarbageResult(env, sender, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(collectResult->Get()->Status, NKikimrProto::OK,
+                collectResult->Get()->ToString());
+        }
     }
 
     Y_UNIT_TEST(TrashBatchReloadAfterRestartWithTinyLimit) {

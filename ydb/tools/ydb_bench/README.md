@@ -304,6 +304,26 @@ portable configuration directly.
 
 ### Distributed YDB (experimental)
 
+Select **Deploy cluster** in the distributed Builder to reserve and deploy a
+cluster without running a workload. This is a dedicated run with one profile:
+its YAML contains `mode: deploy`, `cluster-template`, `storage`, and `tenants`.
+CLI nodes in the snapshot are ignored; no load generator or search is started.
+The cluster remains active until **Release cluster** is pressed in Runs or the
+run page. Connection endpoints and the actual launch YAML remain available in
+the profile. Other runs can be queued on the coordinator while it is held.
+The queue advances only after worker cleanup is confirmed. Cancel, controller
+shutdown and lease expiration retain the existing interruption/recovery rules;
+an interrupted deployment is not automatically restarted.
+
+While ready, a reservation records per-host CPU telemetry and all YDB counters
+(every five seconds, using the compressed dictionary/delta archive format).
+Completed one-minute intervals are copied into the profile's `telemetry/`
+directory while the cluster is held; Release saves the final interval before
+stopping nodes. Run downloads and run-level Prometheus export include these
+archives. Collection/transfer errors are reported explicitly; an interrupted
+transfer can leave the latest interval incomplete. Older reservations without
+telemetry remain readable and are labelled as having no recorded metrics.
+
 The template **Configuration** tab edits all message types reachable from the
 bundled YDB `TAppConfig` and `TEphemeralInputFields` protobuf descriptors. The latter
 covers YAML input fields such as `hosts`, `host_configs`, `fail_domain_type`,
@@ -499,7 +519,7 @@ load:
 Use `measurement.verification-repetitions` to enable final verification. In the
 Builder, choose the workload and search objective under **Load generators**;
 verification is configured in **Run policy**. YAML remains a separate top-level tab.
-All participant servers must use the same distributed protocol version (11).
+All participant servers must use the same distributed protocol version (12).
 
 Each worker freezes the selected binaries, resolves placement from its own
 topology and reserves ports. The coordinator retains that execution plan,

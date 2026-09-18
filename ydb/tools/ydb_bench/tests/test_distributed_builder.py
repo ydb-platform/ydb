@@ -69,6 +69,21 @@ class DistributedBuilderTest(unittest.TestCase):
         self.assertEqual(16, profile["actor_system"]["tenants"]["/Root/db"]["dynamic_nodes"]["cpu_count"])
         self.assertEqual("select", profile["distributed"]["cli_nodes"]["c2"]["workload"]["operation"])
 
+    def test_deployment_has_no_workload_or_cli_requirement(self):
+        raw = {key: self.raw[key] for key in ("cluster-template", "storage", "tenants")}
+        raw["mode"] = "deploy"
+        profile = self.load(raw).runs[0].parameters["local_ydb"]
+        self.assertNotIn("workload", profile)
+        self.assertNotIn("load", profile)
+        self.assertEqual(["static", "dynamic"], [n["role"] for n in profile["distributed"]["template"]["nodes"]])
+        self.assertEqual(8, profile["actor_system"]["static_nodes"]["cpu_count"])
+        self.assertEqual(16, profile["actor_system"]["tenants"]["/Root/db"]["dynamic_nodes"]["cpu_count"])
+        raw["cluster-template"]["nodes"] = raw["cluster-template"]["nodes"][:1]
+        self.load(raw)
+        raw["load"] = {"values": [1]}
+        with self.assertRaises(BenchmarkError):
+            self.load(raw)
+
     def test_shared_dataset_rejects_incompatible_options(self):
         self.raw["cli-nodes"]["c2"]["workload"]["options"]["columns"] = 3
         with self.assertRaisesRegex(BenchmarkError, "identical workload type and options"):

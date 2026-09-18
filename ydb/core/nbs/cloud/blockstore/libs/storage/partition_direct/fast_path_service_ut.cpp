@@ -39,9 +39,9 @@ public:
     }
 
     [[nodiscard]] TRegionVChunks GetTouchedVChunks(
-        ui32 startVChunkIndex) const override
+        ui32 regionIndex) const override
     {
-        Y_UNUSED(startVChunkIndex);
+        Y_UNUSED(regionIndex);
         return {};
     }
 };

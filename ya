@@ -221,7 +221,15 @@ def _atomic_fetch(url, into, md5):
         if real_md5 != md5:
             # Treat checksum mismatch as a network problem: it means the transfer was corrupted or truncated
             raise YaBinDownloadError('MD5 mismatched: %s differs from %s' % (real_md5, md5))
-        os.rename(tmp_dest, into)
+        try:
+            os.rename(tmp_dest, into)
+        except OSError as e:
+            import errno
+            # EEXIST - windows: a concurrent ya has already fetched the same file.
+            # The name is the md5 of the content, so the existing file is identical - keep it.
+            # On POSIX rename() replaces the target silently and never gets here.
+            if e.errno != errno.EEXIST:
+                raise
         sys.stderr.write('OK\n')
     except Exception as e:
         sys.stderr.write('ERROR: ' + str(e) + '\n')

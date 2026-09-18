@@ -29,8 +29,9 @@ public:
 
     [[nodiscard]] virtual bool Get(ui32 vChunkIndex) const = 0;
 
+    // Returns touched VChunks in the specified region.
     [[nodiscard]] virtual TRegionVChunks GetTouchedVChunks(
-        ui32 startVChunkIndex) const = 0;
+        ui32 regionIndex) const = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

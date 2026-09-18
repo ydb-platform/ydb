@@ -2,6 +2,8 @@
 
 #include <util/generic/bitmap.h>
 
+#include <cstring>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
@@ -45,15 +47,24 @@ bool TTouchedVChunks::Get(ui32 vChunkIndex) const
            (1u << (bitIndex % 8));
 }
 
-TRegionVChunks TTouchedVChunks::GetTouchedVChunks(ui32 startVChunkIndex) const
+TRegionVChunks TTouchedVChunks::GetTouchedVChunks(ui32 regionIndex) const
 {
-    TRegionVChunks result;
-    for (ui32 index = 0; index < VChunkPerRegionCount; ++index) {
-        if (Get(startVChunkIndex + index)) {
-            result.Set(index);
-        }
+    static_assert(VChunkPerRegionCount % 8 == 0);
+    constexpr size_t RegionByteCount = VChunkPerRegionCount / 8;
+    static_assert(RegionByteCount == sizeof(ui32));
+    static_assert(MaskSize % RegionByteCount == 0);
+    constexpr size_t RegionsPerMask = MaskSize / RegionByteCount;
+
+    const size_t maskIndex = regionIndex / RegionsPerMask;
+    if (maskIndex >= Masks.size()) {
+        return {};
     }
-    return result;
+
+    const size_t regionIndexInMask = regionIndex % RegionsPerMask;
+    const size_t byteIndex = regionIndexInMask * RegionByteCount;
+    ui32 bits = 0;
+    std::memcpy(&bits, Masks[maskIndex].data() + byteIndex, RegionByteCount);
+    return TRegionVChunks(bits);
 }
 
 bool TTouchedVChunks::Add(ui32 vChunkIndex, TPersistResultPromise promise)

@@ -66,12 +66,12 @@ Y_UNIT_TEST_SUITE(TTouchedVChunksTest)
         UNIT_ASSERT(firstRegion.Get(31));
         UNIT_ASSERT(!firstRegion.Get(0));
 
-        const auto secondRegion = touchedVChunks.GetTouchedVChunks(32);
+        const auto secondRegion = touchedVChunks.GetTouchedVChunks(1);
         UNIT_ASSERT(secondRegion.Get(0));
         UNIT_ASSERT(secondRegion.Get(31));
         UNIT_ASSERT(!secondRegion.Get(1));
 
-        const auto thirdRegion = touchedVChunks.GetTouchedVChunks(64);
+        const auto thirdRegion = touchedVChunks.GetTouchedVChunks(2);
         UNIT_ASSERT(thirdRegion.Get(0));
         UNIT_ASSERT(!thirdRegion.Get(1));
     }

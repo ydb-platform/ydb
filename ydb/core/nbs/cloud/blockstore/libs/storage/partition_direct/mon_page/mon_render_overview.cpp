@@ -42,15 +42,34 @@ struct TDbgHeaderCell
     TVector<TDbgId> DbgIds;
 };
 
+// A reusable default config and the number of VChunks matching it.
+struct TDefaultConfigEntry
+{
+    TVChunkConfig Config;
+    size_t VChunkCount = 0;
+};
+
 using TDbgConfigHeaders = std::array<TDbgHeaderCell, VChunkPerRegionCount>;
 using TDbgConfigRow = std::array<TDbgTableCell, VChunkPerRegionCount>;
 using TDbgConfigTable = THashMap<TNodeId, TDbgConfigRow>;
+using TDefaultConfigs =
+    std::array<TDefaultConfigEntry, DirectBlockGroupHostCount>;
+using TDefaultConfigCache = THashMap<TDbgId, TDefaultConfigs>;
 
 // Contains the fixed columns and node rows of the DBG table.
 struct TDbgConfigTableData
 {
     TDbgConfigHeaders Headers;
     TDbgConfigTable Table;
+    TDefaultConfigCache DefaultConfigs;
+
+    // Returns the cached default config entry matching the VChunk placement.
+    TDefaultConfigEntry& GetDefaultConfig(TDbgId dbgId, TVchunkId vChunkId)
+    {
+        auto* configs = DefaultConfigs.FindPtr(dbgId);
+        Y_ABORT_UNLESS(configs);
+        return (*configs)[vChunkId % DirectBlockGroupHostCount];
+    }
 };
 
 enum class EDbgConfigCellKind
@@ -88,6 +107,24 @@ TCountAndSize GetPBuffersUsage(const TVector<TDbgSnapshot>& dbgs)
     return result;
 }
 
+// Builds all distinct default configs for a DBG. Default host roles repeat
+// every hostCount VChunks.
+TDefaultConfigs BuildDefaultConfigCache(const TDbgSnapshot& dbg)
+{
+    TDefaultConfigs result;
+    for (TVchunkId vChunkId = 0; vChunkId < DirectBlockGroupHostCount;
+         ++vChunkId)
+    {
+        auto config = TVChunkConfig::MakeDefault(
+            vChunkId,
+            DirectBlockGroupHostCount,
+            DefaultPrimaryCount);
+        config.SetDBGIndex(dbg.Index);
+        result[vChunkId].Config = std::move(config);
+    }
+    return result;
+}
+
 // Builds table columns and node rows without calculating cell contents.
 TDbgConfigTableData BuildDbgConfigTable(const TVector<TDbgSnapshot>& dbgs)
 {
@@ -95,6 +132,7 @@ TDbgConfigTableData BuildDbgConfigTable(const TVector<TDbgSnapshot>& dbgs)
     for (const auto& dbg: dbgs) {
         result.Headers[dbg.Index % VChunkPerRegionCount].DbgIds.push_back(
             dbg.Index);
+        result.DefaultConfigs.emplace(dbg.Index, BuildDefaultConfigCache(dbg));
         for (const auto& connection: dbg.Connections) {
             result.Table[connection.DDiskId.NodeId];
             result.Table[connection.PBufferId.NodeId];

@@ -24,10 +24,11 @@ public:
         return Touched.contains(vChunkIndex);
     }
 
-    TRegionVChunks GetTouchedVChunks(ui32 startVChunkIndex) const override
+    TRegionVChunks GetTouchedVChunks(ui32 regionIndex) const override
     {
         ++GetRegionCallCount;
         TRegionVChunks result;
+        const ui32 startVChunkIndex = regionIndex * VChunkPerRegionCount;
         for (size_t i = 0; i < VChunkPerRegionCount; ++i) {
             if (Touched.contains(startVChunkIndex + i)) {
                 result.Set(i);

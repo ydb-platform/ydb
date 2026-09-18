@@ -59,6 +59,7 @@
 #include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/services/metadata/service.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/object_counter.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
@@ -892,11 +893,11 @@ void TColumnShard::SetupMetadata() {
 
 void TColumnShard::SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request) {
     const ui64 memory = request.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
-    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-        ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(memory, request.GetRequest()->GetTaskId(), TTLTaskSubscription,
-                                    std::shared_ptr<NOlap::TDataAccessorsRequest>(request.GetRequest()),
-                                    std::make_shared<TCSMetadataSubscriber>(SelfId(), request.GetProcessor(), Generation()),
-                                    DataAccessorsManager.GetObjectPtrVerified(), nullptr));
+    auto task = std::make_shared<TAccessorsMemorySubscriber>(memory, request.GetRequest()->GetTaskId(), TTLTaskSubscription,
+        std::shared_ptr<NOlap::TDataAccessorsRequest>(request.GetRequest()),
+        std::make_shared<TCSMetadataSubscriber>(SelfId(), request.GetProcessor(), Generation()), DataAccessorsManager.GetObjectPtrVerified(),
+        nullptr);
+    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor, task);
 }
 
 bool TColumnShard::SetupTtl() {
@@ -1633,21 +1634,26 @@ public:
         bool reask = false;
         YDB_LOG_CREATE_CONTEXT(
             {"event", "TTxAskPortionChunks::Execute"});
-        std::map<std::pair<ui64, TInternalPathId>, NOlap::TPortionInfo::TConstPtr> portions;
+        std::vector<NOlap::TPortionInfo::TConstPtr> portions;
         for (const auto& [pathId, byConsumer] : PortionsByPath) {
             const auto granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleOptional(pathId);
             if (!granule) {
                 continue;
             }
             for (const auto& [_, consumer] : byConsumer.GetConsumers()) {
-                for (const auto& portion : consumer.GetPortions(*granule)) {
-                    portions.emplace(std::make_pair(portion->GetPortionId(), pathId), portion);
+                for (const ui64 portionId : consumer.GetPortionIds()) {
+                    if (auto portion = granule->GetPortionOptional(portionId, false)) {
+                        portions.emplace_back(std::move(portion));
+                    }
                 }
             }
         }
         // Cache requests regroup addresses in hash maps; restore global PortionId order here.
-        for (const auto& [address, portion] : portions) {
-            const auto pathId = address.second;
+        SortUniqueBy(portions, [](const auto& portion) {
+            return std::make_pair(portion->GetPortionId(), portion->GetPathId());
+        });
+        for (const auto& portion : portions) {
+            const auto pathId = portion->GetPathId();
             const ui64 p = portion->GetPortionId();
             const NOlap::TPortionAddress pAddress = portion->GetAddress();
             auto itPortionConstructor = Constructors.find(pAddress);
@@ -1702,7 +1708,7 @@ public:
             return false;
         }
 
-        for (const auto& [_, portion] : portions) {
+        for (const auto& portion : portions) {
             auto it = Constructors.find(portion->GetAddress());
             if (it != Constructors.end() && it->second.IsReady()) {
                 FetchedAccessors.emplace_back(std::move(it->second));

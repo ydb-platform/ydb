@@ -720,9 +720,9 @@ public:
     // Used + (MinFree + MaxFree) / 2 whenever its free part leaves that band. Its footprint Max(Size, Used) is
     // charged to the node total, so Memory admission, the spilling cookies and the published resources are precise.
     //
-    // The demand is tracked lock-free. While the arena covers it the charge is Size either way, so a task that
-    // starts or ends only moves two atomics and reads the ceiling below; the lock is taken to grow, to shrink, and
-    // whenever the arena needs attention. Deferring a shrink leaves the arena above the demand, never below it.
+    // The demand is tracked lock-free: while the arena covers it the charge does not move, so a task that starts
+    // or ends only touches two atomics and the ceiling below. The lock is taken to grow, to shrink, and whenever
+    // the arena needs attention. A shrink left to the periodic pass leaves the arena above the demand, never below.
 
     ui64 ArenaUsed() const {
         return ArenaExternalMemory.load() + ArenaExecutionUnits.load() * ExecutionUnitMemory.load();
@@ -793,26 +793,24 @@ public:
         return limit > others ? limit - others : 0;
     }
 
-    // The demand a change may reach before the arena needs the lock: one past the growth threshold while the arena
-    // is healthy, Max when it is off (nothing to do at all) and 0 whenever a change must be looked at. Without a
-    // band (MaxFree 0) nothing absorbs a change, so every one of them is looked at. Must be called under Lock.
+    // The demand a change may reach before the arena needs the lock. Must be called under Lock.
     ui64 ArenaFastCeilingLocked() const {
         if (!EnableMemoryArena.load()) {
-            return Max<ui64>();
+            return ArenaFastPathOpen;
         }
         const ui64 minFree = MemoryArenaMinFreeSize.load();
-        // the same states in which ArenaPlanLocked cannot act: a ceiling published under any of them would either
-        // describe a size that is about to change, or leave the recheck below nothing to make progress with
+        // the states in which ArenaPlanLocked cannot act, and a configuration with no band to absorb a change: a
+        // ceiling published under any of them would describe a size that is about to change, or leave the
+        // adjuster's recheck below nothing to make progress with
         if (MemoryArenaMaxFreeSize.load() == 0 || Arena.AdjustInProgress || Arena.Stopped || !ResourceBroker
             || Arena.Charged != Arena.Size || Arena.GrowWanted || Arena.Size < minFree)
         {
-            return 0;
+            return ArenaFastPathShut;
         }
         return Arena.Size - minFree + 1;
     }
 
-    // Applies the demand without the lock. True when the arena covers it: the charge is Max(Size, Used) == Size
-    // either way, so only the gauge and a possible shrink are left to the adjuster.
+    // Applies the demand without the lock, and reports whether the arena already covers it.
     bool ArenaFastUpdate(const TKqpResourcesRequest& resources, bool allocate) {
         if (allocate) {
             ArenaExternalMemory.fetch_add(resources.ExternalMemory);
@@ -827,7 +825,7 @@ public:
         // sequentially consistent, as is the adjuster's store of the ceiling followed by its own read of the
         // demand: the two cannot miss each other, so a change that skips here was seen by the adjuster
         const ui64 ceiling = ArenaFastCeiling.load();
-        return ceiling && ArenaUsed() < ceiling;
+        return ceiling != ArenaFastPathShut && ArenaUsed() < ceiling;
     }
 
     void ApplyArenaDemand(const TKqpResourcesRequest& resources, bool allocate) {
@@ -846,22 +844,20 @@ public:
         // has to keep the fast path shut, or its demand sits above a published ceiling with nothing to act on it
         Arena.GrowWanted = target > Arena.Size;
         const ui64 cap = ArenaSizeCapLocked();
-        // The arena may hold what it backs, and beyond that only what the node total leaves it. A node total that
-        // has dropped, or transactions that have taken more of it, therefore pull the arena down even while the
-        // band is asking for a bigger one, and it keeps backing its own demand, so that the resource broker is
-        // never told less than the node is really using.
+        // The arena may hold what it backs and, beyond that, only what the node total leaves it, so a total that
+        // has dropped or transactions that have taken more of it pull the arena down even while the band is asking
+        // for a bigger one. It keeps backing its own demand: the resource broker is never told less than the node
+        // is really using.
         ui64 planned = Min(target, Max(used, cap));
         if (planned > Arena.Size) {
-            // growing, on the other hand, stops at the node total: the resource broker would grant the first task
-            // of an idle queue whatever its size
-            planned = Max(Arena.Size, Min(planned, cap));
+            planned = Max(Arena.Size, Min(planned, cap)); // growing stops at the cap, see ArenaSizeCapLocked
         }
         return planned;
     }
 
     // Never under Lock: the resource broker calls are made outside it. One adjuster at a time, a concurrent caller
-    // only records and charges its demand, which the loop picks up when it re-evaluates after a round. A refused
-    // growth is not asked again here but stays pending for the next free, broker attach or config change.
+    // only records and charges its demand, which the loop picks up when it re-evaluates after a round. A growth the
+    // resource broker refused is not asked again until the periodic pass clears the gate, see NoteArenaGrowth.
     void AdjustArena() {
         bool publish = false;
         bool growRefused = ArenaGrowRefused.load(std::memory_order_relaxed);
@@ -873,7 +869,7 @@ public:
             ui64 deficit = 0;
             with_lock (Lock) {
                 // while this section runs every demand change takes the lock and waits for its outcome
-                ArenaFastCeiling.store(0);
+                ArenaFastCeiling.store(ArenaFastPathShut);
                 publish |= ReconcileArenaLocked();
                 const ui64 used = ArenaUsed();
                 size = Arena.Size;
@@ -881,7 +877,7 @@ public:
                 if (target == size || (growRefused && target > size)) {
                     const ui64 ceiling = ArenaFastCeilingLocked();
                     ArenaFastCeiling.store(ceiling);
-                    if (ceiling && ArenaUsed() >= ceiling) {
+                    if (ceiling != ArenaFastPathShut && ArenaUsed() >= ceiling) {
                         continue; // a change landed while this section ran
                     }
                     break;
@@ -973,7 +969,7 @@ public:
                 size = ask;
             }
             Counters->RmArenaGrows->Inc();
-            return ask == delta; // a deficit that went through without the headroom is not a full growth
+            return ask == delta;
         }
         Counters->RmArenaGrowFailures->Inc();
         return false;
@@ -982,9 +978,8 @@ public:
     void ShrinkArena(IResourceBroker& broker, ui64& taskId, ui64& size, ui64 by, bool& taskLost) {
         bool ok = false;
         if (by >= size) {
-            // cancelled, not finished: the arena task outlives the queries it backs, so the resource broker must
-            // not take its lifetime for the execution time of a kqp_query task. That average is what the broker
-            // estimates a task's finish time from, and the estimate drives the queue's planned resource usage.
+            // cancelled, not finished: the arena outlives the queries it backs, and the resource broker averages
+            // the lifetime of finished tasks into the estimate its queues are ordered by (TScheduler::FinishTask)
             ok = broker.FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId, /* cancel */ true), SelfId);
             by = size;
         } else {
@@ -1011,7 +1006,7 @@ public:
             Arena.Size = 0;
             Arena.TaskId = 0;
             Arena.GrowWanted = false;
-            ArenaFastCeiling.store(0);
+            ArenaFastCeiling.store(ArenaFastPathShut);
             ReconcileArenaLocked();
         }
     }
@@ -1048,8 +1043,10 @@ public:
     // config change re-prices the ones in use
     std::atomic<ui64> ArenaExternalMemory = 0;
     std::atomic<ui64> ArenaExecutionUnits = 0;
-    // the demand a change may reach before the arena needs the lock, see ArenaFastCeilingLocked
-    std::atomic<ui64> ArenaFastCeiling = 0;
+    // see ArenaFastCeilingLocked; shut means every change takes the lock, open means none of them needs to
+    static constexpr ui64 ArenaFastPathShut = 0;
+    static constexpr ui64 ArenaFastPathOpen = Max<ui64>();
+    std::atomic<ui64> ArenaFastCeiling = ArenaFastPathShut;
     // the last growth did not fully go through, see NoteArenaGrowth
     std::atomic<bool> ArenaGrowRefused = false;
 

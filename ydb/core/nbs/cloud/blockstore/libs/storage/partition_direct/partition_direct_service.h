@@ -19,6 +19,18 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Disk-wide state captured when a vchunk write starts.
+struct TWriteStartInfo
+{
+    // Tablet-wide lsn minted for this write.
+    ui64 Lsn = 0;
+    // Number of vchunk writes in flight across the whole disk, including
+    // this one.
+    size_t InflightWriteCount = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct IPartitionDirectService
 {
     virtual ~IPartitionDirectService() = default;
@@ -59,11 +71,14 @@ struct IPartitionDirectService
         size_t hostIndex,
         ui32 dbgConnectionsConfigGeneration) = 0;
 
-    // Generates the next tablet-wide write LSN. Called by a vchunk on its
-    // executor thread when it starts processing a write, so generation and
-    // dirty-map registration happen on the same thread. Also drives periodic
-    // persistent buffer cleanup.
-    virtual ui64 GenerateLsn() = 0;
+    // Registers a starting vchunk write and mints its lsn. Called by a vchunk
+    // on its executor thread when it starts processing a write, so generation
+    // and dirty-map registration happen on the same thread. Every call must
+    // be paired with OnWriteFinished().
+    virtual TWriteStartInfo OnWriteStarted() = 0;
+
+    // Releases the in-flight write registered by OnWriteStarted().
+    virtual void OnWriteFinished() = 0;
 
     // Called when DDisk replied BLOCKED, meaning DDisk has already
     // seen a newer tablet generation. The current tablet instance must suicide.

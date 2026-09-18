@@ -63,7 +63,11 @@ public:
         EDataLocation dataLocation) const = 0;
     [[nodiscard]] virtual TDuration GetReadRequestTimeout() const = 0;
 
-    [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
+    // Chooses DirectWrite or IndirectWrite for this request.
+    // inflightWriteCount is the number of vchunk writes in flight across the
+    // whole disk, including this one. Low load favours DirectWrite for latency.
+    [[nodiscard]] virtual EWriteMode GetWriteMode(
+        size_t inflightWriteCount) const = 0;
     [[nodiscard]] virtual TDuration GetWriteHedgingDelay(
         THostMask hosts,
         bool indirect) const = 0;
@@ -131,7 +135,8 @@ public:
         EDataLocation dataLocation) const override;
     [[nodiscard]] TDuration GetReadRequestTimeout() const override;
 
-    [[nodiscard]] EWriteMode GetWriteMode() const override;
+    [[nodiscard]] EWriteMode GetWriteMode(
+        size_t inflightWriteCount) const override;
     [[nodiscard]] TDuration GetWriteHedgingDelay(
         THostMask hosts,
         bool indirect) const override;
@@ -175,6 +180,7 @@ private:
     const TDuration DefaultFlushRequestTimeout;
     const TDuration DefaultEraseRequestTimeout;
     const EWriteMode DefaultWriteMode;
+    const size_t MaxInflightWritesForDirectWrite;
 
     TVector<THostStat> HostStatistics;
     TVector<THostState> HostStates;

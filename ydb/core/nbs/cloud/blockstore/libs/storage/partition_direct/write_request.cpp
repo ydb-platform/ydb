@@ -34,7 +34,8 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     IDirectBlockGroupPtr directBlockGroup,
     std::shared_ptr<TWriteRequestBundle> bundle)
     : ActorSystem(actorSystem)
-    , WriteMode(directBlockGroup->GetOracle()->GetWriteMode())
+    , WriteMode(directBlockGroup->GetOracle()->GetWriteMode(
+          bundle->GetInflightWriteCount()))
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", ToString(WriteMode)},
@@ -572,7 +573,7 @@ TWriteRequestExecutorPtr CreateWriteRequestExecutor(
         logTitle,
         vChunkConfig,
         std::move(directBlockGroup),
-        bundle);
+        std::move(bundle));
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

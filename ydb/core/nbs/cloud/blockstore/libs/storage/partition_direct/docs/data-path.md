@@ -62,9 +62,10 @@ primaries is an initial value, not a maximum. Request code must use
 
 ## Record identity
 
-[TFastPathService::GenerateLsn](../fast_path_service.cpp) increments an atomic
-counter shared by this partition's DBGs. Each new vChunk write registers a
-pending record before sending I/O. Its
+[TFastPathService::OnWriteStarted](../fast_path_service.cpp) increments an
+atomic LSN counter shared by this partition's DBGs and a disk-wide in-flight
+write counter. Each new vChunk write registers a pending record before sending
+I/O. Its
 [TPBufferKey](../../../common/pbuffer_key.h) is `(Generation, Lsn)`, ordered
 lexicographically; the tablet generation separates new writes after restart
 from restored records. Do not replace a restored key's generation with the
@@ -83,6 +84,15 @@ registers a pending write, and creates a
 [TWriteRequestExecutor](../write_request.cpp). The executor snapshots the
 vChunk configuration and obtains its write mode and timing from the oracle.
 It requires at least three desired PB hosts before starting.
+
+The oracle chooses the mode from the disk-wide in-flight write count captured
+at `OnWriteStarted` (including this write). When
+`MaxInflightWritesForDirectWrite` is unset the default is 16. Explicit 0 keeps
+the configured static `WriteMode`. Otherwise a count at or below the threshold
+selects `DirectWrite` for low-load latency, and a higher count selects
+`IndirectWrite`. Each DBG has its own oracle, so the count is stored on
+`TWriteRequestBundle` and read by the executor rather than shared between
+oracles.
 
 - `DirectWrite` sends individual writes from the partition to desired PBs.
 - `IndirectWrite` selects a coordinator with `SelectBestPBufferHost` and

@@ -397,6 +397,7 @@ void TVChunk::OnWriteBlocksResponse(
         FormatError(response.Error).Quote().c_str());
 
     --InflightWritesCount;
+    PartitionDirectService->OnWriteFinished();
 
     {
         auto dirtyMapSpan = bundle->GetSpan().CreateChild(
@@ -718,10 +719,12 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
     // Mint the record id and register the write as inflight on the same
     // executor thread, so the cleanup watermark covers it from the moment of
     // minting.
+    const auto writeRequestInfo = PartitionDirectService->OnWriteStarted();
     const TPBufferKey pBufferKey{
         .Generation = DirectBlockGroup->GetTabletGeneration(),
-        .Lsn = PartitionDirectService->GenerateLsn()};
+        .Lsn = writeRequestInfo.Lsn};
     bundle->SetPBufferKey(pBufferKey);
+    bundle->SetInflightWriteCount(writeRequestInfo.InflightWriteCount);
     BlocksDirtyMap->RegisterInflightWrite(pBufferKey, bundle->GetVChunkRange());
 
     LOG_DEBUG(

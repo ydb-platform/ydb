@@ -59,6 +59,12 @@ message TOracleConfig
     // back online. If the number of successes is less, the host will not go online,
     // regardless of the time during which the successes occurred.
     optional uint32 MinSuccessesCountBeforeReturningOnline = 10;
+
+    // Disk-wide in-flight write requests count at or below which
+    // DirectWrite mode is selected. Above this value IndirectWrite is used.
+    // Unset defaults to 16. 0 disables the adaptive choice and the static
+    // WriteMode is used.
+    optional uint32 MaxInflightWritesForDirectWrite = 11;
 }
 
 message TStorageServiceConfig

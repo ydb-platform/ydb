@@ -29,6 +29,11 @@ public:
 
     [[nodiscard]] ui32 GetMinSuccessesCountBeforeReturningOnline() const;
 
+    // Disk-wide in-flight write count at or below which GetWriteMode selects
+    // DirectWrite. Unset defaults to 16. 0 keeps the configured static
+    // WriteMode.
+    [[nodiscard]] ui32 GetMaxInflightWritesForDirectWrite() const;
+
 private:
     TStorageConfigPtr StorageConfig;
 };

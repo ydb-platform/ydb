@@ -82,6 +82,8 @@ TOracle::TOracle(
     , DefaultFlushRequestTimeout(StorageConfig->GetFlushRequestTimeout())
     , DefaultEraseRequestTimeout(StorageConfig->GetEraseRequestTimeout())
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
+    , MaxInflightWritesForDirectWrite(
+          OracleConfig->GetMaxInflightWritesForDirectWrite())
     , HostStatistics(hostHealths.size())
     , HostStates(hostHealths.size())
     , HostsHealths(hostHealths)
@@ -288,9 +290,14 @@ TDuration TOracle::GetReadRequestTimeout() const
     return DefaultReadRequestTimeout;
 }
 
-EWriteMode TOracle::GetWriteMode() const
+EWriteMode TOracle::GetWriteMode(size_t inflightWriteCount) const
 {
-    return DefaultWriteMode;
+    if (!MaxInflightWritesForDirectWrite) {
+        return DefaultWriteMode;
+    }
+    return inflightWriteCount <= MaxInflightWritesForDirectWrite
+               ? EWriteMode::DirectWrite
+               : EWriteMode::IndirectWrite;
 }
 
 TDuration TOracle::GetWriteHedgingDelay(THostMask hosts, bool indirect) const

@@ -1122,6 +1122,71 @@ Y_UNIT_TEST_SUITE(TOracle)
                 "host #" << i);
         }
     }
+
+    Y_UNIT_TEST(GetWriteModeShouldSelectByInflightWhenThresholdUnset)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        rawConfig.SetWriteMode(NProto::EWriteMode::IndirectWrite);
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::DirectWrite,
+            oracle.GetWriteMode(1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::DirectWrite,
+            oracle.GetWriteMode(16));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(17));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(132));
+    }
+
+    Y_UNIT_TEST(GetWriteModeShouldKeepConfiguredModeWhenThresholdZero)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        rawConfig.SetWriteMode(NProto::EWriteMode::IndirectWrite);
+        rawConfig.MutableOracleConfig()->SetMaxInflightWritesForDirectWrite(0);
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(16));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(132));
+    }
+
+    Y_UNIT_TEST(GetWriteModeShouldSelectByInflightWhenThresholdSet)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        rawConfig.SetWriteMode(NProto::EWriteMode::IndirectWrite);
+        rawConfig.MutableOracleConfig()->SetMaxInflightWritesForDirectWrite(16);
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::DirectWrite,
+            oracle.GetWriteMode(1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::DirectWrite,
+            oracle.GetWriteMode(16));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(17));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(132));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

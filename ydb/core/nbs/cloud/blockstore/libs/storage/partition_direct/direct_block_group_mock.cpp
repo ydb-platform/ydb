@@ -91,8 +91,9 @@ TDuration TOracleMock::GetReadRequestTimeout() const
     return ReadRequestTimeout;
 }
 
-EWriteMode TOracleMock::GetWriteMode() const
+EWriteMode TOracleMock::GetWriteMode(size_t inflightWriteCount) const
 {
+    LastInflightWriteCount = inflightWriteCount;
     return WriteMode;
 }
 

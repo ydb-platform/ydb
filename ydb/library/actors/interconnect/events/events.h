@@ -54,6 +54,18 @@ namespace NActors {
         EvSubscribeForConnection,
         EvReportConnection,
 
+        // wake for the direct-session (v1) lock-free registration queue
+        EvProcessDirectSessionQueue,
+
+        // internal event for v2 queue dispatching
+        EvRegisterCallback,
+        EvRegisterSession,
+        EvUnregisterSession,
+        EvStop,
+        EvUringMonRequest,
+        EvUringQueueOverload,
+        EvUringEventTooLarge,
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

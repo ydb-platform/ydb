@@ -142,6 +142,7 @@ namespace NActors {
             FlagExtendedFormat = 1 << 5,
             FlagDebugTrackReceive = 1 << 6,
             FlagFailFastWhenDisconnected = 1 << 7,
+            FlagDisablePayloadChecksums = 1 << 8, // When set, IC will not calculate or check XDC checksums
         };
         using TEventFlags = ui32;
 
@@ -311,6 +312,11 @@ namespace NActors {
 
         TIntrusivePtr<TEventSerializedData> GetChainBuffer();
         TIntrusivePtr<TEventSerializedData> ReleaseChainBuffer();
+
+        // Serializes the event now and drops the IEventBase. Pass allowExternalDataChannel when the
+        // session that will transmit it can route sections over an external data channel: the retained
+        // serialization info decides whether that is still possible once the event is only a rope.
+        void Preserialize(bool allowExternalDataChannel);
 
         ui32 GetSize() const {
             if (Buffer) {

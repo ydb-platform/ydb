@@ -22,6 +22,7 @@ SRCS(
     interconnect_common.h
     interconnect_counters.cpp
     interconnect.h
+    interconnect_direct_session.h
     interconnect_handshake.cpp
     interconnect_handshake.h
     interconnect_impl.h
@@ -32,6 +33,7 @@ SRCS(
     interconnect_proxy_wrapper.cpp
     interconnect_proxy_wrapper.h
     interconnect_resolve.cpp
+    interconnect_session_iface.h
     interconnect_stream.cpp
     interconnect_stream.h
     interconnect_tcp_input_session.cpp
@@ -41,6 +43,9 @@ SRCS(
     interconnect_tcp_server.h
     interconnect_tcp_session.cpp
     interconnect_tcp_session.h
+    interconnect_tcp_session_v2.cpp
+    interconnect_tcp_session_v2.h
+    interconnect_uring_engine.h
     interconnect_zc_processor.cpp
     interconnect_zc_processor.h
     load.cpp
@@ -53,8 +58,28 @@ SRCS(
     subscription_manager.h
     types.cpp
     types.h
+    v2_event_serializer.cpp
+    v2_event_serializer.h
+    v2_io_buffers.h
+    v2_serialize_window.h
     watchdog_timer.h
 )
+
+PEERDIR(
+    ydb/library/uring
+)
+
+IF (OS_LINUX)
+    SRCS(
+        uring_context.cpp
+        uring_context.h
+        interconnect_uring_engine.cpp
+    )
+ELSE()
+    SRCS(
+        interconnect_uring_engine_stub.cpp
+    )
+ENDIF()
 
 PEERDIR(
     contrib/libs/libc_compat
@@ -95,7 +120,12 @@ IF (OS_LINUX)
     )
 ENDIF()
 
+RECURSE(
+    bench
+)
+
 RECURSE_FOR_TESTS(
+    benchmark
     ut
     ut_fat
     ut_huge_cluster

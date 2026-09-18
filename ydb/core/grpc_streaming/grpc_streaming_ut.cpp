@@ -398,6 +398,11 @@ public:
         Y_UNUSED(ctx);
         Context->Attach(SelfId());
         Context->Read();
+        // Intentionally do NOT write: a pending write would set FlagWriteActive,
+        // which makes FinishInternal() skip Stream.Finish() (finish == false).
+        // The LOGBROKER-10618 crash is Stream.Finish() on a dead CQ, which only
+        // happens when FlagWriteActive is clear (e.g. a deferred StreamWrite that
+        // never started writing). So keep the write side idle to reproduce it.
         Attached.Signal();
         Become(&THangActor::StateWork);
     }
@@ -558,25 +563,26 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
         auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
         auto stub = NStreamingTest::TStreamingService::NewStub(channel);
 
-        {
-            grpc::ClientContext context;
-            auto stream = stub->Session(&context);
-            // The server actor (THangActor) now holds the IStreamCtx and never
-            // finishes the stream. Keep the client stream alive so the RPC stays
-            // in flight on the server side.
-            Y_UNUSED(stream);
+        // The server actor (THangActor) now holds the IStreamCtx and never
+        // finishes the stream. Keep the client stream alive across server.Reset()
+        // so the RPC stays in flight on the server side (with an in-flight write)
+        // when the completion queues are shut down, matching LOGBROKER-10618.
+        grpc::ClientContext context;
+        auto stream = stub->Session(&context);
+        Y_UNUSED(stream);
 
-            // Wait until the server-side THangActor has been created and attached
-            // to the stream. This guarantees the IStreamCtx (TFacade) is held by
-            // the actor before we shut the server down, so the facade destructor
-            // will run after the completion queue is dead.
-            THangActor::Attached.WaitI();
-        }
+        // Wait until the server-side THangActor has been created and attached
+        // to the stream. This guarantees the IStreamCtx (TFacade) is held by
+        // the actor before we shut the server down, so the facade destructor
+        // will run after the completion queue is dead.
+        THangActor::Attached.WaitI();
 
         // Destroy the server: GRpcServer->Stop() shuts down the CQs, then the
         // actor system is destroyed, destroying THangActor and its IStreamCtx.
         // Without the fix this crashes with the LOGBROKER-10618 Y_VERIFY.
         server.Reset();
+
+        THangActor::Attached.Reset();
     }
 }
 

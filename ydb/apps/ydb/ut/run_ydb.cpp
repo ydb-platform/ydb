@@ -85,6 +85,11 @@ public:
 
 TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode, bool autoAddEndpointAndDatabase, const THashMap<TString, TString>& env, int expectedExitCode)
 {
+    return RunYdbWithStderr(args1, args2, checkExitCode, autoAddEndpointAndDatabase, env, expectedExitCode, nullptr);
+}
+
+TString RunYdbWithStderr(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode, bool autoAddEndpointAndDatabase, const THashMap<TString, TString>& env, int expectedExitCode, TString* stderrOutput)
+{
     TShellCommand command(BinaryPath(GetEnv("YDB_CLI_BINARY")));
 
     if (autoAddEndpointAndDatabase) {
@@ -109,6 +114,10 @@ TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool ch
             "exitcode: " << command.GetExitCode() << Endl <<
             "stdout: " << Endl << command.GetOutput() << Endl <<
             "stderr: " << Endl << command.GetError() << Endl;
+    }
+
+    if (stderrOutput) {
+        *stderrOutput = command.GetError();
     }
 
     return command.GetOutput();

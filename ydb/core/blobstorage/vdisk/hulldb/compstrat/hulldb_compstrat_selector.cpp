@@ -58,7 +58,7 @@ namespace NKikimr {
             // try to find what to compact based on levels balance (skipped in emergency mode;
             // even then Balance refuses jobs whose estimated output exceeds the free-chunk budget)
             if (!Params.EmergencyMode) {
-                action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
+                action = TStrategyBalance(HullCtx, Params, LevelSnap, Task, Ranks).Select();
                 if (action != ActNothing) {
                     Task->SelectStrategy = Task->IsFullCompaction
                         ? ESelectStrategy::BalanceFull
@@ -120,7 +120,7 @@ namespace NKikimr {
             }
 
             // try to find what to compact based on levels balance
-            action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
+            action = TStrategyBalance(HullCtx, Params, LevelSnap, Task, Ranks).Select();
             if (action != ActNothing) {
                 Task->SelectStrategy = Task->IsFullCompaction
                     ? ESelectStrategy::BalanceFull
@@ -159,7 +159,7 @@ namespace NKikimr {
             }
 
             // try to find what to compact based on levels balance
-            action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
+            action = TStrategyBalance(HullCtx, Params, LevelSnap, Task, Ranks).Select();
             if (action != ActNothing) {
                 Task->SelectStrategy = Task->IsFullCompaction
                     ? ESelectStrategy::BalanceFull

@@ -288,27 +288,29 @@ TEST(TLoggingTagListTest, Add)
     EXPECT_EQ(ReadTags(tags.GetPayload()), (TTags{{"Count", "42"}, {"Range", "1-9"}}));
 }
 
-TEST(TLoggingTagListBuilderTest, AppendsToTarget)
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TLoggingTagListBuilderGuardTest, AppendsToTarget)
 {
     TLoggingTagList tags;
-    TLoggingTagListBuilder(&tags).With("Key", 1);
+    TLoggingTagListBuilderGuard(&tags).With("Key", 1);
     EXPECT_EQ(ToString(tags), "Key: 1");
 }
 
-TEST(TLoggingTagListBuilderTest, ChainKeepsOrder)
+TEST(TLoggingTagListBuilderGuardTest, ChainKeepsOrder)
 {
     TLoggingTagList tags;
-    TLoggingTagListBuilder(&tags)
+    TLoggingTagListBuilderGuard(&tags)
         .With("First", 1)
         .WithFormat("Second", "%.2f", 1.5)
         .With("Third", "value");
     EXPECT_EQ(ToString(tags), "First: 1, Second: 1.50, Third: value");
 }
 
-TEST(TLoggingTagListBuilderTest, SkipsTagOnFalseCondition)
+TEST(TLoggingTagListBuilderGuardTest, SkipsTagOnFalseCondition)
 {
     TLoggingTagList tags;
-    TLoggingTagListBuilder(&tags)
+    TLoggingTagListBuilderGuard(&tags)
         .WithIf(false, "Skipped", 1)
         .WithIf(true, "Kept", 2)
         .WithFormatIf(false, "SkippedFormat", "%x", 255)
@@ -316,11 +318,11 @@ TEST(TLoggingTagListBuilderTest, SkipsTagOnFalseCondition)
     EXPECT_EQ(ToString(tags), "Kept: 2, KeptFormat: ff");
 }
 
-TEST(TLoggingTagListBuilderTest, EvaluatesLazyTagOnlyWhenKept)
+TEST(TLoggingTagListBuilderGuardTest, EvaluatesLazyTagOnlyWhenKept)
 {
     TLoggingTagList tags;
     int calls = 0;
-    TLoggingTagListBuilder(&tags)
+    TLoggingTagListBuilderGuard(&tags)
         .WithIf(false, "Skipped", YT_LAZY((++calls, 1)))
         .WithIf(true, "Kept", YT_LAZY((++calls, 2)))
         .WithFormatIf(false, "SkippedFormat", "%x", YT_LAZY((++calls, 255)))
@@ -329,25 +331,83 @@ TEST(TLoggingTagListBuilderTest, EvaluatesLazyTagOnlyWhenKept)
     EXPECT_EQ(ToString(tags), "Kept: 2, KeptFormat: ff");
 }
 
-TEST(TLoggingTagListBuilderTest, SplicesList)
+TEST(TLoggingTagListBuilderGuardTest, SplicesList)
 {
     auto spliced = TLoggingTagList()
         .With("Inner", 1)
         .With("Other", 2);
 
     TLoggingTagList tags;
-    TLoggingTagListBuilder(&tags)
+    TLoggingTagListBuilderGuard(&tags)
         .With("Outer", 0)
         .With(spliced);
     EXPECT_EQ(ToString(tags), "Outer: 0, Inner: 1, Other: 2");
 }
 
-TEST(TLoggingTagListBuilderTest, AccumulatesAcrossBuilders)
+TEST(TLoggingTagListBuilderGuardTest, AccumulatesAcrossBuilders)
 {
     TLoggingTagList tags;
-    TLoggingTagListBuilder(&tags).With("First", 1);
-    TLoggingTagListBuilder(&tags).With("Second", 2);
+    TLoggingTagListBuilderGuard(&tags).With("First", 1);
+    TLoggingTagListBuilderGuard(&tags).With("Second", 2);
     EXPECT_EQ(ToString(tags), "First: 1, Second: 2");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, DiscardsChainWithoutTarget)
+{
+    int calls = 0;
+    TLoggingTagListBuilderGuard(nullptr)
+        .With("Key", 1)
+        .WithFormat("Format", "%x", 255)
+        .WithIf(true, "Lazy", YT_LAZY((++calls, 1)))
+        .WithFormatIf(true, "LazyFormat", "%x", YT_LAZY((++calls, 255)));
+    EXPECT_EQ(calls, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TLoggingTagListBuilderGuardTest, InvokesFunctorOnceChainIsOver)
+{
+    TLoggingTagList tags;
+    std::string observed;
+    {
+        TLoggingTagListBuilderGuard guard(&tags, [&] { observed = ToString(tags); });
+        guard
+            .With("First", 1)
+            .With("Second", 2);
+        EXPECT_TRUE(observed.empty());
+    }
+    EXPECT_EQ(observed, "First: 1, Second: 2");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, SkipsFunctorWhileUnwinding)
+{
+    TLoggingTagList tags;
+    int calls = 0;
+    EXPECT_THROW({
+        TLoggingTagListBuilderGuard guard(&tags, [&] { ++calls; });
+        guard.With("Key", 1);
+        throw std::runtime_error("Oops");
+    }, std::runtime_error);
+
+    EXPECT_EQ(calls, 0);
+    EXPECT_EQ(ToString(tags), "Key: 1");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, FunctorIsOptional)
+{
+    TLoggingTagList tags;
+    TLoggingTagListBuilderGuard(&tags).With("Key", 1);
+    EXPECT_EQ(ToString(tags), "Key: 1");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, InvokesFunctorWithoutTarget)
+{
+    int calls = 0;
+    {
+        TLoggingTagListBuilderGuard guard(nullptr, [&] { ++calls; });
+        guard.With("Key", 1);
+    }
+    EXPECT_EQ(calls, 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

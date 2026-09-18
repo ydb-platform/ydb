@@ -1174,6 +1174,10 @@ private:
             delimitedBuilder->AppendString(info);
         }
 
+        if (!RequestLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", RequestLoggingTags_);
+        }
+
         if (RuntimeInfo_->Descriptor.Cancelable && !Cancelable_) {
             delimitedBuilder->AppendFormat("Cancelable: %v", Cancelable_);
         }
@@ -1227,6 +1231,10 @@ private:
 
         for (const auto& info : ResponseInfos_) {
             delimitedBuilder->AppendString(info);
+        }
+
+        if (!ResponseLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", ResponseLoggingTags_);
         }
 
         delimitedBuilder->AppendFormat("ExecutionTime: %v, TotalTime: %v",

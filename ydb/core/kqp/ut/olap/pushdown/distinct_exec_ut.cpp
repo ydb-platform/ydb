@@ -520,6 +520,96 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         UNIT_ASSERT_C(issues.Contains("does not match") || issues.Contains("OptForceOlapPushdownDistinct"), issues);
     }
 
+    // JSON_VALUE ERROR ON EMPTY is not kernel-pushable. Alias projection must refuse it instead of
+    // ConvertComparisonNode → BuildOlapJsonValue YQL_ENSURE abort. DISTINCT stays in KQP.
+    Y_UNIT_TEST(JsonValueDistinct_ErrorOnEmpty_ForcePragma_DoesNotAbort) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        auto qsRes = queryClient.GetSession().GetValueSync();
+        UNIT_ASSERT_C(qsRes.IsSuccess(), qsRes.GetIssues().ToString());
+        auto querySession = qsRes.GetSession();
+
+        constexpr TStringBuf kTable = "/Root/foo_json_returning_force";
+        auto cre = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `)" << kTable << R"(` (
+                a Int64 NOT NULL,
+                payload JsonDocument,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(cre.IsSuccess(), cre.GetIssues().ToString());
+
+        auto ins = querySession.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo_json_returning_force` (a, payload)
+            VALUES (1, JsonDocument('{"a.b.c" : "a1"}'));
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(ins.IsSuccess(), ins.GetIssues().ToString());
+
+        auto sel = querySession.ExecuteQuery(R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "jsonDoc";
+
+            SELECT DISTINCT JSON_VALUE(payload, "$.\"a.b.c\"" ERROR ON EMPTY) AS jsonDoc
+            FROM `/Root/foo_json_returning_force` LIMIT 10
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(sel.IsSuccess(), sel.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(sel.GetResultSet(0).RowsCount(), 1u);
+    }
+
+    Y_UNIT_TEST(JsonValueDistinct_ErrorOnEmpty_SourceColumnInWhere_Succeeds) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        auto qsRes = queryClient.GetSession().GetValueSync();
+        UNIT_ASSERT_C(qsRes.IsSuccess(), qsRes.GetIssues().ToString());
+        auto querySession = qsRes.GetSession();
+
+        constexpr TStringBuf kTable = "/Root/foo_json_returning_filter";
+        auto cre = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `)" << kTable << R"(` (
+                a Int64 NOT NULL,
+                payload JsonDocument,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(cre.IsSuccess(), cre.GetIssues().ToString());
+
+        auto ins = querySession.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo_json_returning_filter` (a, payload)
+            VALUES (1, JsonDocument('{"a.b.c" : "a1"}'));
+            INSERT INTO `/Root/foo_json_returning_filter` (a, payload)
+            VALUES (2, JsonDocument('{"a.b.c" : "a1"}'));
+            INSERT INTO `/Root/foo_json_returning_filter` (a, payload)
+            VALUES (3, JsonDocument('{"a.b.c" : "a2"}'));
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(ins.IsSuccess(), ins.GetIssues().ToString());
+
+        auto sel = querySession.ExecuteQuery(R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+            SELECT DISTINCT JSON_VALUE(payload, "$.\"a.b.c\"" ERROR ON EMPTY) AS jsonDoc
+            FROM `/Root/foo_json_returning_filter`
+            WHERE payload IS NOT NULL
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(sel.IsSuccess(), sel.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(sel.GetResultSet(0).RowsCount(), 2u);
+    }
+
     Y_UNIT_TEST(OneShard_DistinctOnOff_SameResult) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

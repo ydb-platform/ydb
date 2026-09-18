@@ -782,7 +782,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         auto it = session.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         const auto collected = CollectStreamResult(it);
-        UNIT_ASSERT_C(collected.RowsCount > 0, collected.ResultSetYson);
+        UNIT_ASSERT_VALUES_EQUAL_C(collected.RowsCount, 5, collected.ResultSetYson);
 
         const i64 after = ReadDistinctLimitSyncPointInvocations(kikimr);
         UNIT_ASSERT_C(after > before, TStringBuilder() << "sync point counter: before=" << before << " after=" << after);
@@ -813,7 +813,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         auto it = session.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         const auto collected = CollectStreamResult(it);
-        UNIT_ASSERT_C(collected.RowsCount > 0, collected.ResultSetYson);
+        UNIT_ASSERT_VALUES_EQUAL_C(collected.RowsCount, 5, collected.ResultSetYson);
 
         const i64 after = ReadDistinctLimitSyncPointInvocations(kikimr);
         UNIT_ASSERT_C(after > before, TStringBuilder() << "TRIVIAL reader sync point counter: before=" << before << " after=" << after);

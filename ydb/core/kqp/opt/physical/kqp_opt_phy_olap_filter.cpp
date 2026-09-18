@@ -398,6 +398,9 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
         }
 
         if (auto maybeJsonValue = node.Maybe<TCoJsonValue>()) {
+            if (!CanBePushedAsOlapJsonValue(maybeJsonValue.Cast(), &argument)) {
+                return NullNode;
+            }
             return BuildOlapJsonValue(maybeJsonValue.Cast(), argument, ctx, pos, pushdownOptions);
         }
 
@@ -989,6 +992,11 @@ bool CollectOlapOperationForAliasProjection(const TCoAtom& aliasAtom, const TExp
     }
     // Alias must be a fresh column: not a stored column and not an already emitted projection.
     if (rowType->FindItem(alias) || projectionMembers.contains(alias)) {
+        return false;
+    }
+    // Same gate as IsSuitableToCollectProjection: RETURNING / ON EMPTY / ON ERROR / PASSING are not
+    // kernel-pushable. ConvertComparisonNode → BuildOlapJsonValue YQL_ENSUREs this.
+    if (!CanBePushedAsOlapJsonValue(jsonValue, &arg)) {
         return false;
     }
     auto olapOperations = ConvertComparisonNode(TExprBase(value), arg, ctx, value->Pos(), pushdownOptions);

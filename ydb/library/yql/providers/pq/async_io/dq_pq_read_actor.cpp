@@ -618,7 +618,6 @@ private:
                 },
                 TopicPartitionsCount
             );
-            UpdateAvailableClustersMetric();
         }
         for (const auto& cluster : Clusters) {
             const auto& partitionsToRead = GetPartitionsToRead(cluster);
@@ -626,9 +625,10 @@ private:
                 Partitions[MakePartitionKey(TString(cluster.Info.Name), partitionId)];
             }
         }
-
+        
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
         SchedulePartitionCountTimer();
+        UpdateAvailableClustersMetric();
     }
 
     void Handle(TEvPrivate::TEvRequestPartitionStatus::TPtr&) {

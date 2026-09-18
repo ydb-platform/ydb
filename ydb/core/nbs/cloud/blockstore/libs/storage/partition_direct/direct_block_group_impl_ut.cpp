@@ -87,6 +87,7 @@ std::shared_ptr<TVChunk> StartVChunk(
             vChunkIndex,
             DirectBlockGroupHostCount,
             DefaultPrimaryCount),
+        false,
         TDirtyMapStateProto{},
         dbg,
         1000,   // syncRequestsBatchSize

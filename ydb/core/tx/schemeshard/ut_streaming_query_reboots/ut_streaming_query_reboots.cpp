@@ -1,12 +1,27 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <util/generic/is_in.h>
+
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
     void CompareProperties(const NKikimrSchemeOp::TStreamingQueryProperties& expected, const NKikimrSchemeOp::TStreamingQueryProperties& actual) {
         const auto& expectedProperties = expected.properties();
         const auto& actualProperties = actual.properties();
-        UNIT_ASSERT_EQUAL(expectedProperties.size(), actualProperties.size());
+
+        const auto isManagedProperty = [](const auto& key) {
+            return IsIn({
+                "__created_by", "__modified_by", "__started_by",
+                "__stopped_by", "__created_at", "__modified_at"
+            }, key);
+        };
+
+        size_t actualUserPropertiesCount = 0;
+        for (const auto& property : actualProperties) {
+            actualUserPropertiesCount += !isManagedProperty(property.first);
+        }
+        UNIT_ASSERT_EQUAL(expectedProperties.size(), actualUserPropertiesCount);
+
         for (const auto& [expectedKey, expectedValue] : expectedProperties) {
             const auto it = actualProperties.find(expectedKey);
             UNIT_ASSERT(it != actualProperties.end());

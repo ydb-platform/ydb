@@ -1141,6 +1141,42 @@
       {
         "name": "PreviousExecutionIds",
         "type": "Utf8?"
+      },
+      {
+        "name": "CreatedBy",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ModifiedBy",
+        "type": "Utf8?"
+      },
+      {
+        "name": "StartedBy",
+        "type": "Utf8?"
+      },
+      {
+        "name": "StoppedBy",
+        "type": "Utf8?"
+      },
+      {
+        "name": "CreatedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "ModifiedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "SubmittedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "StartedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "FinishedAt",
+        "type": "Timestamp?"
       }
     ],
     "primary_key": [

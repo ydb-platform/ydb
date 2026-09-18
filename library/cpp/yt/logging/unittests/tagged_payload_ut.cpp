@@ -260,6 +260,25 @@ TEST(TTaggedPayloadTest, AppendTagWithReset)
     EXPECT_EQ(ReadTags(tags), (TTags{{"Rewritten", "final"}, {"Emptied", ""}}));
 }
 
+TEST(TTaggedPayloadTest, WriterRestoresPayloadOnThrow)
+{
+    TTaggedPayloadWriter writer;
+    WriteMessage(&writer, "Message");
+    WriteTag(&writer, "Kept", "yes");
+
+    EXPECT_THROW(
+        writer.AppendTag("Doomed", [] (TStringBuilderBase* builder) {
+            builder->AppendString(std::string(4096, 'x'));
+            throw std::runtime_error("boom");
+        }),
+        std::runtime_error);
+
+    WriteTag(&writer, "After", "still valid");
+    auto decoded = Decode(writer.Finish());
+    EXPECT_EQ(decoded.Message, "Message");
+    EXPECT_EQ(decoded.Tags, (TTags{{"Kept", "yes"}, {"After", "still valid"}}));
+}
+
 TEST(TLoggingTagListTest, Add)
 {
     TLoggingTagList tags;

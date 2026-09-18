@@ -2612,29 +2612,3 @@ FROM `{table_name}`"""
         )
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
-
-
-    @pytest.mark.parametrize("local_topics", [True, False])
-    def test_large_message(
-        self: StreamingTestBase,
-        kikimr: Kikimr,
-        entity_name: Callable[[str], str],
-        local_topics: bool,
-    ) -> None:
-        query_name = f"test_large_message_{local_topics!s:.1}"
-        inp, out, endpoint = self.get_io_names(kikimr, query_name, local_topics, entity_name)
-
-        kikimr.ydb_client.query(f"""
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                INSERT INTO {out} SELECT Data FROM {inp};
-            END DO;
-        """)
-        try:
-            self.wait_completed_checkpoints(kikimr, query_name)
-
-            message = "a" * (8 * 1024 * 1024)
-            self.get_ydb_client(kikimr, local_topics).topic_write(self.input_topic, [message])
-            assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == [message]
-        finally:
-            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

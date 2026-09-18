@@ -345,9 +345,7 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "CloneQueue: " << BlocksDirtyMap->DebugPrintReadyToClone() << "\n";
     sb << "FlushQueue: " << BlocksDirtyMap->DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap->DebugPrintReadyToErase() << "\n";
-    sb << "AheadBehind:" << BlocksDirtyMap->DebugPrintAheadBehindBrief()
-       << "\n";
-    sb << "Ahead:\n" << BlocksDirtyMap->DebugPrintAhead();
+    sb << "BehindBrief:" << BlocksDirtyMap->DebugPrintBehindBrief() << "\n";
     sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
     sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
     return sb;

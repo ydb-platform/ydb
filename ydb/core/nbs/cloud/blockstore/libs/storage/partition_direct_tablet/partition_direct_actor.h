@@ -108,7 +108,7 @@ private:
     // Persisted vchunk config overrides, keyed by vchunk index.
     TVChunkConfigs VChunkConfigs;
 
-    // Batch persisting of ahead and behind fields.
+    // Batch persisting of behind fields.
     bool ExecutingUpdateDirtyMapState = false;
     TVector<TPersistResultPromise> ExecutingUpdateDirtyMapStatePromises;
     TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests

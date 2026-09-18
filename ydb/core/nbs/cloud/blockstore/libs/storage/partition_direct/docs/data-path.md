@@ -133,9 +133,9 @@ writes and incomplete records found during recovery are distinct states.
 
 DDisk masks normally contain desired, enabled hosts that can read the whole
 range. [TDDiskState::CanReadFromDDisk](../dirty_map/ddisk_state.cpp) rejects
-disabled DDisks, ranges beyond a fresh disk's watermark, and ranges marked
-outdated in its behind map. The ahead map helps repair accounting but does
-not currently make above-watermark ranges eligible for this read check.
+disabled DDisks and ranges outside the continuous prefix before the first
+Behind range. A successful flush can extend this prefix by removing its range
+from Behind.
 PB masks start from confirmed replicas and also exclude disabled hosts.
 If filtering empties the mask, `MakeReadRangeHint` currently falls back to
 the desired DDisk host positions, keeping the hint's original PB/DDisk source

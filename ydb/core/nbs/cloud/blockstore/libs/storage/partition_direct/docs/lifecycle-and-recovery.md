@@ -88,7 +88,7 @@ The gates in [TBlocksDirtyMap](../dirty_map/dirty_map.cpp) and
 6. A record becomes flushed only after every desired enabled destination
    confirms and at least three confirmations exist. A failure clears that
    destination's requested bit and requeues the record.
-7. PB locks postpone erase. Erase also waits for durable ahead/behind state
+7. PB locks postpone erase. Erase also waits for durable behind state
    when the record overlaps a tracked outdated range.
 
 Write completion starts flush work. Flush completion starts erase and state
@@ -105,14 +105,14 @@ erases, compact erase records and barriers, use the shared PB page.
 
 ## Persisted DDisk state and repair
 
-[TDDiskState](../dirty_map/ddisk_state.cpp) combines an operational watermark
-with two range sets:
-
-- Ahead ranges have newer data beyond the normal copied prefix.
-- Behind ranges missed a flush and contain outdated data.
+[TDDiskState](../dirty_map/ddisk_state.cpp) keeps the ranges that do not have
+up-to-date data in its Behind field. Only the continuous prefix before the
+first Behind range can be read. Successful flush and copy operations remove
+their ranges from Behind, while a flush missed by a lagging DDisk adds its
+range.
 
 The configuration watermark initializes a fresh DDisk. Flush results update
-the range sets, incrementing the dirty-map state generation. `DoPersistDirtyMap`
+the Behind field, incrementing the dirty-map state generation. `DoPersistDirtyMap`
 sends that state to
 [part_updatedirtymapstate.cpp](../../partition_direct_tablet/part_updatedirtymapstate.cpp).
 Only transaction completion advances the dirty map's persisted generation.

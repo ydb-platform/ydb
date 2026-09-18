@@ -907,18 +907,15 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     }
 
     // A Fresh DDisk has range tracking enabled. When a write is flushed to it,
-    // FlushCompleted must propagate the completion down to the DDisk state so
-    // the flushed range is recorded in the DDisk's Ahead field (data that is
-    // already up-to-date above the operational watermark and needs no sync).
+    // FlushCompleted must remove the up-to-date range from Behind.
     // Operational DDisks have tracking disabled, so they record nothing.
-    Y_UNIT_TEST(ShouldTrackAheadRangeOnFreshDDiskAfterFlush)
+    Y_UNIT_TEST(ShouldRemoveFlushedRangeFromBehindOnFreshDDisk)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // Promote hand-off H3 to primary and make it Fresh with a low
-        // watermark so tracking is enabled and writes above the watermark are
-        // recorded as "ahead".
+        // watermark so tracking is enabled.
         vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
         dirtyMap->UpdateConfig(vchunkConfig, true);
@@ -931,7 +928,6 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintDDiskState());
 
         // The unsynced tail is tracked as Behind before the flush.
-        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL(
             "  H3: [5..32767]\n",
             dirtyMap->DebugPrintBehind());
@@ -952,11 +948,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         FlushAll(flushHint, *dirtyMap);
 
-        // FlushCompleted recorded the flushed range in the Fresh DDisk's Ahead
-        // field. Only the Fresh host H3 tracks; the Operational hosts do not.
-        UNIT_ASSERT_VALUES_EQUAL(
-            "  H3: [10..19]\n",
-            dirtyMap->DebugPrintAhead());
+        // Only the Fresh host H3 updates its Behind map; the Operational hosts
+        // do not track completed flushes.
         UNIT_ASSERT_VALUES_EQUAL(
             "  H3: [5..9][20..32767]\n",
             dirtyMap->DebugPrintBehind());
@@ -2646,16 +2639,16 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     // Exercises the full persist lifecycle:
     //   - NeedPersist() starts false and generation is 0.
-    //   - After a flush that populates a fresh DDisk's Ahead field,
+    //   - After a flush that changes a fresh DDisk's Behind field,
     //     NeedPersist() becomes true and generation advances.
     //   - GetStateForPersist() captures the generation and correct DDisk count.
     //   - StatePersisted() resets NeedPersist() to false.
-    //   - Only Behind data (not Ahead) can block MakeEraseHint().
-    Y_UNIT_TEST(PersistLifecycleAndEraseNotBlockedByAheadData)
+    //   - Behind data blocks MakeEraseHint() until it is persisted.
+    Y_UNIT_TEST(PersistLifecycleAndEraseBlockedByBehindData)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // H3 is fresh; writes above watermark populate its Ahead field.
+        // H3 is fresh; successful writes remove ranges from Behind.
         // H1 is lagging; writes populate Behind field.
         vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
@@ -2677,7 +2670,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             requested,
             requested);
 
-        // Flush all DDIsks; H3's Ahead field changes → generation increments.
+        // Flush all DDisks; H3's Behind field changes → generation increments.
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         FlushAll(flushHint, *dirtyMap);
@@ -2698,7 +2691,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap->StatePersisted(gen);
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
 
-        // Only Behind blocks erase; Ahead does not.
+        // Persisted Behind state no longer blocks erase.
         UNIT_ASSERT_VALUES_EQUAL(
             "  H1: [10..19]\n"
             "  H3: [5..9][20..32767]\n",
@@ -2711,13 +2704,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             eraseHints.DebugPrint());
     }
 
-    // Load() restores the per-DDisk Ahead/Behind state captured by
+    // Load() restores the per-DDisk Behind state captured by
     // GetStateForPersist() into a freshly constructed dirty map.
     Y_UNIT_TEST(ShouldLoadPersistedDDiskState)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // H3 is fresh; writes above watermark populate its Ahead field.
+        // H3 is fresh; successful writes remove ranges from Behind.
         // H1 is lagging; writes populate Behind field.
         vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
@@ -2735,12 +2728,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             requested,
             requested);
 
-        // Flush all DDisks so H3's Ahead field records the flushed range.
+        // Flush all DDisks so H3's Behind field drops the flushed range.
         auto flushHint = source->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         FlushAll(flushHint, *source);
 
-        UNIT_ASSERT_VALUES_EQUAL("  H3: [10..19]\n", source->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL(
             "  H1: [10..19]\n"
             "  H3: [5..9][20..32767]\n",
@@ -2757,10 +2749,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
-        // After load the target mirrors the source's Ahead/Behind fields.
-        UNIT_ASSERT_VALUES_EQUAL(
-            source->DebugPrintAhead(),
-            target->DebugPrintAhead());
+        // After load the target mirrors the source's Behind fields.
         UNIT_ASSERT_VALUES_EQUAL(
             source->DebugPrintBehind(),
             target->DebugPrintBehind());
@@ -2775,7 +2764,6 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         const auto before = dirtyMap->DebugPrintDDiskState();
 
-        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
         UNIT_ASSERT_VALUES_EQUAL(before, dirtyMap->DebugPrintDDiskState());
     }

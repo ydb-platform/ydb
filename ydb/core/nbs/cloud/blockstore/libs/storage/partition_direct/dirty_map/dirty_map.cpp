@@ -717,7 +717,7 @@ void TBlocksDirtyMap::FlushCompleted(
     const TInflightInfo& inflight,
     THostMask ddisks)
 {
-    AddToAheadAndBehindOnFlushCompleted(inflight, ddisks);
+    UpdateBehindOnFlushCompleted(inflight, ddisks);
 }
 
 void TBlocksDirtyMap::DataToPBufferAdded(
@@ -765,7 +765,7 @@ void TBlocksDirtyMap::DataFromPBufferReleased(
     }
 }
 
-void TBlocksDirtyMap::OnBehindAheadChanged()
+void TBlocksDirtyMap::OnBehindChanged()
 {
     ++StateGeneration;
 }
@@ -782,9 +782,7 @@ bool TBlocksDirtyMap::NeedErase() const
 
 bool TBlocksDirtyMap::NeedPersist() const
 {
-    const bool needPersistAheadBehind =
-        StateGeneration > PersistedStateGeneration;
-    return needPersistAheadBehind;
+    return StateGeneration > PersistedStateGeneration;
 }
 
 TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
@@ -964,19 +962,6 @@ TString TBlocksDirtyMap::DebugPrintReadyToErase() const
     return result;
 }
 
-TString TBlocksDirtyMap::DebugPrintAhead() const
-{
-    TStringBuilder result;
-    for (THostIndex h = 0; h < GetHostCount(); ++h) {
-        auto ahead = DDiskStates[h].DebugPrintAhead();
-        if (ahead.empty()) {
-            continue;
-        }
-        result << "  " << PrintHostIndex(h) << ": " << ahead << "\n";
-    }
-    return result;
-}
-
 TString TBlocksDirtyMap::DebugPrintBehind() const
 {
     TStringBuilder result;
@@ -990,13 +975,13 @@ TString TBlocksDirtyMap::DebugPrintBehind() const
     return result;
 }
 
-TString TBlocksDirtyMap::DebugPrintAheadBehindBrief() const
+TString TBlocksDirtyMap::DebugPrintBehindBrief() const
 {
     TStringBuilder result;
     result << "gen:" << GetCurrentGeneration() << "/"
            << PersistedStateGeneration << " ";
     for (THostIndex h = 0; h < GetHostCount(); ++h) {
-        auto brief = DDiskStates[h].DebugPrintAheadBehindBrief();
+        auto brief = DDiskStates[h].DebugPrintBehindBrief();
         if (brief) {
             result << PrintHostIndex(h) << ":" << brief;
         }
@@ -1077,12 +1062,12 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
                             : TRangeLock(weak_from_this(), pBufferKey));
 }
 
-void TBlocksDirtyMap::AddToAheadAndBehindOnFlushCompleted(
+void TBlocksDirtyMap::UpdateBehindOnFlushCompleted(
     const TInflightInfo& inflight,
     THostMask ddisks)
 {
-    // Check that one of the ddisks is lagging or aheading, in this case it
-    // needs to be notified about the data flush to ddisk.
+    // Check that one of the DDisks tracks missing data. In this case it needs
+    // to be notified about the data flush to DDisk.
     bool needNotify = AnyOf(
         DDiskStates,
         [](const TDDiskState& ddisk) { return ddisk.IsTrackingEnabled(); });

@@ -31,7 +31,7 @@ std::optional<TPBufferKey> GetSafeBarrierOnExecutor(
     return future.GetValue(TDuration::Seconds(10));
 }
 
-// Drives dirtyMap into a state where its Ahead/Behind state needs persistence.
+// Drives dirtyMap into a state where its Behind state needs persistence.
 // Must run on the executor thread.
 void MakeDirtyMapNeedPersist(TBlocksDirtyMap& dirtyMap)
 {

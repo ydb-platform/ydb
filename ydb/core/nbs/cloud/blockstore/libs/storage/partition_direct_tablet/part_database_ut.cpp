@@ -60,14 +60,12 @@ TDirtyMapStateProto MakeSampleDirtyMapState()
     TDirtyMapStateProto state;
 
     auto* ddiskState = state.AddDDiskStates();
-    auto* ahead = ddiskState->MutableAhead();
-    ahead->SetRunLengthEncoding("ahead-rle");
     auto* behind = ddiskState->MutableBehind();
     behind->SetBitMask("behind-bit-mask");
 
     auto* secondDDiskState = state.AddDDiskStates();
-    auto* secondAhead = secondDDiskState->MutableAhead();
-    secondAhead->SetRunLengthEncoding("second-ahead-rle");
+    auto* secondBehind = secondDDiskState->MutableBehind();
+    secondBehind->SetRunLengthEncoding("second-behind-rle");
 
     return state;
 }

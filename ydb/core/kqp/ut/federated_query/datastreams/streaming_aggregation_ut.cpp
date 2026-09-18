@@ -395,7 +395,11 @@ public:
                 END) || ":" || )" + result;
         }
         StartAggregation(useStateTable, "key String NOT NULL, subkey Uint64 NOT NULL, value Int64 NOT NULL",
-            result, keys);
+            result, keys, "", {.ExpectedError = useStateTable
+                ? "At most one streaming aggregation with a state table is allowed per query" : ""});
+        if (useStateTable) {
+            return;
+        }
         struct TRow {
             TString Input;
             std::array<std::string, 4> Output;
@@ -700,7 +704,12 @@ public:
             END DO;
         )", "input"_a = InputTopic, "output"_a = OutputTopic, "second_output"_a = secondOutput,
             "state_table"_a = useStateTable ? "/Root/aggregationState" : "",
-            "sinks"_a = sinks));
+            "sinks"_a = sinks),
+            useStateTable ? EStatus::GENERIC_ERROR : EStatus::SUCCESS,
+            useStateTable ? "At most one streaming aggregation with a state table is allowed per query" : "");
+        if (useStateTable) {
+            return;
+        }
         WaitStreamingQueryStatus("aggregation");
         ValidateStreamingQueryAst("aggregation", [](const TString& ast) {
             const auto parsed = NYql::ParseAst(ast);
@@ -1188,6 +1197,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
         CheckMultipleAggregations(UseStateTable, true);
     }
 
+    Y_UNIT_TEST_QUAD_F(MultipleFiniteAggregations, UseStateTable, Nested, TStreamingAggregationTestFixture) {
+        CreateStateTable(UseStateTable);
+        const TString query = fmt::format(R"sql(
+            PRAGMA ydb.EnableStreamingAggregation = "TRUE";
+            PRAGMA ydb.StreamingAggregationStateTablePath = "{}";
+            $input = AsList(
+                AsStruct("a" AS key, 1l AS value),
+                AsStruct("b" AS key, 2l AS value),
+                AsStruct("a" AS key, 3l AS value));
+            $first = SELECT key, SUM(value) AS value FROM AS_TABLE($input) GROUP BY key;
+            {}
+        )sql", UseStateTable ? "/Root/aggregationState" : "", Nested
+            ? "SELECT key, SUM(value) FROM $first GROUP BY key;"
+            : "SELECT * FROM $first; SELECT key, COUNT(*) FROM AS_TABLE($input) GROUP BY key;");
+        const auto results = ExecQuery(query, UseStateTable ? EStatus::GENERIC_ERROR : EStatus::SUCCESS,
+            UseStateTable ? "At most one streaming aggregation with a state table is allowed per query" : "");
+        if constexpr (!UseStateTable) {
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), Nested ? 1 : 2);
+            for (const auto& result : results) {
+                UNIT_ASSERT_VALUES_EQUAL(result.RowsCount(), 3);
+            }
+        }
+    }
+
     Y_UNIT_TEST_TWIN_F(SomeAggregate, UseStateTable, TStreamingAggregationTestFixture) {
         StartAggregation(UseStateTable, "key String NOT NULL, value Int64", R"(
             key || ":" || CAST(COUNT(*) AS String) || ":" || COALESCE(CAST(SOME(value) AS String), "null")
@@ -1222,6 +1255,27 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
 
     Y_UNIT_TEST_TWIN_F(GroupingSets, UseStateTable, TStreamingAggregationTestFixture) {
         CheckGroupingSets(UseStateTable, "GROUPING SETS ((key), (subkey))", {1, 2});
+    }
+
+    Y_UNIT_TEST_F(GroupingSetsWithIntersectingKeys, TStreamingAggregationTestFixture) {
+        StartAggregation(/* useStateTable */ false, "a String NOT NULL, b String NOT NULL, value Int64 NOT NULL", R"(
+            (CASE GROUPING(a, b) WHEN 1 THEN "a:" ELSE "b:" END)
+                || COALESCE(a, b) || ":" || CAST(COUNT(*) AS String) || ":" || CAST(SUM(value) AS String)
+        )", "GROUPING SETS ((a), (b))");
+        // Both grouping sets contain the same String keys, but must keep independent accumulators.
+        WriteAndCheck({
+            R"({"a":"x","b":"x","value":1})",
+            R"({"a":"x","b":"y","value":10})",
+            R"({"a":"y","b":"y","value":100})",
+            R"({"a":"x","b":"x","value":1000})",
+        }, {
+            "a:x:1:1", "b:x:1:1",
+            "a:x:2:11", "b:y:1:10",
+            "a:y:1:100", "b:y:2:110",
+            "a:x:3:1011", "b:x:2:1001",
+        });
+        WriteAndCheck({R"({"a":"y","b":"x","value":-1})"}, {"a:y:2:99", "b:x:3:1000"});
+        FinishAggregation();
     }
 
     Y_UNIT_TEST_TWIN_F(CaseGrouping, UseStateTable, TStreamingAggregationTestFixture) {
@@ -1860,7 +1914,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
         ExecQuery("DROP STREAMING QUERY aggregation;");
     }
 
-    Y_UNIT_TEST_TWIN_F(StateTableUsesQueryUserToken, TableInput, TStreamingAggregationTestFixture) {
+    Y_UNIT_TEST_QUAD_F(StateTableUsesQueryUserToken, TableInput, DataQuery, TStreamingAggregationTestFixture) {
         CreateStateTable(true);
         const TString user = "aggregation_user@builtin";
         ExecQuery(fmt::format(R"(
@@ -1899,11 +1953,31 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             return false;
         });
 
-        NQuery::TQueryClient client(*GetInternalDriver(), NQuery::TClientSettings().AuthToken(user));
-        const auto result = client.ExecuteQuery(MakeStateTableQuery(TableInput), NQuery::TTxControl::NoTx(),
-            NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)
-                .ClientTimeout(TEST_OPERATION_TIMEOUT)).ExtractValueSync();
-        CheckFiniteResult(result, {"a:1", "a:2", "b:2"}, TableInput);
+        if constexpr (DataQuery) {
+            NYdb::NTable::TTableClient client(*GetInternalDriver(), NYdb::NTable::TClientSettings().AuthToken(user));
+            const auto sessionResult = client.CreateSession().ExtractValueSync();
+            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+            auto session = sessionResult.GetSession();
+            const auto result = session.ExecuteDataQuery(MakeStateTableQuery(TableInput),
+                NYdb::NTable::TTxControl::BeginTx().CommitTx(),
+                NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TEST_OPERATION_TIMEOUT)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            TResultSetParser parser(result.GetResultSet(0));
+            std::vector<std::string> actual;
+            while (parser.TryNextRow()) {
+                actual.push_back(parser.ColumnParser("Data").GetString());
+            }
+            Sort(actual);
+            UNIT_ASSERT_VALUES_EQUAL(actual, (std::vector<std::string>{"a:1", "a:2", "b:2"}));
+            CheckPersistedState();
+        } else {
+            NQuery::TQueryClient client(*GetInternalDriver(), NQuery::TClientSettings().AuthToken(user));
+            const auto result = client.ExecuteQuery(MakeStateTableQuery(TableInput), NQuery::TTxControl::NoTx(),
+                NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)
+                    .ClientTimeout(TEST_OPERATION_TIMEOUT)).ExtractValueSync();
+            CheckFiniteResult(result, {"a:1", "a:2", "b:2"}, TableInput);
+        }
         UNIT_ASSERT(requests->Selects.load() > 0);
         UNIT_ASSERT(requests->Upserts.load() > 0);
         UNIT_ASSERT(requests->SameIdentity.load());

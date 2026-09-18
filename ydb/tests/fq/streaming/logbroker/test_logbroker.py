@@ -135,7 +135,7 @@ class TestLogbroker(StreamingTestBase):
 
     def wait_available_clusters(self, kikimr, expected_count, timeout=120):
         path = f"{kikimr.get_database_name()}/{self.query_name}"
-        logging.info("Waiting for query %s AvaliableClusters=%s", path, expected_count)
+        logging.info("Waiting for query %s AvailableClusters=%s", path, expected_count)
         deadline = time.monotonic() + timeout
         previous_values = None
         while True:
@@ -145,18 +145,18 @@ class TestLogbroker(StreamingTestBase):
                     "subsystem": "DqSourceTracker",
                     "source": "PqRead",
                     "tx_id": path,
-                    "sensor": "AvaliableClusters",
+                    "sensor": "AvailableClusters",
                 })
                 if value is not None:
                     values[node_id] = value
             if values != previous_values:
-                logging.info("Query %s AvaliableClusters per node: %s", path, values)
+                logging.info("Query %s AvailableClusters per node: %s", path, values)
                 previous_values = values
             if values and all(value == expected_count for value in values.values()):
-                logging.info("Query %s reached AvaliableClusters=%s", path, expected_count)
+                logging.info("Query %s reached AvailableClusters=%s", path, expected_count)
                 return
             assert time.monotonic() < deadline, (
-                f"Expected AvaliableClusters={expected_count}; per-node values: {values}"
+                f"Expected AvailableClusters={expected_count}; per-node values: {values}"
             )
             time.sleep(1)
 

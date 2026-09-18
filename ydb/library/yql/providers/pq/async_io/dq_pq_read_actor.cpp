@@ -239,7 +239,7 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
             AsyncInputDataRate = Task->GetCounter("AsyncInputDataRate", true);
             ReconnectRate = Task->GetCounter("ReconnectRate", true);
             DataRate = Task->GetCounter("DataRate", true);
-            AvaliableClusters = Source->GetCounter("AvaliableClusters");
+            AvailableClusters = Source->GetCounter("AvailableClusters");
             WaitEventTimeMs = Source->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
         }
 
@@ -259,7 +259,7 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
         ::NMonitoring::TDynamicCounters::TCounterPtr AsyncInputDataRate;
         ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
         ::NMonitoring::TDynamicCounters::TCounterPtr DataRate;
-        ::NMonitoring::TDynamicCounters::TCounterPtr AvaliableClusters;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AvailableClusters;
         NMonitoring::THistogramPtr WaitEventTimeMs;
     };
 
@@ -625,7 +625,7 @@ private:
                 Partitions[MakePartitionKey(TString(cluster.Info.Name), partitionId)];
             }
         }
-        
+
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
         SchedulePartitionCountTimer();
         UpdateAvailableClustersMetric();
@@ -1039,7 +1039,7 @@ private:
     }
 
     void UpdateAvailableClustersMetric() {
-        Metrics.AvaliableClusters->Set(CountIf(Clusters, [](const TClusterState& cluster) {
+        Metrics.AvailableClusters->Set(CountIf(Clusters, [](const TClusterState& cluster) {
             return cluster.Available;
         }));
     }

@@ -143,13 +143,6 @@ class LogbrokerFederation(object):
                     stub = ydb_discovery_v1_pb2_grpc.DiscoveryServiceStub(channel)
                     return federation._forward_to_cm(stub.ListEndpoints, request, context)
 
-        # class SchemeService(ydb_scheme_v1_pb2_grpc.SchemeServiceServicer):
-        #     def DescribePath(self, request, context):
-        #         # KQP determines the external entity type before discovering clusters.
-        #         with grpc.insecure_channel(federation.cm_endpoint) as channel:
-        #             stub = ydb_scheme_v1_pb2_grpc.SchemeServiceStub(channel)
-        #             return federation._forward_to_cm(stub.DescribePath, request, context)
-
         class FederationDiscoveryService(ydb_federation_discovery_v1_pb2_grpc.FederationDiscoveryServiceServicer):
             def ListFederationDatabases(self, request, context):
                 database = dict(context.invocation_metadata()).get("x-ydb-database", "")
@@ -183,7 +176,6 @@ class LogbrokerFederation(object):
         self.__discovery_executor = futures.ThreadPoolExecutor(max_workers=4)
         self.__discovery_server = grpc.server(self.__discovery_executor)
         ydb_discovery_v1_pb2_grpc.add_DiscoveryServiceServicer_to_server(DiscoveryService(), self.__discovery_server)
-        # ydb_scheme_v1_pb2_grpc.add_SchemeServiceServicer_to_server(SchemeService(), self.__discovery_server)
         ydb_federation_discovery_v1_pb2_grpc.add_FederationDiscoveryServiceServicer_to_server(
             FederationDiscoveryService(), self.__discovery_server,
         )

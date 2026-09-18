@@ -34,6 +34,7 @@ struct TEvPartitionDirectPrivate
 
         EvUpdateVChunkConfig,
         EvUpdateDirtyMapState,
+        EvSetVChunkTouched,
         EvFastPathServiceReady,
 
         EvFastPathServiceShutdown,
@@ -73,6 +74,18 @@ struct TEvPartitionDirectPrivate
         TEvUpdateDirtyMapState(ui32 vChunkIndex, TDirtyMapStateProto state)
             : VChunkIndex(vChunkIndex)
             , State(std::move(state))
+        {}
+    };
+
+    struct TEvSetVChunkTouched
+        : public NActors::TEventLocal<TEvSetVChunkTouched, EvSetVChunkTouched>
+    {
+        const ui32 VChunkIndex;
+        TPersistResultPromise UpdateCompleted =
+            NThreading::NewPromise<EPersistResult>();
+
+        explicit TEvSetVChunkTouched(ui32 vChunkIndex)
+            : VChunkIndex(vChunkIndex)
         {}
     };
 

@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_events_private.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -109,6 +110,9 @@ private:
     TVector<TPersistResultPromise> ExecutingUpdateDirtyMapStatePromises;
     TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests
         PendingUpdateDirtyMapStateRequests;
+
+    // A bit is set after its vchunk is touched and is never cleared.
+    TTouchedVChunks TouchedVChunks;
 
 public:
     TPartitionActor(
@@ -236,6 +240,10 @@ private:
         const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandleSetVChunkTouched(
+        const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleFastPathServiceReady(
         const TEvPartitionDirectPrivate::TEvFastPathServiceReady::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -294,6 +302,10 @@ private:
 
     void HandleUpdateDirtyMapStateDuringDelete(
         const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleSetVChunkTouchedDuringDelete(
+        const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceShutdownDuringDelete(

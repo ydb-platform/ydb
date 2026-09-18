@@ -41,7 +41,7 @@ from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, 
 from ydb.tools.ydb_bench.lib.ydb_telemetry import read_metrics
 from ydb.tools.ydb_bench.lib.hosts import HostDirectory, allowed_path, allowed_post_path
 from ydb.tools.ydb_bench.lib.federation import Federation, split_reference, page_options
-from ydb.tools.ydb_bench.lib.cluster_templates import ClusterTemplateStore
+from ydb.tools.ydb_bench.lib.cluster_templates import ClusterTemplateStore, apply_configuration_yaml
 from ydb.tools.ydb_bench.lib.monitoring_settings import MonitoringSettings
 from ydb.tools.ydb_bench.lib.metrics_export import MetricsExporter
 from ydb.tools.ydb_bench.lib.grafana import Grafana
@@ -52,6 +52,7 @@ from ydb.tools.ydb_bench.lib import process_recovery
 from ydb.tools.ydb_bench.lib.distributed_runtime import DistributedRuntime
 from ydb.tools.ydb_bench.lib.distributed_reports import attempt_counters
 from ydb.tools.ydb_bench.lib import cluster_templates_ui, distributed_builder_ui, monitoring_settings_ui
+from ydb.tools.ydb_bench.lib import cluster_config, cluster_config_ui
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 _STREAM_CHUNK_SIZE = 1024 * 1024
@@ -2542,7 +2543,7 @@ function localReportTable(title,rows,headers=[]){
     '<tbody>'+rows.map(row=>'<tr>'+row.map(value=>'<td>'+esc(value??'—')+'</td>').join('')+'</tr>').join('')+
     '</tbody></table></section>'
 }
-function localReportConfiguration(data){
+function localReportConfiguration(data,runId){
   const p=data.parameters||{},m=p.measurement||{},g=p.geometry||{},result=data.result||{},objective=p.load?.objective||{};
   const value=item=>item===null||item===undefined?'—':typeof item==='object'?JSON.stringify(item):String(item);
   const rows=object=>Object.entries(object||{}).map(([key,item])=>[key.replaceAll('_',' '),value(item)]);
@@ -2568,7 +2569,8 @@ function localReportConfiguration(data){
     ])+
     localReportTable('Binaries',Object.entries(data.binaries||{}).map(([role,binary])=>[
       role.replaceAll('_',' '),String(binary.name||'—').split('/').pop(),binary.sha256||'—'
-    ]),['Role','Name','SHA-256'])+'</details>'
+    ]),['Role','Name','SHA-256'])+
+    (runId?savedYdbConfigurationHtml(runId,data.ydb_configurations||[]):'')+'</details>'
 }
 function localReportMetrics(data){
   const schema=localResultSchema(data),metrics=localResultMetrics(data.result||{},schema).metrics;
@@ -2593,7 +2595,7 @@ function localReportMetrics(data){
     '</div>'+localReportTable('CPU usage · % of assigned CPUs',cpu,['Role','Mean','Peak'])+
     localReportTable('Additional workload metrics',extra)
 }
-function localResultPanel(data){
+function localResultPanel(data,runId){
   const view=localResultViewModel(data);
   if(!view.hasResult){
     const terminal=!['running','preparing'].includes(data.state);
@@ -2608,7 +2610,7 @@ function localResultPanel(data){
   return '<div class=local-result-heading><span class="local-result-badge '+esc(view.tone)+'">'+
     esc(normal&&result.outcome==='boundary-found'?'SLO satisfied':view.label)+'</span></div>'+
     (!normal&&view.detail?'<p class=error>'+esc(view.detail)+'</p>':'')+
-    '<p class=report-source>'+esc(source)+'</p>'+localReportMetrics(data)+localReportConfiguration(data)
+    '<p class=report-source>'+esc(source)+'</p>'+localReportMetrics(data)+localReportConfiguration(data,runId)
 }
 function localYdbDefaultView(data){
   return ['running','preparing'].includes(data.state)?'discovery':data.result?'result':'discovery'
@@ -2718,7 +2720,7 @@ function renderLocalYdbProfile(container,data){
     );
     container.innerHTML=localYdbViewTabs(container,data,selectedView)+
       '<section class=local-profile-view data-local-ydb-panel=result'+
-      (selectedView==='result'?'':' hidden')+'>'+localResultPanel(data)+'</section>'+
+      (selectedView==='result'?'':' hidden')+'>'+localResultPanel(data,container.dataset.localYdbRunId)+'</section>'+
       '<section class=local-profile-view data-local-ydb-panel=discovery'+
       (selectedView==='discovery'?'':' hidden')+'>'+discovery+'</section>';
     localApplyYdbView(container,selectedView,container.dataset.localYdbViewExplicit==='true');
@@ -2928,7 +2930,7 @@ function renderLocalYdbProfile(container,data){
   ))+'">Verification metrics</a></p>';
   container.innerHTML=failure+localYdbViewTabs(container,data,selectedView)+
     '<section class=local-profile-view data-local-ydb-panel=result'+
-    (selectedView==='result'?'':' hidden')+'>'+localResultPanel(data)+'</section>'+
+    (selectedView==='result'?'':' hidden')+'>'+localResultPanel(data,container.dataset.localYdbRunId)+'</section>'+
     '<section class=local-profile-view data-local-ydb-panel=discovery'+
     (selectedView==='discovery'?'':' hidden')+'>'+html+'</section>';
   localApplyYdbView(container,selectedView,container.dataset.localYdbViewExplicit==='true');
@@ -3279,6 +3281,41 @@ function configurationProfile(value){
   return '<div class=configuration-grid>'+sections.join('')+'</div>'
 }
 const configurationSelections=new Map();
+const configurationSections=new Map();
+function configurationProfileSections(value){
+  const pick=keys=>Object.fromEntries(keys.filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]]));
+  if(value['cluster-template']){
+    const groups=[['Cluster',['cluster-template']],['Storage',['storage','actor-system']],['Tenants',['tenants']],
+      ['Load generators',['cli-nodes','workload','load','client','tenant']],['Run policy',['measurement']]];
+    const known=new Set(groups.flatMap(([,keys])=>keys));
+    const extra=Object.keys(value).filter(key=>!known.has(key));
+    return groups.map(([name,keys])=>{
+      if(name==='Cluster')return [name,configurationProfile(pick([...keys,...extra]))];
+      const selected=pick(keys);
+      return [name,'<div class=configuration-grid>'+Object.entries(selected).map(([key,item])=>
+        ['tenants','cli-nodes'].includes(key)?Object.entries(item||{}).map(([title,settings])=>
+          '<section><h3>'+esc(title)+'</h3>'+configurationFields(settings)+'</section>').join(''):
+          '<section>'+configurationFields(item)+'</section>').join('')+'</div>']
+    });
+  }
+  if(value.workload){
+    const actor=value['actor-system']||{};
+    const cluster=pick(Object.keys(value).filter(key=>!['workload','load','client','affinity','measurement','actor-system'].includes(key)));
+    cluster['actor-system']=Object.fromEntries(Object.entries(actor).filter(([key])=>!['static-nodes','dynamic-nodes'].includes(key)));
+    return [['Cluster',configurationProfile(cluster)],['Storage',configurationFields(actor['static-nodes']||{})],
+      ['Compute',configurationFields(actor['dynamic-nodes']||{})],
+      ['Load generator',configurationProfile(pick(['workload','load','client']))],
+      ['CPU placement',configurationFields(value.affinity||{})],['Run policy',configurationFields(value.measurement||{})]];
+  }
+  return [['Parameters',configurationProfile(value)]]
+}
+function savedYdbConfigurationHtml(id,files){
+  return '<section><h3>Saved YDB configuration</h3>'+(files.length?
+    '<p class=muted>Captured at launch; independent of subsequent template changes.</p><ul>'+files.map(file=>
+      '<li><a target=_blank rel=noopener href="'+esc(runHref(id,'artifact/'+file.path.split('/').map(enc).join('/')))+'">'+
+      esc(file.label)+'</a></li>').join('')+'</ul>':
+    '<p class=muted>No saved YDB YAML is available for this profile. It is not reconstructed from the current template.</p>')+'</section>'
+}
 function runConfigurationHtml(id,saved){
   const profiles=[];
   for(const [benchmark,items] of Object.entries(saved.structured||{})){
@@ -3287,21 +3324,52 @@ function runConfigurationHtml(id,saved){
     }
   }
   const previous=configurationSelections.get(id);
-  const selected=previous==='YAML'||profiles.some(profile=>profile.key===previous)?previous:profiles[0]?.key||'YAML';
-  const tabs='<nav class=profile-list>'+profiles.map((profile,index)=>
+  const selected=previous==='yaml'||profiles.some(profile=>profile.key===previous)?previous:profiles[0]?.key||'yaml';
+  const tabs='<nav class=profile-list aria-label="Run configuration">'+profiles.map((profile,index)=>
     '<button type=button data-config-profile="'+index+'" class="'+(profile.key===selected?'selected':'')+'">'+esc(profile.key)+'</button>'
-  ).join('')+'<button type=button data-config-profile="yaml" class="'+(selected==='YAML'?'selected':'')+'">YAML</button></nav>';
-  const panels=profiles.map((profile,index)=>'<div data-config-panel="'+index+'" '+(profile.key===selected?'':'hidden')+'>'+configurationProfile(profile.value)+'</div>').join('');
+  ).join('')+'<button type=button data-config-profile="yaml" class="'+(selected==='yaml'?'selected':'')+'">Run YAML</button></nav>';
+  const panels=profiles.map((profile,index)=>{
+    const files=(saved.ydb_configurations?.[profile.key]||[]).filter(file=>!file.path.endsWith('/profile.yaml'));
+    const yaml=files.length?files.map(file=>(files.length>1?'<h4>'+esc(file.label)+'</h4>':'')+
+      '<pre class=run-configuration><code data-config-yaml-url="'+esc(runHref(id,'artifact/'+file.path.split('/').map(enc).join('/')))+
+      '">Loading saved YDB configuration…</code></pre>').join(''):
+      '<p class=muted>No YDB configuration was saved for this profile. It is not reconstructed from the current template.</p>';
+    const sections=[...configurationProfileSections(profile.value),['YDB configuration',yaml]],key=JSON.stringify([id,profile.key]);
+    const active=sections.some(([name])=>name===configurationSections.get(key))?configurationSections.get(key):sections[0][0];
+    return '<div data-config-panel="'+index+'" data-config-key="'+esc(key)+'" '+(profile.key===selected?'':'hidden')+'>'+
+      '<nav class=tabs aria-label="Profile configuration sections">'+sections.map(([name],i)=>
+        '<button type=button data-config-section="'+i+'" class="'+(name===active?'active':'')+'" aria-pressed="'+(name===active)+'">'+esc(name)+'</button>').join('')+'</nav>'+
+      sections.map(([name,body],i)=>'<div data-config-section-panel="'+i+'" '+(name===active?'':'hidden')+'>'+
+        (body||'<p class=muted>No explicit settings in the saved profile.</p>')+'</div>').join('')+'</div>'
+  }).join('');
   return '<section id=run-configuration-view class=new-run-page>'+tabs+
     '<p class=muted>perf: '+(saved.perf?'on':'off')+' · Continue on error: '+(saved.continue_on_error?'on':'off')+'</p>'+
-    panels+'<div data-config-panel="yaml" '+(selected==='YAML'?'':'hidden')+'><pre class=run-configuration><code>'+esc(saved.yaml)+'</code></pre></div></section>'
+    panels+(!profiles.length?'<p class=muted>Structured configuration unavailable. See Run YAML.</p>':'')+
+    '<div data-config-panel="yaml" '+(selected==='yaml'?'':'hidden')+'><pre class=run-configuration><code>'+esc(saved.yaml)+'</code></pre></div></section>'
 }
 function bindRunConfiguration(container,id){
   if(!container)return;
   for(const button of container.querySelectorAll('[data-config-profile]'))button.onclick=()=>{
     for(const other of container.querySelectorAll('[data-config-profile]'))other.classList.toggle('selected',other===button);
     for(const panel of container.querySelectorAll('[data-config-panel]'))panel.hidden=panel.dataset.configPanel!==button.dataset.configProfile;
-    configurationSelections.set(id,button.textContent)
+    configurationSelections.set(id,button.dataset.configProfile==='yaml'?'yaml':button.textContent)
+  }
+  for(const panel of container.querySelectorAll('[data-config-panel]')){
+    for(const button of panel.querySelectorAll('[data-config-section]'))button.onclick=()=>{
+      for(const other of panel.querySelectorAll('[data-config-section]')){
+        other.setAttribute('aria-pressed',String(other===button));other.classList.toggle('active',other===button)
+      }
+      for(const body of panel.querySelectorAll('[data-config-section-panel]'))body.hidden=body.dataset.configSectionPanel!==button.dataset.configSection;
+      configurationSections.set(panel.dataset.configKey,button.textContent)
+    };
+    for(const text of panel.querySelectorAll('[data-config-yaml-url]'))(async()=>{
+      try{
+        const response=await fetch(text.dataset.configYamlUrl);
+        if(!response.ok)throw Error('Cannot load saved YAML (HTTP '+response.status+')');
+        const yaml=await response.text();
+        if(text.isConnected)text.textContent=yaml
+      }catch(error){if(text.isConnected)text.textContent=error.message}
+    })();
   }
 }
 """
@@ -3720,9 +3788,11 @@ async function renderComparisons(){
 
 
 _CSS += cluster_templates_ui.CSS
+_CSS += cluster_config_ui.CSS
 _CSS += monitoring_settings_ui.CSS
 _JS = monitoring_settings_ui.JS + _JS
 _JS += cluster_templates_ui.JS
+_JS += cluster_config_ui.JS
 _CSS += distributed_builder_ui.CSS
 _JS += distributed_builder_ui.JS
 
@@ -3780,6 +3850,57 @@ def _run_directory(output, run_id):
     if candidate == root or root not in candidate.parents or not candidate.is_dir():
         raise BenchmarkError("run not found: {}".format(run_id))
     return candidate
+
+
+def _saved_ydb_configurations(root, profile_directory):
+    """List only retained execution files; never regenerate from a live template."""
+    root, profile_directory = Path(root).resolve(), Path(profile_directory).resolve()
+    if profile_directory == root or root not in profile_directory.parents:
+        return []
+    result = []
+
+    def add(path, label):
+        resolved = path.resolve()
+        if not path.is_symlink() and root in resolved.parents and resolved.is_file():
+            result.append({"label": label, "path": resolved.relative_to(root).as_posix()})
+
+    add(profile_directory / "profile.yaml", "Profile snapshot")
+    for generation in ("cluster", "verification-cluster"):
+        directory = profile_directory / generation
+        add(directory / "cluster.yaml", generation + " · YDB YAML")
+        add(directory / "configuration" / "cluster.yaml", generation + " · YDB YAML")
+        index = directory / "configuration" / "index.json"
+        if not index.is_file() or index.is_symlink() or root not in index.resolve().parents:
+            continue
+        if index.stat().st_size > 1024 * 1024:
+            continue
+        try:
+            entries = json.loads(index.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(entries, list) or len(entries) > 1000:
+            continue
+        start = len(result)
+        fingerprints = set()
+        remaining = 32 * 1024 * 1024
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+                continue
+            path = directory / entry["path"]
+            if (directory / "configuration").resolve() not in path.resolve().parents:
+                continue
+            if not path.is_symlink() and root in path.resolve().parents and path.is_file():
+                size = path.stat().st_size
+                if size <= remaining:
+                    remaining -= size
+                    digest = hashlib.sha256(path.read_bytes()).digest()
+                    if digest in fingerprints:
+                        continue
+                    fingerprints.add(digest)
+            add(path, "{} · {} · {}".format(generation, entry.get("node", "YDB"), entry.get("host_id", "")))
+        if len(result) == start + 1:
+            result[start]["label"] = generation + " · YDB YAML"
+    return result
 
 
 def _content_disposition(filename):
@@ -5114,8 +5235,32 @@ class RunService:
                 structured = None
         except (yaml.YAMLError, TypeError, ValueError, RecursionError):
             structured = None
+        profile_yaml = {}
+        if structured is not None:
+            try:
+                document = yaml.safe_load(yaml_text)
+                for benchmark, profiles in document.items():
+                    if not isinstance(profiles, dict):
+                        continue
+                    for name, value in profiles.items():
+                        if isinstance(value, dict):
+                            profile_yaml[str(benchmark) + "/" + str(name)] = yaml.safe_dump(
+                                {benchmark: {name: value}}, sort_keys=False, allow_unicode=True
+                            )
+            except (yaml.YAMLError, TypeError, ValueError, RecursionError):
+                profile_yaml = {}
+        configurations = {}
+        for record in manifest.get("runs", []):
+            if record.get("benchmark") not in ("local-ydb", "distributed-ydb"):
+                continue
+            relative = record.get("manifest") or str(Path(record.get("directory", "")) / "run.json")
+            configurations[record["benchmark"] + "/" + record["profile"]] = _saved_ydb_configurations(
+                root, (root / relative).parent
+            )
         return {
             "yaml": yaml_text,
+            "ydb_configurations": configurations,
+            "profile_yaml": profile_yaml,
             "structured": structured,
             "perf": bool(options.get("perf", manifest.get("profiler"))),
             "continue_on_error": bool(options.get("continue_on_error", False)),
@@ -5303,7 +5448,9 @@ class RunService:
             "result",
             "error",
         )
-        return {name: value[name] for name in fields if name in value}
+        result = {name: value[name] for name in fields if name in value}
+        result["ydb_configurations"] = _saved_ydb_configurations(root, candidate.parent)
+        return result
 
     def local_ydb_activity(self, run_id, profile, after=0, benchmark="local-ydb"):
         if benchmark not in ("local-ydb", "distributed-ydb"):
@@ -6263,6 +6410,8 @@ def _handler(service):
                     return self._json(200, service.topology(mode, count, excluded))
                 except (BenchmarkError, ValueError) as error:
                     return self._json(400, {"error": str(error)})
+            if path == "/api/cluster-config/schema":
+                return self._json(200, cluster_config.schema())
             if path == "/api/cluster-templates":
                 try:
                     return self._json(200, service.cluster_templates.list())
@@ -6546,6 +6695,36 @@ def _handler(service):
                     result = import_archive(service.output, self._raw_body())
                     service.run_index.refresh([service.output / result['id'] / 'run.json'])
                     return self._json(201, result)
+                if path in ("/api/cluster-config/validate", "/api/cluster-config/yaml", "/api/cluster-config/apply"):
+                    origin = self.headers.get("Origin")
+                    if self.headers.get("Content-Type", "").split(";")[0] != "application/json" or (
+                        origin and urlparse(origin).netloc != self.headers.get("Host")
+                    ):
+                        return self._json(403, {"error": "same-origin JSON request required"})
+                    options = self._json_body()
+                    if not isinstance(options, dict):
+                        raise BenchmarkError('Expected a configuration object')
+                    if path.endswith('/apply'):
+                        return self._json(
+                            200,
+                            apply_configuration_yaml(
+                                options.get('template'),
+                                options.get('yaml'),
+                                [service.hosts.identity(self.server.server_port), *service.hosts.list()],
+                            ),
+                        )
+                    paths = options.get('tenants', [])
+                    result = (
+                        cluster_config.parse_document(options.get('yaml'), paths)
+                        if path.endswith('/yaml')
+                        else cluster_config.document_response(
+                            options.get('config'),
+                            options.get('tenant_configs', {}),
+                            paths,
+                            options.get('tenant_replacements', {}),
+                        )
+                    )
+                    return self._json(200, result)
                 if path in ("/api/cluster-templates", "/api/cluster-templates/delete"):
                     origin = self.headers.get("Origin")
                     if self.headers.get("Content-Type", "").split(";")[0] != "application/json" or (

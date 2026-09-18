@@ -13,6 +13,7 @@ TEST_SRCS(
     test_hosts.py
     test_run_index.py
     test_cluster_templates.py
+    test_cluster_config.py
     test_distributed_sessions.py
     test_distributed_plan.py
     test_distributed_builder.py

@@ -3332,6 +3332,13 @@ TStatus AnnotateOpGroupingSets(const TExprNode::TPtr& input, TExprContext& ctx) 
         resultItems.push_back(ctx.MakeType<TItemExprType>(item->GetName(), itemType));
     }
 
+    for (const auto& indicator : groupingSets.GroupingIndicators()) {
+        Y_ENSURE(indicator.Size() == 2, "Grouping indicator must be a pair of a group by key and a column");
+        const auto indicatorName = indicator.Item(1).StringValue();
+        Y_ENSURE(!structType->FindItem(indicatorName), "Duplicate grouping indicator column " << indicatorName);
+        resultItems.push_back(ctx.MakeType<TItemExprType>(indicatorName, ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+    }
+
     input->SetTypeAnn(ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(resultItems)));
     return TStatus::Ok;
 }

@@ -1423,14 +1423,21 @@ NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags) {
 /**
  * OpGroupingSets operator. Logical representation of grouping sets.
  */
-TOpGroupingSets::TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos)
+TOpGroupingSets::TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets,
+                                 TGroupingIndicators groupingIndicators, TPositionHandle pos)
     : IUnaryOperator(EOperator::GroupingSets, pos, input)
-    , GroupingSets(std::move(groupingSets)) {
+    , GroupingSets(std::move(groupingSets))
+    , GroupingIndicators(std::move(groupingIndicators)) {
     Y_ENSURE(!GroupingSets.empty(), "Grouping sets list must not be empty");
 }
 
 void TOpGroupingSets::ComputeOutputIUs() {
-    Props.OutputIUs = GetInput()->GetOutputIUs();
+    TVector<TInfoUnit> outputIUs = GetInput()->GetOutputIUs();
+    for (const auto& [key, indicator] : GroupingIndicators) {
+        Y_UNUSED(key);
+        outputIUs.push_back(indicator);
+    }
+    Props.OutputIUs = std::move(outputIUs);
 }
 
 TString TOpGroupingSets::ToString(TExprContext& ctx) {
@@ -1444,7 +1451,21 @@ TString TOpGroupingSets::ToString(TExprContext& ctx) {
         }
         result << "(" << FormatInfoUnits(GroupingSets[setIndex]) << ")";
     }
-    return result << "]";
+    result << "]";
+
+    if (!GroupingIndicators.empty()) {
+        result << ", grouping indicators [";
+        for (size_t indicatorIndex = 0; indicatorIndex < GroupingIndicators.size(); ++indicatorIndex) {
+            if (indicatorIndex != 0) {
+                result << ", ";
+            }
+            const auto& [key, indicator] = GroupingIndicators[indicatorIndex];
+            result << key.GetFullName() << " -> " << indicator.GetFullName();
+        }
+        result << "]";
+    }
+
+    return result;
 }
 
 /***

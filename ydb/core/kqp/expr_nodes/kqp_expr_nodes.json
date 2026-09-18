@@ -1111,12 +1111,21 @@
             "ListBase": "TKqpOpGroupingSet"
         },
         {
+            "Name": "TKqpOpGroupingIndicator",
+            "ListBase": "TCoAtom"
+        },
+        {
+            "Name": "TKqpOpGroupingIndicatorList",
+            "ListBase": "TKqpOpGroupingIndicator"
+        },
+        {
             "Name": "TKqpOpGroupingSets",
             "Base": "TCallable",
             "Match" : {"Type": "Callable", "Name": "KqpOpGroupingSets"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TKqpOpAggregate"},
-                {"Index": 1, "Name": "GroupingSets", "Type": "TKqpOpGroupingSetList"}
+                {"Index": 1, "Name": "GroupingSets", "Type": "TKqpOpGroupingSetList"},
+                {"Index": 2, "Name": "GroupingIndicators", "Type": "TKqpOpGroupingIndicatorList"}
             ]
         },
         {

@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -191,7 +192,7 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
     UNIT_ASSERT_VALUES_EQUAL(req["compute_memory_bytes"].GetUIntegerSafe(1), 0);
     UNIT_ASSERT(req.Has("observed_peak_compute_memory_bytes"));
     UNIT_ASSERT(req.Has("table_read_bytes"));
-    UNIT_ASSERT(req.Has("source_read_bytes"));
+    UNIT_ASSERT(req.Has("read_ingress_bytes"));
     UNIT_ASSERT_C(req.Has("query_len"), "query_len field");
     UNIT_ASSERT_C(req.Has("results_size"), "results_size field");
     UNIT_ASSERT_C(req.Has("database"), "database field");
@@ -660,12 +661,8 @@ Y_UNIT_TEST(LongIssuesTruncatedAtWarn) {
     UNIT_ASSERT_C(found, "expected a single-envelope failure with truncated issues at WARN");
 }
 
-// At DEBUG long SQL is truncated to QUERY_TEXT_LIMIT (3 KB) bytes and
-// emitted as a single envelope (`total=1`) — operators of the always-on
-// stream consume "one record per query". The original length is preserved
-// in `query_len` and the cut is flagged by `data_truncated: true`.
 Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
-    constexpr size_t QUERY_TEXT_LIMIT = 3 * 1024;
+    constexpr size_t QUERY_TEXT_LIMIT = 6 * 1024 - 32;
 
     TStringStream logStream;
     {
@@ -674,7 +671,6 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
 
         auto db = kikimr.GetQueryClient();
 
-        // ~30 KB of SQL, well past the 3 KB cap.
         TStringBuilder sb;
         sb << "/*";
         for (size_t i = 0; i < 30000; ++i) {
@@ -707,7 +703,7 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
         UNIT_ASSERT_VALUES_EQUAL_C(e.Total, 1,
             TStringBuilder() << "truncated SQL at DEBUG must be a single envelope, got total=" << e.Total);
         const auto data = req["data"].GetStringSafe("");
-        UNIT_ASSERT_C(data.size() <= QUERY_TEXT_LIMIT,
+        UNIT_ASSERT_C(data.size() == QUERY_TEXT_LIMIT,
             TStringBuilder() << "DEBUG envelope data must be capped at QUERY_TEXT_LIMIT, got " << data.size());
         sawTruncated = true;
     }
@@ -752,7 +748,7 @@ Y_UNIT_TEST_TWIN(LargeAst, Trace) {
         }
     }
     UNIT_ASSERT_VALUES_EQUAL(parts, first->Total);
-    UNIT_ASSERT(request["ast_len"].GetUIntegerSafe(0) > 2 * 1024);
+    UNIT_ASSERT(request["ast_len"].GetUIntegerSafe(0) > 3 * 1024);
     if constexpr (Trace) {
         UNIT_ASSERT_VALUES_EQUAL(sql, query);
         UNIT_ASSERT_VALUES_EQUAL(ast.size(), request["ast_len"].GetUIntegerSafe(0));
@@ -760,7 +756,7 @@ Y_UNIT_TEST_TWIN(LargeAst, Trace) {
         UNIT_ASSERT(!request.Has("ast_truncated"));
     } else {
         UNIT_ASSERT_VALUES_EQUAL(parts, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ast.size(), 2 * 1024);
+        UNIT_ASSERT_VALUES_EQUAL(ast.size(), 3 * 1024);
         UNIT_ASSERT(request["ast_truncated"].GetBooleanSafe(false));
     }
 }
@@ -793,16 +789,30 @@ Y_UNIT_TEST_TWIN(SensitiveSqlSuppressesAst, Trace) {
     UNIT_ASSERT(found);
 }
 
-Y_UNIT_TEST(TableReadResourcesWithoutClientStats) {
+Y_UNIT_TEST_TWIN(TableReadResourcesWithoutClientStats, DropProgress) {
     const TString query = "SELECT * FROM `/Root/EightShard` WHERE Key > 0 /* resource_log_marker */";
     TStringStream logStream;
+    size_t progressEvents = 0;
     {
-        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        TKikimrRunner kikimr(MakeStreamSettings(logStream).SetUseRealThreads(false));
         SetKqpRequestLevel(kikimr, NLog::PRI_DEBUG);
-        auto result = kikimr.GetQueryClient().ExecuteQuery(
-            query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        kikimr.GetTestServer().GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvCurrentExecutionStats::EventType
+                || ev->GetTypeRewrite() == TEvKqp::TEvCurrentQueryStats::EventType) {
+                ++progressEvents;
+                if constexpr (DropProgress) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        auto result = kikimr.RunCall([&] {
+            return kikimr.GetQueryClient().ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        });
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
+    UNIT_ASSERT_GT(progressEvents, 0);
     bool found = false;
     for (const auto& entry : CollectReqJson(logStream.Str())) {
         const auto& req = entry.Json["request"];
@@ -813,6 +823,30 @@ Y_UNIT_TEST(TableReadResourcesWithoutClientStats) {
         UNIT_ASSERT(req["table_read_bytes"].GetUIntegerSafe(0) > 0);
         UNIT_ASSERT(req.Has("observed_peak_compute_memory_bytes"));
         UNIT_ASSERT(!req["ast"].GetStringSafe("").empty());
+        found = true;
+    }
+    UNIT_ASSERT(found);
+}
+
+Y_UNIT_TEST(BatchQueryResources) {
+    const TString query = "BATCH DELETE FROM `/Root/EightShard` WHERE Key > 0";
+    TStringStream logStream;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::PRI_DEBUG);
+        auto result = kikimr.GetQueryClient().ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+    bool found = false;
+    for (const auto& entry : CollectReqJson(logStream.Str())) {
+        const auto& req = entry.Json["request"];
+        if (req["data"].GetStringSafe("") != query) {
+            continue;
+        }
+        UNIT_ASSERT(req["cpu_time_us"].GetUIntegerSafe(0) > 0);
+        UNIT_ASSERT(req["table_read_bytes"].GetUIntegerSafe(0) > 0);
+        UNIT_ASSERT_VALUES_EQUAL(req["compute_memory_bytes"].GetUIntegerSafe(1), 0);
         found = true;
     }
     UNIT_ASSERT(found);

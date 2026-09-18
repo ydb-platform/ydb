@@ -941,7 +941,7 @@ protected:
                         currentProto.SetCpuTimeUs(current.CpuTimeUs);
                         currentProto.SetComputeMemoryBytes(current.ComputeMemoryBytes);
                         currentProto.SetTableReadBytes(current.TableReadBytes);
-                        currentProto.SetSourceReadBytes(current.SourceReadBytes);
+                        currentProto.SetReadIngressBytes(current.ReadIngressBytes);
                         auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
                         Stats->ExportExecStats(execStats);
                         for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
@@ -962,8 +962,8 @@ protected:
                 StatCollectInflightBytes = collectBytes;
                 Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
             }
-            if (auto currentStats = GetUserRequestContext()->CurrentQueryStats) {
-                Stats->ReportCurrentStats(*currentStats);
+            if (GetUserRequestContext()->CollectCurrentQueryStats) {
+                this->Send(Target, new TEvKqpExecuter::TEvCurrentExecutionStats(Stats->TakeCurrentStats()));
             }
             ProcessStreamingQueryCounters();
         }
@@ -1645,7 +1645,7 @@ protected:
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
             .StatsMode = Request.StatsMode,
-            .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero() || bool(GetUserRequestContext()->CurrentQueryStats),
+            .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero() || GetUserRequestContext()->CollectCurrentQueryStats,
             .RlPath = Request.RlPath,
             .ExecuterSpan = tasksSpan,
             .Trace = TraceStats ? &*TraceStats : nullptr,
@@ -1953,8 +1953,8 @@ protected:
             ReportEventElapsedTime();
 
             Stats->FinishTs = TInstant::Now();
-            if (auto currentStats = GetUserRequestContext()->CurrentQueryStats) {
-                Stats->ReportCurrentStats(*currentStats, true);
+            if (GetUserRequestContext()->CollectCurrentQueryStats) {
+                ResponseEv->CurrentExecutionStats = Stats->TakeCurrentStats(true);
             }
 
             {

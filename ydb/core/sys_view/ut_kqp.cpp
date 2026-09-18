@@ -1,6 +1,8 @@
 #include "ut_common.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/library/testlib/common/test_utils.h>
@@ -58,6 +60,22 @@ void CreateRootColumnTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTabl
 
     if (fillTable)
         FillRootTable(env, tableNum);
+}
+
+THolder<NKqp::TEvKqp::TEvQueryRequest> MakeStreamQueryRequest(const NActors::TActorId& sender, const TString& query) {
+    auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
+    request->Record.MutableRequest()->SetQuery(query);
+    NActors::ActorIdToProto(sender, request->Record.MutableRequestActorId());
+    return request;
+}
+
+void SendKqpQueryRequest(TTestActorRuntime& runtime, const NActors::TActorId& sender,
+    THolder<NKqp::TEvKqp::TEvQueryRequest> request)
+{
+    runtime.Send(new NActors::IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()),
+        0, true);
 }
 
 void BreakLock(TSession& session, const TString& tableName) {
@@ -2443,6 +2461,71 @@ Y_UNIT_TEST_SUITE(SystemView) {
         NKqp::CompareYson(R"([
             [[0u]];
         ])", ysonString);
+    }
+
+    Y_UNIT_TEST(QuerySessionsRuntimeStats) {
+        NKqp::TKikimrSettings settings = NKqp::TKikimrSettings().SetUseRealThreads(false);
+        NKqp::TKikimrRunner kikimr(settings);
+        constexpr ui32 totalRows = 2000;
+        kikimr.RunCall([&] { NKqp::CreateManyShardsTable(kikimr, totalRows, 50, 20); return true; });
+
+        auto client = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
+        auto checkSession = kikimr.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        auto streamSender = runtime.AllocateEdgeActor();
+        NActors::TActorId executerId;
+
+        runtime.SetObserverFunc([&](TAutoPtr<NActors::IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NKqp::TEvKqpExecuter::TEvStreamData::EventType || ev->Recipient != streamSender) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            const auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+            executerId = ev->Sender;
+            auto ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+            ack->Record.SetEnough(false);
+            ack->Record.SetFreeSpace(-1);
+            runtime.Send(new NActors::IEventHandle(ev->Sender, sender, ack.Release()));
+            return TTestActorRuntime::EEventAction::DROP;
+        });
+
+        auto request = MakeStreamQueryRequest(streamSender, "SELECT * FROM `/Root/ManyShardsTable`;");
+        request->Record.MutableRequest()->SetSessionId(session.GetId().c_str());
+        request->Record.MutableRequest()->SetDatabase("/Root");
+        request->Record.MutableRequest()->SetKeepSession(true);
+        SendKqpQueryRequest(runtime, streamSender, std::move(request));
+
+        runtime.SimulateSleep(TDuration::Seconds(6));
+        UNIT_ASSERT(executerId);
+
+        auto checkSysView = [&](bool executing) {
+            auto result = kikimr.RunCall([&] {
+                return checkSession.ExecuteDataQuery(TStringBuilder()
+                    << "SELECT State, Query, DurationUs, CpuTimeUs, ComputeMemoryBytes, ReadIngressBytes "
+                    << "FROM `/Root/.sys/query_sessions` WHERE SessionId = '" << session.GetId() << "';",
+                    TTxControl::BeginTx().CommitTx()).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("State").GetOptionalUtf8().value(), executing ? "EXECUTING" : "IDLE");
+            for (const auto* name : {"DurationUs", "CpuTimeUs", "ComputeMemoryBytes", "ReadIngressBytes"}) {
+                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(name).GetOptionalUint64().has_value(), executing, name);
+            }
+        };
+        checkSysView(true);
+
+        auto resumeAck = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(0, 0);
+        resumeAck->Record.SetEnough(false);
+        resumeAck->Record.SetFreeSpace(100_MB);
+        runtime.Send(new NActors::IEventHandle(executerId, sender, resumeAck.Release()));
+        auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
+            reply->Get()->Record.GetResponse().DebugString());
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        checkSysView(false);
     }
 
     Y_UNIT_TEST(UdfModulesEmpty) {

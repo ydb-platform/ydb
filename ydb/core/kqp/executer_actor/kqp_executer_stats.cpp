@@ -1165,7 +1165,9 @@ void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats&
         auto [it, _] = Tables.try_emplace(tablePath, TaskCount4);
         auto& queryTableStats = it->second;
         queryTableStats.ReadRows.SetNonZero(index, tableStat.GetReadRows());
+        CurrentTableReadBytes -= queryTableStats.ReadBytes.Sum;
         queryTableStats.ReadBytes.SetNonZero(index, tableStat.GetReadBytes());
+        CurrentTableReadBytes += queryTableStats.ReadBytes.Sum;
         queryTableStats.WriteRows.SetNonZero(index, tableStat.GetWriteRows());
         queryTableStats.WriteBytes.SetNonZero(index, tableStat.GetWriteBytes());
         queryTableStats.EraseRows.SetNonZero(index, tableStat.GetEraseRows());
@@ -1215,6 +1217,7 @@ void TQueryExecutionStats::UpdateStorageTables(const NYql::NDqProto::TDqTaskStat
         auto& queryTableStats = it->second;
         queryTableStats.StorageStats.ReadRows += tableStat.GetReadRows();
         queryTableStats.StorageStats.ReadBytes += tableStat.GetReadBytes();
+        CurrentTableReadBytes += tableStat.GetReadBytes();
         queryTableStats.StorageStats.WriteRows += tableStat.GetWriteRows();
         queryTableStats.StorageStats.WriteBytes += tableStat.GetWriteBytes();
         queryTableStats.StorageStats.EraseRows += tableStat.GetEraseRows();
@@ -1239,19 +1242,20 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
         AFL_ENSURE(taskId <= TaskCount);
         CurrentTaskStats.resize(TaskCount);
         auto& current = CurrentTaskStats[taskId - 1];
-        // Terminal reports can have no Tasks (failure before task-runner setup).
-        // Unlike cumulative counters, current memory must also accept zero.
+        CurrentMemoryBytes -= current.MemoryBytes;
         current.MemoryBytes = state == NDqProto::COMPUTE_STATE_EXECUTING
             ? stats.GetMemoryUsage() : 0;
-        // CA may fail before SetTaskRunner (e.g. WASM compartment acquire);
-        // FillStats then sends empty Tasks. Do not ENSURE — that would mask
-        // the real failure issues from COMPUTE_STATE_FAILURE.
+        CurrentMemoryBytes += current.MemoryBytes;
+        ObservedPeakComputeMemoryBytes = std::max(ObservedPeakComputeMemoryBytes, CurrentMemoryBytes);
+        // Failure before task-runner setup produces a report without Tasks.
         if (stats.GetTasks().empty()) {
             return;
         }
         AFL_ENSURE(stats.GetTasks().size() == 1);
         AFL_ENSURE(stats.GetTasks(0).GetTaskId() == taskId);
-        current.SourceReadBytes = std::max(current.SourceReadBytes, stats.GetTasks(0).GetIngressBytes());
+        CurrentReadIngressBytes -= current.ReadIngressBytes;
+        current.ReadIngressBytes = std::max(current.ReadIngressBytes, stats.GetTasks(0).GetIngressBytes());
+        CurrentReadIngressBytes += current.ReadIngressBytes;
     }
 
     for (auto& taskStats : stats.GetTasks()) {
@@ -1567,22 +1571,19 @@ TCurrentExecStats TQueryExecutionStats::GetCurrentExecStats(TInstant now) const 
         result.DurationUs = (now - StartTs).MicroSeconds();
     }
     result.CpuTimeUs = StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
-    for (const auto& task : CurrentTaskStats) {
-        result.ComputeMemoryBytes += task.MemoryBytes;
-        result.SourceReadBytes += task.SourceReadBytes;
-    }
-    for (const auto& [path, table] : Tables) {
-        result.TableReadBytes += table.StorageStats.ReadBytes + table.ReadBytes.Sum;
-    }
+    result.ComputeMemoryBytes = CurrentMemoryBytes;
+    result.ReadIngressBytes = CurrentReadIngressBytes;
+    result.TableReadBytes = CurrentTableReadBytes;
+    result.ObservedPeakComputeMemoryBytes = ObservedPeakComputeMemoryBytes;
     return result;
 }
 
-void TQueryExecutionStats::ReportCurrentStats(TCurrentQueryStats& queryStats, bool finished) {
+TCurrentExecStatsReport TQueryExecutionStats::TakeCurrentStats(bool finished) {
     auto current = GetCurrentExecStats(TInstant::Now());
     if (finished) {
         current.ComputeMemoryBytes = 0;
     }
-    queryStats.Update(current, LastReportedCurrentStats);
+    return {current, ++CurrentStatsSequenceNo};
 }
 
 void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {

@@ -278,25 +278,6 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     TStringStreamWrapper wrapper(Stream);
 
-    std::optional<TString> generatedContext;
-    for (const auto& column : tableDesc.GetColumns()) {
-        if (!column.HasDefaultFromExpression()) {
-            continue;
-        }
-
-        const auto& context = column.GetDefaultFromExpression().GetContext();
-        if (generatedContext && *generatedContext != context) {
-            return TFormatResult(
-                Ydb::StatusIds::UNSUPPORTED,
-                "Generated columns have inconsistent expression contexts");
-        }
-        generatedContext = context;
-    }
-
-    if (generatedContext && !generatedContext->empty()) {
-        Stream << *generatedContext << "\n";
-    }
-
     Ydb::Table::CreateTableRequest createRequest;
     if (temporary) {
         Stream << "CREATE TEMPORARY TABLE ";
@@ -691,6 +672,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
                 Stream << del << "vector_type=\"float\"";
                 break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16:
+                Stream << del << "vector_type=\"float16\"";
+                break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
+                Stream << del << "vector_type=\"bfloat16\"";
+                break;
             default:
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::VectorIndexSettings");
         }
@@ -751,7 +738,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Tokenizer");
         }
         if (analyzers.has_language()) {
-            Stream << ", language=" << analyzers.language();
+            Stream << ", language=";
+            if (analyzers.language().find(',') == TString::npos) {
+                Stream << analyzers.language();
+            } else {
+                EscapeString(analyzers.language(), Stream);
+            }
         }
         if (analyzers.has_use_filter_lowercase()) {
             Stream << ", use_filter_lowercase=" << (analyzers.use_filter_lowercase() ? "true" : "false");

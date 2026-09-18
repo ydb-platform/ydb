@@ -1,6 +1,6 @@
 #include "limit.h"
 
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/limit_sorted.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/ordered_result_with_limit.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 TSyncPointLimitControl::TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context,
-    const std::shared_ptr<TScanWithLimitCollection>& collection)
+    const std::shared_ptr<TOrderedResultWithLimitCollection>& collection)
     : TBase(pointIndex, "SYNC_LIMIT", context, collection)
     , Limit(limit)
     , Collection(collection)
@@ -22,10 +22,11 @@ bool TSyncPointLimitControl::DrainToLimit() {
         nextInHeap = TSourceIterator(Collection->GetNextSource());
     }
 
-    while (FilledIterators.size() &&
-           (!nextInHeap || FilledIterators.front().ComparePrefix(*nextInHeap, *PKPrefixSize) == std::partial_ordering::less) &&
-           (!UnfilledIterators.size() ||
-               FilledIterators.front().ComparePrefix(UnfilledIterators.front(), *PKPrefixSize) == std::partial_ordering::less)) {
+    const auto notGreater = [](const std::partial_ordering cmp) {
+        return cmp == std::partial_ordering::less || cmp == std::partial_ordering::equivalent;
+    };
+    while (FilledIterators.size() && (!nextInHeap || notGreater(FilledIterators.front().ComparePrefix(*nextInHeap, *PKPrefixSize))) &&
+           (!UnfilledIterators.size() || notGreater(FilledIterators.front().ComparePrefix(UnfilledIterators.front(), *PKPrefixSize)))) {
         std::pop_heap(FilledIterators.begin(), FilledIterators.end());
 
         if (!FilledIterators.back().Next()) {
@@ -52,7 +53,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
     const NActors::TLogContextGuard verifyContext =
         NActors::TLogContextBuilder::Build()("source_schema", source->GetSourceSchema()->DebugString());
     LWTRACK(LimitSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
-        source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
+        source->GetSourceId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
         source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
     if (FetchedCount >= Limit) {
         return ESourceAction::Finish;
@@ -77,17 +78,17 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
                 return item.GetSourceIdx() == source->GetSourceIdx();
             }) != UnfilledIterators.end()) {
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in UnfilledIterators")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<IDataSource>()->GetFirstPK().DebugString())(
                     "source_idx", source->GetSourceIdx());
         } else if (FindIf(FilledIterators, [&](const auto& item) {
                        return item.GetSourceIdx() == source->GetSourceIdx();
                    }) != FilledIterators.end()) {
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in FilledIterators")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<IDataSource>()->GetFirstPK().DebugString())(
                     "source_idx", source->GetSourceIdx());
         } else {
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "unknown portion")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source->GetAs<IDataSource>()->GetFirstPK().DebugString())(
                     "source_idx", source->GetSourceIdx());
         }
     }
@@ -96,7 +97,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
 
     const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
     const auto& g = source->GetStageResult().GetBatch();
-
+    bool hasRows = false;
     if (g && g->GetRecordsCount()) {
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrs;
         for (auto&& i : rk.fields()) {
@@ -117,18 +118,18 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
             {"sourceIdx", source->GetSourceIdx()},
             {"fetched", FetchedCount},
             {"limit", Limit});
-        FilledIterators.emplace_back(arrs, source->GetStageResult().GetNotAppliedFilter(), source);
-        AFL_VERIFY(FilledIterators.back().IsFilled());
-        std::push_heap(FilledIterators.begin(), FilledIterators.end());
+        TSourceIterator iterator(arrs, source->GetStageResult().GetNotAppliedFilter(), source);
+        AFL_VERIFY(iterator.IsFilled());
+        if (iterator.IsValid()) {
+            hasRows = true;
+            FilledIterators.emplace_back(std::move(iterator));
+            std::push_heap(FilledIterators.begin(), FilledIterators.end());
+        }
     }
     if (DrainToLimit()) {
         Collection->Clear();
     }
-    if (source->GetStageResult().IsEmpty()) {
-        return ESourceAction::Finish;
-    } else {
-        return ESourceAction::ProvideNext;
-    }
+    return hasRows ? ESourceAction::ProvideNext : ESourceAction::Finish;
 }
 
 TString TSyncPointLimitControl::TSourceIterator::DebugString() const {
@@ -137,8 +138,8 @@ TString TSyncPointLimitControl::TSourceIterator::DebugString() const {
     sb << "idx=" << Source->GetSourceIdx() << ";";
     sb << "f=" << IsFilled() << ";";
     sb << "record=" << SortableRecord->DebugJson() << ";";
-    sb << "start=" << Source->GetAs<TPortionDataSource>()->GetStart().DebugString() << ";";
-    sb << "finish=" << Source->GetAs<TPortionDataSource>()->GetFinish().DebugString() << ";";
+    sb << "start=" << Source->GetAs<IDataSource>()->GetFirstPK().DebugString() << ";";
+    sb << "finish=" << Source->GetAs<IDataSource>()->GetLastPK().DebugString() << ";";
     return sb;
 }
 

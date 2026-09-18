@@ -740,7 +740,7 @@ bool ra_portable_deserialize(roaring_array_t *answer, const char *buf,
                 return false;
             }
             // it is now safe to read
-            bitset_container_t *c = bitset_container_create();
+            bitset_container_t *c = bitset_container_create_uninitialized();
             if (c == NULL) {  // memory allocation failure
                 // Failed to allocate memory for a bitset container.
                 ra_clear(answer);  // we need to clear the containers already

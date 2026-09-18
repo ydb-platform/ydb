@@ -631,37 +631,40 @@ namespace {
         //               2) if not invalidate - serve WaitingQueue or return session to pool if empty
     public:
         TKikimrLookupActor(
-            NActors::TActorId&& parentId,
-            ::NMonitoring::TDynamicCounterPtr taskCounters,
-            std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-            std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
             NKqpProto::TDqSourceKikimrLookupSource&& lookupSource,
-            const NKikimr::NMiniKQL::TStructType* keyType,
-            const NKikimr::NMiniKQL::TStructType* payloadType,
-            const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-            const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-            const size_t maxKeysInRequest,
-            bool isMultiMatches = false)
-            : ParentId(std::move(parentId))
-            , Alloc(alloc)
-            , KeyTypeHelper(keyTypeHelper)
+            IDqAsyncIoFactory::TLookupSourceArguments&& args)
+            : ParentId(std::move(args.ParentId))
+            , Alloc(std::move(args.Alloc))
+            , KeyTypeHelper(std::move(args.KeyTypeHelper))
             , LookupSource(std::move(lookupSource))
-            , KeyType(keyType)
-            , PayloadType(payloadType)
-            , SelectResultType(MergeStructTypes(typeEnv, keyType, payloadType))
-            , HolderFactory(holderFactory)
+            , KeyType(args.KeyType)
+            , PayloadType(args.PayloadType)
+            , SelectResultType(MergeStructTypes(args.TypeEnv, args.KeyType, args.PayloadType))
+            , HolderFactory(args.HolderFactory)
             , ColumnDestinations(CreateColumnDestination())
-            , MaxKeysInRequest(maxKeysInRequest)
-            , IsMultiMatches(isMultiMatches)
+            , MaxKeysInRequest(args.MaxKeysInRequest)
+            , IsMultiMatches(args.IsMultiMatches)
             , SelectBody(MakeSelect())
             , SelectWithKeys(MakeSelectWithKeys())
         {
+            switch(args.StatsLevel) {
+                // Shift priorities by one level (minimum level is Basic)
+#define TRANSLATE(DQ, PROTO) \
+                case TCollectStatsLevel::DQ: \
+                    StatsMode = Ydb::Query::STATS_MODE_##PROTO; \
+                    break
+                TRANSLATE(None, NONE);
+                TRANSLATE(Basic, NONE);
+                TRANSLATE(Full, BASIC);
+                TRANSLATE(Profile, FULL); // TRACE logging will remap to `STATS_MODE_PROFILE` (see below)
+#undef TRANSLATE
+            }
             if (auto token = LookupSource.GetToken(); !token.empty()) {
                 Token.emplace(token);
             }
-            InitMonCounters(taskCounters);
+            InitMonCounters(args.TaskCounters);
             auto guard = Guard(*Alloc);
-            Pickle.emplace(/*stable=*/false, MakePickleType(typeEnv, keyType));
+            Pickle.emplace(/*stable=*/false, MakePickleType(args.TypeEnv, KeyType));
         }
 
         ~TKikimrLookupActor() {
@@ -850,7 +853,7 @@ namespace {
         }
 
         void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request, size_t fullscanLimit) {
-            if (!request) {
+            if (Y_UNLIKELY(!request)) {
                 YDB_LOG_DEBUG("CreateRequest: parent MIA", COMMON_LOG);
                 return;
             }
@@ -928,6 +931,10 @@ namespace {
                 return;
             }
             auto state = std::move(ev->Get()->State);
+            if (Y_UNLIKELY(!state->StreamProcessor)) {
+                YDB_LOG_ERROR("TEvQueryExecuteQueryResponsePart called ater CleanupStreamProcessor, should be impossible", COMMON_LOG);
+                return;
+            }
             auto& response = ev->Get()->Response;
             YDB_LOG_TRACE("TEvQueryExecuteQueryResponsePart",
                     COMMON_LOG,
@@ -987,7 +994,7 @@ namespace {
             auto startCycleCount = GetCycleCountFast();
             auto guard = Guard(*Alloc);
             auto request = state->Request.lock();
-            if (!request) {
+            if (Y_UNLIKELY(!request)) {
                 YDB_LOG_DEBUG("ProcessReceivedData: parent MIA", COMMON_LOG);
                 return;
             }
@@ -1224,11 +1231,10 @@ namespace {
                 tx_control.mutable_begin_tx()->mutable_snapshot_read_only();
                 tx_control.set_commit_tx(true);
             }
-            YDB_LOG_DEBUG("QueryStatsMode",
-                    COMMON_LOG,
-                    {"mode", (request.set_stats_mode(Ydb::Query::STATS_MODE_BASIC), "BASIC")}); // intentional side effects, order important
-            YDB_LOG_TRACE("QueryStatsMode",
-                    {"mode", (request.set_stats_mode(Ydb::Query::STATS_MODE_FULL), "FULL")}); // intentional side effects, order important
+            if (IS_DEBUG_LOG_ENABLED(YDB_LOG_THIS_FILE_COMPONENT)) {
+                // unless debug log enabled, stats collection is useless
+                request.set_stats_mode(StatsMode == Ydb::Query::STATS_MODE_FULL && IS_TRACE_LOG_ENABLED(YDB_LOG_THIS_FILE_COMPONENT) ? Ydb::Query::STATS_MODE_PROFILE : StatsMode);
+            }
             YDB_LOG_TRACE("Query",
                     COMMON_LOG,
                     {"query", request.DebugString()});
@@ -1250,6 +1256,7 @@ namespace {
         const size_t MaxKeysInRequest;
         const bool IsMultiMatches;
         TMaybe<TString> Token;
+        Ydb::Query::StatsMode StatsMode;
         static inline constexpr std::string_view KeyTupleListName = "$keyTupleList"sv;
         NYql::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper = new NKikimr::NMiniKQL::TTypeInfoHelper();
         const TString SelectBody;
@@ -1272,32 +1279,11 @@ namespace {
     } // namespace
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateKikimrLookupActor(
-        NActors::TActorId parentId,
-        ::NMonitoring::TDynamicCounterPtr taskCounters,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
         NKqpProto::TDqSourceKikimrLookupSource&& lookupSource,
-        const NKikimr::NMiniKQL::TStructType* keyType,
-        const NKikimr::NMiniKQL::TStructType* payloadType,
-        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const size_t maxKeysInRequest,
-        const bool isMultiMatches
-    )
+        IDqAsyncIoFactory::TLookupSourceArguments&& args)
     {
-        auto guard = Guard(*alloc);
-        const auto actor = new TKikimrLookupActor(
-            std::move(parentId),
-            taskCounters,
-            alloc,
-            keyTypeHelper,
-            std::move(lookupSource),
-            keyType,
-            payloadType,
-            typeEnv,
-            holderFactory,
-            maxKeysInRequest,
-            isMultiMatches);
+        auto guard = Guard(*args.Alloc);
+        const auto actor = new TKikimrLookupActor(std::move(lookupSource), std::move(args));
         return {actor, actor};
     }
 

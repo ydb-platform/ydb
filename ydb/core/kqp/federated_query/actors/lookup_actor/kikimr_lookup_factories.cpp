@@ -8,19 +8,7 @@ namespace NYql::NDq::NDqSourceLookup {
 
     void RegisterKikimrLookupProviderFactories(TDqAsyncIoFactory& factory) {
         auto lookupActorFactory = [](NKqpProto::TDqSourceKikimrLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
-            return CreateKikimrLookupActor(
-                std::move(args.ParentId),
-                std::move(args.TaskCounters),
-                std::move(args.Alloc),
-                std::move(args.KeyTypeHelper),
-                std::move(lookupSource),
-                args.KeyType,
-                args.PayloadType,
-                args.TypeEnv,
-                args.HolderFactory,
-                args.MaxKeysInRequest,
-                args.IsMultiMatches
-            );
+            return CreateKikimrLookupActor(std::move(lookupSource), std::move(args));
         };
 
         factory.RegisterLookupSource<NKqpProto::TDqSourceKikimrLookupSource>("kikimr", lookupActorFactory);

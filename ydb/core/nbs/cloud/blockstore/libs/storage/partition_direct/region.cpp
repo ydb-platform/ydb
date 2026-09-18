@@ -32,6 +32,7 @@ TRegion::TRegion(
     ui32 regionIndex,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
     const TVChunkConfigs& vChunkConfigs,
+    TRegionVChunks touchedVChunks,
     const TDirtyMapStateProtos& dirtyMapStates,
     ui32 syncRequestsBatchSize,
     ui32 blockSize,
@@ -39,11 +40,11 @@ TRegion::TRegion(
     : ActorSystem(actorSystem)
     , DiskDescription(diskDescription)
 {
-    const ui64 vChunksPerRegionCount = GetVChunksPerRegion(vChunkSize);
-    for (size_t i = 0; i < vChunksPerRegionCount; i++) {
-        const size_t vChunkIndex = (regionIndex * vChunksPerRegionCount) + i;
-        const size_t dbgIndex =
-            GetDirectBlockGroupIndex(vChunkIndex, directBlockGroups.size());
+    for (size_t i = 0; i < VChunkPerRegionCount; i++) {
+        const size_t vChunkIndex = GetVChunkIndex(regionIndex, i);
+        const size_t dbgIndex = GetDirectBlockGroupIndex(
+            vChunkIndex,
+            DefaultVolumeDirectBlockGroupCount);
 
         const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
         auto vChunkConfig = persisted ? *persisted
@@ -62,6 +63,7 @@ TRegion::TRegion(
             partitionDirectService,
             DiskDescription,
             vChunkConfig,
+            touchedVChunks[i],
             dirtyMapState ? *dirtyMapState : TDirtyMapStateProto(),
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,

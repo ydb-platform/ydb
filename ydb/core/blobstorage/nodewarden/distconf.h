@@ -367,7 +367,7 @@ namespace NKikimr::NStorage {
         ui64 CommitRequestCookie = 0;
         bool ProposeRequestInFlight = false;
         std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
-        std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
+        std::vector<std::tuple<TActorId, TString, bool, ui64>> ConsoleConfigValidationQ;
 
         // retro trace root-side batching
         TControlWrapper RootRetroTraceBatchIntervalSec = TControlWrapper(10, 1, 3600);
@@ -696,7 +696,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
         void OnConsolePipeError();
-        bool EnqueueConsoleConfigValidation(TActorId queryId, bool enablingDistconf, TString yaml);
+        bool EnqueueConsoleConfigValidation(TActorId queryId, bool enablingDistconf, TString yaml, bool allowUnknownFields);
 
         static std::optional<TString> UpdateConfigComposite(NKikimrBlobStorage::TStorageConfig& config, const TString& yaml,
             const std::optional<TString>& fetched);

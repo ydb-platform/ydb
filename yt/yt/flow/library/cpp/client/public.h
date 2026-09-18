@@ -40,6 +40,7 @@ YT_DEFINE_ERROR_ENUM(
     ((GracefulShutdown)                (3304))
     // The worker cancelled the job after being disconnected from the controller for too long.
     ((AbandonedJob)                    (3306))
+    ((TimerStoreLimitExceeded)         (3307))
 );
 
 YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);
@@ -51,6 +52,9 @@ constexpr std::string_view LeaderControllerAddressAttribute = "leader_controller
 constexpr std::string_view MonitoringProjectAttribute = "monitoring_project";
 constexpr std::string_view MonitoringClusterAttribute = "monitoring_cluster";
 constexpr std::string_view IdAttribute = "id";
+
+//! Cypress node under the pipeline path that the Cypress election backend locks exclusively.
+inline constexpr TStringBuf LeaderControllerLockName = "leader_controller_lock";
 
 //! Row key in the flow_control dynamic table whose value is the YSON-serialized leader
 //! controller node info (see TNodeInfo). Supersedes the deprecated

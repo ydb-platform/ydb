@@ -270,6 +270,7 @@ protected:
     bool MoveDataRecordTouched = false;
     TLogoBlobID MoveDataBlobId;
     THashMap<TLogoBlobID, TLogoBlobID> MoveDataBlobIdToNewBlobId; // for blobs with refcount > 1
+    ui64 MoveDataBlobsMoved = 0;
     // trash checking stage
     std::optional<ui64> MoveDataTrashCheckingVacuumGeneration = {}; // not set for Trash, set for TrashForVacuum
     TLogoBlobID MoveDataTrashCheckingBlobId;

@@ -4,6 +4,7 @@
 #include "metadata_subscription/udf_module.h"
 #include "metadata_subscription/wasm_artifact.h"
 #include "wasm/compile.h"
+#include <ydb/public/lib/udf/manifest/manifest.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log.h>
@@ -45,7 +46,7 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 "");
             break;
         case EStep::ReadLibraryChunks:
-            NTableQuery::SetSelectSourceChunksParams(request, LibrarySource_.Uid);
+            NTableQuery::SetSelectSourceChunksParams(request, LibrarySource_.Uid, SourceChunks_.size());
             break;
         case EStep::DeleteArtifactChunks:
             NTableQuery::SetDeleteArtifactChunksParams(request, LibraryName_, Kind_, LibrarySource_.Uid);
@@ -123,9 +124,16 @@ void TWasmLibraryCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequest
         ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
         return;
     }
-    ReplyError(TStringBuilder()
+    const TString message = TStringBuilder()
         << "YQL request failed at library compile step " << static_cast<int>(Step_)
-        << ": " << ev->Get()->GetErrorMessage());
+        << ": " << ev->Get()->GetErrorMessage();
+    if (Step_ == EStep::UpdateMetaFailed) {
+        // A failure to persist must terminate instead of recursively retrying
+        // the same update, and must keep the original compilation error.
+        ReplyError(TStringBuilder() << ErrorMessage_ << "; failed to persist error: " << message);
+    } else {
+        FailAndPersist(message);
+    }
 }
 
 void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryResponse& response) {
@@ -146,25 +154,32 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
                 return;
             }
             case EStep::ReadLibraryChunks: {
-                TVector<TString> chunks;
-                if (!NTableQuery::ParseSourceChunksResponse(response, chunks)) {
-                    ReplyError(TStringBuilder()
+                const size_t previousChunkCount = SourceChunks_.size();
+                if (!NTableQuery::AppendSourceChunksResponse(response, SourceChunks_)) {
+                    FailAndPersist(TStringBuilder()
                         << "Failed to read library source chunks for '" << LibraryName_ << "'");
+                    return;
+                }
+                if (SourceChunks_.size() - previousChunkCount == NTableQuery::ChunksPerRead
+                    && SourceChunks_.size() <= LibrarySource_.ChunkCount)
+                {
+                    ExecuteQuery(NTableQuery::BuildSelectSourceChunksQuery(ModuleChunksTablePath_), true);
                     return;
                 }
                 TString joinError;
                 if (!JoinAndVerifyBlobs(
-                        chunks,
+                        SourceChunks_,
                         LibrarySource_.ChunkCount,
                         LibrarySource_.Size,
                         LibrarySource_.Md5,
                         LibrarySource_.Body,
                         joinError))
                 {
-                    ReplyError(TStringBuilder()
+                    FailAndPersist(TStringBuilder()
                         << "Library '" << LibraryName_ << "' source is corrupted: " << joinError);
                     return;
                 }
+                SourceChunks_.clear();
                 CompileLibrary();
                 return;
             }
@@ -194,12 +209,15 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
             case EStep::VerifyStillCurrent: {
                 NTableQuery::TModuleSourceRow current;
                 if (!NTableQuery::ParseModuleSourceResponse(response, current)) {
-                    ReplyError(TStringBuilder()
+                    ReplyDeferred(TStringBuilder()
                         << "Library '" << LibraryName_ << "' disappeared while compiling");
                     return;
                 }
                 if (current.Uid != LibrarySource_.Uid) {
-                    ReplyError(TStringBuilder()
+                    // Losing to a re-upload is not a failure of this library:
+                    // reported as a real one it would count against the compile
+                    // controller's retry budget for a perfectly good library.
+                    ReplyDeferred(TStringBuilder()
                         << "Library '" << LibraryName_ << "' was re-uploaded while compiling: uid="
                         << LibrarySource_.Uid << " is now " << current.Uid);
                     return;
@@ -233,12 +251,12 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
             case EStep::ConfirmStillCurrent: {
                 NTableQuery::TModuleSourceRow current;
                 if (!NTableQuery::ParseModuleSourceResponse(response, current)) {
-                    ReplyError(TStringBuilder()
+                    ReplyDeferred(TStringBuilder()
                         << "Library '" << LibraryName_ << "' disappeared while compiling");
                     return;
                 }
                 if (current.Uid != LibrarySource_.Uid) {
-                    ReplyError(TStringBuilder()
+                    ReplyDeferred(TStringBuilder()
                         << "Library '" << LibraryName_ << "' was re-uploaded while compiling: uid="
                         << LibrarySource_.Uid << " is now " << current.Uid);
                     return;
@@ -257,8 +275,12 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
 
 void TWasmLibraryCompileActor::CompileLibrary() {
     try {
-        const auto format = NWasm::DetectBytecodeFormatFromBody(LibrarySource_.Body);
-        Format_ = format == NYdb::NWasm::EBytecodeFormat::HumanReadable ? "wat" : "wasm";
+        const auto manifest = NYdb::NUdfManifest::Parse(LibrarySource_.Manifest);
+        if (manifest.Name != LibraryName_ || manifest.Type != NYdb::NUdfManifest::EModuleType::Library || manifest.Kind != NYdb::NUdfManifest::EModuleKind::Wasm) {
+            ythrow yexception() << "Expected matching WASM library manifest";
+        }
+        Format_ = manifest.Extension;
+        const auto format = NWasm::DetectBytecodeFormat(Format_);
         const TString objectCode = NWasm::CompileModuleObjectCode(LibrarySource_.Body, format);
         const auto wasmChunks = SplitBlob(LibrarySource_.Body);
         const auto objectChunks = SplitBlob(objectCode);
@@ -326,6 +348,13 @@ void TWasmLibraryCompileActor::FailAndPersist(const TString& message) {
 void TWasmLibraryCompileActor::ReplyError(const TString& message) {
     ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "TWasmLibraryCompileActor: " << message;
     Send(ReplyTo_, new TEvLibraryCompileResponse(false, LibraryName_, message));
+    PassAway();
+}
+
+void TWasmLibraryCompileActor::ReplyDeferred(const TString& reason) {
+    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
+        << "TWasmLibraryCompileActor: deferred library '" << LibraryName_ << "': " << reason;
+    Send(ReplyTo_, new TEvLibraryCompileResponse(false, LibraryName_, reason, true));
     PassAway();
 }
 

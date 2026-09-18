@@ -1,13 +1,19 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_cleanup_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
+
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
@@ -30,13 +36,8 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-[[nodiscard]] constexpr ui64 BlocksPerRegion(ui32 blockSize = DefaultBlockSize)
-{
-    return RegionSize / blockSize;
-}
-
 constexpr ui64 DefaultStripeSize = 512_KB;
-constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
+constexpr ui64 DefaultVChunkSize = MaxVChunkSize;
 const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
 const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
@@ -262,11 +263,9 @@ TPersistResultFuture SendVChunkConfigUpdate(
 TPersistResultFuture SendDirtyMapStateUpdate(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
-    ui32 vChunkIndex,
-    ui32 stateGeneration)
+    ui32 vChunkIndex)
 {
     TDirtyMapStateProto state;
-    state.SetStateGeneration(stateGeneration);
 
     auto request =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>(
@@ -287,6 +286,34 @@ TPersistResultFuture SendDirtyMapStateUpdate(
     env.Runtime->DestroyActor(sender);
 
     return future;
+}
+
+void PersistDDiskTouch(
+    TEnvironmentSetup& env,
+    ui64 partitionTabletId,
+    ui32 vChunkIndex)
+{
+    auto request =
+        std::make_unique<TEvPartitionDirectPrivate::TEvSetVChunkTouched>(
+            vChunkIndex);
+    auto future = request->UpdateCompleted.GetFuture();
+
+    const TActorId sender = env.Runtime->AllocateEdgeActor(
+        env.Settings.ControllerNodeId,
+        __FILE__,
+        __LINE__);
+    env.Runtime->SendToPipe(
+        partitionTabletId,
+        sender,
+        request.release(),
+        0,
+        TTestActorSystem::GetPipeConfigWithRetries());
+    env.Runtime->DestroyActor(sender);
+
+    env.Sim(TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(
+        EPersistResult::Success,
+        future.GetValue(TDuration::Seconds(10)));
 }
 
 NProto::TError DeletePartition(
@@ -726,7 +753,7 @@ void ShouldWriteAndReadBlocksInDifferentRegions(
 
     auto scopedService = SetupStorage(env, writeMode);
 
-    const ui64 blocksPerRegion = BlocksPerRegion(blockSize);
+    const ui64 blocksPerRegion = GetRegionBlockCount(blockSize, MaxVChunkSize);
     const ui64 blockCount = 3 * blocksPerRegion;
     auto partition = CreatePartitionTablet(env, blockCount, blockSize);
 
@@ -802,7 +829,8 @@ void RandomWrites(EWriteMode writeMode)
 
     auto scopedService = SetupStorage(env, writeMode);
 
-    const ui64 blockCount = 3 * BlocksPerRegion();
+    const ui64 blockCount =
+        3 * GetRegionBlockCount(DefaultBlockSize, MaxVChunkSize);
     auto partition = CreatePartitionTablet(env, blockCount);
 
     const TActorId& edge = runtime->AllocateEdgeActor(
@@ -940,6 +968,53 @@ void ShouldWriteAndReadMultipleBlocks(
 
 Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 {
+    Y_UNIT_TEST(ShouldPublishAndRevokeFrontendMetadata)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        scopedService.reset();
+        auto config = CreateNbsConfig(EWriteMode::DirectWrite);
+        config.MutableNbsFrontendConfig()->SetEnabled(true);
+        scopedService = std::make_unique<TScopedNbsService>(config);
+        auto blockStore = GetNbsService()->Frontend->GetBlockStore();
+        auto mount = [&]
+        {
+            auto request = std::make_shared<
+                NNbs1CompatApi::NBlockStore::NProto::TMountVolumeRequest>();
+            request->SetDiskId("test-volume");
+            request->MutableHeaders()->SetClientId("frontend-test");
+            return blockStore
+                ->MountVolume(MakeIntrusive<TCallContext>(), std::move(request))
+                .GetValueSync();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
+
+        WaitForTabletBoot(env);
+        auto volumeConfig = CreateVolumeConfig(32768);
+        volumeConfig.SetStorageMediaKind(NProto::STORAGE_MEDIA_SSD);
+        const auto update = SendUpdateVolumeConfig(env, volumeConfig, 1);
+        UNIT_ASSERT(update.GetStatus() == NKikimrBlockStore::OK);
+        env.Sim(TDuration::Seconds(10));
+        const auto response = mount();
+        UNIT_ASSERT(!HasError(response));
+        UNIT_ASSERT(!response.GetSessionId().empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            response.GetVolume().GetDiskId(),
+            "test-volume");
+        UNIT_ASSERT_VALUES_EQUAL(response.GetVolume().GetBlockSize(), 4096);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetVolume().GetBlocksCount(), 32768);
+
+        const auto edge = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        StopFastPathService(env, PartitionTabletId, edge);
+        UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
+    }
+
     Y_UNIT_TEST(MultipleInit)
     {
         {
@@ -1004,8 +1079,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         const ui64 partition = CreatePartitionTablet(
             env,
-            4 * BlocksPerRegion() + 1   // blockCount
-        );
+            4 * GetRegionBlockCount(DefaultBlockSize, MaxVChunkSize) + 1);
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -1188,15 +1262,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 env.Settings.ControllerNodeId);
         };
 
-        auto first = SendDirtyMapStateUpdate(env, partition, 0, 1);
+        auto first = SendDirtyMapStateUpdate(env, partition, 0);
         env.Sim(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommits.size());
         UNIT_ASSERT(!first.HasValue());
 
         TVector<TPersistResultFuture> batched;
-        batched.push_back(SendDirtyMapStateUpdate(env, partition, 1, 2));
-        batched.push_back(SendDirtyMapStateUpdate(env, partition, 2, 3));
-        batched.push_back(SendDirtyMapStateUpdate(env, partition, 3, 4));
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 1));
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 2));
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 3));
         env.Sim(TDuration::Seconds(1));
 
         // While the first transaction is in flight, the remaining updates do
@@ -1230,7 +1304,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         // Completion of a batch resets the in-flight state: a later update
         // starts and completes a new transaction normally.
-        auto next = SendDirtyMapStateUpdate(env, partition, 4, 5);
+        auto next = SendDirtyMapStateUpdate(env, partition, 4);
         env.Sim(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(3u, blockedCommits.size());
         UNIT_ASSERT(!next.HasValue());
@@ -1241,6 +1315,100 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(EPersistResult::Success, next.GetValue());
 
         runtime->FilterFunction = {};
+    }
+
+    Y_UNIT_TEST(ShouldCommitVChunkTouchedBeforeFirstFlush)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(
+            env,
+            EWriteMode::DirectWrite,
+            TDuration::Seconds(1),
+            /*pbufferCleanupLsnStep=*/0,
+            /*syncRequestsBatchSize=*/1);
+        const ui64 partition = CreatePartitionTablet(env);
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        const auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        bool touchedRequestReleased = false;
+        bool touchedCommitObserved = false;
+        size_t flushRequestCount = 0;
+        size_t dirtyMapPersistRequestCount = 0;
+        std::unique_ptr<IEventHandle> blockedTouchedRequest;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                    TEvPartitionDirectPrivate::TEvSetVChunkTouched::EventType &&
+                !touchedRequestReleased)
+            {
+                UNIT_ASSERT(!blockedTouchedRequest);
+                blockedTouchedRequest = std::move(ev);
+                return false;
+            } else if (
+                type == TEvTablet::TEvCommitResult::EventType &&
+                touchedRequestReleased)
+            {
+                const auto* msg = ev->Get<TEvTablet::TEvCommitResult>();
+                if (msg->TabletID == partition) {
+                    touchedCommitObserved = true;
+                }
+            } else if (type == NDDisk::TEvSync::EventType) {
+                UNIT_ASSERT(touchedCommitObserved);
+                ++flushRequestCount;
+            } else if (
+                type ==
+                TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::EventType)
+            {
+                UNIT_ASSERT(touchedCommitObserved);
+                ++dirtyMapPersistRequestCount;
+            }
+            return true;
+        };
+
+        WriteBlock(
+            env,
+            loadActorAdapter,
+            edge,
+            0,
+            NUnitTest::RandomString(DefaultBlockSize, 1));
+        env.Sim(TDuration::Seconds(5));
+
+        UNIT_ASSERT(blockedTouchedRequest);
+        UNIT_ASSERT_VALUES_EQUAL(0, flushRequestCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMapPersistRequestCount);
+
+        touchedRequestReleased = true;
+        runtime->Send(
+            std::move(blockedTouchedRequest),
+            env.Settings.ControllerNodeId);
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(touchedCommitObserved);
+
+        WriteBlock(
+            env,
+            loadActorAdapter,
+            edge,
+            1,
+            NUnitTest::RandomString(DefaultBlockSize, 2));
+        env.Sim(TDuration::Seconds(10));
+
+        // Dirty-map state reflecting the write can only be produced after a
+        // flush response, so observing the real flush after the touched
+        // transaction commits proves the required persistence order.
+        UNIT_ASSERT_C(flushRequestCount > 0, "first flush was not started");
+
+        runtime->FilterFunction = {};
+        StopFastPathService(env, partition, edge);
     }
 
     Y_UNIT_TEST(ShouldBatchVChunkConfigUpdates)
@@ -1374,11 +1542,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommitResults.size());
 
         auto pendingConfig = SendVChunkConfigUpdate(env, partition, 1);
-        auto executingDirtyMap = SendDirtyMapStateUpdate(env, partition, 0, 1);
+        auto executingDirtyMap = SendDirtyMapStateUpdate(env, partition, 0);
         env.Sim(TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(2u, blockedCommitResults.size());
 
-        auto pendingDirtyMap = SendDirtyMapStateUpdate(env, partition, 1, 2);
+        auto pendingDirtyMap = SendDirtyMapStateUpdate(env, partition, 1);
         env.Sim(TDuration::Seconds(1));
 
         UNIT_ASSERT(!executingConfig.HasValue());
@@ -1825,6 +1993,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         };
 
         const ui64 partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
 
         // Grow the group to six hosts, then remove host 2: slot 2 is dead and
         // the group is at generation 2.
@@ -2011,7 +2180,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
     }
 
-    Y_UNIT_TEST(ShouldReplyUpdateInProgressToNewerVolumeConfig)
+    Y_UNIT_TEST(ShouldReplyOkToNewerVolumeConfig)
     {
         TEnvironmentSetup env{{
             .NodeCount = 8,
@@ -2024,9 +2193,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto volumeConfig = CreateVolumeConfig(32768);
         volumeConfig.SetVersion(1);
         const auto response = SendUpdateVolumeConfig(env, volumeConfig, 2);
-        UNIT_ASSERT(
-            response.GetStatus() ==
-            NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+        UNIT_ASSERT(response.GetStatus() == NKikimrBlockStore::OK);
         UNIT_ASSERT_VALUES_EQUAL(response.GetTxId(), 2);
         UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
     }
@@ -2366,6 +2533,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             /*syncRequestsBatchSize=*/1);
 
         auto partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(
+                EWriteMode::DirectWrite,
+                TDuration::Seconds(1),
+                /*pbufferCleanupLsnStep=*/4,
+                /*syncRequestsBatchSize=*/1));
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -2453,6 +2629,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             /*syncRequestsBatchSize=*/1);
 
         auto partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(
+                EWriteMode::DirectWrite,
+                TDuration::Seconds(1),
+                /*pbufferCleanupLsnStep=*/2,
+                /*syncRequestsBatchSize=*/1));
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -2548,6 +2733,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             /*syncRequestsBatchSize=*/1);
 
         auto partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(
+                EWriteMode::DirectWrite,
+                TDuration::Seconds(1),
+                /*pbufferCleanupLsnStep=*/4,
+                /*syncRequestsBatchSize=*/1));
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -2648,8 +2842,14 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         const TString& html = response->Get()->Html;
         UNIT_ASSERT(!html.empty());
-        UNIT_ASSERT_STRING_CONTAINS(html, "partition_direct tablet");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<h3>Overview</h3>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            TStringBuilder() << "<td>TabletId</td><td>" << tabletId);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Disk size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "VChunk size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Region size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Regions");
     }
 
     Y_UNIT_TEST(ChaosMonitoringPageUpdatesNodeState)
@@ -3227,7 +3427,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(1u, deallocateRequestCount);
         UNIT_ASSERT(!deallocateBeforeWipeDone);
         UNIT_ASSERT(!deleteChunksBeforeWipeDone);
-        UNIT_ASSERT_VALUES_EQUAL(DirectBlockGroupsCount, deallocateOpSize);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkPerRegionCount, deallocateOpSize);
         UNIT_ASSERT(!deallocateOpMalformed);
 
         UNIT_ASSERT(!TryGetLoadActorAdapterActorId(env, partition, edge));

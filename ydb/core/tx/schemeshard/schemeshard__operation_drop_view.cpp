@@ -2,8 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -13,11 +12,7 @@ using namespace NSchemeShard;
 class TPropose: public TSubOperationState {
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropView TPropose"
-            << ", opId: " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TPropose"; }
 
 public:
     explicit TPropose(TOperationId id)
@@ -25,7 +20,7 @@ public:
     { }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << " ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "Propose to coordinator");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -38,8 +33,8 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << " HandleReply TEvOperationPlan"
-            << ", step: " << step
+        YDB_LOG_INFO_CTX(context.Ctx, "Operation plan received",
+            {"step", step},
         );
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -106,6 +101,8 @@ class TDropView: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    virtual const char* Name() const override final { return "TDropView"; }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const ui64 ssId = context.SS->TabletID();
         const auto& drop = Transaction.GetDrop();
@@ -113,9 +110,8 @@ public:
         const TString& workingDir = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        LOG_N("TDropView Propose"
-            << ", opId: " << OperationId
-            << ", path: " << workingDir << "/" << name
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", workingDir + "/" + name},
         );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ssId);
@@ -185,15 +181,14 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TDropView AbortPropose"
-            << ", opId: " << OperationId
-        );
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TDropView AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", txId: " << forceDropTxId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropView AbortUnsafe",
+            {"opId", OperationId},
+            {"txId", forceDropTxId},
+            {"schemeshard", context.SS->SelfTabletId()},
         );
 
         context.OnComplete.DoneOperation(OperationId);
@@ -215,3 +210,4 @@ ISubOperation::TPtr CreateDropView(TOperationId id, TTxState::ETxState state) {
 
 }
 
+#undef YDB_LOG_THIS_FILE_COMPONENT

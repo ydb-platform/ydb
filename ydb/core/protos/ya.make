@@ -71,6 +71,7 @@ SRCS(
     counters_testshard.proto
     counters_tx_allocator.proto
     counters_tx_proxy.proto
+    counters_wasm_compile_controller.proto
     data_events.proto
     data_format_settings.proto
     data_integrity_trails.proto

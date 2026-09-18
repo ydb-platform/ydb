@@ -137,7 +137,7 @@ public:
 
     const NJson::TJsonValue& GetResult() const;
 
-    void SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue);
+    void SetValueByPath(const NSubColumns::TSplittedJsonPath& path, const NJson::TJsonValue& jsonValue);
 };
 
 }   // namespace NKikimr::NArrow::NAccessor

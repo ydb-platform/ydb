@@ -10,6 +10,8 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -79,14 +81,18 @@ public:
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_I("TTxReplyAllocate: operation not found"
-                ", cookie# " << AllocateResult->Cookie
-                << ", txId# " << txId);
+            YDB_LOG_INFO("TTxReplyAllocate: operation not found",
+                {"cookie", AllocateResult->Cookie},
+                {"txId", txId},
+            );
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_I("TTxReplyAllocate, id# " << BuildId << ", txId# " << txId);
+        YDB_LOG_INFO("TTxReplyAllocate",
+            {"buildId", BuildId},
+            {"txId", txId},
+        );
 
         NIceDb::TNiceDb db(txc.DB);
         switch (operationInfo.OperationState) {
@@ -144,8 +150,10 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        LOG_E("TTxReplyAllocate: OnUnhandledException"
-            ", id# " << BuildId << ", exception: " << exc.what());
+        YDB_LOG_ERROR("TTxReplyAllocate: OnUnhandledException",
+            {"buildId", BuildId},
+            {"exception", exc.what()},
+        );
     }
 };
 
@@ -172,11 +180,12 @@ public:
             AddIssue(response.MutableIssues(), operationInfo.GetIssue());
         }
 
-        LOG_N("TTxReplyModify: ReplyOnCreation"
-              << ", id: " << operationInfo.Id
-              << ", status: " << Ydb::StatusIds::StatusCode_Name(status)
-              << ", error: " << operationInfo.GetIssue()
-              << ", replyTo: " << operationInfo.CreateSender.ToString());
+        YDB_LOG_NOTICE("TTxReplyModify: ReplyOnCreation",
+            {"id", operationInfo.Id},
+            {"status", Ydb::StatusIds::StatusCode_Name(status)},
+            {"error", operationInfo.GetIssue()},
+            {"replyTo", operationInfo.CreateSender.ToString()},
+        );
 
         Send(operationInfo.CreateSender, std::move(responseEv), 0, operationInfo.SenderCookie);
     }
@@ -187,22 +196,28 @@ public:
 
         auto* operationIdPtr = Self->TxIdToSetColumnConstraintOperations.FindPtr(txId);
         if (!operationIdPtr) {
-            LOG_I("TTxReplyModify: operation not found, txId# " << txId);
+            YDB_LOG_INFO("TTxReplyModify: operation not found",
+                {"txId", txId},
+            );
             return true;
         }
 
         BuildId = *operationIdPtr;
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_I("TTxReplyModify: operation not found by BuildId"
-                ", id# " << BuildId << ", txId# " << txId);
+            YDB_LOG_INFO("TTxReplyModify: operation not found by BuildId",
+                {"buildId", BuildId},
+                {"txId", txId},
+            );
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_I("TTxReplyModify, id# " << BuildId
-            << ", txId# " << txId
-            << ", status# " << NKikimrScheme::EStatus_Name(record.GetStatus()));
+        YDB_LOG_INFO("TTxReplyModify",
+            {"buildId", BuildId},
+            {"txId", txId},
+            {"status", NKikimrScheme::EStatus_Name(record.GetStatus())},
+        );
 
         NIceDb::TNiceDb db(txc.DB);
         bool shouldForget = false;
@@ -239,7 +254,10 @@ public:
             }
 
             auto copyTxId = it->second->LastTxId;
-            LOG_I("TTxReplyModify : Waiting for txId " << copyTxId << " to retry SetColumnConstraint id# " << BuildId);
+            YDB_LOG_INFO("TTxReplyModify: waiting for tx to retry SetColumnConstraint",
+                {"txId", copyTxId},
+                {"buildId", BuildId},
+            );
             operationInfo.DependencyTxIds.insert(copyTxId);
             Self->TxIdToDependentSetColumnConstraint[copyTxId].insert(BuildId);
             Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(copyTxId)));
@@ -316,8 +334,10 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        LOG_E("TTxReplyModify: OnUnhandledException"
-            ", id# " << BuildId << ", exception: " << exc.what());
+        YDB_LOG_ERROR("TTxReplyModify: OnUnhandledException",
+            {"buildId", BuildId},
+            {"exception", exc.what()},
+        );
     }
 };
 
@@ -340,7 +360,10 @@ public:
             THashSet<TIndexBuildId> deps = std::move(Self->TxIdToDependentSetColumnConstraint.at(txId));
             Self->TxIdToDependentSetColumnConstraint.erase(txId);
             for (auto& dependentBuildId : deps) {
-                LOG_I("TTxReplyCompleted txId: " << txId << " : trying to resume dependent SetColumnConstraint " << dependentBuildId);
+                YDB_LOG_INFO("TTxReplyCompleted: trying to resume dependent SetColumnConstraint",
+                    {"txId", txId},
+                    {"dependentBuildId", dependentBuildId},
+                );
                 if (auto* dependentOperationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(dependentBuildId)) {
                     auto& dependentOperationInfo = **dependentOperationInfoPtr;
                     dependentOperationInfo.DependencyTxIds.erase(txId);
@@ -353,20 +376,27 @@ public:
         }
 
         if (!operationIdPtr) {
-            LOG_I("TTxReplyCompleted: operation not found, txId# " << txId);
+            YDB_LOG_INFO("TTxReplyCompleted: operation not found",
+                {"txId", txId},
+            );
             return true;
         }
 
         BuildId = *operationIdPtr;
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_I("TTxReplyCompleted: operation not found by BuildId"
-                ", id# " << BuildId << ", txId# " << txId);
+            YDB_LOG_INFO("TTxReplyCompleted: operation not found by BuildId",
+                {"buildId", BuildId},
+                {"txId", txId},
+            );
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_I("TTxReplyCompleted, id# " << BuildId << ", txId# " << txId);
+        YDB_LOG_INFO("TTxReplyCompleted",
+            {"buildId", BuildId},
+            {"txId", txId},
+        );
 
         NIceDb::TNiceDb db(txc.DB);
         if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Locking) {
@@ -398,8 +428,10 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        LOG_E("TTxReplyCompleted: OnUnhandledException"
-            ", id# " << BuildId << ", exception: " << exc.what());
+        YDB_LOG_ERROR("TTxReplyCompleted: OnUnhandledException",
+            {"buildId", BuildId},
+            {"exception", exc.what()},
+        );
     }
 };
 
@@ -420,26 +452,34 @@ public:
         const auto& record = Response->Get()->Record;
         const TTabletId tabletId = TTabletId(record.GetTabletId());
 
-        LOG_I("TTxReplyValidateRowCondition: operationId# " << BuildId
-            << ", tabletId# " << tabletId
-            << ", status# " << record.GetStatus()
-            << ", isValid# " << record.GetIsValid());
+        YDB_LOG_INFO("TTxReplyValidateRowCondition",
+            {"buildId", BuildId},
+            {"tabletId", tabletId},
+            {"status", record.GetStatus()},
+            {"isValid", record.GetIsValid()},
+        );
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_W("TTxReplyValidateRowCondition: operation not found, id# " << BuildId);
+            YDB_LOG_WARN("TTxReplyValidateRowCondition: operation not found",
+                {"buildId", BuildId},
+            );
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
 
         if (operationInfo.IsCancelled) {
-            LOG_I("TTxReplyValidateRowCondition: operation is cancelled, ignoring message, id# " << BuildId);
+            YDB_LOG_INFO("TTxReplyValidateRowCondition: operation is cancelled, ignoring message",
+                {"buildId", BuildId},
+            );
             return true;
         }
 
         if (operationInfo.ValidationFailed) {
-            LOG_I("TTxReplyValidateRowCondition: operation is rejected, ignoring message, id# " << BuildId);
+            YDB_LOG_INFO("TTxReplyValidateRowCondition: operation is rejected, ignoring message",
+                {"buildId", BuildId},
+            );
             return true;
         }
 
@@ -454,7 +494,9 @@ public:
         }
 
         if (!found) {
-            LOG_W("TTxReplyValidateRowCondition: shard not found for tabletId# " << tabletId);
+            YDB_LOG_WARN("TTxReplyValidateRowCondition: shard not found",
+                {"tabletId", tabletId},
+            );
             return true;
         }
 
@@ -464,8 +506,10 @@ public:
         // Therefore, we should ignore extra responses so that
         // `DoneValidationShards` does not end up containing duplicates.
         if (!operationInfo.InProgressValidationShards.contains(shardIdx)) {
-            LOG_N("TTxReplyValidateRowCondition: superfluous shard event, id# " << BuildId
-                << ", shardIdx# " << shardIdx);
+            YDB_LOG_NOTICE("TTxReplyValidateRowCondition: superfluous shard event",
+                {"buildId", BuildId},
+                {"shardIdx", shardIdx},
+            );
             return true;
         }
 
@@ -487,7 +531,9 @@ public:
 
         if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::DONE) {
             if (!record.GetIsValid()) {
-                LOG_N("TTxReplyValidateRowCondition: validation failed on shard# " << shardIdx);
+                YDB_LOG_NOTICE("TTxReplyValidateRowCondition: validation failed on shard",
+                    {"shardIdx", shardIdx},
+                );
                 operationInfo.ValidationFailed = true;
             }
 
@@ -497,8 +543,10 @@ public:
             Progress(BuildId);
 
         } else if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST) {
-            LOG_E("TTxReplyValidateRowCondition: error on shard# " << shardIdx
-                << ", status# " << record.GetStatus());
+            YDB_LOG_ERROR("TTxReplyValidateRowCondition: error on shard",
+                {"shardIdx", shardIdx},
+                {"status", record.GetStatus()},
+            );
 
             operationInfo.ValidationFailed = true;
 
@@ -508,8 +556,10 @@ public:
             Progress(BuildId);
 
         } else {
-            LOG_D("TTxReplyValidateRowCondition: shard# " << shardIdx
-                << " still in progress, status# " << record.GetStatus());
+            YDB_LOG_DEBUG("TTxReplyValidateRowCondition: shard still in progress",
+                {"shardIdx", shardIdx},
+                {"status", record.GetStatus()},
+            );
         }
 
         {
@@ -532,12 +582,15 @@ public:
         TIndexBuildInfo* operationInfo, const std::exception& exc) override
     {
         if (!operationInfo) {
-            LOG_N("TTxReplyValidateRowCondition: OnUnhandledException: id not found"
-                ", id# " << BuildId);
+            YDB_LOG_NOTICE("TTxReplyValidateRowCondition: OnUnhandledException: id not found",
+                {"buildId", BuildId},
+            );
             return;
         }
-        LOG_E("TTxReplyValidateRowCondition: OnUnhandledException"
-            ", id# " << BuildId << ", exception: " << exc.what());
+        YDB_LOG_ERROR("TTxReplyValidateRowCondition: OnUnhandledException",
+            {"buildId", BuildId},
+            {"exception", exc.what()},
+        );
     }
 };
 
@@ -555,29 +608,35 @@ public:
     bool DoExecute([[maybe_unused]] TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& shardIdx = Self->GetShardIdx(ShardId);
 
-        LOG_N("TTxReplyRetrySetColumnConstraint: PipeRetry"
-            << ", id# " << BuildId
-            << ", shardId# " << ShardId
-            << ", shardIdx# " << shardIdx);
+        YDB_LOG_NOTICE("TTxReplyRetrySetColumnConstraint: PipeRetry",
+            {"buildId", BuildId},
+            {"shardId", ShardId},
+            {"shardIdx", shardIdx},
+        );
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_I("TTxReplyRetrySetColumnConstraint: operation not found, id# " << BuildId);
+            YDB_LOG_INFO("TTxReplyRetrySetColumnConstraint: operation not found",
+                {"buildId", BuildId},
+            );
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
 
         if (operationInfo.OperationState != TSetColumnConstraintOperationInfo::EOperationState::Validating) {
-            LOG_I("TTxReplyRetrySetColumnConstraint: superfluous event, id# " << BuildId
-                << ", state# " << ToString(operationInfo.OperationState));
+            YDB_LOG_INFO("TTxReplyRetrySetColumnConstraint: superfluous event",
+                {"buildId", BuildId},
+                {"state", ToString(operationInfo.OperationState)},
+            );
             return true;
         }
 
         if (!operationInfo.ValidationShards.contains(shardIdx)) {
-            LOG_I("TTxReplyRetrySetColumnConstraint: shard not found in ValidationShards"
-                << ", id# " << BuildId
-                << ", shardIdx# " << shardIdx);
+            YDB_LOG_INFO("TTxReplyRetrySetColumnConstraint: shard not found in ValidationShards",
+                {"buildId", BuildId},
+                {"shardIdx", shardIdx},
+            );
             return true;
         }
 
@@ -597,8 +656,10 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        LOG_E("TTxReplyRetrySetColumnConstraint: OnUnhandledException"
-            ", id# " << BuildId << ", exception: " << exc.what());
+        YDB_LOG_ERROR("TTxReplyRetrySetColumnConstraint: OnUnhandledException",
+            {"buildId", BuildId},
+            {"exception", exc.what()},
+        );
     }
 };
 
@@ -613,14 +674,18 @@ private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
     bool InitiateValidationShards(TSetColumnConstraintOperationInfo& operationInfo) {
-        LOG_D("InitiateValidationShards, id# " << BuildId);
+        YDB_LOG_DEBUG("InitiateValidationShards",
+            {"buildId", BuildId},
+        );
 
         Y_ENSURE(operationInfo.ToValidateShards.empty());
         Y_ENSURE(operationInfo.InProgressValidationShards.empty());
 
         TPath path = TPath::Init(operationInfo.TablePathId, Self);
         if (!path.IsLocked()) {
-            LOG_E("InitiateValidationShards: table is not locked, id# " << BuildId);
+            YDB_LOG_ERROR("InitiateValidationShards: table is not locked",
+                {"buildId", BuildId},
+            );
             return false;
         }
         Y_ENSURE(path.LockedBy() == operationInfo.LockTxId);
@@ -643,7 +708,9 @@ private:
             Y_ENSURE(emplaced);
 
             operationInfo.ToValidateShards.emplace_back(partition->ShardIdx);
-            LOG_D("InitiateValidationShards: added shard " << partition->ShardIdx);
+            YDB_LOG_DEBUG("InitiateValidationShards: added shard",
+                {"shardIdx", partition->ShardIdx},
+            );
         }
 
         return true;
@@ -669,7 +736,9 @@ private:
             record.AddNotNullColumns(TString(columnName));
         }
 
-        LOG_N("TTxProgressSetColumnConstraint: TEvValidateRowConditionRequest: " << record.ShortDebugString());
+        YDB_LOG_NOTICE("TTxProgressSetColumnConstraint: TEvValidateRowConditionRequest",
+            {"record", record.ShortDebugString()},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -688,7 +757,9 @@ private:
     }
 
     bool DriveToSendMessageToPartOfShards(TSetColumnConstraintOperationInfo& operationInfo) {
-        LOG_D("DriveToSendMessageToPartOfShards Start, id# " << BuildId);
+        YDB_LOG_DEBUG("DriveToSendMessageToPartOfShards Start",
+            {"buildId", BuildId},
+        );
 
         if (operationInfo.NeedToCalculateValidationShards) {
             operationInfo.NeedToCalculateValidationShards = false;
@@ -702,7 +773,9 @@ private:
         }) && operationInfo.DoneValidationShards.size() == operationInfo.ValidationShards.size();
 
         if (done) {
-            LOG_D("DriveToSendMessageToPartOfShards Done, id# " << BuildId);
+            YDB_LOG_DEBUG("DriveToSendMessageToPartOfShards Done",
+                {"buildId", BuildId},
+            );
         }
 
         return done;
@@ -719,14 +792,18 @@ public:
         auto& operationInfo = *operationInfoPtr->get();
 
         if (!operationInfo.DependencyTxIds.empty()) {
-            LOG_N("TTxProgressSetColumnConstraint: " << BuildId << ": waiting for dependencies");
+            YDB_LOG_NOTICE("TTxProgressSetColumnConstraint: waiting for dependencies",
+                {"buildId", BuildId},
+            );
             return true;
         }
 
-        LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId
-            << "; OperationState = " << ToString(operationInfo.OperationState)
-            << "; IsCancelled = " << operationInfo.IsCancelled
-            << "; ValidationFailed = " << operationInfo.ValidationFailed);
+        YDB_LOG_DEBUG("TTxProgressSetColumnConstraint::DoExecute",
+            {"buildId", BuildId},
+            {"operationState", ToString(operationInfo.OperationState)},
+            {"isCancelled", operationInfo.IsCancelled},
+            {"validationFailed", operationInfo.ValidationFailed},
+        );
 
         switch (operationInfo.OperationState) {
             case TSetColumnConstraintOperationInfo::EOperationState::Invalid: {
@@ -765,9 +842,13 @@ public:
                 // If cancelled, skip to Finishing to release locks without setting constraint
                 if (operationInfo.IsCancelled || operationInfo.ValidationFailed) {
                     if (operationInfo.IsCancelled) {
-                        LOG_I("TTxProgressSetColumnConstraint: operation cancelled in Validating, jumping to Finishing, id# " << BuildId);
+                        YDB_LOG_INFO("TTxProgressSetColumnConstraint: operation cancelled in Validating, jumping to Finishing",
+                            {"buildId", BuildId},
+                        );
                     } else {
-                        LOG_I("TTxProgressSetColumnConstraint: validation failed in Validating, jumping to Finishing, id# " << BuildId);
+                        YDB_LOG_INFO("TTxProgressSetColumnConstraint: validation failed in Validating, jumping to Finishing",
+                            {"buildId", BuildId},
+                        );
                     }
 
                     NIceDb::TNiceDb db(txc.DB);
@@ -832,13 +913,15 @@ public:
         TIndexBuildInfo* operationInfo, const std::exception& exc) override
     {
         if (!operationInfo) {
-            LOG_N("TTxProgressSetColumnConstraint: OnUnhandledException: id not found"
-                ", id# " << BuildId);
+            YDB_LOG_NOTICE("TTxProgressSetColumnConstraint: OnUnhandledException: id not found",
+                {"buildId", BuildId},
+            );
             return;
         }
-        LOG_E("TTxProgressSetColumnConstraint: OnUnhandledException"
-            ", id# " << BuildId
-            << ", exception: " << exc.what());
+        YDB_LOG_ERROR("TTxProgressSetColumnConstraint: OnUnhandledException",
+            {"buildId", BuildId},
+            {"exception", exc.what()},
+        );
     }
 };
 
@@ -876,3 +959,4 @@ ITransaction* TSchemeShard::CreateTxReplyValidateRowCondition(
 } // namespace NSchemeShard
 } // namespace NKikimr
 
+#undef YDB_LOG_THIS_FILE_COMPONENT

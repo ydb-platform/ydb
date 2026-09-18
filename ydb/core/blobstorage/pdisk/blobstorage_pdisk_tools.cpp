@@ -74,17 +74,29 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
                 ->DetectFileParameters(path, diskSizeBytes, isBlockDevice);
         }
     }
+    if (options.PhysicalChunkSizeBytes) {
+        const ui32 physicalChunkSizeBytes = *options.PhysicalChunkSizeBytes;
+        if (physicalChunkSizeBytes == 0 || physicalChunkSizeBytes % sectorSizeBytes != 0 ||
+                physicalChunkSizeBytes % NPDisk::ChunkSizeAlignment != 0) {
+            ythrow yexception() << "physicalChunkSizeBytes# " << physicalChunkSizeBytes <<
+                " must be non-zero and a multiple of sectorSizeBytes# " << sectorSizeBytes <<
+                " and of ChunkSizeAlignment# " << NPDisk::ChunkSizeAlignment << ", path# " << path.Quote();
+        }
+    }
+    // Space occupied by a chunk on the device; the user-accessible size is derived back from it by PDisk.
+    const ui32 chunkSizeBytes = options.PhysicalChunkSizeBytes.value_or(userAccessibleChunkSizeBytes);
+
     if (options.EnableSmallDiskOptimization && diskSizeBytes > 0 && diskSizeBytes < NPDisk::SmallDiskSizeBoundary &&
-        userAccessibleChunkSizeBytes > NPDisk::SmallDiskMaximumChunkSize) {
+        chunkSizeBytes > NPDisk::SmallDiskMaximumChunkSize) {
         throw NPDisk::TPDiskFormatBigChunkException() << "diskSizeBytes# " << diskSizeBytes <<
-            " userAccessibleChunkSizeBytes# " << userAccessibleChunkSizeBytes <<
+            " chunkSizeBytes# " << chunkSizeBytes <<
             " bool(sectorMap)# " << bool(options.SectorMap) <<
             " sectorMap->DeviceSize# " << (options.SectorMap ? options.SectorMap->DeviceSize : 0);
     }
     Y_VERIFY_S((options.EnableSmallDiskOptimization && diskSizeBytes < NPDisk::SmallDiskSizeBoundary) || (
-            diskSizeBytes > 0 && diskSizeBytes / userAccessibleChunkSizeBytes > 200),
+            diskSizeBytes > 0 && diskSizeBytes / chunkSizeBytes > 200),
             " diskSizeBytes# " << diskSizeBytes <<
-            " userAccessibleChunkSizeBytes# " << userAccessibleChunkSizeBytes <<
+            " chunkSizeBytes# " << chunkSizeBytes <<
             " bool(sectorMap)# " << bool(options.SectorMap) <<
             " sectorMap->DeviceSize# " << (options.SectorMap ? options.SectorMap->DeviceSize : 0)
         );
@@ -121,7 +133,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
     pDisk->WriteDiskFormat(diskSizeBytes, sectorSizeBytes, userAccessibleChunkSizeBytes, diskGuid,
         chunkKey, logKey, sysLogKey, mainKey, textMessage, options.IsErasureEncodeUserLog,
         options.TrimEntireDevice, options.Metadata, cfg->PlainDataChunks,
-        options.ForceRandomizeMagic);
+        options.ForceRandomizeMagic, options.PhysicalChunkSizeBytes);
 }
 
 bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, TPDiskInfo &outInfo,

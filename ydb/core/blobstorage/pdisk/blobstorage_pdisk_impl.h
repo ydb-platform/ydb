@@ -36,6 +36,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <list>
 #include <queue>
 
 #if defined(__linux__)
@@ -101,7 +102,8 @@ public:
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
     TDeque<TRequestBase*> PausedQueue;
-    std::set<std::unique_ptr<TYardInit>> PendingYardInits;
+    // Preserve arrival order among ready owners; busy owners may still be skipped.
+    std::list<std::unique_ptr<TYardInit>> PendingYardInits;
     ui64 LastFlushId = 0;
     bool IsQueuePaused = false;
     bool IsQueueStep = false;
@@ -346,10 +348,12 @@ public:
     void WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NWilson::TTraceId *traceId);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Common log writing
+    // firstLsnToKeep, when nonzero, asks for the RED exception only if the record really
+    // moves this owner's retention point forward; it is compared under StateMutex.
     bool PreallocateLogChunks(ui64 headedRecordSize, TOwner owner, ui64 lsn, EOwnerGroupType ownerGroupType,
-            bool isAllowedForSpaceRed);
+            bool isAllowedForSpaceRed, ui64 firstLsnToKeep = 0);
     bool AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, TOwner owner, ui64 lsn,
-            EOwnerGroupType ownerGroupType, bool isAllowedForSpaceRed);
+            EOwnerGroupType ownerGroupType, bool isAllowedForSpaceRed, ui64 firstLsnToKeep = 0);
     void LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit);
     void CommitLogChunks(TCommitLogChunks &req);
     void OnLogCommitDone(TLogCommitDone &req);
@@ -392,7 +396,8 @@ public:
     void ChunkUnlock(TChunkUnlock &evChunkUnlock);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reservation
-    TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason);
+    TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason,
+            bool forHousekeeping = false);
     void ChunkReserve(TChunkReserve &evChunkReserve);
     bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason);
     void ChunkForget(TChunkForget &evChunkForget);
@@ -411,7 +416,8 @@ public:
     void WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes, const ui64 &diskGuid,
             const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
             TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice,
-            std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic);
+            std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic,
+            std::optional<ui32> physicalChunkSizeBytes = std::nullopt);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
     void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str, NKikimrProto::EReplyStatus status = NKikimrProto::ERROR);
@@ -454,7 +460,7 @@ public:
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
     void ProcessLogReadQueue();
-    void ProcessYardInitSet();
+    void ProcessPendingYardInits();
     void TrimAllUntrimmedChunks();
     void ProcessChunkTrimQueue();
     void ClearQuarantineChunks();

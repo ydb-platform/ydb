@@ -198,6 +198,11 @@ public:
     // Update state according to the changed configuration.
     void UpdateHosts(THostMask added, THostMask removed, THostMask disabled);
 
+    // The slot of this host is marked removed in the local database: the host
+    // is out of the group and its copies are invisible to the restore, so the
+    // record stops waiting for it.
+    void OnHostSlotRemoved(THostIndex host);
+
     // Sets a lock that prohibits erasing the PBuffer.
     void LockPBuffer();
     // Removes the lock that prohibits erasing the PBuffer.
@@ -251,6 +256,7 @@ private:
 
     THostMask DesiredDDisks;
     THostMask Disabled;
+    THostMask DeadSlots;
     THostMask WriteRequested;
     THostMask WriteConfirmed;
     THostMask WriteFailed;

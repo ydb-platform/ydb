@@ -67,6 +67,10 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
+    // The slot of this host is marked removed in the local database. Runs on
+    // the vchunk's executor thread.
+    void OnHostSlotRemoved(THostIndex hostIndex);
+
     // If the current count of hosts in the config is less than the desired
     // host count, update the config and persist it in the tablet.
     void UpdateHostCount(size_t newHostCount);

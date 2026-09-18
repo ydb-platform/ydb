@@ -45,6 +45,11 @@ public:
     // Note. Fresh watermarks are not applying for exists DDisks.
     void UpdateConfig(const TVChunkConfig& vChunkConfig, bool isTouched);
 
+    // The slot is marked removed in the local database: the host is out of the
+    // group and its copies are invisible to the restore, so records stop
+    // waiting for it.
+    void MarkHostSlotRemoved(THostIndex host);
+
     void RestorePBuffer(
         TPBufferKey pBufferKey,
         TBlockRange16 range,
@@ -231,6 +236,7 @@ private:
 
     THostMask DesiredDDisks;
     THostMask DisabledHosts;
+    THostMask DeadSlots;
 
     // Inflight write requests.
     TInflightMap Inflight;

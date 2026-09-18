@@ -422,6 +422,16 @@ void TVChunk::OnWriteBlocksResponse(
     ScheduleCleaningUp();
 }
 
+void TVChunk::OnHostSlotRemoved(THostIndex hostIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    BlocksDirtyMap->MarkHostSlotRemoved(hostIndex);
+
+    UpdatePendingCounters();
+    DoErase(false);
+}
+
 void TVChunk::OnBelatedWriteBlocksResponse(
     std::shared_ptr<TWriteRequestBundle> bundle,
     THostMask completedWrites,

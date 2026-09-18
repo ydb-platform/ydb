@@ -1335,6 +1335,42 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             eraseHints.DebugPrint());
     }
 
+    Y_UNIT_TEST(ShouldWaitForDisabledHostUntilItsSlotIsRemoved)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        const auto range = TBlockRange16::WithLength(10, 10);
+
+        dirtyMap->RegisterInflightWrite(MakeKey(5), range);
+        dirtyMap->WriteFinished(
+            MakeKey(5),
+            range,
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            THostMask{});
+        FlushAll(dirtyMap->MakeFlushHint(1), *dirtyMap);
+
+        Y_UNUSED(dirtyMap->MakeEraseHint(1));
+        dirtyMap->EraseFinished(THostIndex{0}, {MakeKey(5)}, {});
+        dirtyMap->EraseFinished(THostIndex{1}, {MakeKey(5)}, {});
+
+        // H2 is disabled before it answered the erase. Its copy is still on
+        // the disk and the restore lists it, so the record keeps waiting.
+        vchunkConfig.DisableHost(THostIndex{2});
+        dirtyMap->UpdateConfig(vchunkConfig, true /* isTouched */);
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(5).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
+
+        // The slot is marked removed in the local database: the host is out of
+        // the group and its copies are invisible to the restore.
+        dirtyMap->MarkHostSlotRemoved(THostIndex{2});
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
+        UNIT_ASSERT(!dirtyMap->GetSafeBarrierForErase().has_value());
+    }
+
     Y_UNIT_TEST(ShouldEraseBelatedCopyBeforeForgettingRecord)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();

@@ -306,9 +306,9 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
         for (THostIndex host: val.GetEraseNeeded()) {
             val.RequestErase(host);
 
-            if (DisabledHosts.Get(host)) {
-                // We can't handle this situation properly. Barrier cleanup
-                // will help us.
+            if (DeadSlots.Get(host)) {
+                // The slot is out of the group: nothing to erase there and
+                // the restore does not list it.
                 val.ConfirmErase(host);
                 if (val.GetState() == TInflightInfo::EState::PBufferErased) {
                     RemovePBuffer(pBufferKey);
@@ -466,6 +466,34 @@ bool TBlocksDirtyMap::OnBelatedWrite(
         RemovePBuffer(pBufferKey);
     }
     return true;
+}
+
+void TBlocksDirtyMap::MarkHostSlotRemoved(THostIndex host)
+{
+    if (DeadSlots.Get(host)) {
+        return;
+    }
+
+    DeadSlots.Set(host);
+
+    TVector<TPBufferKey> erased;
+    Inflight.Enumerate(
+        [&](TInflightMap::TFindItem& item)
+        {
+            TInflightInfo& inflightItem = item.Value;
+            inflightItem.OnHostSlotRemoved(host);
+            if (inflightItem.GetState() == TInflightInfo::EState::PBufferErased)
+            {
+                erased.push_back(item.Key);
+            }
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+
+    for (auto pBufferKey: erased) {
+        ReadyToErase.erase(pBufferKey);
+        ReadyToFlush.erase(pBufferKey);
+        RemovePBuffer(pBufferKey);
+    }
 }
 
 void TBlocksDirtyMap::UpdateWatermarkDebugOnly(

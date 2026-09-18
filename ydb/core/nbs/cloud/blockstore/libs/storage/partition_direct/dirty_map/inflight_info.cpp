@@ -34,6 +34,7 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , State(other.State)
     , DesiredDDisks(other.DesiredDDisks)
     , Disabled(other.Disabled)
+    , DeadSlots(other.DeadSlots)
     , WriteRequested(other.WriteRequested)
     , WriteConfirmed(other.WriteConfirmed)
     , WriteFailed(other.WriteFailed)
@@ -380,6 +381,23 @@ void TInflightInfo::UpdateHosts(
     CheckInvariants();
 }
 
+void TInflightInfo::OnHostSlotRemoved(THostIndex host)
+{
+    if (DeadSlots.Get(host)) {
+        return;
+    }
+
+    DeadSlots.Set(host);
+
+    if (State == EState::PBufferOrphaned) {
+        MaybeSettleOrphan();
+        return;
+    }
+    if (State == EState::PBufferFlushed || State == EState::PBufferErasing) {
+        MaybeAdvanceToErased();
+    }
+}
+
 void TInflightInfo::LockPBuffer()
 {
     Y_ABORT_UNLESS(
@@ -428,6 +446,7 @@ TString TInflightInfo::DebugPrint(TInstant now) const
     result << " " << FormatDuration(now - StartAt) << ", " << ToString(State)
            << ", locks:" << PBuffersLockCount << ", pgen:" << PersistGeneration
            << ", dd:" << DesiredDDisks.Print() << ", d:" << Disabled.Print()
+           << ", dead:" << DeadSlots.Print()
            << ", wr:" << WriteRequested.Print()
            << ", wc:" << WriteConfirmed.Print()
            << ", wf:" << WriteFailed.Print()
@@ -572,7 +591,7 @@ void TInflightInfo::CheckInvariants() const
 
     if (State == EState::PBufferErased) {
         Y_ABORT_UNLESS(
-            WriteRequested.Exclude(Disabled).Exclude(EraseConfirmed).Empty());
+            WriteRequested.Exclude(DeadSlots).Exclude(EraseConfirmed).Empty());
         Y_ABORT_UNLESS(PBuffersLockCount == 0);
     }
 }
@@ -594,7 +613,8 @@ void TInflightInfo::MaybeAdvanceToErased()
     Y_ABORT_UNLESS(
         State == EState::PBufferFlushed || State == EState::PBufferErasing);
 
-    if (EraseConfirmed.Exclude(Disabled) != WriteRequested.Exclude(Disabled)) {
+    if (EraseConfirmed.Exclude(DeadSlots) != WriteRequested.Exclude(DeadSlots))
+    {
         return;
     }
 
@@ -619,10 +639,13 @@ void TInflightInfo::MaybeSettleOrphan()
 
 bool TInflightInfo::CanForget() const
 {
-    const auto answered = WriteConfirmed.Include(WriteFailed).Include(Disabled);
+    // A disabled host still answers later and its disk is listed by the
+    // restore, so only a removed slot releases the record.
+    const auto answered =
+        WriteConfirmed.Include(WriteFailed).Include(DeadSlots);
 
     return WriteRequested.Exclude(answered).Empty() &&
-           WriteRequested.Exclude(Disabled).Exclude(EraseConfirmed).Empty();
+           WriteRequested.Exclude(DeadSlots).Exclude(EraseConfirmed).Empty();
 }
 
 void TInflightInfo::MaybeQueryErase()
@@ -638,7 +661,7 @@ void TInflightInfo::MaybeQueryErase()
         State == EState::PBufferOrphaned);
 
     const auto hostsToErase =
-        WriteRequested.Exclude(Disabled).Exclude(EraseRequested);
+        WriteRequested.Exclude(DeadSlots).Exclude(EraseRequested);
     if (!hostsToErase.Empty()) {
         ReadyQueue->Register(*this, IReadyQueue::EQueueType::Erase);
     }

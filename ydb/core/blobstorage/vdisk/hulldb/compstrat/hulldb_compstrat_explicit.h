@@ -109,6 +109,7 @@ namespace NKikimr::NHullComp {
             }
 
             Task->SetupAction(ActCompactSsts);
+            Task->SelectStrategy = ESelectStrategy::Explicit;
             auto& compact = Task->CompactSsts;
             compact.TargetLevel = *levelOfInterest;
             if (!*levelOfInterest) {

@@ -593,6 +593,9 @@ namespace NKikimr {
                 EAction action = BalanceLevelsTree();
                 if (action != ActNothing) {
                     Task->SetupAction(action);
+                    Task->SelectStrategy = Task->IsFullCompaction
+                        ? ESelectStrategy::BalanceFull
+                        : ESelectStrategy::BalanceLevel;
                 }
 
                 TInstant finishTime(TAppData::TimeProvider->Now());

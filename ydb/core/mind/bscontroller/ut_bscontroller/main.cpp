@@ -2116,6 +2116,79 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         });
     }
 
+    Y_UNIT_TEST(PendingDecommitGroupsDoNotIncreaseCreationReserve) {
+        TEnvironmentSetup env(1, 1);
+        TFinalizer finalizer(env);
+        bool activeZone;
+        env.Prepare({}, [](TTestActorRuntime&) {}, activeZone);
+
+        NKikimrBlobStorage::TConfigRequest settingsRequest;
+        auto* settings = settingsRequest.AddCommand()->MutableUpdateSettings();
+        settings->AddDefaultMaxSlots(11);
+        settings->AddGroupReserveMin(1);
+        settings->AddGroupReservePartPPM(100000);
+        auto response = env.Invoke(settingsRequest);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+        NKikimrBlobStorage::TConfigRequest createRequest;
+        env.DefineBox(1, "box", {{"/dev/disk1", NKikimrBlobStorage::SSD, false, false, 0}},
+                      env.GetNodes(), createRequest);
+        env.DefineStoragePool(1, 1, "pool", 5, NKikimrBlobStorage::SSD, {}, createRequest, "none");
+        const size_t baseConfigIndex = createRequest.CommandSize();
+        createRequest.AddCommand()->MutableQueryBaseConfig();
+        response = env.Invoke(createRequest);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+        const auto baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(baseConfig.GroupSize(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(baseConfig.VSlotSize(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(baseConfig.PDiskSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(baseConfig.GetPDisk(0).GetExpectedSlotCount(), 11);
+
+        auto extendPool = [&](ui32 numGroups) {
+            NKikimrBlobStorage::TConfigRequest request;
+            env.DefineStoragePool(1, 1, "pool", numGroups, NKikimrBlobStorage::SSD, {}, request, "none", 1);
+            request.AddCommand()->MutableQueryBaseConfig();
+            return env.Invoke(request);
+        };
+
+        auto assertReserveFailure = [](const NKikimrBlobStorage::TConfigResponse& response) {
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_C(response.GetErrorDescription().Contains("group reserve constraint hit"),
+                          response.DebugString());
+        };
+
+        // With five physical groups, six free slots allow only three more groups.
+        assertReserveFailure(extendPool(9));
+
+        NKikimrBlobStorage::TConfigRequest decommitRequest;
+        auto* decommit = decommitRequest.AddCommand()->MutableDecommitGroups();
+        decommit->SetDatabase("/dc-1");
+        for (ui32 i = 0; i < 4; ++i) {
+            decommit->AddGroupIds(baseConfig.GetGroup(i).GetGroupId());
+        }
+        decommitRequest.AddCommand()->MutableQueryBaseConfig();
+        response = env.Invoke(decommitRequest);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+        const auto& decommittingConfig = response.GetStatus(1).GetBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(decommittingConfig.GroupSize(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(decommittingConfig.VSlotSize(), 5);
+        ui32 pendingGroups = 0;
+        for (const auto& group : decommittingConfig.GetGroup()) {
+            pendingGroups += group.GetVirtualGroupInfo().GetDecommitStatus() == NKikimrBlobStorage::TGroupDecommitStatus::PENDING;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pendingGroups, 4);
+
+        // PENDING groups still occupy slots, but only physical groups contribute to the reserve.
+        assertReserveFailure(extendPool(10));
+        response = extendPool(9);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        const auto& expandedConfig = response.GetStatus(1).GetBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(expandedConfig.GroupSize(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(expandedConfig.VSlotSize(), 9);
+    }
+
     Y_UNIT_TEST(UnsupportedCommandError) {
         TEnvironmentSetup env(1, 1);
         RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {

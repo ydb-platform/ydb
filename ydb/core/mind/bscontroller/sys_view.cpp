@@ -282,6 +282,7 @@ public:
             auto erasureGroup = pdiskFilterGroup->GetSubgroup("erasureSpecies", entry.GetErasureSpecies());
 
             erasureGroup->GetCounter("CurrentGroupsCreated")->Set(entry.GetCurrentGroupsCreated());
+            erasureGroup->GetCounter("CurrentVirtualGroupsCreated")->Set(entry.GetCurrentVirtualGroupsCreated());
             erasureGroup->GetCounter("CurrentAllocatedSize")->Set(entry.GetCurrentAllocatedSize());
             erasureGroup->GetCounter("CurrentAvailableSize")->Set(entry.GetCurrentAvailableSize());
             erasureGroup->GetCounter("AvailableGroupsToCreate")->Set(entry.GetAvailableGroupsToCreate());
@@ -410,6 +411,9 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
     info->SetErasureSpeciesV2(TErasureType::ErasureSpeciesName(groupInfo->ErasureSpecies));
     info->SetBoxId(std::get<0>(groupInfo->StoragePoolId));
     info->SetStoragePoolId(std::get<1>(groupInfo->StoragePoolId));
+    if (groupInfo->VirtualGroupState) {
+        info->SetVirtualGroupState(*groupInfo->VirtualGroupState);
+    }
     if (groupInfo->EncryptionMode) {
         info->SetEncryptionMode(*groupInfo->EncryptionMode);
     }

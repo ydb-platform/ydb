@@ -125,6 +125,11 @@ void RenderOverviewInfo(
                         << "(region) * " << VChunkPerRegionCount << "(vpr)");
                 RenderValue(
                     str,
+                    "Touched VChunks",
+                    TStringBuilder() << tabletInfo.TouchedVChunkCount << " / "
+                                     << totalVChunkCount);
+                RenderValue(
+                    str,
                     "Disk size",
                     TStringBuilder()
                         << FormatByteSize(

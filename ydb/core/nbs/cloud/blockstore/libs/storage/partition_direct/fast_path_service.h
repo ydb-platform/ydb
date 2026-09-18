@@ -75,6 +75,7 @@ public:
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
         const TVChunkConfigs& vChunkConfigs,
+        ITouchedProvider* touchedProvider,
         const TDirtyMapStateProtos& dirtyMapStates,
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
@@ -121,6 +122,8 @@ public:
     TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override;
+
+    TPersistResultFuture SetVChunkTouched(ui32 vChunkIndex) override;
 
     void QueryAddHost(
         size_t directBlockGroupId,

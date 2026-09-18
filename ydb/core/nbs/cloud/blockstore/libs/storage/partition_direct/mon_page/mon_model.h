@@ -62,6 +62,7 @@ struct TTabletInfo
     ui64 BlockCount = 0;
     ui64 VChunkSize = 0;
     ui32 VolumeDirectBlockGroupCount = 0;
+    size_t TouchedVChunkCount = 0;
     TString DiskId;
     TString State;   // "INIT" / "WORK"
 };

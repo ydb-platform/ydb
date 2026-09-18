@@ -181,7 +181,7 @@ void TVChunkConfig::AppendHost()
     ++HostCount;
 }
 
-TString TVChunkConfig::EvacuateHost(THostIndex hostIndex)
+TString TVChunkConfig::EvacuateHost(THostIndex hostIndex, bool fresh)
 {
     DisableHost(hostIndex);
 
@@ -202,7 +202,7 @@ TString TVChunkConfig::EvacuateHost(THostIndex hostIndex)
                                 << PrintHostIndex(hostIndex);
     }
 
-    PromoteHost(to);
+    PromoteHost(to, fresh);
     Y_ABORT_UNLESS(EnabledHosts.Get(to) == true);
 
     return TStringBuilder() << PrintHostIndex(hostIndex) << " demoted, "
@@ -223,16 +223,18 @@ TString TVChunkConfig::DemoteHost(THostIndex hostIndex)
     return {};
 }
 
-void TVChunkConfig::PromoteHost(THostIndex hostIndex)
+void TVChunkConfig::PromoteHost(THostIndex hostIndex, bool fresh)
 {
     PBufferHosts.SetRole(hostIndex, EHostRole::Primary);
     if (DDiskHosts.GetRole(hostIndex) != EHostRole::Primary) {
         DDiskHosts.SetRole(hostIndex, EHostRole::Primary);
-        Watermarks[hostIndex] = 0;
+        if (fresh) {
+            Watermarks[hostIndex] = 0;
+        }
     }
 }
 
-TString TVChunkConfig::PromoteHostIfNeeded()
+TString TVChunkConfig::PromoteHostIfNeeded(bool fresh)
 {
     TStringBuilder result;
     auto enabledDDisks = GetEnabledDDisks();
@@ -249,7 +251,7 @@ TString TVChunkConfig::PromoteHostIfNeeded()
 
     result << "Promote " << PrintHostIndex(hostToPromote) << " "
            << DebugPrint();
-    PromoteHost(hostToPromote);
+    PromoteHost(hostToPromote, fresh);
     return result;
 }
 

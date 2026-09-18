@@ -100,6 +100,7 @@ TVector<TRegionPtr> CreateRegions(
     ui32 blockSize,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
     const TVChunkConfigs& vChunkConfigs,
+    ITouchedProvider* touchedProvider,
     const TDirtyMapStateProtos& dirtyMapStates,
     const TStorageConfig& storageConfig)
 {
@@ -116,6 +117,7 @@ TVector<TRegionPtr> CreateRegions(
             i,
             directBlockGroups,
             vChunkConfigs,
+            touchedProvider->GetTouchedVChunks(i * VChunkPerRegionCount),
             dirtyMapStates,
             storageConfig.GetSyncRequestsBatchSize(),
             blockSize,
@@ -138,6 +140,7 @@ TFastPathService::TFastPathService(
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
     const TVChunkConfigs& vChunkConfigs,
+    ITouchedProvider* touchedProvider,
     const TDirtyMapStateProtos& dirtyMapStates,
     TStorageConfigPtr storageConfig,
     ISchedulerPtr scheduler,
@@ -161,6 +164,7 @@ TFastPathService::TFastPathService(
           blockSize,
           DirectBlockGroups,
           vChunkConfigs,
+          touchedProvider,
           dirtyMapStates,
           *StorageConfig))
     , LogTitle(
@@ -448,6 +452,16 @@ TPersistResultFuture TFastPathService::UpdateDirtyMapState(
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>(
             vChunkIndex,
             std::move(state));
+    auto result = event->UpdateCompleted.GetFuture();
+    ActorSystem->Send(PartitionActorId, event.release());
+    return result;
+}
+
+TPersistResultFuture TFastPathService::SetVChunkTouched(ui32 vChunkIndex)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvSetVChunkTouched>(
+            vChunkIndex);
     auto result = event->UpdateCompleted.GetFuture();
     ActorSystem->Send(PartitionActorId, event.release());
     return result;

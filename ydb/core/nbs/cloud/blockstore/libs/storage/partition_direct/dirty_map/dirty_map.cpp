@@ -22,6 +22,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 TBlocksDirtyMap::TBlocksDirtyMap(
     TArenaAllocatorPoolPtr arenaAllocatorPool,
     const TVChunkConfig& vChunkConfig,
+    bool isTouched,
+    const TDirtyMapStateProto& state,
     ui32 blockSize,
     ui16 blockCount)
     : ArenaAllocatorPool(std::move(arenaAllocatorPool))
@@ -37,7 +39,13 @@ TBlocksDirtyMap::TBlocksDirtyMap(
         DDiskStates.emplace_back(ArenaAllocator, blockCount);
     }
 
-    UpdateConfig(vChunkConfig);
+    UpdateConfig(vChunkConfig, isTouched);
+
+    size_t ddisk = 0;   // TODO (drbasic). Reliable ddisk matching.
+    for (const auto& ddiskState: state.GetDDiskStates()) {
+        DDiskStates[ddisk].Load(ddiskState);
+        ++ddisk;
+    }
 }
 
 TBlocksDirtyMap::~TBlocksDirtyMap()
@@ -51,16 +59,9 @@ TBlocksDirtyMap::~TBlocksDirtyMap()
         });
 }
 
-void TBlocksDirtyMap::Load(const TDirtyMapStateProto& proto)
-{
-    size_t ddisk = 0;   // TODO (drbasic). Reliable ddisk matching.
-    for (const auto& ddiskState: proto.GetDDiskStates()) {
-        DDiskStates[ddisk].Load(ddiskState);
-        ++ddisk;
-    }
-}
-
-void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
+void TBlocksDirtyMap::UpdateConfig(
+    const TVChunkConfig& vChunkConfig,
+    bool isTouched)
 {
     ResizeHosts(vChunkConfig.GetHostCount());
 
@@ -73,7 +74,8 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
     // When a new disk appears, it doesn't have all the data. Need to set its
     // watermark level.
     for (auto indx: added) {
-        const auto watermark = vChunkConfig.GetWatermark(indx);
+        const auto watermark =
+            isTouched ? vChunkConfig.GetWatermark(indx) : std::nullopt;
         DDiskStates[indx].Init(
             this,
             BlockCount,
@@ -756,7 +758,7 @@ void TBlocksDirtyMap::DataFromPBufferReleased(
 
 void TBlocksDirtyMap::OnBehindAheadChanged()
 {
-    ++BehindAheadGeneration;
+    ++StateGeneration;
 }
 
 bool TBlocksDirtyMap::NeedFlush() const
@@ -771,30 +773,33 @@ bool TBlocksDirtyMap::NeedErase() const
 
 bool TBlocksDirtyMap::NeedPersist() const
 {
-    return BehindAheadGeneration > PersistedGeneration;
+    const bool needPersistAheadBehind =
+        StateGeneration > PersistedStateGeneration;
+    return needPersistAheadBehind;
 }
 
 TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
 {
     TDirtyMapStateProto result;
-    result.SetStateGeneration(GetCurrentGeneration());
+
     for (const auto& ddiskState: DDiskStates) {
         ddiskState.Save(result.AddDDiskStates());
     }
+
     return result;
 }
 
 void TBlocksDirtyMap::StatePersisted(ui32 persistGeneration)
 {
-    Y_ABORT_UNLESS(persistGeneration > PersistedGeneration);
-    Y_ABORT_UNLESS(persistGeneration <= BehindAheadGeneration);
+    Y_ABORT_UNLESS(persistGeneration > PersistedStateGeneration);
+    Y_ABORT_UNLESS(persistGeneration <= StateGeneration);
 
-    PersistedGeneration = persistGeneration;
+    PersistedStateGeneration = persistGeneration;
 }
 
 ui32 TBlocksDirtyMap::GetCurrentGeneration() const
 {
-    return BehindAheadGeneration;
+    return StateGeneration;
 }
 
 void TBlocksDirtyMap::Trim()
@@ -979,8 +984,8 @@ TString TBlocksDirtyMap::DebugPrintBehind() const
 TString TBlocksDirtyMap::DebugPrintAheadBehindBrief() const
 {
     TStringBuilder result;
-    result << "gen:" << GetCurrentGeneration() << "/" << PersistedGeneration
-           << " ";
+    result << "gen:" << GetCurrentGeneration() << "/"
+           << PersistedStateGeneration << " ";
     for (THostIndex h = 0; h < GetHostCount(); ++h) {
         auto brief = DDiskStates[h].DebugPrintAheadBehindBrief();
         if (brief) {
@@ -1138,13 +1143,13 @@ bool TBlocksDirtyMap::CheckEraseAbility(
     TBlockRange16 range,
     TInflightInfo& inflightInfo)
 {
-    if (BehindAheadGeneration == 0) {
+    if (StateGeneration == 0) {
         // There is not a single red block.
         return true;
     }
 
     if (inflightInfo.GetPersistGeneration() &&
-        inflightInfo.GetPersistGeneration() <= PersistedGeneration)
+        inflightInfo.GetPersistGeneration() <= PersistedStateGeneration)
     {
         // Red blocks already persisted. Can erase.
         return true;
@@ -1167,7 +1172,7 @@ bool TBlocksDirtyMap::CheckEraseAbility(
         // The red blocks from this inflightInfo are already in the current
         // generation. Start waiting for data with the current or newer
         // generation to be persisted.
-        inflightInfo.SetPersistGeneration(BehindAheadGeneration);
+        inflightInfo.SetPersistGeneration(StateGeneration);
     }
     return false;
 }

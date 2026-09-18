@@ -13,6 +13,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/bitmap.h>
 #include <util/generic/set.h>
 
 #include <algorithm>
@@ -25,6 +26,18 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 using EChaosMode = TChaosConfig::TChaosNodeConfig::EChaosMode;
+
+// Provides an empty touched-vchunk mask for fast-path service tests.
+class TEmptyTouchedProvider final: public ITouchedProvider
+{
+public:
+    [[nodiscard]] TRegionVChunks GetTouchedVChunks(
+        ui32 startVChunkIndex) const override
+    {
+        Y_UNUSED(startVChunkIndex);
+        return {};
+    }
+};
 
 // Records node state changes issued by TFastPathService for one DBG.
 class TChaosInjectorControlMock final: public NTransport::IChaosInjectorControl
@@ -105,6 +118,8 @@ struct TFixture: public NUnitTest::TBaseFixture
             ChaosInjectorControls.push_back(std::move(control));
         }
 
+        TEmptyTouchedProvider touchedProvider;
+
         return std::make_shared<TFastPathService>(
             Runtime->GetActorSystem(0),
             NActors::TActorId(),
@@ -117,6 +132,7 @@ struct TFixture: public NUnitTest::TBaseFixture
             std::move(directBlockGroups),
             std::move(chaosInjectorControls),
             TVChunkConfigs{},
+            &touchedProvider,
             TDirtyMapStateProtos{},
             std::make_shared<TStorageConfig>(std::move(storageServiceConfig)),
             nullptr,

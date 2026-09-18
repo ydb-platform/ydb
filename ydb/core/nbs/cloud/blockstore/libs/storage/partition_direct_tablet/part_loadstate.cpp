@@ -72,14 +72,13 @@ TVChunkConfig MakeCompactedConfig(
         std::move(watermarks));
 }
 
-// The dirty map matches its entries to hosts by position (see
-// TBlocksDirtyMap::Load), so it is compacted by the same pass.
+// The dirty map constructor matches persisted entries to hosts by position,
+// so the state is compacted by the same pass.
 TDirtyMapStateProto MakeCompactedDirtyMapState(
     const TDirtyMapStateProto& state,
     THostMask deadSlots)
 {
     TDirtyMapStateProto result;
-    result.SetStateGeneration(state.GetStateGeneration());
     for (size_t slot = 0; slot < state.DDiskStatesSize(); ++slot) {
         if (!deadSlots.Get(static_cast<THostIndex>(slot))) {
             *result.AddDDiskStates() = state.GetDDiskStates(slot);
@@ -121,6 +120,7 @@ bool TPartitionActor::PrepareLoadState(
         db.ReadDirectBlockGroupsConnections(args.DirectBlockGroupsConnections),
         db.ReadAllVChunkConfigs(args.VChunkConfigs),
         db.ReadAllDirtyMapStates(args.DirtyMapStates),
+        db.ReadAllTouchedVChunks(args.TouchedVChunks),
         db.ReadAddHostInProgress(args.AddHostInProgress),
         db.ReadRemoveHostInProgress(args.RemoveHostInProgress),
     };
@@ -193,6 +193,7 @@ void TPartitionActor::CompleteLoadState(
 
         if (args.DirectBlockGroupsConnections.Defined()) {
             DDiskBlockGroupAllocated = true;
+            TouchedVChunks = std::move(args.TouchedVChunks);
             Start(
                 ctx,
                 std::move(*args.DirectBlockGroupsConnections),

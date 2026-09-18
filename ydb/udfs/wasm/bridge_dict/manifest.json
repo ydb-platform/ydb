@@ -1,4 +1,6 @@
 {
+  "module_type": "module",
+  "module_kind": "wasm",
   "module_name": "BridgeDict",
   "calling_convention": "bridge",
   "module_extension": "wasm",

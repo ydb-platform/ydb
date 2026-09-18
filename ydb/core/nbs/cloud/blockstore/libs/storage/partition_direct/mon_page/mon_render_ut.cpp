@@ -21,6 +21,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
                  .BlockCount = 16384,
                  .VChunkSize = 1_MB,
                  .VolumeDirectBlockGroupCount = 32,
+                 .TouchedVChunkCount = 17,
                  .DiskId = "vol-1",
                  .State = "WORK"},
             .FastPathServiceInfo = TFastPathServiceInfo{.LsnCounter = 100},
@@ -87,7 +88,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             html,
             "Volume DirectBlockGroup Count</td><td>32</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Last safe barrier");
         UNIT_ASSERT_STRING_CONTAINS(html, "vol-1");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
@@ -99,6 +99,9 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "VChunk count</td><td>64 = 2(region) * 32(vpr)");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "Touched VChunks</td><td>17 / 64</td>");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "Disk size</td><td>64.00 MiB = 4.00 KiB * 16384(block) = "
@@ -354,7 +357,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             /*vChunkIndex*/ 17,
             /*hostCount*/ 5,
             /*primaryCount*/ 3);
-        config.PromoteHost(3);
+        config.PromoteHost(3, true);
         config.SetWatermark(3, 42 * BlockSize);
         dbg.VChunkConfigs.emplace(config.GetVChunkIndex(), std::move(config));
 

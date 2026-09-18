@@ -28,7 +28,7 @@ private:
     }
 
     virtual std::shared_ptr<NArrow::TSimpleRow> DoGetSourceStartPK(const std::shared_ptr<NCommon::IDataSource>& source) const override {
-        return std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch());
+        return std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetFirstPK());
     }
 
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override {

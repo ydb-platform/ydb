@@ -321,6 +321,32 @@ The initial draft uses the `kv` upsert workload, one thread per CLI, 4 vCPU
 per static/dynamic node, and no verification repetition. These are editable
 starting values, not recommendations for a particular machine.
 
+In the **Physical** view, select a static node and use **Add disk** to configure
+individual SectorMap, file, block-device or PARTLABEL entries. Each entry specifies
+SSD/HDD media; SectorMap and file entries also specify size in GiB. Paths belong
+to the node's host; PARTLABEL stores a partition label, not a device path.
+Saving a template never creates files or opens/formats devices. Legacy SectorMap
+count/size settings migrate to an explicit disk list. Identical paths on one host
+are rejected, including PARTLABEL and its explicit `/dev/disk/by-partlabel/` path.
+Other aliases require host-side device identity checks and are not resolved by
+template validation. Execution supports all four sources with SSD or HDD media.
+Temporary files use `temporary: true` without a path; each generation creates its
+own files in `file-disks/<session-id>/` next to the history database and removes
+them after processes stop, including cancellation and recovery cleanup.
+Persistent files use `name` and reside directly in `file-disks/`; they remain after
+cleanup. Existing files must have the configured size. Existing files and block
+devices require the run-level `reset-disks: true` permission: YDB metadata is
+cleared before each cluster start, including search repetitions. Use only dedicated
+benchmark disks; their previous data is lost. New files need no reset permission.
+Workers reject mounted devices, active holders, duplicate device identities and
+overlapping disk/partition assignments, and hold generation-scoped disk locks.
+This does not replace reserving the devices against unrelated external workloads.
+Disks appear inside their storage node in Physical. Drag a disk onto another
+static node to reassign it within the same physical host.
+Individual disk cross-host moves are rejected. Whole nodes may move between hosts
+when all their disks are SectorMap or temporary files: configuration moves, not data. Empty
+storage nodes may be saved while editing; execution requires at least one disk.
+
 The legacy single-generator format uses the YAML editor. Its
 `cluster-template` field contains the complete placement snapshot, and `tenant`
 selects a database from that snapshot. `workload`, `actor-system`, `client`,
@@ -329,7 +355,7 @@ Actor-system vCPU is independent of affinity. Binary selection, node counts,
 logical locations, tenant assignments and CPU masks come from the template;
 there is no separate run-level geometry or affinity override.
 
-Supported legacy scope is SectorMap SSD storage with erasure `NONE`, one CLI
+Supported legacy scope is storage with erasure `NONE`, one CLI
 generator, at least one static node, and a target tenant with dynamic nodes.
 Other tenant definitions are allowed, but only the selected tenant receives
 the workload. Geometry is fixed during search and verification. This is not a

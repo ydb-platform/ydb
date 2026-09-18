@@ -22,12 +22,15 @@ def execution_template(value, host_ids, target_tenant, multiple_cli=False):
     if not any(node["role"] == "dynamic" and node["tenant"] == target_tenant for node in nodes):
         raise BenchmarkError("The workload target tenant has no dynamic nodes")
     for node in nodes:
+        if node["role"] == "static" and not node["disks"]:
+            raise BenchmarkError("Static node {} requires at least one disk before execution".format(node["name"]))
         if node["role"] != "cli" and not all(node["location"].values()):
             raise BenchmarkError("Node {} requires a DC and rack before execution".format(node["name"]))
         if node["role"] == "dynamic" and not node["tenant"]:
             raise BenchmarkError("Dynamic node {} requires a tenant before execution".format(node["name"]))
-    if any(tenant["storage_kind"] != "ssd" for tenant in template["tenants"]):
-        raise BenchmarkError("Distributed YDB SectorMap storage currently supports SSD tenants only")
+    media = {disk["media"] for node in nodes if node["role"] == "static" for disk in node["disks"]}
+    if any(tenant["storage_kind"] not in media for tenant in template["tenants"]):
+        raise BenchmarkError("Tenant storage kind has no matching disks")
     return template
 
 

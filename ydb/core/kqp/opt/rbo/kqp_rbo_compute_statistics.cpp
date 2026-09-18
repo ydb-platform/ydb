@@ -348,6 +348,10 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Statistics = GetInput()->Props.Statistics;
     Props.Cost = GetInput()->Props.Cost;
 
+    if (PartiallyPushedDown) {
+        return;
+    }
+
     auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetInput()->Props, true, ctx.TypeCtx));
     auto lambda = TCoLambda(FilterExpr.Node);
     double selectivity = TPredicateSelectivityComputer(inputStats, &Props.Metadata->ColumnLineage).Compute(lambda.Body());

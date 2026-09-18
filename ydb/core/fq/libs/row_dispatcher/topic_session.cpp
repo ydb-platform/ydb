@@ -154,6 +154,7 @@ private:
             , UseSsl(ev->Get()->Record.GetSource().GetUseSsl())
             , UseActorSystemThreads(ev->Get()->Record.GetSource().GetUseActorSystemThreadsInTopicClient())
             , ReadActorId(ev->Sender)
+            , Generation(ev->Cookie)
             , InFlightMemory(self.Config.GetMemoryQuotaManager(), "InFlightMemory", GetReadGroupSubgroup(counters, self.TopicPath, readGroup, &ev->Get()->Record.GetSource()))
             , Counters(counters)
         {
@@ -221,7 +222,7 @@ private:
 
         void OnClientError(TStatus status) override {
             if (Self) {
-                Self->SendSessionError(ReadActorId, status, false);
+                Self->SendSessionError(ReadActorId, status, false, Generation);
             }
         }
 
@@ -290,6 +291,7 @@ private:
         const bool UseSsl;
         const bool UseActorSystemThreads;
         const TActorId ReadActorId;
+        const ui64 Generation;
         TDuration ReconnectPeriod;
 
         // State
@@ -428,7 +430,7 @@ private:
     void SendStatistics();
     bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     TMaybe<ui64> GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings);
-    void SendSessionError(TActorId readActorId, TStatus status, bool isFatalError);
+    void SendSessionError(TActorId readActorId, TStatus status, bool isFatalError, ui64 generation);
     void RestartSessionIfOldestClient(const TClientsInfo& info);
     void RefreshParsers();
 
@@ -815,7 +817,17 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
         {"logPrefix", LogPrefix});
 
     std::optional<ui64> minOffset;
-    for (const auto& [actorId, info] : Self.Clients) {
+    for (const auto& [_, info] : Self.Clients) {
+        if (info->NextMessageOffset && *info->NextMessageOffset > event.GetEndOffset()) {
+            Self.ThrowFatalError(TStatus::Fail(
+                EStatusId::BAD_REQUEST,
+                TStringBuilder() << "Requested offsets do not exist in the topic \"" << Self.TopicPath
+                    << "\": offset " << *info->NextMessageOffset << " for partition " << Self.PartitionId
+                    << " exceeds the end offset " << event.GetEndOffset()
+                    << ". The topic may have been recreated. Recreate or restart the streaming query \""
+                    << info->QueryId << "\"."));
+            return;
+        }
         if (!minOffset || (info->NextMessageOffset && *info->NextMessageOffset < *minOffset)) {
             minOffset = info->NextMessageOffset;
         }
@@ -932,7 +944,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
         {"readActorId", info.ReadActorId},
         {"messagesSize", event->Record.MessagesSize()});
     info.ProcessedNextMessageOffset = event->Record.GetNextMessageOffset();
-    Send(RowDispatcherActorId, event.release());
+    Send(RowDispatcherActorId, event.release(), 0, info.Generation);
     info.FilteredStat.Add(queuedBytes, eventsSize);
     info.FilteredDataRate->Add(queuedBytes);
     SendDataArrived(info);
@@ -953,6 +965,7 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
             Metrics.RestartSessionByOffsets->Inc();
             ++RestartSessionByOffsets;
             info.RestartSessionByOffsetsByQuery->Inc();
+            RefreshParsers();
             StopReadSession();
         }
     }
@@ -999,7 +1012,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     }
 
     if (auto status = formatIt->second->AddClient(clientInfo); status.IsFail()) {
-        SendSessionError(clientInfo->ReadActorId, status, false);
+        SendSessionError(clientInfo->ReadActorId, status, false, clientInfo->Generation);
         return;
     }
 
@@ -1010,7 +1023,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 
 void TTopicSession::HandleError(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     Y_ENSURE(ErrorStatus, "ErrorStatus should be set in ErrorState");
-    SendSessionError(ev->Sender, ErrorStatus.GetRef(), true);
+    SendSessionError(ev->Sender, ErrorStatus.GetRef(), true, ev->Cookie);
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
@@ -1095,7 +1108,7 @@ void TTopicSession::FatalError(const TStatus& status) {
         YDB_LOG_DEBUG("Send TEvSessionError",
             {"logPrefix", LogPrefix},
             {"readActorId", readActorId});
-        SendSessionError(readActorId, status, true);
+        SendSessionError(readActorId, status, true, info->Generation);
     }
     StopReadSession();
     ErrorStatus = status;
@@ -1108,7 +1121,7 @@ void TTopicSession::ThrowFatalError(const TStatus& status) {
     ythrow yexception() << "FatalError: " << status.GetErrorMessage();
 }
 
-void TTopicSession::SendSessionError(TActorId readActorId, TStatus status, bool isFatalError) {
+void TTopicSession::SendSessionError(TActorId readActorId, TStatus status, bool isFatalError, ui64 generation) {
     YDB_LOG_WARN("SendSessionError",
         {"logPrefix", LogPrefix},
         {"readActorId", readActorId},
@@ -1122,7 +1135,7 @@ void TTopicSession::SendSessionError(TActorId readActorId, TStatus status, bool 
     issue.set_severity(NYql::TSeverityIds::S_INFO);
     event->ReadActorId = readActorId;
     event->IsFatalError = isFatalError;
-    Send(RowDispatcherActorId, event.release());
+    Send(RowDispatcherActorId, event.release(), 0, generation);
 }
 
 void TTopicSession::StopReadSession() {
@@ -1147,7 +1160,7 @@ void TTopicSession::SendDataArrived(TClientsInfo& info) {
     auto event = std::make_unique<TEvRowDispatcher::TEvNewDataArrived>();
     event->Record.SetPartitionId(PartitionId);
     event->ReadActorId = info.ReadActorId;
-    Send(RowDispatcherActorId, event.release());
+    Send(RowDispatcherActorId, event.release(), 0, info.Generation);
 }
 
 void TTopicSession::HandleMemoryLimitException(const NKikimr::TMemoryLimitExceededException& error) {
@@ -1181,6 +1194,7 @@ void TTopicSession::SendStatistics() {
         TTopicSessionClientStatistic clientStatistic;
         clientStatistic.PartitionId = PartitionId;
         clientStatistic.ReadActorId = readActorId;
+        clientStatistic.Generation = info.Generation;
         clientStatistic.QueuedRows = info.QueuedRows;
         clientStatistic.QueuedBytes = info.QueuedBytes;
         clientStatistic.Offset = info.ProcessedNextMessageOffset;
@@ -1230,7 +1244,7 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
     if (it != Clients.end()) {
         YDB_LOG_ERROR("Such a client already exists",
             {"logPrefix", LogPrefix});
-        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Client with id " << ev->Sender << " already exists"), false);
+        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Client with id " << ev->Sender << " already exists"), false, ev->Cookie);
         return false;
     }
 
@@ -1240,7 +1254,7 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
             {"logPrefix", LogPrefix},
             {"consumerName", ConsumerName},
             {"sourceConsumerName", source.GetConsumerName()});
-        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")"), false);
+        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")"), false, ev->Cookie);
         return false;
     }
 
@@ -1249,7 +1263,7 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
             {"logPrefix", LogPrefix},
             {"skipJsonErrors", SkipJsonErrors},
             {"sourceSkipJsonErrors", source.GetSkipJsonErrors()});
-        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same skip json errors settings in all queries via RD (current mode " << SkipJsonErrors << ")"), false);
+        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same skip json errors settings in all queries via RD (current mode " << SkipJsonErrors << ")"), false, ev->Cookie);
         return false;
     }
     return true;

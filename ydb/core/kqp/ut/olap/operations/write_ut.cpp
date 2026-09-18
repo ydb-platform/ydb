@@ -1,4 +1,4 @@
-#include "write_log_to_columnshard.h"
+#include "write_log_columnshard.h"
 
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/olap/helpers/get_value.h>
@@ -7,7 +7,7 @@
 #include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
-#include <ydb/core/kqp/ut/olap/operations/write_log_to_columnshard.h>
+#include <ydb/core/kqp/ut/olap/operations/write_log_columnshard.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -979,6 +979,49 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"1u", "1u"},
             {"2u", "2u"},
             {"3u", "3u"}});
+    }
+
+    Y_UNIT_TEST(WriteMessageErrors) {
+
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1),
+            std::make_shared<TDBLogColumnUint64>("value1", std::vector<TKeyName>{"value1"}, TSchematizedLogColumn::TDatabaseSettings::NotNull()),
+            std::make_shared<TDBLogColumnUint64>("value2", std::vector<TKeyName>{"value2"}),
+            std::make_shared<TDBLogMessageErrorColumn>()
+        });
+        env.WriteLog([](){
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+                {"value1", 1});
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+                {"value1", 1},
+                {"value2", 2});
+
+            // TWriteResultKind::DummyValueInsteadOfNull
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+                {"value2", 1});
+
+            // TWriteResultKind::DummyValueInsteadOfCastError
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+                {"value1", "string value"});
+
+            // TWriteResultKind::NullInsteadOfCastError
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+                {"value1", 1},
+                {"value2", "string_value"});
+
+            // Two errors
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "",
+                {"value2", "string-value"});
+        });
+
+        // Fetch and check data
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u", "#", "#"},
+            {"2u", "1u", "[2u]", "#"},
+            {"3u", "0u", "[1u]", R"(["Dummy \"value1\" instead of null"])"},
+            {"4u", "0u", "#", R"(["Dummy \"value1\" instead of not casted value \"string value\""])"},
+            {"5u", "1u", "#", R"(["Null \"value2\" instead of not casted value string_value"])"},
+            {"6u", "0u", "#", R"(["Dummy \"value1\" instead of null; Null \"value2\" instead of not casted value string-value"])"}});
     }
 
     Y_UNIT_TEST(ManualFlush) {

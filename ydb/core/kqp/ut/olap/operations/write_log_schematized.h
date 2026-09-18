@@ -15,8 +15,15 @@ public:
     TBaseSchematizedLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
         : Runner(runner)
         , Component(component)
-        , Columns(std::move(columns))
-    {
+        , Columns(std::move(columns)) {
+
+        for(std::size_t i = 0;i < Columns.size();i++) {
+            ErrorColumn = std::dynamic_pointer_cast<TDBLogMessageErrorColumn>(Columns[i]);
+            if (ErrorColumn != nullptr) {
+                ErrorColumnIndex = i;
+                break;
+            }
+        }
     }
 
     TKikimrRunner& GetRunner() const {
@@ -50,6 +57,9 @@ protected:
     TKikimrRunner& Runner;
     const NLog::EComponent Component;
     const TVector<std::shared_ptr<TSchematizedLogColumn>> Columns;
+    std::shared_ptr<TDBLogMessageErrorColumn> ErrorColumn;
+    std::optional<std::size_t> ErrorColumnIndex;
+
     bool TableExists {false};
     unsigned WrittenRecordCount{0};
 };

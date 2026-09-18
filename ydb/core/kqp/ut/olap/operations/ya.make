@@ -13,7 +13,7 @@ ENDIF()
 SRCS(
     delete_ut.cpp
     write_log_schematized.cpp
-    write_log_to_columnshard.cpp
+    write_log_columnshard.cpp
     write_ut.cpp
 )
 

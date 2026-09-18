@@ -1,4 +1,4 @@
-#include "write_log_to_columnshard.h"
+#include "write_log_columnshard.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>

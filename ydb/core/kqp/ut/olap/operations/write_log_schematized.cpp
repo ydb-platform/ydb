@@ -1,5 +1,7 @@
 #include "write_log_schematized.h"
 
+#include <ydb/library/actors/struct_log/text_writer.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
@@ -10,8 +12,43 @@ void TBaseSchematizedLogWriter::Write(const NActors::NStructuredLog::TLogMessage
         return ;
     }
 
-    for(auto& column: Columns) {
-        column->Write(message);
+    TStringBuilder columnWriteErrors;
+    for(std::size_t i = 0;i < Columns.size();i++) {
+        if (ErrorColumnIndex.has_value() && ErrorColumnIndex.value() == i) {
+            continue;
+        }
+
+        const auto& column =  Columns[i];
+        auto result = column->Write(message);
+        TStringBuilder errorText;
+
+        switch (result.Kind) {
+            case TSchematizedLogColumn::TWriteResultKind::Success:
+                break;
+            case TSchematizedLogColumn::TWriteResultKind::DummyValueInsteadOfNull:
+                errorText << "Dummy \"" << column->Name << "\" instead of null";
+                break;
+            case TSchematizedLogColumn::TWriteResultKind::DummyValueInsteadOfCastError:
+                errorText << "Dummy \"" << column->Name << "\" instead of not casted value " << TTextWriter::EscapeFieldValue(result.Value);
+                break;
+            case TSchematizedLogColumn::TWriteResultKind::NullInsteadOfCastError:
+                errorText << "Null \"" << column->Name << "\" instead of not casted value " << TTextWriter::EscapeFieldValue(result.Value);
+                break;
+            case TSchematizedLogColumn::TWriteResultKind::ArrowError:       // @todo what to do
+            case TSchematizedLogColumn::TWriteResultKind::UnknownError:     // @todo what to do
+                break;
+        }
+
+        if (!errorText.empty()) {
+            if (!columnWriteErrors.empty()) {
+                columnWriteErrors << "; ";
+            }
+            columnWriteErrors << errorText;
+        }
+    }
+
+    if (ErrorColumn != nullptr) {
+        ErrorColumn->Write(columnWriteErrors);
     }
     WrittenRecordCount++;
 }

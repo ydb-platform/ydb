@@ -70,7 +70,24 @@ public:
     }
 
     virtual void Reset() = 0;
-    virtual bool Write(const NActors::NStructuredLog::TLogMessage&) = 0;
+
+    enum class TWriteResultKind {
+        Success,
+        DummyValueInsteadOfNull,
+        DummyValueInsteadOfCastError,
+        NullInsteadOfCastError,
+        ArrowError,
+        UnknownError
+    };
+    struct TWriteResult {
+        TWriteResultKind Kind{TWriteResultKind::Success};
+        TString Value;
+
+        TWriteResult() = default;
+        TWriteResult(TWriteResultKind kind): Kind(kind) {}
+        TWriteResult(TWriteResultKind kind, const TString& value): Kind(kind), Value(value) {}
+    };
+    virtual TWriteResult Write(const NActors::NStructuredLog::TLogMessage&) = 0;
     virtual std::shared_ptr<arrow::Array> MakeArray() = 0;
 };
 
@@ -104,12 +121,6 @@ public:
         return TArrowTypeMapper<TValueType>::AppendNull(*Builder);
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage&) override {
-        // @todo Удалить реализацию -заглушку
-        TValueType value{};
-        return AppendValue(value);
-    }
-
     std::shared_ptr<arrow::Array> MakeArray() override {
         std::shared_ptr<arrow::Array> result;
         auto status = Builder->Finish(&result);
@@ -129,8 +140,8 @@ public:
 
     TDBLogMessageIdColumn(ui64 currentValue=0) : TBase("id", TDatabaseSettings::PKShardingKey()), CurrentValue(currentValue)  {}
 
-    bool Write(const NActors::NStructuredLog::TLogMessage& ) override {
-        return AppendValue(CurrentValue++);
+    TWriteResult Write(const NActors::NStructuredLog::TLogMessage& ) override {
+        return AppendValue(CurrentValue++) ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
     }
 };
 
@@ -142,8 +153,8 @@ public:
     TDBLogMessageTimeColumn() : TBase("timestamp", TDatabaseSettings::PKShardingKey())  {
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
-        return AppendValue(message.Time);
+    TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
+        return AppendValue(message.Time) ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
     }
 };
 
@@ -155,8 +166,8 @@ public:
     TDBLogMessagePrioColumn() : TBase("priority", TDatabaseSettings()) {
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
-        return AppendValue(static_cast<ui16>(message.Priority));
+    TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
+        return AppendValue(static_cast<ui16>(message.Priority)) ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
     }
 };
 
@@ -168,8 +179,8 @@ public:
     TDBLogMessageNodeIdColumn() : TBase("node_id", TDatabaseSettings{.IsPK = true, .IsNotNull = true}) {
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
-        return AppendValue(static_cast<ui16>(message.NodeId));
+    TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
+        return AppendValue(static_cast<ui16>(message.NodeId)) ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
     }
 };
 
@@ -181,8 +192,8 @@ public:
     TDBLogMessageTextColumn() : TBase("message", TDatabaseSettings()) {
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
-        return AppendValue(message.TextMessage);
+    TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
+        return AppendValue(message.TextMessage) ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
     }
 };
 
@@ -194,12 +205,33 @@ public:
     TDBLogMessageLocationColumn() : TBase("location", TDatabaseSettings()) {
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
+    TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
         TString location;
         if (message.FileName) {
             location = TString(message.FileName) + ':' + ToString(message.LineNumber);
         }
-        return AppendValue(location);
+        return AppendValue(location) ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
+    }
+};
+
+// Write message writer error to column
+class TDBLogMessageErrorColumn : public TTypedDBLogColumn<TString> {
+public:
+    using TBase = TTypedDBLogColumn<TString>;
+
+    TDBLogMessageErrorColumn() : TBase("write_error", TDatabaseSettings()) {
+    }
+
+    TWriteResult Write(const NActors::NStructuredLog::TLogMessage& ) override {
+        return TWriteResultKind::UnknownError;
+    }
+
+    TWriteResult Write(const TString& error) {
+        if (error.empty()) {
+            return AppendNull()? TWriteResultKind::Success : TWriteResultKind::ArrowError;
+        } else {
+            return AppendValue(error)? TWriteResultKind::Success : TWriteResultKind::ArrowError;
+        }
     }
 };
 
@@ -215,14 +247,16 @@ public:
         KeyName(keyName) {
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
+    TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
         TStringValueExtractor extractor;
         auto value = extractor.ExtractValue(message.StructuredMessage, KeyName);
         if (value.has_value()) {
-            return AppendValue(value.value());
-        } else {
-            return AppendNull();
+            return AppendValue(value.value()) ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
         }
+        if (TSchematizedLogColumn::Settings.IsNotNull) {
+            return AppendValue("") ? TWriteResultKind::DummyValueInsteadOfNull : TWriteResultKind::ArrowError;
+        }
+        return AppendNull() ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
     }
 };
 
@@ -239,22 +273,46 @@ public:
         KeyName(keyName) {
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
+    TBase::TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
+        using TThisWriteResult = TBase::TWriteResult;
+        using TThisWriteResultKind = TBase::TWriteResultKind;
+
         using TExtractor = TNativeValueExtractor<T>;
         TExtractor extractor;
         auto value = extractor.ExtractValue(message.StructuredMessage, KeyName);
         switch (value.first) {
             case TExtractor::TResultKind::Ok:
-                if (!value.second.has_value()) {
-                    return false;
-                }
-                return TBase::AppendValue(value.second.value());
+                return TBase::AppendValue(value.second.value())
+                    ? TThisWriteResultKind::Success
+                    : TThisWriteResultKind::ArrowError;
             case TExtractor::TResultKind::NoCast:
-                return TBase::AppendNull(); // @todo Обработка ошибок
+                if (TSchematizedLogColumn::Settings.IsNotNull) {
+                    TStringValueExtractor stringExtractor;
+                    auto strValue = stringExtractor.ExtractValue(message.StructuredMessage, KeyName).value_or("");
+                    return TBase::AppendValue(T{})
+                        ? TThisWriteResult(TThisWriteResultKind::DummyValueInsteadOfCastError, strValue)
+                        : TThisWriteResult(TThisWriteResultKind::ArrowError);
+                } else {
+                    TStringValueExtractor stringExtractor;
+                    auto strValue = stringExtractor.ExtractValue(message.StructuredMessage, KeyName).value_or("");
+                    return TBase::AppendNull()
+                        ? TThisWriteResult(TThisWriteResultKind::NullInsteadOfCastError, strValue)
+                        : TThisWriteResult(TThisWriteResultKind::ArrowError);
+                }
             case TExtractor::TResultKind::NoValue:
-                return TBase::AppendNull();
-            break;
+                if (TSchematizedLogColumn::Settings.IsNotNull) {
+                    TStringValueExtractor stringExtractor;
+                    auto strValue = stringExtractor.ExtractValue(message.StructuredMessage, KeyName).value_or("");
+                    return TBase::AppendValue(T{})  // @todo Generate dummy value
+                        ? TThisWriteResult(TThisWriteResultKind::DummyValueInsteadOfNull, strValue)
+                        : TThisWriteResult(TThisWriteResultKind::ArrowError);
+                } else {
+                    return TBase::AppendNull()
+                        ? TThisWriteResultKind::Success
+                        : TThisWriteResultKind::ArrowError;
+                }
         }
+        return TThisWriteResultKind::UnknownError;
     }
 };
 

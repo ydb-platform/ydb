@@ -81,18 +81,15 @@ public:
             );
         }
 
-        // Check if the restore can be forgotten
-        // Allow forgetting when:
-        // 1. The main operation is no longer active (not in Operations table), AND
-        // 2. Either actual incremental processing progress has been made OR the operation is fully completed, AND
-        // 3. There are no incremental operations still in progress
+        // Check if the restore can be forgotten.
+        // Allowed when: main op inactive, state is terminal/finalizing, no sub-ops in flight.
         bool mainOperationActive = Self->Operations.contains(TTxId(restoreId));
-        bool actualProgressMade = (incrementalRestore.CurrentIncrementalIdx > 0 || 
-                                   !incrementalRestore.CompletedOperations.empty() ||
-                                   incrementalRestore.State == TIncrementalRestoreState::EState::Completed ||
-                                   incrementalRestore.State == TIncrementalRestoreState::EState::Finalizing);
+        bool stateAllowsForget =
+            incrementalRestore.State == TIncrementalRestoreState::EState::Completed ||
+            incrementalRestore.State == TIncrementalRestoreState::EState::Failed ||
+            incrementalRestore.State == TIncrementalRestoreState::EState::Finalizing;
         bool hasActiveIncrementalOperations = false;
-        
+
         // Check if any of the in-progress operations are still active
         for (const auto& opId : incrementalRestore.InProgressOperations) {
             if (Self->Operations.contains(opId.GetTxId())) {
@@ -100,8 +97,10 @@ public:
                 break;
             }
         }
-        
-        bool canForget = !mainOperationActive && actualProgressMade && !hasActiveIncrementalOperations;
+
+        // State==Finalizing blocks Forget; State==Completed/Failed means the long-op is already released.
+        bool canForget = !mainOperationActive && stateAllowsForget
+                      && !hasActiveIncrementalOperations;
         
         if (!canForget) {
             return Reply(
@@ -110,29 +109,21 @@ public:
             );
         }
 
-        Self->IncrementalRestoreStates.erase(restoreId);
-        
-        // Clean up database tables
         NIceDb::TNiceDb db(txc.DB);
-        
+
+        Self->CleanupIncrementalRestoreItems(restoreId, db,
+            Self->IncrementalRestoreStates.FindPtr(restoreId));
+
+        Self->IncrementalRestoreStates.erase(restoreId);
+
         // Clean up IncrementalRestoreState table
         db.Table<Schema::IncrementalRestoreState>().Key(restoreId).Delete();
         LOG_I("Cleaned up IncrementalRestoreState for operation: " << restoreId);
-        
+
         // Clean up IncrementalRestoreOperations table
         db.Table<Schema::IncrementalRestoreOperations>().Key(restoreId).Delete();
         LOG_I("Cleaned up IncrementalRestoreOperations for operation: " << restoreId);
-        
-        auto txIt = Self->TxIdToIncrementalRestore.begin();
-        while (txIt != Self->TxIdToIncrementalRestore.end()) {
-            if (txIt->second == restoreId) {
-                auto toErase = txIt++;
-                Self->TxIdToIncrementalRestore.erase(toErase);
-            } else {
-                ++txIt;
-            }
-        }
-        
+
         auto opIt = Self->IncrementalRestoreOperationToState.begin();
         while (opIt != Self->IncrementalRestoreOperationToState.end()) {
             if (opIt->second == restoreId) {

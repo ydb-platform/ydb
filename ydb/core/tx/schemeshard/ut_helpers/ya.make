@@ -37,6 +37,7 @@ SRCS(
     shred_helpers.cpp
     test_env.cpp
     test_env.h
+    test_incremental_restore.h
     test_with_reboots.h
 )
 

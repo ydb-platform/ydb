@@ -76,9 +76,7 @@ namespace NKikimr {
 
             private:
                 void Start() override {
-                    if (!Impl->AuthToken.empty()) {
-                        Context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, Impl->AuthToken);
-                    }
+                    Impl->AddAuthMetadata(Context);
                     Reader = (Impl->Stub.*AsyncRequest)(&Context, Params, &Impl->CQ);
                     Reader->Finish(&Reply, &Status, this);
                 }
@@ -149,9 +147,7 @@ namespace NKikimr {
                 void Start() override {
                     // Stub call will cause async call to InvokeProcess. Lock reader to avoid race.
                     auto guard = Guard(ReaderLock);
-                    if (!Impl->AuthToken.empty()) {
-                        Context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, Impl->AuthToken);
-                    }
+                    Impl->AddAuthMetadata(Context);
                     Reader = (Impl->Stub.*AsyncRequest)(&Context, Params, &Impl->CQ, this);
                 }
 
@@ -215,11 +211,17 @@ namespace NKikimr {
                 return Channel->GetState(false);
             }
 
-void SetAuthToken(const TString& token) {
-    with_lock (Mutex) {
-        AuthToken = token;
-    }
-}
+            void SetAuthToken(const TString& token) {
+                with_lock (Mutex) {
+                    AuthToken = token;
+                }
+            }
+
+            void AddAuthMetadata(grpc::ClientContext& context) const {
+                if (!AuthToken.empty()) {
+                    context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, AuthToken);
+                }
+            }
 
             template<typename TRequest, typename TResponse>
             void Issue(const TRequest& request, TCallback<TResponse>&& callback,
@@ -322,7 +324,6 @@ void SetAuthToken(const TString& token) {
         }
 
         void TGRpcClient::SetAuthToken(const TString& token) {
-            AuthToken = token;
             Impl->SetAuthToken(token);
         }
 

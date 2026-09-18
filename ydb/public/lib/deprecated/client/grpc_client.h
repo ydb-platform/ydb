@@ -31,7 +31,6 @@ namespace NKikimr {
 
         class TGRpcClient {
             TGRpcClientConfig Config;
-            TString AuthToken;
             class TImpl;
             THolder<TImpl> Impl;
 

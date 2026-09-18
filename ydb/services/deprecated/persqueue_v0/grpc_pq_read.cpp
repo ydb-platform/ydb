@@ -156,7 +156,8 @@ void TPQReadService::TSession::CreateActor(std::unique_ptr<NPersQueue::TTopicsLi
 
     auto g(Guard(Lock));
     auto* actor = new TReadSessionActor(this, *topicsHandler, Cookie, SchemeCache, NewSchemeCache, Counters,
-                                    classifier ? classifier->ClassifyAddress(GetPeerName()) : "unknown");
+                                    classifier ? classifier->ClassifyAddress(GetPeerName()) : "unknown",
+                                    GetAuthority());
     ui32 poolId = Proxy->ActorSystem->AppData<::NKikimr::TAppData>()->UserPoolId;
     ActorId = Proxy->ActorSystem->Register(actor, TMailboxType::HTSwap, poolId);
 }

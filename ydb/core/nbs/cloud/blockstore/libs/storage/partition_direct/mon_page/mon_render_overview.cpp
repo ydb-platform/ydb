@@ -180,6 +180,45 @@ void TransferDefaultConfigsToTable(
     }
 }
 
+// Replaces cached defaults with touched persisted config counters.
+void ApplyRealConfigs(
+    const TVector<TDbgSnapshot>& dbgs,
+    size_t directBlockGroupCount,
+    const TVChunkConfigs& vChunkConfigs,
+    const ITouchedProvider& touchedProvider,
+    TDbgConfigTableData* tableData)
+{
+    for (const auto& [vChunkId, config]: vChunkConfigs) {
+        Y_ABORT_UNLESS(vChunkId == config.GetVChunkIndex());
+        if (!touchedProvider.Get(vChunkId)) {
+            continue;
+        }
+
+        const TDbgId dbgId =
+            GetDirectBlockGroupIndex(vChunkId, directBlockGroupCount);
+        auto& entry = tableData->GetDefaultConfig(dbgId, vChunkId);
+        Y_ABORT_UNLESS(entry.VChunkCount != 0);
+        --entry.VChunkCount;
+
+        Y_ABORT_UNLESS(dbgId < dbgs.size() && dbgs[dbgId].Index == dbgId);
+        const auto& dbg = dbgs[dbgId];
+        Y_ABORT_UNLESS(dbg.Connections.size() >= config.GetHostCount());
+        const size_t columnIndex = dbg.Index % VChunkPerRegionCount;
+        for (THostIndex host = 0; host < config.GetHostCount(); ++host) {
+            const auto& connection = dbg.Connections[host];
+            if (config.GetDDiskRole(host) != EHostRole::None) {
+                const auto state = config.GetHostHumanReadableState(host);
+                ++tableData->Table[connection.DDiskId.NodeId][columnIndex]
+                      .DDiskStates[state];
+            }
+            if (config.GetPBufferRole(host) != EHostRole::None) {
+                ++tableData->Table[connection.PBufferId.NodeId][columnIndex]
+                      .PBufferCount;
+            }
+        }
+    }
+}
+
 // Builds table columns and node rows without calculating cell contents.
 TDbgConfigTableData BuildDbgConfigTable(const TVector<TDbgSnapshot>& dbgs)
 {
@@ -314,6 +353,7 @@ void RenderDbgConfigTable(
     IOutputStream& str,
     const TVector<TDbgSnapshot>& dbgs,
     const TTabletInfo& tabletInfo,
+    const TVChunkConfigs& vChunkConfigs,
     const ITouchedProvider& touchedProvider)
 {
     auto tableData = BuildDbgConfigTable(dbgs);
@@ -324,6 +364,12 @@ void RenderDbgConfigTable(
     FillDefaultConfigs(
         regionCount,
         tabletInfo.VolumeDirectBlockGroupCount,
+        touchedProvider,
+        &tableData);
+    ApplyRealConfigs(
+        dbgs,
+        tabletInfo.VolumeDirectBlockGroupCount,
+        vChunkConfigs,
         touchedProvider,
         &tableData);
     TransferDefaultConfigsToTable(dbgs, &tableData);
@@ -552,14 +598,17 @@ void RenderOverview(
     const TVChunkConfigs& vChunkConfigs,
     const ITouchedProvider& touchedProvider)
 {
-    Y_UNUSED(vChunkConfigs);
-
     RenderOverviewInfo(
         str,
         data.TabletInfo,
         data.FastPathServiceInfo,
         GetPBuffersUsage(data.Dbgs));
-    RenderDbgConfigTable(str, data.Dbgs, data.TabletInfo, touchedProvider);
+    RenderDbgConfigTable(
+        str,
+        data.Dbgs,
+        data.TabletInfo,
+        vChunkConfigs,
+        touchedProvider);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

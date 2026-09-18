@@ -75,6 +75,24 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         };
     }
 
+    TVector<TDbgSnapshot> MakeOverviewDbgs()
+    {
+        TVector<TDbgSnapshot> result;
+        result.reserve(VChunkPerRegionCount);
+        for (size_t i = 0; i < VChunkPerRegionCount; ++i) {
+            result.push_back(TDbgSnapshot{.Index = i});
+            for (THostIndex host = 0; host < DirectBlockGroupHostCount; ++host)
+            {
+                result.back().Connections.push_back(TConnectionSnapshot{
+                    .HostIndex = host,
+                    .DDiskId = {1, 1, host},
+                    .PBufferId = {{1, 1, host}},
+                });
+            }
+        }
+        return result;
+    }
+
     TDbgSnapshot MakeDbg(size_t index)
     {
         TInflightByOperation inflightByOperation{};
@@ -229,17 +247,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
     Y_UNIT_TEST(OverviewReadsTouchedVChunksByRegion)
     {
         TMonPageData data = MakeData();
-        for (size_t i = 0; i < VChunkPerRegionCount; ++i) {
-            data.Dbgs.push_back(TDbgSnapshot{.Index = i});
-            for (THostIndex host = 0; host < DirectBlockGroupHostCount; ++host)
-            {
-                data.Dbgs.back().Connections.push_back(TConnectionSnapshot{
-                    .HostIndex = host,
-                    .DDiskId = {1, 1, host},
-                    .PBufferId = {{1, 1, host}},
-                });
-            }
-        }
+        data.Dbgs = MakeOverviewDbgs();
 
         TTestTouchedProvider touchedProvider;
         touchedProvider.Touched = {0, 31, 32, 63};
@@ -255,6 +263,32 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_VALUES_EQUAL(
             2,
             CountOccurrences(html, "DDisk:&#10;Primary:12&#10;PBuffer: 20"));
+    }
+
+    Y_UNIT_TEST(OverviewAppliesRealVChunkDDiskStates)
+    {
+        TMonPageData data = MakeData();
+        data.Dbgs = MakeOverviewDbgs();
+
+        auto config = TVChunkConfig::MakeDefault(
+            0,
+            DirectBlockGroupHostCount,
+            DefaultPrimaryCount);
+        config.PromoteHost(3, true);
+        const TVChunkConfigs configs{{0, std::move(config)}};
+
+        TTestTouchedProvider touchedProvider;
+        touchedProvider.Touched = {0};
+
+        const TString html = RenderMonPage(data, configs, touchedProvider);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, touchedProvider.GetCallCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, touchedProvider.GetRegionCallCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            4,
+            CountOccurrences(
+                html,
+                "DDisk:&#10;Primary:3&#10;Fresh:1&#10;PBuffer: 5"));
     }
 
     Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)

@@ -17,8 +17,18 @@ enum class EMemoryConsumerKind {
     ColumnTablesPortionsMetaDataCache,
 };
 
+struct TConsumerReport {
+    ui64 Used = 0;
+    ui64 Demand = 0; // total desired footprint, invariant: Demand >= Used
+    ui64 Reclaimable = 0; // releasable asynchronously on request, invariant: Reclaimable <= Used
+};
+
 struct IMemoryConsumer : public TThrRefBase {
-    virtual void SetConsumption(ui64 value) = 0;
+    virtual void SetReport(TConsumerReport report) = 0;
+
+    void SetConsumption(ui64 value) {
+        SetReport({.Used = value, .Demand = value, .Reclaimable = 0});
+    }
 };
 
 enum EEvMemory {

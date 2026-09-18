@@ -350,8 +350,9 @@ def main():
                 line_query_id = extract_field(line, "querySpanId")
                 line_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
                 if line_query_id and line_query_text:
-                    breaker_sa_with_text_by_id[bid] = line_query_text
                     breaker_tx_items.append((line_query_id, line_query_text))
+                    if line_query_id == breaker_id:
+                        breaker_sa_with_text_by_id[bid] = line_query_text
 
     if breaker_id and (breaker_id in breaker_sa_with_text_by_id):
         breaker_query_text = breaker_sa_with_text_by_id[breaker_id]

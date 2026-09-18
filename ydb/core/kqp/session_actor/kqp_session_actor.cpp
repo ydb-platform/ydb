@@ -2732,13 +2732,14 @@ public:
 
             auto allQueries = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
             if (isCommitAction) {
-                auto it = std::find_if(begin(allQueries), end(allQueries),
-                    [victimQuerySpanId](const auto& item) {
-                        return item.Id == victimQuerySpanId;
-                    });
-                if (it == end(allQueries)) {
-                    allQueries.push_back({QueryState->GetQuerySpanId(), "COMMIT"});
-                }
+                    const auto currentQuerySpanId = QueryState->GetQuerySpanId();
+                        auto it = std::find_if(begin(allQueries), end(allQueries),
+                            [currentQuerySpanId](const auto& item) {
+                                return item.Id == currentQuerySpanId;
+                            });
+                        if (it == end(allQueries)) {
+                            allQueries.push_back({currentQuerySpanId, "COMMIT"});
+                        }
             }
             NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
                 .Component = "SessionActor",

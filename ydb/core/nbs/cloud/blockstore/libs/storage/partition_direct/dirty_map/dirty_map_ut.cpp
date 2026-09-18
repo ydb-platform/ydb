@@ -1236,6 +1236,62 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
                 << newerHint.DebugPrint());
     }
 
+    Y_UNIT_TEST(ShouldEraseOverlappingWritesInAscendingOrder)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
+            CreateArenaAllocatorPool(),
+            vchunkConfig,
+            DefaultBlockSize,
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+
+        const auto range = TBlockRange16::WithLength(10, 10);
+        const auto overlappingRange = TBlockRange16::WithLength(15, 10);
+        const auto disjointRange = TBlockRange16::WithLength(100, 10);
+
+        auto writeAndFlush = [&](ui64 lsn, TBlockRange16 writeRange)
+        {
+            dirtyMap->RegisterInflightWrite(MakeKey(lsn), writeRange);
+            dirtyMap->WriteFinished(
+                MakeKey(lsn),
+                writeRange,
+                MakePrimaryHosts(),
+                MakePrimaryHosts());
+            FlushAll(dirtyMap->MakeFlushHint(1), *dirtyMap);
+        };
+        writeAndFlush(5, range);
+        writeAndFlush(12, overlappingRange);
+        writeAndFlush(20, disjointRange);
+
+        // The newer overlapping record is not put into the same batch.
+        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0:1:5,1:20;"
+            "H1:1:5,1:20;"
+            "H2:1:5,1:20;",
+            eraseHints.DebugPrint());
+
+        // The newer overlapping record waits while the older one is being
+        // erased.
+        dirtyMap->EraseFinished(THostIndex{0}, {MakeKey(5), MakeKey(20)}, {});
+        dirtyMap->EraseFinished(THostIndex{1}, {MakeKey(5), MakeKey(20)}, {});
+        dirtyMap->EraseFinished(THostIndex{2}, {MakeKey(20)}, {MakeKey(5)});
+        UNIT_ASSERT_VALUES_EQUAL(2, dirtyMap->GetInflightCount());
+
+        // The failed erase is retried, the newer overlapping record still
+        // waits.
+        eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL("H2:1:5;", eraseHints.DebugPrint());
+
+        dirtyMap->EraseFinished(THostIndex{2}, {MakeKey(5)}, {});
+        eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0:1:12;"
+            "H1:1:12;"
+            "H2:1:12;",
+            eraseHints.DebugPrint());
+    }
+
     Y_UNIT_TEST(ShouldLockPBuffer)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();

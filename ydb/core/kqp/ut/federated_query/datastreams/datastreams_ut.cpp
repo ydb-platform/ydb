@@ -2459,6 +2459,29 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             ExecQuery(query, EStatus::GENERIC_ERROR);
         }
     }
+<<<<<<< HEAD
+=======
+
+    Y_UNIT_TEST_F(WriteLargeMessageIntoTopic, TStreamingTestFixture) {
+        const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(outputTopic);
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{pq_source}`.`{output_topic}`
+            SELECT String::JoinFromList(ListReplicate("X", 6000000), "-");)",
+            "pq_source"_a = pqSourceName,
+            "output_topic"_a = outputTopic
+        ));
+
+        std::string expectedMessage(6000000 * 2 - 1, '-');
+        for (size_t i = 0; i < expectedMessage.size(); i += 2) {
+            expectedMessage[i] = 'X';
+        }
+        ReadTopicMessage(outputTopic, expectedMessage);
+    }
+>>>>>>> 894eb9eaf91 (YQ-5715 Don't check write message limit (#53441))
 }
 
 } // namespace NKikimr::NKqp

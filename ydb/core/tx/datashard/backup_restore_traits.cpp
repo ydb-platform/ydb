@@ -149,8 +149,8 @@ TString ChangefeedKeySuffix(bool encryptedBackup) {
     return AddEncryptedSuffix("changefeed_description.pb", encryptedBackup);
 }
 
-TString SchemeKeySuffix(bool encryptedBackup) {
-    return AddEncryptedSuffix("scheme.pb", encryptedBackup);
+TString SchemeKeySuffix(bool encryptedBackup, bool asSql) {
+    return AddEncryptedSuffix(asSql ? "create_table.sql" : "scheme.pb", encryptedBackup);
 }
 
 TString MetadataKeySuffix(bool encryptedBackup) {

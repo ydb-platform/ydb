@@ -159,7 +159,8 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& e
         NIceDb::TUpdate<Schema::Exports::EnablePermissions>(exportInfo.EnablePermissions),
         NIceDb::TUpdate<Schema::Exports::IncludeIndexData>(exportInfo.IncludeIndexData),
         NIceDb::TUpdate<Schema::Exports::PeerName>(exportInfo.PeerName),
-        NIceDb::TUpdate<Schema::Exports::SanitizedToken>(exportInfo.SanitizedToken)
+        NIceDb::TUpdate<Schema::Exports::SanitizedToken>(exportInfo.SanitizedToken),
+        NIceDb::TUpdate<Schema::Exports::EnableTableBackupAsSql>(exportInfo.EnableTableBackupAsSql)
     );
 
     if (exportInfo.UserSID) {

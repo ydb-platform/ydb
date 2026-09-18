@@ -226,6 +226,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             if (enableFeatureFlags) {
                 exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
                 exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
+                exportInfo->EnableTableBackupAsSql = AppData()->FeatureFlags.GetEnableTableBackupAsSql();
             }
             TString explain;
             if (!FillItems(*exportInfo, settings, explain)) {

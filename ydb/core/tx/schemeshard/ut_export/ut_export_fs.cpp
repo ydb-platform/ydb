@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/checksum.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <google/protobuf/text_format.h>
 #include <util/folder/path.h>
@@ -198,12 +200,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_VALUES_EQUAL(settings.items_size(), 2);
     }
 
-    Y_UNIT_TEST(ShouldExportDataAndSchemaToFs) {
+    Y_UNIT_TEST_TWIN(ShouldExportDataAndSchemaToFs, TableBackupAsSql) {
         TTempDir tempDir;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTableBackupAsSql(TableBackupAsSql);
+        runtime.GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
@@ -241,7 +245,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
 
-        TString schemePath = MakeExportPath(basePath, "backup/Table", "scheme.pb");
+        const TString schemeFile = TableBackupAsSql ? "create_table.sql" : "scheme.pb";
+        const TString otherSchemeFile = TableBackupAsSql ? "scheme.pb" : "create_table.sql";
+        TString schemePath = MakeExportPath(basePath, "backup/Table", schemeFile);
+        UNIT_ASSERT(!FileExists(MakeExportPath(basePath, "backup/Table", otherSchemeFile)));
+        UNIT_ASSERT(!FileExists(MakeExportPath(basePath, "backup/Table", otherSchemeFile + ".sha256")));
         TString metadataPath = MakeExportPath(basePath, "backup/Table", "metadata.json");
         TString dataPath = MakeExportPath(basePath, "backup/Table", "data_00.csv");
 
@@ -253,12 +261,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         Cerr << "Scheme content: " << schemeContent << Endl;
         UNIT_ASSERT_C(!schemeContent.empty(), "Scheme file is empty");
 
-        Ydb::Table::CreateTableRequest schemeProto;
-        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(schemeContent, &schemeProto),
-                     "Failed to parse scheme.pb");
-        UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns_size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns(0).name(), "key");
-        UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns(1).name(), "value");
+        if constexpr (TableBackupAsSql) {
+            UNIT_ASSERT_C(schemeContent.Contains("CREATE TABLE `Table`"), schemeContent);
+            UNIT_ASSERT_C(schemeContent.Contains("`key` Uint32"), schemeContent);
+            UNIT_ASSERT_C(schemeContent.Contains("`value` Utf8"), schemeContent);
+            UNIT_ASSERT_C(schemeContent.Contains("PRIMARY KEY (`key`)"), schemeContent);
+        } else {
+            Ydb::Table::CreateTableRequest schemeProto;
+            UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(schemeContent, &schemeProto),
+                         "Failed to parse scheme.pb");
+            UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns_size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns(0).name(), "key");
+            UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns(1).name(), "value");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(schemePath + ".sha256"),
+            NBackup::ComputeChecksum(schemeContent) + " " + schemeFile);
 
         TString metadataContent = ReadFileContent(metadataPath);
         UNIT_ASSERT_C(!metadataContent.empty(), "Metadata file is empty");
@@ -551,13 +568,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
     }
 
-    Y_UNIT_TEST(EncryptedExport) {
+    Y_UNIT_TEST_TWIN(EncryptedExport, TableBackupAsSql) {
         TTempDir tempDir;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTableBackupAsSql(TableBackupAsSql);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
@@ -613,14 +631,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
 
         TFsPath baseDir(basePath);
+        const TString schemeFile = TableBackupAsSql ? "create_table.sql.enc" : "scheme.pb.enc";
+        const TString otherSchemeFile = TableBackupAsSql ? "scheme.pb.enc" : "create_table.sql.enc";
         TVector<TFsPath> expectedFiles = {
             baseDir / "metadata.json",
             baseDir / "SchemaMapping" / "metadata.json.enc",
             baseDir / "SchemaMapping" / "mapping.json.enc",
-            baseDir / "001" / "scheme.pb.enc",
+            baseDir / "001" / schemeFile,
             baseDir / "001" / "data_00.csv.enc",
             baseDir / "001" / "data_01.csv.enc",
-            baseDir / "002" / "scheme.pb.enc",
+            baseDir / "002" / schemeFile,
             baseDir / "002" / "data_00.csv.enc",
             baseDir / "002" / "data_01.csv.enc",
         };
@@ -628,6 +648,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         for (const auto& file : expectedFiles) {
             UNIT_ASSERT_C(FileExists(file.GetPath()), "File not found: " << file.GetPath());
         }
+        UNIT_ASSERT(!FileExists((baseDir / "001" / otherSchemeFile).GetPath()));
+        UNIT_ASSERT(!FileExists((baseDir / "002" / otherSchemeFile).GetPath()));
 
         TVector<TFsPath> allFiles;
         std::function<void(const TFsPath&)> collectFiles = [&](const TFsPath& dir) {
@@ -665,16 +687,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
                 ), filePath);
 
             UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, "Duplicate IV for: " << filePath);
+            if constexpr (TableBackupAsSql) {
+                if (filePath.EndsWith("create_table.sql.enc")) {
+                    const TString sql(decryptedData.Data(), decryptedData.Size());
+                    const TString tableName = filePath == (baseDir / "001" / schemeFile).GetPath() ? "Table1" : "Table2";
+                    UNIT_ASSERT_C(sql.Contains("CREATE TABLE `" + tableName + "`"), sql);
+                    UNIT_ASSERT_C(sql.Contains("PRIMARY KEY (`key`)"), sql);
+                }
+            }
         }
     }
 
-    Y_UNIT_TEST(IndexMaterializationForFs) {
+    Y_UNIT_TEST_TWIN(IndexMaterializationForFs, TableBackupAsSql) {
         TTempDir tempDir;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
         runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTableBackupAsSql(TableBackupAsSql);
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -712,8 +743,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         const auto& entry = desc.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
 
-        UNIT_ASSERT(FileExists(MakeExportPath(basePath, "backup/Table", "scheme.pb")));
-        UNIT_ASSERT(FileExists(MakeExportPath(basePath, "backup/Table/index/indexImplTable", "scheme.pb")));
+        const TString schemeFile = TableBackupAsSql ? "create_table.sql" : "scheme.pb";
+        const TString otherSchemeFile = TableBackupAsSql ? "scheme.pb" : "create_table.sql";
+        const auto schemeContent = ReadFileContent(MakeExportPath(basePath, "backup/Table", schemeFile));
+        UNIT_ASSERT(!schemeContent.empty());
+        UNIT_ASSERT(!FileExists(MakeExportPath(basePath, "backup/Table", otherSchemeFile)));
+        if constexpr (TableBackupAsSql) {
+            UNIT_ASSERT_C(schemeContent.Contains("INDEX `index`"), schemeContent);
+        }
+        const TString indexPath = "backup/Table/index/indexImplTable";
+        Ydb::Table::CreateTableRequest indexScheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
+            ReadFileContent(MakeExportPath(basePath, indexPath, "scheme.pb")), &indexScheme));
+        UNIT_ASSERT_VALUES_EQUAL(indexScheme.columns_size(), 2);
+        UNIT_ASSERT(!FileExists(MakeExportPath(basePath, indexPath, "create_table.sql")));
     }
 
     Y_UNIT_TEST(ShouldFailOnNonExistentBasePath) {

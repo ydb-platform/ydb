@@ -150,8 +150,8 @@ public:
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::MetadataKeySuffix(EncryptionSettings.EncryptedBackup);
     }
 
-    inline TString GetSchemeKey() const {
-        return ObjectKeyPattern + '/' + NBackupRestoreTraits::SchemeKeySuffix(EncryptionSettings.EncryptedBackup);
+    inline TString GetSchemeKey(bool asSql = false) const {
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::SchemeKeySuffix(EncryptionSettings.EncryptedBackup, asSql);
     }
 
     inline TString GetDataKey(

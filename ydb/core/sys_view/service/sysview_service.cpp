@@ -383,16 +383,21 @@ private:
         auto sendEv = MakeHolder<T>();
         auto& record = sendEv->Record;
 
+        TDuration packingTime;
         if (dbCounters.IsConfirmed) {
             for (auto& [service, state] : dbCounters.States) {
                 state.Counters->ToProto(state.Current);
             }
             if constexpr (!isLabeled) {
                 dbCounters.DetailedCurrent.Clear();
-                for (auto& [service, state] : dbCounters.DetailedStates) {
-                    auto* entry = dbCounters.DetailedCurrent.Add();
-                    entry->SetService(service);
-                    state->Pack(*entry->MutableTables());
+                if (!dbCounters.DetailedStates.empty()) {
+                    auto packStart = Now();
+                    for (auto& [service, state] : dbCounters.DetailedStates) {
+                        auto* entry = dbCounters.DetailedCurrent.Add();
+                        entry->SetService(service);
+                        state->Pack(*entry->MutableTables());
+                    }
+                    packingTime = Now() - packStart;
                 }
             }
             ++dbCounters.Generation;
@@ -420,7 +425,9 @@ private:
         size_t detailedRoleCount = 0;
         size_t detailedTableCount = 0;
         if constexpr (!isLabeled) {
-            record.MutableDetailedCounters()->CopyFrom(dbCounters.DetailedCurrent);
+            if (!dbCounters.DetailedStates.empty()) {
+                record.MutableDetailedCounters()->CopyFrom(dbCounters.DetailedCurrent);
+            }
             detailedRoleCount = record.DetailedCountersSize();
             for (const auto& entry : record.GetDetailedCounters()) {
                 detailedTableCount += entry.TablesSize();
@@ -436,7 +443,8 @@ private:
             {"retrying", dbCounters.IsRetrying},
             {"labeled", isLabeled},
             {"detailedRoles", detailedRoleCount},
-            {"detailedTables", detailedTableCount});
+            {"detailedTables", detailedTableCount},
+            {"packingTimeMs", packingTime.MilliSeconds()});
 
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(sendEv.Release(), processorId, true),
@@ -1044,7 +1052,9 @@ private:
         std::unordered_map<NKikimrSysView::EDbCountersService,
                            TIntrusivePtr<IDbDetailedCounters>> DetailedStates;
         // Pack advances the delta baseline, so retain the complete detailed payload
-        // until it is confirmed and reuse it unchanged on every retry.
+        // until it is confirmed and reuse it unchanged on every retry. A deeper fix
+        // would use a pre-serialized payload (avoiding the copy), but that requires a
+        // proto change to support it in the TEventPB send path.
         NProtoBuf::RepeatedPtrField<NKikimrSysView::TEvSendDbCountersRequest::TDetailedCounters> DetailedCurrent;
         ui64 Generation;
         bool IsConfirmed = true;

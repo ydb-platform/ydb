@@ -13,7 +13,7 @@ WITH (option = value[, ...])
 * `secret_name` — имя изменяемого секрета.
 * `option` — опция команды:
   * `value` — строка со значением секрета.
-  * `service_account_id`, `resource` — только для [секрета с делегированием IAM](../../../concepts/datamodel/iam-delegation-secrets.md): новый сервисный аккаунт и/или облако. Новое делегирование настраивается в IAM до отзыва старого, поэтому запросы, использующие секрет, переключаются на новый сервисный аккаунт без перезапуска. Тип секрета изменить нельзя.
+  * `SERVICE_ACCOUNT_ID`, `RESOURCE` — только для [секрета с делегированием IAM](../../../concepts/datamodel/iam-delegation-secrets.md): новый сервисный аккаунт и/или облако. Новое делегирование настраивается в IAM до отзыва старого, поэтому запросы, использующие секрет, переключаются на новый сервисный аккаунт без перезапуска. Тип секрета изменить нельзя.
 
 ## Разрешения
 
@@ -36,7 +36,7 @@ ALTER SECRET IF EXISTS secret_name WITH (value = "secret_value_new");
 Сменить сервисный аккаунт [секрета с делегированием IAM](../../../concepts/datamodel/iam-delegation-secrets.md):
 
 ```sql
-ALTER SECRET events_sa WITH (service_account_id = "aje6h0sbq9wl2xn5tdg7");
+ALTER SECRET events_sa WITH (SERVICE_ACCOUNT_ID="aje6h0sbq9wl2xn5tdg7");
 ```
 
 ## См. также

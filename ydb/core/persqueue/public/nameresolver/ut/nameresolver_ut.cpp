@@ -691,4 +691,205 @@ Y_UNIT_TEST_F(CorrectNameFalseUsesConvertOldTopicName, TNameResolverFixture) {
         "/Root/LbCommunal/topic");
 }
 
+Y_UNIT_TEST_F(NamesFromConfigFederationLocal, TNameResolverFixture) {
+    SetFcc(false);
+    NKikimrPQ::TPQTabletConfig cfg;
+    cfg.SetTopicName("rt3.dc1--account--topic");
+    cfg.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
+    cfg.SetFederationAccount("account");
+    cfg.SetLocalDC(true);
+    cfg.SetDC("dc1");
+    cfg.SetYdbDatabasePath("");
+
+    auto names = NamesFromConfig(cfg);
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "rt3.dc1--account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.ShortClientsideName, "account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "account/topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetCluster(), "dc1");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetAccount(), "account");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetLegacyProducer(), "account");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetTopicForSrcIdHash(), "account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetInternalName(), "rt3.dc1--account--topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetModernName(), "topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/Root/PQ/rt3.dc1--account--topic");
+}
+
+Y_UNIT_TEST_F(NamesFromConfigFederationRemoteDc, TNameResolverFixture) {
+    SetFcc(false);
+    NKikimrPQ::TPQTabletConfig cfg;
+    cfg.SetTopicName("rt3.dc2--account@path--topic");
+    cfg.SetTopicPath("/lb/account-database/path/topic-mirrored-from-dc2");
+    cfg.SetFederationAccount("account");
+    cfg.SetLocalDC(false);
+    cfg.SetDC("dc2");
+    cfg.SetYdbDatabasePath("/lb/account-database");
+
+    auto names = NamesFromConfig(cfg);
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "rt3.dc2--account@path--topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "account/path/topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetCluster(), "dc2");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetModernName(), "path/topic-mirrored-from-dc2");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/lb/account-database/path/topic-mirrored-from-dc2");
+}
+
+Y_UNIT_TEST_F(NamesFromConfigFcc, TNameResolverFixture) {
+    SetFcc(true);
+    NKikimrPQ::TPQTabletConfig cfg;
+    cfg.SetTopicName("my-stream");
+    cfg.SetTopicPath("/lb/database/my-stream");
+    cfg.SetYdbDatabasePath("/lb/database");
+
+    auto names = NamesFromConfig(cfg);
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "my-stream");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "my-stream");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPathWithDC(), "my-stream");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetTopicForSrcIdHash(), "lb/database/my-stream");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetInternalName(), "/lb/database/my-stream");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetModernName(), "my-stream");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/lb/database/my-stream");
+}
+
+Y_UNIT_TEST_F(NamesFromConfigExplicitTopicPath, TNameResolverFixture) {
+    SetFcc(true);
+    NKikimrPQ::TPQTabletConfig cfg;
+    cfg.SetYdbDatabasePath("/lb/database");
+
+    auto names = NamesFromConfig(cfg, TString("/lb/database/my-stream"));
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "my-stream");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/lb/database/my-stream");
+}
+
+Y_UNIT_TEST_F(NamesFromConfigExplicitFirstClassCitizen, TNameResolverFixture) {
+    SetFcc(false);
+    NKikimrPQ::TPQTabletConfig cfg;
+    cfg.SetTopicName("my-stream");
+    cfg.SetTopicPath("/lb/database/my-stream");
+    cfg.SetYdbDatabasePath("/lb/database");
+
+    auto names = NamesFromConfig(cfg, true);
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "my-stream");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/lb/database/my-stream");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetInternalName(), "/lb/database/my-stream");
+}
+
+Y_UNIT_TEST_F(NamesFromConfigFccTopicWhenFederationEnabled, TNameResolverFixture) {
+    SetFcc(false);
+    NKikimrPQ::TPQTabletConfig cfg;
+    cfg.SetTopicName("topic-0-test");
+    cfg.SetTopicPath("/Root/topic-0-test");
+    cfg.SetYdbDatabasePath("/Root");
+
+    auto names = NamesFromConfig(cfg);
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "topic-0-test");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/Root/topic-0-test");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetInternalName(), "/Root/topic-0-test");
+}
+
+Y_UNIT_TEST_F(NamesFromConfigLegacyStyleDoubleName, TNameResolverFixture) {
+    SetFcc(false);
+    NKikimrPQ::TPQTabletConfig cfg;
+    cfg.SetTopicName("rt3.dc1--account@account--account");
+    cfg.SetTopicPath("/Root/PQ/rt3.dc1--account@account--account");
+    cfg.SetFederationAccount("account");
+    cfg.SetLocalDC(true);
+    cfg.SetDC("dc1");
+    cfg.SetYdbDatabasePath("");
+
+    auto names = NamesFromConfig(cfg);
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "account/account/account");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "rt3.dc1--account@account--account");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetTopicForSrcIdHash(), "account@account--account");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetModernName(), "account/account");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetInternalName(), "rt3.dc1--account@account--account");
+}
+
+Y_UNIT_TEST_F(NamesFromConfigModernPathLocalAndRemote, TNameResolverFixture) {
+    SetFcc(false);
+    {
+        NKikimrPQ::TPQTabletConfig cfg;
+        cfg.SetTopicName("rt3.dc1--account@path--topic");
+        cfg.SetTopicPath("/lb/account-database/path/topic");
+        cfg.SetFederationAccount("account");
+        cfg.SetDC("dc1");
+        cfg.SetLocalDC(true);
+        cfg.SetYdbDatabasePath("/lb/account-database");
+
+        auto names = NamesFromConfig(cfg);
+        UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/lb/account-database/path/topic");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetSecondaryPath(), "/Root/PQ/rt3.dc1--account@path--topic");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetModernName(), "path/topic");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "rt3.dc1--account@path--topic");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "account/path/topic");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetInternalName(), "rt3.dc1--account@path--topic");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetTopicForSrcIdHash(), "account@path--topic");
+    }
+    {
+        NKikimrPQ::TPQTabletConfig cfg;
+        cfg.SetTopicName("rt3.dc2--account@path--topic");
+        cfg.SetLocalDC(false);
+        cfg.SetTopicPath("/lb/account-database/path/topic-mirrored-from-dc2");
+        cfg.SetFederationAccount("account");
+        cfg.SetDC("dc2");
+        cfg.SetYdbDatabasePath("/lb/account-database");
+
+        auto names = NamesFromConfig(cfg);
+        UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/lb/account-database/path/topic-mirrored-from-dc2");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetSecondaryPath(), "/Root/PQ/rt3.dc2--account@path--topic");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetModernName(), "path/topic-mirrored-from-dc2");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "rt3.dc2--account@path--topic");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "account/path/topic");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPathWithDC(), "account/path/topic-mirrored-from-dc2");
+        UNIT_ASSERT_VALUES_EQUAL(names.GetTopicForSrcIdHash(), "account@path--topic");
+    }
+}
+
+Y_UNIT_TEST_F(NamesFromConfigNoTopicName, TNameResolverFixture) {
+    SetFcc(false);
+    NKikimrPQ::TPQTabletConfig cfg;
+    cfg.SetTopic("topic");
+    cfg.SetTopicPath("/Root/PQ/rt3.dc1--account@path--topic");
+    cfg.SetFederationAccount("account");
+    cfg.SetDC("dc1");
+    cfg.SetLocalDC(true);
+
+    auto names = NamesFromConfig(cfg);
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/Root/PQ/rt3.dc1--account@path--topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetModernName(), "path/topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "rt3.dc1--account@path--topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "account/path/topic");
+}
+
+Y_UNIT_TEST(NamesFromConfigExplicitPrefixNoAppData) {
+    NKikimrPQ::TPQTabletConfig cfg;
+    cfg.SetTopicName("rt3.dc1--account@path--topic");
+    cfg.SetTopicPath("/lb/account-database/path/topic");
+    cfg.SetFederationAccount("account");
+    cfg.SetDC("dc1");
+    cfg.SetLocalDC(true);
+    cfg.SetYdbDatabasePath("/lb/account-database");
+
+    auto names = NamesFromConfig(cfg, TString(), false, "Root/PQ", "");
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), "/lb/account-database/path/topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetSecondaryPath(), "/Root/PQ/rt3.dc1--account@path--topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "rt3.dc1--account@path--topic");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "account/path/topic");
+}
+
+Y_UNIT_TEST_F(NamesFromConfigEmptyPathIsInvalid, TNameResolverFixture) {
+    NKikimrPQ::TPQTabletConfig cfg;
+    auto names = NamesFromConfig(cfg, TString());
+    UNIT_ASSERT(!names.IsValid());
+}
+
 } // Y_UNIT_TEST_SUITE(TNameResolverTest)

@@ -1,9 +1,12 @@
 #pragma once
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 
 #include <expected>
+#include <memory>
 #include <optional>
 
 namespace NKikimr::NPQ::NNameResolver {
@@ -86,5 +89,104 @@ std::optional<TFederationAccountTarget> TryFederationAccountTarget(
     TStringBuf path,
     TStringBuf federationRoot
 );
+
+/**
+ * All names derived from a tablet config.
+ * Value type; pass TTopicNamesPtr where a shared handle is needed.
+ *
+ * Federation example (local DC, TopicPath "/Root/PQ/rt3.dc1--account--topic"):
+ *   Path="/Root/PQ/rt3.dc1--account--topic"
+ *   ClientsideName="rt3.dc1--account--topic", ShortClientsideName="account--topic"
+ *   ModernName="topic"
+ *   FederationPath="account/topic", FederationPathWithDC="account/topic"
+ *   Account="account", Cluster="dc1", LegacyProducer="account", LegacyLogtype="topic"
+ *   InternalName="rt3.dc1--account--topic"
+ *   TopicForSrcIdHash="account--topic"
+ *
+ * User-database federation (TopicPath "/lb/account-database/path/topic"):
+ *   Path="/lb/account-database/path/topic"
+ *   SecondaryPath="/Root/PQ/rt3.dc1--account@path--topic"
+ *
+ * FCC example (TopicPath "/lb/database/my-stream"):
+ *   Path="/lb/database/my-stream", ClientsideName="my-stream"
+ *   FederationPath=FederationPathWithDC="my-stream"
+ *   TopicForSrcIdHash="lb/database/my-stream", InternalName="/lb/database/my-stream"
+ */
+struct TTopicNames {
+    // False if parsing failed; then only Reason is meaningful.
+    bool Valid = false;
+    TString Reason;
+
+    TString Path;
+    TString ClientsideName;
+    TString ShortClientsideName;
+    TString ModernName;
+    TString FederationPath;
+    TString FederationPathWithDC;
+    TString Account;
+    TString Cluster;
+    TString LegacyProducer;
+    TString LegacyLogtype;
+    TString InternalName;
+    TString TopicForSrcIdHash;
+    TString SecondaryPath;
+
+    bool IsValid() const { return Valid; }
+    const TString& GetReason() const { return Reason; }
+
+    const TString& GetClientsideName() const { return ClientsideName; }
+    TString GetPrimaryPath() const { return Path; }
+    TString GetFederationPath() const { return FederationPath; }
+    TString GetFederationPathWithDC() const { return FederationPathWithDC; }
+    const TString& GetAccount() const { return Account; }
+    const TString& GetCluster() const { return Cluster; }
+    const TString& GetLegacyProducer() const { return LegacyProducer; }
+    const TString& GetLegacyLogtype() const { return LegacyLogtype; }
+    const TString& GetModernName() const { return ModernName; }
+    TString GetInternalName() const { return InternalName; }
+    TString GetTopicForSrcIdHash() const { return TopicForSrcIdHash; }
+    TString GetSecondaryPath() const { return SecondaryPath; }
+    TString GetPrintableString() const { return Path; }
+};
+
+using TTopicNamesPtr = std::shared_ptr<const TTopicNames>;
+
+inline TTopicNamesPtr MakeTopicNamesPtr(TTopicNames names) {
+    return std::make_shared<const TTopicNames>(std::move(names));
+}
+
+/**
+ * Tablet's only name entry. Reads firstClassCitizen, PQ Root and TestDatabaseRoot from AppData()->PQConfig.
+ * SchemeCache fills TPQGroupInfo::Names with NamesFromConfig(config, schemePath).
+ */
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config);
+
+/**
+ * Same as NamesFromConfig(config), but uses topicPath instead of config.GetTopicPath().
+ * Pass the scheme path when the stored tablet config has no TopicPath.
+ */
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath);
+
+/**
+ * Same formation as NamesFromConfig, but firstClassCitizen is passed explicitly and AppData is not read.
+ */
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, bool firstClassCitizen);
+
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath, bool firstClassCitizen);
+
+/**
+ * Same as NamesFromConfig(config, topicPath, firstClassCitizen), but PQ prefix and
+ * TestDatabaseRoot override are passed explicitly (AppData is not read).
+ * pqNormalizedPrefix is slash-stripped PQ Root, matching TTopicNamesConverterFactory.
+ */
+TTopicNames NamesFromConfig(
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TString& topicPath,
+    bool firstClassCitizen,
+    const TString& pqNormalizedPrefix,
+    const TString& ydbDatabaseRootOverride);
+
+// const char* would convert to bool and skip topicPath. Pass TString.
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const char*) = delete;
 
 } // namespace NKikimr::NPQ::NNameResolver

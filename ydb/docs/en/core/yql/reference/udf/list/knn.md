@@ -57,6 +57,8 @@ Currently {{ ydb-short-name }} does not support building an index for vectors wi
 
 ```yql
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
+Knn::ToBinaryStringFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "Float16Vector">
+Knn::ToBinaryStringBFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "BFloat16Vector">
 Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
 Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
 Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
@@ -75,12 +77,16 @@ Conversion functions for vector data convert an array of elements into a byte st
   `1` — `Float` (4 bytes per element)
   `2` — `Uint8` (1 byte per element)
   `3` — `Int8` (1 byte per element)
+  `4` — `Float16` (2 bytes per element, [IEEE-754 binary16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format))
+  `5` — `BFloat16` (2 bytes per element, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format))
   `10` — `Bit` (1 bit per element)
 
 For example, a vector of 5 elements of type `Float` will be serialized into a 21-byte string:  
 4 bytes × 5 elements (main part) + 1 byte (type) = 21 bytes.
 
 #### Implementation details {#functions-convert-details}
+
+`ToBinaryStringFloat16` and `ToBinaryStringBFloat16` round `Float` coordinates to the nearest representable value, with ties to even. `FloatFromBinaryString` converts them back to `Float`. Use `vector_type=float16` or `vector_type=bfloat16` for vector indexes storing these formats.
 
 The `ToBinaryStringBit` function maps coordinates that are greater than `0` to `1`. All other coordinates are mapped to `0`.
 
@@ -119,7 +125,7 @@ In case of mismatched lengths or formats, these functions return `NULL`.
 
 {% note info %}
 
-All distance and similarity functions support overloads when first or second arguments are `Tagged<String, "FloatVector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+All distance and similarity functions support overloads when first or second arguments are `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
 
 If both arguments are `Tagged`, tag values should match, or the query will raise an error.
 

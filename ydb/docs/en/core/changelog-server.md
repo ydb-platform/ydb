@@ -10,7 +10,6 @@ Release date: TBD.
 * Column-oriented table columns support [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.3#encoding). Use `ENCODING(DICT)` for low-cardinality values.
 * [Local min_max indexes](./dev/min_max-skip-index.md?version=v26.3) are enabled for column-oriented tables. They skip data fragments outside a query range, reducing the amount of data read.
 * Added [storage group decommissioning through virtual storage groups](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data moves to virtual groups in the background while applications continue reading and writing data.
-* Streaming writes are available for secondary indexes, `RETURNING`, and `DEFAULT`, reducing memory consumption and latency for large write operations.
 * Added [authentication through external OpenID Connect identity providers](./security/authentication.md?version=v26.3#external-idp). {{ ydb-short-name }} validates JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
 * Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
 * Removed the experimental PostgreSQL wire protocol and PostgreSQL SQL syntax from `ydbd`. PostgreSQL-compatible types, `Pg::` functions, and federated queries to external PostgreSQL databases are not affected.

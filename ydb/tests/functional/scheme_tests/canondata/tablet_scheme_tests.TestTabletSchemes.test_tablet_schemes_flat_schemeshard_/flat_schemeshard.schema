@@ -928,11 +928,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "BootstrapConfig",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -961,19 +956,24 @@
                 "ColumnId": 6,
                 "ColumnName": "NextPartitionId",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "BootstrapConfig",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2973,11 +2973,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 17,
-                "ColumnName": "NeedSyncHive",
-                "ColumnType": "Bool"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "TxId",
                 "ColumnType": "Uint64"
@@ -3056,13 +3051,17 @@
                 "ColumnId": 16,
                 "ColumnName": "NeedUpdateObject",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "NeedSyncHive",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
                     1,
                     2,
                     3,
@@ -3078,7 +3077,8 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3815,11 +3815,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "TabletType",
-                "ColumnType": "Uint32"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerShardId",
                 "ColumnType": "Uint64"
@@ -3848,19 +3843,24 @@
                 "ColumnId": 6,
                 "ColumnName": "LastTxId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "TabletType",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3954,11 +3954,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 17,
-                "ColumnName": "MultiColumnStatistics",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerPathId",
                 "ColumnType": "Uint64"
@@ -4037,13 +4032,17 @@
                 "ColumnId": 16,
                 "ColumnName": "DetailedMetricsSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "MultiColumnStatistics",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
                     1,
                     2,
                     3,
@@ -4059,7 +4058,8 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6767,11 +6767,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "RowsProcessed",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "TxId",
                 "ColumnType": "Uint64"
@@ -6800,19 +6795,24 @@
                 "ColumnId": 6,
                 "ColumnName": "BytesProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "RowsProcessed",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7039,11 +7039,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "MultiColumnStatistics",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -7072,19 +7067,24 @@
                 "ColumnId": 6,
                 "ColumnName": "StandaloneSharding",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "MultiColumnStatistics",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8088,11 +8088,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "Content",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerPathId",
                 "ColumnType": "Uint64"
@@ -8121,19 +8116,24 @@
                 "ColumnId": 6,
                 "ColumnName": "Location",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "Content",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9326,11 +9326,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "EndTime",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "Id",
                 "ColumnType": "Uint64"
@@ -9359,19 +9354,24 @@
                 "ColumnId": 6,
                 "ColumnName": "StartTime",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9912,11 +9912,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "NextCondErase",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerPathId",
                 "ColumnType": "Uint64"
@@ -9945,19 +9940,24 @@
                 "ColumnId": 6,
                 "ColumnName": "LastCondErase",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "NextCondErase",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7
                 ],
                 "RoomID": 0,
                 "Codec": 0,

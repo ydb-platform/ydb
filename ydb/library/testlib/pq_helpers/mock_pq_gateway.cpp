@@ -484,6 +484,11 @@ public:
         UnpublishedData.erase(it);
     }
 
+    void CancelDeferredPublication(const ui64 publicationIntId) {
+        const auto lock = Guard();
+        UnpublishedData.erase(publicationIntId);
+    }
+
 private:
     void AddAck(const ui64 seqNo) {
         auto ack = NYdb::NTopic::TWriteSessionEvent::TWriteAck{
@@ -654,6 +659,38 @@ class TMockPqGateway final : public IMockPqGateway {
 
                 return NThreading::MakeFuture<NYdb::NTopic::TPublishResult>(DoCommitDeferredPublication(intId));
             }
+        }
+
+        NYdb::NTopic::TAsyncCancelPublicationResult CancelPublication(const NYdb::NTopic::TDeferredPublication& publication, const NYdb::NTopic::TCancelPublicationSettings& /*settings*/) final {
+            with_lock (Mutex) {
+                const auto it = OpenedPublications.find(publication.IntPublicationId);
+                if (it == OpenedPublications.end()) {
+                    return NThreading::MakeFuture(NYdb::NTopic::TCancelPublicationResult(NYdb::TStatus(NYdb::EStatus::NOT_FOUND, {})));
+                }
+
+                CreatedExtPublicationIds.erase(TString(it->second.ExtPublicationId));
+                OpenedPublications.erase(it);
+                for (const auto& writeSession : WriteSessions) {
+                    writeSession->CancelDeferredPublication(publication.IntPublicationId);
+                }
+            }
+            return NThreading::MakeFuture(NYdb::NTopic::TCancelPublicationResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+        }
+
+        NYdb::NTopic::TAsyncListPublicationsResult ListPublications(const NYdb::NTopic::TListPublicationsSettings& settings) final {
+            std::vector<NYdb::NTopic::TPublicationSummary> publications;
+            with_lock (Mutex) {
+                for (const auto& [intId, info] : OpenedPublications) {
+                    if (!settings.WriterIdentity_ || settings.WriterIdentity_ == info.WriterIdentity) {
+                        publications.push_back({
+                            .IntPublicationId = intId,
+                            .ExtPublicationId = info.ExtPublicationId,
+                            .WriterIdentity = info.WriterIdentity,
+                        });
+                    }
+                }
+            }
+            return NThreading::MakeFuture(NYdb::NTopic::TListPublicationsResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(publications)));
         }
 
         //// Mock API implementation

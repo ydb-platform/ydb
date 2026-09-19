@@ -496,5 +496,53 @@ Y_UNIT_TEST_SUITE(TopicNameConverterForCPTest) {
             UNIT_ASSERT_VALUES_EQUAL(overridden->GetClientsideName(), "/Root/table/stream");
         }
     }
+
+    Y_UNIT_TEST(UpgradeToFullConverterKeepsInvalidNames) {
+        TConverterTestWrapper wrapper(false, "/Root/PQ", "dc1");
+        wrapper.SetConverter("rt3.dc1--account--topic", "", "");
+        UNIT_ASSERT_C(wrapper.DiscoveryConverter->IsValid(), wrapper.DiscoveryConverter->GetReason());
+
+        NKikimrPQ::TPQTabletConfig pqConfig;
+        pqConfig.SetTopicName("rt3.dc1--account--topic");
+        pqConfig.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
+        pqConfig.SetFederationAccount("account");
+        pqConfig.SetLocalDC(true);
+        pqConfig.SetDC("dc1");
+        pqConfig.SetYdbDatabasePath("");
+
+        NKikimr::NPQ::NNameResolver::TTopicNames invalid;
+        invalid.Reason = "test";
+        auto fromInvalid = wrapper.DiscoveryConverter->UpgradeToFullConverter(
+            NKikimr::NPQ::NNameResolver::MakeTopicNamesPtr(std::move(invalid)), pqConfig, "");
+
+        UNIT_ASSERT(!fromInvalid->IsValid());
+        UNIT_ASSERT_VALUES_EQUAL(fromInvalid->GetReason(), "test");
+    }
+
+    Y_UNIT_TEST(UpgradeToFullConverterUsesNamesParseMode) {
+        TConverterTestWrapper wrapper(false, "/Root/PQ", "dc1");
+        wrapper.SetConverter("rt3.dc1--account--topic", "", "");
+        UNIT_ASSERT_C(wrapper.DiscoveryConverter->IsValid(), wrapper.DiscoveryConverter->GetReason());
+
+        NKikimrPQ::TPQTabletConfig pqConfig;
+        pqConfig.SetTopicName("my-stream");
+        pqConfig.SetTopicPath("/lb/database/my-stream");
+        pqConfig.SetYdbDatabasePath("/lb/database");
+
+        auto names = NKikimr::NPQ::NNameResolver::NamesFromConfig(
+            pqConfig, TString(), true, "", "");
+        UNIT_ASSERT_C(names.Valid, names.Reason);
+        UNIT_ASSERT(names.FirstClassCitizen);
+
+        auto full = wrapper.DiscoveryConverter->UpgradeToFullConverter(
+            NKikimr::NPQ::NNameResolver::MakeTopicNamesPtr(names), pqConfig, "");
+        auto fcc = TTopicNameConverter::ForFirstClass(pqConfig);
+
+        UNIT_ASSERT_C(full->IsValid(), full->GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(full->GetClientsideName(), fcc->GetClientsideName());
+        UNIT_ASSERT_VALUES_EQUAL(full->GetFederationPath(), fcc->GetFederationPath());
+        UNIT_ASSERT_VALUES_EQUAL(full->GetTopicForSrcIdHash(), fcc->GetTopicForSrcIdHash());
+        UNIT_ASSERT_VALUES_EQUAL(full->GetInternalName(), fcc->GetInternalName());
+    }
 }
 } // NTests

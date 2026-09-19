@@ -76,6 +76,31 @@ bool IsExplicitLegacyName(TStringBuf topic) {
         && (topic.StartsWith("rt3.") || topic.Contains("--") || topic.Contains("@"));
 }
 
+// True for objects that must be parsed as federation on a federation node.
+// False for first-class tablets on a FCC-off node (kafka BalanceScenarioForFederation).
+bool LooksLikeFederationObject(
+    const NKikimrPQ::TPQTabletConfig& config,
+    TStringBuf topicPath,
+    TStringBuf pqNormalizedPrefix)
+{
+    if (!config.GetFederationAccount().empty()) {
+        return true;
+    }
+    TStringBuf path = topicPath.empty() ? TStringBuf(config.GetTopicPath()) : topicPath;
+    path = StripLeadingSlash(path);
+    if (!pqNormalizedPrefix.empty() && IsPathPrefix(path, pqNormalizedPrefix)) {
+        return true;
+    }
+    TStringBuf name = config.GetTopicName();
+    if (name.empty()) {
+        name = path;
+        if (const auto slash = name.rfind('/'); slash != TStringBuf::npos) {
+            name = name.substr(slash + 1);
+        }
+    }
+    return IsExplicitLegacyName(StripLeadingSlash(name));
+}
+
 bool IsCleanRelativePath(TStringBuf path) {
     return !path.empty()
         && !path.StartsWith('/')
@@ -997,10 +1022,11 @@ struct TNameBuilder {
         }
     }
 
-    TTopicNames ToTopicNames(bool fromConfig) const {
+    TTopicNames ToTopicNames() const {
         TTopicNames names;
         names.Valid = Valid;
         names.Reason = Reason;
+        names.FirstClassCitizen = FstClass;
         if (!names.Valid) {
             return names;
         }
@@ -1019,25 +1045,21 @@ struct TNameBuilder {
                 ? (*Account_ + "/" + FullModernName)
                 : LbPath.GetOrElse("");
         }
-        if (fromConfig) {
-            if (FullModernName.empty() || ClientsideName.empty()) {
-                names.Valid = false;
-                names.Reason = "Internal error: empty modern or clientside name.";
-                return names;
-            }
-            names.InternalName = InternalName;
-            names.ClientsideName = ClientsideName;
-            names.ShortClientsideName = ShortClientsideName;
-            if (FstClass) {
-                names.TopicForSrcIdHash = StripLeadSlash(FullModernPath);
-            } else {
-                names.TopicForSrcIdHash = ShortLegacyName;
-            }
-            if (SecondaryPath.Defined()) {
-                names.SecondaryPath = *SecondaryPath;
-            }
+        if (FullModernName.empty() || ClientsideName.empty()) {
+            names.Valid = false;
+            names.Reason = "Internal error: empty modern or clientside name.";
+            return names;
+        }
+        names.InternalName = InternalName;
+        names.ClientsideName = ClientsideName;
+        names.ShortClientsideName = ShortClientsideName;
+        if (FstClass) {
+            names.TopicForSrcIdHash = StripLeadSlash(FullModernPath);
         } else {
-            names.InternalName = names.Path;
+            names.TopicForSrcIdHash = ShortLegacyName;
+        }
+        if (SecondaryPath.Defined()) {
+            names.SecondaryPath = *SecondaryPath;
         }
         return names;
     }
@@ -1057,7 +1079,7 @@ TTopicNames NamesFromConfig(
     TNameBuilder builder;
     builder.InitFromTabletConfig(
         firstClassCitizen, pqNormalizedPrefix, config, ydbDatabaseRootOverride, topicPath);
-    return builder.ToTopicNames(true);
+    return builder.ToTopicNames();
 }
 
 TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath, bool firstClassCitizen) {
@@ -1075,21 +1097,21 @@ TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TStr
         return names;
     }
     const auto& pqConfig = AppData()->PQConfig;
-    const bool firstClassCitizen = pqConfig.GetTopicsAreFirstClassCitizen() || !pqConfig.GetEnabled();
+    const bool nodeIsFirstClass = pqConfig.GetTopicsAreFirstClassCitizen() || !pqConfig.GetEnabled();
+    const auto pqPrefix = NormalizePqPrefix(pqConfig.GetRoot());
+    // On a federation node, first-class tablets (e.g. /Root/topic-0-test) are not
+    // federation objects: parse them as FCC once. Do not try federation first and
+    // retry — a failed federation parse of a fed object must stay invalid.
+    const bool firstClassCitizen = nodeIsFirstClass
+        || !LooksLikeFederationObject(config, topicPath, pqPrefix);
     TNameBuilder builder;
     builder.InitFromTabletConfig(
         firstClassCitizen,
-        NormalizePqPrefix(pqConfig.GetRoot()),
+        pqPrefix,
         config,
         pqConfig.GetTestDatabaseRoot(),
         topicPath);
-    auto names = builder.ToTopicNames(true);
-    // Request-side FCC converters used to keep names valid when AppData FCC is off
-    // for a first-class tablet config (kafka BalanceScenarioForFederation).
-    if (!names.Valid && !firstClassCitizen) {
-        return NamesFromConfig(config, topicPath, true);
-    }
-    return names;
+    return builder.ToTopicNames();
 }
 
 TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config) {

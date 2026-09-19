@@ -85,7 +85,10 @@ public:
     TTopicConverterPtr UpgradeToFullConverter(const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
                                               const TString& ydbDatabaseRootOverride,
                                               const TMaybe<TString>& clientsideNameOverride = {});
-    // Prefer when SchemeCache already filled TPQGroupInfo::Names. Falls back to tablet config if names is null.
+    // Prefer when SchemeCache already filled TPQGroupInfo::Names.
+    // Trusts that result: invalid names are returned as an invalid converter, not re-parsed.
+    // Falls back to tablet config only if names is null.
+    // Uses names.FirstClassCitizen so FCC names are not mixed with a federation discovery converter.
     TTopicConverterPtr UpgradeToFullConverter(
         const NKikimr::NPQ::NNameResolver::TTopicNames::TPtr& names,
         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,

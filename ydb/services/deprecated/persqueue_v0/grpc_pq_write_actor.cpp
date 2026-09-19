@@ -396,6 +396,12 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         PQInfo->Names,
         Config.GetPQTabletConfig(),
         AppData(ctx)->PQConfig.GetTestDatabaseRoot());
+    if (!FullConverter->IsValid()) {
+        errorReason = Sprintf("Internal server error with topic '%s': %s, Marker# PQ503",
+            DiscoveryConverter->GetPrintableString().c_str(), FullConverter->GetReason().c_str());
+        CloseSession(errorReason, NPersQueue::NErrorCode::ERROR, ctx);
+        return;
+    }
     InitAfterDiscovery(ctx);
     SecurityObject = entry.SecurityObject;
 

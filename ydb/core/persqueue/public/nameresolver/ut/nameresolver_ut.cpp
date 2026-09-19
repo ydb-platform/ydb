@@ -703,6 +703,7 @@ Y_UNIT_TEST_F(NamesFromConfigFederationLocal, TNameResolverFixture) {
 
     auto names = NamesFromConfig(cfg);
     UNIT_ASSERT_C(names.Valid, names.Reason);
+    UNIT_ASSERT(!names.FirstClassCitizen);
     UNIT_ASSERT_VALUES_EQUAL(names.ClientsideName, "rt3.dc1--account--topic");
     UNIT_ASSERT_VALUES_EQUAL(names.ShortClientsideName, "account--topic");
     UNIT_ASSERT_VALUES_EQUAL(names.FederationPath, "account/topic");
@@ -743,6 +744,7 @@ Y_UNIT_TEST_F(NamesFromConfigFcc, TNameResolverFixture) {
 
     auto names = NamesFromConfig(cfg);
     UNIT_ASSERT_C(names.Valid, names.Reason);
+    UNIT_ASSERT(names.FirstClassCitizen);
     UNIT_ASSERT_VALUES_EQUAL(names.ClientsideName, "my-stream");
     UNIT_ASSERT_VALUES_EQUAL(names.FederationPath, "my-stream");
     UNIT_ASSERT_VALUES_EQUAL(names.FederationPathWithDC, "my-stream");
@@ -786,6 +788,7 @@ Y_UNIT_TEST_F(NamesFromConfigFccTopicWhenFederationEnabled, TNameResolverFixture
 
     auto names = NamesFromConfig(cfg);
     UNIT_ASSERT_C(names.Valid, names.Reason);
+    UNIT_ASSERT(names.FirstClassCitizen);
     UNIT_ASSERT_VALUES_EQUAL(names.ClientsideName, "topic-0-test");
     UNIT_ASSERT_VALUES_EQUAL(names.Path, "/Root/topic-0-test");
     UNIT_ASSERT_VALUES_EQUAL(names.InternalName, "/Root/topic-0-test");
@@ -950,6 +953,31 @@ Y_UNIT_TEST_F(NamesFromConfigDoesNotAbortOnMalformedInput, TNameResolverFixture)
     badMirror.SetYdbDatabasePath("/lb/db");
     badMirror.SetFederationAccount("account");
     expectInvalid(badMirror, TString(), false);
+}
+
+Y_UNIT_TEST_F(NamesFromConfigDoesNotFccMaskMalformedFederation, TNameResolverFixture) {
+    SetFcc(false);
+
+    NKikimrPQ::TPQTabletConfig underPq;
+    underPq.SetTopicPath("/Root/PQ/account/topic");
+    auto names = NamesFromConfig(underPq);
+    UNIT_ASSERT(!names.Valid);
+    UNIT_ASSERT(!names.FirstClassCitizen);
+    UNIT_ASSERT(!names.Reason.empty());
+
+    NKikimrPQ::TPQTabletConfig rt3NoDash;
+    rt3NoDash.SetTopicPath("/Root/PQ/rt3.dc1topic");
+    names = NamesFromConfig(rt3NoDash, TString("/Root/PQ/rt3.dc1topic"));
+    UNIT_ASSERT(!names.Valid);
+    UNIT_ASSERT(!names.FirstClassCitizen);
+
+    NKikimrPQ::TPQTabletConfig userDb;
+    userDb.SetTopicPath("/lb/db/topic-mirrored-from");
+    userDb.SetYdbDatabasePath("/lb/db");
+    userDb.SetFederationAccount("account");
+    names = NamesFromConfig(userDb);
+    UNIT_ASSERT(!names.Valid);
+    UNIT_ASSERT(!names.FirstClassCitizen);
 }
 
 } // Y_UNIT_TEST_SUITE(TNameResolverTest)

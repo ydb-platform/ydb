@@ -300,7 +300,7 @@ TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
     if (names) {
         AFL_ENSURE(Valid)("reason", Reason)("original_topic", OriginalTopic);
         return TTopicNameConverter::FromNames(
-            FstClass, *names, clientsideNameOverride, pqTabletConfig.GetYdbDatabasePath());
+            names->FirstClassCitizen, *names, clientsideNameOverride, pqTabletConfig.GetYdbDatabasePath());
     }
     return UpgradeToFullConverter(pqTabletConfig, ydbDatabaseRootOverride, clientsideNameOverride);
 }

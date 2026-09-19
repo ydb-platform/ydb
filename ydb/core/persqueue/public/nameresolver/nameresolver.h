@@ -106,6 +106,10 @@ struct TTopicNames {
     bool Valid = false;
     TString Reason;
 
+    // Parse mode used to fill the fields below. True after FCC parse, including a
+    // first-class tablet on a federation node (kafka BalanceScenarioForFederation).
+    bool FirstClassCitizen = false;
+
     // Absolute scheme path of the topic object.
     // Fed: "/Root/PQ/rt3.dc1--account--topic"
     // Fed dir: "/lb/account-database/path/topic"
@@ -146,9 +150,9 @@ struct TTopicNames {
     // FCC: empty
     TString Account;
 
-    // Origin DC from tablet config.
+    // Origin DC copied from tablet config (PQTabletConfig.DC). Empty if DC is unset.
     // Fed: "dc1"
-    // FCC: empty
+    // FCC: empty unless the tablet config has DC
     TString Cluster;
 
     // Logbroker producer: account or account@dir. Solomon Producer label.
@@ -174,10 +178,11 @@ struct TTopicNames {
     // FCC: "lb/database/my-stream" (scheme path without leading slash)
     TString TopicForSrcIdHash;
 
-    // Alternate scheme path. Set for user-database federation (legacy PQ-root leaf).
-    // Fed PQ-root: empty
-    // Fed dir: "/Root/PQ/rt3.dc1--account@path--topic"
-    // FCC: empty
+    // Alternate scheme path. Empty in FCC.
+    // User-database federation: legacy PQ-root leaf
+    //   Fed dir: "/Root/PQ/rt3.dc1--account@path--topic"
+    // PQ-root federation: JoinPath({YdbDatabasePath, ModernName}) when YdbDatabasePath is set,
+    // otherwise empty.
     TString SecondaryPath;
 };
 

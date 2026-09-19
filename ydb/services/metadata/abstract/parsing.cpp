@@ -31,6 +31,8 @@ void TObjectSettingsImpl::DeserializeFeatures(const TCoNameValueTupleList& featu
                 result.emplace(name, maybeInt.Cast().Literal().Cast<TCoAtom>());
             } else if (const auto& maybeBool = value.Maybe<TCoBool>()) {
                 result.emplace(name, maybeBool.Cast().Literal().Cast<TCoAtom>());
+            } else if (value.Maybe<TCoString>() || value.Maybe<TCoUtf8>() || value.Maybe<TCoTimestamp>()) {
+                result.emplace(name, value.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>());
             } else if (const auto& maybeList = value.Maybe<TCoNameValueTupleList>()) {
                 TFeaturesExtractor::TFeatures features;
                 DeserializeFeatures(maybeList.Cast(), features);

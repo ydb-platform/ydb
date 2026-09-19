@@ -623,10 +623,17 @@ protected:
 
 class TOpGroupingSets: public IUnaryOperator {
 public:
-    TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos);
+    using TGroupingIndicators = TVector<std::pair<TInfoUnit, TInfoUnit>>;
+
+    TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TGroupingIndicators groupingIndicators,
+                    TPositionHandle pos);
 
     const TVector<TVector<TInfoUnit>>& GetGroupingSets() const {
         return GroupingSets;
+    }
+
+    const TGroupingIndicators& GetGroupingIndicators() const {
+        return GroupingIndicators;
     }
 
     virtual TString ToString(TExprContext& ctx) override;
@@ -638,6 +645,7 @@ protected:
 
 private:
     TVector<TVector<TInfoUnit>> GroupingSets;
+    TGroupingIndicators GroupingIndicators;
 };
 
 enum class EWindowFuncKind : ui32 {
@@ -746,7 +754,7 @@ protected:
 class TOpFilter: public IUnaryOperator {
 public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr);
-    TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr);
+    TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr, bool partiallyPushedDown = false);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual const TVector<TInfoUnit>& GetUniqueRawInputIUs() const override;
@@ -766,6 +774,8 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     const TExpression& GetFilterExpression() const { return FilterExpr; }
     void SetFilterExpression(TExpression filterExpr);
+
+    bool PartiallyPushedDown = false;
 
 protected:
     void ComputeOutputIUs() override;

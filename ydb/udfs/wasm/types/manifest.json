@@ -2,374 +2,244 @@
   "module_type": "module",
   "module_kind": "wasm",
   "module_name": "BridgeTypes",
-  "calling_convention": "bridge",
   "module_extension": "wasm",
-  "required_libraries": ["sdk"],
+  "required_libraries": [
+    "sdk"
+  ],
   "functions": [
     {
       "name": "EchoBool",
       "export": "echo_bool",
-      "argument_types": [{"value": "bool", "tag": "concrete_type"}],
-      "result_type": {"value": "bool", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Bool>"
+      ],
+      "result_type": "Optional<Bool>"
     },
     {
       "name": "EchoInt32",
       "export": "echo_int32",
-      "argument_types": [{"value": "int32", "tag": "concrete_type"}],
-      "result_type": {"value": "int32", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Int32>"
+      ],
+      "result_type": "Optional<Int32>"
     },
     {
       "name": "EchoUint32",
       "export": "echo_uint32",
-      "argument_types": [{"value": "uint32", "tag": "concrete_type"}],
-      "result_type": {"value": "uint32", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Uint32>"
+      ],
+      "result_type": "Optional<Uint32>"
     },
     {
       "name": "EchoInt64",
       "export": "echo_int64",
-      "argument_types": [{"value": "int64", "tag": "concrete_type"}],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Int64>"
+      ],
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "EchoUint64",
       "export": "echo_uint64",
-      "argument_types": [{"value": "uint64", "tag": "concrete_type"}],
-      "result_type": {"value": "uint64", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Uint64>"
+      ],
+      "result_type": "Optional<Uint64>"
     },
     {
       "name": "EchoFloat",
       "export": "echo_float",
-      "argument_types": [{"value": "float", "tag": "concrete_type"}],
-      "result_type": {"value": "float", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Float>"
+      ],
+      "result_type": "Optional<Float>"
     },
     {
       "name": "EchoDouble",
       "export": "echo_double",
-      "argument_types": [{"value": "double", "tag": "concrete_type"}],
-      "result_type": {"value": "double", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Double>"
+      ],
+      "result_type": "Optional<Double>"
     },
     {
       "name": "EchoString",
       "export": "echo_string",
-      "argument_types": [{"value": "string", "tag": "concrete_type"}],
-      "result_type": {"value": "string", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<String>"
+      ],
+      "result_type": "Optional<String>"
     },
     {
       "name": "EchoUtf8",
       "export": "echo_utf8",
-      "argument_types": [{"value": "utf8", "tag": "concrete_type"}],
-      "result_type": {"value": "utf8", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Utf8>"
+      ],
+      "result_type": "Optional<Utf8>"
     },
     {
       "name": "ReadDateAsUint64",
       "export": "read_date_as_uint64",
-      "argument_types": [{"value": "date", "tag": "concrete_type"}],
-      "result_type": {"value": "uint64", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Date>"
+      ],
+      "result_type": "Optional<Uint64>"
     },
     {
       "name": "ReadDatetimeAsUint32",
       "export": "read_datetime_as_uint32",
-      "argument_types": [{"value": "datetime", "tag": "concrete_type"}],
-      "result_type": {"value": "uint32", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Datetime>"
+      ],
+      "result_type": "Optional<Uint32>"
     },
     {
       "name": "ReadTimestampAsUint64",
       "export": "read_timestamp_as_uint64",
-      "argument_types": [{"value": "timestamp", "tag": "concrete_type"}],
-      "result_type": {"value": "uint64", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Timestamp>"
+      ],
+      "result_type": "Optional<Uint64>"
     },
     {
       "name": "ReadDecimalChecksum",
       "export": "read_decimal_checksum",
-      "argument_types": [{"value": "decimal", "tag": "concrete_type"}],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "argument_types": [
+        "Optional<Decimal(35,0)>"
+      ],
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "ListSumInt64",
       "export": "list_sum_int64",
       "argument_types": [
-        {
-          "value": "list",
-          "tag": "concrete_type",
-          "item": {"value": "int64", "tag": "concrete_type"}
-        }
+        "List<Int64>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "NestedListSumInt64",
       "export": "nested_list_sum_int64",
       "argument_types": [
-        {
-          "value": "list",
-          "tag": "concrete_type",
-          "item": {
-            "value": "list",
-            "tag": "concrete_type",
-            "item": {"value": "int64", "tag": "concrete_type"}
-          }
-        }
+        "List<List<Int64>>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "DictNestedListSums",
       "export": "dict_nested_list_sums",
       "argument_types": [
-        {
-          "value": "dict",
-          "tag": "concrete_type",
-          "key": {"value": "string", "tag": "concrete_type"},
-          "payload": {
-            "value": "list",
-            "tag": "concrete_type",
-            "item": {
-              "value": "list",
-              "tag": "concrete_type",
-              "item": {"value": "int64", "tag": "concrete_type"}
-            }
-          }
-        }
+        "Dict<String, List<List<Int64>>>"
       ],
-      "result_type": {
-        "value": "dict",
-        "tag": "concrete_type",
-        "key": {"value": "string", "tag": "concrete_type"},
-        "payload": {"value": "int64", "tag": "concrete_type"}
-      }
+      "result_type": "Dict<String, Int64>"
     },
     {
       "name": "DictGetInt64",
       "export": "dict_get_int64",
       "argument_types": [
-        {
-          "value": "dict",
-          "tag": "concrete_type",
-          "key": {"value": "string", "tag": "concrete_type"},
-          "payload": {"value": "int64", "tag": "concrete_type"}
-        },
-        {"value": "string", "tag": "concrete_type"}
+        "Dict<String, Int64>",
+        "Optional<String>"
       ],
-      "result_type": {
-        "value": "optional",
-        "tag": "concrete_type",
-        "item": {"value": "int64", "tag": "concrete_type"}
-      }
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "TupleKindSum",
       "export": "tuple_kind_sum",
       "argument_types": [
-        {
-          "value": "tuple",
-          "tag": "concrete_type",
-          "elements": [
-            {"value": "int64", "tag": "concrete_type"},
-            {"value": "string", "tag": "concrete_type"},
-            {"value": "float", "tag": "concrete_type"}
-          ]
-        }
+        "Tuple<Int64, String, Float>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "StructGetScore",
       "export": "struct_get_score",
       "argument_types": [
-        {
-          "value": "struct",
-          "tag": "concrete_type",
-          "members": [
-            {"name": "id", "type": {"value": "int32", "tag": "concrete_type"}},
-            {"name": "score", "type": {"value": "float", "tag": "concrete_type"}},
-            {"name": "name", "type": {"value": "utf8", "tag": "concrete_type"}}
-          ]
-        }
+        "Struct<'id': Int32, 'score': Float, 'name': Utf8>"
       ],
-      "result_type": {"value": "float", "tag": "concrete_type"}
+      "result_type": "Optional<Float>"
     },
     {
       "name": "VariantIndex",
       "export": "variant_index",
       "argument_types": [
-        {
-          "value": "variant",
-          "tag": "concrete_type",
-          "elements": [
-            {"value": "uint32", "tag": "concrete_type"},
-            {"value": "timestamp", "tag": "concrete_type"}
-          ]
-        }
+        "Variant<Uint32, Timestamp>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "OptionalListPresentCount",
       "export": "optional_list_present_count",
       "argument_types": [
-        {
-          "value": "list",
-          "tag": "concrete_type",
-          "item": {
-            "value": "optional",
-            "tag": "concrete_type",
-            "item": {"value": "int64", "tag": "concrete_type"}
-          }
-        }
+        "List<Optional<Int64>>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "ResourceTagLen",
       "export": "resource_tag_len",
       "argument_types": [
-        {"value": "resource", "tag": "concrete_type", "resource_tag": "Demo"}
+        "Resource<'Demo'>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "MakeGreetingStruct",
       "export": "make_greeting_struct",
       "argument_types": [],
-      "result_type": {
-        "value": "struct",
-        "tag": "concrete_type",
-        "members": [
-          {"name": "msg", "type": {"value": "string", "tag": "concrete_type"}},
-          {"name": "n", "type": {"value": "int64", "tag": "concrete_type"}}
-        ]
-      }
+      "result_type": "Struct<'msg': String, 'n': Int64>"
     },
     {
       "name": "MakeIntList",
       "export": "make_int_list",
       "argument_types": [],
-      "result_type": {
-        "value": "list",
-        "tag": "concrete_type",
-        "item": {"value": "int64", "tag": "concrete_type"}
-      }
+      "result_type": "List<Int64>"
     },
     {
       "name": "MakeNameDict",
       "export": "make_name_dict",
       "argument_types": [],
-      "result_type": {
-        "value": "dict",
-        "tag": "concrete_type",
-        "key": {"value": "string", "tag": "concrete_type"},
-        "payload": {"value": "int64", "tag": "concrete_type"}
-      }
+      "result_type": "Dict<String, Int64>"
     },
     {
       "name": "MakeNestedIntLists",
       "export": "make_nested_int_lists",
       "argument_types": [],
-      "result_type": {
-        "value": "list",
-        "tag": "concrete_type",
-        "item": {
-          "value": "list",
-          "tag": "concrete_type",
-          "item": {"value": "int64", "tag": "concrete_type"}
-        }
-      }
+      "result_type": "List<List<Int64>>"
     },
     {
       "name": "MakeIntListPair",
       "export": "make_int_list_pair",
       "argument_types": [],
-      "result_type": {
-        "value": "tuple",
-        "tag": "concrete_type",
-        "elements": [
-          {
-            "value": "list",
-            "tag": "concrete_type",
-            "item": {"value": "int64", "tag": "concrete_type"}
-          },
-          {
-            "value": "list",
-            "tag": "concrete_type",
-            "item": {"value": "int64", "tag": "concrete_type"}
-          }
-        ]
-      }
+      "result_type": "Tuple<List<Int64>, List<Int64>>"
     },
     {
       "name": "MakeLabelledPoint",
       "export": "make_labelled_point",
       "argument_types": [],
-      "result_type": {
-        "value": "struct",
-        "tag": "concrete_type",
-        "members": [
-          {"name": "label", "type": {"value": "string", "tag": "concrete_type"}},
-          {
-            "name": "point",
-            "type": {
-              "value": "struct",
-              "tag": "concrete_type",
-              "members": [
-                {"name": "x", "type": {"value": "int64", "tag": "concrete_type"}},
-                {"name": "y", "type": {"value": "int64", "tag": "concrete_type"}}
-              ]
-            }
-          }
-        ]
-      }
+      "result_type": "Struct<'label': String, 'point': Struct<'x': Int64, 'y': Int64>>"
     },
     {
       "name": "MakeOptionalIntListPair",
       "export": "make_optional_int_list_pair",
       "argument_types": [],
-      "result_type": {
-        "value": "optional",
-        "tag": "concrete_type",
-        "item": {
-          "value": "tuple",
-          "tag": "concrete_type",
-          "elements": [
-            {
-              "value": "list",
-              "tag": "concrete_type",
-              "item": {"value": "int64", "tag": "concrete_type"}
-            },
-            {
-              "value": "list",
-              "tag": "concrete_type",
-              "item": {"value": "int64", "tag": "concrete_type"}
-            }
-          ]
-        }
-      }
+      "result_type": "Optional<Tuple<List<Int64>, List<Int64>>>"
     },
     {
       "name": "MakeVariantUint32",
       "export": "make_variant_uint32",
       "argument_types": [],
-      "result_type": {
-        "value": "variant",
-        "tag": "concrete_type",
-        "elements": [
-          {"value": "uint32", "tag": "concrete_type"},
-          {"value": "timestamp", "tag": "concrete_type"}
-        ]
-      }
+      "result_type": "Variant<Uint32, Timestamp>"
     },
     {
       "name": "RunCallableInt64",
       "export": "run_callable_int64",
       "argument_types": [
-        {
-          "value": "callable",
-          "tag": "concrete_type",
-          "arguments": [{"value": "int64", "tag": "concrete_type"}],
-          "returns": {"value": "int64", "tag": "concrete_type"}
-        },
-        {"value": "int64", "tag": "concrete_type"}
+        "(Int64)->Int64",
+        "Optional<Int64>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     }
   ]
 }

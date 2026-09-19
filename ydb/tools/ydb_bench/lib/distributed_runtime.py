@@ -5,7 +5,7 @@ import json
 
 import yaml
 
-from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_json
+from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_json, atomic_write_text
 from ydb.tools.ydb_bench.lib.distributed_artifacts import copy_results
 from ydb.tools.ydb_bench.lib.distributed_coordinator import DistributedCluster, request_operation
 from ydb.tools.ydb_bench.lib.distributed_telemetry import estimate_clock, summarize_hosts
@@ -247,6 +247,7 @@ class DistributedRuntime:
                 }
             }
         )
+        atomic_write_text(self.output / "profile.yaml", self.config_yaml)
         # Freeze peer routing for this run. Membership edits must not redirect
         # a generation's renewal or cleanup to a different endpoint.
         self.peers = {

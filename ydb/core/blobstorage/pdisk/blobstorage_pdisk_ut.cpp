@@ -2546,6 +2546,161 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_LE(ui64(evCheckSpaceResult->TotalChunks) * formatChunkSize, expectedSlotSize);
     }
 
+    static std::pair<ui32, ui32> GetFormatChunkSizes(TActorTestContext& testCtx) {
+        return testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return std::make_pair(pdisk->Format.ChunkSize, pdisk->Format.GetUserAccessibleChunkSize());
+        });
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeIsUsedAsIs) {
+        constexpr ui32 physicalChunkSize = 128_MB;
+        TActorTestContext testCtx({
+            .PhysicalChunkSize = physicalChunkSize,
+        });
+
+        const auto [formatChunkSize, userAccessibleChunkSize] = GetFormatChunkSizes(testCtx);
+        UNIT_ASSERT_VALUES_EQUAL(formatChunkSize, physicalChunkSize);
+        // The user-accessible size is what is left after the per-sector PDisk metadata.
+        UNIT_ASSERT_LT(userAccessibleChunkSize, physicalChunkSize);
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->ChunkSize, userAccessibleChunkSize);
+
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        const ui32 chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+        vdisk.SendEvLogSync();
+
+        // A VDisk may use its whole user-accessible chunk, including the very last block.
+        const TString writeData = PrepareData(vdisk.PDiskParams->AppendBlockSize);
+        const ui32 offset = userAccessibleChunkSize - writeData.size();
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, offset, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
+            NKikimrProto::OK);
+
+        const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+            new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, offset, writeData.size(), 0, nullptr),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeAutomaticFormatting) {
+        TActorTestContext testCtx({
+            .PhysicalChunkSize = 128_MB,
+            .InitiallyZeroed = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const auto [physical, usable] = GetFormatChunkSizes(testCtx);
+        UNIT_ASSERT_VALUES_EQUAL(physical, 128_MB);
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->ChunkSize, usable);
+        UNIT_ASSERT_VALUES_EQUAL(usable % vdisk.PDiskParams->AppendBlockSize, 0);
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeSmallDiskAutomaticFormatting) {
+        TActorTestContext testCtx({
+            .DiskSize = 10_GB,
+            .PhysicalChunkSize = 128_MB,
+            .SmallDisk = true,
+            .InitiallyZeroed = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const auto [physical, usable] = GetFormatChunkSizes(testCtx);
+        // The retry must preserve physical mode, rather than adding metadata headroom to 32 MiB.
+        UNIT_ASSERT_VALUES_EQUAL(physical, NPDisk::SmallDiskMaximumChunkSize);
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->ChunkSize, usable);
+        UNIT_ASSERT_VALUES_EQUAL(usable % vdisk.PDiskParams->AppendBlockSize, 0);
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        vdisk.SendEvLogSync();
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeMustBeAligned) {
+        TTestContext testCtx(true /*useSectorMap*/);
+        ui32 chunkSize = 128_MB;
+        // A multiple of the sector size, but not of NPDisk::ChunkSizeAlignment.
+        const ui32 physicalChunkSize = 128_MB + (4 << 10);
+        UNIT_ASSERT_EXCEPTION(FormatPDiskForTest(testCtx.Path, 1, chunkSize, 0, false, testCtx.SectorMap,
+            false, false, true, std::nullopt, std::nullopt, physicalChunkSize), yexception);
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeSurvivesConfigOptionRemoval) {
+        constexpr ui32 physicalChunkSize = 128_MB;
+        TActorTestContext testCtx({
+            .PhysicalChunkSize = physicalChunkSize,
+        });
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        const ui32 chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+        vdisk.SendEvLogSync();
+
+        const TString writeData = PrepareData(4096);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
+            NKikimrProto::OK);
+
+        // The physical chunk size lives in the format record, so dropping the config option changes nothing.
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->PhysicalChunkSize = 0;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+
+        const auto [formatChunkSize, userAccessibleChunkSize] = GetFormatChunkSizes(testCtx);
+        UNIT_ASSERT_VALUES_EQUAL(formatChunkSize, physicalChunkSize);
+
+        vdisk.InitFull();
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->ChunkSize, userAccessibleChunkSize);
+
+        const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+            new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, 0, writeData.size(), 0, nullptr),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeHasNoEffectWithoutFormatting) {
+        TActorTestContext testCtx({});
+
+        const auto [formatChunkSize, userAccessibleChunkSize] = GetFormatChunkSizes(testCtx);
+        // Derived from the 128 MiB user-accessible default, so bigger than 128 MiB.
+        UNIT_ASSERT_GT(formatChunkSize, 128_MB);
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        const ui32 chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+        vdisk.SendEvLogSync();
+
+        const TString writeData = PrepareData(4096);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
+            NKikimrProto::OK);
+
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->PhysicalChunkSize = 128_MB;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+
+        const auto sizesAfterRestart = GetFormatChunkSizes(testCtx);
+        UNIT_ASSERT_VALUES_EQUAL(sizesAfterRestart.first, formatChunkSize);
+        UNIT_ASSERT_VALUES_EQUAL(sizesAfterRestart.second, userAccessibleChunkSize);
+
+        vdisk.InitFull();
+        const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+            new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, 0, writeData.size(), 0, nullptr),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
+    }
+
     Y_UNIT_TEST(StaticGroupChunkReserve) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 

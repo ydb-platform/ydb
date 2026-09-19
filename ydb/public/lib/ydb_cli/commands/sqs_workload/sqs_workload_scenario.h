@@ -19,9 +19,9 @@ namespace NYdb::NConsoleClient {
         TDuration TotalSec;
         TDuration WindowSec;
         TDuration WarmupSec;
-        bool Quiet;
-        bool PrintTimestamp;
-        double Percentile;
+        bool Quiet = false;
+        bool PrintTimestamp = false;
+        double Percentile = 80.0;
         std::shared_ptr<Aws::SQS::SQSClient> SqsClient;
         std::shared_ptr<TLog> Log;
         std::shared_ptr<std::atomic_bool> ErrorFlag;
@@ -34,15 +34,15 @@ namespace NYdb::NConsoleClient {
         TMaybe<TString> AwsAccessKeyId;
         TMaybe<TString> AwsRegion;
         TString Endpoint;
-        ui64 MaxUniqueMessages;
-        ui32 BatchSize;
-        ui32 MessageSize;
-        ui32 GroupsAmount;
-        ui32 WorkersCount;
-        ui32 RequestTimeoutMs;
+        ui64 MaxUniqueMessages = 0;
+        ui32 BatchSize = 1;
+        ui32 MessageSize = 900;
+        ui32 GroupsAmount = 0;
+        ui32 WorkersCount = 1;
+        ui32 RequestTimeoutMs = 2000;
         bool AwsSdkLog = false;
-        bool UseXmlAPI;
-        bool ValidateMessagesOrder;
+        bool UseXmlAPI = false;
+        bool ValidateMessagesOrder = false;
 
         void InitAwsSdk();
         void DestroyAwsSdk();

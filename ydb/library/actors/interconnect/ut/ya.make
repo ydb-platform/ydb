@@ -28,6 +28,12 @@ SRCS(
     v2_session_ut.cpp
 )
 
+# RDMA tests use host libibverbs/libnl libraries that are not built with MSan,
+# so MSan cannot reliably track initialized memory across the library boundary.
+IF (SANITIZER_TYPE == "memory")
+    CXXFLAGS(-DINTERCONNECT_UT_DISABLE_RDMA_TESTS)
+ENDIF()
+
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect

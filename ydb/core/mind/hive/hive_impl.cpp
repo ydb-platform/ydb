@@ -3496,7 +3496,7 @@ ui64 THive::GetObjectImbalance(TFullObjectId object) {
     if (it == ObjectDistributions.Distributions.end()) {
         return 0;
     }
-    return it->second->GetImbalance();
+    return it->second->second.GetImbalance();
 }
 
 void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects) {

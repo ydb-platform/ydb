@@ -304,6 +304,64 @@ portable configuration directly.
 
 ### Distributed YDB (experimental)
 
+The template **Configuration** tab edits all message types reachable from the
+bundled YDB `TAppConfig` and `TEphemeralInputFields` protobuf descriptors. The latter
+covers YAML input fields such as `hosts`, `host_configs`, `fail_domain_type`,
+`default_disk_type`, `erasure` and top-level `storage_pool_types`.
+Nested messages, repeated fields,
+maps and oneof alternatives are discovered at runtime, not maintained as a
+separate field list. The schema fingerprint identifies the editor schema; it
+does not establish compatibility with an external YDB binary.
+
+Only explicitly added fields are saved in the template's `ydb_config` mapping.
+Removing a field unsets it; an unchecked boolean remains explicitly false.
+Use **Add section** or the **+** beside a section to search available fields.
+Scalar values can be set before adding; Cancel leaves the draft unchanged.
+Tenant **Effective configuration** shows inherited values read-only; **Override**
+enables a local value and **Reset** returns a field to inheritance.
+**Overrides only** hides inherited values without removing them from the field picker.
+64-bit integer values are kept as strings across the browser boundary. The
+top-level YAML tab accepts/exports a configuration V2 draft with `metadata`,
+`config`, `allowed_labels` and `selector_config`. Metadata starts at revision 0
+with an empty cluster identity; the runner supplies the actual session identity.
+Configuration scope selects cluster defaults or a tenant's overrides, stored in
+`ydb_tenant_configs`. Each tenant has one exact `tenant` selector. Nested maps
+use `!inherit` by default. The checkbox beside each tenant mapping controls
+whether it inherits or replaces the entire section; replacement paths are stored
+in `ydb_tenant_replacements`. YAML imports preserve this choice. Lists replace
+the corresponding list (their items do not inherit). Other selector predicates
+and multiple selectors for one tenant are rejected
+rather than silently converted. Legacy bare mappings can still be imported.
+Unknown fields are retained
+and reported, not silently removed. Comments and YAML formatting are not retained.
+Validation checks known protobuf field types, not full YDB cluster semantics.
+
+The tabs are Cluster, Physical, Logical, Tenants, Configuration and YAML.
+Applying YAML reconciles missing DCs/racks from `hosts` or `nameservice_config.node`,
+and tenants from exact tenant selectors or explicit tenant-pool slots. Registered
+hosts are matched by exact name, ID or endpoint hostname (case-insensitive DNS names);
+unknown or ambiguous hosts reject the entire operation with a dialog. No hosts are
+registered automatically. Existing nodes, disks and assignments are preserved.
+New tenants default to SSD and one storage group; review them before saving.
+Application changes only the draft, not the saved template. Imported managed or
+unknown config sections retain the existing execution-validation restrictions.
+Cluster is a projection of the same `ydb_config` mapping: domain name,
+self-management erasure, state storage and storage pool types. Renaming the
+domain in this form updates template tenant paths, not existing run drafts.
+Absent state storage and pools keep YDB/benchmark automatic generation.
+Execution supports one domain (ID 1), erasure `none`, `block-4-2` or
+`mirror-3-dc`, standard SSD/HDD pools and a single flat state-storage ring
+using static node IDs. Geometry is checked before worker preparation.
+Advanced configurations remain editable but may be rejected for execution.
+
+During distributed execution supported configuration overrides are recursively
+merged into each generated node config; lists replace existing lists. Unknown
+fields and benchmark-owned placement, disk, endpoint, system bootstrap and
+actor-system sections reject execution rather than bypassing admission or
+silently overriding the run Builder. These sections remain editable/exportable
+for standalone configuration work. Importing configuration does not reconstruct
+physical placement yet. No resources are opened or modified by the editor.
+
 `distributed-ydb` runs one fixed YDB cluster across the hosts in a placement
 template. All participating benchmark servers must run a compatible distributed
 peer protocol on Linux and be registered with the coordinator. The coordinator
@@ -441,11 +499,22 @@ load:
 Use `measurement.verification-repetitions` to enable final verification. In the
 Builder, choose the workload and search objective under **Load generators**;
 verification is configured in **Run policy**. YAML remains a separate top-level tab.
-All participant servers must use the same distributed protocol version (2).
+All participant servers must use the same distributed protocol version (11).
 
 Each worker freezes the selected binaries, resolves placement from its own
 topology and reserves ports. The coordinator retains that execution plan,
 binary checksums, results and host-qualified telemetry in one canonical run.
+Each distributed profile retains `profile.yaml` with its input configuration,
+including the embedded cluster template. Before starting YDB nodes, the coordinator
+checks that all workers generated identical YAML and downloads one complete
+`cluster/configuration/cluster.yaml` (and
+`verification-cluster/configuration/cluster.yaml` for a fresh verification cluster).
+All static and dynamic nodes use this same document: storage actor-system settings
+are in the base configuration, and each tenant's settings are in its selector.
+These are the same bytes supplied to YDB, including resolved placement and tenant
+overrides, not a later reconstruction from the saved template.
+The run Configuration page and profile result link to these retained artifacts.
+Older runs without these artifacts are explicitly reported as unavailable.
 Counters are viewed per host, without merging unrelated wall clocks. Aggregate
 CPU metrics require sufficient common measurement coverage and bounded clock
 uncertainty; missing coverage is not reported as zero utilization.

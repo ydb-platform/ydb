@@ -4,6 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -11,24 +12,10 @@
 
 #include <ydb/core/mind/bscontroller/types.h>
 
-#include <library/cpp/threading/future/core/future.h>
-
 #include <util/datetime/base.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Result of an asynchronous request to persist partition state.
-// Cancelled means the partition stopped before it could confirm completion.
-enum class EPersistResult
-{
-    Success,
-    Cancelled,
-};
-using TPersistResultFuture = NThreading::TFuture<EPersistResult>;
-using TPersistResultPromise = NThreading::TPromise<EPersistResult>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -53,6 +40,10 @@ struct IPartitionDirectService
     virtual TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,
         TDirtyMapStateProto state) = 0;
+
+    // Marks the vchunk as touched in the partition's local DB. A touched bit
+    // is never cleared.
+    virtual TPersistResultFuture SetVChunkTouched(ui32 vChunkIndex) = 0;
 
     // Query the addition of a new host to the group. The request is idempotent
     // and can be repeated multiple times. A request with an outdated

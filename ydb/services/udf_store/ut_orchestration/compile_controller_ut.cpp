@@ -52,7 +52,7 @@ struct TSeenAssignment {
 
 //! Just the one exchange the controller needs from the console at boot: it
 //! subscribes, and the answer comes back before anything else it started.
-class TConfigsDispatcherStub : public TActorBootstrapped<TConfigsDispatcherStub> {
+class TConfigsDispatcherStub: public TActorBootstrapped<TConfigsDispatcherStub> {
 public:
     void Bootstrap() {
         Become(&TThis::StateWork);
@@ -84,8 +84,9 @@ public:
 
         TAppPrepare app;
         app.AddDomain(TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
-            "dc-1", /*domainUid=*/0, /*schemeRoot=*/0, /*planResolution=*/100500,
-            TVector<ui64>{}, TVector<ui64>{}, TVector<ui64>{}, DefaultPoolKinds(2)).Release());
+                          "dc-1", /*domainUid=*/0, /*schemeRoot=*/0, /*planResolution=*/100500,
+                          TVector<ui64>{}, TVector<ui64>{}, TVector<ui64>{}, DefaultPoolKinds(2))
+                          .Release());
         SetupChannelProfiles(app);
         SetupTabletServices(Runtime, &app, true);
 
@@ -152,6 +153,18 @@ public:
         UNIT_ASSERT(result);
 
         WorkerPipes[nodeIndex] = std::make_pair(pipe, sender);
+    }
+
+    NKikimrUdfStore::TEvDescribeModuleResult Describe(const TString& name, const TString& uid) {
+        auto request = MakeHolder<TEvCompileController::TEvDescribeModule>();
+        request->Record.SetName(name);
+        request->Record.SetUid(uid);
+        request->Record.SetKind(NKikimrUdfStore::ARTIFACT_KIND_MODULE);
+        const auto& [pipe, sender] = WorkerPipes.at(0);
+        Runtime.SendToPipe(pipe, sender, request.Release());
+        auto response = Runtime.GrabEdgeEventRethrow<TEvCompileController::TEvDescribeModuleResult>(sender, SimTimeout);
+        UNIT_ASSERT(response);
+        return response->Get()->Record;
     }
 
     void DisconnectWorker(ui32 nodeIndex) {
@@ -310,6 +323,43 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(WasmCompileController) {
+
+    Y_UNIT_TEST(DescribeKnownPlatformsAndCurrentUidFailures) {
+        TTestEnv env(2);
+        env.SetBudgets(1, 1, 1);
+        env.RegisterWorker(0, CpuSpecX86);
+        env.RegisterWorker(1, CpuSpecArm);
+        env.Settle();
+        auto empty = env.Describe("m1", "u1");
+        UNIT_ASSERT_VALUES_EQUAL(empty.PlatformsSize(), 2);
+        for (const auto& platform : empty.GetPlatforms()) {
+            UNIT_ASSERT(!platform.GetCompiling() && !platform.GetFailed());
+        }
+        env.SetArtifacts(CpuSpecX86, {});
+        env.SetArtifacts(CpuSpecArm, {});
+        env.SetSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.Settle();
+        auto assignments = env.Assignments();
+        // The configured tenant budget allows one compilation at a time.
+        UNIT_ASSERT_VALUES_EQUAL(assignments.size(), 1);
+        env.ReportFailed(assignments.front(), false, "invalid export");
+        env.Settle();
+        auto failed = env.Describe("m1", "u1");
+        UNIT_ASSERT_VALUES_EQUAL(failed.PlatformsSize(), 2);
+        size_t failedCount = 0;
+        for (const auto& platform : failed.GetPlatforms()) {
+            if (platform.GetFailed()) {
+                ++failedCount;
+                UNIT_ASSERT_VALUES_EQUAL(platform.GetError(), "invalid export");
+                UNIT_ASSERT_VALUES_EQUAL(platform.GetCpuSpec(), assignments.front().Record.GetKey().GetCpuSpec());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(failedCount, 1);
+        auto replaced = env.Describe("m1", "u2");
+        for (const auto& platform : replaced.GetPlatforms()) {
+            UNIT_ASSERT(!platform.GetFailed() && !platform.GetCompiling());
+        }
+    }
 
     Y_UNIT_TEST(OnePlatformCompilesOnce) {
         TTestEnv env(3);
@@ -689,6 +739,6 @@ Y_UNIT_TEST_SUITE(WasmCompileController) {
             "the platform still reads as uncovered after both artifacts appeared");
         UNIT_ASSERT_VALUES_EQUAL(env.PlatformCounter(CpuSpecX86, "WasmCompileAssignmentsActive"), 0);
     }
-}
+    } // Y_UNIT_TEST_SUITE(WasmCompileController)
 
 } // namespace NKikimr::NUdfStore

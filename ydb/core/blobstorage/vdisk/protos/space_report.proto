@@ -24,12 +24,22 @@ message TVDiskSpaceBreakdown {
     uint64 FreeChunkReserveBytes = 12;
     uint64 LockedOrQuarantinedBytes = 13;
     uint64 UnclassifiedBytes = 14;
+    uint64 FreeStripeBytes = 15;
 }
 
 message TVDiskSpaceComponent {
     uint64 ChunkCount = 1;
     uint64 AllocatedBytes = 2;
     TVDiskSpaceBreakdown Breakdown = 3;
+    uint64 StripedBytes = 4;
+}
+
+message TVDiskStripeHeapSpace {
+    uint64 ChunkCount = 1;
+    uint64 AllocatedBytes = 2;
+    uint64 UsedBytes = 3;
+    uint64 FreeBytes = 4;
+    uint64 LockedFreeBytes = 5;
 }
 
 message TVDiskHugeSizeClass {
@@ -68,6 +78,7 @@ message TVDiskSpaceReport {
     TVDiskSpaceComponent SyncLog = 11;
     repeated TVDiskChunkKeeperSpace ChunkKeeper = 12;
     TVDiskSpaceComponent Unattributed = 13;
+    TVDiskStripeHeapSpace StripeHeap = 14;
 }
 
 message TGetVDiskSpaceReportResponse {

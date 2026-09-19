@@ -28,6 +28,7 @@ namespace {
         FreeChunkReserveBytes += other.FreeChunkReserveBytes;
         LockedOrQuarantinedBytes += other.LockedOrQuarantinedBytes;
         UnclassifiedBytes += other.UnclassifiedBytes;
+        FreeStripeBytes += other.FreeStripeBytes;
         return *this;
     }
 
@@ -45,7 +46,8 @@ namespace {
             + ChunkTailBytes
             + FreeChunkReserveBytes
             + LockedOrQuarantinedBytes
-            + UnclassifiedBytes;
+            + UnclassifiedBytes
+            + FreeStripeBytes;
     }
 
     void AddClassifiedHugeBlob(TSpaceBreakdown& breakdown, const TClassifiedHugeBlob& blob) {

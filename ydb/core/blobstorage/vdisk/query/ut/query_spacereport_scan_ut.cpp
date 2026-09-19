@@ -134,9 +134,27 @@ namespace {
             estimate.AddIfLastKey<TKeyBlock, TMemRecBlock>(lastKey, sst.Get());
             UNIT_ASSERT_VALUES_EQUAL(estimate.SstCount, 1);
             UNIT_ASSERT_VALUES_EQUAL(estimate.ChunkCount, 3);
+            UNIT_ASSERT_VALUES_EQUAL(estimate.StripedBytes, 0);
             UNIT_ASSERT_VALUES_EQUAL(
                 estimate.StructuralMetadataBytes,
                 sizeof(TIdxDiskPlaceHolder) + 2 * sizeof(TIdxDiskLinker));
+        }
+
+        Y_UNIT_TEST(StripedSstContributesAlignedExtentInsteadOfWholeChunk) {
+            using TSst = TLevelSegment<TKeyBlock, TMemRecBlock>;
+
+            TTestContexts contexts;
+            const TKeyBlock key(10);
+            auto sst = MakeIntrusive<TSst>(contexts.GetVCtx());
+            sst->LoadedIndex.emplace_back(key, TMemRecBlock(1));
+            sst->AllChunks = {11};
+            sst->HeapStripe = TDiskPart(11, 4096, 5000);
+
+            TPhysicalSstEstimate estimate;
+            estimate.AddIfLastKey<TKeyBlock, TMemRecBlock>(key, sst.Get(), 4096);
+            UNIT_ASSERT_VALUES_EQUAL(estimate.SstCount, 1);
+            UNIT_ASSERT_VALUES_EQUAL(estimate.ChunkCount, 0);
+            UNIT_ASSERT_VALUES_EQUAL(estimate.StripedBytes, 8192);
         }
     }
 

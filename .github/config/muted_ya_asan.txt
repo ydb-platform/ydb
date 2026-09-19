@@ -262,6 +262,7 @@ ydb/core/persqueue/public/schema/ut SchemaValidation.ProcessTopicAttributesInval
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyAlterSchema
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyUpdateRow
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
+ydb/core/persqueue/public/schema/ut_light unittest.sole chunk
 ydb/core/persqueue/writer/ut unittest.sole chunk
 ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics
 ydb/core/raw_socket/ut unittest.sole chunk

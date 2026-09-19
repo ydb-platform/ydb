@@ -1,6 +1,10 @@
 #include "frontend_state.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/overlapped_requests_guard_wrapper.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/split_requests_wrapper.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/storage_gate.h>
 
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
@@ -22,6 +26,7 @@ struct TSession
 {
     TString ClientId;
     TString SessionId;
+    IDeviceHandlerPtr Handler;
 };
 
 NProto::TError NotAcceptingRequests()
@@ -71,18 +76,18 @@ NProto::TError ValidateMountParameters(
     return {};
 }
 
-NProto::TError ValidateVolumeConfig(
+NProto::TError ValidateVolumeMetadata(
     const NKikimrBlockStore::TVolumeConfig& config)
 {
     if (config.GetDiskId().empty() || config.PartitionsSize() != 1 ||
-        config.GetBlockSize() != DefaultBlockSize ||
+        !IsSupportedBlockSize(config.GetBlockSize()) ||
         !config.GetPartitions(0).GetBlockCount() ||
         config.GetStorageMediaKind() != NProto::STORAGE_MEDIA_SSD)
     {
         return MakeError(
             E_ARGUMENT,
             "NBS2 frontend requires a disk id, one nonempty partition, "
-            "4096-byte blocks and SSD media");
+            "a supported block size and SSD media");
     }
     return {};
 }
@@ -111,9 +116,12 @@ NNbs1CompatApi::NBlockStore::NProto::TVolume MakeClassicVolume(
 struct TFrontendState::TSnapshot
 {
     bool AcceptingRequests = false;
-    std::optional<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
+    std::optional<NKikimrBlockStore::TVolumeConfig> VolumeMetadata;
     TString RegistrationId;
     std::optional<TSession> Session;
+    TStorageGatePtr StorageGate;
+    IStoragePtr Storage;
+    TVolumeConfigPtr IoGeometry;
 };
 
 TFrontendState::TFrontendState()
@@ -149,16 +157,31 @@ NProto::TError TFrontendState::CheckAcceptingRequests() const
 }
 
 TResultOrError<TString> TFrontendState::RegisterVolume(
-    const NKikimrBlockStore::TVolumeConfig& volumeConfig)
+    const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
+    IStoragePtr storage,
+    TVolumeConfigPtr ioGeometry)
 {
-    if (const auto error = ValidateVolumeConfig(volumeConfig); HasError(error))
+    if (const auto error = ValidateVolumeMetadata(volumeMetadata);
+        HasError(error))
     {
         return error;
     }
 
+    if (!storage || !ioGeometry ||
+        ioGeometry->DiskId != volumeMetadata.GetDiskId() ||
+        ioGeometry->BlockSize != volumeMetadata.GetBlockSize() ||
+        ioGeometry->BlockCount !=
+            volumeMetadata.GetPartitions(0).GetBlockCount() ||
+        !ioGeometry->BlocksPerStripe || !ioGeometry->VChunkSize)
+    {
+        return MakeError(
+            E_ARGUMENT,
+            "Missing or inconsistent partition backend");
+    }
+
     with_lock (Mutex) {
-        if (Snapshot->VolumeConfig &&
-            Snapshot->VolumeConfig->GetDiskId() != volumeConfig.GetDiskId())
+        if (Snapshot->VolumeMetadata &&
+            Snapshot->VolumeMetadata->GetDiskId() != volumeMetadata.GetDiskId())
         {
             return MakeError(
                 E_ARGUMENT,
@@ -166,10 +189,19 @@ TResultOrError<TString> TFrontendState::RegisterVolume(
         }
 
         auto snapshot = std::make_unique<TSnapshot>(*Snapshot);
-        snapshot->VolumeConfig = volumeConfig;
+        snapshot->VolumeMetadata = volumeMetadata;
         snapshot->Session.reset();
         snapshot->RegistrationId = CreateGuidAsString();
+        snapshot->StorageGate =
+            std::make_shared<TStorageGate>(std::move(storage));
+        snapshot->Storage = CreateOverlappedRequestsGuardStorageWrapper(
+            CreateSplitRequestsStorageWrapper(snapshot->StorageGate));
+        snapshot->IoGeometry = std::move(ioGeometry);
         const TString registrationId = snapshot->RegistrationId;
+        // A retained old handler must never start using a replacement backend.
+        if (Snapshot->StorageGate) {
+            Snapshot->StorageGate->Detach();
+        }
         Snapshot.atomic_store(
             TTrueAtomicSharedPtr<TSnapshot>(snapshot.release()));
         return registrationId;
@@ -185,9 +217,13 @@ void TFrontendState::UnregisterVolume(const TString& registrationId)
             return;
         }
         auto snapshot = std::make_unique<TSnapshot>(*Snapshot);
-        snapshot->VolumeConfig.reset();
+        snapshot->StorageGate->Detach();
+        snapshot->VolumeMetadata.reset();
         snapshot->RegistrationId.clear();
         snapshot->Session.reset();
+        snapshot->StorageGate.reset();
+        snapshot->Storage.reset();
+        snapshot->IoGeometry.reset();
         Snapshot.atomic_store(
             TTrueAtomicSharedPtr<TSnapshot>(snapshot.release()));
     }
@@ -200,7 +236,7 @@ TFrontendState::GetVolume(const TString& diskId) const
     if (const auto error = CheckDisk(*snapshot, diskId); HasError(error)) {
         return error;
     }
-    return MakeClassicVolume(*snapshot->VolumeConfig);
+    return MakeClassicVolume(*snapshot->VolumeMetadata);
 }
 
 NNbs1CompatApi::NBlockStore::NProto::TMountVolumeResponse
@@ -235,11 +271,26 @@ TFrontendState::MountVolume(const NCompatProto::TMountVolumeRequest& request)
 
         if (!Snapshot->Session) {
             auto next = std::make_unique<TSnapshot>(*Snapshot);
-            next->Session = TSession{clientId, CreateGuidAsString()};
+            const auto& config = *next->IoGeometry;
+            auto handler =
+                CreateDefaultDeviceHandlerFactory()->CreateDeviceHandler({
+                    .Storage = next->Storage,
+                    .DiskId = config.DiskId,
+                    .ClientId = clientId,
+                    .BlockSize = config.BlockSize,
+                    .BlockCount = config.BlockCount,
+                    .BlocksPerStripeCount = config.BlocksPerStripe,
+                    .VChunkSize = config.VChunkSize,
+                    .StorageMediaKind = static_cast<NProto::EStorageMediaKind>(
+                        next->VolumeMetadata->GetStorageMediaKind()),
+                });
+            next->Session =
+                TSession{clientId, CreateGuidAsString(), std::move(handler)};
             Snapshot.atomic_store(
                 TTrueAtomicSharedPtr<TSnapshot>(next.release()));
         }
-        *response.MutableVolume() = MakeClassicVolume(*Snapshot->VolumeConfig);
+        *response.MutableVolume() =
+            MakeClassicVolume(*Snapshot->VolumeMetadata);
         response.SetSessionId(Snapshot->Session->SessionId);
         // No inactivity expiry in MVP; zero disables NBS1 periodic remount.
         response.SetInactiveClientsTimeout(0);
@@ -276,16 +327,24 @@ NProto::TError TFrontendState::UnmountVolume(
     return {};
 }
 
-NProto::TError TFrontendState::ValidateIoSession(
+TResultOrError<TFrontendIoBackend> TFrontendState::AcquireIoBackend(
     const TString& diskId,
     const TString& clientId,
     const TString& sessionId) const
 {
+    // TODO: Implement authoritative session ownership and coordinated
+    // write-access revocation inside the partition, including already admitted
+    // writes.
     const auto snapshot = Snapshot.atomic_load();
     if (const auto error = CheckDisk(*snapshot, diskId); HasError(error)) {
         return error;
     }
-    return CheckSession(*snapshot, clientId, sessionId);
+    if (const auto error = CheckSession(*snapshot, clientId, sessionId);
+        HasError(error))
+    {
+        return error;
+    }
+    return TFrontendIoBackend{snapshot->Session->Handler, snapshot->IoGeometry};
 }
 
 // static
@@ -296,7 +355,8 @@ NProto::TError TFrontendState::CheckDisk(
     if (!snapshot.AcceptingRequests) {
         return NotAcceptingRequests();
     }
-    if (!snapshot.VolumeConfig || snapshot.VolumeConfig->GetDiskId() != diskId)
+    if (!snapshot.VolumeMetadata ||
+        snapshot.VolumeMetadata->GetDiskId() != diskId)
     {
         return MakeError(
             E_NOT_FOUND,

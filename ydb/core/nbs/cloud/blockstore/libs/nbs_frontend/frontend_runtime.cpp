@@ -31,9 +31,14 @@ TNbsFrontendRuntime::GetBlockStore() const
 }
 
 TResultOrError<TString> TNbsFrontendRuntime::RegisterVolume(
-    const NKikimrBlockStore::TVolumeConfig& volumeConfig)
+    const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
+    IStoragePtr storage,
+    TVolumeConfigPtr ioGeometry)
 {
-    return FrontendState->RegisterVolume(volumeConfig);
+    return FrontendState->RegisterVolume(
+        volumeMetadata,
+        std::move(storage),
+        std::move(ioGeometry));
 }
 
 void TNbsFrontendRuntime::UnregisterVolume(const TString& registrationId)

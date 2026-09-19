@@ -280,7 +280,8 @@ private:
                 Become(&TDqLocalFileSpillingService::BrokenState);
                 return;
             }
-            Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), e.what());
+            Cout << (TStringBuilder() << "Cannot start DQ local file spilling service at " << root << ": " << e.what() << Endl) << Flush;
+            abort();
         }
 
         Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(

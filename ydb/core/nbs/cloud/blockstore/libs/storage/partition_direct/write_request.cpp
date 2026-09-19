@@ -166,7 +166,7 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
 
     CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
 
-    if (IsQuorumReached()) {
+    if (IsReplied || IsQuorumReached()) {
         ReplyOrNotifyBelated(MakeError(S_OK), completedWritesOfCurrentResponse);
         return;
     }
@@ -317,7 +317,10 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
 
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
-        if (IsQuorumReached()) {
+        if (IsReplied || IsQuorumReached()) {
+            // A write that lands after the client has been answered is
+            // reported as belated even when the quorum was never reached: the
+            // data is on the PBuffer and has to be erased from there.
             ReplyOrNotifyBelated(MakeError(S_OK), THostMask::MakeOne(host));
         }
         return;

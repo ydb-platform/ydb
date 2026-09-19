@@ -1,0 +1,30 @@
+{
+  "release": "26.2.1.14",
+  "stable_branch": "stable-26-2",
+  "release_notes_pr": {
+    "number": 52531,
+    "base": "main",
+    "merged": true,
+    "changed_files": [
+      "ydb/docs/ru/core/changelog-server.md",
+      "ydb/docs/en/core/changelog-server.md",
+      "ydb/docs/ru/core/downloads/ydb-open-source-database.md",
+      "ydb/docs/en/core/downloads/ydb-open-source-database.md"
+    ],
+    "build_docs": "success",
+    "review": "approved",
+    "placeholders": [],
+    "artifacts": {
+      "binary": "verified",
+      "docker": "verified",
+      "source_tag": "verified"
+    }
+  },
+  "stable_docs": {
+    "backport_pr": 53439,
+    "docs_release": "success",
+    "published_url": "https://ydb.tech/docs/en/changelog-server?version=v26.2#26-2-1-14",
+    "http_status": 200,
+    "anchor_present": true
+  }
+}

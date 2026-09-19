@@ -13,8 +13,6 @@ Release date: TBD.
 * Added [authentication through external OpenID Connect identity providers](./security/authentication.md?version=v26.3#external-idp). {{ ydb-short-name }} validates JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
 * Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
 * Column-oriented tables use an updated compaction strategy to organize data more efficiently.
-* For column-oriented tables, `ALTER TABLE ... COMPACT` can start forced compaction.
-* Column-oriented and row-oriented tables now have parity in the supported set of [YQL data types](./yql/reference/types/primitive.md?version=main), including `Interval`, `Uuid`, and `DyNumber`.
 * Bulk authorization requests to AccessService are enabled by default, reducing authorization request overhead.
 * Streaming YQL queries can access [system virtual attributes](./concepts/query_execution/topics.md?version=v26.3#system-metadata), including `__ydb_create_time`, `__ydb_write_time`, and user attributes in `__ydb_user_attributes`.
 * Full VDisk synchronization is faster because processed SyncLog data is removed locally by default.
@@ -27,6 +25,8 @@ Release date: TBD.
 
 The following functionality is not enabled by default.
 
+* For column-oriented tables, `ALTER TABLE ... COMPACT` can start forced compaction.
+* Column-oriented and row-oriented tables now have parity in the supported set of [YQL data types](./yql/reference/types/primitive.md?version=main), including `Interval`, `Uuid`, and `DyNumber`.
 * Added [hybrid search](./dev/hybrid-search.md?version=v26.3), combining full-text relevance and vector similarity into one ranked result.
 * Topics can be accessed through the [Amazon SQS API](./reference/sqs-api/index.md?version=v26.3), allowing SQS-compatible clients to read and write messages.
 * Added [JSON indexes](./dev/json-indexes.md?version=v26.3) for accelerating `JSON_EXISTS` and `JSON_VALUE` queries.

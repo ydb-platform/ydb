@@ -7030,6 +7030,53 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST(DistinctShuffleEliminationPreservesRenamedKeys) {
+        struct TCase {
+            bool Enabled;
+            TVector<TInfoUnit> ShuffledBy;
+            TVector<TInfoUnit> Keys;
+            TVector<TInfoUnit> Expected;
+        };
+        const TInfoUnit id("id"), k("k"), intermediateId("_intermediate_id"), intermediateK("_intermediate_k");
+        const TVector<TCase> cases = {
+            {true, {id}, {id}, {intermediateId}},
+            {true, {id}, {id, k}, {intermediateId}},
+            {true, {k, id}, {id, k}, {intermediateK, intermediateId}},
+            {true, {id, k}, {id}, {}},
+            {true, {}, {id}, {}},
+            {false, {id}, {id}, {}},
+        };
+
+        for (const auto& testCase : cases) {
+            TMapRuleTestContext testContext;
+            testContext.Config->OptShuffleElimination = testCase.Enabled;
+            TPlanProps planProps;
+            const auto pos = NYql::TPositionHandle();
+
+            auto read = MakeTestRead({id, k}, pos);
+            read->Props.Metadata = TRBOMetadata();
+            read->Props.Metadata->ShuffledByColumns = testCase.ShuffledBy;
+
+            TVector<TOpAggregationTraits> traits;
+            TVector<TOpAggregationTraits> finalTraits;
+            TVector<TInfoUnit> finalKeys;
+            for (const auto& key : testCase.Keys) {
+                const auto intermediateKey = key == id ? intermediateId : intermediateK;
+                traits.emplace_back(key, "distinct", intermediateKey);
+                finalTraits.emplace_back(intermediateKey, "distinct", key);
+                finalKeys.push_back(intermediateKey);
+            }
+            auto aggregate = MakeIntrusive<TOpAggregate>(read, traits, testCase.Keys, EOpPhase::Intermediate, true, pos);
+            aggregate->ComputeMetadata(testContext.RboCtx, planProps);
+            UNIT_ASSERT(aggregate->Props.Metadata->ShuffledByColumns == testCase.Expected);
+
+            auto finalAggregate = MakeIntrusive<TOpAggregate>(aggregate, finalTraits, finalKeys, EOpPhase::Final, true, pos);
+            finalAggregate->ComputeMetadata(testContext.RboCtx, planProps);
+            const auto expectedFinal = testCase.Expected.empty() ? TVector<TInfoUnit>{} : testCase.ShuffledBy;
+            UNIT_ASSERT(finalAggregate->Props.Metadata->ShuffledByColumns == expectedFinal);
+        }
+    }
+
     Y_UNIT_TEST(NarrowByLivenessPrunesReadColumnsAfterDeadAggregateTraits) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();
@@ -12223,6 +12270,98 @@ PRAGMA ydb.OptimizerHints = '
             TString("ColumnShardHashV1"),
             TStringBuilder() << "The remaining shuffle must match the preserved source hash: "
                              << JoinSeq(", ", hashFuncs) << "\n" << plan);
+    }
+
+    Y_UNIT_TEST_TWIN(DistinctShuffleEliminationTPCHQ4, CompositePartitionKey) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableNewRBO(true);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetAllowOlapDataQuery(true);
+        config->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        config->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        config->SetDefaultCostBasedOptimizationLevel(4);
+        config->SetDefaultEnableShuffleElimination(true);
+        config->SetDefaultHashShuffleFuncType(NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({MakeTPCHStatsSetting()});
+        TKikimrRunner kikimr(settings);
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        auto schema = tableSession.ExecuteSchemeQuery(Sprintf(R"(
+            CREATE TABLE `/Root/lineitem` (
+                l_orderkey Int64 NOT NULL,
+                l_linenumber Int32 NOT NULL,
+                l_commitdate Date NOT NULL,
+                l_receiptdate Date NOT NULL,
+                PRIMARY KEY (l_orderkey, l_linenumber)
+            )
+            PARTITION BY HASH(%s)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 8);
+
+            CREATE TABLE `/Root/orders` (
+                o_orderkey Int64 NOT NULL,
+                o_orderpriority Utf8 NOT NULL,
+                o_orderdate Date NOT NULL,
+                PRIMARY KEY (o_orderkey)
+            )
+            PARTITION BY HASH(o_orderkey)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 4);
+        )", CompositePartitionKey ? "l_orderkey, l_linenumber" : "l_orderkey")).GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+
+        const auto july = TInstant::ParseIso8601("1993-07-01T00:00:00Z");
+        const auto october = TInstant::ParseIso8601("1993-10-01T00:00:00Z");
+        NYdb::TValueBuilder orders, lineitems;
+        orders.BeginList();
+        lineitems.BeginList();
+        for (i64 id = 1; id <= 32; ++id) {
+            orders.AddListItem().BeginStruct()
+                .AddMember("o_orderkey").Int64(id)
+                .AddMember("o_orderpriority").Utf8(id % 2 ? "HIGH" : "LOW")
+                .AddMember("o_orderdate").Date(id <= 16 ? july : october)
+                .EndStruct();
+            // Two qualifying line items per matching order must count only once.
+            for (i32 line = 1; line <= 3; ++line) {
+                lineitems.AddListItem().BeginStruct()
+                    .AddMember("l_orderkey").Int64(id)
+                    .AddMember("l_linenumber").Int32(line)
+                    .AddMember("l_commitdate").Date(july)
+                    .AddMember("l_receiptdate").Date(id % 4 && line < 3 ? october : july)
+                    .EndStruct();
+            }
+        }
+        orders.EndList();
+        lineitems.EndList();
+        for (auto& [table, rows] : TVector<std::pair<TString, NYdb::TValue>>{
+                 {"/Root/orders", orders.Build()}, {"/Root/lineitem", lineitems.Build()}}) {
+            const auto upsert = tableClient.BulkUpsert(table, std::move(rows)).GetValueSync();
+            UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        }
+
+        std::string query = NResource::Find("resfs/file/tpch/queries/yql/q4.sql");
+        Replace(query, "{% include 'header.sql.jinja' %}", "PRAGMA YqlSelect = 'force';");
+        Replace(query, "{{orders}}", "`/Root/orders`");
+        Replace(query, "{{lineitem}}", "`/Root/lineitem`");
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        const auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+        const auto plan = TString{*explain.GetStats()->GetPlan()};
+        const auto shuffles = CollectHashShuffleDescriptions(plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(shuffles.size(), CompositePartitionKey ? 3 : 2, plan);
+        // Identify the DISTINCT exchange by its intermediate order-key alias,
+        // separately from the join and priority-aggregation exchanges.
+        const auto distinctShuffles = std::count_if(shuffles.begin(), shuffles.end(), [](const TString& shuffle) {
+            return shuffle.Contains("_intermediate_") && shuffle.Contains("l_orderkey");
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(distinctShuffles, CompositePartitionKey ? 1 : 0, plan);
+
+        const auto execute = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(execute.IsSuccess(), execute.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(execute.GetResultSet(0)), R"([["HIGH";8u];["LOW";4u]])");
     }
 
     Y_UNIT_TEST(ShuffleEliminationColumnShardHashPreservedInPhysicalAst) {

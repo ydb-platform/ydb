@@ -988,6 +988,24 @@ namespace TEvDataShard {
                 || Record.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED // Ydb::StatusIds::GENERIC_ERROR
             ;
         }
+
+        bool MayHaveWritten() const {
+            using TError = NKikimrTxDataShard::TError;
+
+            switch (Record.GetStatus()) {
+                case TError::WRONG_SHARD_STATE:
+                case TError::SHARD_IS_BLOCKED:
+                case TError::READONLY:
+                case TError::DISK_GROUP_OUT_OF_SPACE:
+                case TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED:
+                case TError::SCHEME_CHANGED:
+                case TError::EXECUTION_CANCELLED:
+                    return false;
+
+                default:
+                    return true;
+            }
+        }
     };
 
     struct TEvOverloadReady

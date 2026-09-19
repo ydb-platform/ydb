@@ -200,8 +200,18 @@ TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config);
 /**
  * Same as NamesFromConfig(config), but uses topicPath instead of config.GetTopicPath().
  * Pass the scheme path when the stored tablet config has no TopicPath.
+ * SchemeCache calls this overload (via AppData PQConfig).
  */
 TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath);
+
+/**
+ * Same as NamesFromConfig(config, topicPath), but reads FCC / PQ Root / TestDatabaseRoot
+ * from pqConfig instead of AppData. Use in tests that have PQConfig but no actor TLS.
+ */
+TTopicNames NamesFromConfig(
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TString& topicPath,
+    const NKikimrPQ::TPQConfig& pqConfig);
 
 /**
  * Same formation as NamesFromConfig, but firstClassCitizen is passed explicitly and AppData is not read.

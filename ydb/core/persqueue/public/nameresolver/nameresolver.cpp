@@ -1090,13 +1090,11 @@ TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, bool first
     return NamesFromConfig(config, TString(), firstClassCitizen);
 }
 
-TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath) {
-    if (!HasAppData()) {
-        TTopicNames names;
-        names.Reason = "AppData is not available.";
-        return names;
-    }
-    const auto& pqConfig = AppData()->PQConfig;
+TTopicNames NamesFromConfig(
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TString& topicPath,
+    const NKikimrPQ::TPQConfig& pqConfig)
+{
     const bool nodeIsFirstClass = pqConfig.GetTopicsAreFirstClassCitizen() || !pqConfig.GetEnabled();
     const auto pqPrefix = NormalizePqPrefix(pqConfig.GetRoot());
     // On a federation node, first-class tablets (e.g. /Root/topic-0-test) are not
@@ -1112,6 +1110,15 @@ TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TStr
         pqConfig.GetTestDatabaseRoot(),
         topicPath);
     return builder.ToTopicNames();
+}
+
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath) {
+    if (!HasAppData()) {
+        TTopicNames names;
+        names.Reason = "AppData is not available.";
+        return names;
+    }
+    return NamesFromConfig(config, topicPath, AppData()->PQConfig);
 }
 
 TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config) {

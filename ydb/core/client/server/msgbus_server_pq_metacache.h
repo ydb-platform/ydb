@@ -95,6 +95,8 @@ struct TEvPqNewMetaCache {
     };
 
     struct TEvDescribeTopicsResponse : public TEventLocal<TEvDescribeTopicsResponse, EvDescribeTopicsResponse> {
+        // Discovery converters for the requested topics, aligned with Result->ResultSet.
+        // ByName fills this from the request names (non-null entries), same as Describe(converters).
         TVector<NPersQueue::TDiscoveryConverterPtr> TopicsRequested;
         std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> Result;
         explicit TEvDescribeTopicsResponse(TVector<NPersQueue::TDiscoveryConverterPtr>&& topics,

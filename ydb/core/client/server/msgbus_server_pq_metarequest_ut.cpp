@@ -535,7 +535,7 @@ public:
             part->SetTabletId(MakeTabletID(false, topicId * 100 + 1 + i));
         }
         auto names = NPQ::NNameResolver::NamesFromConfig(
-            *pqTabletConfig, path, false, "Root/PQ", "");
+            *pqTabletConfig, path, Runtime->GetAppData(0).PQConfig);
         UNIT_ASSERT_C(names.Valid, names.Reason);
         pqInfo->Names = NPQ::NNameResolver::MakeTopicNamesPtr(std::move(names));
         entry.PQGroupInfo.Reset(pqInfo);

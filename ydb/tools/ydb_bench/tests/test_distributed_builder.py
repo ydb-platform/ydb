@@ -206,7 +206,8 @@ for(const tab of ['Cluster','Storage','Tenants','Load generators','Run policy'])
     const resetDisks=html.split('<input type=checkbox data-distributed-path="["reset-disks"]" ')[1];
     assert.equal(Boolean(resetDisks),tab==='Storage');
     if(resetDisks)assert(!resetDisks.split('>')[0].includes('checked'));
-    assert.equal((html.match(/<select/g)||[]).length,2); // Benchmark and template; actor flags remain checkboxes.
+    assert.equal((html.match(/<select/g)||[]).length,3); // Benchmark, mode and template; actor flags remain checkboxes.
+    for(const id of ['benchmark','distributed-mode','distributed-template'])assert(html.includes('id='+id));
   }
   if(tab==='Load generators'){assert(html.includes('Dataset'));assert(html.includes('c1'));assert(html.includes('c2'))}
   if(tab==='Run policy')assert(html.includes('Failed requests remain visible'));

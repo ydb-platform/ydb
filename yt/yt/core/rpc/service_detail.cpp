@@ -550,7 +550,7 @@ public:
     TError GetCanceledError() const
     {
         auto error = TError(NYT::EErrorCode::Canceled, "RPC request is canceled");
-        if (ThrottledError_) {
+        if (ThrottledError_ && !ThrottledError_->IsOK()) {
             error.Add(*ThrottledError_);
         }
         return error;
@@ -1932,7 +1932,7 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
             .With("method_limit", incomingRequest.RuntimeInfo->QueueSizeLimit.load(std::memory_order::relaxed))
             .With("queue_limit", incomingRequest.RequestQueue->GetQueueSizeLimit())
             .With("queue", incomingRequest.RequestQueue->GetName());
-        if (incomingRequest.ThrottledError) {
+        if (incomingRequest.ThrottledError && !incomingRequest.ThrottledError->IsOK()) {
             error.Add(*incomingRequest.ThrottledError);
         }
         ReplyError(std::move(error), std::move(incomingRequest));
@@ -1945,7 +1945,7 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
             .With("method_limit", incomingRequest.RuntimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed))
             .With("queue_limit", incomingRequest.RequestQueue->GetQueueByteSizeLimit())
             .With("queue", incomingRequest.RequestQueue->GetName());
-        if (incomingRequest.ThrottledError) {
+        if (incomingRequest.ThrottledError && !incomingRequest.ThrottledError->IsOK()) {
             error.Add(*incomingRequest.ThrottledError);
         }
         ReplyError(std::move(error), std::move(incomingRequest));

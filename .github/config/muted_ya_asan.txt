@@ -332,7 +332,6 @@ ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
-ydb/core/kqp/ut/olap/types KqpOlapJson.DoubleFilterVariants[10,true,1,10,100,0]
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelAuto
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelForce
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelScalar
@@ -445,14 +444,12 @@ ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoTokenNoUserPass
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_Replace
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_SubFoldersDropRestore
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_SubFoldersReplace
-ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_UseTokenWithOldSecret
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_UseTokenWithSchemaSecret
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_UseUserPasswordWithOldSecret
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_UseUserPasswordWithSchemaSecret
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_WithConnectionStringFakeTopicPath
 ydb/services/ydb/backup_ut BackupRestore.ReplicasAreNotBackedUp+UseSchemeSecret
 ydb/services/ydb/backup_ut BackupRestore.ReplicasAreNotBackedUp-UseSchemeSecret
-ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/tests/datashard/truncate/concurrency py3test.[test_truncate_table_concurrency.py */*] chunk
 ydb/tests/datashard/truncate/concurrency test_truncate_table_concurrency.py.TestTruncateTableConcurrency.test_truncate_with_concurrent_rw_operations
 ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Date_1_UNIQUE_SYNC-pk_types35-all_types35-index35-Date-UNIQUE-SYNC]

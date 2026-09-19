@@ -8,6 +8,11 @@ feature_flags:
   enable_topic_autopartitioning_for_cdc: true
 ```
 
+{% note warning %}
+
+Change settings in the `feature_flags` section only on the recommendation of the support service.
+
+{% endnote %}
 
 ## Feature flags
 

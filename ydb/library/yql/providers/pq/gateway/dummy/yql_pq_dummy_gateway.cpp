@@ -52,7 +52,7 @@ NThreading::TFuture<void> TDummyPqGateway::CloseSession(const TString& sessionId
 NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
     Y_UNUSED(token);
 
-    const auto& clusterCanonized = SkipDatabasePrefix(cluster, database);
+    const auto& clusterCanonized = SkipDatabasePrefix(cluster, database, true);
     const auto& pathCanonized = SkipDatabasePrefix(path, database);
 
     with_lock (Mutex) {
@@ -72,7 +72,7 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePa
 IPqGateway::TAsyncDescribeFederatedTopicResult TDummyPqGateway::DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
     Y_UNUSED(token);
 
-    const auto& clusterCanonized = SkipDatabasePrefix(cluster, database);
+    const auto& clusterCanonized = SkipDatabasePrefix(cluster, database, true);
     const auto& pathCanonized = SkipDatabasePrefix(path, database);
 
     with_lock (Mutex) {
@@ -133,8 +133,8 @@ TFederatedTopicClientSettings TDummyPqGateway::GetFederatedTopicClientSettings()
     return {};
 }
 
-TString TDummyPqGateway::SkipDatabasePrefix(const TString& path, const TString& database) const {
-    return AllowSkipDatabasePrefix ? NYql::SkipDatabasePrefix(path, database) : path;
+TString TDummyPqGateway::SkipDatabasePrefix(const TString& path, const TString& database, bool isCluster) const {
+    return AllowSkipDatabasePrefix ? NYql::SkipDatabasePrefix(path, database, isCluster) : path;
 }
 
 TDummyPqGateway::TPtr CreatePqFileGateway(bool skipDatabasePrefix) {

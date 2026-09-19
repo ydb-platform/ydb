@@ -39,6 +39,7 @@ namespace NActors {
 
     protected:
         friend class TBasicExecutorPool;
+        friend class TSharedExecutorPool;
         friend class TIOExecutorPool;
         TThreadParkPad WaitingPad;
 

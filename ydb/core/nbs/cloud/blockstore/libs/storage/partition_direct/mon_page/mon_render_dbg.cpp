@@ -2,6 +2,8 @@
 
 #include "mon_util.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -18,10 +20,15 @@ namespace {
 
 void RenderWatermarks(
     IOutputStream& str,
-    const TDbgSnapshot& dbg,
+    size_t dbgIndex,
+    size_t dbgCount,
+    const TVChunkConfigs& vChunkConfigs,
     ui32 blockSize)
 {
-    for (const auto& [vChunkId, vChunkConfig]: dbg.VChunkConfigs) {
+    for (const auto& [vChunkId, vChunkConfig]: vChunkConfigs) {
+        if (GetDirectBlockGroupIndex(vChunkId, dbgCount) != dbgIndex) {
+            continue;
+        }
         TStringBuilder w;
         for (auto host: vChunkConfig.GetDDisks()) {
             if (auto watermark = vChunkConfig.GetWatermark(host)) {
@@ -41,7 +48,8 @@ void RenderWatermarks(
 void RenderDbgList(
     IOutputStream& str,
     const TTabletInfo& tabletInfo,
-    const TVector<TDbgSnapshot>& dbgs)
+    const TVector<TDbgSnapshot>& dbgs,
+    const TVChunkConfigs& vChunkConfigs)
 {
     HTML (str) {
         TAG (TH3) {
@@ -94,7 +102,6 @@ void RenderDbgList(
                     size_t inflight = 0;
                     size_t consecutiveErrors = 0;
                     size_t consecutiveSuccesses = 0;
-                    TCountAndSize pBuffersUsage;
                     ui64 ddiskTotalBytes = 0;
                     ui64 freshTotalBytes = 0;
                     ui64 rottenTotalBytes = 0;
@@ -108,7 +115,6 @@ void RenderDbgList(
                         {
                             inflight += host.InflightByOperation[operation];
                         }
-                        pBuffersUsage += host.DirtyMapStats.PBuffersUsage;
                         ddiskTotalBytes += host.DirtyMapStats.DDiskTotalBytes;
                         freshTotalBytes += host.DirtyMapStats.FreshTotalBytes;
                         rottenTotalBytes += host.DirtyMapStats.RottenTotalBytes;
@@ -116,7 +122,7 @@ void RenderDbgList(
                     totalInflight += inflight;
                     totalConsecutiveErrors += consecutiveErrors;
                     totalConsecutiveSuccesses += consecutiveSuccesses;
-                    totalPBuffersUsage += pBuffersUsage;
+                    totalPBuffersUsage += dbg.PBuffersUsage;
                     totalDDiskBytes += ddiskTotalBytes;
                     totalFreshBytes += freshTotalBytes;
                     totalRottenBytes += rottenTotalBytes;
@@ -156,7 +162,7 @@ void RenderDbgList(
                             str << consecutiveErrors;
                         }
                         TABLED () {
-                            str << pBuffersUsage.Print(true);
+                            str << dbg.PBuffersUsage.Print(true);
                         }
                         TABLED () {
                             str << FormatByteSize(ddiskTotalBytes);
@@ -165,7 +171,12 @@ void RenderDbgList(
                             str << " / ";
                             str << FormatByteSize(freshTotalBytes);
                             str << "<br>";
-                            RenderWatermarks(str, dbg, tabletInfo.BlockSize);
+                            RenderWatermarks(
+                                str,
+                                dbg.Index,
+                                tabletInfo.VolumeDirectBlockGroupCount,
+                                vChunkConfigs,
+                                tabletInfo.BlockSize);
                         }
                     }
                 }
@@ -484,10 +495,13 @@ void RenderDbgDetail(
 
 }   // namespace
 
-void RenderDbg(IOutputStream& str, const TMonPageData& data)
+void RenderDbg(
+    IOutputStream& str,
+    const TMonPageData& data,
+    const TVChunkConfigs& vChunkConfigs)
 {
     if (!data.SelectedDbg) {
-        RenderDbgList(str, data.TabletInfo, data.Dbgs);
+        RenderDbgList(str, data.TabletInfo, data.Dbgs, vChunkConfigs);
         return;
     }
     for (const auto& dbg: data.Dbgs) {

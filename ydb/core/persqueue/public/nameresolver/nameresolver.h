@@ -92,7 +92,7 @@ std::optional<TFederationAccountTarget> TryFederationAccountTarget(
 
 /**
  * All names derived from a tablet config.
- * Value type; pass TTopicNamesPtr where a shared handle is needed.
+ * Value type; pass TTopicNames::TPtr where a shared handle is needed.
  *
  * Field comments use two federation topics and one FCC topic:
  *   Fed:     "/Root/PQ/rt3.dc1--account--topic"
@@ -100,6 +100,8 @@ std::optional<TFederationAccountTarget> TryFederationAccountTarget(
  *   FCC:     "/lb/database/my-stream"
  */
 struct TTopicNames {
+    using TPtr = std::shared_ptr<const TTopicNames>;
+
     // False if parsing failed; then only Reason is meaningful.
     bool Valid = false;
     TString Reason;
@@ -177,28 +179,9 @@ struct TTopicNames {
     // Fed dir: "/Root/PQ/rt3.dc1--account@path--topic"
     // FCC: empty
     TString SecondaryPath;
-
-    bool IsValid() const { return Valid; }
-    const TString& GetReason() const { return Reason; }
-
-    const TString& GetClientsideName() const { return ClientsideName; }
-    TString GetPrimaryPath() const { return Path; }
-    TString GetFederationPath() const { return FederationPath; }
-    TString GetFederationPathWithDC() const { return FederationPathWithDC; }
-    const TString& GetAccount() const { return Account; }
-    const TString& GetCluster() const { return Cluster; }
-    const TString& GetLegacyProducer() const { return LegacyProducer; }
-    const TString& GetLegacyLogtype() const { return LegacyLogtype; }
-    const TString& GetModernName() const { return ModernName; }
-    TString GetInternalName() const { return InternalName; }
-    TString GetTopicForSrcIdHash() const { return TopicForSrcIdHash; }
-    TString GetSecondaryPath() const { return SecondaryPath; }
-    TString GetPrintableString() const { return Path; }
 };
 
-using TTopicNamesPtr = std::shared_ptr<const TTopicNames>;
-
-inline TTopicNamesPtr MakeTopicNamesPtr(TTopicNames names) {
+inline TTopicNames::TPtr MakeTopicNamesPtr(TTopicNames names) {
     return std::make_shared<const TTopicNames>(std::move(names));
 }
 

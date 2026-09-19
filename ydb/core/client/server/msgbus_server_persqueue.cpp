@@ -22,10 +22,10 @@ using namespace NPqMetaCacheV2;
 namespace {
 TString ClientsideNameFromSchemeEntry(const TSchemeCacheNavigate::TEntry& entry) {
     const auto& pqGroupInfo = entry.PQGroupInfo;
-    if (!pqGroupInfo || !pqGroupInfo->Names || !pqGroupInfo->Names->IsValid()) {
+    if (!pqGroupInfo || !pqGroupInfo->Names || !pqGroupInfo->Names->Valid) {
         return {};
     }
-    return pqGroupInfo->Names->GetClientsideName();
+    return pqGroupInfo->Names->ClientsideName;
 }
 } // namespace
 

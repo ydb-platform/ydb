@@ -76,13 +76,13 @@ Y_UNIT_TEST(SchemeCacheFillsTopicNamesFirstClass) {
     UNIT_ASSERT(entry.PQGroupInfo->Names);
 
     const auto& names = *entry.PQGroupInfo->Names;
-    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
-    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), path);
-    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "topic_scheme_cache_names");
-    UNIT_ASSERT_VALUES_EQUAL(names.GetModernName(), "topic_scheme_cache_names");
-    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "topic_scheme_cache_names");
-    UNIT_ASSERT_VALUES_EQUAL(names.GetInternalName(), path);
-    UNIT_ASSERT_VALUES_EQUAL(names.GetTopicForSrcIdHash(), "Root/topic_scheme_cache_names");
+    UNIT_ASSERT_C(names.Valid, names.Reason);
+    UNIT_ASSERT_VALUES_EQUAL(names.Path, path);
+    UNIT_ASSERT_VALUES_EQUAL(names.ClientsideName, "topic_scheme_cache_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.ModernName, "topic_scheme_cache_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.FederationPath, "topic_scheme_cache_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.InternalName, path);
+    UNIT_ASSERT_VALUES_EQUAL(names.TopicForSrcIdHash, "Root/topic_scheme_cache_names");
 }
 
 Y_UNIT_TEST(SchemeCacheFillsTopicNamesFederation) {
@@ -100,16 +100,16 @@ Y_UNIT_TEST(SchemeCacheFillsTopicNamesFederation) {
     UNIT_ASSERT(entry.PQGroupInfo->Names);
 
     const auto& names = *entry.PQGroupInfo->Names;
-    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
-    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), path);
-    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "rt3.dc1--account--sc_names");
+    UNIT_ASSERT_C(names.Valid, names.Reason);
+    UNIT_ASSERT_VALUES_EQUAL(names.Path, path);
+    UNIT_ASSERT_VALUES_EQUAL(names.ClientsideName, "rt3.dc1--account--sc_names");
     UNIT_ASSERT_VALUES_EQUAL(names.ShortClientsideName, "account--sc_names");
-    UNIT_ASSERT_VALUES_EQUAL(names.GetModernName(), "sc_names");
-    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "account/sc_names");
-    UNIT_ASSERT_VALUES_EQUAL(names.GetCluster(), "dc1");
-    UNIT_ASSERT_VALUES_EQUAL(names.GetAccount(), "account");
-    UNIT_ASSERT_VALUES_EQUAL(names.GetInternalName(), "rt3.dc1--account--sc_names");
-    UNIT_ASSERT_VALUES_EQUAL(names.GetTopicForSrcIdHash(), "account--sc_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.ModernName, "sc_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.FederationPath, "account/sc_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.Cluster, "dc1");
+    UNIT_ASSERT_VALUES_EQUAL(names.Account, "account");
+    UNIT_ASSERT_VALUES_EQUAL(names.InternalName, "rt3.dc1--account--sc_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.TopicForSrcIdHash, "account--sc_names");
 }
 
 Y_UNIT_TEST(CreateTopicKeepsLiteralDashDashName) {

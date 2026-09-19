@@ -457,7 +457,7 @@ Y_UNIT_TEST_SUITE(TopicNameConverterForCPTest) {
 
             auto names = NKikimr::NPQ::NNameResolver::NamesFromConfig(
                 pqConfig, TString(), false, "Root/PQ", "");
-            UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+            UNIT_ASSERT_C(names.Valid, names.Reason);
 
             auto fromConfig = TTopicNameConverter::ForFederation("Root/PQ", pqConfig, "");
             auto fromNames = TTopicNameConverter::FromNames(false, names);
@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(TopicNameConverterForCPTest) {
 
             auto names = NKikimr::NPQ::NNameResolver::NamesFromConfig(
                 pqConfig, TString(), true, "", "");
-            UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+            UNIT_ASSERT_C(names.Valid, names.Reason);
 
             auto fromConfig = TTopicNameConverter::ForFirstClass(pqConfig);
             auto fromNames = TTopicNameConverter::FromNames(true, names, {}, "/lb/database");

@@ -247,7 +247,7 @@ struct TSchemeCacheNavigate {
         std::shared_ptr<NPQ::IPartitionChooser> PartitionChooser;
         std::shared_ptr<NPQ::TPartitionGraph> PartitionGraph;
         // Object-level names: NamesFromConfig(scheme path, PQTabletConfig, node PQConfig).
-        NPQ::NNameResolver::TTopicNamesPtr Names;
+        NPQ::NNameResolver::TTopicNames::TPtr Names;
     };
 
     struct TRtmrVolumeInfo : public TAtomicRefCount<TRtmrVolumeInfo> {

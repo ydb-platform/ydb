@@ -1086,7 +1086,7 @@ TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TStr
     auto names = builder.ToTopicNames(true);
     // Request-side FCC converters used to keep names valid when AppData FCC is off
     // for a first-class tablet config (kafka BalanceScenarioForFederation).
-    if (!names.IsValid() && !firstClassCitizen) {
+    if (!names.Valid && !firstClassCitizen) {
         return NamesFromConfig(config, topicPath, true);
     }
     return names;

@@ -292,7 +292,7 @@ TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
 }
 
 TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
-        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& names,
+        const NKikimr::NPQ::NNameResolver::TTopicNames::TPtr& names,
         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
         const TString& ydbDatabaseRootOverride,
         const TMaybe<TString>& clientsideNameOverride

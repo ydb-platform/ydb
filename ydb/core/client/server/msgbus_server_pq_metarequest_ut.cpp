@@ -536,7 +536,7 @@ public:
         }
         auto names = NPQ::NNameResolver::NamesFromConfig(
             *pqTabletConfig, path, false, "Root/PQ", "");
-        UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+        UNIT_ASSERT_C(names.Valid, names.Reason);
         pqInfo->Names = NPQ::NNameResolver::MakeTopicNamesPtr(std::move(names));
         entry.PQGroupInfo.Reset(pqInfo);
 

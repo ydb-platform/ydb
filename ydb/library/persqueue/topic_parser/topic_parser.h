@@ -87,7 +87,7 @@ public:
                                               const TMaybe<TString>& clientsideNameOverride = {});
     // Prefer when SchemeCache already filled TPQGroupInfo::Names. Falls back to tablet config if names is null.
     TTopicConverterPtr UpgradeToFullConverter(
-        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& names,
+        const NKikimr::NPQ::NNameResolver::TTopicNames::TPtr& names,
         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
         const TString& ydbDatabaseRootOverride,
         const TMaybe<TString>& clientsideNameOverride = {});

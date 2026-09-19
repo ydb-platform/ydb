@@ -11,7 +11,6 @@ ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCounters
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
-ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
 ydb/core/tx/replication/service/ut_worker unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
@@ -29,7 +28,6 @@ ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prest
 ydb/tests/fq/pq_async_io/ut TPqWriterTest.TestCheckpoints
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_pq_source_actor_count[max_tasks_50]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_shared_reading_group[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_stop_after_restart[kikimr0-False]
 ydb/tests/fq/streaming/generic py3test.sole chunk
@@ -46,4 +44,3 @@ ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_read[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]
-ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test

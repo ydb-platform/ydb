@@ -146,6 +146,7 @@ struct TDqChannelLimits {
     TDuration CleanupPeriod = TDuration::MilliSeconds(30000);
     TDuration IdlePingPeriod = TDuration::MilliSeconds(30000);
     TDuration IdleDestroyPeriod = TDuration::MilliSeconds(30000);
+    TDuration UnboundWaitPeriod = TDuration::Minutes(10); // an auto-created descriptor nobody binds to is erased after this
 };
 
 NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,

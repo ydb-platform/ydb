@@ -1,5 +1,7 @@
 #include "oracle.h"
 
+#include "oracle_config.h"
+
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -1121,6 +1123,72 @@ Y_UNIT_TEST_SUITE(TOracle)
                 stats[i].Health,
                 "host #" << i);
         }
+    }
+
+    Y_UNIT_TEST(GetWriteModeShouldSelectByInflightWhenThresholdUnset)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        rawConfig.SetWriteMode(NProto::EWriteMode::IndirectWrite);
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::DirectWrite,
+            oracle.GetWriteMode(1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::DirectWrite,
+            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite + 1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(132));
+    }
+
+    Y_UNIT_TEST(GetWriteModeShouldKeepConfiguredModeWhenThresholdZero)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        rawConfig.SetWriteMode(NProto::EWriteMode::IndirectWrite);
+        rawConfig.MutableOracleConfig()->SetMaxInflightWritesForDirectWrite(0);
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(132));
+    }
+
+    Y_UNIT_TEST(GetWriteModeShouldSelectByInflightWhenThresholdSet)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        rawConfig.SetWriteMode(NProto::EWriteMode::IndirectWrite);
+        rawConfig.MutableOracleConfig()->SetMaxInflightWritesForDirectWrite(
+            DefaultMaxInflightWritesForDirectWrite);
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::DirectWrite,
+            oracle.GetWriteMode(1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::DirectWrite,
+            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite + 1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode(132));
     }
 }
 

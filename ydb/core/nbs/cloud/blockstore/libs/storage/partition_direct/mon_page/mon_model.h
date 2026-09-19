@@ -75,6 +75,8 @@ struct TArenaMemoryUsage
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
+    // Number of writes currently in flight across the whole disk.
+    size_t InflightWriteCount = 0;
     TArenaMemoryUsage ArenaMemoryUsage;
 };
 

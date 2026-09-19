@@ -57,6 +57,9 @@ public:
     TBlockRange16 GetVChunkRange() const;
     void SetPBufferKey(TPBufferKey pBufferKey);
     TPBufferKey GetPBufferKey() const;
+    // Disk-wide in-flight write count, including this write.
+    void SetInflightWriteCount(size_t inflightWriteCount);
+    size_t GetInflightWriteCount() const;
     TGuardedSgList& GetSgList();
 
 private:
@@ -67,6 +70,7 @@ private:
     TCallContextPtr CallContext;
     TBlockRange16 VChunkRange;
     TPBufferKey PBufferKey;
+    size_t InflightWriteCount = 0;
 
     NThreading::TPromise<TWriteBlocksLocalResponse> Promise;
 };

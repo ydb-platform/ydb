@@ -106,6 +106,16 @@ TPBufferKey TWriteRequestBundle::GetPBufferKey() const
     return PBufferKey;
 }
 
+void TWriteRequestBundle::SetInflightWriteCount(size_t inflightWriteCount)
+{
+    InflightWriteCount = inflightWriteCount;
+}
+
+size_t TWriteRequestBundle::GetInflightWriteCount() const
+{
+    return InflightWriteCount;
+}
+
 TGuardedSgList& TWriteRequestBundle::GetSgList()
 {
     return SgList;

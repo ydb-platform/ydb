@@ -189,6 +189,7 @@ TWriteRequestExecutorPtr TWriteRequestTestFixture::CreateRequestExecutor(
         MakeIntrusive<TCallContext>(),
         Range);
     bundle->SetPBufferKey(UserPBufferKey);
+    bundle->SetInflightWriteCount(1);
 
     WriteClient->Response.reset();
     DirectBlockGroup->Oracle.WriteMode = writeMode;

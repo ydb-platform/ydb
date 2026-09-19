@@ -93,6 +93,8 @@ using TWriteRequestExecutorPtr = std::shared_ptr<TWriteRequestExecutor>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Creates a write executor. The bundle must already have the disk-wide
+// inflight write count and PBufferKey set.
 TWriteRequestExecutorPtr CreateWriteRequestExecutor(
     NActors::TActorSystem* const actorSystem,
     const TLogTitle& logTitle,

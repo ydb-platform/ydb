@@ -108,14 +108,6 @@ class TableScheme(object):
         self.data['TableKey'].append(cid)
         return self
 
-    def sort_columns(self):
-        # The tablet reports columns in hash map order, which is not stable
-        self.data['ColumnsAdded'].sort(key=lambda column: column['ColumnId'])
-        self.data['ColumnsDropped'].sort(key=lambda column: column['ColumnId'])
-        for family in self.data['ColumnFamilies'].values():
-            family['Columns'].sort()
-        return self
-
     def unknown_delta(self, delta):
         raise RuntimeError("Unknown delta type")
 
@@ -173,4 +165,4 @@ def get_scheme(client, tablet_id):
 
         scheme[pos[delta['table_id']]] = scheme[pos[delta['table_id']]].add_delta(delta)
 
-    return [element.sort_columns() for element in scheme]
+    return [element for element in scheme]

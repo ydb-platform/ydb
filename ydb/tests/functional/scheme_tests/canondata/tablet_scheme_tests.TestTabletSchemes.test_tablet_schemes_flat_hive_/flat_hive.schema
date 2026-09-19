@@ -63,9 +63,19 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 116,
+                "ColumnName": "ObjectDomain",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 0,
                 "ColumnName": "ID",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 117,
+                "ColumnName": "SeizedByChild",
+                "ColumnType": "Bool"
             },
             {
                 "ColumnId": 1,
@@ -73,8 +83,18 @@
                 "ColumnType": "PairUi64Ui64"
             },
             {
+                "ColumnId": 118,
+                "ColumnName": "NeedToReleaseFromParent",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 2,
                 "ColumnName": "KnownGeneration",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 119,
+                "ColumnName": "ReassignReason",
                 "ColumnType": "Uint64"
             },
             {
@@ -83,9 +103,19 @@
                 "ColumnType": "Uint64"
             },
             {
+                "ColumnId": 120,
+                "ColumnName": "Statistics",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 4,
                 "ColumnName": "LeaderNode",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 121,
+                "ColumnName": "DataCentersPreference",
+                "ColumnType": "String"
             },
             {
                 "ColumnId": 5,
@@ -93,9 +123,34 @@
                 "ColumnType": "Uint64"
             },
             {
+                "ColumnId": 123,
+                "ColumnName": "BalancerPolicy",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 7,
                 "ColumnName": "AllowedNodes",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 124,
+                "ColumnName": "StoppedByTenant",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 125,
+                "ColumnName": "NewAllowedDataCenterIds",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 126,
+                "ColumnName": "IsBackup",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 127,
+                "ColumnName": "ConfirmedStorageVersion",
+                "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 11,
@@ -146,74 +201,30 @@
                 "ColumnId": 115,
                 "ColumnName": "LockedReconnectTimeout",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 116,
-                "ColumnName": "ObjectDomain",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 117,
-                "ColumnName": "SeizedByChild",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 118,
-                "ColumnName": "NeedToReleaseFromParent",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 119,
-                "ColumnName": "ReassignReason",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 120,
-                "ColumnName": "Statistics",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 121,
-                "ColumnName": "DataCentersPreference",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 123,
-                "ColumnName": "BalancerPolicy",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 124,
-                "ColumnName": "StoppedByTenant",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 125,
-                "ColumnName": "NewAllowedDataCenterIds",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 126,
-                "ColumnName": "IsBackup",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 127,
-                "ColumnName": "ConfirmedStorageVersion",
-                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    116,
                     0,
+                    117,
                     1,
+                    118,
                     2,
+                    119,
                     3,
+                    120,
                     4,
+                    121,
                     5,
+                    123,
                     7,
+                    124,
+                    125,
+                    126,
+                    127,
                     11,
                     13,
                     17,
@@ -223,18 +234,7 @@
                     112,
                     113,
                     114,
-                    115,
-                    116,
-                    117,
-                    118,
-                    119,
-                    120,
-                    121,
-                    123,
-                    124,
-                    125,
-                    126,
-                    127
+                    115
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -264,9 +264,19 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "StoragePool",
+                "ColumnType": "Utf8"
+            },
+            {
                 "ColumnId": 0,
                 "ColumnName": "Tablet",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "Binding",
+                "ColumnType": "String"
             },
             {
                 "ColumnId": 1,
@@ -277,27 +287,17 @@
                 "ColumnId": 5,
                 "ColumnName": "NeedNewGroup",
                 "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 7,
-                "ColumnName": "StoragePool",
-                "ColumnType": "Utf8"
-            },
-            {
-                "ColumnId": 8,
-                "ColumnName": "Binding",
-                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    0,
-                    1,
-                    5,
                     7,
-                    8
+                    0,
+                    8,
+                    1,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -849,24 +849,14 @@
                 "ColumnType": "Uint64"
             },
             {
-                "ColumnId": 2,
-                "ColumnName": "FollowerID",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 3,
-                "ColumnName": "ProtoMetrics",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 4,
-                "ColumnName": "UsageImpact",
-                "ColumnType": "Double"
-            },
-            {
                 "ColumnId": 100,
                 "ColumnName": "MaximumCPU",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "FollowerID",
+                "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 101,
@@ -874,9 +864,19 @@
                 "ColumnType": "String"
             },
             {
+                "ColumnId": 3,
+                "ColumnName": "ProtoMetrics",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 102,
                 "ColumnName": "MaximumNetwork",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "UsageImpact",
+                "ColumnType": "Double"
             }
         ],
         "ColumnsDropped": [],
@@ -884,12 +884,12 @@
             "0": {
                 "Columns": [
                     1,
-                    2,
-                    3,
-                    4,
                     100,
+                    2,
                     101,
-                    102
+                    3,
+                    102,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

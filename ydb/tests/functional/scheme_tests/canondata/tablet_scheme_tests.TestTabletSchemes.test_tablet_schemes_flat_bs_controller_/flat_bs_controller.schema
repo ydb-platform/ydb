@@ -7,6 +7,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 29,
+                "ColumnName": "EnableConfigV2",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -135,17 +140,13 @@
                 "ColumnId": 28,
                 "ColumnName": "ExpectedStorageYamlConfigVersion",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 29,
-                "ColumnName": "EnableConfigV2",
-                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    29,
                     1,
                     2,
                     4,
@@ -171,8 +172,7 @@
                     24,
                     26,
                     27,
-                    28,
-                    29
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -419,9 +419,19 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 120,
+                "ColumnName": "Database",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 4,
                 "ColumnName": "Owner",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 121,
+                "ColumnName": "BridgeGroupInfo",
+                "ColumnType": "String"
             },
             {
                 "ColumnId": 5,
@@ -474,6 +484,11 @@
                 "ColumnType": "Bool"
             },
             {
+                "ColumnId": 102,
+                "ColumnName": "VirtualGroupState",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 15,
                 "ColumnName": "DecommitStatus",
                 "ColumnType": "Uint32"
@@ -486,11 +501,6 @@
             {
                 "ColumnId": 17,
                 "ColumnName": "BridgePileId",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 102,
-                "ColumnName": "VirtualGroupState",
                 "ColumnType": "Uint32"
             },
             {
@@ -527,16 +537,6 @@
                 "ColumnId": 114,
                 "ColumnName": "Metrics",
                 "ColumnType": "String"
-            },
-            {
-                "ColumnId": 120,
-                "ColumnName": "Database",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 121,
-                "ColumnName": "BridgeGroupInfo",
-                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -546,7 +546,9 @@
                     1,
                     2,
                     3,
+                    120,
                     4,
+                    121,
                     5,
                     6,
                     7,
@@ -557,19 +559,17 @@
                     12,
                     13,
                     14,
+                    102,
                     15,
                     16,
                     17,
-                    102,
                     106,
                     109,
                     110,
                     111,
                     112,
                     113,
-                    114,
-                    120,
-                    121
+                    114
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1000,6 +1000,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 11,
+                "ColumnName": "Metrics",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 4,
                 "ColumnName": "FailDomain",
                 "ColumnType": "Uint32"
@@ -1008,11 +1013,6 @@
                 "ColumnId": 5,
                 "ColumnName": "VDisk",
                 "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 11,
-                "ColumnName": "Metrics",
-                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -1022,9 +1022,9 @@
                     1,
                     2,
                     3,
+                    11,
                     4,
-                    5,
-                    11
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1490,6 +1490,16 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "Success",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "ScrubCycleFinishTime",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "NodeId",
                 "ColumnType": "Uint32"
@@ -1513,29 +1523,19 @@
                 "ColumnId": 6,
                 "ColumnName": "ScrubCycleStartTime",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 7,
-                "ColumnName": "Success",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 8,
-                "ColumnName": "ScrubCycleFinishTime",
-                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
+                    8,
                     1,
                     2,
                     3,
                     5,
-                    6,
-                    7,
-                    8
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

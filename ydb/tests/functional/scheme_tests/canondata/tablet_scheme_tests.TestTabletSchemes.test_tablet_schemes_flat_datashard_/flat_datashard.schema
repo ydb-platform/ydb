@@ -822,6 +822,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "TimeoutMs",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "Oid",
                 "ColumnType": "Uint64"
@@ -850,24 +855,19 @@
                 "ColumnId": 6,
                 "ColumnName": "Flags",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 7,
-                "ColumnName": "TimeoutMs",
-                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6,
-                    7
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1378,6 +1378,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "MaxOffset",
+                "ColumnType": "Int64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "PathOwnerId",
                 "ColumnType": "Uint64"
@@ -1401,23 +1406,18 @@
                 "ColumnId": 6,
                 "ColumnName": "SplitKey",
                 "ColumnType": "String"
-            },
-            {
-                "ColumnId": 7,
-                "ColumnName": "MaxOffset",
-                "ColumnType": "Int64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
                     4,
-                    6,
-                    7
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2084,6 +2084,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "LastTxId",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "TableOwnerId",
                 "ColumnType": "Uint64"
@@ -2112,24 +2117,19 @@
                 "ColumnId": 6,
                 "ColumnName": "LastStep",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 7,
-                "ColumnName": "LastTxId",
-                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6,
-                    7
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2600,6 +2600,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "UserTraceId",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "LockId",
                 "ColumnType": "Uint64"
@@ -2628,24 +2633,19 @@
                 "ColumnId": 6,
                 "ColumnName": "UserSID",
                 "ColumnType": "Utf8"
-            },
-            {
-                "ColumnId": 7,
-                "ColumnName": "UserTraceId",
-                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6,
-                    7
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

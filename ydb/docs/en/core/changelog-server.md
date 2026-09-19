@@ -9,7 +9,7 @@ Release date: TBD.
 * [Column-oriented tables](./recipes/import-export-column-tables.md?version=v26.3) can be exported and imported through S3-compatible object storage.
 * Column-oriented table columns support [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.3#encoding). Use `ENCODING(DICT)` for low-cardinality values.
 * [Local min_max indexes](./dev/min_max-skip-index.md?version=v26.3) are enabled for column-oriented tables. They skip data fragments outside a query range, reducing the amount of data read.
-* [Storage groups](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3) can be moved to virtual storage groups in the background without interrupting application reads and writes.
+* Added [storage group decommissioning through virtual storage groups](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data moves to virtual groups in the background while applications continue reading and writing data.
 * Added [authentication through external OpenID Connect identity providers](./security/authentication.md?version=v26.3#external-idp). {{ ydb-short-name }} validates JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
 * Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
 * Streaming YQL queries can access [system virtual attributes](./concepts/query_execution/topics.md?version=v26.3#system-metadata), including `__ydb_create_time`, `__ydb_write_time`, and user attributes in `__ydb_user_attributes`.

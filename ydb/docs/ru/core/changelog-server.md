@@ -9,7 +9,7 @@
 * [Колоночные таблицы](./recipes/import-export-column-tables.md?version=v26.3) можно экспортировать и импортировать через S3-совместимые объектные хранилища.
 * Колонки колоночных таблиц поддерживают [словарное кодирование](./yql/reference/syntax/create_table/index.md?version=v26.3#encoding). Используйте `ENCODING(DICT)` для значений с низкой кардинальностью.
 * Для колоночных таблиц включены [локальные min_max-индексы](./dev/min_max-skip-index.md?version=v26.3). Они пропускают фрагменты данных вне диапазона запроса, сокращая объём чтения.
-* [Группы хранения](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3) можно перемещать в виртуальные группы в фоновом режиме, не прерывая чтение и запись приложений.
+* Добавлена [декомиссия групп хранения посредством использования виртуальных групп](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Данные перемещаются в виртуальные группы в фоновом режиме, приложения продолжают чтение и запись.
 * Добавлена [аутентификация через внешних поставщиков удостоверений OpenID Connect](./security/authentication.md?version=v26.3#external-idp). {{ ydb-short-name }} проверяет JWT-токены по JSON Web Key Set (JWKS) поставщика и периодически обновляет данные аутентификации.
 * Kafka API поддерживает [взаимную TLS-аутентификацию](./reference/kafka-api/auth.md?version=v26.3). Клиентский сертификат сопоставляется с идентификатором безопасности, SASL-аутентификация не требуется.
 * Потоковым YQL-запросам стали доступны [системные виртуальные атрибуты](./concepts/query_execution/topics.md?version=v26.3#system-metadata), включая `__ydb_create_time`, `__ydb_write_time` и пользовательские атрибуты `__ydb_user_attributes`.

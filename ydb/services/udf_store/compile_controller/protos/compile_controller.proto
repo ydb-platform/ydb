@@ -82,3 +82,19 @@ message TEvCompileFailed {
 message TEvArtifactReady {
     optional TArtifactKey Key = 1;
 }
+
+// A bounded snapshot for one upload. Artifact storage remains authoritative for READY.
+message TEvDescribeModule {
+    optional string Name = 1;
+    optional EArtifactKind Kind = 2;
+    optional string Uid = 3;
+}
+message TEvDescribeModuleResult {
+    message TPlatform {
+        optional string CpuSpec = 1;
+        optional bool Compiling = 2;
+        optional bool Failed = 3;
+        optional string Error = 4;
+    }
+    repeated TPlatform Platforms = 1;
+}

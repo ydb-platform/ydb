@@ -53,14 +53,14 @@ public:
 
     // Disables the host. Demote ddisk and pbuffer. If possible, adds ddisk on
     // the new host. Returns the text of the error or message to be logged.
-    TString EvacuateHost(THostIndex hostIndex);
+    TString EvacuateHost(THostIndex hostIndex, bool fresh);
 
     // Removes ddisk from the host. Demote pbuffer to handoff. Returns error
     // message or empty string when demote executed successfully.
     TString DemoteHost(THostIndex hostIndex);
-    // Adds ddisk to the host.
-    void PromoteHost(THostIndex hostIndex);
-    TString PromoteHostIfNeeded();
+    // Adds ddisk to the host. Set watermark to 0 if it fresh.
+    void PromoteHost(THostIndex hostIndex, bool fresh);
+    TString PromoteHostIfNeeded(bool fresh);
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;
     [[nodiscard]] EHostRole GetDDiskRole(THostIndex hostIndex) const;

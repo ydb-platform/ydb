@@ -56,6 +56,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_ACTOR: ${{ github.event.sender.login }}
           YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
+          YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE: ${{ vars.YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE }}
+          YDBDOC_MAX_SOURCE_CHARACTERS: ${{ vars.YDBDOC_MAX_SOURCE_CHARACTERS }}
           YDBDOC_DAILY_BUDGET_RUB: ${{ vars.YDBDOC_DAILY_BUDGET_RUB }}
           YDBDOC_TRANSCRIPT_BACKEND: ydb
           YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}

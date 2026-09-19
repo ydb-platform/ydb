@@ -2994,6 +2994,10 @@ message TColumnShardConfig {
     }
 
     optional TFlowControlConfig FlowControl = 74;
+    // Actor-system pool for ordinary scans: "User" or "Batch". Unset follows the scan actor (ANALYZE stays on Batch).
+    optional string ScanDefaultPool = 75;
+    // Actor-system pool for compaction conveyor tasks: "User" or "Batch". Unset is User.
+    optional string CompactionDefaultPool = 76;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

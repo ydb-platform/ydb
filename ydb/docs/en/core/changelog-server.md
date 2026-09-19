@@ -15,9 +15,6 @@ Release date: TBD.
 * Column-oriented tables use an updated compaction strategy to organize data more efficiently.
 * For column-oriented tables, `ALTER TABLE ... COMPACT` can start forced compaction.
 * Column-oriented tables support the `Interval`, `Uuid`, and `DyNumber` data types.
-* `DISTINCT` and `DISTINCT LIMIT` are pushed down to ColumnShard for column-oriented tables, reducing intermediate data and query execution time.
-* Added snapshot retention for long-running analytical queries over column-oriented tables: snapshot data is retained until a query completes.
-* Database-level small-blob quotas are enforced for column-oriented tables. New writes are rejected after the quota derived from `data_size_hard_quota` is exhausted.
 * Bulk authorization requests to AccessService are enabled by default, reducing authorization request overhead.
 * Streaming YQL queries can access [system virtual attributes](./concepts/query_execution/topics.md?version=v26.3#system-metadata), including `__ydb_create_time`, `__ydb_write_time`, and user attributes in `__ydb_user_attributes`.
 * Added a configurable limit for stored forced-compaction operations. Completed and cancelled operations can be removed automatically when the limit is reached.

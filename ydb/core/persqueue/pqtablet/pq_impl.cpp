@@ -516,6 +516,7 @@ void TPersQueue::InitPlanStep(const NKikimrPQ::TTabletTxInfo& info)
 
     ExecStep = info.GetExecStep();
     ExecTxId = info.GetExecTxId();
+    // LastAckedPlanStep is not persisted: after reboot retransmits are fenced again.
 }
 
 void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResult& read,
@@ -3590,6 +3591,55 @@ void TPersQueue::SendDeferredReadSetAcks(const TActorContext& ctx)
     DeferredReadSetAcks.clear();
 }
 
+void TPersQueue::SendReadyPlanStepAcks(const TActorContext& ctx)
+{
+    // Early exit at the first non-Ready: only the Ready prefix may be sent.
+    // A WaitTxExecuted/unfenced WaitWriteTx head blocks later Ready entries
+    // so the mediator sees arrival order. Cannot skip the head or scan past it.
+    while (!PlanStepAckQueue.empty()) {
+        auto& front = PlanStepAckQueue.front();
+        if (front.State == TPlanStepAckEntry::EState::WaitWriteTx &&
+            front.EnqueuedAtFenceEpoch < WriteTxFenceEpoch) {
+            front.State = TPlanStepAckEntry::EState::Ready;
+        }
+        if (front.State != TPlanStepAckEntry::EState::Ready) {
+            break;
+        }
+        auto entry = std::move(PlanStepAckQueue.front());
+        PlanStepAckQueue.pop_front();
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send PlanStep ack",
+            {"logPrefix", LogPrefix()},
+            {"step", entry.Step},
+            {"txCount", entry.Event->Record.TransactionsSize()});
+        SendPlanStepAcks(ctx, entry.Sender, *entry.Event);
+    }
+}
+
+void TPersQueue::MarkPlanStepAcksReadyForTx(ui64 txId)
+{
+    // Matches are not a prefix (unknown and other knowns interleave; several
+    // senders/retransmits share LastTxId). After EXECUTED the tx leaves Txs
+    // and there is no second notification, so mark every waiter now.
+    auto it = PlanStepAckByTxId.find(txId);
+    if (it == PlanStepAckByTxId.end()) {
+        return;
+    }
+    for (TPlanStepAckEntry* entry : it->second) {
+        PQ_ENSURE(entry);
+        PQ_ENSURE(entry->State == TPlanStepAckEntry::EState::WaitTxExecuted);
+        PQ_ENSURE(entry->LastTxId.Defined() && *entry->LastTxId == txId);
+        entry->State = TPlanStepAckEntry::EState::Ready;
+    }
+    PlanStepAckByTxId.erase(it);
+}
+
+bool TPersQueue::HasWaitWriteTxPlanStepAck() const
+{
+    // Unfenced WaitWriteTx may sit behind a known head; the count is the
+    // presence check without scanning the queue.
+    return WaitWriteTxUnfencedCount > 0;
+}
+
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
 {
     LOG_I("Handle TEvTxProcessing::TEvReadSetAck",
@@ -3739,7 +3789,8 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
         CanProcessTxWrites() ||
         TxWritesChanged ||
         !DeleteTxs.empty() ||
-        !PendingDeferredReadSetAcks.empty()
+        !PendingDeferredReadSetAcks.empty() ||
+        HasWaitWriteTxPlanStepAck()
         ;
     if (!canProcess) {
         return;
@@ -3796,6 +3847,10 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     CheckChangedTxStates(ctx);
     CreateSupportivePartitionActors(ctx);
     SendDeferredReadSetAcks(ctx);
+
+    ++WriteTxFenceEpoch;
+    WaitWriteTxUnfencedCount = 0;
+    SendReadyPlanStepAcks(ctx);
 
     WriteTxsInProgress = false;
 
@@ -3922,46 +3977,62 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         }
     }
 
+    // PlanStep / PlanTxId advance only when at least one TxId from this message is in Txs.
     if ((step > PlanStep) && lastPlannedTxId.Defined()) {
         // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию
         PlanStep = step;
         PlanTxId = *lastPlannedTxId;
     }
 
-    if (lastPlannedTxId.Defined()) {
-        // эту транзакцию ещё не удалили
-        auto p = Txs.find(*lastPlannedTxId);
-        TDistributedTransaction& tx = p->second;
-
-        // таблетка координатора могла перезапуститься надо обновить информацию
-        tx.AddPlanStepSender(sender, std::move(ev));
-
-        if (tx.State >= NKikimrPQ::TTransaction::EXECUTED) {
-            // таблетка PQ могла отправить подтвержение, но координатор перезапустился и его не получил
-            SendPlanStepAcks(ctx, tx);
-        }
-    } else {
-        // No TxId from this PlanStep is in Txs: empty Transactions, unknown/future ids,
-        // or a retransmit after the step's txs were already executed and deleted.
-        // Ack immediately so the mediator sees steps in order.
+    if (LastAckedPlanStep.Defined() && step <= *LastAckedPlanStep) {
+        // Already sent Accepted for this or a later step in this incarnation
+        // (retransmit / late lower step). Planning above still ran. Skip the
+        // queue and WRITE_TX fence; duplicate Accepted is ok.
         SendPlanStepAcks(ctx, sender, *ev);
+    } else if (lastPlannedTxId.Defined()) {
+        // Known: WaitTxExecuted until LastTxId reaches EXECUTED, or Ready now.
+        // Retransmits are appended as-is (duplicate PlanStepAccepted is acceptable).
+        const auto& tx = Txs.find(*lastPlannedTxId)->second;
+        const auto state = tx.State >= NKikimrPQ::TTransaction::EXECUTED
+            ? TPlanStepAckEntry::EState::Ready
+            : TPlanStepAckEntry::EState::WaitTxExecuted;
+        PlanStepAckQueue.push_back({
+            .Sender = sender,
+            .Step = step,
+            .Event = std::move(ev),
+            .State = state,
+            .LastTxId = lastPlannedTxId,
+        });
+        if (state == TPlanStepAckEntry::EState::WaitTxExecuted) {
+            PlanStepAckByTxId[*lastPlannedTxId].push_back(&PlanStepAckQueue.back());
+        }
+        SendReadyPlanStepAcks(ctx);
+    } else {
+        // All-unknown: WaitWriteTx. Piggyback on the in-flight WRITE_TX if any,
+        // otherwise TryWriteTxs starts a fence cycle.
+
+        YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX,
+            "All-unknown PlanStep; queueing ack until WRITE_TX completes",
+            {"logPrefix", LogPrefix()},
+            {"step", step},
+            {"planStep", PlanStep},
+            {"txCount", event.TransactionsSize()});
+
+        PlanStepAckQueue.push_back({
+            .Sender = sender,
+            .Step = step,
+            .Event = std::move(ev),
+            .State = TPlanStepAckEntry::EState::WaitWriteTx,
+            .LastTxId = Nothing(),
+            .EnqueuedAtFenceEpoch = WriteTxFenceEpoch,
+        });
+        ++WaitWriteTxUnfencedCount;
+        TryWriteTxs(ctx);
     }
 
     LOG_D("PlanStep PlanTxId",
         {"planStep", PlanStep},
         {"planTxId", PlanTxId});
-}
-
-void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
-                                  const TDistributedTransaction& tx)
-{
-    if (tx.PlanStepSenders.empty()) {
-        return;
-    }
-
-    for (const auto& [receiver, event] : tx.PlanStepSenders) {
-        SendPlanStepAcks(ctx, receiver, *event);
-    }
 }
 
 void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
@@ -3985,6 +4056,10 @@ void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
 
     SendPlanStepAck(ctx, step, txAcks);
     SendPlanStepAccepted(ctx, receiver, step);
+
+    if (!LastAckedPlanStep.Defined() || step > *LastAckedPlanStep) {
+        LastAckedPlanStep = step;
+    }
 }
 
 void TPersQueue::SendPlanStepAck(const TActorContext& ctx,
@@ -4804,7 +4879,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         TxQueue.pop_front();
         SetTxCompleteLagCounter();
 
-        SendPlanStepAcks(ctx, tx);
+        MarkPlanStepAcksReadyForTx(tx.TxId);
+        SendReadyPlanStepAcks(ctx);
         SendEvReadSetAckToSenders(ctx, tx);
         TryReturnTabletStateAll(ctx);
 

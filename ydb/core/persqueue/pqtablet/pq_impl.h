@@ -183,8 +183,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat, public TLogPrefix {
     void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status);
 
     void SendPlanStepAcks(const TActorContext& ctx,
-                          const TDistributedTransaction& tx);
-    void SendPlanStepAcks(const TActorContext& ctx,
                           const TActorId& receiver,
                           const TEvTxProcessing::TEvPlanStep& ev);
     void SendPlanStepAck(const TActorContext& ctx,
@@ -638,6 +636,71 @@ private:
     void MovePendingDeferredReadSetAcks();
     void AddPendingDeferredReadSetAck(TDeferredReadSetAck&& ack);
     void SendDeferredReadSetAcks(const TActorContext& ctx);
+
+    // Max step for which TEvPlanStepAccepted was already sent in this incarnation.
+    // In-memory only (not PlanStep/PlanTxId, not persisted). Retransmits and late
+    // steps <= LastAcked skip the queue and WRITE_TX fence after planning txs.
+    TMaybe<ui64> LastAckedPlanStep;
+
+    // FIFO of pending PlanStep acks. Mediator ignores non-head TEvPlanStepAccepted,
+    // so we send only a Ready prefix in arrival order. Duplicate Accepted is ok.
+    // Steps <= LastAckedPlanStep never enter this queue.
+    //
+    // EState is one phase per entry (not independent Ready/FenceInFlight flags):
+    //
+    //   WaitTxExecuted — known LastTxId, not yet EXECUTED.
+    //       CheckTxState(EXECUTED of LastTxId) → Ready via PlanStepAckByTxId.
+    //       Already EXECUTED at enqueue → Ready immediately.
+    //   WaitWriteTx — all-unknown (incl. empty Transactions). Does not advance
+    //       PlanStep/PlanTxId. Leadership fence: a WRITE_TX of current _txinfo
+    //       that *completes after* enqueue (piggyback / complete-after).
+    //       Ready when WriteTxFenceEpoch > EnqueuedAtFenceEpoch (lazily at send).
+    //       Fail → PoisonPill, never Ready.
+    //   Ready — send when this entry is the queue head.
+    //
+    // Known:   WaitTxExecuted → Ready
+    // Unknown: WaitWriteTx    → Ready
+    //
+    // WRITE_TX optimization: a successful WRITE_TX (fence *or* propose/delete)
+    // increments WriteTxFenceEpoch. Every WaitWriteTx enqueued at a lower epoch
+    // becomes Ready, including those that arrived while the request was in
+    // flight — one KV cycle instead of start-after (Pending/InFlight).
+    // WaitWriteTxUnfencedCount is the number of WaitWriteTx still at the
+    // current epoch; canProcess keys off it so a known WaitTxExecuted head
+    // cannot busy-loop WRITE_TX.
+    // A retransmit of an already-fenced unknown is a new WaitWriteTx at the
+    // current epoch and does start another WRITE_TX — unless step <=
+    // LastAckedPlanStep, which never enqueues.
+    struct TPlanStepAckEntry {
+        enum class EState {
+            WaitTxExecuted,
+            WaitWriteTx,
+            Ready,
+        };
+
+        TActorId Sender;
+        ui64 Step = 0;
+        std::unique_ptr<TEvTxProcessing::TEvPlanStep> Event;
+        EState State = EState::WaitWriteTx;
+        // Last known TxId from this PlanStep; undefined for all-unknown.
+        TMaybe<ui64> LastTxId;
+        // WaitWriteTx only: Ready once WriteTxFenceEpoch > this.
+        ui64 EnqueuedAtFenceEpoch = 0;
+    };
+    TDeque<TPlanStepAckEntry> PlanStepAckQueue;
+    // WaitTxExecuted entries by LastTxId. Pointers into PlanStepAckQueue (stable
+    // under push_back / pop_front of other elements). Cleared at EXECUTED
+    // before those entries are sent and popped — not deque iterators.
+    THashMap<ui64, TVector<TPlanStepAckEntry*>> PlanStepAckByTxId;
+
+    // Successful WRITE_TX cycles in this incarnation. Not persisted.
+    ui64 WriteTxFenceEpoch = 0;
+    // WaitWriteTx entries with EnqueuedAtFenceEpoch == WriteTxFenceEpoch.
+    ui64 WaitWriteTxUnfencedCount = 0;
+
+    void SendReadyPlanStepAcks(const TActorContext& ctx);
+    void MarkPlanStepAcksReadyForTx(ui64 txId);
+    bool HasWaitWriteTxPlanStepAck() const;
 };
 
 }// NPQ

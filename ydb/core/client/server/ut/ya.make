@@ -9,6 +9,7 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/testing/gmock_in_unittest
     ydb/core/persqueue
+    ydb/core/persqueue/public/nameresolver
     ydb/core/tablet_flat
     ydb/core/testlib/default
     ydb/core/testlib/actors

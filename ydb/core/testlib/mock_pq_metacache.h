@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/base/appdata.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/testing/gmock_in_unittest/gmock.h>
@@ -71,15 +72,12 @@ public:
         auto handle = [=](TEvPqMetaCache::TEvDescribeTopicsByNameRequest::TPtr& ev, const TActorContext& ctx) {
             auto result = std::make_shared<NSchemeCache::TSchemeCacheNavigate>();
             result->ResultSet = resultSet;
-            TVector<TString> topics;
-            auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
+            // Same as production ProcessTopicsByNameRequest: converters from request names, not nulls.
+            NPersQueue::TTopicNamesConverterFactory factory(AppData(ctx)->PQConfig, {});
             TVector<NPersQueue::TDiscoveryConverterPtr> converters;
-            for (auto& entry : resultSet) {
-                auto converter = entry.PQGroupInfo
-                        ? factory.MakeTopicConverter(entry.PQGroupInfo->Description.GetPQTabletConfig())
-                        : nullptr;
-                topics.push_back(entry.Path.back());
-                converters.push_back(converter);
+            converters.reserve(ev->Get()->Topics.size());
+            for (const auto& topic : ev->Get()->Topics) {
+                converters.push_back(factory.MakeDiscoveryConverter(topic, {}));
             }
             auto* response = new TEvPqMetaCache::TEvDescribeTopicsResponse(std::move(converters), result);
             ctx.Send(ev->Sender, response);

@@ -1,9 +1,12 @@
 #pragma once
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 
 #include <expected>
+#include <memory>
 #include <optional>
 
 namespace NKikimr::NPQ::NNameResolver {
@@ -86,5 +89,150 @@ std::optional<TFederationAccountTarget> TryFederationAccountTarget(
     TStringBuf path,
     TStringBuf federationRoot
 );
+
+/**
+ * All names derived from a tablet config.
+ * Value type; pass TTopicNames::TPtr where a shared handle is needed.
+ *
+ * Field comments use two federation topics and one FCC topic:
+ *   Fed:     "/Root/PQ/rt3.dc1--account--topic"
+ *   Fed dir: "/lb/account-database/path/topic"  (legacy leaf rt3.dc1--account@path--topic)
+ *   FCC:     "/lb/database/my-stream"
+ */
+struct TTopicNames {
+    using TPtr = std::shared_ptr<const TTopicNames>;
+
+    // False if parsing failed; then only Reason is meaningful.
+    bool Valid = false;
+    TString Reason;
+
+    // Parse mode used to fill the fields below. True after FCC parse, including a
+    // first-class tablet on a federation node (kafka BalanceScenarioForFederation).
+    bool FirstClassCitizen = false;
+
+    // Absolute scheme path of the topic object.
+    // Fed: "/Root/PQ/rt3.dc1--account--topic"
+    // Fed dir: "/lb/account-database/path/topic"
+    // FCC: "/lb/database/my-stream"
+    TString Path;
+
+    // Name the client uses (legacy rt3 form in federation).
+    // Fed: "rt3.dc1--account--topic"
+    // Fed dir: "rt3.dc1--account@path--topic"
+    // FCC: "my-stream"
+    TString ClientsideName;
+
+    // ClientsideName without "rt3.<dc>--". Solomon Topic label in federation.
+    // Fed: "account--topic"
+    // Fed dir: "account@path--topic"
+    // FCC: "my-stream"
+    TString ShortClientsideName;
+
+    // Modern path relative to the account; includes "-mirrored-from-<dc>" when remote.
+    // Fed local: "topic"; Fed dir local: "path/topic"; remote: "path/topic-mirrored-from-dc2"
+    // FCC: "my-stream"
+    TString ModernName;
+
+    // Logbroker path account[/dir]/topic without DC suffix.
+    // Fed: "account/topic"
+    // Fed dir: "account/path/topic"
+    // FCC: "my-stream" (same as ClientsideName)
+    TString FederationPath;
+
+    // FederationPath with "-mirrored-from-<dc>" when the topic is remote.
+    // Fed local: "account/topic"
+    // Fed dir remote: "account/path/topic-mirrored-from-dc2"
+    // FCC: "my-stream"
+    TString FederationPathWithDC;
+
+    // Federation account from tablet config.
+    // Fed / Fed dir: "account"
+    // FCC: empty
+    TString Account;
+
+    // Origin DC copied from tablet config (PQTabletConfig.DC). Empty if DC is unset.
+    // Fed: "dc1"
+    // FCC: empty unless the tablet config has DC
+    TString Cluster;
+
+    // Logbroker producer: account or account@dir. Solomon Producer label.
+    // Fed: "account"
+    // Fed dir: "account@path"
+    // FCC: empty
+    TString LegacyProducer;
+
+    // Last component of the modern path (logtype).
+    // Fed / Fed dir: "topic"
+    // FCC: empty
+    TString LegacyLogtype;
+
+    // Identity key: FullLegacyName in federation, scheme Path in FCC.
+    // Fed: "rt3.dc1--account--topic"
+    // Fed dir: "rt3.dc1--account@path--topic"
+    // FCC: "/lb/database/my-stream"
+    TString InternalName;
+
+    // Key mixed into source-id hash (SrcIdMeta2). ShortLegacyName in federation.
+    // Fed: "account--topic"
+    // Fed dir: "account@path--topic"
+    // FCC: "lb/database/my-stream" (scheme path without leading slash)
+    TString TopicForSrcIdHash;
+
+    // Alternate scheme path. Empty in FCC.
+    // User-database federation: legacy PQ-root leaf
+    //   Fed dir: "/Root/PQ/rt3.dc1--account@path--topic"
+    // PQ-root federation: JoinPath({YdbDatabasePath, ModernName}) when YdbDatabasePath is set,
+    // otherwise empty.
+    TString SecondaryPath;
+};
+
+inline TTopicNames::TPtr MakeTopicNamesPtr(TTopicNames names) {
+    return std::make_shared<const TTopicNames>(std::move(names));
+}
+
+/**
+ * Tablet's only name entry. Reads firstClassCitizen, PQ Root and TestDatabaseRoot from AppData()->PQConfig.
+ * SchemeCache fills TPQGroupInfo::Names with NamesFromConfig(config, schemePath).
+ * Never aborts or throws on malformed config: Valid=false and Reason is set.
+ */
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config);
+
+/**
+ * Same as NamesFromConfig(config), but uses topicPath instead of config.GetTopicPath().
+ * Pass the scheme path when the stored tablet config has no TopicPath.
+ * SchemeCache calls this overload (via AppData PQConfig).
+ */
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath);
+
+/**
+ * Same as NamesFromConfig(config, topicPath), but reads FCC / PQ Root / TestDatabaseRoot
+ * from pqConfig instead of AppData. Use in tests that have PQConfig but no actor TLS.
+ */
+TTopicNames NamesFromConfig(
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TString& topicPath,
+    const NKikimrPQ::TPQConfig& pqConfig);
+
+/**
+ * Same formation as NamesFromConfig, but firstClassCitizen is passed explicitly and AppData is not read.
+ */
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, bool firstClassCitizen);
+
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const TString& topicPath, bool firstClassCitizen);
+
+/**
+ * Same as NamesFromConfig(config, topicPath, firstClassCitizen), but PQ prefix and
+ * TestDatabaseRoot override are passed explicitly (AppData is not read).
+ * pqNormalizedPrefix is slash-stripped PQ Root, matching TTopicNamesConverterFactory.
+ */
+TTopicNames NamesFromConfig(
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TString& topicPath,
+    bool firstClassCitizen,
+    const TString& pqNormalizedPrefix,
+    const TString& ydbDatabaseRootOverride);
+
+// const char* would convert to bool and skip topicPath. Pass TString.
+TTopicNames NamesFromConfig(const NKikimrPQ::TPQTabletConfig& config, const char*) = delete;
 
 } // namespace NKikimr::NPQ::NNameResolver

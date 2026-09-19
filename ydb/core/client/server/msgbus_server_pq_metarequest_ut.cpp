@@ -6,6 +6,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/fake_scheme_shard.h>
@@ -497,10 +498,10 @@ public:
         TSchemeCacheNavigate::TEntry entry;
         entry.Status = status;
         entry.Kind = kind;
-        entry.Path = {"Root", "PQ"};
         if (status != TSchemeCacheNavigate::EStatus::Ok || kind != TSchemeCacheNavigate::KindTopic
                                                         || !makePQDescription
         ) {
+            entry.Path = {"Root", "PQ"};
             return entry;
         }
         auto *pqInfo = new TSchemeCacheNavigate::TPQGroupInfo();
@@ -522,15 +523,21 @@ public:
             default:
                 UNIT_FAIL("");
         }
+        const TString path = TStringBuilder() << "/Root/PQ/" << descr.GetName();
+        entry.Path = NKikimr::SplitPath(path);
         auto* pqTabletConfig = descr.MutablePQTabletConfig();
         pqTabletConfig->SetTopicName(descr.GetName());
         pqTabletConfig->SetDC("dc1");
-        pqTabletConfig->SetTopicPath(NKikimr::JoinPath({"/Root/PQ", descr.GetName()}));
+        pqTabletConfig->SetTopicPath(path);
         for (auto i = 0u; i <  descr.GetPartitionPerTablet(); i++) {
             auto* part = descr.AddPartitions();
             part->SetPartitionId(i);
             part->SetTabletId(MakeTabletID(false, topicId * 100 + 1 + i));
         }
+        auto names = NPQ::NNameResolver::NamesFromConfig(
+            *pqTabletConfig, path, Runtime->GetAppData(0).PQConfig);
+        UNIT_ASSERT_C(names.Valid, names.Reason);
+        pqInfo->Names = NPQ::NNameResolver::MakeTopicNamesPtr(std::move(names));
         entry.PQGroupInfo.Reset(pqInfo);
 
         return entry;

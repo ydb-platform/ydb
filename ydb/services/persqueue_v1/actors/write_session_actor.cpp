@@ -631,8 +631,16 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
         return;
     }
 
-    FullConverter = DiscoveryConverter->UpgradeToFullConverter(InitialPQTabletConfig,
-                                                               AppData(ctx)->PQConfig.GetTestDatabaseRoot());
+    FullConverter = DiscoveryConverter->UpgradeToFullConverter(
+        PQGroupInfo->Names,
+        InitialPQTabletConfig,
+        AppData(ctx)->PQConfig.GetTestDatabaseRoot());
+    if (!FullConverter->IsValid()) {
+        errorReason = Sprintf("Internal server error with topic '%s': %s, Marker# PQ503",
+            DiscoveryConverter->GetPrintableString().c_str(), FullConverter->GetReason().c_str());
+        CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
+        return;
+    }
     if (!InitAfterDiscovery(ctx)) {
         return;
     }

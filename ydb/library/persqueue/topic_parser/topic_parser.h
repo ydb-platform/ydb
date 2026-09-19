@@ -7,6 +7,7 @@
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 #include <ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public/topic_parser.h>
@@ -84,6 +85,15 @@ public:
     TTopicConverterPtr UpgradeToFullConverter(const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
                                               const TString& ydbDatabaseRootOverride,
                                               const TMaybe<TString>& clientsideNameOverride = {});
+    // Prefer when SchemeCache already filled TPQGroupInfo::Names.
+    // Trusts that result: invalid names are returned as an invalid converter, not re-parsed.
+    // Falls back to tablet config only if names is null.
+    // Uses names.FirstClassCitizen so FCC names are not mixed with a federation discovery converter.
+    TTopicConverterPtr UpgradeToFullConverter(
+        const NKikimr::NPQ::NNameResolver::TTopicNames::TPtr& names,
+        const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
+        const TString& ydbDatabaseRootOverride,
+        const TMaybe<TString>& clientsideNameOverride = {});
 
     TString GetPrintableString() const;
 
@@ -192,7 +202,16 @@ protected:
                         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
                         const TString& ydbDatabaseRootOverride,
                         const TMaybe<TString>& clientsideNameOverride = {});
+    void FillFromNames(const NKikimr::NPQ::NNameResolver::TTopicNames& names,
+                       const TMaybe<TString>& clientsideNameOverride);
+    void SetYdbDatabasePath(const TString& ydbDatabasePath);
 public:
+
+    static TTopicConverterPtr FromNames(
+        bool firstClass,
+        const NKikimr::NPQ::NNameResolver::TTopicNames& names,
+        const TMaybe<TString>& clientsideNameOverride = {},
+        const TString& ydbDatabasePath = {});
 
     static TTopicConverterPtr ForFirstClass(const NKikimrPQ::TPQTabletConfig& pqTabletConfig);
 
@@ -268,9 +287,6 @@ public:
     bool IsFirstClass() const;
 
     operator bool() const { return Valid && !ClientsideName; };
-
-private:
-    void BuildInternals(const NKikimrPQ::TPQTabletConfig& config);
 
 private:
     TString ClientsideName;

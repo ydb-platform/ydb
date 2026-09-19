@@ -131,11 +131,18 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         return false;
     }
     topicsIter->second.FullConverter = topicsIter->second.DiscoveryConverter->UpgradeToFullConverter(
+        entry.PQGroupInfo->Names,
         pqDescr.GetPQTabletConfig(),
         AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
         topicsIter->second.CdcStreamPath
     );
-    AFL_ENSURE(topicsIter->second.FullConverter->IsValid());
+    if (!topicsIter->second.FullConverter->IsValid()) {
+        TString errorReason = Sprintf("Internal server error with topic '%s': %s, Marker# PQ503",
+            topicsIter->second.DiscoveryConverter->GetPrintableString().c_str(),
+            topicsIter->second.FullConverter->GetReason().c_str());
+        CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
+        return false;
+    }
     return CheckTopicACL(entry, topicsIter->first, ctx);
 }
 

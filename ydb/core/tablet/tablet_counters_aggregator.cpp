@@ -1245,9 +1245,18 @@ private:
 
         YDB_LOG_INFO_CTX(ctx, "Created the detailed metrics aggregator of the database",
             {"databasePath", db.DatabasePath});
+
+        ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()),
+            new NSysView::TEvSysView::TEvRegisterDbDetailedCounters(
+                db.DatabasePath,
+                IsFollower ? NKikimrSysView::TABLETS_FOLLOWERS : NKikimrSysView::TABLETS,
+                db.Aggregator));
     }
 
     void ResetDetailedMetricsAggregator(TPathId pathId, TDetailedMetricsForDb& db, const TActorContext& ctx) {
+        // No unregister event: the only caller is the database-removed path, and the
+        // SysView Service drops the whole per-database entry - detailed role counters
+        // included - on its own TEvRemoveDatabase.
         if (!db.Aggregator) {
             return;
         }

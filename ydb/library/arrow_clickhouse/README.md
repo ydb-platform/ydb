@@ -9,7 +9,7 @@ The redefinition of types is in arrow_clickhouse_types.h header.
 The library uses DataStreams primitives that were replaced by processors in ClickHouse 20.3. It's not possible to
 extract processors from ClickHouse code base. It's too monolithic and depends on specific multithreading model.
 
-The core reason of library is posibility to use ClickHouse's GROUP BY code (Aggregator.cpp) and aggregate fucntions
+The core reason of library is possibility to use ClickHouse's GROUP BY code (Aggregator.cpp) and aggregate functions
 (AggregateFunctions directory) with minimal modifications over data presented in Apache Arrow formats.
 
 Original ClickHouse support 2-level aggregation and several optiumizations (LowCardinality, Sparse data, LLVM).

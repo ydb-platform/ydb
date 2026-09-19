@@ -71,7 +71,7 @@ You can generate three types of load:
 | `MaxWritesInFlight`       | Maximum number of simultaneously processed write requests. If this parameter is not set then the number of simultaneously processed requests is not limited.                                                                                  |
 | `MaxWriteBytesInFlight`   | Maximum number of total amount of simultaneously processed write requests' data. If this parameter is not set then the total amount of data being written concurrently is unlimited.                                                          |
 | `PutHandleClass`          | [Class of data writes](#write-class) to the disk subsystem.                                                                                                                                                                                   |
-| `DelayAfterCompletionSec` | The amount of time in seconds the actor will wait upon completing the initial data allocation before starting the main load cycle. If its value is `0` or not set the load will start immediately after the completion of the data allocaion. |
+| `DelayAfterCompletionSec` | The amount of time in seconds the actor will wait upon completing the initial data allocation before starting the main load cycle. If its value is `0` or not set the load will start immediately after the completion of the data allocation. |
 
 {% include [load-actors-params](../_includes/load-actors-interval.md) %}
 

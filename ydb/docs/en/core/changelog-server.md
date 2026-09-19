@@ -14,6 +14,7 @@ Release date: TBD.
 * Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
 * Column-oriented tables use an updated compaction strategy to organize data more efficiently.
 * For column-oriented tables, `ALTER TABLE ... COMPACT` can start forced compaction.
+* Column-oriented tables support the `Interval`, `Uuid`, and `DyNumber` data types.
 * Streaming YQL queries can access [system virtual attributes](./concepts/query_execution/topics.md?version=v26.3#system-metadata), including `__ydb_create_time`, `__ydb_write_time`, and user attributes in `__ydb_user_attributes`.
 * Added a configurable limit for stored forced-compaction operations. Completed and cancelled operations can be removed automatically when the limit is reached.
 

@@ -2507,8 +2507,9 @@ void KqpRm::ArenaAbsorbsChurn() {
 }
 
 // The arena task outlives the queries it backs, so the resource broker must not take its lifetime for the
-// execution time of a query. That average is what the broker estimates a task's finish time from, and the
-// estimate is what a queue's planned resource usage, and so its turn to be scheduled, is built on
+// execution time of a query. That average is what the broker shows for the task type and estimates a task's
+// finish time from, and the estimate is what a queue's planned resource usage, and so its turn to be scheduled,
+// would be built on if a kqp task ever waited in the queue; the instant submits of the resource manager never do
 void KqpRm::ArenaLifetimeIsNotAQueryDuration() {
     StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
     NKikimr::TActorSystemStub stub;

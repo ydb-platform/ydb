@@ -143,15 +143,11 @@ public:
     }
 
     bool AcquireIfAvailable(ui64 value) {
-        if (Available() >= value) {
-            Used += value;
-            UpdateCookie();
-            if (Sensors) {
-                Sensors.Allocated->Set(Used);
-            }
-            return true;
+        if (!Has(value)) {
+            return false;
         }
-        return false;
+        ForceAcquire(value);
+        return true;
     }
 
     // The unconditional counterpart of AcquireIfAvailable, for the memory arena: Used may go past Limit, which
@@ -509,10 +505,6 @@ public:
             Y_DEBUG_ABORT_UNLESS(reduced);
         }
 
-        if (resources.ExecutionUnits) {
-            ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
-        }
-
         if (resources.Memory > 0) {
             with_lock (Lock) {
                 TotalMemoryResource->Release(resources.Memory);
@@ -525,8 +517,13 @@ public:
             }
         }
 
-        // after the release, so that the arena sees the node memory it may now take
+        // after the release, so that the arena sees the node memory it may now take, and before the execution units
+        // go back, so that their next taker is not in the arena together with them
         ApplyArenaDemand(resources, /* allocate */ false);
+
+        if (resources.ExecutionUnits) {
+            ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
+        }
 
         if (ActorSystem) {
             YDB_LOG_DEBUG_CTX(*ActorSystem, "Released resources, Free",
@@ -718,7 +715,8 @@ public:
     // The memory arena (issue #53093): one long lived kqp_query task of the resource broker backs the external
     // memory and the execution units in use. The demand is always satisfied; the arena is resized afterwards to
     // Used + (MinFree + MaxFree) / 2 whenever its free part leaves that band. Its footprint Max(Size, Used) is
-    // charged to the node total, so Memory admission, the spilling cookies and the published resources are precise.
+    // charged to the node total, so Memory admission, the spilling cookies and the published resources count it,
+    // the free part of the arena included: the resource broker holds it for this node as it holds the demand.
     //
     // The demand is tracked lock-free: while the arena covers it the charge does not move, so a task that starts
     // or ends only touches two atomics and the ceiling below. The lock is taken to grow, to shrink, and whenever
@@ -793,8 +791,15 @@ public:
         return limit > others ? limit - others : 0;
     }
 
+    // The band wants a bigger arena than the resource broker has granted: before the cap, and whether or not a
+    // round makes it, since a growth still wanted when the adjuster leaves has to keep the fast path shut, or its
+    // demand sits above a published ceiling with nothing to act on it
+    bool ArenaGrowWantedLocked(ui64 used) const {
+        return ArenaTargetLocked(used) > Arena.Size;
+    }
+
     // The demand a change may reach before the arena needs the lock. Must be called under Lock.
-    ui64 ArenaFastCeilingLocked() const {
+    ui64 ArenaFastCeilingLocked(ui64 used) const {
         if (!EnableMemoryArena.load()) {
             return ArenaFastPathOpen;
         }
@@ -803,7 +808,7 @@ public:
         // ceiling published under any of them would describe a size that is about to change, or leave the
         // adjuster's recheck below nothing to make progress with
         if (MemoryArenaMaxFreeSize.load() == 0 || Arena.AdjustInProgress || Arena.Stopped || !ResourceBroker
-            || Arena.Charged != Arena.Size || Arena.GrowWanted || Arena.Size < minFree)
+            || Arena.Charged != Arena.Size || ArenaGrowWantedLocked(used) || Arena.Size < minFree)
         {
             return ArenaFastPathShut;
         }
@@ -840,9 +845,6 @@ public:
             return Arena.Size;
         }
         const ui64 target = ArenaTargetLocked(used);
-        // before the cap, and whether or not this round makes it: a growth still wanted when the adjuster leaves
-        // has to keep the fast path shut, or its demand sits above a published ceiling with nothing to act on it
-        Arena.GrowWanted = target > Arena.Size;
         const ui64 cap = ArenaSizeCapLocked();
         // The arena may hold what it backs and, beyond that, only what the node total leaves it, so a total that
         // has dropped or transactions that have taken more of it pull the arena down even while the band is asking
@@ -861,29 +863,45 @@ public:
     // retry that finds a round in flight is dropped, the next one makes it.
     void AdjustArena(bool retryRefused = false) {
         bool publish = false;
+        // a resource broker round and its outcome, written back by the locked section that plans the next one
+        TIntrusivePtr<IResourceBroker> broker;
+        bool roundMade = false;
+        ui64 size = 0;
+        ui64 taskId = 0;
+        bool taskLost = false;
+        bool stopped = false;
         for (;;) {
-            TIntrusivePtr<IResourceBroker> broker;
-            ui64 size = 0;
-            ui64 taskId = 0;
             ui64 target = 0;
             ui64 deficit = 0;
             with_lock (Lock) {
                 // while this section runs every demand change takes the lock and waits for its outcome
                 ArenaFastCeiling.store(ArenaFastPathShut);
+                if (roundMade) {
+                    roundMade = false;
+                    Arena.AdjustInProgress = false;
+                    stopped = Arena.Stopped;
+                    // the arena task can only vanish behind the adjuster with the other tasks of the dead actor
+                    Y_DEBUG_ABORT_UNLESS(!taskLost || stopped, "the arena task is gone");
+                    Arena.Size = stopped ? 0 : size;
+                    Arena.TaskId = stopped ? 0 : taskId;
+                }
                 publish |= ReconcileArenaLocked();
+                if (stopped) {
+                    break;
+                }
                 const ui64 used = ArenaUsed();
                 size = Arena.Size;
                 target = ArenaPlanLocked(used);
-                // an adjuster records the outcome of its round before its second locked section lets go of the
+                // an adjuster records the outcome of its round before the locked section that lets go of the
                 // arena, so a plan made here after the round sees it
                 const bool gated = !retryRefused && ArenaGrowRefused.load(std::memory_order_relaxed);
                 if (target == size || (gated && target > size)) {
-                    if (retryRefused && !Arena.GrowWanted) {
+                    if (retryRefused && !ArenaGrowWantedLocked(used)) {
                         // the refused growth is no longer wanted: the gate would otherwise outlive it, hold back the
                         // next demand change and make its grant news
                         ArenaGrowRefused.store(false, std::memory_order_relaxed);
                     }
-                    const ui64 ceiling = ArenaFastCeilingLocked();
+                    const ui64 ceiling = ArenaFastCeilingLocked(used);
                     ArenaFastCeiling.store(ceiling);
                     if (ceiling != ArenaFastPathShut && ArenaUsed() >= ceiling) {
                         continue; // a change landed while this section ran
@@ -896,7 +914,7 @@ public:
                 broker = ResourceBroker;
             }
 
-            bool taskLost = false;
+            taskLost = false;
             if (target > size) {
                 const ui64 sizeBefore = size;
                 const ui64 want = target - size;
@@ -906,25 +924,12 @@ public:
             } else {
                 ShrinkArena(*broker, taskId, size, size - target, taskLost);
             }
-
-            bool stopped = false;
-            with_lock (Lock) {
-                Arena.AdjustInProgress = false;
-                stopped = Arena.Stopped;
-                // the arena task can only vanish behind the adjuster with the other tasks of the dead actor
-                Y_DEBUG_ABORT_UNLESS(!taskLost || stopped, "the arena task is gone");
-                Arena.Size = stopped ? 0 : size;
-                Arena.TaskId = stopped ? 0 : taskId;
-                publish |= ReconcileArenaLocked();
-            }
-
-            if (stopped) {
-                if (taskId) {
-                    // created or adopted after the actor died, so not dropped with the others
-                    broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId, /* cancel */ true), SelfId);
-                }
-                break;
-            }
+            roundMade = true;
+        }
+        if (stopped && taskId) {
+            // created or adopted after the actor died, so not dropped with the others; one created before was, and
+            // the resource broker then reports the finish of an unknown task, an error line and nothing else
+            broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId, /* cancel */ true), SelfId);
         }
         if (publish) {
             FireResourcesPublishing();
@@ -993,7 +998,9 @@ public:
         bool ok = false;
         if (by >= size) {
             // cancelled, not finished: the arena outlives the queries it backs, and the resource broker averages
-            // the lifetime of finished tasks into the estimate its queues are ordered by (TScheduler::FinishTask)
+            // the lifetime of finished tasks into the execution time it shows for the type and orders a waiting
+            // queue by (TScheduler::FinishTask); the delta tasks a growth merges in are finished by the merge, as
+            // the per tx ones are, but they live for the length of the merge
             ok = broker.FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId, /* cancel */ true), SelfId);
             by = size;
         } else {
@@ -1019,7 +1026,6 @@ public:
             Arena.Stopped = true;
             Arena.Size = 0;
             Arena.TaskId = 0;
-            Arena.GrowWanted = false;
             ArenaFastCeiling.store(ArenaFastPathShut);
             ReconcileArenaLocked();
         }
@@ -1070,8 +1076,6 @@ public:
         ui64 Size = 0;
         ui64 TaskId = 0;
         ui64 Charged = 0; // force-acquired from TotalMemoryResource, Max(Size, Used) after every reconcile
-        // the band wants a bigger arena than the resource broker has granted, see ArenaPlanLocked
-        bool GrowWanted = false;
         // the last values published to the gauges
         ui64 ShownUsed = 0;
         ui64 ShownSize = 0;

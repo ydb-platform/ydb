@@ -75,6 +75,8 @@ message TTableServiceConfig {
 
         // Precise memory tracking (issue #53093): a resource broker task backs the ExternalMemory requests and the
         // memory of the execution units in use. Off: the demand is only counted, the node total is not charged.
+        // As with every field of this section, a dynamic config item that carries the section without the field
+        // resets it to the default.
         optional bool EnableMemoryArena = 35 [default = true];
         // Bytes charged to the arena per execution unit in use: the compute actor footprint outside the MKQL quota,
         // which is prepaid as ExternalMemory. A demand past the kqp queue limit is charged anyway, as a deficit.

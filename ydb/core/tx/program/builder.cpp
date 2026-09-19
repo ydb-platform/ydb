@@ -59,6 +59,10 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
             return TConclusionStatus::Fail(
                 TStringBuilder() << "Unknown kernel for " << name.GetColumnName() << ";kernel_idx=" << func.GetKernelIdx());
         }
+        if (func.HasYqlUnaryOperationId() &&
+            func.GetYqlUnaryOperationId() == (ui32)NYql::TKernelRequestBuilder::EUnaryOp::ToString) {
+            kernelLogic = TToStringKernel::Resolve(*kernelFunction);
+        }
         return std::make_shared<TKernelFunction>(kernelFunction);
     }
 

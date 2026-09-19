@@ -25,6 +25,21 @@
         "Не открывает первоначальный PR против stable branch"
       ],
       "covers": "RC public identity and main-first PR flow"
+    },
+    {
+      "id": 3,
+      "prompt": "Подготовь пункт публичных release notes. В implementation PR есть Tiling++, но в документации v26.3 и main нет страницы, описывающей это поведение. В черновике написано «компакция». Проверь терминологию по приложенному глоссарию.",
+      "expected_output": "Не публикует пункт без точной публичной документации, фиксирует отдельный documentation gap и не использует несуществующий в глоссарии термин «компакция».",
+      "files": [],
+      "expectations": [
+        "Не использует implementation PR или issue как ссылку на документацию",
+        "Не оставляет неподтверждённый пункт без ссылки в public release notes",
+        "Не считает Tracker значение Документация не нужна исключением из documentation gate",
+        "Использует только канонический термин из соответствующего RU или EN glossary",
+        "Не считает glossary заменой страницы, документирующей функциональность",
+        "Сверяет claim с узким разделом документации, а не с общей страницей feature flags"
+      ],
+      "covers": "documentation gate and glossary-controlled terminology"
     }
   ]
 }

@@ -16,7 +16,8 @@ Use this skill for public server release notes. Use
 2. Run the release-readiness audit. For every YDBFEATURES candidate, record
    implementation at the exact target, public surface and limitations, Tracker
    state, feature-flag definition/default/runtime guard, source and backport
-   PRs, previous RU/EN announcement, documentation, and disposition.
+   PRs, previous RU/EN announcement, documentation, glossary terms used in
+   public prose, and disposition.
 3. Check default state in target-ref code and feature-flag documentation. A
    Tracker branch field or an old source PR does not prove default-on status.
 4. Verify Linux archive, Docker manifest, source tag, all public links, and
@@ -34,11 +35,23 @@ Use this skill for public server release notes. Use
   bullet when default state, public surface, scope, or release transition differ.
 - Publish a feature only at first public availability, or when its public state
   changes. Code in an older branch is not proof of an earlier announcement.
-- Prefer equivalent public docs with `?version=vX.Y`. If unavailable, use a
-  verified equivalent `?version=main` page. If neither exists, leave the
-  functionality bullet unlinked. Never use a PR or issue as a docs fallback.
-- When Tracker says `Документация не нужна`, add no documentation link and do
-  not report a documentation gap for that item.
+- Include a functionality bullet only when a public documentation page supports
+  its exact claim. Prefer `?version=vX.Y`; if unavailable, use a verified
+  equivalent `?version=main` page. If neither exists, omit the bullet from the
+  public release notes and report the documentation gap separately. Never use a
+  PR or issue as a documentation fallback.
+- A Tracker value of `Документация не нужна` does not bypass the documentation
+  gate. If no public page supports the exact claim, omit the item from public
+  release notes. Do not use that Tracker value to justify an unlinked bullet.
+- Before drafting, read `ydb/docs/ru/core/concepts/glossary.md` and
+  `ydb/docs/en/core/concepts/glossary.md`. For every YDB-specific term in
+  release-note prose, use only the canonical wording from the corresponding
+  glossary. Do not invent translations, variants, or implementation names.
+  The glossary controls terminology but does not replace the required feature
+  documentation page.
+- Link the feature name or public operation to the narrowest matching
+  documentation section. A general feature-flags page is not evidence for a
+  user-facing functional claim when dedicated documentation exists.
 - End the handoff with a table of every `main` fallback or missing-documentation
   item: problem, YDBFEATURES ticket, implementation PR. Write `None` if empty.
 

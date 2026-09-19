@@ -95,8 +95,6 @@ struct TCallbacks : IDqComputeActorAsyncOutput::ICallbacks {
         SavedCheckpoints.push_back(checkpoint.GetId());
     }
 
-    void OnAsyncOutputStateCommitted(ui64, const NYql::NDqProto::TCheckpoint&) override {}
-
     void OnAsyncOutputFinished(ui64) override {
         Finished = true;
     }
@@ -153,7 +151,6 @@ public:
             .RandomProvider = nullptr,
             .TraceId = {},
             .TaskCounters = {},
-            .HasCheckpoints = true,
         });
         Sink = sink;
         RegisterWithSameMailbox(actor);

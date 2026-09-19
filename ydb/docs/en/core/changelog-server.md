@@ -13,7 +13,9 @@ Release date: TBD.
 * Added [authentication through external OpenID Connect identity providers](./security/authentication.md?version=v26.3#external-idp). {{ ydb-short-name }} validates JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
 * Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
 * Column-oriented tables use an updated compaction strategy to organize data more efficiently.
+* For column-oriented tables, `ALTER TABLE ... COMPACT` can start forced compaction.
 * Streaming YQL queries can access [system virtual attributes](./concepts/query_execution/topics.md?version=v26.3#system-metadata), including `__ydb_create_time`, `__ydb_write_time`, and user attributes in `__ydb_user_attributes`.
+* Added a configurable limit for stored forced-compaction operations. Completed and cancelled operations can be removed automatically when the limit is reached.
 
 ### Disabled functionality
 

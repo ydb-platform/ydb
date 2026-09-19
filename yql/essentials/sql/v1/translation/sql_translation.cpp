@@ -74,6 +74,21 @@ bool BuildContextRecreationQuery(TContext& context, TStringBuilder& query) {
     return true;
 }
 
+TNodeResult TryYqlSelect(
+    TContext& context,
+    EYqlSelect mode,
+    const std::function<TNodeResult()>& yqlSelect)
+{
+    auto issues = context.Issues;
+    const bool hasPendingErrors = context.HasPendingErrors;
+    auto result = yqlSelect();
+    if (!result && result.error() == ESQLError::UnsupportedYqlSelect && mode == EYqlSelect::Auto) {
+        context.Issues = std::move(issues);
+        context.HasPendingErrors = hasPendingErrors;
+    }
+    return result;
+}
+
 // ensures that the parsing mode is restored to the original value
 class TModeGuard {
     ESqlMode& Mode_;
@@ -6287,7 +6302,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         }
 
         if (!isAnyIncompatiblePragma) {
-            result = yqlSelect();
+            result = TryYqlSelect(Ctx_, mode, yqlSelect);
         } else {
             result = std::unexpected(ESQLError::UnsupportedYqlSelect);
         }

@@ -107,9 +107,9 @@ private:
                 periodic->ScheduleOutOfBand();
             }
         } catch (const std::exception& e) {
-            YT_LOG_ERROR("DoPingTransaction has failed (TransactionId: %v, Error: %v)",
-                GetGuidAsString(transactionId),
-                e.what());
+            YT_TLOG_ERROR("Failed to ping transaction")
+                .With("TransactionId", transactionId)
+                .With("Error", e.what());
         }
     }
 
@@ -126,7 +126,7 @@ private:
 
 ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config, IRawClientPtr rawClient)
 {
-    YT_LOG_DEBUG("Using async transaction pinger");
+    YT_TLOG_DEBUG("Using async transaction pinger");
 
     return MakeIntrusive<TSharedTransactionPinger>(config->AsyncTxPingerPoolThreads, std::move(rawClient));
 }

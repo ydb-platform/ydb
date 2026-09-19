@@ -301,9 +301,9 @@ std::vector<std::string> EnumerateDirectories(const std::string& path, int depth
 std::string GetRelativePath(const std::string& from, const std::string& to)
 {
     std::vector<std::string> tokensFrom;
-    StringSplitter(GetRealPath(from)).Split(LOCSLASH_C).Collect(&tokensFrom);
+    StringSplitter(GetRealPath(from)).Split(LOCSLASH_C).SkipEmpty().Collect(&tokensFrom);
     std::vector<std::string> tokensTo;
-    StringSplitter(GetRealPath(to)).Split(LOCSLASH_C).Collect(&tokensTo);
+    StringSplitter(GetRealPath(to)).Split(LOCSLASH_C).SkipEmpty().Collect(&tokensTo);
 
     int commonPrefixLength = 0;
     while (commonPrefixLength < std::min(std::ssize(tokensFrom), std::ssize(tokensTo)) &&

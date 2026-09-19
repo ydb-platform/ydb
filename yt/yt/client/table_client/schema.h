@@ -137,16 +137,16 @@ public:
 public:
     TColumnSchema();
     TColumnSchema(
-        const std::string& name,
+        TStringBuf name,
         EValueType type,
         std::optional<ESortOrder> sortOrder = {});
     TColumnSchema(
-        const std::string& name,
+        TStringBuf name,
         ESimpleLogicalValueType type,
         std::optional<ESortOrder> sortOrder = {});
 
     TColumnSchema(
-        const std::string& name,
+        TStringBuf name,
         TLogicalTypePtr type,
         std::optional<ESortOrder> sortOrder = {});
 

@@ -24,6 +24,8 @@
 
 #include <library/cpp/yt/misc/tls.h>
 
+#include <library/cpp/yt/string/format.h>
+
 #include <util/string/cast.h>
 #include <util/string/split.h>
 
@@ -230,6 +232,18 @@ void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStri
         context.TraceId,
         context.SpanId,
         (context.Sampled ? 1u : 0) | (context.Debug ? 2u : 0));
+}
+
+std::string FormatTraceParent(const TSpanContext& spanContext)
+{
+    return Format(
+        "00-%08x%08x%08x%08x-%016" PRIx64 "-%02x",
+        spanContext.TraceId.Parts32[3],
+        spanContext.TraceId.Parts32[2],
+        spanContext.TraceId.Parts32[1],
+        spanContext.TraceId.Parts32[0],
+        spanContext.SpanId,
+        spanContext.Sampled ? 1u : 0);
 }
 
 bool TryParseTraceParent(TStringBuf traceParent, TSpanContext& spanContext)

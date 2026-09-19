@@ -154,11 +154,17 @@ public:
     using TPtr = std::shared_ptr<TListener>;
     TListener(size_t initLatch, size_t inflight)
         : Latch_(initLatch)
-        , Queue_(inflight) {}
+        , GotEOF_(false)
+        , Queue_(inflight)
+    {
+        if (!initLatch) {
+            OnEOF();
+        }
+    }
 
     void OnEOF() {
-        bool excepted = 0;
-        if (GotEOF_.compare_exchange_strong(excepted, 1)) {
+        bool expected = false;
+        if (GotEOF_.compare_exchange_strong(expected, true)) {
             // block poining to nullptr is marker of EOF
             HandleResult(nullptr);
         } else {

@@ -164,9 +164,7 @@ void TServiceContextBase::ReplyEpilogue()
         {
             const auto& Logger = RpcServerLogger();
             YT_TLOG_ALERT("Missing request info")
-                .With("RequestId", RequestId_)
-                .WithFormat("Method", "%v.%v", RequestHeader_->service(), RequestHeader_->method())
-                .With("State", RequestInfoState_);
+                .With(MakeRequestInfoAlertTags());
         }
     }
 
@@ -490,11 +488,32 @@ bool TServiceContextBase::IsLoggingEnabled() const
     return LoggingEnabled_;
 }
 
+NLogging::TLoggingTagList TServiceContextBase::MakeRequestInfoAlertTags() const
+{
+    return NLogging::TLoggingTagList()
+        .With("RequestId", RequestId_)
+        .WithFormat("Method", "%v.%v", RequestHeader_->service(), RequestHeader_->method())
+        .With("State", RequestInfoState_);
+}
+
 void TServiceContextBase::SetRawRequestInfo(std::string info, bool incremental)
 {
     YT_ASSERT(!Replied_);
+    if (Replied_ && TDispatcher::Get()->ShouldAlertOnMissingRequestInfo()) {
+        const auto& Logger = RpcServerLogger();
+        YT_TLOG_ALERT("Request info set after the context has been replied")
+            .With(MakeRequestInfoAlertTags());
+    }
+
     if (LoggingEnabled_) {
         YT_ASSERT(RequestInfoState_ != ERequestInfoState::Flushed);
+        if (RequestInfoState_ == ERequestInfoState::Flushed &&
+            TDispatcher::Get()->ShouldAlertOnMissingRequestInfo())
+        {
+            const auto& Logger = RpcServerLogger();
+            YT_TLOG_ALERT("Request info set after it has been flushed")
+                .With(MakeRequestInfoAlertTags());
+        }
     }
 
     RequestInfoState_ = ERequestInfoState::Set;
@@ -521,6 +540,11 @@ void TServiceContextBase::SuppressMissingRequestInfoCheck()
 void TServiceContextBase::SetRawResponseInfo(std::string info, bool incremental)
 {
     YT_ASSERT(!Replied_);
+    if (Replied_ && TDispatcher::Get()->ShouldAlertOnMissingRequestInfo()) {
+        const auto& Logger = RpcServerLogger();
+        YT_TLOG_ALERT("Response info set after the context has been replied")
+            .With(MakeRequestInfoAlertTags());
+    }
 
     if (!LoggingEnabled_) {
         return;
@@ -532,6 +556,30 @@ void TServiceContextBase::SetRawResponseInfo(std::string info, bool incremental)
     if (!info.empty()) {
         ResponseInfos_.push_back(std::move(info));
     }
+}
+
+NLogging::TLoggingTagList* TServiceContextBase::GetRequestAnnotations()
+{
+    YT_ASSERT(!Replied_);
+    if (Replied_ && TDispatcher::Get()->ShouldAlertOnMissingRequestInfo()) {
+        const auto& Logger = RpcServerLogger();
+        YT_TLOG_ALERT("Request annotated after the context has been replied")
+            .With(MakeRequestInfoAlertTags());
+    }
+
+    return LoggingEnabled_ ? &RequestLoggingTags_ : nullptr;
+}
+
+NLogging::TLoggingTagList* TServiceContextBase::GetResponseAnnotations()
+{
+    YT_ASSERT(!Replied_);
+    if (Replied_ && TDispatcher::Get()->ShouldAlertOnMissingRequestInfo()) {
+        const auto& Logger = RpcServerLogger();
+        YT_TLOG_ALERT("Response annotated after the context has been replied")
+            .With(MakeRequestInfoAlertTags());
+    }
+
+    return LoggingEnabled_ ? &ResponseLoggingTags_ : nullptr;
 }
 
 const IMemoryUsageTrackerPtr& TServiceContextBase::GetMemoryUsageTracker() const
@@ -828,6 +876,16 @@ void TServiceContextWrapper::SuppressMissingRequestInfoCheck()
 void TServiceContextWrapper::SetRawResponseInfo(std::string info, bool incremental)
 {
     UnderlyingContext_->SetRawResponseInfo(std::move(info), incremental);
+}
+
+NLogging::TLoggingTagList* TServiceContextWrapper::GetRequestAnnotations()
+{
+    return UnderlyingContext_->GetRequestAnnotations();
+}
+
+NLogging::TLoggingTagList* TServiceContextWrapper::GetResponseAnnotations()
+{
+    return UnderlyingContext_->GetResponseAnnotations();
 }
 
 const IMemoryUsageTrackerPtr& TServiceContextWrapper::GetMemoryUsageTracker() const

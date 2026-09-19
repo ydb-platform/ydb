@@ -119,7 +119,7 @@ def test_get_workspace_dep_paths_with_custom_base_path():
     ]
 
 
-def test_get_workspace_deps_ok():
+def test_get_workspace_deps_ok(monkeypatch):
     pj = PackageJson("/packages/foo/package.json")
     pj.data = {
         "dependencies": {
@@ -137,7 +137,7 @@ def test_get_workspace_deps_ok():
         }
         return p
 
-    PackageJson.load = classmethod(load_mock)
+    monkeypatch.setattr(PackageJson, "load", classmethod(load_mock))
 
     ws_deps = pj.get_workspace_deps()
 
@@ -146,7 +146,7 @@ def test_get_workspace_deps_ok():
     assert ws_deps[1].path == "/packages/baz/package.json"
 
 
-def test_get_workspace_deps_with_wrong_name():
+def test_get_workspace_deps_with_wrong_name(monkeypatch):
     pj = PackageJson("/packages/foo/package.json")
     pj.data = {
         "dependencies": {
@@ -161,7 +161,7 @@ def test_get_workspace_deps_with_wrong_name():
         }
         return p
 
-    PackageJson.load = classmethod(load_mock)
+    monkeypatch.setattr(PackageJson, "load", classmethod(load_mock))
 
     with pytest.raises(PackageJsonWorkspaceError) as e:
         pj.get_workspace_deps()
@@ -172,7 +172,7 @@ def test_get_workspace_deps_with_wrong_name():
     )
 
 
-def test_get_workspace_map_ok():
+def test_get_workspace_map_ok(monkeypatch):
     pj = PackageJson("/packages/foo/package.json")
     pj.data = {
         "dependencies": {
@@ -189,7 +189,7 @@ def test_get_workspace_map_ok():
         }
         return p
 
-    PackageJson.load = classmethod(load_mock)
+    monkeypatch.setattr(PackageJson, "load", classmethod(load_mock))
 
     ws_map = pj.get_workspace_map()
 

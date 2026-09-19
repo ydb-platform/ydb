@@ -1,6 +1,7 @@
 #include "sql_ut.h"
 
 #include <yql/essentials/sql/v1/translation/sql.h>
+#include <yql/essentials/sql/v1/translation/sql_translation.h>
 
 using namespace NSQLTranslationV1;
 
@@ -43,6 +44,50 @@ Y_UNIT_TEST(AutoSubquery) {
         WHERE a IN (SELECT a FROM my_table VIEW my_view);
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(NestedArgumentErrorDoesNotRequestFallback) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Auto;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT Abs(Abs(1 AS named, 2));
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Unnamed arguments can not follow after named one");
+    UNIT_ASSERT_VALUES_EQUAL(res.Issues.Size(), 1);
+}
+
+Y_UNIT_TEST(SQLStatusOperatorOrPrioritizesBasicRegardlessOfErrorOrder) {
+    const TSQLStatus basic = std::unexpected(ESQLError::Basic);
+    const TSQLStatus unsupported = std::unexpected(ESQLError::UnsupportedYqlSelect);
+
+    const auto basicThenUnsupported = basic | unsupported;
+    const auto unsupportedThenBasic = unsupported | basic;
+
+    UNIT_ASSERT(!basicThenUnsupported);
+    UNIT_ASSERT(basicThenUnsupported.error() == ESQLError::Basic);
+    UNIT_ASSERT(!unsupportedThenBasic);
+    UNIT_ASSERT(unsupportedThenBasic.error() == ESQLError::Basic);
+}
+
+Y_UNIT_TEST(AutoFallbackPreservesMode) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Auto;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        SELECT EnsureType(Percentile(CAST(key AS Interval64), 0.5), Interval64?)
+        FROM (SELECT Interval64('P1D') AS key);
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {{TString("YqlSelect"), 0}};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
 }
 
 Y_UNIT_TEST(Minimal) {

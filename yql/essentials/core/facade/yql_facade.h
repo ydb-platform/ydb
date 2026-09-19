@@ -69,6 +69,7 @@ public:
     void SetUdfResolverLogfile(const TString& path);
     void SetUdfBridgeBinaryPath(const TString& path);
     void AddRemoteLayersProvider(const TString& alias, NLayers::IRemoteLayerProviderPtr provider);
+    void SetTranslatorsRegistry(NSQLTranslation::TTranslatorsRegistry translatorsRegistry);
 
     TProgramPtr Create(
         const TFile& file,
@@ -111,6 +112,7 @@ private:
     TMaybe<TString> UdfResolverLogfile_;
     TString BridgeBinaryPath_;
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
+    NSQLTranslation::TTranslatorsRegistry TranslatorsRegistry_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -405,7 +407,8 @@ private:
         EHiddenMode hiddenMode,
         const TQContext& qContext,
         THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders,
-        TString bridgeBinaryPath);
+        TString bridgeBinaryPath,
+        NSQLTranslation::TTranslatorsRegistry translatorsRegistry);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
@@ -513,6 +516,7 @@ private:
     bool FuzzUntypedLambda_ = false;
     bool FuzzUniversal_ = false;
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
+    const NSQLTranslation::TTranslatorsRegistry TranslatorsRegistry_;
 };
 
 TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context);

@@ -16,6 +16,8 @@ items:
       href: data-formats/format-arrow.md
   - name: Working with topics
     href: topic.md
+  - name: Batch codecs
+    href: kafka-codec.md
   - name: Working with coordination nodes
     href: coordination.md
   - name: Handling errors in the API

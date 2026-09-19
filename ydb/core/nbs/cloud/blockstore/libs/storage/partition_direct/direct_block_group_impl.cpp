@@ -1796,6 +1796,15 @@ void TDirectBlockGroup::MarkSlotDead(
 {
     Connections.MarkSlotDead(slot, dbgConnectionsConfigGeneration);
     Oracle.OnHostRemoved(slot);
+
+    // The mark is already committed to the local database, so the records may
+    // stop waiting for this host: its copies are out of the group and the
+    // restore does not list them.
+    for (const auto& weakVChunk: VChunks) {
+        if (auto vChunk = weakVChunk.lock()) {
+            vChunk->OnHostSlotRemoved(slot);
+        }
+    }
 }
 
 bool TDirectBlockGroup::HasPBufferQuorum() const

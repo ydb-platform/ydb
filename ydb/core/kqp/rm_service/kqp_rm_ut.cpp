@@ -470,6 +470,7 @@ public:
         UNIT_TEST(ArenaShrinksWhenNodeTotalDrops);
         UNIT_TEST(ArenaReclaimsSurplusWhileGrowthIsWanted);
         UNIT_TEST(ArenaYieldsSurplusToRefusedMemoryRequest);
+        UNIT_TEST(ArenaFastPathOpenWhileCapWithholdsGrowth);
         UNIT_TEST(ArenaLifetimeIsNotAQueryDuration);
     UNIT_TEST_SUITE_END();
 
@@ -536,6 +537,7 @@ public:
     void ArenaShrinksWhenNodeTotalDrops();
     void ArenaReclaimsSurplusWhileGrowthIsWanted();
     void ArenaYieldsSurplusToRefusedMemoryRequest();
+    void ArenaFastPathOpenWhileCapWithholdsGrowth();
     void ArenaLifetimeIsNotAQueryDuration();
 
 private:
@@ -2557,6 +2559,55 @@ void KqpRm::ArenaYieldsSurplusToRefusedMemoryRequest() {
     AssertResourceBrokerSensors(0, 0, 0, 3, 0);
 }
 
+// A growth the band wants but the cap withholds waits for the periodic pass, and until then the charge cannot move
+// while the demand stays within the size: such a change takes no lock, and the gauges wait for the pass with it.
+// The first change past the size takes the lock and is charged as a deficit at once
+void KqpRm::ArenaFastPathOpenWhileCapWithholdsGrowth() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx1 = MakeTx(1, rm);
+    auto tx2 = MakeTx(2, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 600}));
+
+    // the band asks for 350 + 200 and the cap allows 1000 - 600: the arena takes 400 and goes on wanting more
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 350}));
+    AssertResourceBrokerSensors(0, 1000, 0, 0, 2);
+    AssertArenaSensors(400, 350, 0);
+    AssertResourceManagerStats(rm, 0, 100);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+
+    // within the size: no lock, so the gauge waits for the pass while the demand itself has moved
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 30}));
+    AssertArenaSensors(400, 350, 0);
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 380);
+    TickArenaAdjust();
+    AssertArenaSensors(400, 380, 0);
+    AssertResourceBrokerSensors(0, 1000, 0, 0, 2);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+
+    // past the size: the lock, and the 30 the arena does not back charged at once
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 3, NRm::TKqpResourcesRequest{.ExternalMemory = 50}));
+    AssertArenaSensors(400, 430, 30);
+    AssertResourceManagerStats(rm, 0, 100);
+    UNIT_ASSERT_VALUES_EQUAL(tx2->GetMemoryAvailability(), -230); // 800 - 600 - 430
+    AssertResourceBrokerSensors(0, 1000, 0, 0, 2);
+
+    rm->FreeResources(*tx2, 3, NRm::TKqpResourcesRequest{.ExternalMemory = 50});
+    rm->FreeResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 30});
+    rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 350});
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 600});
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 1, 1);
+    tx1.Reset();
+    AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+}
+
 // The arena task outlives the queries it backs, so the resource broker must not take its lifetime for the
 // execution time of a query. That average is what the broker shows for the task type and estimates a task's
 // finish time from, and the estimate is what a queue's planned resource usage, and so its turn to be scheduled,
@@ -2674,6 +2725,8 @@ void KqpRm::ArenaReclaimsSurplusWhileGrowthIsWanted() {
         rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 250});
     }
 
+    // the free stayed within the size and took no lock: the pass gives the arena back whole
+    TickArenaAdjust();
     AssertResourceBrokerSensors(0, 0, 0, 1, 0);
     AssertArenaSensors(0, 0, 0);
     AssertResourceManagerStats(rm, 280, 100);

@@ -56,7 +56,7 @@
                                                     }
                                                 ],
                                                 "Name": "Sort",
-                                                "SortBy": "row.salary"
+                                                "SortBy": "[0,item.salary]"
                                             }
                                         ],
                                         "PlanNodeId": 4,

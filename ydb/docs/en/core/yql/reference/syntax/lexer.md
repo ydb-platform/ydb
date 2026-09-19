@@ -82,6 +82,35 @@ In ANSI SQL syntax compatibility mode, arbitrary IDs can also be enclosed in dou
 SELECT 1 as "column with "" double quote"; -- column name will be: column with " double quote
 ```
 
+## Query parameterization {#query-params}
+
+Query parameters are [named expressions](expressions.md#named-nodes) whose values are passed separately from the query text (see [DECLARE](declare.md)). Such parameters can only be substituted in the parts of a query that are not required for its compilation. For example, a parameter can be used in a filter:
+
+```yql
+DECLARE $my_param AS String;
+SELECT Data FROM my_table WHERE Data LIKE $my_param
+```
+
+Or in data:
+
+```yql
+DECLARE $my_param AS String;
+SELECT Data || $my_param FROM my_table
+```
+
+At the same time, parameters cannot be used in the parts required for query compilation, for example:
+
+* In table names;
+* In any parameters of the [WITH](select/with.md) block;
+* In any expressions inside [EvaluateExpr and EvaluateAtom](../builtins/basic.md#evaluate_expr_atom).
+
+For such parts, you can only use string constants inside the query, for example:
+
+```yql
+$table = "my_table";
+SELECT * FROM $table
+```
+
 ## SQL hints {#sql-hints}
 
 SQL hints are special settings with which a user can modify a query execution plan

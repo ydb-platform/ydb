@@ -186,6 +186,7 @@ def test_build_package_json_adds_missing_pack_metadata(tmp_path):
 def test_build_workspace_without_lockfile(tmp_path):
     package_manager = object.__new__(package_manager_module.PackageManager)
     package_manager.sources_path = str(tmp_path / "source")
+    package_manager.sources_root = str(tmp_path)
     package_manager.build_path = str(tmp_path / "build")
     package_manager.module_path = "project/module"
     package_manager.inject_peers = False
@@ -250,6 +251,7 @@ def test_build_workspace_merges_transitive_workspace_lockfiles(tmp_path):
     package_manager.sources_path = str(source_path)
     package_manager.build_path = str(build_path)
     package_manager.module_path = "consumer"
+    package_manager.sources_root = str(tmp_path / "source")
     package_manager.inject_peers = False
 
     package_manager.build_workspace(tarballs_store="__tarballs__", local_cli=True)

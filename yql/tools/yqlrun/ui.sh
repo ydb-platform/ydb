@@ -20,10 +20,17 @@ else
 fi
 
 
-PORT=${1:-3000}
+PORT=3000
+if [ $# -gt 0 ]; then
+    case "$1" in
+        -*) ;;
+        *) PORT=$1; shift ;;
+    esac
+fi
 
-if [ "$2" = "--gdb" ]; then
+if [ "$1" = "--gdb" ]; then
     GDB="ya tool gdb --args"
+    shift
 fi
 
 if [ -z "${ARC_BUILD_DIR}" ]; then
@@ -38,4 +45,5 @@ ${GDB} ${PGM} ui \
     --assets ${ASSETS_DIR} \
     --gateways-cfg ${GATEWAYS_CFG} \
     --remote --port $PORT \
-    $PG_EXT_OPT
+    $PG_EXT_OPT \
+    "$@"

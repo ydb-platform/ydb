@@ -31,6 +31,10 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
+#ifndef DONT_ADD_SPARK
+#include <yql/spark/tools/tool_lib/tool_lib.h>
+#endif
+
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/logger/stream.h>
 
@@ -129,6 +133,9 @@ int RunUI(int argc, const char* argv[])
     TString gatewaysCfgFile;
     TString fsCfgFile;
     TString pgExtConfig;
+#ifndef DONT_ADD_SPARK
+    NSparkTool::TSparkSettings sparkSettings;
+#endif
 
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = YtProviderName;
@@ -150,12 +157,19 @@ int RunUI(int argc, const char* argv[])
     opts.AddLongOption("fs-cfg", "fs configuration file").Optional().RequiredArgument("FILE").StoreResult(&fsCfgFile);
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
     opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&sqlFlags, ',');
+#ifndef DONT_ADD_SPARK
+    opts.AddLongOption("spark-parser-path", "Path to Spark SQL parser").StoreResult(&sparkSettings.ParserPath);
+    opts.AddLongOption("spark-parser-port", "Spark SQL parser port").StoreResult(&sparkSettings.ParserPort);
+#endif
 
     TServerConfig config;
     config.SetAssetsPath("http/www");
     config.InitCliOptions(opts);
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
     config.ParseFromCli(res);
+#ifndef DONT_ADD_SPARK
+    NSparkTool::ValidateSparkSettings(sparkSettings);
+#endif
 
     TUserDataTable userData;
     for (auto& s : filesMappingList) {
@@ -285,12 +299,19 @@ int RunUI(int argc, const char* argv[])
     NLog::YqlLogger().SetComponentLevel(NLog::EComponent::CoreEval, NLog::ELevel::DEBUG);
     NLog::YqlLogger().SetComponentLevel(NLog::EComponent::CorePeepHole, NLog::ELevel::DEBUG);
 
+    NSQLTranslation::TTranslatorsRegistry translatorsRegistry;
+#ifndef DONT_ADD_SPARK
+    NSparkTool::AddSparkTranslator(translatorsRegistry, sparkSettings);
+#endif
+
     auto server = CreateYqlServer(config,
                 funcRegistry.Get(), udfIndex, ctx.NextUniqueId,
                 userData,
                 std::move(gatewaysConfig),
                 sqlFlags,
-                moduleResolver, udfResolver, fileStorage);
+                moduleResolver, udfResolver, fileStorage, std::move(translatorsRegistry),
+                Nothing()
+    );
     server->Start();
     server->Wait();
 

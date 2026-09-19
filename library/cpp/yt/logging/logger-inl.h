@@ -459,8 +459,9 @@ public:
     template <class... TArgs>
     TTaggedLoggingGuard& WithFormat(TLoggingTagKey tag, TFormatString<TArgs...> format, TArgs&&... args) &
     {
-        Format(Writer_.BeginTag(tag.Get()), format, std::forward<TArgs>(args)...);
-        Writer_.EndTag();
+        Writer_.AppendTag(tag.Get(), [&] (TStringBuilderBase* builder) {
+            Format(builder, format, std::forward<TArgs>(args)...);
+        });
         return *this;
     }
 
@@ -560,9 +561,10 @@ private:
     template <class TValue>
     TTaggedLoggingGuard& DoWith(TLoggingTagKey tag, const TValue& value, TStringBuf spec) &
     {
-        // Format the value straight into the payload buffer; no temporary.
-        FormatValue(Writer_.BeginTag(tag.Get()), value, spec);
-        Writer_.EndTag();
+        Writer_.AppendTag(tag.Get(), [&] (TStringBuilderBase* builder) {
+            // Format the value straight into the payload buffer; no temporary.
+            FormatValue(builder, value, spec);
+        });
         return *this;
     }
 };
@@ -591,8 +593,9 @@ private:
 template <class TValue>
 TWellKnownTaggedLoggingGuard TTaggedLoggingGuard::With(const TValue& value) &
 {
-    FormatValue(Writer_.BeginWellKnownTag(TWellKnownLoggingTagTraits<TValue>::Key), value, "v"_sb);
-    Writer_.EndTag();
+    Writer_.AppendWellKnownTag(TWellKnownLoggingTagTraits<TValue>::Key, [&] (TStringBuilderBase* builder) {
+        FormatValue(builder, value, "v"_sb);
+    });
     return TWellKnownTaggedLoggingGuard(*this);
 }
 

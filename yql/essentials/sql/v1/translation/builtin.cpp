@@ -4578,7 +4578,7 @@ TNodeResult BuildBuiltinFunc(
         }
     }
 
-    if (ns == "datetime2" && lowerName == "update") {
+    if (ns == "datetime2" && (lowerName == "update" || lowerName == "init" || lowerName == "init64")) {
         if (namedArgs) {
             TStructNode* castedNamedArgs = namedArgs->GetStructNode();
             Y_DEBUG_ABORT_UNLESS(castedNamedArgs);

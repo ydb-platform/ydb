@@ -11,6 +11,7 @@
 
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/library/aws_init/aws.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -154,7 +155,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(8)});
     }
 
-    Y_UNIT_TEST(RebuildVectorIndex) {
+    void DoRebuildVectorIndex(bool cancel, bool reboot, bool rejectReplacement = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -193,16 +194,74 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         // Write more data
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 200, 400);
 
-        // Rebuild the same index
+        const auto liveIndex = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+        const auto livePosting = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable", true, true, true);
+        auto checkLiveIndex = [&] {
+            const auto index = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+            TestDescribeResult(index, {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+            UNIT_ASSERT_VALUES_EQUAL(index.GetPathDescription().GetSelf().GetPathId(),
+                liveIndex.GetPathDescription().GetSelf().GetPathId());
+            const auto posting = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable", true, true, true);
+            UNIT_ASSERT_VALUES_EQUAL(posting.GetPathDescription().GetSelf().GetPathId(),
+                livePosting.GetPathDescription().GetSelf().GetPathId());
+        };
+
+        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> kmeansBlocker(runtime);
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> moveBlocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveIndex;
+        });
         ui64 rebuildIndexTx = ++txId;
         TestRebuildVectorIndex(runtime, rebuildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        runtime.WaitFor("rebuild clustering", [&] { return !kmeansBlocker.empty(); });
+        checkLiveIndex();
+        if (reboot) {
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+            checkLiveIndex();
+        }
+        if (cancel) {
+            TestCancelBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", rebuildIndexTx);
+        }
+        kmeansBlocker.Stop().Unblock();
+        if (!cancel) {
+            runtime.WaitFor("rebuild replacement", [&] { return !moveBlocker.empty(); });
+            checkLiveIndex();
+            if (reboot) {
+                RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+                checkLiveIndex();
+            }
+        }
+        auto rejectMove = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            auto* tx = ev->Get()->Record.MutableTransaction(0);
+            if (rejectReplacement && tx->GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveIndex) {
+                tx->MutableMoveIndex()->SetAllowOverwrite(false);
+            }
+        });
+        moveBlocker.Stop().Unblock();
         env.TestWaitNotification(runtime, rebuildIndexTx, tenantSchemeShard);
 
         auto rebuildOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", rebuildIndexTx);
-        UNIT_ASSERT_VALUES_EQUAL(rebuildOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(rebuildOperation.GetIndexBuild().GetState(),
+            cancel ? Ydb::Table::IndexBuildState::STATE_CANCELLED :
+                rejectReplacement ? Ydb::Table::IndexBuildState::STATE_REJECTED : Ydb::Table::IndexBuildState::STATE_DONE);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
             {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1)});
+        if (cancel || rejectReplacement) {
+            checkLiveIndex();
+        } else {
+            const auto rebuilt = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+            UNIT_ASSERT(rebuilt.GetPathDescription().GetSelf().GetPathId() != liveIndex.GetPathDescription().GetSelf().GetPathId());
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(RebuildVectorIndex, Cancel, Reboot) {
+        DoRebuildVectorIndex(Cancel, Reboot);
+    }
+
+    Y_UNIT_TEST_TWIN(RebuildVectorIndexRejectReplacement, Reboot) {
+        DoRebuildVectorIndex(false, Reboot, true);
     }
 
     Y_UNIT_TEST(RebuildVectorIndexPreservesDataColumns) {

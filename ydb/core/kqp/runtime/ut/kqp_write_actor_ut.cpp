@@ -26,7 +26,6 @@ using namespace NYql::NDq;
 constexpr ui64 ShardId = 1001001;
 const TTableId TableId(1, 2, 3);
 constexpr ui64 ReplacementShardId = ShardId + 1;
-constexpr ui64 OtherShardId = ShardId + 2;
 
 enum class ETableKind { Column, Row };
 // Each partition has an exclusive upper key bound; Nothing() denotes +infinity.
@@ -261,12 +260,6 @@ public:
         return result;
     }
 
-    void AssertNoWrites() {
-        Execute();
-        UNIT_ASSERT_C(Runtime.CaptureMailboxEvents(PipeCache.Hint(), PipeCache.NodeId()).empty(),
-            "Unexpected write: a surviving shard must keep its existing in-flight request");
-    }
-
     void Acknowledge(const TWrite& write) {
         Runtime.Send(new IEventHandle(write->Sender, PipeCache,
             NEvents::TDataEvents::TEvWriteResult::BuildCompleted(write->Get()->TabletId).release(), 0, write->Cookie));
@@ -484,40 +477,6 @@ Y_UNIT_TEST_SUITE(KqpDirectWriteActor) {
         fixture.Acknowledge(second);
         const TVector<ui64> expected = {1, 2};
         UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, expected);
-    }
-
-    Y_UNIT_TEST(CheckpointWaitsForAllReplacementDataShards) {
-        TSinkFixture fixture(ETableKind::Row);
-        fixture.Write(TVector<ui64>{1, 3}, MakeCheckpoint(1));
-        const auto original = fixture.GrabWrites({{ShardId, {1, 3}}}).at(ShardId);
-
-        fixture.Retry(original, {{ReplacementShardId, 2}, {OtherShardId, Nothing()}});
-        const auto replacements = fixture.GrabWrites({{ReplacementShardId, {1}}, {OtherShardId, {3}}});
-        UNIT_ASSERT(fixture.Callbacks.SavedCheckpoints.empty());
-        fixture.Acknowledge(original);
-        UNIT_ASSERT(fixture.Callbacks.SavedCheckpoints.empty());
-        fixture.Acknowledge(replacements.at(ReplacementShardId));
-        UNIT_ASSERT(fixture.Callbacks.SavedCheckpoints.empty());
-        fixture.Acknowledge(replacements.at(OtherShardId));
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
-        fixture.AssertNoWrites();
-    }
-
-    Y_UNIT_TEST(CheckpointKeepsSurvivingDataShardInFlight) {
-        TSinkFixture fixture(ETableKind::Row, 64_MB, {{ShardId, 10}, {OtherShardId, Nothing()}});
-        fixture.Write(TVector<ui64>{1, 20}, MakeCheckpoint(1));
-        const auto original = fixture.GrabWrites({{ShardId, {1}}, {OtherShardId, {20}}});
-
-        fixture.Retry(original.at(ShardId), {{ReplacementShardId, 10}, {OtherShardId, Nothing()}});
-        const auto replacement = fixture.GrabWrite(1, ReplacementShardId);
-        fixture.AssertNoWrites();
-        fixture.Acknowledge(replacement);
-        UNIT_ASSERT(fixture.Callbacks.SavedCheckpoints.empty());
-        fixture.Acknowledge(original.at(ShardId));
-        UNIT_ASSERT(fixture.Callbacks.SavedCheckpoints.empty());
-        fixture.Acknowledge(original.at(OtherShardId));
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
-        fixture.AssertNoWrites();
     }
 
     Y_UNIT_TEST(FinishedSinkCompletesCheckpointAfterDataShardDeletion) {

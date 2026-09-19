@@ -809,7 +809,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             MakeKey(123),
             overlapped_0,
             MakePrimariesMask(),
-            MakePrimariesMask());
+            MakePrimariesMask(),
+            THostMask{});
         DirtyMap->RegisterInflightWrite(
             MakeKey(124),
             TBlockRange16::WithLength(250, 10));
@@ -817,7 +818,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             MakeKey(124),
             overlapped_01,
             MakePrimariesMask(),
-            MakePrimariesMask());
+            MakePrimariesMask(),
+            THostMask{});
         DirtyMap->RegisterInflightWrite(
             MakeKey(125),
             TBlockRange16::WithLength(260, 10));
@@ -825,7 +827,8 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             MakeKey(125),
             overlapped_1,
             MakePrimariesMask(),
-            MakePrimariesMask());
+            MakePrimariesMask(),
+            THostMask{});
 
         // Start data copy
         ExpectedRange = TBlockRange16::WithLength(0, BlocksPerCopy);

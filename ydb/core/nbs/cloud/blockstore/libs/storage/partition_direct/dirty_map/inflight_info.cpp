@@ -36,6 +36,7 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , Disabled(other.Disabled)
     , WriteRequested(other.WriteRequested)
     , WriteConfirmed(other.WriteConfirmed)
+    , WriteFailed(other.WriteFailed)
     , FlushRequested(other.FlushRequested)
     , FlushConfirmed(other.FlushConfirmed)
     , EraseRequested(other.EraseRequested)
@@ -103,6 +104,46 @@ void TInflightInfo::OnWritten(
     ReadyQueue->Register(*this, IReadyQueue::EQueueType::Flush);
 }
 
+void TInflightInfo::OnWriteWithoutQuorum(
+    THostMask writeRequested,
+    THostMask writeConfirmed,
+    THostMask writeFailed)
+{
+    Y_ABORT_UNLESS(State == EState::PBufferPendingWrite);
+    Y_ABORT_UNLESS(WriteConfirmed.Count() == 0);
+    Y_ABORT_UNLESS(writeConfirmed.Count() < QuorumDirectBlockGroupHostCount);
+
+    WriteRequested = writeRequested;
+    WriteConfirmed = writeConfirmed;
+    WriteFailed = writeFailed;
+    SetState(EState::PBufferOrphaned);
+
+    ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, true);
+    MaybeSettleOrphan();
+    MaybeQueryErase();
+}
+
+void TInflightInfo::OnBelatedWrite(THostIndex host, bool completed)
+{
+    Y_ABORT_UNLESS(WriteRequested.Get(host));
+    Y_ABORT_UNLESS(State != EState::PBufferErased);
+
+    if (!completed) {
+        WriteFailed.Set(host);
+        if (State == EState::PBufferOrphaned) {
+            MaybeSettleOrphan();
+        }
+        return;
+    }
+
+    WriteConfirmed.Set(host);
+    // The copy landed after the erase for this host had been answered, so the
+    // erase has to be repeated.
+    EraseRequested.Reset(host);
+    EraseConfirmed.Reset(host);
+    MaybeQueryErase();
+}
+
 TInflightInfo::EState TInflightInfo::GetState() const
 {
     return State;
@@ -137,7 +178,9 @@ TReadSource TInflightInfo::ReadMask() const
         case EState::PBufferFlushed:
         case EState::PBufferErasing:
         case EState::PBufferErased:
-            // The data has already been transferred to DDisk.
+        case EState::PBufferOrphaned:
+            // The data has already been transferred to DDisk, or the write
+            // was answered with an error and its copies are garbage.
             // Will read from DDisks. Lsn=0 marks a DDisk read.
             // Filter out non-desired or fresh later.
             return {.Mask = THostMask::MakeAll(MaxHostCount), .PBufferKey = {}};
@@ -213,33 +256,44 @@ THostMask TInflightInfo::GetInflightFlushes() const
 void TInflightInfo::RequestErase(THostIndex host)
 {
     Y_ABORT_UNLESS(
-        State == EState::PBufferFlushed || State == EState::PBufferErasing);
+        State == EState::PBufferFlushed || State == EState::PBufferErasing ||
+        State == EState::PBufferOrphaned);
 
     Y_ABORT_UNLESS(WriteRequested.Get(host));
     Y_ABORT_UNLESS(!EraseRequested.Get(host));
     Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
-    Y_ABORT_UNLESS(FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
+    Y_ABORT_UNLESS(
+        State == EState::PBufferOrphaned ||
+        FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
     Y_ABORT_UNLESS(PBuffersLockCount == 0);
 
-    SetState(EState::PBufferErasing);
+    if (State != EState::PBufferOrphaned) {
+        SetState(EState::PBufferErasing);
+    }
     EraseRequested.Set(host);
 }
 
 void TInflightInfo::ConfirmErase(THostIndex host)
 {
-    Y_ABORT_UNLESS(State == EState::PBufferErasing);
+    Y_ABORT_UNLESS(
+        State == EState::PBufferErasing || State == EState::PBufferOrphaned);
     Y_ABORT_UNLESS(EraseRequested.Get(host));
     Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
     Y_ABORT_UNLESS(PBuffersLockCount == 0);
 
     EraseConfirmed.Set(host);
+    if (State == EState::PBufferOrphaned) {
+        MaybeSettleOrphan();
+        return;
+    }
     MaybeAdvanceToErased();
 }
 
 void TInflightInfo::EraseFailed(THostIndex host)
 {
     Y_ABORT_UNLESS(
-        State == EState::PBufferErasing || State == EState::PBufferErased);
+        State == EState::PBufferErasing || State == EState::PBufferErased ||
+        State == EState::PBufferOrphaned);
     Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
     Y_ABORT_UNLESS(PBuffersLockCount == 0);
 
@@ -311,6 +365,13 @@ void TInflightInfo::UpdateHosts(
             MaybeAdvanceToErased();
             break;
         }
+        case EState::PBufferOrphaned: {
+            // A disabled host answers neither the write nor its erase, so it
+            // stops holding the record.
+            Disabled = disabled;
+            MaybeSettleOrphan();
+            break;
+        }
         case EState::PBufferErased: {
             // Nothing to do.
         } break;
@@ -369,6 +430,7 @@ TString TInflightInfo::DebugPrint(TInstant now) const
            << ", dd:" << DesiredDDisks.Print() << ", d:" << Disabled.Print()
            << ", wr:" << WriteRequested.Print()
            << ", wc:" << WriteConfirmed.Print()
+           << ", wf:" << WriteFailed.Print()
            << ", fr:" << FlushRequested.Print()
            << ", fc:" << FlushConfirmed.Print()
            << ", er:" << EraseRequested.Print()
@@ -431,7 +493,14 @@ void TInflightInfo::SetState(EState newState)
             Y_ABORT_UNLESS(State == EState::PBufferFlushed);
             break;
         case EState::PBufferErased:
-            Y_ABORT_UNLESS(State == EState::PBufferErasing);
+            Y_ABORT_UNLESS(
+                State == EState::PBufferErasing ||
+                State == EState::PBufferOrphaned);
+            break;
+        case EState::PBufferOrphaned:
+            Y_ABORT_UNLESS(
+                State == EState::PBufferPendingWrite ||
+                State == EState::PBufferErasing);
             break;
     }
 
@@ -495,12 +564,15 @@ void TInflightInfo::CheckInvariants() const
                 FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
             Y_ABORT_UNLESS(GetInflightFlushes().Empty());
             break;
+        case EState::PBufferOrphaned:
+            Y_ABORT_UNLESS(GetInflightFlushes().Empty());
+            Y_ABORT_UNLESS(PBuffersLockCount == 0);
+            break;
     }
 
     if (State == EState::PBufferErased) {
         Y_ABORT_UNLESS(
-            EraseConfirmed.Exclude(Disabled) ==
-            WriteRequested.Exclude(Disabled));
+            WriteRequested.Exclude(Disabled).Exclude(EraseConfirmed).Empty());
         Y_ABORT_UNLESS(PBuffersLockCount == 0);
     }
 }
@@ -522,21 +594,48 @@ void TInflightInfo::MaybeAdvanceToErased()
     Y_ABORT_UNLESS(
         State == EState::PBufferFlushed || State == EState::PBufferErasing);
 
-    if (EraseConfirmed.Exclude(Disabled) == WriteRequested.Exclude(Disabled)) {
+    if (EraseConfirmed.Exclude(Disabled) != WriteRequested.Exclude(Disabled)) {
+        return;
+    }
+
+    if (CanForget()) {
+        SetState(EState::PBufferErased);
+        return;
+    }
+
+    // A host has not answered the write yet: its copy may still land, and it
+    // has to be erased before the record is forgotten.
+    SetState(EState::PBufferOrphaned);
+}
+
+void TInflightInfo::MaybeSettleOrphan()
+{
+    Y_ABORT_UNLESS(State == EState::PBufferOrphaned);
+
+    if (CanForget()) {
         SetState(EState::PBufferErased);
     }
+}
+
+bool TInflightInfo::CanForget() const
+{
+    const auto answered = WriteConfirmed.Include(WriteFailed).Include(Disabled);
+
+    return WriteRequested.Exclude(answered).Empty() &&
+           WriteRequested.Exclude(Disabled).Exclude(EraseConfirmed).Empty();
 }
 
 void TInflightInfo::MaybeQueryErase()
 {
     if (PBuffersLockCount != 0 || State == EState::PBufferWritten ||
-        State == EState::PBufferFlushing)
+        State == EState::PBufferFlushing || State == EState::PBufferErased)
     {
         return;
     }
 
     Y_ABORT_UNLESS(
-        State == EState::PBufferFlushed || State == EState::PBufferErasing);
+        State == EState::PBufferFlushed || State == EState::PBufferErasing ||
+        State == EState::PBufferOrphaned);
 
     const auto hostsToErase =
         WriteRequested.Exclude(Disabled).Exclude(EraseRequested);

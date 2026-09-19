@@ -228,7 +228,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(1),
             range,
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         vchunkConfig.PromoteHost(4, true);
         vchunkConfig.SetWatermark(4, 50 * DefaultBlockSize);
@@ -442,7 +443,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         // After write, we should be able to get read hints (read from
         // confirmed PBuffers — hosts {0, 1, 2}).
@@ -490,7 +492,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(124),
@@ -499,7 +502,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(124),
             TBlockRange16::WithLength(10, 10),
             MakeHostMask(true, true, false, true, false),
-            MakeHostMask(true, true, false, true, false));
+            MakeHostMask(true, true, false, true, false),
+            THostMask{});
 
         // After write, we should be able to get read hints
         auto readHint =
@@ -568,7 +572,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         // WriteFinished should generate one inflight item
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
@@ -583,7 +588,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(124),
             TBlockRange16::WithLength(20, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         // Second writeFinished should generate one more inflight item
         UNIT_ASSERT_VALUES_EQUAL(2, dirtyMap->GetInflightCount());
@@ -714,8 +720,18 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // The lsn stays inflight through the written and flushed states, so the
         // barrier does not advance past a not-yet-erased write.
-        dirtyMap->WriteFinished(MakeKey(123), range1, requested, confirmed);
-        dirtyMap->WriteFinished(MakeKey(124), range2, requested, confirmed);
+        dirtyMap->WriteFinished(
+            MakeKey(123),
+            range1,
+            requested,
+            confirmed,
+            THostMask{});
+        dirtyMap->WriteFinished(
+            MakeKey(124),
+            range2,
+            requested,
+            confirmed,
+            THostMask{});
         UNIT_ASSERT_VALUES_EQUAL(
             MakeKey(123).Print(),
             dirtyMap->GetSafeBarrierForErase()->Print());
@@ -755,7 +771,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
     }
 
-    Y_UNIT_TEST(ShouldNotHoldSafeBarrierForSubQuorumWrite)
+    Y_UNIT_TEST(ShouldHoldSafeBarrierForSubQuorumWriteUntilErased)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
@@ -768,13 +784,30 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123).Print(),
             dirtyMap->GetSafeBarrierForErase()->Print());
 
-        // A write that fails to reach a quorum of PBuffers drops its pending
-        // entry and stops holding the barrier.
+        // A write that fails to reach a quorum of PBuffers keeps holding the
+        // barrier: its copies are still on the PBuffers.
         dirtyMap->WriteFinished(
             MakeKey(123),
             range,
             MakePrimaryHosts(),
-            MakeHostMask(true, true, false, false, false));   // 2 < quorum 3
+            MakeHostMask(true, true, false, false, false),   // 2 < quorum 3
+            MakeHostMask(false, false, true, false, false));
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(123).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        // The copies are erased, and only then the record is forgotten.
+        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0:1:123;"
+            "H1:1:123;"
+            "H2:1:123;",
+            eraseHints.DebugPrint());
+
+        for (const auto host: MakePrimaryHosts()) {
+            dirtyMap->EraseFinished(host, {MakeKey(123)}, {});
+        }
         UNIT_ASSERT(!dirtyMap->GetSafeBarrierForErase().has_value());
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
     }
@@ -795,7 +828,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             range,
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT(!flushHint.Empty());
@@ -828,7 +862,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             range,
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT(!flushHint.Empty());
@@ -885,7 +920,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -945,7 +981,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            requested);
+            requested,
+            THostMask{});
 
         // Finish flushes to every DDisk.
         auto flushHint = dirtyMap->MakeFlushHint(1);
@@ -992,7 +1029,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1047,7 +1085,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1096,7 +1135,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1140,7 +1180,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
         // Range cross write watermark. Should be flushed to 3 enabled ddisks.
         dirtyMap->RegisterInflightWrite(
             MakeKey(124),
@@ -1149,7 +1190,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(124),
             TBlockRange16::WithLength(95, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
         // Range over write watermark. Should be flushed to 3 enabled ddisks.
         // Because it overlaps 124, this record must be flushed after 124.
         dirtyMap->RegisterInflightWrite(
@@ -1159,7 +1201,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(125),
             TBlockRange16::WithLength(100, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         auto flushHint = dirtyMap->MakeFlushHint(3);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1192,14 +1235,16 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(20),
             range,
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(MakeKey(30), disjointRange);
         dirtyMap->WriteFinished(
             MakeKey(30),
             disjointRange,
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto hint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_C(
@@ -1216,7 +1261,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(10),
             range,
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
         auto olderHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_C(
             olderHint.DebugPrint().find(":10[") != TString::npos,
@@ -1236,6 +1282,107 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
                 << newerHint.DebugPrint());
     }
 
+    Y_UNIT_TEST(ShouldEraseCopyOfWriteWithoutQuorum)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        const auto range = TBlockRange16::WithLength(10, 10);
+
+        // The write got no quorum and the client got an error, but H0 did
+        // write the data.
+        dirtyMap->RegisterInflightWrite(MakeKey(5), range);
+        dirtyMap->WriteFinished(
+            MakeKey(5),
+            range,
+            MakePrimaryHosts(),
+            MakeHostMask(true, false, false, false, false),
+            MakeHostMask(false, true, true, false, false));
+
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        // A newer overlapping write is written and flushed.
+        dirtyMap->RegisterInflightWrite(MakeKey(12), range);
+        dirtyMap->WriteFinished(
+            MakeKey(12),
+            range,
+            MakePrimaryHosts(),
+            MakePrimaryHosts(),
+            THostMask{});
+        FlushAll(dirtyMap->MakeFlushHint(1), *dirtyMap);
+
+        // The copy of the write without quorum is erased first, the newer
+        // record waits for it.
+        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0:1:5;"
+            "H1:1:5;"
+            "H2:1:5;",
+            eraseHints.DebugPrint());
+
+        dirtyMap->EraseFinished(THostIndex{0}, {MakeKey(5)}, {});
+        dirtyMap->EraseFinished(THostIndex{1}, {MakeKey(5)}, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, dirtyMap->GetInflightCount());
+
+        dirtyMap->EraseFinished(THostIndex{2}, {MakeKey(5)}, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0:1:12;"
+            "H1:1:12;"
+            "H2:1:12;",
+            eraseHints.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldEraseBelatedCopyBeforeForgettingRecord)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        const auto range = TBlockRange16::WithLength(10, 10);
+
+        // The quorum is reached without H3, which has not answered yet.
+        dirtyMap->RegisterInflightWrite(MakeKey(5), range);
+        dirtyMap->WriteFinished(
+            MakeKey(5),
+            range,
+            MakeHostMask(true, true, true, true, false),
+            MakePrimaryHosts(),
+            THostMask{});
+        FlushAll(dirtyMap->MakeFlushHint(1), *dirtyMap);
+
+        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0:1:5;"
+            "H1:1:5;"
+            "H2:1:5;"
+            "H3:1:5;",
+            eraseHints.DebugPrint());
+
+        for (const auto host: MakeHostMask(true, true, true, true, false)) {
+            dirtyMap->EraseFinished(host, {MakeKey(5)}, {});
+        }
+
+        // H3 has not answered the write, so the record is kept: its copy may
+        // still land.
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            dirtyMap->OnBelatedWrite(
+                MakeKey(5),
+                MakeHostMask(false, false, false, true, false),
+                THostMask{}));
+
+        // The copy that landed after the erase is erased again.
+        eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL("H3:1:5;", eraseHints.DebugPrint());
+
+        dirtyMap->EraseFinished(THostIndex{3}, {MakeKey(5)}, {});
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
+    }
+
     Y_UNIT_TEST(ShouldEraseOverlappingWritesInAscendingOrder)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
@@ -1252,7 +1399,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
                 MakeKey(lsn),
                 writeRange,
                 MakePrimaryHosts(),
-                MakePrimaryHosts());
+                MakePrimaryHosts(),
+                THostMask{});
             FlushAll(dirtyMap->MakeFlushHint(1), *dirtyMap);
         };
         writeAndFlush(5, range);
@@ -1300,7 +1448,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
@@ -1339,7 +1488,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         // Flush hints should not be generated when DDisk is locked.
         auto flushHint = dirtyMap->MakeFlushHint(1);
@@ -1480,7 +1630,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(0, 100),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1506,7 +1657,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(124),
             TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         // lsn 123 is post-flush (FromDDisk) over [0..99]; lsn 124 is in
         // PBuffer over [10..19]. The read should be split into three hints:
@@ -1571,7 +1723,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
@@ -1580,7 +1733,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(200),
             TBlockRange16::WithLength(30, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto readHint =
             dirtyMap->MakeReadHint(TBlockRange16::WithLength(0, 50));
@@ -1607,7 +1761,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 41),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
@@ -1616,7 +1771,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(200),
             TBlockRange16::WithLength(20, 11),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto readHint =
             dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 41));
@@ -1635,7 +1791,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(300),
             TBlockRange16::WithLength(0, 50),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
         readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(5, 40));
 
         UNIT_ASSERT_VALUES_EQUAL(1, readHint.RangeHints.size());
@@ -1656,7 +1813,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 21),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
@@ -1665,7 +1823,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(200),
             TBlockRange16::WithLength(25, 21),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto readHint =
             dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 36));
@@ -1689,7 +1848,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 41),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(150),
@@ -1698,7 +1858,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(150),
             TBlockRange16::WithLength(20, 21),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
@@ -1707,7 +1868,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(200),
             TBlockRange16::WithLength(30, 6),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto readHint =
             dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 41));
@@ -1734,7 +1896,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto readHint =
             dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
@@ -1757,7 +1920,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 100),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
@@ -1766,7 +1930,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(200),
             TBlockRange16::WithLength(10, 40),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto readHint =
             dirtyMap->MakeReadHint(TBlockRange16::WithLength(0, 100));
@@ -1793,7 +1958,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
                 MakeKey(i),
                 TBlockRange16::WithLength(i, 1),
                 MakePrimaryHosts(),
-                MakePrimaryHosts());
+                MakePrimaryHosts(),
+                THostMask{});
         }
 
         auto readHint =
@@ -1828,7 +1994,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 21),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
@@ -1837,7 +2004,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(200),
             TBlockRange16::WithLength(25, 21),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(300),
@@ -1846,7 +2014,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(300),
             TBlockRange16::WithLength(40, 21),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto readHint =
             dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 51));
@@ -1871,7 +2040,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 6),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
@@ -1880,7 +2050,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(200),
             TBlockRange16::WithLength(25, 6),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(300),
@@ -1889,7 +2060,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(300),
             TBlockRange16::WithLength(45, 6),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto readHint =
             dirtyMap->MakeReadHint(TBlockRange16::WithLength(0, 61));
@@ -1918,7 +2090,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 91),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(200),
@@ -1927,7 +2100,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(200),
             TBlockRange16::WithLength(20, 6),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(300),
@@ -1936,7 +2110,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(300),
             TBlockRange16::WithLength(40, 6),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         dirtyMap->RegisterInflightWrite(
             MakeKey(400),
@@ -1945,7 +2120,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(400),
             TBlockRange16::WithLength(70, 6),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         auto readHint =
             dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 91));
@@ -1975,11 +2151,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 41),
             MakePrimaryHosts(),
-            MakeHostMask(true, true, false, false, false));
+            MakeHostMask(true, true, false, false, false),
+            MakeHostMask(false, false, true, false, false));
 
-        // write result with no quorum is skipped
+        // The record without quorum is kept until its copies are erased, but
+        // it is invisible to reads.
         UNIT_ASSERT_VALUES_EQUAL(
-            inflightCounterBeforeWrite,
+            inflightCounterBeforeWrite + 1,
             dirtyMap->GetInflightCount());
 
         auto readHint =
@@ -1997,7 +2175,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(200),
             TBlockRange16::WithLength(10, 41),
             MakePrimaryHosts(),
-            MakeHostMask(true, true, true, false, false));
+            MakeHostMask(true, true, true, false, false),
+            THostMask{});
         auto readHint1 =
             dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 41));
         UNIT_ASSERT_VALUES_EQUAL(1, readHint1.RangeHints.size());
@@ -2030,7 +2209,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2051,7 +2231,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         // Second write overlaps and is pending.
         dirtyMap->RegisterInflightWrite(
@@ -2072,7 +2253,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(200),
             TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
 
         readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2095,7 +2277,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         // Flush all hosts.
         auto flushHint = dirtyMap->MakeFlushHint(1);
@@ -2142,12 +2325,22 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100).Print(),
             dirtyMap->GetSafeBarrierForErase()->Print());
 
-        // Completing write 100 with sub-quorum drops it.
+        // Completing write 100 with sub-quorum keeps it until its copies are
+        // erased.
         dirtyMap->WriteFinished(
             MakeKey(100),
             TBlockRange16::WithLength(10, 10),
             MakePrimaryHosts(),
-            MakeHostMask(true, true, false, false, false));
+            MakeHostMask(true, true, false, false, false),
+            MakeHostMask(false, false, true, false, false));
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(100).Print(),
+            dirtyMap->GetSafeBarrierForErase()->Print());
+
+        Y_UNUSED(dirtyMap->MakeEraseHint(1));
+        for (const auto host: MakePrimaryHosts()) {
+            dirtyMap->EraseFinished(host, {MakeKey(100)}, {});
+        }
         UNIT_ASSERT_VALUES_EQUAL(
             MakeKey(200).Print(),
             dirtyMap->GetSafeBarrierForErase()->Print());
@@ -2157,7 +2350,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(200),
             TBlockRange16::WithLength(20, 10),
             MakePrimaryHosts(),
-            MakePrimaryHosts());
+            MakePrimaryHosts(),
+            THostMask{});
         UNIT_ASSERT_VALUES_EQUAL(
             MakeKey(200).Print(),
             dirtyMap->GetSafeBarrierForErase()->Print());
@@ -2178,7 +2372,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
 
@@ -2244,7 +2439,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         // Flush all hosts.
         auto flushHint = dirtyMap->MakeFlushHint(1);
@@ -2291,7 +2487,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         // Verify all 3 primary hosts have byte counters.
         for (THostIndex h: MakePrimaryHosts()) {
@@ -2337,7 +2534,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
@@ -2401,7 +2599,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         // Quorum is still held by the two remaining hosts, so the inflight item
         // survives.
@@ -2457,7 +2656,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            confirmed);
+            confirmed,
+            THostMask{});
 
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
 
@@ -2675,7 +2875,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 10),
             requested,
-            requested);
+            requested,
+            THostMask{});
 
         // Flush all DDIsks; H3's Ahead field changes → generation increments.
         auto flushHint = dirtyMap->MakeFlushHint(1);
@@ -2733,7 +2934,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(100),
             TBlockRange16::WithLength(10, 10),
             requested,
-            requested);
+            requested,
+            THostMask{});
 
         // Flush all DDisks so H3's Ahead field records the flushed range.
         auto flushHint = source->MakeFlushHint(1);
@@ -2791,7 +2993,12 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         const auto range = TBlockRange16::WithLength(10, 10);
         const auto requested = MakePrimaryHosts();
         dirtyMap->RegisterInflightWrite(pBufferKey, range);
-        dirtyMap->WriteFinished(pBufferKey, range, requested, requested);
+        dirtyMap->WriteFinished(
+            pBufferKey,
+            range,
+            requested,
+            requested,
+            THostMask{});
 
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->MakeFlushHint(1).Empty());
@@ -2846,7 +3053,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakeKey(123),
             TBlockRange16::WithLength(10, 10),
             requested,
-            requested);
+            requested,
+            THostMask{});
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());

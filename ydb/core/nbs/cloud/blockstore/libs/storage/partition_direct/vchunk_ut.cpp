@@ -44,7 +44,8 @@ void MakeDirtyMapNeedPersist(TBlocksDirtyMap& dirtyMap)
     const auto pBufferKey = MakeKey(100);
     const auto range = TBlockRange16::WithLength(10, 10);
     dirtyMap.RegisterInflightWrite(pBufferKey, range);
-    dirtyMap.WriteFinished(pBufferKey, range, requested, requested);
+    dirtyMap
+        .WriteFinished(pBufferKey, range, requested, requested, THostMask{});
 
     auto flushHints = dirtyMap.MakeFlushHint(1);
     Y_ABORT_UNLESS(!flushHints.Empty());
@@ -70,7 +71,8 @@ void MakeDirtyMapNeedFlush(TBlocksDirtyMap& dirtyMap)
         MakeKey(100),
         TBlockRange16::WithLength(10, 10),
         requested,
-        requested);
+        requested,
+        THostMask{});
 }
 
 }   // namespace
@@ -171,6 +173,84 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));
+    }
+
+    // A write that got no quorum is answered with an error, but the copies
+    // that did land are still on the PBuffers. The record is kept until they
+    // are erased: forgetting it right away would leave a copy that a restart
+    // restores and flushes over newer data.
+    Y_UNIT_TEST_F(ShouldEraseCopiesOfWriteWithoutQuorum, TBaseFixture)
+    {
+        Init();
+
+        const auto range = TBlockRange16::WithLength(10, 1);
+        ExpectedRange = range;
+        RangeData = GenerateRandomString(BlockSize * range.Size());
+
+        // Force the next generated lsn to be 123 (LsnGenerator pre-increments).
+        PartitionDirectService->LsnGenerator = 122;
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            false,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            3,   // syncRequestsBatchSize
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+
+        auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
+        auto request =
+            std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                .RequestId = 1,
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
+        request->Sglist = MakeSgList();
+
+        auto future =
+            vchunk->WriteBlocksLocal(callContext, request, NWilson::TTraceId());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitWriteRequests(3, TDuration::Seconds(10)));
+
+        // Every PBuffer answers with an error: the quorum is unreachable and
+        // the client gets an error.
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(E_IO, "disk error")},
+            true);
+
+        const auto& result = future.GetValue(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(E_IO, result.Error.GetCode());
+
+        // The record is still in the dirty map: it holds the cleanup barrier.
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(123).Print(),
+            GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk)
+                ->Print());
+
+        // The scheduled cleanup erases the copies.
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitScheduledTasks(1, TDuration::Seconds(10)));
+        RunScheduledTasks();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitEraseRequests(3, TDuration::Seconds(10)));
+        SetEraseResult(TDBGEraseResponse{.Error = MakeError(S_OK)}, true);
+
+        // Only now the record leaves the dirty map and releases the barrier.
+        UNIT_ASSERT(
+            !GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk)
+                 .has_value());
+
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 
     Y_UNIT_TEST_F(ShouldPersistTouchedBeforeFirstFlush, TBaseFixture)

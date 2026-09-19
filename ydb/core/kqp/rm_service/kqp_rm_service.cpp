@@ -452,9 +452,6 @@ public:
             return result;
         }
 
-        ui64 rbTaskId = LastResourceBrokerTaskId.fetch_add(1) + 1;
-        TString rbTaskName = TStringBuilder() << "kqp-" << txId << '-' << taskId << '-' << rbTaskId;
-
         Y_DEFER {
             if (!result) {
                 Counters->RmNotEnoughMemory->Inc();
@@ -471,9 +468,33 @@ public:
             }
         };
 
-        bool allocated = ResourceBroker->SubmitTaskInstant(
-            TEvResourceBroker::TEvSubmitTask(rbTaskId, rbTaskName, {0, resources.Memory}, NLocalDb::KqpResourceManagerTaskName, 0, {}),
-            SelfId);
+        // the resource broker shares its memory between its queues, so it can refuse what the node total admitted;
+        // the free part of the arena is what kqp holds of that memory beyond its demand, so it is given back and
+        // the task submitted once more. Unlike the node total the resource broker does not say what it lacks, so
+        // any free part is given back, whether or not it covers the request, and a task waiting in another queue
+        // may take it first: the request is then refused as before, over an arena at its demand that the next
+        // change past it, or the periodic pass, regrows
+        ui64 rbTaskId = 0;
+        bool allocated = false;
+        for (;;) {
+            rbTaskId = LastResourceBrokerTaskId.fetch_add(1) + 1;
+            const TString rbTaskName = TStringBuilder() << "kqp-" << txId << '-' << taskId << '-' << rbTaskId;
+            allocated = ResourceBroker->SubmitTaskInstant(
+                TEvResourceBroker::TEvSubmitTask(rbTaskId, rbTaskName, {0, resources.Memory}, NLocalDb::KqpResourceManagerTaskName, 0, {}),
+                SelfId);
+            if (allocated) {
+                break;
+            }
+            bool yieldArena = false;
+            with_lock (Lock) {
+                yieldArena = !arenaYielded && ArenaSurplusLocked() > 0;
+            }
+            if (!yieldArena) {
+                break;
+            }
+            arenaYielded = true;
+            AdjustArena(/* retryRefused */ false, /* yieldSurplus */ true);
+        }
 
         if (!allocated) {
             TStringBuilder reason;
@@ -731,8 +752,8 @@ public:
     // Used + (MinFree + MaxFree) / 2 whenever its free part leaves that band. Its footprint Max(Size, Used) is
     // charged to the node total, so Memory admission, the spilling cookies and the published resources count it,
     // the free part of the arena included: the resource broker holds it for this node as it holds the demand. A
-    // Memory request that only the free part keeps out is retried, once, over the arena shrunk to its demand
-    // (AllocateResources).
+    // Memory request that only the free part keeps out at the node total, or that the resource broker refuses
+    // while the arena has a free part, is retried, once, over the arena shrunk to its demand (AllocateResources).
     //
     // The demand is tracked lock-free: while the arena covers it the charge does not move, so a task that starts
     // or ends only touches two atomics and the ceiling below. The lock is taken to grow, to shrink, and whenever
@@ -752,12 +773,20 @@ public:
         return EnableMemoryArena.load() && used > Arena.Size ? used - Arena.Size : 0;
     }
 
-    // Whether the arena, shrunk to its demand, would let a Memory request in under what the node total leaves it;
-    // not through Available(), which reads 0 once the total has dropped under the arena. False while a round is in
-    // flight, when the plan cannot act (ArenaPlanLocked). Must be called under Lock.
-    bool ArenaSurplusCoversLocked(ui64 memory) const {
+    // The free part of the arena a yield can give back: none while a round is in flight, when the plan cannot act
+    // (ArenaPlanLocked). Must be called under Lock.
+    ui64 ArenaSurplusLocked() const {
         const ui64 used = ArenaUsed();
-        return !Arena.AdjustInProgress && !Arena.Stopped && Arena.Size > used && used + memory <= ArenaSizeCapLocked();
+        if (Arena.AdjustInProgress || Arena.Stopped || Arena.Size <= used) {
+            return 0;
+        }
+        return Arena.Size - used;
+    }
+
+    // Whether the arena, shrunk to its demand, would let a Memory request in under what the node total leaves it;
+    // not through Available(), which reads 0 once the total has dropped under the arena. Must be called under Lock.
+    bool ArenaSurplusCoversLocked(ui64 memory) const {
+        return ArenaSurplusLocked() && ArenaUsed() + memory <= ArenaSizeCapLocked();
     }
 
     // Returns true when the charge moved.

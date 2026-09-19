@@ -470,6 +470,7 @@ public:
         UNIT_TEST(ArenaShrinksWhenNodeTotalDrops);
         UNIT_TEST(ArenaReclaimsSurplusWhileGrowthIsWanted);
         UNIT_TEST(ArenaYieldsSurplusToRefusedMemoryRequest);
+        UNIT_TEST(ArenaYieldsSurplusToBrokerRefusal);
         UNIT_TEST(ArenaFastPathOpenWhileCapWithholdsGrowth);
         UNIT_TEST(ArenaDefaultsAgainstASmallQueue);
         UNIT_TEST(ArenaLifetimeIsNotAQueryDuration);
@@ -538,6 +539,7 @@ public:
     void ArenaShrinksWhenNodeTotalDrops();
     void ArenaReclaimsSurplusWhileGrowthIsWanted();
     void ArenaYieldsSurplusToRefusedMemoryRequest();
+    void ArenaYieldsSurplusToBrokerRefusal();
     void ArenaFastPathOpenWhileCapWithholdsGrowth();
     void ArenaDefaultsAgainstASmallQueue();
     void ArenaLifetimeIsNotAQueryDuration();
@@ -2558,6 +2560,68 @@ void KqpRm::ArenaYieldsSurplusToRefusedMemoryRequest() {
     AssertResourceManagerStats(rm, 1000, 100);
     AssertResourceBrokerSensors(0, 0, 0, 2, 1);
     tx2.Reset();
+    AssertResourceBrokerSensors(0, 0, 0, 3, 0);
+}
+
+// The resource broker shares its memory between its queues, so it can refuse a task the node total admitted; the
+// free part of the arena is what kqp holds of that memory beyond its demand, and it is given back to such a request
+// too. The resource broker does not say what it lacks, so the free part goes back whether or not it covers the
+// request; a request refused once there is nothing left to give back is refused as before
+void KqpRm::ArenaYieldsSurplusToBrokerRefusal() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto broker = GetInstantBroker();
+    const TActorId client = Runtime->AllocateEdgeActor();
+    auto tx = MakeTx(1, rm);
+    // another queue takes all but 200 of what the resource broker has
+    const auto other = [&](ui64 taskId) {
+        return TEvResourceBroker::TEvSubmitTask(taskId, "other", {0, TOTAL_MEMORY_LIMIT - 500}, "unknown", 0, {});
+    };
+
+    // 100 plus the headroom of 200, and the other queue beside it
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+    AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+    UNIT_ASSERT(broker->SubmitTaskInstant(other(1'000), client));
+
+    // 500 fits the node total and not the resource broker: the arena gives its 200 back, which does not cover it,
+    // and the request is refused all the same
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 500}));
+    AssertResourceBrokerSensors(0, 100, 0, 0, 1);
+    AssertArenaSensors(100, 100, 0);
+    AssertResourceManagerStats(rm, 900, 100);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
+
+    // the pass grows the arena back once the other queue lets go, and the other queue takes its place again
+    UNIT_ASSERT(broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(1'000), client));
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 300, 0, 1, 1);
+    AssertArenaSensors(300, 100, 0);
+    UNIT_ASSERT(broker->SubmitTaskInstant(other(1'001), client));
+
+    // 300 fits the node total but not the resource broker: the arena gives its 200 back and the task goes in
+    UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 300}));
+    AssertResourceBrokerSensors(0, 400, 0, 1, 2);
+    AssertArenaSensors(100, 100, 0);
+    AssertResourceManagerStats(rm, 600, 100);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 2);
+
+    // 500 fits the node total and not the resource broker either, and there is nothing left to give back
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 3, NRm::TKqpResourcesRequest{.Memory = 500}));
+    AssertResourceBrokerSensors(0, 400, 0, 1, 2);
+    AssertArenaSensors(100, 100, 0);
+    AssertResourceManagerStats(rm, 600, 100);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 2);
+
+    UNIT_ASSERT(broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(1'001), client));
+    rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 300});
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100});
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 2, 1);
+    tx.Reset();
     AssertResourceBrokerSensors(0, 0, 0, 3, 0);
 }
 

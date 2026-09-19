@@ -1,0 +1,28 @@
+{
+  "skill_name": "ydb-release-publication",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Выпусти YDB 26.2.1.14. Release-notes PR содержит только два changelog-файла, Docker ещё TBD, а build-docs выполняется.",
+      "expected_output": "Возвращает BLOCKED до любых внешних действий.",
+      "files": [],
+      "expectations": [
+        "Требует четыре release files, Docker manifest и completed green build-docs",
+        "Не создаёт docs backport, GitHub Release, default-branch PR или Club YDB draft"
+      ],
+      "covers": "strict release-notes preflight"
+    },
+    {
+      "id": 2,
+      "prompt": "Опубликуй готовый OSS-релиз. В старом шаблоне Club YDB сказано, что он установлен на всех prod и preprod, но согласованной актуальной формулировки нет.",
+      "expected_output": "До изменения Club YDB draft запрашивает wording, не повторяет старое утверждение и затем всегда добавляет SELECT Version().",
+      "files": [],
+      "expectations": [
+        "Не делает вывод о внутреннем rollout из старого шаблона",
+        "Сохраняет MODERATORS visibility and approved image",
+        "Создаёт GitHub Release only after stable docs publication is verified"
+      ],
+      "covers": "Club YDB rollout safety and publication order"
+    }
+  ]
+}

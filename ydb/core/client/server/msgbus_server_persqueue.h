@@ -5,7 +5,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
@@ -68,15 +68,15 @@ protected:
     struct TPerTopicInfo {
         TPerTopicInfo()
         { }
-        explicit TPerTopicInfo(const TSchemeEntry& topicEntry, NPersQueue::TTopicConverterPtr& topicConverter)
+        explicit TPerTopicInfo(const TSchemeEntry& topicEntry, const TString& clientsideName)
             : TopicEntry(topicEntry)
-            , Converter(topicConverter)
+            , ClientsideName(clientsideName)
         {
         }
 
         TActorId ActorId;
         TSchemeEntry TopicEntry;
-        NPersQueue::TTopicConverterPtr Converter;
+        TString ClientsideName;
         NKikimrClient::TResponse Response;
         bool ActorAnswered = false;
     };
@@ -161,7 +161,6 @@ protected:
     THashMap<TActorId, THolder<TPerTopicInfo>> Children;
     size_t ChildrenAnswered = 0;
     std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> TopicsDescription;
-    TVector<NPersQueue::TTopicConverterPtr> TopicsConverters;
 
     // Nodes info
     const bool ListNodes;

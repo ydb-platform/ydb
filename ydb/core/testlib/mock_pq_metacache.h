@@ -71,16 +71,7 @@ public:
         auto handle = [=](TEvPqMetaCache::TEvDescribeTopicsByNameRequest::TPtr& ev, const TActorContext& ctx) {
             auto result = std::make_shared<NSchemeCache::TSchemeCacheNavigate>();
             result->ResultSet = resultSet;
-            TVector<TString> topics;
-            auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
-            TVector<NPersQueue::TDiscoveryConverterPtr> converters;
-            for (auto& entry : resultSet) {
-                auto converter = entry.PQGroupInfo
-                        ? factory.MakeTopicConverter(entry.PQGroupInfo->Description.GetPQTabletConfig())
-                        : nullptr;
-                topics.push_back(entry.Path.back());
-                converters.push_back(converter);
-            }
+            TVector<NPersQueue::TDiscoveryConverterPtr> converters(resultSet.size());
             auto* response = new TEvPqMetaCache::TEvDescribeTopicsResponse(std::move(converters), result);
             ctx.Send(ev->Sender, response);
         };

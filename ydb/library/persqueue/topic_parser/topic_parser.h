@@ -7,6 +7,7 @@
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 #include <ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public/topic_parser.h>
@@ -84,6 +85,12 @@ public:
     TTopicConverterPtr UpgradeToFullConverter(const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
                                               const TString& ydbDatabaseRootOverride,
                                               const TMaybe<TString>& clientsideNameOverride = {});
+    // Prefer when SchemeCache already filled TPQGroupInfo::Names. Falls back to tablet config if names is null.
+    TTopicConverterPtr UpgradeToFullConverter(
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& names,
+        const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
+        const TString& ydbDatabaseRootOverride,
+        const TMaybe<TString>& clientsideNameOverride = {});
 
     TString GetPrintableString() const;
 
@@ -192,7 +199,16 @@ protected:
                         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
                         const TString& ydbDatabaseRootOverride,
                         const TMaybe<TString>& clientsideNameOverride = {});
+    void FillFromNames(const NKikimr::NPQ::NNameResolver::TTopicNames& names,
+                       const TMaybe<TString>& clientsideNameOverride);
+    void SetYdbDatabasePath(const TString& ydbDatabasePath);
 public:
+
+    static TTopicConverterPtr FromNames(
+        bool firstClass,
+        const NKikimr::NPQ::NNameResolver::TTopicNames& names,
+        const TMaybe<TString>& clientsideNameOverride = {},
+        const TString& ydbDatabasePath = {});
 
     static TTopicConverterPtr ForFirstClass(const NKikimrPQ::TPQTabletConfig& pqTabletConfig);
 

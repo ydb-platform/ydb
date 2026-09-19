@@ -19,6 +19,16 @@ namespace NMsgBusProxy {
 using namespace NSchemeCache;
 using namespace NPqMetaCacheV2;
 
+namespace {
+TString ClientsideNameFromSchemeEntry(const TSchemeCacheNavigate::TEntry& entry) {
+    const auto& pqGroupInfo = entry.PQGroupInfo;
+    if (!pqGroupInfo || !pqGroupInfo->Names || !pqGroupInfo->Names->IsValid()) {
+        return {};
+    }
+    return pqGroupInfo->Names->GetClientsideName();
+}
+} // namespace
+
 const TDuration TPersQueueBaseRequestProcessor::TIMEOUT = TDuration::MilliSeconds(90000);
 
 namespace {
@@ -127,7 +137,6 @@ struct TTopicInfo {
 
     NKikimrPQ::TPQTabletConfig Config;
     TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo;
-    NPersQueue::TDiscoveryConverterPtr Converter;
     ui32 NumParts = 0;
     THashSet<ui32> PartitionsToRequest;
 
@@ -299,18 +308,6 @@ THashSet<TString> GetTopicsListOrThrow(
 void TPersQueueBaseRequestProcessor::Handle(
         NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx
 ) {
-    TopicsConverters.reserve(ev->Get()->TopicsRequested.size());
-    Y_ABORT_UNLESS(ev->Get()->Result->ResultSet.size() == ev->Get()->TopicsRequested.size());
-    for (ui32 i = 0; i < ev->Get()->TopicsRequested.size(); ++i) {
-        if (ev->Get()->Result->ResultSet[i].PQGroupInfo) {
-            const auto& pqTabletConfig = ev->Get()->Result->ResultSet[i].PQGroupInfo->Description.GetPQTabletConfig();
-            TopicsConverters.push_back(ev->Get()->TopicsRequested[i]->UpgradeToFullConverter(
-                    pqTabletConfig,
-                    AppData(ctx)->PQConfig.GetTestDatabaseRoot()));
-        } else {
-            TopicsConverters.push_back(nullptr);
-        }
-    }
     TopicsDescription = std::move(ev->Get()->Result);
     if (ReadyToCreateChildren()) {
         if (CreateChildren(ctx)) {
@@ -330,21 +327,14 @@ bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
     if (ChildrenCreationDone)
         return false;
     ChildrenCreationDone = true;
-    Y_ABORT_UNLESS(TopicsDescription->ResultSet.size() == TopicsConverters.size());
-    ui32 i = 0;
     for (const auto& entry : TopicsDescription->ResultSet) {
-        auto converter = TopicsConverters[i++];
-        if (!converter) {
-            continue;
-        }
         if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo) {
-
-            auto name = converter->GetClientsideName();
+            auto name = ClientsideNameFromSchemeEntry(entry);
 
             if (name.empty() || !TopicsToRequest.empty() && !IsIn(TopicsToRequest, name)) {
                 continue;
             }
-            ChildrenToCreate.emplace_back(new TPerTopicInfo(entry, converter));
+            ChildrenToCreate.emplace_back(new TPerTopicInfo(entry, name));
         }
     }
     NeedChildrenCreation = true;
@@ -378,7 +368,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
     while (!ChildrenToCreate.empty()) {
         THolder<TPerTopicInfo> perTopicInfo(ChildrenToCreate.front().Release());
         ChildrenToCreate.pop_front();
-        const auto& name = perTopicInfo->Converter->GetClientsideName();
+        const auto& name = perTopicInfo->ClientsideName;
         if (name.empty()) {
             continue;
         }
@@ -950,13 +940,14 @@ public:
         Y_ABORT_UNLESS(TopicInfo.size() == resultSet.size());
         for (auto i = 0u; i != resultSet.size(); i++) {
             auto& entry = resultSet[i];
-            auto& converter = ev->Get()->TopicsRequested[i];
-            if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo && converter) {
+            if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo) {
                 auto& description = entry.PQGroupInfo->Description;
-                auto converter = ev->Get()->TopicsRequested[i]->UpgradeToFullConverter(description.GetPQTabletConfig(),
-                                                                                                           AppData(ctx)->PQConfig.GetTestDatabaseRoot());
-                Y_ABORT_UNLESS(TopicInfo.contains(converter->GetClientsideName()));
-                auto& topicInfo = TopicInfo[converter->GetClientsideName()];
+                const auto name = ClientsideNameFromSchemeEntry(entry);
+                if (name.empty()) {
+                    continue;
+                }
+                Y_ABORT_UNLESS(TopicInfo.contains(name));
+                auto& topicInfo = TopicInfo[name];
                 topicInfo.BalancerTabletId = description.GetBalancerTabletID();
                 topicInfo.PQInfo = entry.PQGroupInfo;
             }

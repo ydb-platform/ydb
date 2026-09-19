@@ -131,6 +131,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         return false;
     }
     topicsIter->second.FullConverter = topicsIter->second.DiscoveryConverter->UpgradeToFullConverter(
+        entry.PQGroupInfo->Names,
         pqDescr.GetPQTabletConfig(),
         AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
         topicsIter->second.CdcStreamPath

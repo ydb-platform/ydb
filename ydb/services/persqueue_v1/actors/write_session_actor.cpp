@@ -631,8 +631,10 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
         return;
     }
 
-    FullConverter = DiscoveryConverter->UpgradeToFullConverter(InitialPQTabletConfig,
-                                                               AppData(ctx)->PQConfig.GetTestDatabaseRoot());
+    FullConverter = DiscoveryConverter->UpgradeToFullConverter(
+        PQGroupInfo->Names,
+        InitialPQTabletConfig,
+        AppData(ctx)->PQConfig.GetTestDatabaseRoot());
     if (!InitAfterDiscovery(ctx)) {
         return;
     }

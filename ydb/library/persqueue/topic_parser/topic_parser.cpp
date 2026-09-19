@@ -1,7 +1,6 @@
 #include "topic_parser.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/folder/path.h>
@@ -290,6 +289,20 @@ TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
     auto* res = new TTopicNameConverter(FstClass, PQPrefix, pqTabletConfig,
         ydbDatabaseRootOverride, clientsideNameOverride);
     return TTopicConverterPtr(res);
+}
+
+TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& names,
+        const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
+        const TString& ydbDatabaseRootOverride,
+        const TMaybe<TString>& clientsideNameOverride
+) {
+    if (names) {
+        AFL_ENSURE(Valid)("reason", Reason)("original_topic", OriginalTopic);
+        return TTopicNameConverter::FromNames(
+            FstClass, *names, clientsideNameOverride, pqTabletConfig.GetYdbDatabasePath());
+    }
+    return UpgradeToFullConverter(pqTabletConfig, ydbDatabaseRootOverride, clientsideNameOverride);
 }
 
 void TDiscoveryConverter::BuildFstClassNames() {
@@ -718,19 +731,17 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
     return res;
 }
 
-TTopicNameConverter::TTopicNameConverter(
-        bool firstClass, const TString& pqPrefix,
-        const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
-        const TString& ydbDatabaseRootOverride,
-        const TMaybe<TString>& clientsideNameOverride
-)
-{
-    FstClass = firstClass;
-    PQPrefix = pqPrefix;
-    OriginalTopic = pqTabletConfig.GetTopicPath();
+void TTopicNameConverter::SetYdbDatabasePath(const TString& ydbDatabasePath) {
+    TStringBuf db = ydbDatabasePath;
+    db.SkipPrefix("/");
+    db.ChopSuffix("/");
+    Database = db;
+}
 
-    const auto names = NKikimr::NPQ::NNameResolver::NamesFromConfig(
-        pqTabletConfig, TString(), firstClass, pqPrefix, ydbDatabaseRootOverride);
+void TTopicNameConverter::FillFromNames(
+        const NKikimr::NPQ::NNameResolver::TTopicNames& names,
+        const TMaybe<TString>& clientsideNameOverride
+) {
     Valid = names.Valid;
     Reason = names.Reason;
     if (!Valid) {
@@ -750,11 +761,6 @@ TTopicNameConverter::TTopicNameConverter(
     LegacyLogtype = names.LegacyLogtype;
     InternalName = names.InternalName;
 
-    TStringBuf db = pqTabletConfig.GetYdbDatabasePath();
-    db.SkipPrefix("/");
-    db.ChopSuffix("/");
-    Database = db;
-
     if (FstClass) {
         FullModernPath = names.Path;
     } else {
@@ -772,6 +778,37 @@ TTopicNameConverter::TTopicNameConverter(
     if (clientsideNameOverride) {
         ClientsideName = *clientsideNameOverride;
     }
+}
+
+TTopicNameConverter::TTopicNameConverter(
+        bool firstClass, const TString& pqPrefix,
+        const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
+        const TString& ydbDatabaseRootOverride,
+        const TMaybe<TString>& clientsideNameOverride
+)
+{
+    FstClass = firstClass;
+    PQPrefix = pqPrefix;
+    OriginalTopic = pqTabletConfig.GetTopicPath();
+
+    const auto names = NKikimr::NPQ::NNameResolver::NamesFromConfig(
+        pqTabletConfig, TString(), firstClass, pqPrefix, ydbDatabaseRootOverride);
+    FillFromNames(names, clientsideNameOverride);
+    SetYdbDatabasePath(pqTabletConfig.GetYdbDatabasePath());
+}
+
+TTopicConverterPtr TTopicNameConverter::FromNames(
+        bool firstClass,
+        const NKikimr::NPQ::NNameResolver::TTopicNames& names,
+        const TMaybe<TString>& clientsideNameOverride,
+        const TString& ydbDatabasePath
+) {
+    auto* converter = new TTopicNameConverter();
+    converter->FstClass = firstClass;
+    converter->OriginalTopic = names.Path;
+    converter->FillFromNames(names, clientsideNameOverride);
+    converter->SetYdbDatabasePath(ydbDatabasePath);
+    return TTopicConverterPtr(converter);
 }
 
 TTopicConverterPtr TTopicNameConverter::ForFirstClass(const NKikimrPQ::TPQTabletConfig& pqTabletConfig) {

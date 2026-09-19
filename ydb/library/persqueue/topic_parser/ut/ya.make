@@ -7,6 +7,7 @@ SIZE(SMALL)
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
+    ydb/core/persqueue/public/nameresolver
     ydb/library/persqueue/topic_parser
 )
 

@@ -1,4 +1,5 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NPersQueue::NTests {
@@ -442,6 +443,58 @@ Y_UNIT_TEST_SUITE(TopicNameConverterForCPTest) {
         );
         UNIT_ASSERT(!converter->IsValid());
 
+    }
+
+    Y_UNIT_TEST(FromNamesMatchesConfigConverter) {
+        {
+            NKikimrPQ::TPQTabletConfig pqConfig;
+            pqConfig.SetTopicName("rt3.dc1--account--topic");
+            pqConfig.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
+            pqConfig.SetFederationAccount("account");
+            pqConfig.SetLocalDC(true);
+            pqConfig.SetDC("dc1");
+            pqConfig.SetYdbDatabasePath("");
+
+            auto names = NKikimr::NPQ::NNameResolver::NamesFromConfig(
+                pqConfig, TString(), false, "Root/PQ", "");
+            UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+
+            auto fromConfig = TTopicNameConverter::ForFederation("Root/PQ", pqConfig, "");
+            auto fromNames = TTopicNameConverter::FromNames(false, names);
+
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetClientsideName(), fromConfig->GetClientsideName());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetShortClientsideName(), fromConfig->GetShortClientsideName());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetFederationPath(), fromConfig->GetFederationPath());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetTopicForSrcIdHash(), fromConfig->GetTopicForSrcIdHash());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetPrimaryPath(), fromConfig->GetPrimaryPath());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetInternalName(), fromConfig->GetInternalName());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetAccount(), fromConfig->GetAccount());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetCluster(), fromConfig->GetCluster());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetModernName(), fromConfig->GetModernName());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetLegacyProducer(), fromConfig->GetLegacyProducer());
+        }
+        {
+            NKikimrPQ::TPQTabletConfig pqConfig;
+            pqConfig.SetTopicName("my-stream");
+            pqConfig.SetTopicPath("/lb/database/my-stream");
+            pqConfig.SetYdbDatabasePath("/lb/database");
+
+            auto names = NKikimr::NPQ::NNameResolver::NamesFromConfig(
+                pqConfig, TString(), true, "", "");
+            UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+
+            auto fromConfig = TTopicNameConverter::ForFirstClass(pqConfig);
+            auto fromNames = TTopicNameConverter::FromNames(true, names, {}, "/lb/database");
+
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetClientsideName(), fromConfig->GetClientsideName());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetFederationPath(), fromConfig->GetFederationPath());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetTopicForSrcIdHash(), fromConfig->GetTopicForSrcIdHash());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetPrimaryPath(), fromConfig->GetPrimaryPath());
+            UNIT_ASSERT_VALUES_EQUAL(fromNames->GetInternalName(), fromConfig->GetInternalName());
+
+            auto overridden = TTopicNameConverter::FromNames(true, names, TString("/Root/table/stream"));
+            UNIT_ASSERT_VALUES_EQUAL(overridden->GetClientsideName(), "/Root/table/stream");
+        }
     }
 }
 } // NTests

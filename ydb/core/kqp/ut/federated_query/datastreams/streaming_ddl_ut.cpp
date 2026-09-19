@@ -62,6 +62,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         appConfig.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(false);
         auto& resourceManager = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
         resourceManager.SetQueryMemoryLimit(memoryLimit);
+        // the limits below are tuned for the row dispatcher allocations alone: the memory arena would charge the
+        // prepaid memory of the query tasks to the same node total
+        resourceManager.SetEnableMemoryArena(false);
         auto* queue = appConfig.MutableResourceBrokerConfig()->AddQueues();
         queue->SetName(NLocalDb::KqpResourceManagerQueue);
         queue->MutableLimit()->SetMemory(memoryLimit);

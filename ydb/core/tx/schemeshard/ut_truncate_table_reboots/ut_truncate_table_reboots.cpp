@@ -13,7 +13,7 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-#define Y_UNIT_TEST_WITH_REBOOTS_TWIN(N, OPT) Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(N, 1, 1, false, OPT)
+#define Y_UNIT_TEST_WITH_REBOOTS_TWIN(N, OPT) Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(N, 8, 1, false, OPT)
 
 static const TString defaultRowTableSchema = R"(
     Name: "TestTable"
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
     }
 
     // Row-table-specific: truncation with concurrent datashard split
-    Y_UNIT_TEST_WITH_REBOOTS(WithSplit) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(WithSplit, 8, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
     }
 
     // Column-table-specific: truncation of column table inside OLAP store is rejected
-    Y_UNIT_TEST_WITH_REBOOTS(SimpleInStore) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SimpleInStore, 4, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
     }
 
     // Column-table-specific: in-store truncate is rejected; table can still be dropped afterwards
-    Y_UNIT_TEST_WITH_REBOOTS(TruncateInStoreThenDrop) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(TruncateInStoreThenDrop, 4, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

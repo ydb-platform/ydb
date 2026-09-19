@@ -73,7 +73,6 @@ void CreateSecret(const TString& secretName, const TString& secretValue, TSessio
 
 void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bool createSecondaryIndex = false, bool columnTable = false) {
     NKikimrConfig::TFeatureFlags featureFlags;
-    // featureFlags.SetEnableTruncateTable(true);
     featureFlags.SetEnableTruncateColumnTable(true);
     TKikimrRunner kikimr(featureFlags);
     auto db = kikimr.GetTableClient();

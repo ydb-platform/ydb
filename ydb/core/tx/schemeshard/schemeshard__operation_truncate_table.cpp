@@ -78,6 +78,8 @@ public:
 
         Y_ABORT_UNLESS(txState->Shards.size());
 
+        // One seqNo for all shards: for row tables it is only used in FillSeqNo (not per-shard),
+        // for column tables it is passed to MakeColumnShardProposal.
         const auto seqNo = context.SS->StartRound(*txState);
 
         TString txBody;
@@ -98,7 +100,7 @@ public:
             truncate->SetPathId(txState->TargetPathId.LocalPathId);
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
         } else {
-            Y_ABORT();
+            Y_ABORT_UNLESS(false, "Unexpected path type in TPropose::ProgressState");
         }
 
         for (const auto& shard : txState->Shards) {
@@ -191,7 +193,7 @@ public:
             tableInfo->AlterVersion += 1;
             context.SS->PersistColumnTable(db, txState->TargetPathId, *tableInfo);
         } else {
-            Y_ABORT();
+            Y_ABORT_UNLESS(false, "Unexpected path type in TDone::ProgressState");
         }
 
         context.SS->ClearDescribePathCaches(path.Base());
@@ -503,6 +505,8 @@ public:
 
             context.OnComplete.ActivateTx(OperationId);
 
+            // TRUNCATE changes data (not schema), but the scheme board must be notified so that
+            // DescribePath reflects the updated state. Clear caches to avoid stale descriptions.
             context.SS->ClearDescribePathCaches(tablePath.Base());
             context.OnComplete.PublishToSchemeBoard(OperationId, tablePath.Base()->PathId);
 

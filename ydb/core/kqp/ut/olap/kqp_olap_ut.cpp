@@ -5242,7 +5242,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
         for (;;) {
             const auto portionsCount = csController->GetPortionsCount();
-            Cerr << "portions left after truncate: " << portionsCount << Endl;
             if (portionsCount == 0) {
                 break;
             }

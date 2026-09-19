@@ -135,7 +135,7 @@ void VerifyTableTruncated(TTestActorRuntime& runtime, const TString& tablePath) 
         NTxUT::TShardReader reader(static_cast<TTestBasicRuntime&>(runtime), shardIds[0], pathId, NOlap::TSnapshot(1000000, 1000000));
         reader.SetReplyColumnIds({1});  // timestamp column
         auto rb = reader.ReadAll();
-        UNIT_ASSERT(!rb);  // no data after truncation
+        UNIT_ASSERT_C(!rb, "Expected no data after truncation, but ReadAll returned a result");
     } else {
         auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, tablePath);
         UNIT_ASSERT_VALUES_EQUAL(rows, 0);

@@ -400,6 +400,35 @@ namespace NKikimr::NBlobDepot {
         NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColor = {};
         float ApproximateFreeSpaceShare = 0.0f;
 
+        // Channel -> the highest step the tablet reclaimed while we were disconnected. A blob sequence id at or
+        // below it is void: the tablet has released it and may already have collected the blob, so a query still
+        // holding one must fail instead of committing it.
+        //
+        // The generation is part of the value, not just a comparison against the current BlobDepotGeneration:
+        // steps restart from a low value in every new tablet generation, so a watermark carried over a tablet
+        // restart would otherwise condemn perfectly good fresh ids.
+        struct TExpiredStep {
+            ui32 Generation = 0;
+            ui32 Step = 0;
+        };
+        THashMap<ui8, TExpiredStep> ExpiredSteps;
+
+        bool IsBlobSeqIdExpired(const TBlobSeqId& blobSeqId) const {
+            const auto it = ExpiredSteps.find(blobSeqId.Channel);
+            return it != ExpiredSteps.end()
+                && it->second.Generation == blobSeqId.Generation
+                && blobSeqId.Step <= it->second.Step;
+        }
+
+        // Blob sequence ids we failed to hand back because the pipe was already gone; resent on the next connection
+        std::vector<TBlobSeqId> SpoiledBlobSeqIdQ;
+
+        void EnqueueSpoiledBlobSeqId(const TBlobSeqId& blobSeqId) {
+            SpoiledBlobSeqIdQ.push_back(blobSeqId);
+        }
+
+        void FlushSpoiledBlobSeqIdQ();
+
         std::optional<NKikimrBlobDepot::TS3BackendSettings> S3BackendSettings;
         // S3WrapperId is always the per-node router service id obtained from NodeWarden
         // (TEvNodeWardenAcquireBlobDepotS3Router). The agent is responsible for releasing

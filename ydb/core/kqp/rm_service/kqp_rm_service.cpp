@@ -401,31 +401,44 @@ public:
             }
         };
 
-        bool hasScanQueryMemory = true;
-
-        with_lock (Lock) {
-            if (Y_UNLIKELY(!ResourceBroker)) {
-                TStringBuilder reason;
-                reason << "AllocateResources: not ready yet. TxId: " << txId << ", taskId: " << taskId;
-                result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, reason);
-                return result;
-            }
-
-            hasScanQueryMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
-
-            if (hasScanQueryMemory && tx.HasMemoryPoolLimit()) {
-                auto poolMemory = GetOrCreatePoolMemoryResource(tx.MakePoolId(), tx.MemoryPoolPercent);
-                // the pool limit follows the latest tx that allocates from the pool
-                poolMemory->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, TotalMemoryResource->GetOverPercent());
-                if (!poolMemory->HasSensors() && PoolSensorsEnabled()) {
-                    poolMemory->AttachSensors(MakePoolSensors(Counters, tx.Database, tx.PoolId));
+        bool hasScanQueryMemory = false;
+        bool arenaYielded = false;
+        for (;;) {
+            bool yieldArena = false;
+            with_lock (Lock) {
+                if (Y_UNLIKELY(!ResourceBroker)) {
+                    TStringBuilder reason;
+                    reason << "AllocateResources: not ready yet. TxId: " << txId << ", taskId: " << taskId;
+                    result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, reason);
+                    return result;
                 }
-                if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
-                    hasScanQueryMemory = false;
-                    TotalMemoryResource->Release(resources.Memory);
-                    poolMemory->RecordDenied();
+
+                hasScanQueryMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
+                // on the node total only: the arena does not charge the pools, a pool refusal is not its doing
+                yieldArena = !hasScanQueryMemory && !arenaYielded && ArenaSurplusCoversLocked(resources.Memory);
+
+                if (hasScanQueryMemory && tx.HasMemoryPoolLimit()) {
+                    auto poolMemory = GetOrCreatePoolMemoryResource(tx.MakePoolId(), tx.MemoryPoolPercent);
+                    // the pool limit follows the latest tx that allocates from the pool
+                    poolMemory->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, TotalMemoryResource->GetOverPercent());
+                    if (!poolMemory->HasSensors() && PoolSensorsEnabled()) {
+                        poolMemory->AttachSensors(MakePoolSensors(Counters, tx.Database, tx.PoolId));
+                    }
+                    if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
+                        hasScanQueryMemory = false;
+                        TotalMemoryResource->Release(resources.Memory);
+                        poolMemory->RecordDenied();
+                    }
                 }
             }
+            if (!yieldArena) {
+                break;
+            }
+            // the free part of the arena would let the request in: given back, once, and the admission retried over
+            // it; the next demand change or periodic pass regrows it as far as the band asks and the node total then
+            // allows. Best effort: a demand change that lands in between can take the memory back first
+            arenaYielded = true;
+            AdjustArena(/* retryRefused */ false, /* yieldSurplus */ true);
         }
 
         if (!hasScanQueryMemory) {
@@ -716,7 +729,9 @@ public:
     // memory and the execution units in use. The demand is always satisfied; the arena is resized afterwards to
     // Used + (MinFree + MaxFree) / 2 whenever its free part leaves that band. Its footprint Max(Size, Used) is
     // charged to the node total, so Memory admission, the spilling cookies and the published resources count it,
-    // the free part of the arena included: the resource broker holds it for this node as it holds the demand.
+    // the free part of the arena included: the resource broker holds it for this node as it holds the demand. A
+    // Memory request that only the free part keeps out is retried, once, over the arena shrunk to its demand
+    // (AllocateResources).
     //
     // The demand is tracked lock-free: while the arena covers it the charge does not move, so a task that starts
     // or ends only touches two atomics and the ceiling below. The lock is taken to grow, to shrink, and whenever
@@ -734,6 +749,14 @@ public:
 
     ui64 ArenaDeficitLocked(ui64 used) const {
         return EnableMemoryArena.load() && used > Arena.Size ? used - Arena.Size : 0;
+    }
+
+    // Whether the arena, shrunk to its demand, would let a Memory request in under what the node total leaves it;
+    // not through Available(), which reads 0 once the total has dropped under the arena. False while a round is in
+    // flight, when the plan cannot act (ArenaPlanLocked). Must be called under Lock.
+    bool ArenaSurplusCoversLocked(ui64 memory) const {
+        const ui64 used = ArenaUsed();
+        return !Arena.AdjustInProgress && !Arena.Stopped && Arena.Size > used && used + memory <= ArenaSizeCapLocked();
     }
 
     // Returns true when the charge moved.
@@ -839,12 +862,16 @@ public:
         }
     }
 
-    // The size the arena should be resized to, Arena.Size when it should not.
-    ui64 ArenaPlanLocked(ui64 used) {
+    // The size the arena should be resized to, Arena.Size when it should not. A yield (AllocateResources) asks for
+    // the demand alone, whatever the band wants.
+    ui64 ArenaPlanLocked(ui64 used, bool yieldSurplus) {
         if (Arena.AdjustInProgress || Arena.Stopped || !ResourceBroker) {
             return Arena.Size;
         }
-        const ui64 target = ArenaTargetLocked(used);
+        ui64 target = ArenaTargetLocked(used);
+        if (yieldSurplus) {
+            target = Min(target, used);
+        }
         const ui64 cap = ArenaSizeCapLocked();
         // The arena may hold what it backs and, beyond that, only what the node total leaves it, so a total that
         // has dropped or transactions that have taken more of it pull the arena down even while the band is asking
@@ -860,8 +887,9 @@ public:
     // Never under Lock: the resource broker calls are made outside it. One adjuster at a time, a concurrent caller
     // only records and charges its demand, which the loop picks up when it re-evaluates after a round. A growth the
     // resource broker refused is asked again only by a caller that passes retryRefused, see NoteArenaGrowth; a
-    // retry that finds a round in flight is dropped, the next one makes it.
-    void AdjustArena(bool retryRefused = false) {
+    // retry that finds a round in flight is dropped, the next one makes it. yieldSurplus plans for the demand
+    // alone for every round of the call, see ArenaPlanLocked; a yield that finds a round in flight is dropped too.
+    void AdjustArena(bool retryRefused = false, bool yieldSurplus = false) {
         bool publish = false;
         // a resource broker round and its outcome, written back by the locked section that plans the next one
         TIntrusivePtr<IResourceBroker> broker;
@@ -891,7 +919,7 @@ public:
                 }
                 const ui64 used = ArenaUsed();
                 size = Arena.Size;
-                target = ArenaPlanLocked(used);
+                target = ArenaPlanLocked(used, yieldSurplus);
                 // an adjuster records the outcome of its round before the locked section that lets go of the
                 // arena, so a plan made here after the round sees it
                 const bool gated = !retryRefused && ArenaGrowRefused.load(std::memory_order_relaxed);
@@ -920,7 +948,10 @@ public:
                 const ui64 want = target - size;
                 const ui64 granted = GrowArena(*broker, taskId, size, want, Min(deficit, want), taskLost);
                 NoteArenaGrowth(sizeBefore, want, granted, deficit);
-                retryRefused = false; // one retry per call, a refusal this round gates the next one
+                // one retry per call, a refusal this round gates the next one; yieldSurplus holds for every round,
+                // or the re-plan after the shrink would find the free part below the band and take the memory back
+                // before the admission it was given up for is retried
+                retryRefused = false;
             } else {
                 ShrinkArena(*broker, taskId, size, size - target, taskLost);
             }

@@ -82,7 +82,8 @@ message TTableServiceConfig {
         // which is prepaid as ExternalMemory. A demand past the kqp queue limit is charged anyway, as a deficit.
         optional uint64 ExecutionUnitMemory = 36 [default = 1048576];       // 1 MiB
         // The arena is resized to Used + (Min + Max) / 2 whenever its free part leaves the band; a max below the min
-        // is raised to it, and both zero make the arena track its usage exactly.
+        // is raised to it, and both zero make the arena track its usage exactly. The free part counts against the
+        // kqp queue limit like the usage, but is given back to a Memory request it would let in.
         optional uint64 MemoryArenaMinFreeSize = 37 [default = 33554432];   // 32 MiB
         optional uint64 MemoryArenaMaxFreeSize = 38 [default = 134217728];  // 128 MiB
     }

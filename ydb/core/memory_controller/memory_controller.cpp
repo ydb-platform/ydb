@@ -70,18 +70,31 @@ public:
     }
 
     virtual ui64 GetConsumption() const {
-        return Consumption;
+        return Used;
     }
 
-    void SetConsumption(ui64 value) override {
-        Consumption = value;
+    ui64 GetDemand() const {
+        return Demand;
+    }
+
+    ui64 GetReclaimable() const {
+        return Reclaimable;
+    }
+
+    void SetReport(TConsumerReport report) override {
+        Used = report.Used;
+        Demand = report.Demand;
+        Reclaimable = report.Reclaimable;
     }
 
 public:
     const EMemoryConsumerKind Kind;
-    const TActorId ActorId;
+    // Not const: a restarted registrant of the same kind rebinds it, see Handle(TEvConsumerRegister)
+    TActorId ActorId;
 private:
-    std::atomic<ui64> Consumption = 0;
+    std::atomic<ui64> Used = 0;
+    std::atomic<ui64> Demand = 0;
+    std::atomic<ui64> Reclaimable = 0;
 };
 
 class TColumnTablesPortionsMetaDataCacheMemoryConsumer: public TMemoryConsumer {
@@ -99,6 +112,8 @@ struct TConsumerState {
     const EMemoryConsumerKind Kind;
     const TActorId ActorId;
     const ui64 Consumption;
+    const ui64 Demand;
+    const ui64 Reclaimable;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
     bool CanZeroLimit = false;
@@ -107,6 +122,9 @@ struct TConsumerState {
         : Kind(consumer.Kind)
         , ActorId(consumer.ActorId)
         , Consumption(consumer.GetConsumption())
+        // Three atomics are not a snapshot: clamp torn reads instead of asserting invariants.
+        , Demand(Max(consumer.GetDemand(), Consumption))
+        , Reclaimable(Min(consumer.GetReclaimable(), Consumption))
     {
     }
 
@@ -118,6 +136,8 @@ struct TConsumerState {
 
 struct TConsumerCounters {
     TCounterPtr Consumption;
+    TCounterPtr Demand;
+    TCounterPtr Reclaimable;
     TCounterPtr Reservation;
     TCounterPtr LimitBytes;
     TCounterPtr LimitMinBytes;
@@ -180,6 +200,7 @@ private:
             CFunc(TEvents::TEvWakeup::EventType, HandleWakeup);
 
             HFunc(TEvConsumerRegister, Handle);
+            HFunc(TEvConsumerUnregister, Handle);
 
             HFunc(TEvMemTableRegister, Handle);
             HFunc(TEvMemTableUnregister, Handle);
@@ -299,11 +320,15 @@ private:
             YDB_LOG_INFO_CTX(ctx, "Consumer state",
                 {"consumerKind", consumer.Kind},
                 {"consumption", HumanReadableBytes(consumer.Consumption)},
+                {"demand", HumanReadableBytes(consumer.Demand)},
+                {"reclaimable", HumanReadableBytes(consumer.Reclaimable)},
                 {"limit", HumanReadableBytes(limitBytes)},
                 {"min", HumanReadableBytes(consumer.MinBytes)},
                 {"max", HumanReadableBytes(consumer.MaxBytes)});
             auto& counters = GetConsumerCounters(consumer.Kind);
             counters.Consumption->Set(consumer.Consumption);
+            counters.Demand->Set(consumer.Demand);
+            counters.Reclaimable->Set(consumer.Reclaimable);
             counters.Reservation->Set(SafeDiff(limitBytes, consumer.Consumption));
             counters.LimitBytes->Set(limitBytes);
             counters.LimitMinBytes->Set(consumer.MinBytes);
@@ -324,12 +349,52 @@ private:
 
     void Handle(TEvConsumerRegister::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
-        auto consumer = Consumers.emplace(msg->Kind, MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender));
-        Y_ABORT_UNLESS(consumer.second, "Consumer kinds should be unique");
+        auto [it, inserted] = Consumers.emplace(msg->Kind, MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender));
+        if (!inserted) {
+            // A kind the controller feeds itself has no registrant and must not be taken over
+            Y_ABORT_UNLESS(it->second->ActorId, "Consumer kind is owned by the memory controller");
+            // Two live services on one kind is still a bug, but a takeover keeps the node up while it is visible
+            if (it->second->ActorId != ev->Sender) {
+                YDB_LOG_WARN_CTX(ctx, "Consumer kind taken over by another actor",
+                    {"msgKind", msg->Kind},
+                    {"previous", it->second->ActorId},
+                    {"sender", ev->Sender});
+                Counters->GetCounter("Stats/ConsumerTakeovers", true)->Inc();
+            }
+            // A fresh object, not a rebind: the predecessor keeps a pointer to the old one and would keep writing
+            it->second = MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender);
+        }
         YDB_LOG_INFO_CTX(ctx, "Consumer registered",
             {"msgKind", msg->Kind},
             {"sender", ev->Sender});
-        Send(ev->Sender, new TEvConsumerRegistered(consumer.first->second));
+        Send(ev->Sender, new TEvConsumerRegistered(it->second));
+    }
+
+    void Handle(TEvConsumerUnregister::TPtr &ev, const TActorContext& ctx) {
+        const auto *msg = ev->Get();
+        auto it = Consumers.find(msg->Kind);
+        if (it == Consumers.end() || it->second->ActorId != ev->Sender) {
+            // A stale unregister from a replaced registrant must not drop the live one
+            YDB_LOG_WARN_CTX(ctx, "Consumer unregister ignored",
+                {"msgKind", msg->Kind},
+                {"sender", ev->Sender});
+            return;
+        }
+        Consumers.erase(it);
+        // Nothing updates the gauges of a removed kind any more, so zero them instead of leaving the last values
+        ResetConsumerCounters(msg->Kind);
+        YDB_LOG_INFO_CTX(ctx, "Consumer unregistered",
+            {"msgKind", msg->Kind},
+            {"sender", ev->Sender});
+    }
+
+    void ResetConsumerCounters(EMemoryConsumerKind kind) {
+        auto& counters = GetConsumerCounters(kind);
+        counters.Consumption->Set(0);
+        counters.Reservation->Set(0);
+        counters.LimitBytes->Set(0);
+        counters.LimitMinBytes->Set(0);
+        counters.LimitMaxBytes->Set(0);
     }
 
     void Handle(TEvMemTableRegister::TPtr &ev, const TActorContext& ctx) {
@@ -400,6 +465,7 @@ private:
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case EMemoryConsumerKind::QueryExecution:
                 return consumer.Consumption;
         }
     }
@@ -417,6 +483,7 @@ private:
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case EMemoryConsumerKind::QueryExecution:
                 return consumer.Consumption;
         }
     }
@@ -433,6 +500,7 @@ private:
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case EMemoryConsumerKind::QueryExecution:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
                 break;
             case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
@@ -449,6 +517,12 @@ private:
                 {"limit", HumanReadableBytes(consumer.second)});
             Send(consumer.first->Owner, new TEvMemTableCompact(consumer.first->Table, consumer.second));
         }
+    }
+
+    // The kqp_rm queue limit with its self-config override, so the consumer limit is the same number
+    ui64 ResolveQueryExecutionLimitBytes(ui64 hardLimitBytes) const {
+        const ui64* selfConfigLimit = ResourceBrokerSelfConfig.QueueLimits.FindPtr(NLocalDb::KqpResourceManagerQueue);
+        return selfConfigLimit ? *selfConfigLimit : GetQueryExecutionLimitBytes(Config, hardLimitBytes);
     }
 
     void ProcessResourceBrokerConfig(const TActorContext& ctx, NKikimrMemory::TMemoryStats& memoryStats, ui64 hardLimitBytes, ui64 activitiesLimitBytes) {
@@ -470,13 +544,19 @@ private:
         }
 
         // TODO: counters and logs for all column table queues
-        ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
-        YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
-            {"consumption", HumanReadableBytes(queryExecutionConsumption)},
-            {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
-        Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
-        Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
-        memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
+        // A registered QueryExecution consumer reports for itself through the consumers loop
+        if (!Consumers.contains(EMemoryConsumerKind::QueryExecution)) {
+            // The free-list size misses the pages queries hold, the mmapped bytes cover both
+            ui64 queryExecutionConsumption = Max<i64>(0, GetTotalMmapedBytes());
+            YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
+                {"consumption", HumanReadableBytes(queryExecutionConsumption)},
+                {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
+            Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
+            Counters->GetCounter("Consumer/QueryExecution/Demand")->Set(queryExecutionConsumption);
+            Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
+            memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
+            memoryStats.SetQueryExecutionDemand(memoryStats.GetQueryExecutionDemand() + queryExecutionConsumption);
+        }
         memoryStats.SetQueryExecutionLimit(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
 
         // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
@@ -516,6 +596,8 @@ private:
 
         return ConsumerCounters.emplace(consumer, TConsumerCounters{
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Consumption"),
+            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Demand"),
+            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Reclaimable"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Reservation"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Limit"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMin"),
@@ -529,12 +611,16 @@ private:
                 Y_ASSERT(!stats.HasMemTableConsumption());
                 Y_ASSERT(!stats.HasMemTableLimit());
                 stats.SetMemTableConsumption(consumer.Consumption);
+                stats.SetMemTableDemand(consumer.Demand);
+                stats.SetMemTableReclaimable(consumer.Reclaimable);
                 stats.SetMemTableLimit(limitBytes);
                 break;
             }
             case EMemoryConsumerKind::SharedCache: {
                 Y_ASSERT(!stats.HasSharedCacheLimit());
                 stats.SetSharedCacheConsumption(stats.GetSharedCacheConsumption() + consumer.Consumption);
+                stats.SetSharedCacheDemand(stats.GetSharedCacheDemand() + consumer.Demand);
+                stats.SetSharedCacheReclaimable(stats.GetSharedCacheReclaimable() + consumer.Reclaimable);
                 stats.SetSharedCacheLimit(limitBytes);
                 break;
             }
@@ -542,6 +628,8 @@ private:
                 Y_ASSERT(!stats.HasCompactionConsumption());
                 Y_ASSERT(!stats.HasCompactionLimit());
                 stats.SetCompactionConsumption(consumer.Consumption);
+                stats.SetCompactionDemand(consumer.Demand);
+                stats.SetCompactionReclaimable(consumer.Reclaimable);
                 stats.SetCompactionLimit(limitBytes);
                 break;
             }
@@ -550,11 +638,16 @@ private:
             case EMemoryConsumerKind::ColumnTablesColumnDataCache:
             case EMemoryConsumerKind::ColumnTablesBlobCache: {
                 stats.SetSharedCacheConsumption(stats.GetSharedCacheConsumption() + consumer.Consumption);
+                stats.SetSharedCacheDemand(stats.GetSharedCacheDemand() + consumer.Demand);
+                stats.SetSharedCacheReclaimable(stats.GetSharedCacheReclaimable() + consumer.Reclaimable);
                 break;
             }
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
-            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory: {
+            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case EMemoryConsumerKind::QueryExecution: {
                 stats.SetQueryExecutionConsumption(stats.GetQueryExecutionConsumption() + consumer.Consumption);
+                stats.SetQueryExecutionDemand(stats.GetQueryExecutionDemand() + consumer.Demand);
+                stats.SetQueryExecutionReclaimable(stats.GetQueryExecutionReclaimable() + consumer.Reclaimable);
                 break;
             }
         }
@@ -601,6 +694,11 @@ private:
             }
             case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache: {
                 result.MinBytes = result.MaxBytes = GetPortionsMetaDataCacheLimitBytes(Config, hardLimitBytes);
+                break;
+            }
+            case EMemoryConsumerKind::QueryExecution: {
+                // Static and report-only: the ResourceBroker queue limit stays the limit the RM applies
+                result.MinBytes = result.MaxBytes = ResolveQueryExecutionLimitBytes(hardLimitBytes);
                 break;
             }
         }

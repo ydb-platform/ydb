@@ -17,6 +17,7 @@ Release date: TBD.
 * Column-oriented tables support the `Interval`, `Uuid`, and `DyNumber` data types.
 * Bulk authorization requests to AccessService are enabled by default, reducing authorization request overhead.
 * Streaming YQL queries can access [system virtual attributes](./concepts/query_execution/topics.md?version=v26.3#system-metadata), including `__ydb_create_time`, `__ydb_write_time`, and user attributes in `__ydb_user_attributes`.
+* Full VDisk synchronization is faster because processed SyncLog data is removed locally by default.
 * Added a configurable limit for stored forced-compaction operations. Completed and cancelled operations can be removed automatically when the limit is reached.
 
 ### Disabled functionality

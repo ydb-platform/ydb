@@ -73,8 +73,8 @@ message TTableServiceConfig {
         // bound quota (the operator side of the RFC); until then the flag only binds the quota.
         optional bool EnableOperatorMemoryQuota = 34 [default = false];
 
-        // Read once at RM actor Bootstrap; runtime CMS changes take effect only after node restart.
-        optional bool EnableMemoryControllerBudget = 35 [default = false];
+        // Report {Used, Demand, Reclaimable} to MemoryController as the QueryExecution consumer; read once at the RM actor bootstrap
+        optional bool EnableMemoryControllerReport = 39 [default = false];
     }
 
     message TSpillingServiceConfig {

@@ -2,6 +2,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/core/tablet/resource_broker_impl.h>
 
 #include <ydb/core/base/counters.h>
@@ -17,7 +18,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
+#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 
 #include <atomic>
 #include <limits>
@@ -140,12 +143,26 @@ NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfi
     return config;
 }
 
-NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfigWithMC() {
+NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfigWithReport() {
     auto config = MakeKqpResourceManagerConfig();
-    config.SetEnableMemoryControllerBudget(true);
-    config.SetMkqlHeavyProgramMemoryLimit(1); // floor=1 so test limits are not raised
+    config.SetEnableMemoryControllerReport(true);
     return config;
 }
+
+// Stands in for the MemoryController side of a consumer and keeps every report
+struct TRecordingMemoryConsumer : public NMemory::IMemoryConsumer {
+    TVector<NMemory::TConsumerReport> Reports;
+
+    void SetReport(NMemory::TConsumerReport report) override {
+        Reports.push_back(report);
+    }
+};
+
+struct TFixedProcessMemoryInfoProvider : public NMemory::IProcessMemoryInfoProvider {
+    NMemory::TProcessMemoryInfo Get() const override {
+        return {0, 0, {}, {}, {}, {}};
+    }
+};
 
 }
 
@@ -386,11 +403,10 @@ public:
         UNIT_TEST(P14PoolSensorsPersistAcrossIdle);
         UNIT_TEST(P15PoolSensorsAppearAfterFlagEnabled);
         UNIT_TEST(P16MonPageListsIdlePool);
-        UNIT_TEST(MemoryControllerBudget_Registers);
-        UNIT_TEST(MemoryControllerBudget_FlagOff);
-        UNIT_TEST(MemoryControllerBudget_DynamicLimit);
-        UNIT_TEST(MemoryControllerBudget_RbConfigLogOnly);
-        UNIT_TEST(MemoryControllerBudget_RecoveryAfterRevert);
+        UNIT_TEST(MemoryControllerReportFlagOff);
+        UNIT_TEST(MemoryControllerReportUsedAndDemand);
+        UNIT_TEST(MemoryControllerLimitIsNotApplied);
+        UNIT_TEST(MemoryControllerReRegistration);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -430,12 +446,13 @@ public:
     void P14PoolSensorsPersistAcrossIdle();
     void P15PoolSensorsAppearAfterFlagEnabled();
     void P16MonPageListsIdlePool();
+    void MemoryControllerReportFlagOff();
+    void MemoryControllerReportUsedAndDemand();
+    void MemoryControllerLimitIsNotApplied();
+    void MemoryControllerReRegistration();
 
-    void MemoryControllerBudget_Registers();
-    void MemoryControllerBudget_FlagOff();
-    void MemoryControllerBudget_DynamicLimit();
-    void MemoryControllerBudget_RbConfigLogOnly();
-    void MemoryControllerBudget_RecoveryAfterRevert();
+    TIntrusivePtr<TRecordingMemoryConsumer> StartRmsWithFakeMemoryController();
+
 private:
     THolder<TTestBasicRuntime> Runtime;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
@@ -1516,184 +1533,145 @@ void KqpRm::P16MonPageListsIdlePool() {
     UNIT_ASSERT_STRING_CONTAINS(page, "<td>db1</td><td>pool_live</td><td>100</td><td>40</td><td>0</td>");
 }
 
-void KqpRm::MemoryControllerBudget_Registers() {
-    // flag-on: Bootstrap registers QueryExecution in MC; the edge actor at the MC service id receives it
-    const TActorId fakemc0 = Runtime->AllocateEdgeActor(0);
-    Runtime->RegisterService(NMemory::MakeMemoryControllerId(), fakemc0, 0);
+TIntrusivePtr<TRecordingMemoryConsumer> KqpRm::StartRmsWithFakeMemoryController() {
+    const TActorId fakeMemoryController = Runtime->AllocateEdgeActor(0);
+    Runtime->RegisterService(NMemory::MakeMemoryControllerId(), fakeMemoryController, 0);
 
-    StartRms({MakeKqpResourceManagerConfigWithMC(), MakeKqpResourceManagerConfig()});
+    StartRms({MakeKqpResourceManagerConfigWithReport(), MakeKqpResourceManagerConfig()});
+
+    TAutoPtr<IEventHandle> handle;
+    auto* registerEv = Runtime->GrabEdgeEventRethrow<NMemory::TEvConsumerRegister>(handle, TDuration::Seconds(1));
+    UNIT_ASSERT(registerEv);
+    UNIT_ASSERT_VALUES_EQUAL((int)registerEv->Kind, (int)NMemory::EMemoryConsumerKind::QueryExecution);
+    UNIT_ASSERT_VALUES_EQUAL(handle->Sender, ResourceManagers[0]);
+
+    auto consumer = MakeIntrusive<TRecordingMemoryConsumer>();
+    Runtime->Send(new IEventHandle(ResourceManagers[0], fakeMemoryController, new NMemory::TEvConsumerRegistered(consumer)), 0, true);
+    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+    return consumer;
+}
+
+void KqpRm::MemoryControllerReportFlagOff() {
+    const TActorId fakeMemoryController = Runtime->AllocateEdgeActor(0);
+    Runtime->RegisterService(NMemory::MakeMemoryControllerId(), fakeMemoryController, 0);
+
+    StartRms();
     Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
 
     TAutoPtr<IEventHandle> handle;
-    auto* regEv = Runtime->GrabEdgeEventRethrow<NMemory::TEvConsumerRegister>(handle, TDuration::Seconds(1));
-    UNIT_ASSERT(regEv);
-    UNIT_ASSERT_VALUES_EQUAL((int)regEv->Kind, (int)NMemory::EMemoryConsumerKind::QueryExecution);
-
-    // flag-off: no TEvConsumerRegister sent
-    TearDown();
-    SetUp();
-    const TActorId fakemc1 = Runtime->AllocateEdgeActor(0);
-    Runtime->RegisterService(NMemory::MakeMemoryControllerId(), fakemc1, 0);
-
-    StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-    // No TEvConsumerRegister expected; grab with short timeout and assert null
-    TAutoPtr<IEventHandle> handle2;
-    auto* regEv2 = Runtime->GrabEdgeEventRethrow<NMemory::TEvConsumerRegister>(handle2, TDuration::MilliSeconds(50));
-    UNIT_ASSERT(!regEv2);
+    UNIT_ASSERT(!Runtime->GrabEdgeEventRethrow<NMemory::TEvConsumerRegister>(handle, TDuration::MilliSeconds(50)));
 }
 
-void KqpRm::MemoryControllerBudget_FlagOff() {
-    // flag=false (default): no registration, so no sender is authorized and TEvConsumerLimit is ignored
-    StartRms({MakeKqpResourceManagerConfig(), MakeKqpResourceManagerConfig()});
+void KqpRm::MemoryControllerReportUsedAndDemand() {
+    auto consumer = StartRmsWithFakeMemoryController();
     NKikimr::TActorSystemStub stub;
-
     auto rm = GetKqpResourceManager(ResourceManagers[0].NodeId());
-    auto stats = rm->GetLocalResources();
-    UNIT_ASSERT_VALUES_EQUAL(1000, stats.Memory);
+
+    // The registration itself reports, so MemoryController never reads an empty consumer
+    UNIT_ASSERT(!consumer->Reports.empty());
+
+    // Above the largest pooled block, so the release unmaps it instead of parking it in a free list
+    constexpr ui64 BlockBytes = 128_MB;
+    void* block = GetAlignedPage(BlockBytes);
+    Y_DEFER {
+        ReleaseAlignedPage(block, BlockBytes);
+    };
+    const ui64 used = GetTotalMmapedBytes();
+    UNIT_ASSERT_GE(used, BlockBytes);
+
+    auto tx = MakeTx(1, rm);
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
+    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(consumer->Reports.back().Used, used);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->Reports.back().Demand, used);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->Reports.back().Reclaimable, 0);
+
+    // 100 of 1000 is taken, so 950 does not fit and its bytes are the unmet part of Demand
+    const size_t reportsBeforeRefusal = consumer->Reports.size();
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 950}));
+    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+    UNIT_ASSERT_GT(consumer->Reports.size(), reportsBeforeRefusal + 1);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->Reports[reportsBeforeRefusal].Used, used);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->Reports[reportsBeforeRefusal].Demand, used + 950);
+
+    // The next tick carries no refusals and Demand returns to Used
+    UNIT_ASSERT_VALUES_EQUAL(consumer->Reports.back().Used, used);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->Reports.back().Demand, used);
+
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100});
+}
+
+void KqpRm::MemoryControllerLimitIsNotApplied() {
+    auto consumer = StartRmsWithFakeMemoryController();
+    NKikimr::TActorSystemStub stub;
+    auto rm = GetKqpResourceManager(ResourceManagers[0].NodeId());
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, 1000);
 
     const TActorId sender = Runtime->AllocateEdgeActor(0);
-    Runtime->Send(new IEventHandle(ResourceManagers[0], sender,
-        new NMemory::TEvConsumerLimit(500)), 0, true);
+    Runtime->Send(new IEventHandle(ResourceManagers[0], sender, new NMemory::TEvConsumerLimit(500)), 0, true);
     Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
 
-    // limit unchanged: an unregistered RM has no authorized sender to accept a budget from
-    stats = rm->GetLocalResources();
-    UNIT_ASSERT_VALUES_EQUAL(1000, stats.Memory);
+    // The limit of MemoryController is only shown, a mismatch with the ResourceBroker limit must be visible
+    auto rmCounters = GetServiceCounters(Counters, "kqp")->GetSubgroup("subsystem", "RM");
+    UNIT_ASSERT_VALUES_EQUAL(rmCounters->GetCounter("MemoryControllerLimitBytes")->Val(), 500);
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, 1000);
+    auto tx = MakeTx(1, rm);
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 900}));
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 900});
+
+    // The ResourceBroker queue config stays the limit source
+    auto* response = new TEvResourceBroker::TEvConfigResponse;
+    TQueueConfig queueConfig;
+    queueConfig.SetName(NLocalDb::KqpResourceManagerQueue);
+    queueConfig.MutableLimit()->SetMemory(700);
+    response->QueueConfig = queueConfig;
+    Runtime->Send(new IEventHandle(ResourceManagers[0], sender, response), 0, true);
+    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, 700);
+    UNIT_ASSERT_VALUES_EQUAL(rmCounters->GetCounter("MemoryControllerLimitBytes")->Val(), 500);
 }
 
-void KqpRm::MemoryControllerBudget_DynamicLimit() {
-    // flag-on: TEvConsumerLimit(500) from a fake MC at the service id lowers the total limit to 500
-    const TActorId fakemc = Runtime->AllocateEdgeActor(0);
-    Runtime->RegisterService(NMemory::MakeMemoryControllerId(), fakemc, 0);
+void KqpRm::MemoryControllerReRegistration() {
+    NKikimrConfig::TMemoryControllerConfig memoryControllerConfig;
+    memoryControllerConfig.SetHardLimitBytes(1000_MB);
+    auto memoryControllerCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+    const TActorId memoryController = Runtime->Register(NMemory::CreateMemoryController(TDuration::Seconds(1),
+        TIntrusiveConstPtr<NMemory::IProcessMemoryInfoProvider>(MakeIntrusive<TFixedProcessMemoryInfoProvider>()), memoryControllerConfig, NMemory::TResourceBrokerConfig{}, memoryControllerCounters), 0);
+    Runtime->EnableScheduleForActor(memoryController);
+    Runtime->RegisterService(NMemory::MakeMemoryControllerId(), memoryController, 0);
+    auto counters = GetServiceCounters(memoryControllerCounters, "utils")->GetSubgroup("component", "memory_controller");
 
-    StartRms({MakeKqpResourceManagerConfigWithMC(), MakeKqpResourceManagerConfig()});
+    StartRms({MakeKqpResourceManagerConfigWithReport(), MakeKqpResourceManagerConfig()});
+    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Stats/ConsumerTakeovers", true)->Val(), 0);
+
+    // A second RM actor on the node registers the same kind: a takeover, not an abort
+    const TActorId firstRm = ResourceManagers[0];
+    CreateKqpResourceManager(MakeKqpResourceManagerConfigWithReport(), 0);
+    const TActorId secondRm = ResourceManagers.back();
+    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Stats/ConsumerTakeovers", true)->Val(), 1);
+
+    // The stale unregister of the replaced actor must not drop the live registration
+    Runtime->Send(new IEventHandle(firstRm, secondRm, new TEvents::TEvPoison), 0, true);
+    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+
+    constexpr ui64 BlockBytes = 128_MB;
+    void* block = GetAlignedPage(BlockBytes);
+    Y_DEFER {
+        ReleaseAlignedPage(block, BlockBytes);
+    };
+    const i64 used = GetTotalMmapedBytes();
+
+    // A publish of the live RM carries the new block to MemoryController
     NKikimr::TActorSystemStub stub;
-
-    auto rm = GetKqpResourceManager(ResourceManagers[0].NodeId());
-    // Grab TEvConsumerRegister, reply with TEvConsumerRegistered so RM records McActorId = fakemc
-    TAutoPtr<IEventHandle> regHandle;
-    Runtime->GrabEdgeEventRethrow<NMemory::TEvConsumerRegister>(regHandle, TDuration::Seconds(1));
-    Runtime->Send(new IEventHandle(ResourceManagers[0], fakemc,
-        new NMemory::TEvConsumerRegistered(nullptr)), 0, true);
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-
-    // Inject MC limit 500 from the fake MC (passes sender check)
-    Runtime->Send(new IEventHandle(ResourceManagers[0], fakemc,
-        new NMemory::TEvConsumerLimit(500)), 0, true);
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-
-    // Available = limit(500) - used(0) = 500; allocate 400 must succeed, 401 must fail
-    auto tx400 = MakeTx(1, rm);
-    UNIT_ASSERT(rm->AllocateResources(*tx400, 1, NRm::TKqpResourcesRequest{.Memory = 400}));
-
-    auto tx401 = MakeTx(2, rm);
-    UNIT_ASSERT(!rm->AllocateResources(*tx401, 2, NRm::TKqpResourcesRequest{.Memory = 401}));
-
-    rm->FreeResources(*tx400, 1, NRm::TKqpResourcesRequest{.Memory = 400});
-}
-
-void KqpRm::MemoryControllerBudget_RbConfigLogOnly() {
-    // flag-on: after TEvConsumerLimit received, TEvConfigResponse from RB must be log-only (not change limit)
-    const TActorId fakemc = Runtime->AllocateEdgeActor(0);
-    Runtime->RegisterService(NMemory::MakeMemoryControllerId(), fakemc, 0);
-
-    StartRms({MakeKqpResourceManagerConfigWithMC(), MakeKqpResourceManagerConfig()});
-    NKikimr::TActorSystemStub stub;
-
-    auto rm = GetKqpResourceManager(ResourceManagers[0].NodeId());
-    TAutoPtr<IEventHandle> regHandle;
-    Runtime->GrabEdgeEventRethrow<NMemory::TEvConsumerRegister>(regHandle, TDuration::Seconds(1));
-    Runtime->Send(new IEventHandle(ResourceManagers[0], fakemc,
-        new NMemory::TEvConsumerRegistered(nullptr)), 0, true);
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-
-    // Inject MC limit 500 from the fake MC (passes sender check)
-    Runtime->Send(new IEventHandle(ResourceManagers[0], fakemc,
-        new NMemory::TEvConsumerLimit(500)), 0, true);
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-
-    auto stats = rm->GetLocalResources();
-    UNIT_ASSERT_VALUES_EQUAL(500, stats.Memory);
-
-    // Inject a simulated TEvConfigResponse with memory=900 — RM must ignore it (MC-driven)
-    {
-        auto* rbResp = new TEvResourceBroker::TEvConfigResponse;
-        TQueueConfig qc;
-        qc.SetName(NLocalDb::KqpResourceManagerQueue);
-        qc.MutableLimit()->SetMemory(900);
-        rbResp->QueueConfig = qc;
-        const TActorId rbSender = Runtime->AllocateEdgeActor(0);
-        Runtime->Send(new IEventHandle(ResourceManagers[0], rbSender, rbResp), 0, true);
-    }
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-
-    // limit must still be 500 (RB config ignored once MC-driven)
-    stats = rm->GetLocalResources();
-    UNIT_ASSERT_VALUES_EQUAL(500, stats.Memory);
-}
-
-void KqpRm::MemoryControllerBudget_RecoveryAfterRevert() {
-    // A new TEvConsumerLimit after a revert re-enters MC-driven mode and re-arms the watchdog for a second revert
-    const TActorId fakemc = Runtime->AllocateEdgeActor(0);
-    Runtime->RegisterService(NMemory::MakeMemoryControllerId(), fakemc, 0);
-
-    StartRms({MakeKqpResourceManagerConfigWithMC(), MakeKqpResourceManagerConfig()});
-    NKikimr::TActorSystemStub stub;
-
-    auto rm = GetKqpResourceManager(ResourceManagers[0].NodeId());
-    TAutoPtr<IEventHandle> regHandle;
-    Runtime->GrabEdgeEventRethrow<NMemory::TEvConsumerRegister>(regHandle, TDuration::Seconds(1));
-    Runtime->Send(new IEventHandle(ResourceManagers[0], fakemc,
-        new NMemory::TEvConsumerRegistered(nullptr)), 0, true);
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-
-    // Deliver RB limit so LastRbLimitBytes is cached
-    {
-        auto* rbResp = new TEvResourceBroker::TEvConfigResponse;
-        TQueueConfig qc;
-        qc.SetName(NLocalDb::KqpResourceManagerQueue);
-        qc.MutableLimit()->SetMemory(700);
-        rbResp->QueueConfig = qc;
-        const TActorId sender = Runtime->AllocateEdgeActor(0);
-        Runtime->Send(new IEventHandle(ResourceManagers[0], sender, rbResp), 0, true);
-    }
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-
-    // First MC limit: MC-driven
-    Runtime->Send(new IEventHandle(ResourceManagers[0], fakemc,
-        new NMemory::TEvConsumerLimit(500)), 0, true);
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-    UNIT_ASSERT_VALUES_EQUAL(500, rm->GetLocalResources().Memory);
-
-    // First revert
-    Runtime->AdvanceCurrentTime(TDuration::Seconds(11));
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(200));
-    UNIT_ASSERT_VALUES_EQUAL(700, rm->GetLocalResources().Memory);
-
-    // Re-enter MC-driven mode with a new TEvConsumerLimit
-    Runtime->Send(new IEventHandle(ResourceManagers[0], fakemc,
-        new NMemory::TEvConsumerLimit(600)), 0, true);
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-    UNIT_ASSERT_VALUES_EQUAL(600, rm->GetLocalResources().Memory);
-
-    // Second revert: watchdog must have been re-armed after recovery
-    Runtime->AdvanceCurrentTime(TDuration::Seconds(11));
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(200));
-    UNIT_ASSERT_VALUES_EQUAL(700, rm->GetLocalResources().Memory);
-    // A fresh TEvConfigResponse now takes effect (no longer MC-driven)
-    {
-        auto* rbResp = new TEvResourceBroker::TEvConfigResponse;
-        TQueueConfig qc;
-        qc.SetName(NLocalDb::KqpResourceManagerQueue);
-        qc.MutableLimit()->SetMemory(800);
-        rbResp->QueueConfig = qc;
-        const TActorId sender = Runtime->AllocateEdgeActor(0);
-        Runtime->Send(new IEventHandle(ResourceManagers[0], sender, rbResp), 0, true);
-    }
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-
-    UNIT_ASSERT_VALUES_EQUAL(800, rm->GetLocalResources().Memory);
+    auto rm = GetKqpResourceManager(secondRm.NodeId());
+    auto tx = MakeTx(1, rm);
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100});
+    Runtime->SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Consumer/QueryExecution/Consumption")->Val(), used);
+    UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Consumer/QueryExecution/Demand")->Val(), used);
 }
 
 } // namespace NKqp

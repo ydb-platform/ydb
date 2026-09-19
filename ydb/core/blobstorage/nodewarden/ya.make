@@ -63,7 +63,7 @@ PEERDIR(
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/ddisk
     ydb/core/blobstorage/groupinfo
-    ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/pdisk/common
     ydb/core/blobstorage/vdisk/localrecovery
     ydb/core/blobstorage/vdisk
     ydb/core/control/lib

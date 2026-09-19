@@ -1,3 +1,4 @@
+* Updated the experimental UDF API to manifest-based uploads and separate module type/code kind; added incremental `UploadModuleFromFile`.
 * Added `Float16` and `BFloat16` vector index types.
 
 ## v3.23.0

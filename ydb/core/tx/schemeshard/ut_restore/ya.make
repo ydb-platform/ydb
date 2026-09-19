@@ -14,6 +14,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    contrib/libs/apache/arrow
     contrib/libs/double-conversion
     library/cpp/streams/zstd
     library/cpp/string_utils/quote
@@ -23,6 +24,7 @@ PEERDIR(
     ydb/core/wrappers/ut_helpers
     ydb/core/ydb_convert
     ydb/library/aws_init
+    ydb/library/testlib/backup_test_enums
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     ydb/core/testlib/audit_helpers
@@ -31,6 +33,7 @@ PEERDIR(
 SRCS(
     ut_restore.cpp
     ut_restore_fs.cpp
+    ut_restore_data_format.cpp
 )
 
 YQL_LAST_ABI_VERSION()

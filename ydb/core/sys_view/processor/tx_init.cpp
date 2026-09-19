@@ -56,6 +56,30 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         return true;
     };
 
+    bool LoadMetricsOneHour(NIceDb::TNiceDb& db) {
+        Self->MetricsOneHour.clear();
+
+        auto rowset = db.Table<Schema::MetricsOneHour>().Range().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            const ui64 intervalEnd = rowset.GetValue<Schema::MetricsOneHour::IntervalEnd>();
+            const ui32 rank = rowset.GetValue<Schema::MetricsOneHour::Rank>();
+            TQueryToMetrics result;
+            result.Text = rowset.GetValue<Schema::MetricsOneHour::Text>();
+            const TString data = rowset.GetValue<Schema::MetricsOneHour::Data>();
+            if (data) {
+                Y_PROTOBUF_SUPPRESS_NODISCARD result.Metrics.ParseFromString(data);
+            }
+            Self->MetricsOneHour.emplace(std::make_pair(intervalEnd, rank), std::move(result));
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     template <typename S>
     bool LoadPartitionResults(NIceDb::TNiceDb& db, TSelf::TResultPartitionsMap& results) {
         results.clear();
@@ -152,7 +176,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             auto intervalTopsRowset = db.Table<Schema::IntervalTops>().Range().Select();
             auto nodesToRequestRowset = db.Table<Schema::NodesToRequest>().Range().Select();
             auto metricsOneMinuteRowset = db.Table<Schema::MetricsOneMinute>().Range().Select();
-            auto metricsOneHourRowset = db.Table<Schema::MetricsOneHour>().Range().Select();
             auto durationOneMinuteRowset = db.Table<Schema::TopByDurationOneMinute>().Range().Select();
             auto durationOneHourRowset = db.Table<Schema::TopByDurationOneHour>().Range().Select();
             auto readBytesOneMinuteRowset = db.Table<Schema::TopByDurationOneMinute>().Range().Select();
@@ -172,7 +195,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 !intervalTopsRowset.IsReady() ||
                 !nodesToRequestRowset.IsReady() ||
                 !metricsOneMinuteRowset.IsReady() ||
-                !metricsOneHourRowset.IsReady() ||
                 !durationOneMinuteRowset.IsReady() ||
                 !durationOneHourRowset.IsReady() ||
                 !readBytesOneMinuteRowset.IsReady() ||
@@ -221,6 +243,13 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                         YDB_LOG_DEBUG("TTxInit::Execute: loaded interval end sys param",
                             {"tabletId", Self->TabletID()},
                             {"intervalEnd", Self->IntervalEnd});
+                        break;
+                    case Schema::SysParam_LastMergedQueryMetricsIntervalEnd:
+                        Self->LastMergedQueryMetricsIntervalEnd =
+                            TInstant::MicroSeconds(FromString<ui64>(value));
+                        YDB_LOG_DEBUG("Loading last merged query metrics interval end",
+                            {"tabletId", Self->TabletID()},
+                            {"lastMergedIntervalEnd", Self->LastMergedQueryMetricsIntervalEnd});
                         break;
                     default:
                         YDB_LOG_CRIT("TTxInit::Execute: unexpected sys param id",
@@ -300,6 +329,39 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             YDB_LOG_DEBUG("TTxInit::Execute: loaded interval metrics",
                 {"tabletId", Self->TabletID()},
                 {"queryCount", Self->QueryMetrics.size()});
+        }
+
+        // IntervalMetricsOneHour
+        {
+            Self->CurrentHourMetrics.clear();
+            Self->CurrentHourEnd = Self->EndOfHourInterval(Self->IntervalEnd);
+
+            auto rowset = db.Table<Schema::IntervalMetricsOneHour>()
+                .Prefix(Self->CurrentHourEnd.MicroSeconds())
+                .Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TQueryHash queryHash =
+                    rowset.GetValue<Schema::IntervalMetricsOneHour::QueryHash>();
+                TString data = rowset.GetValue<Schema::IntervalMetricsOneHour::Data>();
+
+                if (data) {
+                    Y_PROTOBUF_SUPPRESS_NODISCARD
+                        Self->CurrentHourMetrics[queryHash].ParseFromString(data);
+                }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            YDB_LOG_DEBUG("Loading hour query metrics",
+                {"tabletId", Self->TabletID()},
+                {"hourEnd", Self->CurrentHourEnd},
+                {"queryCount", Self->CurrentHourMetrics.size()});
         }
 
         // IntervalTops
@@ -386,7 +448,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         // NodesToRequest
         {
             Self->NodesToRequest.clear();
-            Self->NodesInFlight.clear();
+            Self->RequestsInFlight.clear();
 
             auto rowset = db.Table<Schema::NodesToRequest>().Range().Select();
             if (!rowset.IsReady()) {
@@ -394,8 +456,19 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
 
             size_t totalHashesCount = 0;
+            size_t staleRequestsCount = 0;
             while (!rowset.EndOfSet()) {
                 TNodeId nodeId = rowset.GetValue<Schema::NodesToRequest::NodeId>();
+                const ui64 requestIntervalEndUs =
+                    rowset.GetValueOrDefault<Schema::NodesToRequest::IntervalEnd>(0);
+                if (requestIntervalEndUs != Self->IntervalEnd.MicroSeconds()) {
+                    db.Table<Schema::NodesToRequest>().Key(nodeId).Delete();
+                    ++staleRequestsCount;
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
                 TString hashes = rowset.GetValue<Schema::NodesToRequest::QueryHashes>();
                 TString textsToGet = rowset.GetValue<Schema::NodesToRequest::TextsToGet>();
                 TString byDuration = rowset.GetValue<Schema::NodesToRequest::ByDuration>();
@@ -427,13 +500,14 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             YDB_LOG_DEBUG("TTxInit::Execute: loaded nodes to request",
                 {"tabletId", Self->TabletID()},
                 {"nodeCount", Self->NodesToRequest.size()},
-                {"totalHashCount", totalHashesCount});
+                {"totalHashCount", totalHashesCount},
+                {"staleRequestsDeleted", staleRequestsCount});
         }
 
         // Metrics...
         if (!LoadQueryResults<Schema::MetricsOneMinute>(db, Self->MetricsOneMinute))
             return false;
-        if (!LoadQueryResults<Schema::MetricsOneHour>(db, Self->MetricsOneHour))
+        if (!LoadMetricsOneHour(db))
             return false;
 
         // TopBy...
@@ -500,6 +574,9 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         auto deadline = Self->IntervalEnd + Self->TotalInterval;
         if (ctx.Now() >= deadline) {
+            if (Self->CurrentStage == AGGREGATE) {
+                Self->PersistQueryResults(db);
+            }
             Self->Reset(db, ctx);
         }
 

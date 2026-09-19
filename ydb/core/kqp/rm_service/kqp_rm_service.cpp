@@ -857,10 +857,10 @@ public:
 
     // Never under Lock: the resource broker calls are made outside it. One adjuster at a time, a concurrent caller
     // only records and charges its demand, which the loop picks up when it re-evaluates after a round. A growth the
-    // resource broker refused is not asked again until the periodic pass clears the gate, see NoteArenaGrowth.
-    void AdjustArena() {
+    // resource broker refused is asked again only by a caller that passes retryRefused, see NoteArenaGrowth; a
+    // retry that finds a round in flight is dropped, the next one makes it.
+    void AdjustArena(bool retryRefused = false) {
         bool publish = false;
-        bool growRefused = ArenaGrowRefused.load(std::memory_order_relaxed);
         for (;;) {
             TIntrusivePtr<IResourceBroker> broker;
             ui64 size = 0;
@@ -874,7 +874,15 @@ public:
                 const ui64 used = ArenaUsed();
                 size = Arena.Size;
                 target = ArenaPlanLocked(used);
-                if (target == size || (growRefused && target > size)) {
+                // an adjuster records the outcome of its round before its second locked section lets go of the
+                // arena, so a plan made here after the round sees it
+                const bool gated = !retryRefused && ArenaGrowRefused.load(std::memory_order_relaxed);
+                if (target == size || (gated && target > size)) {
+                    if (retryRefused && !Arena.GrowWanted) {
+                        // the refused growth is no longer wanted: the gate would otherwise outlive it, hold back the
+                        // next demand change and make its grant news
+                        ArenaGrowRefused.store(false, std::memory_order_relaxed);
+                    }
                     const ui64 ceiling = ArenaFastCeilingLocked();
                     ArenaFastCeiling.store(ceiling);
                     if (ceiling != ArenaFastPathShut && ArenaUsed() >= ceiling) {
@@ -888,12 +896,13 @@ public:
                 broker = ResourceBroker;
             }
 
-            bool complete = true;
             bool taskLost = false;
             if (target > size) {
+                const ui64 sizeBefore = size;
                 const ui64 want = target - size;
-                complete = GrowArena(*broker, taskId, size, want, Min(deficit, want), taskLost);
-                NoteArenaGrowth(complete, size, want, deficit);
+                const ui64 granted = GrowArena(*broker, taskId, size, want, Min(deficit, want), taskLost);
+                NoteArenaGrowth(sizeBefore, want, granted, deficit);
+                retryRefused = false; // one retry per call, a refusal this round gates the next one
             } else {
                 ShrinkArena(*broker, taskId, size, size - target, taskLost);
             }
@@ -916,34 +925,42 @@ public:
                 }
                 break;
             }
-            growRefused = !complete;
         }
         if (publish) {
             FireResourcesPublishing();
         }
     }
 
-    // A growth that did not fully go through is not attempted again until the periodic pass clears the gate, so
-    // that a node under memory pressure does not ask the resource broker once per released allocation.
-    void NoteArenaGrowth(bool complete, ui64 size, ui64 delta, ui64 deficit) {
-        const bool refused = !complete;
+    // A growth that did not fully go through sets the gate that keeps a demand change from asking the resource
+    // broker again, so that a node under memory pressure does not ask once per released allocation; the periodic
+    // pass retries regardless, and drops the gate once the growth is no longer wanted (AdjustArena). Logged on a
+    // change of outcome only, not on every refused pass.
+    void NoteArenaGrowth(ui64 sizeBefore, ui64 delta, ui64 granted, ui64 deficit) {
+        const bool refused = granted < delta;
         if (ArenaGrowRefused.exchange(refused, std::memory_order_relaxed) == refused || !ActorSystem) {
             return;
         }
-        if (refused) {
-            YDB_LOG_NOTICE_CTX(*ActorSystem, "Memory arena growth refused by the resource broker",
-                {"size", size},
+        if (refused && granted) {
+            YDB_LOG_NOTICE_CTX(*ActorSystem, "Memory arena growth partly granted by the resource broker",
+                {"size", sizeBefore},
                 {"delta", delta},
+                {"granted", granted},
+                {"deficit", deficit});
+        } else if (refused) {
+            YDB_LOG_NOTICE_CTX(*ActorSystem, "Memory arena growth refused by the resource broker",
+                {"size", sizeBefore},
+                {"delta", delta},
+                {"granted", granted},
                 {"deficit", deficit});
         } else {
             YDB_LOG_NOTICE_CTX(*ActorSystem, "Memory arena growth granted again by the resource broker",
-                {"size", size},
+                {"size", sizeBefore},
                 {"delta", delta});
         }
     }
 
-    // Grows by delta, or by the deficit alone when the full delta is refused. True when the full delta was granted.
-    bool GrowArena(IResourceBroker& broker, ui64& taskId, ui64& size, ui64 delta, ui64 deficit, bool& taskLost) {
+    // Grows by delta, or by the deficit alone when the full delta is refused. Returns what was granted.
+    ui64 GrowArena(IResourceBroker& broker, ui64& taskId, ui64& size, ui64 delta, ui64 deficit, bool& taskLost) {
         const ui64 asks[2] = {delta, deficit < delta ? deficit : 0}; // the second try only when it is a different ask
         for (ui64 ask : asks) {
             if (!ask) {
@@ -966,10 +983,10 @@ public:
                 size = ask;
             }
             Counters->RmArenaGrows->Inc();
-            return ask == delta;
+            return ask;
         }
         Counters->RmArenaGrowFailures->Inc();
-        return false;
+        return 0;
     }
 
     void ShrinkArena(IResourceBroker& broker, ui64& taskId, ui64& size, ui64 by, bool& taskLost) {
@@ -1239,8 +1256,7 @@ private:
     // A demand change the memory arena absorbed without the lock leaves it above the demand; this is what gives
     // the surplus back, and retries a growth the resource broker refused.
     void HandleAdjustArena() {
-        ResourceManager->ArenaGrowRefused.store(false, std::memory_order_relaxed);
-        ResourceManager->AdjustArena();
+        ResourceManager->AdjustArena(/* retryRefused */ true);
         Schedule(ArenaAdjustPeriod, new TEvPrivate::TEvAdjustArena());
     }
 
@@ -1268,7 +1284,7 @@ private:
             YDB_LOG_INFO("Total node memory for scan bytes",
                 {"queries", queueConfig.GetLimit().GetMemory()});
             // a raised queue limit may let a refused arena growth through
-            ResourceManager->AdjustArena();
+            ResourceManager->AdjustArena(/* retryRefused */ true);
         }
     }
 

@@ -449,6 +449,7 @@ public:
         UNIT_TEST(ArenaExecutionUnitMemory);
         UNIT_TEST(ArenaConfigReloadRepricesUnits);
         UNIT_TEST(ArenaDeficitWhenBrokerRefuses);
+        UNIT_TEST(ArenaGrowRefusalLoggedOnChange);
         UNIT_TEST(ArenaGrowRetriesWithDeficitOnly);
         UNIT_TEST(ArenaBrokerNotReady);
         UNIT_TEST(ArenaMixedRequestMemoryFailureLeavesArenaUntouched);
@@ -513,6 +514,7 @@ public:
     void ArenaExecutionUnitMemory();
     void ArenaConfigReloadRepricesUnits();
     void ArenaDeficitWhenBrokerRefuses();
+    void ArenaGrowRefusalLoggedOnChange();
     void ArenaGrowRetriesWithDeficitOnly();
     void ArenaBrokerNotReady();
     void ArenaMixedRequestMemoryFailureLeavesArenaUntouched();
@@ -1840,6 +1842,118 @@ void KqpRm::ArenaDeficitWhenBrokerRefuses() {
     AssertResourceBrokerSensors(0, 0, 0, 2, 0);
 }
 
+// A refused growth is logged on a change of outcome only: the periodic pass keeps asking in silence, a demand
+// change does not ask at all, and a refusal after a grant is news again. A refusal goes stale once a pass finds no
+// growth wanted: the next demand asks the resource broker at once
+void KqpRm::ArenaGrowRefusalLoggedOnChange() {
+    auto config = MakeArenaConfig(0, 1'000, 3'000); // headroom 2'000
+    config.SetQueryMemoryLimit(100'000'000); // the node total does not refuse first, as it would in production
+
+    // the runtime hands a log event to the logger actor on the spot, past the mailboxes and the observer, so the
+    // event filter is what sees it
+    struct TGrowthLine {
+        TString Text;
+        TString Size;
+        TString Delta;
+        TString Granted;
+    };
+    TVector<TGrowthLine> lines;
+    Runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NLog::PRI_NOTICE);
+    TTestActorRuntimeBase::TEventFilter prevFilter;
+    prevFilter = Runtime->SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == NLog::TEvLog::EventType) {
+            const auto* log = ev->Get<NLog::TEvLog>();
+            if (log->Component == NKikimrServices::KQP_RESOURCE_MANAGER && log->Line.StartsWith("Memory arena growth")) {
+                const auto& fields = *log->StructuredMessage;
+                lines.push_back({log->Line, fields.GetValue<TString>("size").value_or(""),
+                    fields.GetValue<TString>("delta").value_or(""), fields.GetValue<TString>("granted").value_or("")});
+            }
+        }
+        return prevFilter(runtime, ev);
+    });
+
+    StartRms({config, MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx1 = MakeTx(1, rm);
+    auto tx2 = MakeTx(2, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 1'000}));
+
+    // 1'000 + 47'500 + 2'000 > 50'000 refused, the deficit of 47'500 alone granted: not the full growth, so the
+    // gate is set
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 47'500}));
+    AssertArenaSensors(47'500, 47'500, 0);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(lines[0].Text, "Memory arena growth partly granted by the resource broker");
+    UNIT_ASSERT_VALUES_EQUAL(lines[0].Size, "0");
+    UNIT_ASSERT_VALUES_EQUAL(lines[0].Delta, "49500");
+    UNIT_ASSERT_VALUES_EQUAL(lines[0].Granted, "47500");
+
+    // the passes ask for the headroom again and are refused again, in silence; a dispatch of two seconds runs at
+    // least one of them, and possibly more
+    const i64 grows = RmRate("RM/ArenaGrows");
+    TickArenaAdjust();
+    TickArenaAdjust();
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), grows);
+    UNIT_ASSERT_GE(RmRate("RM/ArenaGrowFailures"), 2);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+
+    // a demand change does not ask while the gate is set, even one the arena does not cover: the deficit waits for
+    // the next pass, so the counters do not move between two calls with no dispatch
+    const i64 failures = RmRate("RM/ArenaGrowFailures");
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+    AssertArenaSensors(47'500, 47'600, 100);
+    rm->FreeResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 100});
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), failures);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), grows);
+
+    // the memory tx1 gives back makes room for the headroom: the next pass gets it, which is logged once
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 1'000});
+    TickArenaAdjust();
+    AssertArenaSensors(49'500, 47'500, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), grows + 1);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(lines[1].Text, "Memory arena growth granted again by the resource broker");
+    UNIT_ASSERT_VALUES_EQUAL(lines[1].Size, "47500");
+    UNIT_ASSERT_VALUES_EQUAL(lines[1].Delta, "2000");
+
+    // the first 1'000 stays within the band and is absorbed without the lock; the second eats the whole free part,
+    // so the band asks for the headroom again: 49'500 + 2'000 > 50'000, refused outright, and news again
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000}));
+    UNIT_ASSERT(rm->AllocateResources(*tx2, 3, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000}));
+    AssertArenaSensors(49'500, 49'500, 0);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(lines[2].Text, "Memory arena growth refused by the resource broker");
+    UNIT_ASSERT_VALUES_EQUAL(lines[2].Size, "49500");
+    UNIT_ASSERT_VALUES_EQUAL(lines[2].Delta, "2000");
+    UNIT_ASSERT_VALUES_EQUAL(lines[2].Granted, "0");
+
+    rm->FreeResources(*tx2, 3, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000});
+    rm->FreeResources(*tx2, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000});
+    rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 47'500});
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1});
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, config.GetQueryMemoryLimit(), 100);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+
+    // the pass that emptied the arena found no growth wanted, so the refusal is stale: the next demand asks at
+    // once, and a grant with no refusal before it is not news
+    UNIT_ASSERT(rm->AllocateResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000}));
+    AssertArenaSensors(3'000, 1'000, 0);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+
+    rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 1'000});
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, config.GetQueryMemoryLimit(), 100);
+    UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+    Runtime->SetEventFilter(prevFilter);
+}
+
 // When the full growth (demand plus the hysteresis headroom) is refused, the arena asks for the deficit alone;
 // the headroom stays pending until the periodic pass asks again
 void KqpRm::ArenaGrowRetriesWithDeficitOnly() {
@@ -2166,7 +2280,8 @@ void KqpRm::ArenaChargePublished() {
 }
 
 // A raised resource broker queue limit lets a refused arena growth through: the resource manager is subscribed
-// to the queue config, the response the resource broker pushes retries the growth
+// to the queue config, the response the resource broker pushes retries the growth itself, without waiting for
+// the periodic pass
 void KqpRm::ArenaDeficitRetriedOnQueueLimitRaise() {
     auto config = MakeKqpResourceManagerConfig();
     config.SetQueryMemoryLimit(100'000'000);
@@ -2193,8 +2308,14 @@ void KqpRm::ArenaDeficitRetriedOnQueueLimitRaise() {
     limit->SetMemory(100'000);
     auto configure = MakeHolder<TEvResourceBroker::TEvConfigure>();
     configure->Record.CopyFrom(brokerConfig);
+    // the dispatch ends on the config the resource broker pushes rather than on a scheduled event; the runtime moves
+    // the simulated clock only to reach a scheduled event, so an unmoved clock proves that no periodic pass ran
+    const TInstant configuredAt = Runtime->GetCurrentTime();
     Runtime->Send(new IEventHandle(ResourceBrokers[0], Runtime->AllocateEdgeActor(), configure.Release()));
-    WaitForBrokerMemory(50'500);
+    TDispatchOptions pushed;
+    pushed.FinalEvents.emplace_back(TEvResourceBroker::EvConfigResponse, 1);
+    UNIT_ASSERT(Runtime->DispatchEvents(pushed));
+    UNIT_ASSERT_VALUES_EQUAL(Runtime->GetCurrentTime(), configuredAt);
     AssertResourceBrokerSensors(0, 50'500, 0, 0, 2);
     AssertArenaSensors(49'500, 49'500, 0);
     AssertResourceManagerStats(rm, 100'000 - 1'000 - 49'500, 98);

@@ -1,5 +1,7 @@
 #include "common.h"
 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
@@ -159,6 +161,53 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
         }
     }
 
+    Y_UNIT_TEST_TWIN_F(ResumeConsumerInsideKafkaBatch, NativeSdk, TLocalTopicClientFixture) {
+        Kikimr->GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicMessagesBatching(true);
+        Kikimr->GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+        constexpr char topicPath[] = "/Root/kafka-validation";
+        CreateTopic(topicPath);
+        const auto altered = TopicClient->AlterTopic(topicPath, TAlterTopicSettings()
+            .SetSupportedCodecs({ECodec::KAFKA_BATCH})).GetValue(TEST_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL_C(altered.GetStatus(), EStatus::SUCCESS, altered.GetIssues().ToString());
+        NKafka::TKafkaRecordBatch batch;
+        batch.Magic = 2;
+        batch.ProducerId = 42;
+        batch.ProducerEpoch = 0;
+        batch.BaseSequence = 1;
+        batch.LastOffsetDelta = 1;
+        for (i32 i = 0; i < 2; ++i) {
+            NKafka::TKafkaRecord record;
+            record.OffsetDelta = i;
+            record.SetValue(i == 0 ? "committed" : "remaining");
+            record.Length = record.Size(2) - NKafka::NPrivate::SizeOfVarint<NKafka::TKafkaRecord::LengthMeta::Type>(0);
+            batch.Records.push_back(std::move(record));
+        }
+        const TString bytes = NKafka::WriteKafkaRecordBatch(batch);
+        auto writeSession = TopicClient->CreateWriteSession(WriteSettings(topicPath).Codec(ECodec::KAFKA_BATCH));
+        TTestWriter writer(writeSession);
+        auto message = TWriteMessage::CompressedMessage(
+            std::string_view(bytes.data(), bytes.size()), ECodec::KAFKA_BATCH, 18);
+        message.SeqNo(1);
+        AssertAck(writer.Write(std::move(message), true), 1, 0);
+        UNIT_ASSERT(writeSession->Close(TEST_TIMEOUT));
+        AssertTopicEndOffset(2, topicPath);
+        const auto committed = TopicClient->CommitOffset(topicPath, 0, CONSUMER, 1).GetValue(TEST_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL_C(committed.GetStatus(), EStatus::SUCCESS, committed.GetIssues().ToString());
+        auto session = NativeSdk ? TopicClient->CreateReadSession(ReadSettings(topicPath)) : CreateReadSession(ReadSettings(topicPath));
+        auto data = WaitForReadEvent<TReadSessionEvent::TDataReceivedEvent>(*session);
+        UNIT_ASSERT_VALUES_EQUAL(data.GetMessagesCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(data.GetMessages()[0].GetOffset(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(data.GetMessages()[0].GetData(), "remaining");
+        data.Commit();
+        const auto ack = WaitForReadEvent<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(*session);
+        UNIT_ASSERT_VALUES_EQUAL(ack.GetCommittedOffset(), 2);
+        if constexpr (NativeSdk) {
+            UNIT_ASSERT(session->Close(TEST_TIMEOUT));
+        } else {
+            CloseSession(*session);
+        }
+    }
+
     Y_UNIT_TEST_F(CommitDataEventAndRequestPartitionStatus, TLocalTopicClientFixture) {
         WriteTopicMessages({"message"});
         auto session = CreateReadSession();
@@ -253,7 +302,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
         } while (TInstant::Now() < deadline);
         UNIT_ASSERT_VALUES_EQUAL(committedOffset, 1);
         if constexpr (Deferred) {
-            TDeferredCommit deferred;
+            NYdb::NTopic::TDeferredCommit deferred;
             deferred.Add(messages[0]);
             deferred.Commit();
         } else {

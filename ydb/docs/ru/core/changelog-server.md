@@ -6,11 +6,11 @@
 
 ### Функциональность
 
-* [Колоночные таблицы](./recipes/backup/import-export-column-tables.md?version=main) можно экспортировать и импортировать через S3-совместимые объектные хранилища.
+* [Колоночные таблицы](./recipes/import-export-column-tables.md?version=v26.3) можно экспортировать и импортировать через S3-совместимые объектные хранилища.
 * Колонки колоночных таблиц поддерживают [словарное кодирование](./yql/reference/syntax/create_table/index.md?version=v26.3#encoding). Используйте `ENCODING(DICT)` для значений с низкой кардинальностью.
 * Для колоночных таблиц включены [локальные min_max-индексы](./dev/min_max-skip-index.md?version=v26.3). Они пропускают фрагменты данных вне диапазона запроса, сокращая объём чтения.
 * [Группы хранения](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3) можно перемещать в виртуальные группы в фоновом режиме, не прерывая чтение и запись приложений.
-* Добавлена [аутентификация через внешних поставщиков удостоверений OpenID Connect](./security/authentication.md?version=main#external-idp). {{ ydb-short-name }} проверяет JWT-токены по JSON Web Key Set (JWKS) поставщика и периодически обновляет данные аутентификации.
+* Добавлена [аутентификация через внешних поставщиков удостоверений OpenID Connect](./security/authentication.md?version=v26.3#external-idp). {{ ydb-short-name }} проверяет JWT-токены по JSON Web Key Set (JWKS) поставщика и периодически обновляет данные аутентификации.
 * Kafka API поддерживает [взаимную TLS-аутентификацию](./reference/kafka-api/auth.md?version=v26.3). Клиентский сертификат сопоставляется с идентификатором безопасности, SASL-аутентификация не требуется.
 * Потоковым YQL-запросам стали доступны [системные виртуальные атрибуты](./concepts/query_execution/topics.md?version=v26.3#system-metadata), включая `__ydb_create_time`, `__ydb_write_time` и пользовательские атрибуты `__ydb_user_attributes`.
 
@@ -19,7 +19,7 @@
 Перечисленная ниже функциональность не включена по умолчанию.
 
 * Добавлен [гибридный поиск](./dev/hybrid-search.md?version=v26.3), объединяющий полнотекстовую релевантность и векторную близость в ранжированный результат.
-* С топиками можно работать через [Amazon SQS API](./reference/sqs-api/index.md?version=main), используя SQS-совместимые клиенты для чтения и записи сообщений.
+* С топиками можно работать через [Amazon SQS API](./reference/sqs-api/index.md?version=v26.3), используя SQS-совместимые клиенты для чтения и записи сообщений.
 * Добавлены [JSON-индексы](./dev/json-indexes.md?version=v26.3) для ускорения запросов с `JSON_EXISTS` и `JSON_VALUE`.
 * Полнотекстовые индексы поддерживают [колонки фильтрации](./dev/fulltext-indexes.md?version=v26.3#filtered), позволяющие искать в логическом разделе таблицы.
 * Полнотекстовые индексы можно создавать для таблиц с [произвольными типами первичного ключа](./dev/fulltext-indexes.md?version=v26.3#primary-key).

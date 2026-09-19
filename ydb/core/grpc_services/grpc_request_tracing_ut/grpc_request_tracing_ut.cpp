@@ -256,8 +256,9 @@ private:
 
 class TTestGrpcRequestContext : public NYdbGrpc::IRequestContextBase {
 public:
-    explicit TTestGrpcRequestContext(TMaybe<TString> traceId)
+    explicit TTestGrpcRequestContext(TMaybe<TString> traceId, TMaybe<TString> database = Nothing())
         : TraceId_(std::move(traceId))
+        , Database_(std::move(database))
     {}
 
     const NProtoBuf::Message* GetRequest() const override {
@@ -296,6 +297,9 @@ public:
         if (key == NYdb::YDB_TRACE_ID_HEADER && TraceId_) {
             return {*TraceId_};
         }
+        if (key == NYdb::YDB_DATABASE_HEADER && Database_) {
+            return {*Database_};
+        }
         return {};
     }
 
@@ -314,7 +318,8 @@ public:
     void AddTrailingMetadata(const TString&, const TString&) override {
     }
 
-    void UseDatabase(const TString&) override {
+    void UseDatabase(const TString& database) override {
+        UsedDatabase = database;
     }
 
     void SetNextReplyCallback(NYdbGrpc::IRequestContextBase::TOnNextReply&&) override {
@@ -353,6 +358,7 @@ public:
     }
 
 public:
+    TString UsedDatabase;
     ui32 ReplyCount = 0;
     ui32 ByteReplyCount = 0;
     ui32 ReplyUnauthenticatedCount = 0;
@@ -364,14 +370,16 @@ private:
     NYdbGrpc::TAuthState AuthState_{true};
     google::protobuf::Arena Arena_;
     TMaybe<TString> TraceId_;
+    TMaybe<TString> Database_;
 };
 
 class TTestBiStreamContext
     : public NGRpcServer::IGRpcStreamingContext<Draft::Dummy::PingRequest, Draft::Dummy::PingResponse>
 {
 public:
-    explicit TTestBiStreamContext(TMaybe<TString> traceId)
+    explicit TTestBiStreamContext(TMaybe<TString> traceId, TMaybe<TString> database = Nothing())
         : TraceId_(std::move(traceId))
+        , Database_(std::move(database))
     {}
 
     void Cancel() override {
@@ -402,6 +410,9 @@ public:
         if (key == NYdb::YDB_TRACE_ID_HEADER && TraceId_) {
             return {*TraceId_};
         }
+        if (key == NYdb::YDB_DATABASE_HEADER && Database_) {
+            return {*Database_};
+        }
         return {};
     }
 
@@ -409,7 +420,8 @@ public:
         return GRPC_COMPRESS_LEVEL_NONE;
     }
 
-    void UseDatabase(const TString&) override {
+    void UseDatabase(const TString& database) override {
+        UsedDatabase = database;
     }
 
     TString GetRpcMethodName() const override {
@@ -431,6 +443,7 @@ public:
     }
 
 public:
+    TString UsedDatabase;
     ui32 AttachCount = 0;
     ui32 FinishCount = 0;
     ui32 WriteAndFinishCount = 0;
@@ -439,6 +452,7 @@ public:
 private:
     mutable NYdbGrpc::TAuthState AuthState_{true};
     TMaybe<TString> TraceId_;
+    TMaybe<TString> Database_;
 };
 
 using TTestGrpcRequest = NGRpcService::TGrpcRequestNoOperationCall<
@@ -655,6 +669,18 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckErrorReply) {
 
 Y_UNIT_TEST_SUITE(TGrpcRequestBaseTracing) {
 
+Y_UNIT_TEST(UseDatabasePreservesUnaryDatabaseHeaderPresence) {
+    for (const auto& database : TVector<TMaybe<TString>>{Nothing(), TString(), TString("mydb"), TString("/Root/mydb")}) {
+        auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), database);
+        TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+        UNIT_ASSERT(request.GetDatabaseName() == database);
+        request.UseDatabase("/Root/mydb");
+        const auto expected = database && !database->empty() ? TMaybe<TString>(TString("/Root/mydb")) : database;
+        UNIT_ASSERT(request.GetDatabaseName() == expected);
+        UNIT_ASSERT_VALUES_EQUAL(ctx->UsedDatabase, "/Root/mydb");
+    }
+}
+
 Y_UNIT_TEST(GeneratesTraceIdForEmptyUnaryTraceHeader) {
     auto ctx = MakeIntrusive<TTestGrpcRequestContext>(TMaybe<TString>(TString()));
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
@@ -847,6 +873,18 @@ Y_UNIT_TEST(RespHookDelaysGrpcRequestProxySpanUntilPass) {
 } // TGrpcRequestBaseTracing
 
 Y_UNIT_TEST_SUITE(TGrpcRequestBiStreamTracing) {
+
+Y_UNIT_TEST(UseDatabasePreservesBidiDatabaseHeaderPresence) {
+    for (const auto& database : TVector<TMaybe<TString>>{Nothing(), TString(), TString("mydb"), TString("/Root/mydb")}) {
+        auto ctx = MakeIntrusive<TTestBiStreamContext>(Nothing(), database);
+        NGRpcService::TEvBiStreamPingRequest request(ctx);
+        UNIT_ASSERT(request.GetDatabaseName() == database);
+        request.UseDatabase("/Root/mydb");
+        const auto expected = database && !database->empty() ? TMaybe<TString>(TString("/Root/mydb")) : database;
+        UNIT_ASSERT(request.GetDatabaseName() == expected);
+        UNIT_ASSERT_VALUES_EQUAL(ctx->UsedDatabase, "/Root/mydb");
+    }
+}
 
 Y_UNIT_TEST(RefreshTokenPreservesBidiTraceId) {
     TTestActorRuntime runtime;

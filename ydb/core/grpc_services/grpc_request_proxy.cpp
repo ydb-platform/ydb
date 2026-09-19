@@ -152,6 +152,9 @@ private:
         MaybeStartTracing(event);
 
         if (IsAuthStateOK(*requestBaseCtx)) {
+            if (const auto database = requestBaseCtx->GetDatabaseName(); database && !database->empty() && !IsStartWithSlash(*database)) {
+                requestBaseCtx->UseDatabase(NormalizePath(RootDatabase, *database));
+            }
             Handle(event, ctx);
             return;
         }
@@ -189,7 +192,9 @@ private:
             }
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
-                databaseName = CanonizePath(maybeDatabaseName.GetRef());
+                databaseName = IsStartWithSlash(maybeDatabaseName.GetRef())
+                    ? CanonizePath(maybeDatabaseName.GetRef())
+                    : NormalizePath(RootDatabase, maybeDatabaseName.GetRef());
             } else {
                 if (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
                     Counters->IncEmptyDatabaseNameCounter();

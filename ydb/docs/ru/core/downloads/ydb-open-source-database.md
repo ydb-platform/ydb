@@ -8,6 +8,8 @@
 
 #|
 || Версия |  Дата выпуска | Скачать | Список изменений ||
+|| **v26.3 RC** | > | > | > ||
+|| v.26.3.1.16 | 18.09.26 | [Бинарный файл](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.3.1.16/ydbd-26.3.1.16-linux-amd64.tar.gz) | [См. список](../changelog-server.md#26-3-rc) ||
 || **v26.2** | > | > | > ||
 || v.26.2.1.14 | 16.09.26 | [Бинарный файл](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.2.1.14/ydbd-26.2.1.14-linux-amd64.tar.gz) | [См. список](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||
@@ -47,6 +49,8 @@
 
 #|
 || Версия |  Дата выпуска | Docker `registry/image:tag` | Список изменений ||
+|| **v26.3 RC** | > | > | > ||
+|| v.26.3.1.16 | 18.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16` | [См. список](../changelog-server.md#26-3-rc) ||
 || **v26.2** | > | > | > ||
 || v.26.2.1.14 | 16.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.2.1.14` | [См. список](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||
@@ -86,6 +90,8 @@
 
 #|
 || Версия |  Дата выпуска | Ссылка | Список изменений ||
+|| **v26.3 RC** | > | > | > ||
+|| v.26.3.1.16 | 18.09.26 | [https://github.com/ydb-platform/ydb/tree/26.3.1.16](https://github.com/ydb-platform/ydb/tree/26.3.1.16) | [См. список](../changelog-server.md#26-3-rc) ||
 || **v26.2** | > | > | > ||
 || v.26.2.1.14 | 16.09.26 | [https://github.com/ydb-platform/ydb/tree/26.2.1.14](https://github.com/ydb-platform/ydb/tree/26.2.1.14) | [См. список](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||

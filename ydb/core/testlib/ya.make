@@ -67,6 +67,7 @@ PEERDIR(
     ydb/core/mind/bscontroller
     ydb/core/mind/hive
     ydb/core/node_whiteboard
+    ydb/core/path_aliasing
     ydb/core/persqueue
     ydb/core/persqueue/deferred_publish
     ydb/core/protos

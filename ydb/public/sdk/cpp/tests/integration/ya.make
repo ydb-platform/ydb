@@ -5,6 +5,7 @@ RECURSE(
     bulk_upsert
     key_conflict
     metrics
+    path_aliasing
     server_restart
     sessions
     sessions_pool

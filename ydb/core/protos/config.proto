@@ -3541,6 +3541,19 @@ message TUdfStoreConfig {
     optional uint32 WasmCompileWorkerRetentionSeconds = 16 [default = 86400];
 }
 
+// Local schema-path aliases. Rules are ordered and take effect on node restart.
+message TPathRewriteConfig {
+    message TRule {
+        // RE2 expression. Use ^ to anchor a prefix and (/|$) for a path boundary.
+        optional string Pattern = 1;
+        // RE2 replacement syntax: \\0 is the whole match, \\1..\\9 are captures.
+        optional string Replacement = 2;
+    }
+
+    // First matching rule replaces its first match once; results are not rematched.
+    repeated TRule Rules = 1;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3664,6 +3677,7 @@ message TAppConfig {
 
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
     optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
+    optional TPathRewriteConfig PathRewriteConfig = 124;
 }
 
 message TYdbVersion {

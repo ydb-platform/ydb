@@ -441,15 +441,8 @@ public:
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 auto topicPath = topic.Path().Value();
                 auto topicDatabase = topic.Database().Value();
-                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE && topicDatabase == "/Root") {
-                    auto pos = topicPath.find('/');
-                    Y_ENSURE(pos != TStringBuf::npos);
-                    srcDesc.SetTopicPath(TString(topicPath.substr(pos + 1)));
-                    srcDesc.SetDatabase("/logbroker-federation/" + TString(topicPath.substr(0, pos)));
-                } else {
-                    srcDesc.SetTopicPath(TString(topicPath));
-                    srcDesc.SetDatabase(TString(topicDatabase));
-                }
+                srcDesc.SetTopicPath(TString(topicPath));
+                srcDesc.SetDatabase(TString(topicDatabase));
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
                 const TStructExprType* fullRowType = topicSource.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
@@ -680,15 +673,8 @@ public:
                 sinkDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 auto topicPath = topic.Path().Value();
                 auto topicDatabase = topic.Database().Value();
-                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE && topicDatabase == "/Root") {
-                    auto pos = topicPath.find('/');
-                    Y_ENSURE(pos != TStringBuf::npos);
-                    sinkDesc.SetTopicPath(TString(topicPath.substr(pos + 1)));
-                    sinkDesc.SetDatabase("/logbroker-federation/" + TString(topicPath.substr(0, pos)));
-                } else {
-                    sinkDesc.SetTopicPath(TString(topicPath));
-                    sinkDesc.SetDatabase(TString(topicDatabase));
-                }
+                sinkDesc.SetTopicPath(TString(topicPath));
+                sinkDesc.SetDatabase(TString(topicDatabase));
 
                 sinkDesc.SetUseActorSystemThreadsInTopicClient(State_->UseActorSystemThreadsInTopicClient);
 

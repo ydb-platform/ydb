@@ -79,7 +79,11 @@ message TTableServiceConfig {
         // resets it to the default.
         optional bool EnableMemoryArena = 35 [default = true];
         // Bytes charged to the arena per execution unit in use: the compute actor footprint outside the MKQL quota,
-        // which is prepaid as ExternalMemory. A demand past the kqp queue limit is charged anyway, as a deficit.
+        // which is prepaid as ExternalMemory. A task the node service starts charges MkqlLightProgramMemoryLimit
+        // twice, for its program and its channels, plus this: 3 MiB with the defaults. The kqp queue limit
+        // (QueryExecutionLimitPercent of the hard limit) should hold the expected concurrency times that, plus
+        // MemoryArenaMaxFreeSize and the Memory the tasks acquire as they grow. Past it the demand is a charged
+        // deficit: extra Memory requests are refused and the spilling cookies report the pressure, RM/ArenaDeficit.
         optional uint64 ExecutionUnitMemory = 36 [default = 1048576];       // 1 MiB
         // The arena is resized to Used + (Min + Max) / 2 whenever its free part leaves the band; a max below the min
         // is raised to it, and both zero make the arena track its usage exactly. The free part counts against the

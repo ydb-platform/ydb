@@ -8164,6 +8164,69 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         UNIT_ASSERT_EQUAL(barriers, (std::set<ui32>{0, 1}));
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
+
+    void CheckRestartAfterMoveDataCutsReassignedHistory(bool writeRows) {
+        struct TReassignedStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet, channels);
+                // The first boot is generation 2, so the reassign takes effect on the next one.
+                info->Channels[1].History.emplace_back(3, 2);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableCutHistory(true);
+        TRowsModel data;
+        std::set<ui32> cutChannels;
+        auto observer = env.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
+                const auto& record = ev->Get<TEvTablet::TEvCutTabletHistory>()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetFromGeneration(), 0);
+                cutChannels.insert(record.GetChannel());
+                ev.Reset();
+            }
+        });
+        auto fire = [&](NFake::TStarter* starter) {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            }, 0, starter);
+            env.WaitForWakeUp();
+        };
+
+        fire(nullptr);
+        env.SendSync(data.MakeScheme(new TCompactionPolicy()));
+        if (writeRows) {
+            env.SendSync(data.MakeRows(1000));
+        }
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        // Hive reassigns the channels and asks for MoveData as soon as the tablet is back.
+        TReassignedStarter starter;
+        fire(&starter);
+        env.SendAsync(new TEvTablet::TEvMoveData());
+        TAutoPtr<IEventHandle> handle;
+        env->GrabEdgeEventRethrow<TEvTablet::TEvMoveDataResponse>(handle);
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        fire(&starter);
+        env->SimulateSleep(TDuration::Minutes(1));
+        TStringBuilder cut;
+        for (ui32 channel : cutChannels) {
+            cut << channel << " ";
+        }
+        UNIT_ASSERT_C(cutChannels == (std::set<ui32>{1}), "channels cut: " << cut);
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+
+    Y_UNIT_TEST(RestartAfterMoveDataCutsReassignedHistory) {
+        CheckRestartAfterMoveDataCutsReassignedHistory(true);
+    }
+
+    // Without rows the schema never reaches a snapshot, so boot finds it only in redo.
+    Y_UNIT_TEST(SchemaOnlyRestartAfterMoveDataCutsReassignedHistory) {
+        CheckRestartAfterMoveDataCutsReassignedHistory(false);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_Gc) {

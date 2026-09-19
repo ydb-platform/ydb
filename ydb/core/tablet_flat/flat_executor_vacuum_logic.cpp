@@ -106,6 +106,8 @@ bool TVacuumLogic::NeedLogSnaphot() {
     switch (State) {
         case EVacuumState::PendingFirstSnapshot:
         case EVacuumState::PendingSecondSnapshot:
+        case EVacuumState::PendingThirdSnapshot:
+        case EVacuumState::PendingFinalSnapshot:
             return true;
         default:
             return false;
@@ -130,13 +132,23 @@ void TVacuumLogic::OnMakeLogSnapshot(ui32 generation, ui32 step) {
             ChangeState(EVacuumState::WaitSecondSnapshot);
             break;
         }
+        case EVacuumState::PendingThirdSnapshot: {
+            ThirdLogSnaphotStep = TGCTime(generation, step);
+            ChangeState(EVacuumState::WaitThirdSnapshot);
+            break;
+        }
+        case EVacuumState::PendingFinalSnapshot: {
+            FinalLogSnaphotStep = TGCTime(generation, step);
+            ChangeState(EVacuumState::WaitFinalSnapshot);
+            break;
+        }
         default: {
             break;
         }
     }
 }
 
-void TVacuumLogic::OnSnapshotCommited(ui32 generation, ui32 step) {
+void TVacuumLogic::OnSnapshotCommited(ui32 generation, ui32 step, const TActorContext& ctx) {
     if (auto logl = Logger->Log(ELnLev::Dbg03)) {
         logl << "TVacuumLogic: OnSnapshotCommited"
             << " in tablet with id " << Owner->TabletID()
@@ -161,6 +173,18 @@ void TVacuumLogic::OnSnapshotCommited(ui32 generation, ui32 step) {
             }
             break;
         }
+        case EVacuumState::WaitThirdSnapshot: {
+            if (ThirdLogSnaphotStep <= TGCTime(generation, step)) {
+                ChangeState(GcLogic->HasGarbageBefore(SecondLogSnaphotStep) ? EVacuumState::WaitFinalGC : EVacuumState::PendingFinalSnapshot);
+            }
+            break;
+        }
+        case EVacuumState::WaitFinalSnapshot: {
+            if (FinalLogSnaphotStep <= TGCTime(generation, step)) {
+                CompleteVacuum(ctx);
+            }
+            break;
+        }
         default: {
             break;
         }
@@ -168,6 +192,7 @@ void TVacuumLogic::OnSnapshotCommited(ui32 generation, ui32 step) {
 }
 
 void TVacuumLogic::OnCollectedGarbage(const TActorContext& ctx) {
+    Y_UNUSED(ctx);
     if (auto logl = Logger->Log(ELnLev::Dbg03)) {
         logl << "TVacuumLogic: OnCollectedGarbage"
             << " in tablet with id " << Owner->TabletID()
@@ -183,7 +208,13 @@ void TVacuumLogic::OnCollectedGarbage(const TActorContext& ctx) {
         }
         case EVacuumState::WaitTabletGC: {
             if (!GcLogic->HasGarbageBefore(FirstLogSnaphotStep)) {
-                CompleteVacuum(ctx);
+                StartThirdSnapshot();
+            }
+            break;
+        }
+        case EVacuumState::WaitFinalGC: {
+            if (!GcLogic->HasGarbageBefore(SecondLogSnaphotStep)) {
+                ChangeState(EVacuumState::PendingFinalSnapshot);
             }
             break;
         }
@@ -194,6 +225,7 @@ void TVacuumLogic::OnCollectedGarbage(const TActorContext& ctx) {
 }
 
 void TVacuumLogic::OnGcForStepAckResponse(ui32 generation, ui32 step, const TActorContext& ctx) {
+    Y_UNUSED(ctx);
     if (auto logl = Logger->Log(ELnLev::Dbg03)) {
         logl << "TVacuumLogic: OnGcForStepAckResponse"
             << " in tablet with id " << Owner->TabletID()
@@ -209,7 +241,7 @@ void TVacuumLogic::OnGcForStepAckResponse(ui32 generation, ui32 step, const TAct
         }
         case EVacuumState::WaitLogGC: {
             if (FirstLogSnaphotStep <= TGCTime(generation, step)) {
-                CompleteVacuum(ctx);
+                StartThirdSnapshot();
             }
             break;
         }
@@ -226,6 +258,9 @@ bool TVacuumLogic::NeedGC() {
         case EVacuumState::WaitAllGCs:
         case EVacuumState::WaitTabletGC: {
             return GcLogic->HasGarbageBefore(FirstLogSnaphotStep);
+        }
+        case EVacuumState::WaitFinalGC: {
+            return GcLogic->HasGarbageBefore(SecondLogSnaphotStep);
         }
         default: {
             return false;
@@ -247,6 +282,10 @@ void TVacuumLogic::CompleteVacuum(const TActorContext& ctx) {
     }
 }
 
+
+void TVacuumLogic::StartThirdSnapshot() {
+    ChangeState(EVacuumState::PendingThirdSnapshot);
+}
 
 void TVacuumLogic::ChangeState(EVacuumState to) {
     if (auto logl = Logger->Log(ELnLev::Debug)) {

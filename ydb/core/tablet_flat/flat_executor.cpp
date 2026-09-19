@@ -1044,6 +1044,20 @@ void TExecutor::FollowerGcApplied(ui32 step, TDuration followerSyncDelay) {
         Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_FOLLOWERSYNC_LATENCY].IncrementFor(followerSyncDelay.MicroSeconds());
 }
 
+void TExecutor::DriveVacuumGc(bool collect) {
+    VacuumLogic->OnCollectedGarbage(OwnerCtx());
+    if (collect && VacuumLogic->NeedGC()) {
+        GcLogic->SendCollectGarbage(ActorContext());
+        // A channel with nothing left to collect sends nothing and brings no result, so re-check right away.
+        VacuumLogic->OnCollectedGarbage(OwnerCtx());
+    }
+    // N.B. PassAway may have already been called
+    // A barrier may be released inside an open sync commit, which then takes the snapshot itself
+    if (Owner && !CommitManager->InSyncCommit() && VacuumLogic->NeedLogSnaphot()) {
+        MakeLogSnapshot();
+    }
+}
+
 void TExecutor::CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier) {
     if (barrier && barrier->RefCount() == 1) {
         GcLogic->ReleaseBarrier(barrier->Step);
@@ -1053,9 +1067,7 @@ void TExecutor::CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier) {
                 Owner->CompletedLoansChanged(OwnerCtx());
             }
         }
-        if (VacuumLogic->NeedGC()) {
-            GcLogic->SendCollectGarbage(ActorContext());
-        }
+        DriveVacuumGc(true);
     }
 
     barrier.Drop();
@@ -1463,6 +1475,7 @@ void TExecutor::Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev) {
     }
 
     VacuumLogic->OnGcForStepAckResponse(Generation(), ev->Get()->Step, OwnerCtx());
+    DriveVacuumGc(true);
 }
 
 void TExecutor::AdvancePendingPartSwitches() {
@@ -2905,7 +2918,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
         }
 
-        if (NeedLogSnapshot || LogicSnap->MayFlush(false))
+        if (NeedLogSnapshot || LogicSnap->MayFlush(false) || VacuumLogic->NeedLogSnaphot())
             MakeLogSnapshot();
 
         CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
@@ -2951,7 +2964,7 @@ void TExecutor::MakeLogSnapshot() {
         version->SetHead(ui32(NTable::ECompatibility::Edge));
     }
 
-    LogicAlter->SnapToLog(snap);
+    LogicAlter->SnapToLog(snap, *commit);
     LogicRedo->SnapToLog(snap);
 
     bool haveTxStatus = false;
@@ -3365,7 +3378,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         LogicSnap->Confirm(msg->Step);
         GcLogic->Confirm(ctx);
 
-        VacuumLogic->OnSnapshotCommited(Generation(), step);
+        VacuumLogic->OnSnapshotCommited(Generation(), step, ctx);
         if (NeedLogSnapshot || VacuumLogic->NeedLogSnaphot())
             MakeLogSnapshot();
 
@@ -3416,7 +3429,8 @@ void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
     if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev, OwnerCtx(), Launcher)) {
         Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(ev->Get()->Channel));
     }
-    VacuumLogic->OnCollectedGarbage(OwnerCtx());
+    // An idle tablet sends no more collections by itself; failures keep their own backoff.
+    DriveVacuumGc(ev->Get()->Status == NKikimrProto::OK);
 }
 
 void TExecutor::Handle(TEvPrivate::TEvRetryGcRequest::TPtr &ev, const TActorContext &ctx) {

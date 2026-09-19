@@ -442,6 +442,14 @@ A database schema consists of **schema objects**, which can be databases, [table
 
 For ease of organization, schema objects form a hierarchy with [folders](#folder).
 
+{% if feature_serial %}
+
+### Sequence {#sequence}
+
+**Sequence** is an integer value generator owned by a [Serial](../yql/reference/types/serial.md) column. For its lifecycle and value-generation behavior, see [Sequence](datamodel/sequence.md).
+
+{% endif %}
+
 ### Folder {#folder}
 
 As in file systems, a **folder** or **directory** is a container for [schema objects](#scheme-object).

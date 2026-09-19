@@ -177,13 +177,13 @@ Creating and populating a table based on the results of the `SELECT` query. For 
 
   {% if feature_column_container_type == true %}
 
-  For non-key columns, any data types are allowed{% if feature_serial %}, except [serial](../../types/serial.md) {% endif %}; for key columns, only [primitive](../../types/primitive.md){% if feature_serial %} and [serial](../../types/serial.md){% endif %} types are allowed. When specifying complex types (e.g., `List<String>`), the type is enclosed in double quotes.
+  For non-key columns, any data types are allowed; for key columns, only [primitive](../../types/primitive.md){% if feature_serial %} and [serial](../../types/serial.md){% endif %} types are allowed. When specifying complex types (e.g., `List<String>`), the type is enclosed in double quotes.
 
   {% else %}
 
   {% if feature_serial %}
 
-  For key columns, only [primitive](../../types/primitive.md) and [serial](../../types/serial.md) data types are allowed; for non-key columns, only [primitive](../../types/primitive.md) data types are allowed.
+  For both key and non-key columns, only [primitive](../../types/primitive.md) and [serial](../../types/serial.md) data types are allowed.
 
   {% else %}
 
@@ -195,7 +195,7 @@ Creating and populating a table based on the results of the `SELECT` query. For 
 
   {% if feature_not_null == true %}
 
-  Without additional modifiers, the column acquires an [optional type](../../types/optional.md) and allows `NULL` to be written as values. To obtain a non-optional type, use `NOT NULL`.
+  Without additional modifiers, {% if feature_serial %}a column with a non-serial type{% else %}a column{% endif %} acquires an [optional type](../../types/optional.md) and allows `NULL` to be written as values. To obtain a non-optional type, use `NOT NULL`.
 
   {% else %}
 
@@ -214,6 +214,12 @@ Creating and populating a table based on the results of the `SELECT` query. For 
   {% if feature_map_tables %}
 
   It is mandatory to specify `PRIMARY KEY` with a non-empty list of columns. These columns become part of the key in the order they are listed.
+
+  {% endif %}
+
+  {% if feature_serial %}
+
+  Serial columns automatically have the `NOT NULL` constraint. This mechanism is supported only in row-oriented tables.
 
   {% endif %}
 

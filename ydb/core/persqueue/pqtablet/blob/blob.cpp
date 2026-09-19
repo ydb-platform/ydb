@@ -168,7 +168,7 @@ void TBatch::AddBlob(const TClientBlob &b) {
         InternalPartsPos.push_back(i);
     }
 
-    if (Header.HasOffsetDelta() || b.LogicalMessageCount > 1) {
+    if (CanWriteOffsetDeltaInKeys() || Header.HasOffsetDelta() || b.LogicalMessageCount > 1) {
         Header.SetOffsetDelta(offsetDelta);
     } else {
         Header.ClearOffsetDelta();
@@ -397,15 +397,10 @@ ui64 THead::GetOffsetDelta() const
 
     if (Batches.back().HasOffsetDelta()) {
         return Batches.back().GetOffset() - Offset + Batches.back().GetOffsetDelta();
-    }
+    }    
 
-    ui64 lastBatchOffsetDelta = 0;
-    if (!Batches.back().Blobs.empty()) {
-        const auto& lastBlob = Batches.back().Blobs.back();
-        lastBatchOffsetDelta = Batches.back().GetCount() + (!lastBlob.IsLastPart() ? 1 : 0);
-    }
-
-    return Batches.back().GetOffset() - Offset + lastBatchOffsetDelta;
+    // Head заканчивается завершенным сообщением (не какой-то частью сообщения!) поэтому такой фолбэк уместен.
+    return GetCount(); 
 }
 
 

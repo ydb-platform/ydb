@@ -267,6 +267,10 @@ public:
         SetOffsetDelta(TMaybe<ui32>(static_cast<ui32>(offsetDelta)));
     }
 
+    void ClearOffsetDelta() {
+        SetOffsetDelta(Nothing());
+    }
+
     TMaybe<ui32> GetOffsetDelta() const {
         EnsureValidBodySize();
         return OffsetDelta;

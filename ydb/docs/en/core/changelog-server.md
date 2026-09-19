@@ -20,6 +20,7 @@ Release date: TBD.
 * Full VDisk synchronization is faster because processed SyncLog data is removed locally by default.
 * Added transfer metrics and statistics to `DescribeTransfer` for monitoring and diagnostics.
 * Added a configurable limit for stored forced-compaction operations. Completed and cancelled operations can be removed automatically when the limit is reached.
+* Change Data Capture records can include the [OpenTelemetry trace ID](./concepts/cdc.md?version=v26.3#record-structure) of the request that produced the change.
 
 ### Disabled functionality
 

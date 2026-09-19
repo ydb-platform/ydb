@@ -12,35 +12,11 @@ Release date: TBD.
 * Added [storage group decommissioning through virtual storage groups](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data moves to virtual groups in the background while applications continue reading and writing data.
 * Added [authentication through external OpenID Connect identity providers](./security/authentication.md?version=v26.3#external-idp). {{ ydb-short-name }} validates JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
 * Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
-* Removed the experimental PostgreSQL wire protocol and PostgreSQL SQL syntax from `ydbd`. PostgreSQL-compatible types, `Pg::` functions, and federated queries to external PostgreSQL databases are not affected.
 * Column-oriented tables use an updated compaction strategy to organize data more efficiently.
-* Column-oriented table scans support the Trivial Reader.
 * For column-oriented tables, `ALTER TABLE ... COMPACT` can start forced compaction.
 * Column-oriented tables support the `Interval`, `Uuid`, and `DyNumber` data types.
-* `DISTINCT` and `DISTINCT LIMIT` are pushed down to ColumnShard for column-oriented tables, reducing intermediate data and query execution time.
-* Snapshot retention is enabled for long-running analytical queries, preventing column shards from removing data required by active reads.
-* Database-level small-blob quotas are enforced for column-oriented tables. New writes are rejected after the quota derived from `data_size_hard_quota` is exhausted.
-* Added an in-memory KQP level cache for vector indexes. Configure its maximum size with `resource_manager.kqp_level_cache_max_size_bytes`.
-* Bulk authorization requests to AccessService are enabled by default, reducing authorization request overhead.
 * Streaming YQL queries can access [system virtual attributes](./concepts/query_execution/topics.md?version=v26.3#system-metadata), including `__ydb_create_time`, `__ydb_write_time`, and user attributes in `__ydb_user_attributes`.
-* Local SyncLog data cutting is enabled by default, improving full VDisk synchronization.
-* Added transfer metrics and statistics to `DescribeTransfer` for monitoring and diagnostics.
 * Added a configurable limit for stored forced-compaction operations. Completed and cancelled operations can be removed automatically when the limit is reached.
-* Change Data Capture records can include the OpenTelemetry trace ID of the request that produced the change.
-* Topic-only transactions use BufferActor when committing, optimizing processing when no tables participate.
-* Topic reads that start from a timestamp filter out messages with earlier write timestamps, including messages stored in the same blob as newer messages.
-* Added strict serializable isolation for read-write transactions, including real-time transaction ordering and commit timestamps.
-* Added a compact full-text index format that reduces storage consumption.
-* Backup restoration can write SST parts directly to DataShard, reducing CPU and disk use compared with row-by-row restoration.
-* Local indexes are represented as schema objects, including prefix Bloom filters for row-oriented tables and local indexes for column-oriented tables.
-* Added configurable throttling of synchronous VDisk writes based on the current amount of fresh data, limiting memory growth under intensive write workloads.
-* Workload Manager resource-pool classifiers support `ACTION="reject"`, rejecting matching queries before routing them to a resource pool.
-* Added AccessService V2, including batched authorization requests. Changing its configuration requires a server restart.
-* `ANALYZE` creates a background-operation record for observability; listing, retrieving, cancelling, and forgetting it are available.
-* Literal `DEFAULT` values can be added to write query plans at compile time, avoiding runtime materialization.
-* Administrators can require non-administrative requests to static nodes to specify a database.
-* Structured values in JSON logs can be emitted as separate JSON fields instead of being appended to `message`.
-* Dynamic nodes retain long leases, allowing the cluster to remain available during temporary NodeBroker outages.
 
 ### Disabled functionality
 

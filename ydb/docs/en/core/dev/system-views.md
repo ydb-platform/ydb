@@ -589,10 +589,7 @@ System view structure:
 | `ConcurrentQueryLimit` | Maximum number of concurrently executing queries in the resource pool.<br/>Type: `Int32`. |
 | `QueueSize` | Maximum queue size.<br/>Type: `Int32`. |
 | `DatabaseLoadCpuThreshold` | CPU load threshold of the entire database, in percent, after which queries are not sent for execution and remain in the queue.<br/>Type: `Double`. |
-| `ResourceWeight` | [Weights](../dev/resource-consumption-management.md#resources_weight) for distributing resources among pools.<br/>Type: `Double`. |
 | `TotalCpuLimitPercentPerNode` | Percentage of available CPU that all queries on the node can use in this resource pool.<br/>Type: `Double`. |
-| `QueryCpuLimitPercentPerNode` | Percentage of available CPU on the node for one query in the resource pool.<br/>Type: `Double`. |
-| `QueryMemoryLimitPercentPerNode` | Percentage of available memory on the node that a query can use in this resource pool.<br/>Type: `Double`. |
 
 ### Example {#resource_pools-examples}
 
@@ -605,10 +602,7 @@ SELECT
     ConcurrentQueryLimit,
     QueueSize,
     DatabaseLoadCpuThreshold,
-    ResourceWeight,
-    TotalCpuLimitPercentPerNode,
-    QueryCpuLimitPercentPerNode,
-    QueryMemoryLimitPercentPerNode
+    TotalCpuLimitPercentPerNode
 FROM `.sys/resource_pools`
 WHERE Name = "default";
 ```

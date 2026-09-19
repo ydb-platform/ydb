@@ -212,6 +212,44 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
         UNIT_ASSERT(restored->GetPositions()->Equals(*positions));
     }
 
+    // Dictionary-only reader decodes the values from the dictionary prefix alone (and tolerates the full blob).
+    Y_UNIT_TEST(DictionaryOnlyReaderFromPrefix) {
+        const auto dictionary = MakeBinary({ "alpha", "beta", "gamma" });
+        const auto positions = MakePositions({ 0, 1, 0, 2, std::nullopt, 1 });
+        const auto array = std::make_shared<NAccessor::TDictionaryArray>(dictionary, positions);
+        const auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
+        const NAccessor::TChunkConstructionData constructionData(array->GetRecordsCount(), nullptr, arrow::binary(), serializer);
+        const TDictionaryDenseConstructor constructor;
+
+        const auto blobAndMeta = constructor.SerializeToBlobAndMeta(array, constructionData);
+        const auto* meta = dynamic_cast<const NAccessor::TDictionaryAccessorData*>(blobAndMeta.Meta.get());
+        UNIT_ASSERT(meta);
+        const auto infoWithMeta = constructionData.WithAdditionalAccessorData(blobAndMeta.Meta);
+
+        const TString prefix = blobAndMeta.Blob.substr(0, meta->DictionaryBlobSize);
+        const auto fromPrefix = TDictionaryDenseConstructor::DeserializeDictionaryOnly(prefix, infoWithMeta);
+        UNIT_ASSERT_C(fromPrefix.IsSuccess(), fromPrefix.GetErrorMessage());
+        UNIT_ASSERT(fromPrefix.GetResult()->Equals(*dictionary));
+
+        const auto fromFull = TDictionaryDenseConstructor::DeserializeDictionaryOnly(blobAndMeta.Blob, infoWithMeta);
+        UNIT_ASSERT_C(fromFull.IsSuccess(), fromFull.GetErrorMessage());
+        UNIT_ASSERT(fromFull.GetResult()->Equals(*dictionary));
+
+        // Dispatcher picks the dense reader for the dense constructor and refuses a non-dictionary constructor.
+        NAccessor::TConstructorContainer denseContainer(std::make_shared<TDictionaryDenseConstructor>());
+        const auto dispatched = BuildDictionaryOnlyValues(denseContainer, prefix, infoWithMeta);
+        UNIT_ASSERT_C(dispatched.IsSuccess(), dispatched.GetErrorMessage());
+        UNIT_ASSERT(dispatched.GetResult()->Equals(*dictionary));
+        NAccessor::TConstructorContainer binaryContainer(std::make_shared<TBinaryDenseConstructor>());
+        const auto notDictionary = BuildDictionaryOnlyValues(binaryContainer, prefix, infoWithMeta);
+        UNIT_ASSERT_C(notDictionary.IsSuccess(), notDictionary.GetErrorMessage());
+        UNIT_ASSERT(!notDictionary.GetResult());
+
+        // Truncated prefix is rejected, not verified-crashed.
+        const auto truncated = TDictionaryDenseConstructor::DeserializeDictionaryOnly(prefix.substr(0, prefix.size() - 1), infoWithMeta);
+        UNIT_ASSERT(truncated.IsFail());
+    }
+
     // Dictionary has one value but UInt16 positions; dense encoding narrows them to UInt8.
     Y_UNIT_TEST(DictionaryWithWidePositionsRoundTrips) {
         const auto dictionary = MakeBinary({ "alpha" });

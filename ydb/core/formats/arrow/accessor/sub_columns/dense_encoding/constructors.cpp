@@ -87,4 +87,35 @@ TConclusion<std::shared_ptr<IChunkedArray>> TDictionaryDenseConstructor::DoDeser
     return std::make_shared<TDictionaryArray>(dictionary, positions);
 }
 
+TConclusion<std::shared_ptr<arrow::Array>> TDictionaryDenseConstructor::DeserializeDictionaryOnly(
+    const TString& dictionaryBlob, const TChunkConstructionData& externalInfo) {
+    if (!externalInfo.HasAdditionalAccessorData()) {
+        return TConclusionStatus::Fail("dense dictionary-only reader requires additional accessor data in chunk metadata");
+    }
+    const auto* meta = dynamic_cast<const TDictionaryAccessorData*>(externalInfo.GetAdditionalAccessorData().get());
+    if (!meta) {
+        return TConclusionStatus::Fail("dense dictionary-only reader requires TDictionaryAccessorData in chunk metadata");
+    }
+    const ui32 dictionaryBlobSize = meta->DictionaryBlobSize;
+    if (dictionaryBlobSize < sizeof(ui32) || dictionaryBlob.size() < dictionaryBlobSize) {
+        return TConclusionStatus::Fail(TStringBuilder{} << "dense dictionary blob too small: need at least " << dictionaryBlobSize
+                                                        << ", got " << dictionaryBlob.size());
+    }
+    ui32 dictLength;
+    memcpy(&dictLength, dictionaryBlob.data(), sizeof(dictLength));
+    const TStringBuf dictBlob(dictionaryBlob.data() + sizeof(ui32), dictionaryBlobSize - sizeof(ui32));
+    return DeserializeBinaryLikeArray(dictBlob, dictLength, externalInfo.GetColumnType(), GetCompressionCodec(externalInfo));
+}
+
+TConclusion<std::shared_ptr<arrow::Array>> BuildDictionaryOnlyValues(
+    const TConstructorContainer& constructor, const TString& dictionaryBlob, const TChunkConstructionData& externalInfo) {
+    if (!constructor || constructor->GetType() != IChunkedArray::EType::Dictionary) {
+        return std::shared_ptr<arrow::Array>();
+    }
+    if (dynamic_cast<const TDictionaryDenseConstructor*>(constructor.GetObjectPtr().get())) {
+        return TDictionaryDenseConstructor::DeserializeDictionaryOnly(dictionaryBlob, externalInfo);
+    }
+    return NDictionary::TConstructor::BuildDictionaryOnlyReader(dictionaryBlob, externalInfo);
+}
+
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

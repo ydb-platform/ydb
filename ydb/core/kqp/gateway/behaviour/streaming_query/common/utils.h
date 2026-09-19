@@ -25,6 +25,13 @@ public:
         static inline constexpr char DatabaseId[] = "database_id";
         static inline constexpr char QueryPath[] = "query_path";
         static inline constexpr char State[] = "state";
+        static inline constexpr char ExpireAt[] = "expire_at";
+    };
+
+    struct TOperations {
+        static inline constexpr char Create[] = "create";
+        static inline constexpr char Alter[] = "alter";
+        static inline constexpr char Drop[] = "drop";
     };
 
     // Properties which crated during query translation
@@ -42,6 +49,7 @@ public:
 
         // Internal query info
         static inline constexpr char QueryTextRevision[] = "__query_text_revision";
+        static inline constexpr char InflightOperation[] = "__inflight_operation";
     };
 
     static inline constexpr char InternalTablesPath[] = "streaming/queries";
@@ -63,6 +71,7 @@ public:
     std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     TString CheckpointIntervalString;
     std::optional<TDuration> CheckpointInterval;
+    TString InflightOperation;
 };
 
 }  // namespace NKikimr::NKqp

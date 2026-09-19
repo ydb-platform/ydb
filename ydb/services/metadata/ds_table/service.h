@@ -14,12 +14,29 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <unordered_map>
+
 namespace NKikimr::NMetadata::NProvider {
 
-class TService: public NActors::TActorBootstrapped<TService> {
-private:
+class TService : public NActors::TActorBootstrapped<TService> {
     using TBase = NActors::TActor<TService>;
+
+    struct TTrackOperationId {
+        TString DatabaseId;
+        TString TypeId;
+        TString ObjectId;
+        TPathId PathId;
+        ui64 ObjectGeneration;
+
+        bool operator==(const TTrackOperationId& other) const;
+
+        struct THash {
+            ui64 operator()(const TTrackOperationId& id) const;
+        };
+    };
+
     std::map<TString, NActors::TActorId> Accessors;
+    std::unordered_map<TTrackOperationId, TEvTrackOperationCompletion::TPtr, TTrackOperationId::THash> InflightTrackOperations;
     std::shared_ptr<TRegistrationData> RegistrationData = std::make_shared<TRegistrationData>();
     const TConfig Config;
 
@@ -30,6 +47,9 @@ private:
     void Handle(TEvUnsubscribeExternal::TPtr& ev);
     void Handle(TEvObjectsOperation::TPtr& ev);
     void Handle(TEvResetManagerRegistration::TPtr& ev);
+    void Handle(TEvTrackOperationCompletion::TPtr& ev);
+    void Handle(TEvTrackOperationFinished::TPtr& ev);
+    void StartTracking(const TEvTrackOperationCompletion& request);
 
     void PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender);
     void Activate();
@@ -45,7 +65,6 @@ private:
     }
 
 public:
-
     void Bootstrap(const NActors::TActorContext& ctx);
 
     STATEFN(StateMain) {
@@ -57,6 +76,8 @@ public:
             hFunc(TEvSubscribeExternal, Handle);
             hFunc(TEvUnsubscribeExternal, Handle);
             hFunc(TEvResetManagerRegistration, Handle);
+            hFunc(TEvTrackOperationCompletion, Handle);
+            hFunc(TEvTrackOperationFinished, Handle);
 
             default:
                 Y_ABORT_UNLESS(false);

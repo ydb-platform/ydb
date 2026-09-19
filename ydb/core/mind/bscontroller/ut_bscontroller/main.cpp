@@ -23,6 +23,7 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <algorithm>
 #include <optional>
 
 using namespace NActors;
@@ -880,7 +881,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT(!baseConfig.GetGroup().empty());
             const auto& group = baseConfig.GetGroup(0);
             const ui32 groupId = group.GetGroupId();
-            const ui32 groupGeneration = group.GetGroupGeneration();
+            ui32 groupGeneration = group.GetGroupGeneration();
             const auto slots = getGroupSlots(baseConfig, groupId);
             UNIT_ASSERT_VALUES_EQUAL(slots.size(), 8);
 
@@ -961,6 +962,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(unchanged.PDiskId, source.PDiskId);
             response = reassignWithTarget(source, invalidTarget, [](NKikimrBlobStorage::TConfigRequest& req) {
                 req.SetIgnoreGroupSanityChecks(true);
+                req.SetIgnoreGroupFailModelChecks(true);
+            });
+            UNIT_ASSERT_C(!response.GetSuccess(), describeResponse(response));
+            UNIT_ASSERT_C(response.GetStatus(0).GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kGroupLayoutIncorrect,
+                          describeResponse(response));
+
+            response = reassignWithTarget(source, invalidTarget, [](NKikimrBlobStorage::TConfigRequest& req) {
+                req.SetIgnoreGroupLayoutChecks(true);
             });
             UNIT_ASSERT_C(!response.GetSuccess(), describeResponse(response));
             UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
@@ -968,7 +977,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 describeResponse(response));
 
             response = reassignWithTarget(source, invalidTarget, [](NKikimrBlobStorage::TConfigRequest& req) {
-                req.SetIgnoreGroupSanityChecks(true);
+                req.SetIgnoreGroupLayoutChecks(true);
                 req.SetIgnoreGroupFailModelChecks(true);
             });
             UNIT_ASSERT_C(response.GetSuccess(), describeResponse(response));
@@ -976,11 +985,90 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), describeResponse(response));
             UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).ReassignedItemSize(), 1);
 
-            const auto afterIgnoredSanity = queryBaseConfig();
-            const auto moved = findSlot(getGroupSlots(afterIgnoredSanity, groupId),
+            const auto afterIgnoredLayout = queryBaseConfig();
+            const auto moved = findSlot(getGroupSlots(afterIgnoredLayout, groupId),
                 source.FailRealmIdx, source.FailDomainIdx, source.VDiskIdx);
             UNIT_ASSERT_VALUES_EQUAL(moved.NodeId, invalidTarget.GetNodeId());
             UNIT_ASSERT_VALUES_EQUAL(moved.PDiskId, invalidTarget.GetPDiskId());
+
+            groupGeneration = afterIgnoredLayout.GetGroup(0).GetGroupGeneration();
+            auto repairTarget = findAlternatePDiskOnNode(source.NodeId, source.PDiskId);
+            UNIT_ASSERT(repairTarget);
+            const auto unaffected = slots.back();
+            response = reassignWithTarget(unaffected, *repairTarget, [](NKikimrBlobStorage::TConfigRequest& req) {
+                req.SetIgnoreGroupFailModelChecks(true);
+            });
+            UNIT_ASSERT_C(!response.GetSuccess(), describeResponse(response));
+            UNIT_ASSERT_C(response.GetStatus(0).GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kGroupLayoutIncorrect,
+                          describeResponse(response));
+
+            auto getUnaffectedPDiskStatus = [&](const NKikimrBlobStorage::TBaseConfig& config) {
+                const auto it = std::ranges::find_if(config.GetPDisk(), [&](const auto& pdisk) {
+                    return pdisk.GetNodeId() == unaffected.NodeId && pdisk.GetPDiskId() == unaffected.PDiskId;
+                });
+                UNIT_ASSERT(it != config.GetPDisk().end());
+                return it->GetDriveStatus();
+            };
+            request.Clear();
+            request.SetIgnoreGroupFailModelChecks(true);
+            auto *brokenCmd = request.AddCommand()->MutableUpdateDriveStatus();
+            brokenCmd->MutableHostKey()->SetNodeId(unaffected.NodeId);
+            brokenCmd->SetPDiskId(unaffected.PDiskId);
+            brokenCmd->SetStatus(NKikimrBlobStorage::BROKEN);
+            response = invoke(request);
+            UNIT_ASSERT_C(!response.GetSuccess(), describeResponse(response));
+            UNIT_ASSERT_C(response.GetStatus(0).GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kGroupLayoutIncorrect,
+                          describeResponse(response));
+
+            const auto afterRejectedBroken = queryBaseConfig();
+            UNIT_ASSERT_VALUES_EQUAL(getUnaffectedPDiskStatus(afterRejectedBroken),
+                                     getUnaffectedPDiskStatus(afterIgnoredLayout));
+            UNIT_ASSERT_VALUES_EQUAL(afterRejectedBroken.GetGroup(0).GetGroupGeneration(), groupGeneration);
+            const auto notMoved = findSlot(getGroupSlots(afterRejectedBroken, groupId),
+                                           unaffected.FailRealmIdx, unaffected.FailDomainIdx, unaffected.VDiskIdx);
+            UNIT_ASSERT_VALUES_EQUAL(notMoved.NodeId, unaffected.NodeId);
+            UNIT_ASSERT_VALUES_EQUAL(notMoved.PDiskId, unaffected.PDiskId);
+
+            request.SetIgnoreGroupLayoutChecks(true);
+            response = invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), describeResponse(response));
+            const auto afterBroken = queryBaseConfig();
+            UNIT_ASSERT_VALUES_EQUAL(getUnaffectedPDiskStatus(afterBroken), NKikimrBlobStorage::BROKEN);
+            const auto afterBrokenSlots = getGroupSlots(afterBroken, groupId);
+            const auto evacuated = findSlot(afterBrokenSlots,
+                                            unaffected.FailRealmIdx, unaffected.FailDomainIdx, unaffected.VDiskIdx);
+            UNIT_ASSERT(evacuated.NodeId != unaffected.NodeId || evacuated.PDiskId != unaffected.PDiskId);
+            const auto stillMisplaced = findSlot(afterBrokenSlots, source.FailRealmIdx, source.FailDomainIdx, source.VDiskIdx);
+            UNIT_ASSERT_VALUES_EQUAL(stillMisplaced.NodeId, moved.NodeId);
+            UNIT_ASSERT_VALUES_EQUAL(stillMisplaced.PDiskId, moved.PDiskId);
+            UNIT_ASSERT_VALUES_EQUAL(std::ranges::count(afterBrokenSlots, moved.NodeId, &TVSlotPlacement::NodeId), 2);
+
+            TSet<ui32> occupiedNodes;
+            for (const auto& slot : slots) {
+                occupiedNodes.insert(slot.NodeId);
+            }
+            for (const auto& slot : afterBrokenSlots) {
+                occupiedNodes.insert(slot.NodeId);
+            }
+            repairTarget.reset();
+            for (const auto& pdisk : afterBroken.GetPDisk()) {
+                if (!occupiedNodes.contains(pdisk.GetNodeId()) && pdisk.GetDriveStatus() == NKikimrBlobStorage::ACTIVE) {
+                    auto& target = repairTarget.emplace();
+                    target.SetNodeId(pdisk.GetNodeId());
+                    target.SetPDiskId(pdisk.GetPDiskId());
+                    break;
+                }
+            }
+            UNIT_ASSERT(repairTarget);
+            groupGeneration = afterBroken.GetGroup(0).GetGroupGeneration();
+            response = reassignWithTarget(moved, *repairTarget, [](NKikimrBlobStorage::TConfigRequest& req) {
+                req.SetIgnoreGroupFailModelChecks(true);
+            });
+            UNIT_ASSERT_C(response.GetSuccess(), describeResponse(response));
+            const auto repaired = findSlot(getGroupSlots(queryBaseConfig(), groupId),
+                                          source.FailRealmIdx, source.FailDomainIdx, source.VDiskIdx);
+            UNIT_ASSERT_VALUES_EQUAL(repaired.NodeId, repairTarget->GetNodeId());
+            UNIT_ASSERT_VALUES_EQUAL(repaired.PDiskId, repairTarget->GetPDiskId());
         });
     }
 

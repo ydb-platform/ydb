@@ -174,9 +174,13 @@ TString GetAggregationFunction(TExprNode::TPtr node) {
     return TString(node->Content());
 }
 
+bool IsNestedSelectNode(const TExprNode::TPtr& node) {
+    return node->IsCallable({"YqlSelect", "KqpExprSublink", "KqpInSublink", "KqpExistsSublink"});
+}
+
 void CollectAggregationsImpl(const TExprNode::TPtr& node, TVector<TExprNode::TPtr>& aggregations,
                              THashSet<const TExprNode*>& visited) {
-    if (!visited.insert(node.Get()).second) {
+    if (!visited.insert(node.Get()).second || IsNestedSelectNode(node)) {
         return;
     }
 
@@ -842,7 +846,7 @@ bool IsWindowCall(const TExprNode::TPtr& node) {
 
 void CollectWindowCallsImpl(const TExprNode::TPtr& node, TVector<TExprNode::TPtr>& calls,
                             THashSet<const TExprNode*>& visited) {
-    if (!visited.insert(node.Get()).second) {
+    if (!visited.insert(node.Get()).second || IsNestedSelectNode(node)) {
         return;
     }
 

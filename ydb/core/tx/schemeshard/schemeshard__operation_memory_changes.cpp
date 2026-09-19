@@ -157,6 +157,7 @@ void TMemoryChanges::GrabSysView(TSchemeShard* ss, const TPathId& pathId) {
 
 void TMemoryChanges::GrabNewLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId) {
     Y_ABORT_UNLESS(!ss->LongIncrementalRestoreOps.contains(opId));
+    Y_ABORT_UNLESS(!ss->IncrementalRestoreStates.contains(ui64(opId.GetTxId())));
     LongIncrementalRestoreOps.emplace(opId, std::nullopt);
 }
 
@@ -173,6 +174,11 @@ void TMemoryChanges::GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id) {
 void TMemoryChanges::GrabNewFullBackupOp(TSchemeShard* ss, ui64 id) {
     Y_ABORT_UNLESS(!ss->FullBackups.contains(id));
     FullBackups.emplace(id, nullptr);
+}
+
+void TMemoryChanges::GrabNewSchemeOperationUidKey(TSchemeShard* ss, const TOperationUidKey& key) {
+    Y_ABORT_UNLESS(!ss->OperationsByUid.contains(key));
+    SchemeOperationUidKeys.push(key);
 }
 
 void TMemoryChanges::GrabNewBCPathToFullBackup(TSchemeShard* ss, const TPathId& bcPathId) {
@@ -376,6 +382,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->LongIncrementalRestoreOps[id] = elem.value();
         } else {
             ss->LongIncrementalRestoreOps.erase(id);
+            ss->IncrementalRestoreStates.erase(ui64(id.GetTxId()));
         }
         LongIncrementalRestoreOps.pop();
     }
@@ -388,6 +395,12 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->IncrementalBackups.erase(id);
         }
         IncrementalBackups.pop();
+    }
+
+    while (SchemeOperationUidKeys) {
+        const auto& key = SchemeOperationUidKeys.top();
+        ss->OperationsByUid.erase(key);
+        SchemeOperationUidKeys.pop();
     }
 
     while (FullBackups) {

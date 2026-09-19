@@ -4,6 +4,7 @@
 #include "schemeshard_info_types.h"
 #include "schemeshard_path_element.h"
 
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 
 #include <util/generic/ptr.h>
@@ -80,6 +81,7 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     // Mirrors IncrementalBackups: UnDo erases the id from Self->FullBackups.
     using TFullBackupState = std::pair<ui64, TFullBackupInfo::TPtr>;
     TStack<TFullBackupState> FullBackups;
+    TStack<TOperationUidKey> SchemeOperationUidKeys;
 
     // UnDo erases the (bcPathId -> id) entry, keeping BCPathToFullBackup atomic with FullBackups.
     using TBCPathToFullBackupState = std::pair<TPathId, std::optional<ui64>>;
@@ -154,6 +156,7 @@ public:
     void GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id);
 
     void GrabNewFullBackupOp(TSchemeShard* ss, ui64 id);
+    void GrabNewSchemeOperationUidKey(TSchemeShard* ss, const TOperationUidKey& key);
     void GrabNewBCPathToFullBackup(TSchemeShard* ss, const TPathId& bcPathId);
 
     void GrabNewSecret(TSchemeShard* ss, const TPathId& pathId);

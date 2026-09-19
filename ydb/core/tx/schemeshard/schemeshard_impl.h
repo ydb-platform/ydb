@@ -25,6 +25,7 @@
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
@@ -1614,6 +1615,13 @@ public:
     TOperationId RouteIncoming(TTabletId tabletId, const TActorContext& ctx);
 
     // namespace NLongRunningCommon {
+    // Shared UID index; persistence and lifetime belong to the operation records.
+    THashMap<TOperationUidKey, ui64> OperationsByUid;
+    TMaybe<TOperationUidRecord> FindOperationByUid(const TOperationUidKey& key) const;
+    void BindSchemeOperationUid(const TOperationUidKey& key, ui64 id,
+        const NKikimrSchemeOp::TModifyScheme& tx, const TString& userSID);
+    void PersistSchemeOperationUidKey(NIceDb::TNiceDb& db, const TOperationUidKey& key);
+
     struct TXxport {
         class TTxBase;
         template <typename TInfo, typename TEvRequest, typename TEvResponse> struct TTxGet;
@@ -1631,7 +1639,6 @@ public:
 
     // namespace NExport {
     THashMap<ui64, TExportInfo::TPtr> Exports;
-    THashMap<TString, TExportInfo::TPtr> ExportsByUid;
     TSet<std::pair<TInstant, ui64>> ExportsByTime;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToExport;
     THashMap<TTxId, THashSet<ui64>> TxIdToDependentExport;
@@ -1692,7 +1699,6 @@ public:
 
     // namespace NImport {
     THashMap<ui64, TImportInfo::TPtr> Imports;
-    THashMap<TString, TImportInfo::TPtr> ImportsByUid;
     TSet<std::pair<TInstant, ui64>> ImportsByTime;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToImport;
     THashSet<TActorId> RunningImportSchemeGetters;
@@ -1858,7 +1864,6 @@ public:
     TControlWrapper AllowDataColumnForIndexTable;
 
     THashMap<TIndexBuildId, std::shared_ptr<TIndexBuildInfo>> IndexBuilds;
-    THashMap<TString, std::shared_ptr<TIndexBuildInfo>> IndexBuildsByUid;
     TSet<std::pair<TInstant, TIndexBuildId>> IndexBuildsByTime;
     THashMap<TTxId, TIndexBuildId> TxIdToIndexBuilds;
 
@@ -2017,7 +2022,6 @@ public:
     NTabletFlatExecutor::ITransaction* CreatePipeRetrySetColumnConstraint(TIndexBuildId operationId, TTabletId tabletId);
 
     THashMap<TIndexBuildId, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperations;
-    THashMap<TString, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperationsByUid;
     TSet<std::pair<TInstant, TIndexBuildId>> SetColumnConstraintOperationsByTime;
     THashMap<TTxId, TIndexBuildId> TxIdToSetColumnConstraintOperations;
     // txIds of concurrent operations (e.g. a backup CopyTable) that a

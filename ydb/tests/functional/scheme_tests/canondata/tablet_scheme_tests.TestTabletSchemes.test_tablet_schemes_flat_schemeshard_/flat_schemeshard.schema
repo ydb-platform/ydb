@@ -9133,6 +9133,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "AwaitingInitialRestore",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "OperationId",
                 "ColumnType": "Uint64"
@@ -9186,12 +9191,38 @@
                 "ColumnId": 11,
                 "ColumnName": "RetryNeeded",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "Uid",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "OriginalDdl",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "UserSID",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "BackupCollectionPathOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "BackupCollectionPathId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -9202,7 +9233,12 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12,
+                    13,
+                    14,
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9326,11 +9362,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "EndTime",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "Id",
                 "ColumnType": "Uint64"
@@ -9359,19 +9390,36 @@
                 "ColumnId": 6,
                 "ColumnName": "StartTime",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "Uid",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "OriginalDdl",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -10302,6 +10350,16 @@
                 "ColumnId": 11,
                 "ColumnName": "ExpectedItemCount",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "Uid",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "OriginalDdl",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -10318,7 +10376,9 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -10405,11 +10465,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 17,
-                "ColumnName": "DomainLocalId",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "OperationId",
                 "ColumnType": "Uint64"
@@ -10488,13 +10543,22 @@
                 "ColumnId": 16,
                 "ColumnName": "DomainOwnerId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "DomainLocalId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "Uid",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
                     1,
                     2,
                     3,
@@ -10510,7 +10574,9 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18
                 ],
                 "RoomID": 0,
                 "Codec": 0,

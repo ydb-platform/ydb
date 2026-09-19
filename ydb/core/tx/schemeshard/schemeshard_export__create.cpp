@@ -8,6 +8,7 @@
 #include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/core/tx/datashard/export_data_format.h>
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
@@ -139,20 +140,22 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             );
         }
 
-        const TString& uid = GetUid(request.GetRequest().GetOperationParams());
-        if (uid) {
-            if (auto it = Self->ExportsByUid.find(uid); it != Self->ExportsByUid.end()) {
-                if (IsSameDomain(it->second, request.GetDatabaseName())) {
-                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *it->second);
-                    return Reply(std::move(response));
-                } else {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::ALREADY_EXISTS,
-                        TStringBuilder() << "Export with uid '" << uid << "' already exists"
-                    );
-                }
-            }
+        const TString& uid = GetUid(EOperationUidKind::Export, request.GetRequest().GetOperationParams());
+        const auto admission = TOperationUidAdmission::Prepare({EOperationUidKind::Export, uid},
+            TOperationUidAdmission::EDuplicatePolicy::Replay,
+            [&](const auto& key) { return Self->FindOperationByUid(key); },
+            [&](const auto& stored) {
+                return IsSameDomain(Self->Exports.at(stored.OperationId), request.GetDatabaseName())
+                    ? TOperationUidAdmission::EDecision::Replay : TOperationUidAdmission::EDecision::DomainMismatch;
+            });
+        if (admission.GetDecision() == TOperationUidAdmission::EDecision::Replay) {
+            Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(),
+                *Self->Exports.at(admission.GetOperationId()));
+            return Reply(std::move(response));
+        }
+        if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
+            return Reply(std::move(response), Ydb::StatusIds::ALREADY_EXISTS,
+                TStringBuilder() << "Export with uid '" << uid << "' already exists");
         }
 
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);

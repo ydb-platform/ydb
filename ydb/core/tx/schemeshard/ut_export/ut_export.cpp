@@ -2910,7 +2910,7 @@ partitioning_settings {
             OperationParams {
               labels {
                 key: "uid"
-                value: "foo"
+                value: "ключ with spaces/and?symbols!"
               }
             }
             ExportToS3Settings {
@@ -2927,12 +2927,33 @@ partitioning_settings {
         TestExport(Runtime(), ++txId, "/MyRoot", request);
         const ui64 exportId = txId;
         // create operation again with same uid
-        TestExport(Runtime(), ++txId, "/MyRoot", request);
+        TString differentBody = request;
+        SubstGlobal(differentBody, "/MyRoot/Table", "/MyRoot/MissingTable");
+        TestExport(Runtime(), ++txId, "/MyRoot", differentBody);
         // new operation was not created
         TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         // check previous operation
         TestGetExport(Runtime(), exportId, "/MyRoot");
         Env().TestWaitNotification(Runtime(), exportId);
+
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        TestExport(Runtime(), ++txId, "/MyRoot", differentBody);
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TestGetExport(Runtime(), exportId, "/MyRoot");
+
+        // Legacy retries allow an omitted or unresolved database, but reject
+        // a different resolved path before validating a new request.
+        for (const TString& database : {TString(), TString("/MissingDatabase")}) {
+            TestExport(Runtime(), ++txId, database, differentBody);
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        }
+        TestExport(Runtime(), ++txId, "/MyRoot/Table", differentBody, "", "", Ydb::StatusIds::ALREADY_EXISTS);
+
+        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        TestExport(Runtime(), ++txId, "/MyRoot", request);
+        TestGetExport(Runtime(), txId, "/MyRoot");
+        Env().TestWaitNotification(Runtime(), txId);
     }
 
     Y_UNIT_TEST(ExportStartTime) {

@@ -3,7 +3,7 @@
 #include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
-#include <ydb/core/tx/schemeshard/schemeshard_xxport__helpers.h>
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
@@ -42,8 +42,11 @@ public:
                 << "Another long-running operation with id '" << BuildId << "' already exists");
         }
 
-        const TString& uid = GetUid(request.GetOperationParams());
-        if (uid && Self->IndexBuildsByUid.contains(uid)) {
+        const TString& uid = GetUid(EOperationUidKind::IndexBuild, request.GetOperationParams());
+        const auto admission = TOperationUidAdmission::Prepare({EOperationUidKind::IndexBuild, uid},
+            TOperationUidAdmission::EDuplicatePolicy::Reject,
+            [&](const auto& key) { return Self->FindOperationByUid(key); });
+        if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
                 << "Index build with uid '" << uid << "' already exists");
         }

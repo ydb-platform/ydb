@@ -132,7 +132,8 @@ void TSchemeShard::PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const T
         NIceDb::TUpdate<Schema::SetColumnConstraint::OperationState>(ui32(operationInfo.OperationState)),
         NIceDb::TUpdate<Schema::SetColumnConstraint::StartTime>(operationInfo.StartTime.Seconds()),
         NIceDb::TUpdate<Schema::SetColumnConstraint::DomainOwnerId>(operationInfo.DomainPathId.OwnerId),
-        NIceDb::TUpdate<Schema::SetColumnConstraint::DomainLocalId>(operationInfo.DomainPathId.LocalPathId)
+        NIceDb::TUpdate<Schema::SetColumnConstraint::DomainLocalId>(operationInfo.DomainPathId.LocalPathId),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::Uid>(operationInfo.Uid)
     );
     if (operationInfo.UserSID) {
         db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
@@ -285,7 +286,7 @@ void TSchemeShard::ForgetSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColu
 
     SetColumnConstraintOperationsByTime.erase(byTimeKey);
     if (info.Uid) {
-        SetColumnConstraintOperationsByUid.erase(info.Uid);
+        OperationsByUid.erase(TOperationUidKey{EOperationUidKind::SetColumnConstraint, info.Uid});
     }
 
     TxIdToSetColumnConstraintOperations.erase(info.LockTxId);

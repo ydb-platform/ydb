@@ -26,7 +26,7 @@ Release date: TBD.
 The following functionality is not enabled by default.
 
 * For column-oriented tables, `ALTER TABLE ... COMPACT` can start forced compaction.
-* Column-oriented and row-oriented tables now have parity in the supported set of [YQL data types](./yql/reference/types/primitive.md?version=main), including `Interval`, `Uuid`, and `DyNumber`.
+* Column-oriented and row-oriented tables now have parity in the set of YQL data types (`Interval`, `Uuid`, and `DyNumber` are supported).
 * Added [hybrid search](./dev/hybrid-search.md?version=v26.3), combining full-text relevance and vector similarity into one ranked result.
 * Topics can be accessed through the [Amazon SQS API](./reference/sqs-api/index.md?version=v26.3), allowing SQS-compatible clients to read and write messages.
 * Added [JSON indexes](./dev/json-indexes.md?version=v26.3) for accelerating `JSON_EXISTS` and `JSON_VALUE` queries.

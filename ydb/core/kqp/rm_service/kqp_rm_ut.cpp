@@ -471,6 +471,7 @@ public:
         UNIT_TEST(ArenaReclaimsSurplusWhileGrowthIsWanted);
         UNIT_TEST(ArenaYieldsSurplusToRefusedMemoryRequest);
         UNIT_TEST(ArenaFastPathOpenWhileCapWithholdsGrowth);
+        UNIT_TEST(ArenaDefaultsAgainstASmallQueue);
         UNIT_TEST(ArenaLifetimeIsNotAQueryDuration);
     UNIT_TEST_SUITE_END();
 
@@ -538,6 +539,7 @@ public:
     void ArenaReclaimsSurplusWhileGrowthIsWanted();
     void ArenaYieldsSurplusToRefusedMemoryRequest();
     void ArenaFastPathOpenWhileCapWithholdsGrowth();
+    void ArenaDefaultsAgainstASmallQueue();
     void ArenaLifetimeIsNotAQueryDuration();
 
 private:
@@ -2606,6 +2608,88 @@ void KqpRm::ArenaFastPathOpenWhileCapWithholdsGrowth() {
     AssertResourceBrokerSensors(0, 0, 0, 1, 1);
     tx1.Reset();
     AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+}
+
+// The proto defaults against a kqp queue sized like a small node. A light task the node service starts charges the
+// light limit twice, for the program and for its channels, plus the unit price, 3 MiB in all, and the band adds up
+// to 128 MiB on top; the arena fills the queue long before the tasks do, gives its free part back to a Memory
+// request, and past the queue the demand is a charged deficit: extra Memory requests are refused and the cookies
+// report the pressure
+void KqpRm::ArenaDefaultsAgainstASmallQueue() {
+    auto config = MakeKqpResourceManagerConfig();
+    config.ClearExecutionUnitMemory();
+    config.ClearMemoryArenaMinFreeSize();
+    config.ClearMemoryArenaMaxFreeSize();
+    StartRms({config, MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    // the kqp queue of a node with a hard limit of 1.25 GiB, at the 20 percent the memory controller gives it; the
+    // resource manager takes its node total from the queue config the resource broker pushes
+    const ui64 queue = 256_MB;
+    auto brokerConfig = MakeResourceBrokerTestConfig();
+    auto* limit = brokerConfig.MutableQueues(1)->MutableLimit();
+    limit->ClearResource();
+    limit->SetCpu(4);
+    limit->SetMemory(queue);
+    brokerConfig.MutableResourceLimit()->ClearResource();
+    brokerConfig.MutableResourceLimit()->AddResource(10);
+    brokerConfig.MutableResourceLimit()->AddResource(queue);
+    auto configure = MakeHolder<TEvResourceBroker::TEvConfigure>();
+    configure->Record.CopyFrom(brokerConfig);
+    Runtime->Send(new IEventHandle(ResourceBrokers[0], Runtime->AllocateEdgeActor(), configure.Release()));
+    TDispatchOptions pushed;
+    pushed.FinalEvents.emplace_back(TEvResourceBroker::EvConfigResponse, 1);
+    UNIT_ASSERT(Runtime->DispatchEvents(pushed));
+    AssertResourceManagerStats(rm, queue, 100);
+
+    auto tx = MakeTx(1, rm);
+    // what the node service asks for a light task: the light limit for the program and again for its channels
+    const NRm::TKqpResourcesRequest lightTask{.ExecutionUnits = 1, .ExternalMemory = 2 * 1_MB};
+
+    // 60 tasks demand 180 MiB; each time the free part falls under 32 MiB the band resizes the arena to the demand
+    // plus 80 MiB, the last time at 52 tasks, so it holds 236 MiB, and a Memory request of 30 MiB does not fit the
+    // 20 MiB left until the arena gives its free part back
+    for (ui64 taskId = 1; taskId <= 60; ++taskId) {
+        UNIT_ASSERT(rm->AllocateResources(*tx, taskId, lightTask));
+    }
+    TickArenaAdjust();
+    AssertArenaSensors(236_MB, 180_MB, 0);
+    AssertResourceManagerStats(rm, 20_MB, 40);
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 30_MB}));
+    AssertArenaSensors(180_MB, 180_MB, 0);
+    AssertResourceManagerStats(rm, 46_MB, 40);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+
+    // the pass takes the band back up to what the queue leaves: 256 - 30
+    TickArenaAdjust();
+    AssertArenaSensors(226_MB, 180_MB, 0);
+    AssertResourceManagerStats(rm, 0, 40);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+
+    // 30 more tasks push the demand past the queue: charged as a deficit, the resource broker not asked for more,
+    // and a Memory request of 1 MiB is refused with the cookie reporting the pressure
+    for (ui64 taskId = 61; taskId <= 90; ++taskId) {
+        UNIT_ASSERT(rm->AllocateResources(*tx, taskId, lightTask));
+    }
+    AssertArenaSensors(226_MB, 270_MB, 44_MB);
+    AssertResourceManagerStats(rm, 0, 10);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+    auto refused = rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 1_MB});
+    UNIT_ASSERT(!refused);
+    UNIT_ASSERT_EQUAL(refused.GetStatus(), NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY);
+    UNIT_ASSERT_LT(tx->GetMemoryAvailability(), 0);
+
+    for (ui64 taskId = 1; taskId <= 90; ++taskId) {
+        rm->FreeResources(*tx, taskId, lightTask);
+    }
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 30_MB});
+    TickArenaAdjust();
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, queue, 100);
+    tx.Reset();
+    AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
 }
 
 // The arena task outlives the queries it backs, so the resource broker must not take its lifetime for the

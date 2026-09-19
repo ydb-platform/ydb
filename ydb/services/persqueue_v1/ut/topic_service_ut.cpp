@@ -332,6 +332,10 @@ Y_UNIT_TEST_F(RelativePath, TUpdateOffsetsInTransactionFixture) {
     TestTopicPaths("PQ/rt3.dc1--topic1", "/Root/PQ/rt3.dc1--topic1");
 }
 
+Y_UNIT_TEST_F(FullPathWithoutLeadingSlash, TUpdateOffsetsInTransactionFixture) {
+    TestTopicPaths("Root/PQ/rt3.dc1--topic1", "/Root/PQ/rt3.dc1--topic1");
+}
+
 Y_UNIT_TEST_F(AccessRights, TUpdateOffsetsInTransactionFixture) {
     // temporarily disabled the test
     return;

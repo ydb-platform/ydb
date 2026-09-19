@@ -25,6 +25,7 @@
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/util/rope.h>
@@ -343,6 +344,9 @@ class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
+    TString GetDatabaseRelativePath(TStringBuf path) const {
+        return NKikimr::ResolvePathToDatabase(GetDatabaseName().GetOrElse(TString()), path);
+    }
 };
 
 class IRequestCtxBase
@@ -944,7 +948,8 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+        const auto database = ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+        return database && !database->empty() && DatabaseName_ ? DatabaseName_ : database;
     }
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
@@ -1011,6 +1016,7 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
+        DatabaseName_ = database;
         Ctx_->UseDatabase(database);
     }
 
@@ -1147,6 +1153,7 @@ public:
 
 private:
     TIntrusivePtr<IStreamCtx> Ctx_;
+    TMaybe<TString> DatabaseName_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager_;
@@ -1295,7 +1302,8 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+        const auto database = ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+        return database && !database->empty() && DatabaseName ? DatabaseName : database;
     }
 
     TString GetRpcMethodName() const override {
@@ -1382,6 +1390,7 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
+        DatabaseName = database;
         Ctx_->UseDatabase(database);
     }
 
@@ -1630,6 +1639,7 @@ protected:
     NWilson::TSpan Span_;
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
+    TMaybe<TString> DatabaseName;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager;

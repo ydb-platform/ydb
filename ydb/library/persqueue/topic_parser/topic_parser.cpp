@@ -1,6 +1,7 @@
 #include "topic_parser.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/folder/path.h>
@@ -292,18 +293,9 @@ TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
 }
 
 void TDiscoveryConverter::BuildFstClassNames() {
-    TStringBuf normTopic(OriginalTopic);
-    normTopic.SkipPrefix("/");
-    if (Database.Defined()) {
-
-        TStringBuf normDb(*Database);
-        normDb.SkipPrefix("/");
-        normDb.ChopSuffix("/");
-        normTopic.SkipPrefix(normDb);
-        normTopic.SkipPrefix("/");
-        PrimaryPath = NKikimr::JoinPath({TString(normDb), TString(normTopic)});
-    } else {
-        PrimaryPath = TString(normTopic);
+    PrimaryPath = NKikimr::ResolvePathToDatabase(
+        NKikimr::CanonizePath(Database.GetOrElse(TString())), OriginalTopic);
+    if (!Database.Defined()) {
         Database = "";
     }
     NormalizeAsFullPath(PrimaryPath);

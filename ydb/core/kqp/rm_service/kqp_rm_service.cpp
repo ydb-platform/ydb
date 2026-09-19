@@ -435,8 +435,9 @@ public:
                 break;
             }
             // the free part of the arena would let the request in: given back, once, and the admission retried over
-            // it; the next demand change or periodic pass regrows it as far as the band asks and the node total then
-            // allows. Best effort: a demand change that lands in between can take the memory back first
+            // it; the first demand past the shrunk size, or the periodic pass, regrows it as far as the band asks and
+            // the node total then allows. Best effort: a demand change that lands in between can take the memory
+            // back first
             arenaYielded = true;
             AdjustArena(/* retryRefused */ false, /* yieldSurplus */ true);
         }
@@ -815,8 +816,8 @@ public:
     }
 
     // The band wants a bigger arena than the resource broker has granted: before the cap, and whether or not a
-    // round makes it, since a growth still wanted when the adjuster leaves has to keep the fast path shut, or its
-    // demand sits above a published ceiling with nothing to act on it
+    // round makes it, since a growth still wanted when the adjuster leaves keeps the gate (AdjustArena) and gets
+    // the fast path the ceiling of a withheld growth rather than the band's (ArenaFastCeilingLocked)
     bool ArenaGrowWantedLocked(ui64 used) const {
         return ArenaTargetLocked(used) > Arena.Size;
     }
@@ -826,13 +827,23 @@ public:
         if (!EnableMemoryArena.load()) {
             return ArenaFastPathOpen;
         }
-        const ui64 minFree = MemoryArenaMinFreeSize.load();
-        // the states in which ArenaPlanLocked cannot act, and a configuration with no band to absorb a change: a
-        // ceiling published under any of them would describe a size that is about to change, or leave the
-        // adjuster's recheck below nothing to make progress with
+        // the states in which ArenaPlanLocked cannot act, a charge that is not the size, and a configuration with
+        // no band to absorb a change: a ceiling published under any of them would describe a size that is about
+        // to change, or leave the adjuster's recheck below nothing to make progress with
         if (MemoryArenaMaxFreeSize.load() == 0 || Arena.AdjustInProgress || Arena.Stopped || !ResourceBroker
-            || Arena.Charged != Arena.Size || ArenaGrowWantedLocked(used) || Arena.Size < minFree)
+            || Arena.Charged != Arena.Size)
         {
+            return ArenaFastPathShut;
+        }
+        // a growth the band wants but cannot have now: the cap or the gate withholds it, or a yield has just planned
+        // for the demand alone (AllocateResources). The periodic pass or the first change past the size takes it up;
+        // until then the charge, Max(Size, Used), does not move while the demand stays within the size, so a change
+        // within it needs no lock, and the first change past it takes the lock and is charged as a deficit
+        if (ArenaGrowWantedLocked(used)) {
+            return Arena.Size + 1;
+        }
+        const ui64 minFree = MemoryArenaMinFreeSize.load();
+        if (Arena.Size < minFree) {
             return ArenaFastPathShut;
         }
         return Arena.Size - minFree + 1;
@@ -1289,7 +1300,8 @@ private:
     }
 
     // A demand change the memory arena absorbed without the lock leaves it above the demand; this is what gives
-    // the surplus back, and retries a growth the resource broker refused.
+    // the surplus back, refreshes the gauges, and retries a growth the resource broker refused or the node total
+    // withheld, see ArenaFastCeilingLocked.
     void HandleAdjustArena() {
         ResourceManager->AdjustArena(/* retryRefused */ true);
         Schedule(ArenaAdjustPeriod, new TEvPrivate::TEvAdjustArena());

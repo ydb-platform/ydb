@@ -403,7 +403,9 @@ public:
         // The LOGBROKER-10618 crash is Stream.Finish() on a dead CQ, which only
         // happens when FlagWriteActive is clear (e.g. a deferred StreamWrite that
         // never started writing). So keep the write side idle to reproduce it.
-        Attached.Signal();
+        if (Attached) {
+            Attached->Signal();
+        }
         Become(&THangActor::StateWork);
     }
 
@@ -420,13 +422,13 @@ public:
     }
 
 public:
-    static TManualEvent Attached;
+    static TManualEvent* Attached;
 
 private:
     TIntrusivePtr<IContext> Context;
 };
 
-TManualEvent THangActor::Attached;
+TManualEvent* THangActor::Attached = nullptr;
 
 Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
     Y_UNIT_TEST(SimpleEcho) {
@@ -558,6 +560,11 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
         // the hanging RPC keeps the server from draining.
         options.SetGRpcShutdownDeadline(TDuration::MilliSeconds(100));
 
+        // Per-test event: a fresh event for each test run, so a failure in a
+        // previous run cannot make WaitI() return early on a stale signal.
+        TManualEvent attached;
+        THangActor::Attached = &attached;
+
         auto server = MakeHolder<TGRpcTestServer<THangActor>>(std::move(options));
 
         auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
@@ -565,8 +572,9 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
 
         // The server actor (THangActor) now holds the IStreamCtx and never
         // finishes the stream. Keep the client stream alive across server.Reset()
-        // so the RPC stays in flight on the server side (with an in-flight write)
-        // when the completion queues are shut down, matching LOGBROKER-10618.
+        // so the RPC stays in flight on the server side (with no in-flight write:
+        // THangActor never writes, so FlagWriteActive stays clear) when the
+        // completion queues are shut down, matching LOGBROKER-10618.
         grpc::ClientContext context;
         auto stream = stub->Session(&context);
         Y_UNUSED(stream);
@@ -575,14 +583,14 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
         // to the stream. This guarantees the IStreamCtx (TFacade) is held by
         // the actor before we shut the server down, so the facade destructor
         // will run after the completion queue is dead.
-        THangActor::Attached.WaitI();
+        attached.WaitI();
 
         // Destroy the server: GRpcServer->Stop() shuts down the CQs, then the
         // actor system is destroyed, destroying THangActor and its IStreamCtx.
         // Without the fix this crashes with the LOGBROKER-10618 Y_VERIFY.
         server.Reset();
 
-        THangActor::Attached.Reset();
+        THangActor::Attached = nullptr;
     }
 }
 

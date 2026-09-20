@@ -343,15 +343,11 @@ private:
         }
 
         // Do not issue gRPC operations on a completion queue that is (or is
-        // about to be) shut down. The actor is still alive here (it is calling
-        // Read), so deliver a failure completion:
-        // this lets the actor's state machine proceed without
-        // blocking on a TEvReadFinished that will never arrive. The gRPC
-        // client is not notified (the CQ is dead anyway).
+        // about to be) shut down. Return false (read not accepted) without a
+        // completion event, matching the FlagFinishCalled contract: a rejected
+        // read produces no TEvReadFinished. The gRPC client is not notified
+        // (the CQ is dead anyway).
         if (Server->IsShuttingDown()) {
-            auto event = MakeHolder<typename IContext::TEvReadFinished>();
-            event->Success = false;
-            ActorSystem.Send(Actor, event.Release());
             return false;
         }
 
@@ -437,24 +433,19 @@ private:
 
         auto guard = SingleThreaded.Enforce();
 
-        // Do not issue gRPC operations on a completion queue that is (or is
-        // about to be) shut down. The actor is still alive here (it is calling
-        // Write), so deliver a failure completion:
-        // this lets the actor's state machine proceed without
-        // blocking on a TEvWriteFinished that will never arrive. The gRPC
-        // client is not notified (the CQ is dead anyway).
-        if (Server->IsShuttingDown()) {
-            auto event = MakeHolder<typename IContext::TEvWriteFinished>();
-            event->Success = false;
-            ActorSystem.Send(Actor, event.Release());
-            return false;
-        }
-
         with_lock (WriteLock) {
             auto flags = Flags.load(std::memory_order_acquire);
             Y_ABORT_UNLESS(flags & FlagAttached, "Write cannot be called before Attach");
 
             if (flags & FlagFinishCalled) {
+                return false;
+            }
+
+            // Do not issue gRPC operations on a completion queue that is (or is
+            // about to be) shut down. Return false (write not accepted) without
+            // a completion event. The gRPC client is
+            // not notified (the CQ is dead anyway).
+            if (Server->IsShuttingDown()) {
                 return false;
             }
 
@@ -552,6 +543,21 @@ private:
         } else if (next) {
             if (!Server->IsShuttingDown()) {
                 Stream.Write(next->Message, next->Options, OnWriteDoneTag.Prepare());
+            } else {
+                // The write chain is being torn down. Drop the pending write and
+                // clear the active flag so OnFinishDone's invariant
+                // (!(flags & FlagWriteActive)) holds. If Finish was already
+                // requested, complete the shutdown bookkeeping now; otherwise
+                // leave the stream open so a later Finish() (e.g. from
+                // ~TFacade) can complete it.
+                bool finishCalled;
+                with_lock (WriteLock) {
+                    finishCalled = Flags.load(std::memory_order_acquire) & FlagFinishCalled;
+                    Flags &= ~FlagWriteActive;
+                }
+                if (finishCalled) {
+                    OnFinishDone(status);
+                }
             }
         } else if (nextStatus) {
             if (!Server->IsShuttingDown()) {

@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Callable
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, get_sensors, counter_nodes
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 import ydb.issues
 import os
@@ -870,7 +870,7 @@ TESTCASES = [
                     $input as e
                 left join {streamlookup} any $listified as u
                 on(e.lza = u.a AND e.lyb = u.b)
-                left join /*+streamlookup()*/ any $listified as u2
+                left join /*+ streamlookup()*/ any $listified as u2
                 on(e.sza = u2.a AND e.syb = u2.b)
                 -- MultiGet true
             ;
@@ -1200,11 +1200,11 @@ TESTCASES = [
 
 
 class TestJoinYdbStreaming(StreamingTestBase):
+    # Use only testcase 16 for column-shard tables (since it exercises unusual types)
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
-    @pytest.mark.parametrize("streamlookup", [True, False], ids=["slj", "map"])
-    @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
+    @pytest.mark.parametrize("streamlookup", [True, False] if DEBUG else [True], ids=["slj", "map"] if DEBUG else ["slj"])
+    @pytest.mark.parametrize("column_tables, testcase", [*zip([False]*len(TESTCASES), range(len(TESTCASES))), (True, 16)])
     @pytest.mark.parametrize("local", [True, False], ids=["local", "generic"])
-    @pytest.mark.parametrize("column_tables", [True, False], ids=["cs", "row"])
     def test_streamlookup(
         self,
         kikimr: Kikimr,
@@ -1215,10 +1215,6 @@ class TestJoinYdbStreaming(StreamingTestBase):
         local: bool,
         column_tables: bool,
     ):
-        if not (DEBUG or streamlookup):
-            pytest.skip("map join verified only in DEBUG test")
-        if local and streamlookup:
-            pytest.skip("YQ-5431")
         title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}"
         query_name = f"q_{title}"
         endpoint = self.get_endpoint(kikimr, local_topics=True)
@@ -1248,8 +1244,9 @@ class TestJoinYdbStreaming(StreamingTestBase):
             streamlookup=Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else '',
         )
 
-        # options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
+        options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
+        # path = f"{kikimr.get_database_name()}/{query_name}" # TODO YQ-5684
         try:
             kikimr.ydb_client.query(f"""
                 CREATE STREAMING QUERY {query_name} AS DO BEGIN
@@ -1262,8 +1259,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
             return
 
         assert not (not streamlookup and "MultiGet true" in sql)
-        path = f"/Root/{query_name}"
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
         for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
             self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]), endpoint=endpoint)
@@ -1274,25 +1270,33 @@ class TestJoinYdbStreaming(StreamingTestBase):
         messages_ctr = Counter(map(freeze, map(json.loads, chain(*map(lambda row: islice(row, 1, None), messages)))))
         assert read_data_ctr == messages_ctr
 
-        """ TODO dq_tasks sensors unavailable in ydb streaming
-        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
+        hits = 0
+        miss = 0
+        for node_index in counter_nodes(kikimr.cluster):
+            sensors = get_sensors(kikimr.cluster, node_index, "kqp")
             for component in ["Lookup", "LookupSrc"]:
                 componentSensors = sensors.find_sensors(
-                    labels={"operation": query_id, "component": component},
+                    labels={
+                        "subsystem": "DqLookup",
+                        # "tx_id": path, # TODO: YQ-5684
+                        "component": component,
+                    },
                     key_label="sensor",
                 )
+                for k in componentSensors:
+                    # .tx_id[{path}] # TODO: YQ-5684
+                    logging.debug(f'node[{node_index}].component[{component}].{k} = {componentSensors[k]}')
+                if component == "Lookup":
+                    hits += componentSensors.get("Hits", 0)
+                    miss += componentSensors.get("Miss", 0)
                 if component == "LookupSrc":
                     if options_dict.get("FullscanLimit") == "0" or (
                         "FullscanLimit" not in options_dict and options_dict.get("MaxCachedRows") == "0"
                     ):
                         assert componentSensors.get("Fullscans", 0) == 0
-                for k in componentSensors:
-                    print(
-                        f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
-                        file=sys.stderr,
-                    )
-        """
+
+        if "MultiGet true" not in sql:
+            assert hits + miss == len(messages)*sql.count("/*+ streamlookup(")
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY {query_name}")
         if not local:
@@ -1313,9 +1317,6 @@ class TestJoinYdbStreaming(StreamingTestBase):
         local: bool,
         column_tables: bool,
     ):
-        if local and streamlookup:
-            pytest.skip("YQ-5431")
-        pytest.skip("YQ-5580: works unstable, requires investigation")
         title = f"slj_wm_{partitions_count}{streamlookup!s:.1}{tasks}{local!s:.1}"
         query_name = f"q_{title}"
         endpoint = self.get_endpoint(kikimr, local_topics=True)
@@ -1404,8 +1405,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
             END DO;
         """)
 
-        path = f"/Root/{query_name}"
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
         if partitions_count > 1 or tasks > 1:
             # let idle timeout fire

@@ -1,9 +1,10 @@
 import asyncio
 from contextlib import suppress
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, Union
 
 from .base_protocol import BaseProtocol
 from .client_exceptions import (
+    ClientConnectionError,
     ClientOSError,
     ClientPayloadError,
     ServerDisconnectedError,
@@ -14,6 +15,7 @@ from .helpers import (
     EMPTY_BODY_STATUS_CODES,
     BaseTimerContext,
     set_exception,
+    set_result,
 )
 from .http import HttpResponseParser, RawResponseMessage
 from .http_exceptions import HttpProcessingError
@@ -44,6 +46,27 @@ class ResponseHandler(BaseProtocol, DataQueue[Tuple[RawResponseMessage, StreamRe
 
         self._timeout_ceil_threshold: Optional[float] = 5
 
+        self._closed: Union[None, asyncio.Future[None]] = None
+        self._connection_lost_called = False
+
+    @property
+    def closed(self) -> Union[None, asyncio.Future[None]]:
+        """Future that is set when the connection is closed.
+
+        This property returns a Future that will be completed when the connection
+        is closed. The Future is created lazily on first access to avoid creating
+        futures that will never be awaited.
+
+        Returns:
+            - A Future[None] if the connection is still open or was closed after
+              this property was accessed
+            - None if connection_lost() was already called before this property
+              was ever accessed (indicating no one is waiting for the closure)
+        """
+        if self._closed is None and not self._connection_lost_called:
+            self._closed = self._loop.create_future()
+        return self._closed
+
     @property
     def upgraded(self) -> bool:
         return self._upgraded
@@ -72,16 +95,44 @@ class ResponseHandler(BaseProtocol, DataQueue[Tuple[RawResponseMessage, StreamRe
             self._payload = None
             self._drop_timeout()
 
+    def abort(self) -> None:
+        self._exception = None  # Break cyclic references
+        transport = self.transport
+        if transport is not None:
+            transport.abort()
+            self.transport = None
+            self._payload = None
+            self._drop_timeout()
+
     def is_connected(self) -> bool:
         return self.transport is not None and not self.transport.is_closing()
 
     def connection_lost(self, exc: Optional[BaseException]) -> None:
+        self._connection_lost_called = True
         self._drop_timeout()
 
         original_connection_error = exc
         reraised_exc = original_connection_error
 
         connection_closed_cleanly = original_connection_error is None
+
+        if self._closed is not None:
+            # If someone is waiting for the closed future,
+            # we should set it to None or an exception. If
+            # self._closed is None, it means that
+            # connection_lost() was called already
+            # or nobody is waiting for it.
+            if connection_closed_cleanly:
+                set_result(self._closed, None)
+            else:
+                assert original_connection_error is not None
+                set_exception(
+                    self._closed,
+                    ClientConnectionError(
+                        f"Connection lost: {original_connection_error !s}",
+                    ),
+                    original_connection_error,
+                )
 
         if self._payload_parser is not None:
             with suppress(Exception):  # FIXME: log this somehow?

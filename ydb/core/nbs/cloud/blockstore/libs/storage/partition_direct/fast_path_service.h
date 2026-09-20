@@ -5,6 +5,7 @@
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -16,6 +17,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/throttling/simple_leaky_bucket.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
@@ -38,6 +40,9 @@ private:
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
+    const IArenaAllocatorPtr ArenaAllocator;
+    // Chaos controllers are indexed by DirectBlockGroup index.
+    const TVector<NTransport::IChaosInjectorControlPtr> ChaosInjectorControls;
     const TVector<TRegionPtr> Regions;   // 4 GiB each
 
     TLogTitle LogTitle;
@@ -50,25 +55,12 @@ private:
     TVChunkCounters VChunkCounters;
     TVolumeConfigPtr VolumeConfig;
 
+    // Accessed only from the partition actor thread.
+    TChaosConfig ChaosConfig;
+
     TAdaptiveLock DumpLock;
     size_t DumpCount = 0;
     TMap<size_t, TDBGDumpResponse> DebugDumps;
-
-    struct TPBufferCleanupGather
-    {
-        std::atomic<bool> Active{false};
-        TVector<std::optional<TPBufferKey>> SafeBarriers;
-        std::atomic<size_t> PendingResponses{0};
-    };
-
-    TPBufferCleanupGather CleanupGather;
-
-    // Result of the last finished cleanup round: the lsn of the minimum safe
-    // barrier across all DBGs. 0 until the first round finishes.
-    std::atomic<ui64> LastSafeBarrier{0};
-
-    TAdaptiveLock PBufferBarrierLock;
-    TMap<NKikimr::NBsController::TDDiskId, ui64> LastSentBarrierByPBuffer;
 
     TAdaptiveLock CopyRangeBucketLock;
     std::optional<TSimpleLeakyBucket> CopyRangeBucket;
@@ -81,7 +73,9 @@ public:
         ui64 blockCount,
         ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
+        TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
         const TVChunkConfigs& vChunkConfigs,
+        ITouchedProvider* touchedProvider,
         const TDirtyMapStateProtos& dirtyMapStates,
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
@@ -95,11 +89,7 @@ public:
     NThreading::TFuture<void> Run();
     NThreading::TFuture<void> Stop();
 
-    [[nodiscard]] const TVector<IDirectBlockGroupPtr>&
-    GetDirectBlockGroups() const
-    {
-        return DirectBlockGroups;
-    }
+    [[nodiscard]] IDirectBlockGroupPtr GetDirectBlockGroup(ui32 dbgIndex) const;
 
     // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
@@ -133,20 +123,45 @@ public:
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override;
 
-    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
+    TPersistResultFuture SetVChunkTouched(ui32 vChunkIndex) override;
+
+    void QueryAddHost(
+        size_t directBlockGroupId,
+        ui32 dbgConnectionsConfigGeneration) override;
+
+    void QueryRemoveHost(
+        size_t directBlockGroupId,
+        size_t hostIndex,
+        ui32 dbgConnectionsConfigGeneration) override;
 
     ui64 GenerateLsn() override;
 
     void StopTablet(const TString& reason) override;
 
-    bool TryAdvancePBufferBarrier(
-        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
-        ui64 lsn) override;
-
     TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override;
+
+    void PersistHostHealth(
+        size_t directBlockGroupId,
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override;
 
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
+
+    // Returns the chaos configuration. Must be called on the partition actor
+    // thread and copied before passing it to an asynchronous callback.
+    [[nodiscard]] const TChaosConfig& GetChaosConfig() const
+    {
+        return ChaosConfig;
+    }
+
+    // Updates node state in DBG or all DBGs. Must be called on the partition
+    // actor thread.
+    void SetNodeChaosMode(
+        ui32 nodeId,
+        std::optional<ui32> dbgIndex,
+        TChaosConfig::TChaosNodeConfig::EChaosMode mode);
 
     // Gathers per-DBG monitoring snapshots: one if dbgIndex is set, else all.
     [[nodiscard]] NThreading::TFuture<TVector<TDbgSnapshot>> GatherMonSnapshots(
@@ -176,18 +191,7 @@ private:
     void ScheduleVChunkCountersUpdate();
     void QueryVChunkStats();
     void OnVChunkStats(const TVChunkStatsGatherResult& result);
-
-    void MaybeTriggerPBufferCleanup(ui64 lsn);
-    void PBufferCleanup();
-    void OnGatherSafeBarrierForErase(
-        size_t dbgIndex,
-        std::optional<TPBufferKey> safeBarrier);
-    void FinishPBufferCleanup();
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-size_t CalcRegionCount(ui64 blockCount, ui32 blockSize);
 
 ////////////////////////////////////////////////////////////////////////////////
 

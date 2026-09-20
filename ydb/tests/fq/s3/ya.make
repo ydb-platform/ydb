@@ -19,7 +19,6 @@ PEERDIR(
 
 DEPENDS(
     contrib/python/moto/bin
-    ydb/tests/tools/pq_read
 )
 
 TEST_SRCS(

@@ -217,7 +217,7 @@ private:
         YDB_LOG_INFO("Got get init seq no event",
             {"logPrefix", LogPrefix()});
 
-        Y_VALIDATE(!SeqNoPromise, "Can not handle get init seq no twice");
+        Y_VALIDATE(!SeqNoPromise, "Cannot handle get init seq no twice");
         SeqNoPromise = std::move(ev->Get()->SeqNoPromise);
         SendInitSeqNo();
     }
@@ -436,15 +436,16 @@ public:
     }
 
     NThreading::TFuture<uint64_t> GetInitSeqNo() final {
-        Y_VALIDATE(DeduplicationEnabled, "Can not get init seq no, deduplication is not enabled");
+        Y_VALIDATE(DeduplicationEnabled, "Cannot get init seq no, deduplication is not enabled");
 
         UseManualSeqNo();
 
         if (!InitSeqNoPromise) {
             InitSeqNoPromise = NThreading::NewPromise<uint64_t>();
 
-            Y_VALIDATE(WriteSessionActor, "Can not get init seq no, session already closed");
-            ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvGetInitSeqNo(*InitSeqNoPromise));
+            if (WriteSessionActor) {
+                ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvGetInitSeqNo(*InitSeqNoPromise));
+            }
         }
 
         return InitSeqNoPromise->GetFuture();
@@ -454,7 +455,6 @@ public:
         Y_VALIDATE(!tx && !message.Tx_, "Transaction is not supported for local topic write session");
         Y_VALIDATE(!message.GetPartition(), "Partition is not supported for local topic write session");
         Y_VALIDATE(!message.GetKey(), "Key is not supported for local topic write session");
-        Y_VALIDATE(WriteSessionActor, "Can not write message, session already closed");
 
         if (message.SeqNo_) {
             UseManualSeqNo();
@@ -462,7 +462,9 @@ public:
             UseAutoSeqNo();
         }
 
-        ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(std::move(continuationToken), std::move(message)));
+        if (WriteSessionActor) {
+            ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(std::move(continuationToken), std::move(message)));
+        }
     }
 
     void Write(TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {

@@ -30,7 +30,7 @@ TString TRowsProtoSplitter::CheckLimits(ui64 curRowBytes, size_t rowInd) {
     TString issueMsg;
 
     if (curRowBytes  + BaseProtoBytesSize > ChunkLimit) {
-        issueMsg += TStringBuilder() << "Can not write Row["<< rowInd << "] with size: "
+        issueMsg += TStringBuilder() << "Cannot write Row["<< rowInd << "] with size: "
             << curRowBytes + BaseProtoBytesSize << " bytes (> " << ChunkLimit / (1024 * 1024) << "_MB)\n";
     }
 

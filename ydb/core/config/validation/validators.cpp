@@ -9,6 +9,7 @@
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/util/pb.h>
 
+#include <library/cpp/logger/priority.h>
 #include <library/cpp/protobuf/json/util.h>
 
 #include <util/generic/xrange.h>
@@ -262,6 +263,34 @@ EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config
 }
 
 EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
+    CHECK_ERR(
+        config.GetNbsConfig().GetConsoleLogLevel() <= LOG_MAX_PRIORITY,
+        TStringBuilder() << "NbsConfig.ConsoleLogLevel: expected 0.."
+                         << static_cast<ui32>(LOG_MAX_PRIORITY) << ", got "
+                         << config.GetNbsConfig().GetConsoleLogLevel());
+
+    if (config.GetNbsConfig().GetNbsFrontendConfig().GetEnabled()) {
+        CHECK_ERR(
+            config.GetNbsConfig().GetEnabled(),
+            "NbsConfig.Enabled: expected true when "
+            "NbsConfig.NbsFrontendConfig.Enabled=true, got false");
+        CHECK_ERR(
+            config.HasGRpcConfig(),
+            "GRpcConfig: required when "
+            "NbsConfig.NbsFrontendConfig.Enabled=true, got missing");
+
+        const auto& grpcConfig = config.GetGRpcConfig();
+        CHECK_ERR(
+            grpcConfig.GetStartGRpcProxy(),
+            "GRpcConfig.StartGRpcProxy: expected true when "
+            "NbsConfig.NbsFrontendConfig.Enabled=true, got false");
+        CHECK_ERR(
+            grpcConfig.GetPort() >= 1 && grpcConfig.GetPort() <= 65535,
+            TStringBuilder()
+                << "GRpcConfig.Port: expected 1..65535 when "
+                   "NbsConfig.NbsFrontendConfig.Enabled=true, got "
+                << grpcConfig.GetPort());
+    }
     if (config.HasAuthConfig()) {
         NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateAuthConfig(config.GetAuthConfig(), msg);
         if (result == NKikimr::NConfig::EValidationResult::Error) {
@@ -321,6 +350,12 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
                     return EValidationResult::Error;
                 }
             }
+        }
+    }
+    if (config.HasCompositeConveyorConfig()) {
+        auto result = ValidateCompositeConveyorConfig(config.GetCompositeConveyorConfig(), msg);
+        if (result == EValidationResult::Error) {
+            return result;
         }
     }
     {

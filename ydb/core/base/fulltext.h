@@ -23,6 +23,7 @@ bool ValidateColumnsMatches(const NProtoBuf::RepeatedPtrField<TString>& columns,
 bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::FulltextIndexSettings& settings, TString& error);
 
 bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString& error);
+bool HasSuperLemmer(const Ydb::Table::FulltextIndexSettings& settings);
 bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nameLower, const TString& value, TString& error);
 
 class TDeltaWriter {
@@ -70,7 +71,9 @@ class TMultiDeltaReader: public IDeltaReader {
     };
     struct TItem {
         ui64 DocId = 0;
-        i32 Freq = 0;
+        // A segment frequency is ui32. Keep the signed merge accumulator wider so a valid
+        // frequency above INT32_MAX is not reinterpreted as a deletion.
+        i64 Freq = 0;
         ui32 RdrId = 0;
     };
     TVector<std::unique_ptr<TDeltaReader>> OwnedReaders;

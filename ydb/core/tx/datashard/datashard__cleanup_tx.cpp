@@ -152,3 +152,7 @@ void TDataShard::ExecuteCleanupVolatileTx(ui64 txId, const TActorContext& ctx) {
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

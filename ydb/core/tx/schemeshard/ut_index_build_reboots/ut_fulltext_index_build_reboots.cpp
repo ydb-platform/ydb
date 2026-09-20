@@ -63,6 +63,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
                     {1, 2, 3}, TSerializedCellMatrix(cells, 5, 3), true);
             }
 
+            const bool isCompact = runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex();
             const ui64 buildIndexId = ++t.TxId;
             {
                 auto indexColumns = TVector<TString>{"text"};
@@ -100,7 +101,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
                 {
                     auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/texts/index1/" + TString(NTableIndex::ImplTable));
                     Cerr << "... posting table contains " << rows << " rows" << Endl;
-                    UNIT_ASSERT_VALUES_EQUAL(rows, 38);
+                    UNIT_ASSERT_VALUES_EQUAL(rows, isCompact ? 24 : 38);
                 }
 
                 {
@@ -120,6 +121,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Prefixed, 4 /*rebootBuckets*/, 4 /*pipeResetBuckets*/, true /*killOnCommit*/) {
+        t.GetTestEnvOptions().EnableCompactFulltextIndex(true);
         // speed up the test:
         // only check scheme shard reboots
         t.TabletIds.clear();
@@ -134,9 +136,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
         t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientDestroyed);
         t.NoRebootEventTypes.insert(TEvDataShard::EvBuildIndexProgressResponse);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(true);
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
             {
                 TInactiveZone inactive(activeZone);
 

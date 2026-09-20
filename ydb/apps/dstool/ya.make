@@ -18,3 +18,5 @@ RESOURCE(
 )
 
 END()
+
+RECURSE(lib)

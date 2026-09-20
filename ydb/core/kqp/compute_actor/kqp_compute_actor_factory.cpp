@@ -6,6 +6,8 @@
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 
+#include <atomic>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -31,6 +33,7 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::atomic<ui64> MinMemAllocSize = 1_MB;
     std::atomic<ui64> MinMemFreeSize = 32_MB;
     std::atomic<ui64> ChannelChunkSizeLimit = 48_MB;
+    std::atomic<bool> EnableOperatorMemoryQuota = false;
 
 public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
@@ -65,6 +68,7 @@ public:
         ChannelChunkSizeLimit.store(config.GetChannelChunkSizeLimit());
         MinMemAllocSize.store(config.GetMinMemAllocSize());
         MinMemFreeSize.store(config.GetMinMemFreeSize());
+        EnableOperatorMemoryQuota.store(config.GetEnableOperatorMemoryQuota());
     }
 
     bool GetVerboseMemoryLimitException() override {
@@ -83,6 +87,7 @@ public:
         memoryLimits.MkqlHeavyProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load();
         memoryLimits.MinMemAllocSize = MinMemAllocSize.load();
         memoryLimits.MinMemFreeSize = MinMemFreeSize.load();
+        memoryLimits.EnableOperatorMemoryQuota = EnableOperatorMemoryQuota.load();
         memoryLimits.ArrayBufferMinFillPercentage = args.Task->GetArrayBufferMinFillPercentage();
         if (args.Task->HasBufferPageAllocSize()) {
             memoryLimits.BufferPageAllocSize = args.Task->GetBufferPageAllocSize();
@@ -90,7 +95,7 @@ public:
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
 
-        NScheduler::TSchedulableActorOptions schedulableOptions {
+        NScheduler::TSchedulableOptions schedulableOptions {
             .Query = args.Query,
             .IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID,
         };

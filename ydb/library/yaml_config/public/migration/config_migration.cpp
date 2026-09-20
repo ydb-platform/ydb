@@ -1,4 +1,5 @@
 #include "config_migration.h"
+#include "yaml_helpers.h"
 
 #include <util/generic/hash_set.h>
 #include <util/string/ascii.h>
@@ -10,6 +11,11 @@
 
 namespace NKikimr::NYamlConfig {
     namespace {
+
+        using NMigrationDetail::AsMap;
+        using NMigrationDetail::AsSequence;
+        using NMigrationDetail::FindMap;
+        using NMigrationDetail::FindScalar;
 
         constexpr std::array<TStringBuf, 3> StaticGroupTopologyKeys = {
             "pdisks",
@@ -38,29 +44,6 @@ namespace NKikimr::NYamlConfig {
 
         bool IsStaticOwnedKey(TStringBuf key) {
             return key == "hosts" || key == "host_configs" || key == "static_erasure";
-        }
-
-        std::optional<NFyaml::TMapping> AsMap(const NFyaml::TNodeRef& node) {
-            return node.Type() == NFyaml::ENodeType::Mapping ? std::make_optional(node.Map()) : std::nullopt;
-        }
-
-        std::optional<NFyaml::TSequence> AsSequence(const NFyaml::TNodeRef& node) {
-            return node.Type() == NFyaml::ENodeType::Sequence ? std::make_optional(node.Sequence()) : std::nullopt;
-        }
-
-        std::optional<NFyaml::TMapping> FindMap(const NFyaml::TMapping& map, TStringBuf key) {
-            const TString name(key);
-            return map.Has(name) ? AsMap(map.at(name)) : std::nullopt;
-        }
-
-        std::optional<TString> FindScalar(const NFyaml::TMapping& map, TStringBuf key) {
-            const TString name(key);
-            if (!map.Has(name)) {
-                return std::nullopt;
-            }
-
-            const auto node = map.at(name);
-            return node.Type() == NFyaml::ENodeType::Scalar ? std::make_optional(node.Scalar()) : std::nullopt;
         }
 
         std::optional<NFyaml::TNodeRef> FindNode(const NFyaml::TMapping& map, TStringBuf key) {
@@ -407,19 +390,29 @@ namespace NKikimr::NYamlConfig {
             return parent.at(name).Map();
         }
 
-        void SetBool(NFyaml::TDocument& doc, NFyaml::TMapping& map, TStringBuf key, bool enabled) {
+        void SetScalar(NFyaml::TDocument& doc, NFyaml::TMapping& map, TStringBuf key, TStringBuf value) {
             const TString name(key);
-            const TString scalar = enabled ? "true" : "false";
             if (auto current = map.pair_at_opt(name); current) {
-                current.SetValue(doc.CreateScalar(scalar));
+                current.SetValue(doc.CreateScalar(TString(value)));
             } else {
-                map.Append(doc.CreateScalar(name), doc.CreateScalar(scalar));
+                map.Append(doc.CreateScalar(name), doc.CreateScalar(TString(value)));
             }
+        }
+
+        void SetBool(NFyaml::TDocument& doc, NFyaml::TMapping& map, TStringBuf key, bool enabled) {
+            const TString scalar = enabled ? "true" : "false";
+            SetScalar(doc, map, key, scalar);
         }
 
         bool ConfigV2FeatureFlagEnabled(const NFyaml::TMapping& config) {
             const auto featureFlags = FindMap(config, "feature_flags");
             const auto enabled = featureFlags ? FindScalar(*featureFlags, "switch_to_config_v2") : std::nullopt;
+            return enabled && AsciiEqualsIgnoreCase(*enabled, "true");
+        }
+
+        bool SelfManagementEnabled(const NFyaml::TMapping& config) {
+            const auto selfManagement = FindMap(config, "self_management_config");
+            const auto enabled = selfManagement ? FindScalar(*selfManagement, "enabled") : std::nullopt;
             return enabled && AsciiEqualsIgnoreCase(*enabled, "true");
         }
 
@@ -627,6 +620,21 @@ namespace NKikimr::NYamlConfig {
         SetBool(doc, selfManagement, "enabled", enabled);
         EnsureSelectorsKeepValue(doc, "self_management_config", "enabled", enabled);
         return doc;
+    }
+
+    bool IsSelfManagementEnabled(const TString& input) {
+        auto doc = ParseMigrationConfig(input);
+        return SelfManagementEnabled(GetMainConfig(doc));
+    }
+
+    void SetDiskFailDomainType(NFyaml::TDocument& doc) {
+        auto config = GetMainConfig(doc);
+        SetScalar(doc, config, "fail_domain_type", "disk");
+    }
+
+    bool HasDiskFailDomainType(NFyaml::TDocument& doc) {
+        const auto failDomainType = FindScalar(GetMainConfig(doc), "fail_domain_type");
+        return failDomainType && AsciiEqualsIgnoreCase(*failDomainType, "disk");
     }
 
     NFyaml::TDocument CleanupConfigV2Migration(const TString& input) {

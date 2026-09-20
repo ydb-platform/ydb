@@ -30,3 +30,5 @@ When configuring [table partitioning](../../../concepts/datamodel/table.md#parti
 If the user load on {{ ydb-short-name }} has not changed, consider adjusting the gap between the min and max limits for the number of table partitions to the recommended 20% difference. Use the [`ALTER TABLE table_name SET (key = value)`](../../../yql/reference/syntax/alter_table/set.md) YQL statement to update the [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](../../../concepts/datamodel/table.md#auto_partitioning_min_partitions_count) and [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](../../../concepts/datamodel/table.md#auto_partitioning_max_partitions_count) parameters.
 
 If you want to avoid splitting and merging data shards, you can set the min limit to the max limit value or disable partitioning by load.
+
+When lowering `AUTO_PARTITIONING_PARTITION_SIZE_MB` below the current size of many partitions, this can queue many partitions for splitting and temporarily increase latencies. Operations in the queue run with limited concurrency. Prefer reducing the threshold gradually while monitoring metrics.

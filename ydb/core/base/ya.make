@@ -28,6 +28,7 @@ SRCS(
     defs.h
     domain.cpp
     domain.h
+    storage_pool_kinds.h
     event_filter.cpp
     event_filter.h
     events.h
@@ -78,6 +79,7 @@ SRCS(
     storage_pools.h
     subdomain.h
     subdomain.cpp
+    superlemmer.h
     table_index.cpp
     tablet.cpp
     tablet.h
@@ -130,11 +132,16 @@ PEERDIR(
     ydb/library/login
     ydb/library/pdisk_io
     ydb/library/pretty_types_print/protobuf
+    ydb/library/vector_distance
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql
     library/cpp/deprecated/atomic
     library/cpp/json
+)
+
+PEERDIR(
+    ydb/library/superlemmer_stub
 )
 
 YQL_LAST_ABI_VERSION()
@@ -165,4 +172,3 @@ RECURSE_FOR_TESTS(
     ut_http_database_param
 )
 ENDIF()
-

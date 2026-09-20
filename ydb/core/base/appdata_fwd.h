@@ -54,6 +54,7 @@ namespace NKikimrStream {
 
 namespace NKikimrConfig {
     class TAppConfig;
+    class TStateStorageConfig;
     class TStreamingConfig;
     class TMeteringConfig;
     class TSqsConfig;
@@ -89,6 +90,7 @@ namespace NKikimrConfig {
     class TRecoveryShardConfig;
     class TClusterDiagnosticsConfig;
     class TLongTxServiceConfig;
+    class TUdfStoreConfig;
 }
 
 namespace NKikimrReplication {
@@ -289,6 +291,7 @@ struct TAppData {
     NKikimrConfig::TRecoveryShardConfig& RecoveryShardConfig;
     NKikimrConfig::TClusterDiagnosticsConfig& ClusterDiagnosticsConfig;
     NKikimrConfig::TLongTxServiceConfig& LongTxServiceConfig;
+    NKikimrConfig::TUdfStoreConfig& UdfStoreConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AlwaysSetSystemOwner = false;
@@ -342,7 +345,6 @@ struct TAppData {
 
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
-    TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> UserFacingTracingConfigurator;
 
     // Immutable snapshot registry for fast snapshot queries
     TIntrusivePtr<IImmutableSnapshotRegistryHolder> SnapshotRegistryHolder;

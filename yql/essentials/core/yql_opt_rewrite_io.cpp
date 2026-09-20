@@ -43,8 +43,7 @@ IGraphTransformer::TStatus RewriteIO(const TExprNode::TPtr& input, TExprNode::TP
         !ctx.Step.IsDone(TExprStep::DiscoveryIO) ||
         !ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas) ||
         !ctx.Step.IsDone(TExprStep::ExpandSeq) ||
-        !ctx.Step.IsDone(TExprStep::ExprEval)
-    ) {
+        !ctx.Step.IsDone(TExprStep::ExprEval)) {
         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
     }
 
@@ -59,4 +58,4 @@ IGraphTransformer::TStatus RewriteIO(const TExprNode::TPtr& input, TExprNode::TP
     return IGraphTransformer::TStatus::Ok;
 }
 
-}
+} // namespace NYql

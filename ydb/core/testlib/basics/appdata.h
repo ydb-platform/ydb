@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/storage_pool_kinds.h>
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/testlib/actors/test_runtime.h>

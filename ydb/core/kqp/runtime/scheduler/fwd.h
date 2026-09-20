@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/datetime/base.h>
+#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/stream/output.h>
 
@@ -13,6 +14,13 @@ namespace NKikimr::NKqp::NScheduler {
         using TQueryId = ui64;
         using TPoolId = TString;
         using TDatabaseId = TPoolId;
+
+        struct TFullPoolId {
+            TDatabaseId DatabaseId;
+            TPoolId PoolId;
+
+            bool operator==(const TFullPoolId&) const = default;
+        };
 
         using TId = std::variant<TQueryId, TPoolId>;
 
@@ -75,6 +83,13 @@ namespace NKikimr::NKqp::NScheduler {
     };
 
 } // namespace NKikimr::NKqp::NScheduler
+
+template <>
+struct THash<NKikimr::NKqp::NScheduler::NHdrf::TFullPoolId> {
+    size_t operator()(const NKikimr::NKqp::NScheduler::NHdrf::TFullPoolId& id) const {
+        return CombineHashes(THash<TString>{}(id.DatabaseId), THash<TString>{}(id.PoolId));
+    }
+};
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NKqp::NScheduler::NHdrf::TId, out, id) {
     if (id.index() == 0) {

@@ -220,6 +220,23 @@ bool TTabletInfo::IsGoodForBalancer(TInstant now) const {
             && (now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod());
 }
 
+void TTabletInfo::SetUsageImpact(double usageImpact) {
+    UsageImpact = usageImpact;
+    if (Node != nullptr && IsResourceDrainingState(VolatileState)) {
+        Node->UpdateHighImpactTablet(this);
+    }
+}
+
+bool TTabletInfo::IsHighImpact() const {
+    return Hive.GetUseTabletUsageEstimate() && UsageImpact >= Hive.GetTabletImpactToPin();
+}
+
+bool TTabletInfo::IsPinnedToNode() const {
+    return IsHighImpact()
+            && Node != nullptr
+            && UsageImpact >= Hive.GetTabletImpactShareToPin() * Node->GetNodeUsage();
+}
+
 bool TTabletInfo::InitiateBoot(TNodeId node) {
     if (IsStopped()) {
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_BOOTING);
@@ -275,10 +292,22 @@ bool TTabletInfo::InitiateStop(TSideEffects& sideEffects, bool forMove) {
     }
 }
 
+void TTabletInfo::ChangeNode(TNodeId nodeId) {
+    if (Node != nullptr) {
+        if (Node->Id == nodeId) {
+            return;
+        }
+        // Detach the old node while NodeId still describes its placement.
+        ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STOPPED);
+    }
+    Node = Hive.FindNode(nodeId);
+    Y_ABORT_UNLESS(Node != nullptr);
+}
+
 bool TTabletInfo::BecomeStarting(TNodeId nodeId) {
-    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_STARTING) {
-        Node = Hive.FindNode(nodeId);
-        Y_ABORT_UNLESS(Node != nullptr);
+    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_STARTING
+            || (Node != nullptr && Node->Id != nodeId)) {
+        ChangeNode(nodeId);
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STARTING);
         return true;
     }
@@ -286,18 +315,14 @@ bool TTabletInfo::BecomeStarting(TNodeId nodeId) {
 }
 
 bool TTabletInfo::BecomeRunning(TNodeId nodeId) {
-    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_RUNNING || NodeId != nodeId || (Node != nullptr && Node->Id != nodeId)) {
-        NodeId = nodeId;
+    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_RUNNING
+            || NodeId != nodeId
+            || (Node != nullptr && Node->Id != nodeId))
+    {
         PreferredNodeId = 0;
-        Y_ABORT_UNLESS(NodeId != 0);
-        if (Node == nullptr) {
-            Node = Hive.FindNode(NodeId);
-            Y_ABORT_UNLESS(Node != nullptr);
-        } else if (Node->Id != NodeId) {
-            ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STOPPED);
-            Node = Hive.FindNode(NodeId);
-            Y_ABORT_UNLESS(Node != nullptr);
-        }
+        Y_ABORT_UNLESS(nodeId != 0);
+        ChangeNode(nodeId);
+        NodeId = nodeId;
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
         return true;
     }
@@ -312,9 +337,7 @@ bool TTabletInfo::BecomeStopped() {
         }
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STOPPED);
         BootState.clear();
-        if (Node != nullptr && Node->Freeze) {
-            PreferredNodeId = Node->Id;
-        }
+        // Freeze affinity is maintained by OnTabletChangeVolatileState.
         NodeId = 0;
         Node = nullptr;
         return true;

@@ -116,3 +116,7 @@ THolder<TExecutionUnit> CreateMoveTableUnit(TDataShard& dataShard, TPipeline& pi
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

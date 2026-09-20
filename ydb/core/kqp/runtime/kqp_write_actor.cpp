@@ -1,7 +1,7 @@
 #include "kqp_write_actor.h"
 
-#include "kqp_buffer_lookup_actor.h"
 #include "kqp_buffer_lock_actor.h"
+#include "kqp_buffer_lookup_actor.h"
 #include "kqp_write_actor_settings.h"
 #include "kqp_write_table.h"
 
@@ -16,6 +16,8 @@
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
@@ -24,10 +26,8 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
-#include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/public/write_id.h>
+#include <ydb/core/tx/tx.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -299,6 +299,7 @@ struct TKqpTableWriterStatistics {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
+    ui64 AffectedRows = 0;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
     TVector<ui64> BreakerQuerySpanIds;
@@ -319,6 +320,7 @@ struct TKqpTableWriterStatistics {
             WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
             EraseRows += tableAccessStats.GetEraseRow().GetRows();
             EraseBytes += tableAccessStats.GetEraseRow().GetBytes();
+            AffectedRows += tableAccessStats.GetAffectedRows();
         }
 
         for (const auto& perShardStats : txStats.GetPerShardStats()) {
@@ -396,6 +398,7 @@ struct TKqpTableWriterStatistics {
         tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
         tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
         tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
+        tableStats->SetAffectedRows(tableStats->GetAffectedRows() + AffectedRows);
 
         ReadRows = 0;
         ReadBytes = 0;
@@ -403,6 +406,7 @@ struct TKqpTableWriterStatistics {
         WriteBytes = 0;
         EraseRows = 0;
         EraseBytes = 0;
+        AffectedRows = 0;
 
         tableStats->SetAffectedPartitions(
             tableStats->GetAffectedPartitions() + AffectedPartitions.size());
@@ -415,16 +419,18 @@ class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
 
     struct TEvPrivate {
         enum EEv {
-            EvShardRequestTimeout = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+            EvShardRetry = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
             EvResolveRequestPlanned,
             EvReattachToShard,
         };
 
-        struct TEvShardRequestTimeout : public TEventLocal<TEvShardRequestTimeout, EvShardRequestTimeout> {
+        struct TEvShardRetry : public TEventLocal<TEvShardRetry, EvShardRetry> {
             ui64 ShardId;
+            ui64 Cookie;
 
-            TEvShardRequestTimeout(ui64 shardId)
-                : ShardId(shardId) {
+            TEvShardRetry(ui64 shardId, ui64 cookie)
+                : ShardId(shardId)
+                , Cookie(cookie) {
             }
         };
 
@@ -460,14 +466,16 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
         const NKikimrDataEvents::ELockMode lockMode,
+        const bool collectAffectedRows,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
         TIntrusivePtr<NACLib::TUserContext> userCtx)
         : MessageSettings(GetWriteActorSettings())
         , Alloc(alloc)
-        , MvccSnapshot(mvccSnapshot)
+        , CommitMvccSnapshot(mvccSnapshot)
         , LockMode(lockMode)
+        , CollectAffectedRows(collectAffectedRows)
         , Database(database)
         , TableId(tableId)
         , TablePath(tablePath)
@@ -475,17 +483,27 @@ public:
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
         , IsOlap(isOlap)
+        , AttachWriteSeqNum(
+              AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum()
+              && !inconsistentTx
+              && !isOlap)
         , KeyColumnTypes(std::move(keyColumnTypes))
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
         , Counters(counters)
         , UserCtx(userCtx)
     {
+        AFL_ENSURE(lockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION || !CommitMvccSnapshot);
+        // A non-inconsistent write always has a lock id (assigned by the executer).
+        AFL_ENSURE(inconsistentTx || lockTxId != 0);
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
+                .ColumnShardMaxOperationBytes = MessageSettings.ColumnShardMaxOperationBytes,
                 .Inconsistent = InconsistentTx,
+                .EnableWriteSeqNum = AttachWriteSeqNum,
+                .WriterIndex = WriterIndex,
             },
             Alloc);
 
@@ -500,6 +518,13 @@ public:
     // This ensures UpdateShards/AddAction passes the correct per-query SpanId to TxManager.
     void SetCurrentQuerySpanId(ui64 querySpanId) {
         CurrentQuerySpanId = querySpanId;
+    }
+
+    // Set collect_affected_rows for the current batch. The write actor may be
+    // reused across statements of an interactive tx (via the buffer actor),
+    // where each statement may have its own CollectAffectedRows setting.
+    void SetCollectAffectedRows(bool collectAffectedRows) {
+        CollectAffectedRows = collectAffectedRows;
     }
 
     void Bootstrap() {
@@ -573,7 +598,8 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata,
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata,
         ui32 defaultColumnsCount,
-        i64 priority) {
+        i64 priority,
+        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) {
         YQL_ENSURE(!Closed);
         ShardedWriteController->Open(
             token,
@@ -582,7 +608,8 @@ public:
             std::move(keyColumnsMetadata),
             std::move(columnsMetadata),
             defaultColumnsCount,
-            priority);
+            priority,
+            mvccSnapshot);
 
         // At current time only insert operation can fail.
         NeedToFlushBeforeCommit |= (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
@@ -654,7 +681,7 @@ public:
                 hFunc(TEvPrivate::TEvReattachToShard, Handle);
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-                hFunc(TEvPrivate::TEvShardRequestTimeout, Handle);
+                hFunc(TEvPrivate::TEvShardRetry, Handle);
                 hFunc(TEvPrivate::TEvResolveRequestPlanned, Handle);
                 hFunc(TEvDataShard::TEvOverloadReady, Handle);
                 hFunc(TEvColumnShard::TEvOverloadReady, Handle);
@@ -687,7 +714,6 @@ public:
 
     void Resolve() {
         ResolvingInProgress = true;
-        AFL_ENSURE(InconsistentTx || IsOlap);
         TableWriteActorSpan = NWilson::TSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(ParentTraceId),
             "WaitForTableResolve", NWilson::EFlags::AUTO_END);
 
@@ -786,7 +812,9 @@ public:
             {"logPrefix", this->LogPrefix},
             {"tableId", TableId});
 
-        AFL_ENSURE(InconsistentTx); // Only for CTAS
+        // CTAS (inconsistent) may stream to either row or column tables, and the
+        // consistent row-table move-retry resolves this way too.
+        AFL_ENSURE(InconsistentTx || !IsOlap);
 
         const TVector<TCell> minKey(KeyColumnTypes.size());
         const TTableRange range(minKey, true, {}, false, false);
@@ -840,6 +868,10 @@ public:
             {"partitionsCount", Partitioning->Size()});
 
         Prepare();
+
+        // Flush old data to new shards
+        UpdateShards();
+        FlushToShards();
     }
 
     void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
@@ -892,11 +924,16 @@ public:
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
+        if (ev->Sender.NodeId() == SelfId().NodeId()) {
+            Counters->WriteActorLocalShardWrites->Inc();
+        } else {
+            Counters->WriteActorRemoteShardWrites->Inc();
+        }
         const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
 
         if (ev->Get()->Record.HasOverloadSubscribed() && handleOverload) {
-            YDB_LOG_INFO("Received EvWriteResult with overload subscription.",
+            YDB_LOG_DEBUG("Received EvWriteResult with overload subscription.",
                 {"logPrefix", this->LogPrefix},
                 {"tablePath", TablePath},
                 {"shardID", ev->Get()->Record.GetOrigin()},
@@ -905,9 +942,16 @@ public:
 
             const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
             if (metadata && ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
+                YDB_LOG_INFO("Waiting for overloaded shard.",
+                    {"logPrefix", this->LogPrefix},
+                    {"tablePath", TablePath},
+                    {"shardID", ev->Get()->Record.GetOrigin()},
+                    {"sink", this->SelfId()});
+                // The shard acknowledged the wait: don't let resends burn the bounded
+                // retry budget while the shard is legitimately overloaded. TEvOverloadReady
+                // will reset the attempts again right before the resend.
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
             }
-
             return;
         }
 
@@ -964,6 +1008,10 @@ public:
             if (InconsistentTx) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
                 RetryResolve();
+            } else if (AttachWriteSeqNum && Mode == EMode::WRITE) {
+                // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs.
+                // Retries are bounded in RetryShard before the write re-resolves and then fails.
+                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
             } else {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
@@ -1089,19 +1137,14 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            if (InconsistentTx) {
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
-                RetryResolve();
-            } else {
-                UpdateStats(ev->Get()->Record.GetTxStats());
-                TxManager->SetError(ev->Get()->Record.GetOrigin());
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::SCHEME_ERROR,
-                    NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
-                    TStringBuilder() << "Scheme changed. Table: `"
-                        << TablePath << "`.",
-                    getIssues());
-            }
+            UpdateStats(ev->Get()->Record.GetTxStats());
+            TxManager->SetError(ev->Get()->Record.GetOrigin());
+            RuntimeError(
+                NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                TStringBuilder() << "Scheme changed. Table: `"
+                    << TablePath << "`.",
+                getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN: {
@@ -1169,6 +1212,7 @@ public:
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result) {
             YQL_ENSURE(result->IsShardEmpty);
+            RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
             Callbacks->OnPrepared(std::move(preparedInfo), result->DataSize);
         }
     }
@@ -1188,6 +1232,27 @@ public:
             {"mode", static_cast<int>(Mode)},
             {"locks", txLocks});
 
+        if (Mode == EMode::COMMIT) {
+            UpdateStats(ev->Get()->Record.GetTxStats());
+            RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0, ExtractCommitTimestamp(ev->Get()->Record));
+            return;
+        }
+
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
+        const auto result = ShardedWriteController->OnMessageAcknowledged(
+                ev->Get()->Record.GetOrigin(), ev->Cookie);
+        if (!result) {
+            // A resent batch is answered twice, only the first result is taken
+            YDB_LOG_DEBUG("Ignored an already acknowledged result",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", ev->Get()->Record.GetOrigin()},
+                {"cookie", ev->Cookie});
+            return;
+        }
+
+        RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
+
         // Only collect locks in WRITE mode (COLLECTING state required by AddLock)
         if (Mode == EMode::WRITE) {
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
@@ -1201,19 +1266,10 @@ public:
             }
         }
 
-        if (Mode == EMode::COMMIT) {
-            UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0, ExtractCommitTimestamp(ev->Get()->Record));
-            return;
-        }
-
-        OnMessageReceived(ev->Get()->Record.GetOrigin());
-        const auto result = ShardedWriteController->OnMessageAcknowledged(
-                ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
+        if (result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize, ExtractCommitTimestamp(ev->Get()->Record));
-        } else if (result) {
+        } else {
             AFL_ENSURE(Mode == EMode::WRITE);
             UpdateStats(ev->Get()->Record.GetTxStats());
             Callbacks->OnMessageAcknowledged(result->DataSize);
@@ -1298,14 +1354,19 @@ public:
 
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         YQL_ENSURE(metadata);
-        YQL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx);
+        // A resend is safe when the shard deduplicates by uncommitted write seq num
+        // (AttachWriteSeqNum) or when the write is inconsistent.
+        YQL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
         if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
+            // The resend budget for this shard is exhausted: re-resolve through RetryShard
+            // so the number of consecutive re-resolves per shard stays bounded before
+            // failing with UNAVAILABLE (the per-shard counter is cleared on a successful ack).
             YDB_LOG_WARN("Write retry limit exceeded for table.",
                 {"logPrefix", this->LogPrefix},
                 {"shardId", shardId},
                 {"tablePath", TablePath},
                 {"sink", this->SelfId()});
-            RetryResolve();
+            RetryShard(shardId, metadata->Cookie);
             return false;
         }
 
@@ -1313,6 +1374,19 @@ public:
 
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
         const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
+
+        // In-flight data batches carry the snapshot of the operation that produced
+        // them, and all batches of one message must share it (enforced by
+        // GetMessageMvccSnapshot). A covering-only message contains no data batches
+        // and thus no batch snapshot; for it, fall back to CommitMvccSnapshot
+        // (set only for snapshot isolation).
+        const std::optional<NKikimrDataEvents::TMvccSnapshot> messageMvccSnapshot = [&]() {
+            if (auto batchSnapshot = ShardedWriteController->GetMessageMvccSnapshot(shardId)) {
+                return batchSnapshot;
+            }
+            AFL_ENSURE(!CommitMvccSnapshot || LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+            return CommitMvccSnapshot;
+        }();
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>();
 
@@ -1334,8 +1408,8 @@ public:
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
 
-            if (MvccSnapshot && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
-                *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
+            if (messageMvccSnapshot && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
+                *evWrite->Record.MutableMvccSnapshot() = *messageMvccSnapshot;
             }
         }
 
@@ -1343,9 +1417,11 @@ public:
             evWrite->Record.SetLockMode(LockMode);
         }
 
+        evWrite->Record.SetCollectAffectedRows(CollectAffectedRows);
+
         evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
 
-        const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
+        const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite, isPrepare || isImmediateCommit);
         YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
 
         if (metadata->SendAttempts == 0) {
@@ -1372,7 +1448,7 @@ public:
             Counters->WriteActorImmediateWritesRetries->Inc();
         }
 
-        if (MvccSnapshot && (isPrepare || isImmediateCommit)) {
+        if (messageMvccSnapshot && (isPrepare || isImmediateCommit)) {
             // Commit in snapshot isolation must validate writes against a snapshot
             bool needMvccSnapshot = LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
             if (!needMvccSnapshot && isPrepare && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
@@ -1386,7 +1462,7 @@ public:
             }
             if (needMvccSnapshot) {
                 AFL_ENSURE(LockMode != NKikimrDataEvents::PESSIMISTIC_NONE);
-                *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
+                *evWrite->Record.MutableMvccSnapshot() = *messageMvccSnapshot;
             }
         }
 
@@ -1425,21 +1501,22 @@ public:
 
         ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
 
-        if (InconsistentTx) {
-            TlsActivationContext->Schedule(
-                CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts),
-                new IEventHandle(
-                    SelfId(),
-                    SelfId(),
-                    new TEvPrivate::TEvShardRequestTimeout(shardId),
-                    0,
-                    metadata->Cookie));
-        }
-
         return true;
     }
 
     void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
+        if (Mode != EMode::WRITE) {
+            // At current time retries are only supported for WRITE mode.
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder()
+                    << "Can't retry sending data to tablet during commit."
+                    << "Tablet: " << shardId);
+            return;
+        }
+
+        AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (!metadata || (ifCookieEqual && metadata->Cookie != ifCookieEqual)) {
             YDB_LOG_INFO("Shard retry skipped because metadata was not found for the given cookie.",
@@ -1449,25 +1526,81 @@ public:
             return;
         }
 
+        if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
+            // The resend budget for this shard is exhausted. Re-resolve to pick up the new shard
+            // map after a split/merge; do it at most MaxRetryResolvesPerShard consecutive times per
+            // shard, otherwise fail with UNAVAILABLE instead of looping or stalling forever.
+            YDB_LOG_WARN("Shard write retry limit exceeded; re-resolving the table.",
+                {"logPrefix", this->LogPrefix},
+                {"shardID", shardId},
+                {"attempts", metadata->SendAttempts},
+                {"tablePath", TablePath});
+
+            auto& resolveCount = RetryResolveByShard[shardId];
+            if (resolveCount >= MessageSettings.MaxRetryResolvesPerShard) {
+                YDB_LOG_ERROR("Too many consecutive re-resolves caused by a shard; failing the write.",
+                    {"logPrefix", this->LogPrefix},
+                    {"shardID", shardId},
+                    {"resolves", resolveCount},
+                    {"tablePath", TablePath});
+                TxManager->SetError(shardId);
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                    TStringBuilder()
+                        << "Failed to deliver write to shard " << shardId
+                        << " after " << MessageSettings.MaxWriteAttempts * MessageSettings.MaxRetryResolvesPerShard
+                        << " attempts. Table `" << TablePath << "`.");
+                return;
+            }
+            if (!InconsistentTx) {
+                // TODO: support for resolve for inconsistent transactions
+                TxManager->SetError(shardId);
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                    TStringBuilder()
+                        << "Failed to deliver write to shard " << shardId
+                        << " after " << MessageSettings.MaxWriteAttempts * MessageSettings.MaxRetryResolvesPerShard
+                        << " attempts. Table `" << TablePath << "`.");
+                return;
+            }
+            ++resolveCount;
+            // Reset the send attempts so the pending batches are picked up again by the
+            // next FlushToShards() once the re-resolve finishes (a same-shard-set resolve has
+            // no re-route, so without this the batch would never be re-sent and the query would stall).
+            ResetShardRetries(shardId, metadata->Cookie);
+            // Re-resolve immediately; the per-shard counter bounds the total number of rounds.
+            RetryResolve();
+            return;
+        }
+
         YDB_LOG_DEBUG("Retry Next",
             {"logPrefix", this->LogPrefix},
             {"shardID", shardId},
             {"cookie", ifCookieEqual.value_or(0)},
             {"attempt", metadata->SendAttempts},
             {"delay", CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts)});
-        SendDataToShard(shardId);
+
+        Schedule(CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts),
+            new TEvPrivate::TEvShardRetry(shardId, metadata->Cookie));
     }
 
     void ResetShardRetries(const ui64 shardId, const ui64 cookie) {
         ShardedWriteController->ResetRetries(shardId, cookie);
     }
 
-    void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
-        YDB_LOG_INFO("Timeout",
-            {"logPrefix", this->LogPrefix},
-            {"shardID", ev->Get()->ShardId});
-        YQL_ENSURE(InconsistentTx);
-        RetryShard(ev->Get()->ShardId, ev->Cookie);
+    void Handle(TEvPrivate::TEvShardRetry::TPtr& ev) {
+        const auto& msg = ev->Get();
+        const auto metadata = ShardedWriteController->GetMessageMetadata(msg->ShardId);
+        if (!metadata || metadata->Cookie != msg->Cookie) {
+            // The batch was acknowledged (its cookie advanced) or is no longer
+            // pending: nothing to resend.
+            return;
+        }
+        // The resend budget is enforced in SendDataToShard: once the attempts are
+        // exhausted it routes to the re-resolve path instead of sending again.
+        SendDataToShard(msg->ShardId);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -1487,9 +1620,20 @@ public:
             return;
         }
 
+        const auto state = TxManager->GetState(ev->Get()->TabletId);
+
+        // A moved/restarted tablet keeps its id. During WRITE mode the in-flight
+        // batch is resent; retries are bounded by MaxWriteAttempts in RetryShard,
+        // which then re-resolves and eventually fails with UNAVAILABLE. The new
+        // tablet generation restores the writer chain and answers once.
+        if (AttachWriteSeqNum && Mode == EMode::WRITE) {
+            // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs
+            RetryShard(ev->Get()->TabletId, std::nullopt);
+            return;
+        }
+
         const auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
 
-        const auto state = TxManager->GetState(ev->Get()->TabletId);
         if ((state == IKqpTransactionManager::PREPARED
                     || state == IKqpTransactionManager::EXECUTING)
                 && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
@@ -1594,10 +1738,25 @@ public:
 
         ResolveAttempts = 0;
 
+        if (Mode != EMode::WRITE) {
+            // TODO: allow resolve during PREPARE/COMMIT,
+            // when data rerouting will be fully supported.
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder()
+                    << "Can't resolve shards during commit. "
+                    << (RetryResolveByShard.empty()
+                        ? TString{}
+                        : TStringBuilder() << "Tablet: " << RetryResolveByShard.begin()->first));
+            return;
+        }
+
         if (IsOlap) {
             YQL_ENSURE(SchemeEntry);
             ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
         } else {
+            YQL_ENSURE(Partitioning);
             ShardedWriteController->OnPartitioningChanged(Partitioning);
             Partitioning.reset();
         }
@@ -1674,8 +1833,14 @@ private:
     TWriteActorSettings MessageSettings;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
-    const std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
+    // Snapshot used as a fallback for covering-only commit/prepare messages,
+    // which carry no data batches and thus no per-batch snapshot. Set only for
+    // snapshot isolation (SnapshotRW): its commit must validate the writes
+    // against the operation's snapshot. Nullopt for all other tx modes.
+    const std::optional<NKikimrDataEvents::TMvccSnapshot> CommitMvccSnapshot;
+
     const NKikimrDataEvents::ELockMode LockMode;
+    bool CollectAffectedRows;
 
     const TString Database;
     const TTableId TableId;
@@ -1686,6 +1851,9 @@ private:
     const ui64 LockNodeId;
     const bool InconsistentTx;
     const bool IsOlap;
+    const bool AttachWriteSeqNum;
+    // This writer's id in the uncommitted write chain; one write actor per table today.
+    const ui64 WriterIndex = 0;
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     IKqpTableWriterCallbacks* Callbacks;
@@ -1694,6 +1862,7 @@ private:
     TPartitioning::TCPtr Partitioning;
     ui64 ResolveAttempts = 0;
     bool ResolvingInProgress = false;
+    THashMap<ui64, ui32> RetryResolveByShard;
 
     IKqpTransactionManagerPtr TxManager;
     bool Closed = false;
@@ -1976,6 +2145,12 @@ public:
 
     std::vector<std::pair<TPathId, TString>> SendGenSequenceRequests() {
         std::vector<std::pair<TPathId, TString>> res;
+        // Compact fulltext generations are consumed only once a task participates in a write flush.
+        // Do not reserve them while the task is still buffering/looking up rows: an UPDATE/DELETE that
+        // matches nothing may otherwise finish before its asynchronous sequence response arrives.
+        if (State != EState::WRITING) {
+            return res;
+        }
         for (auto& [pathId, info] : PathWriteInfo) {
             if (!info.GenSequencePath.empty()) {
                 size_t n = (!info.DeleteKeysIndexes.empty() ? 2 : 1);
@@ -2919,8 +3094,11 @@ public:
                 Settings.GetIsOlap(),
                 std::move(keyColumnTypes),
                 Alloc,
-                GetOptionalMvccSnapshot(Settings),
+                (Settings.GetLockMode() == NKikimrDataEvents::ELockMode::OPTIMISTIC_SNAPSHOT_ISOLATION
+                    ? GetOptionalMvccSnapshot(Settings)
+                    : std::nullopt),
                 Settings.GetLockMode(),
+                Settings.GetCollectAffectedRows(),
                 nullptr,
                 TActorId{},
                 Counters,
@@ -2946,7 +3124,8 @@ public:
                 std::move(keyColumnsMetadata),
                 std::move(columnsMetadata),
                 0,
-                Settings.GetPriority());
+                Settings.GetPriority(),
+                GetOptionalMvccSnapshot(Settings));
             WaitingForTableActor = true;
         } catch (const TMemoryLimitExceededException&) {
             RuntimeError(
@@ -2976,7 +3155,7 @@ private:
         Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
     }
 
-    void LoadState(const NYql::NDq::TSinkState&) final {}
+    void LoadState(const NYql::NDq::TSinkState&, const NYql::NDqProto::TCheckpoint&) final {}
 
     ui64 GetOutputIndex() const final {
         return OutputIndex;
@@ -3083,12 +3262,6 @@ private:
             }
 
             const bool outOfMemory = GetFreeSpace() <= 0;
-            if (outOfMemory) {
-                WaitingForTableActor = true;
-            } else if (WaitingForTableActor) {
-                ResumeExecution();
-            }
-
             if (outOfMemory && !Settings.GetEnableStreamWrite()) {
                 RuntimeError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
@@ -3101,6 +3274,14 @@ private:
 
             if (!WriteTableActor->IsClosed() && (outOfMemory || CheckpointInProgress)) {
                 WriteTableActor->FlushBuffers();
+            }
+
+            // Flushing column batches can increase their accounted memory.
+            // Decide whether to resume only after that memory change.
+            if (GetFreeSpace() <= 0) {
+                WaitingForTableActor = true;
+            } else if (WaitingForTableActor) {
+                ResumeExecution();
             }
 
             if (Closed || outOfMemory || CheckpointInProgress) {
@@ -3253,6 +3434,8 @@ struct TTransactionSettings {
     bool InconsistentTx = false;
     std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
     NKikimrDataEvents::ELockMode LockMode;
+    bool DisablePessimisticLocks = false;
+    bool CollectAffectedRows = false;
 };
 
 struct TWriteSettings {
@@ -3583,6 +3766,7 @@ public:
             if (!CheckSchemaVersion(actor, tableId, tablePath)) {
                 return nullptr;
             }
+            actor->SetCollectAffectedRows(settings.TransactionSettings.CollectAffectedRows);
             return actor;
         }
 
@@ -3598,8 +3782,11 @@ public:
             settings.IsOlap,
             std::move(keyColumnTypes),
             Alloc,
-            settings.TransactionSettings.MvccSnapshot,
+            (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::OPTIMISTIC_SNAPSHOT_ISOLATION
+                ? settings.TransactionSettings.MvccSnapshot
+                : std::nullopt),
             settings.TransactionSettings.LockMode,
+            settings.TransactionSettings.CollectAffectedRows,
             TxManager,
             SessionActorId,
             Counters,
@@ -3641,9 +3828,6 @@ public:
             .LockNodeId = LockNodeId,
             .LockMode = settings.TransactionSettings.LockMode,
             .QuerySpanId = QuerySpanId,
-            .MvccSnapshot = settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
-                ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot.
-                : settings.TransactionSettings.MvccSnapshot,
 
             .TxManager = TxManager,
             .Alloc = Alloc,
@@ -3653,6 +3837,7 @@ public:
             .Counters = Counters,
 
             .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
+            .Database = settings.Database,
         });
 
         TActorId id = RegisterWithSameMailbox(actor);
@@ -3686,12 +3871,12 @@ public:
 
             .TableId = tableId,
             .TablePath = tablePath,
+            .Database = settings.Database,
 
             .LockTxId = LockTxId,
             .LockNodeId = LockNodeId,
             .LockMode = NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE, // Writes always need EXCLUSIVE lock
             .QuerySpanId = QuerySpanId,
-            .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
 
             .TxManager = TxManager,
             .Alloc = Alloc,
@@ -3817,7 +4002,8 @@ public:
 
             // Ensure lock actor for unique indexes with pessimistic_none
             if (indexSettings.IsUniq &&
-                    (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE)) {
+                    (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE)
+                    && !settings.TransactionSettings.DisablePessimisticLocks) {
                 auto& lockInfo = LockInfos[indexSettings.TableId.PathId];
                 if (!lockInfo.Actors.contains(indexSettings.TableId.PathId)) {
                     if (!EnsureLockActor(settings, lockInfo, indexSettings.TableId, indexSettings.TablePath)) {
@@ -3842,7 +4028,8 @@ public:
                     indexSettings.KeyColumns,
                     indexSettings.ImplColumns,
                     0,
-                    settings.Priority);
+                    settings.Priority,
+                    settings.TransactionSettings.MvccSnapshot);
                 if (isRelevance) {
                     // Fulltext index with relevance requires writing to 3 additional tables
                     auto docsActor = writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor;
@@ -3860,7 +4047,8 @@ public:
                             ? TVector<NKikimrKqp::TKqpColumnMetadataProto>{indexSettings.DocsColumns.at(0)}
                             : indexSettings.DocsColumns),
                         0,
-                        settings.Priority);
+                        settings.Priority,
+                        settings.TransactionSettings.MvccSnapshot);
                     if (indexSettings.NeedDeleteOldRows) {
                         docsActor->Open(
                             deleteCookie,
@@ -3868,7 +4056,8 @@ public:
                             {indexSettings.DocsColumns.at(0)},
                             {indexSettings.DocsColumns.at(0)},
                             0,
-                            settings.Priority);
+                            settings.Priority,
+                            settings.TransactionSettings.MvccSnapshot);
                     }
 
                     if (indexSettings.DictTableId.PathId != TPathId()) {
@@ -3882,7 +4071,8 @@ public:
                             {indexSettings.DictColumns.at(0)},
                             indexSettings.DictColumns,
                             0,
-                            settings.Priority);
+                            settings.Priority,
+                            settings.TransactionSettings.MvccSnapshot);
                     }
 
                     writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
@@ -3897,7 +4087,8 @@ public:
                             indexSettings.StatsColumns.end() - 2),
                         indexSettings.StatsColumns,
                         0,
-                        settings.Priority);
+                        settings.Priority,
+                        settings.TransactionSettings.MvccSnapshot);
                 }
             } else {
                 writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
@@ -3909,7 +4100,8 @@ public:
                         settings.DefaultColumns,
                         indexSettings.Columns,
                         settings.LookupColumns),
-                    settings.Priority);
+                    settings.Priority,
+                    settings.TransactionSettings.MvccSnapshot);
             }
 
             if (indexSettings.NeedDeleteOldRows && !isCompact) {
@@ -3919,7 +4111,8 @@ public:
                     indexSettings.KeyColumns,
                     indexSettings.KeyColumns,
                     0, // DELETE doesn't need DEFAULT values
-                    settings.Priority);
+                    settings.Priority,
+                    settings.TransactionSettings.MvccSnapshot);
             }
 
             writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
@@ -3962,7 +4155,8 @@ public:
             }
 
             if (indexSettings.IsUniq) {
-                if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+                if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                        && !settings.TransactionSettings.DisablePessimisticLocks) {
                     // Lock Unique Index
                     auto& indexLockInfo = LockInfos.at(indexSettings.TableId.PathId);
                     auto& lockActor = indexLockInfo.Actors.at(indexSettings.TableId.PathId).LockActor;
@@ -3971,10 +4165,12 @@ public:
                         .LockActor = lockActor,
                     });
 
+                    AFL_ENSURE(settings.TransactionSettings.MvccSnapshot);
                     lockActor->SetLockSettings(
                         token.Cookie,
                         indexSettings.KeyColumns,
-                        /* skipAbsent */ false);
+                        /* skipAbsent */ false,
+                        *settings.TransactionSettings.MvccSnapshot);
                 }
 
                 {
@@ -4020,7 +4216,10 @@ public:
                         token.Cookie,
                         indexSettings.KeyPrefixSize,
                         indexSettings.KeyColumns,
-                        {});
+                        {},
+                        settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                            ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot.
+                            : settings.TransactionSettings.MvccSnapshot);
                 }
             }
         }
@@ -4047,7 +4246,8 @@ public:
                 settings.DefaultColumns,
                 settings.Columns,
                 settings.LookupColumns),
-            settings.Priority);
+            settings.Priority,
+            settings.TransactionSettings.MvccSnapshot);
 
         AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
         writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
@@ -4068,7 +4268,8 @@ public:
         });
 
         // Main table lock
-        if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+        if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                && !settings.TransactionSettings.DisablePessimisticLocks) {
             auto& lockInfo = LockInfos.at(settings.TableId.PathId);
             auto& lockActor = lockInfo.Actors.at(settings.TableId.PathId).LockActor;
 
@@ -4079,10 +4280,12 @@ public:
             const bool skipAbsent = settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
                 || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE;
 
+            AFL_ENSURE(settings.TransactionSettings.MvccSnapshot);
             lockActor->SetLockSettings(
                 token.Cookie,
                 settings.KeyColumns,
-                skipAbsent);
+                skipAbsent,
+                *settings.TransactionSettings.MvccSnapshot);
         }
 
         // Main table lookup
@@ -4103,7 +4306,10 @@ public:
                 token.Cookie,
                 settings.KeyColumns.size(),
                 settings.KeyColumns,
-                settings.LookupColumns);
+                settings.LookupColumns,
+                settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                    ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot.
+                    : settings.TransactionSettings.MvccSnapshot);
         }
 
         // Returning info
@@ -4165,10 +4371,13 @@ public:
                     settings.TablePath)) {
                 return std::nullopt;
             }
+            writeInfo.Actors.at(settings.TableId.PathId).WriteActor
+                ->SetCollectAffectedRows(settings.TransactionSettings.CollectAffectedRows);
         }
 
         // Ensure lock actor for main table (pessimistic_none only)
-        if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+        if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                && !settings.TransactionSettings.DisablePessimisticLocks) {
             auto& lockInfo = LockInfos[settings.TableId.PathId];
             if (!lockInfo.Actors.contains(settings.TableId.PathId)) {
                 if (!EnsureLockActor(settings, lockInfo, settings.TableId, settings.TablePath)) {
@@ -4286,6 +4495,15 @@ public:
         }
         auto [taskCookie, pathId] = it->second;
         SeqCookies.erase(it);
+        auto taskIt = WriteTasks.find(taskCookie);
+        // A task may be cancelled by an error/rollback after its asynchronous request was sent. Sequence
+        // values may have gaps, so any late response has no state left to update and is safe to discard.
+        if (taskIt == WriteTasks.end()) {
+            YDB_LOG_DEBUG("Ignoring generation sequence result for a finished write task",
+                {"taskCookie", taskCookie},
+                {"pathId", pathId});
+            return;
+        }
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
@@ -4294,8 +4512,6 @@ public:
                 ev->Get()->Issues);
             return;
         }
-        auto taskIt = WriteTasks.find(taskCookie);
-        YQL_ENSURE(taskIt != WriteTasks.end());
         taskIt->second.OnGenSequenceAllocated(pathId, ev->Get()->Value);
         Process();
     }
@@ -5775,6 +5991,9 @@ public:
         }
         if (TxManager->ConsumeCommitResult(shardId)) {
             if (FlushDeferredLocksBrokenIfPending()) return;
+            if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
+                AFL_ENSURE(CommitTimestamp.has_value());
+            }
             YDB_LOG_DEBUG("Committed",
                 {"logPrefix", this->LogPrefix},
                 {"txId", TxId.value_or(0)});
@@ -6519,6 +6738,8 @@ private:
                     .InconsistentTx = Settings.GetInconsistentTx(),
                     .MvccSnapshot = GetOptionalMvccSnapshot(Settings),
                     .LockMode = Settings.GetLockMode(),
+                    .DisablePessimisticLocks = Settings.GetDisablePessimisticLocks(),
+                    .CollectAffectedRows = Settings.GetCollectAffectedRows(),
                 },
                 .Priority = Settings.GetPriority(),
                 .IsOlap = Settings.GetIsOlap(),
@@ -6602,7 +6823,7 @@ private:
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
-    void LoadState(const NYql::NDq::TSinkState&) final {};
+    void LoadState(const NYql::NDq::TSinkState&, const NYql::NDqProto::TCheckpoint&) final {};
 
     ui64 GetOutputIndex() const final {
         return OutputIndex;
@@ -6655,17 +6876,26 @@ private:
         Callbacks->OnAsyncOutputError(OutputIndex, std::move(issues), statusCode);
     }
 
+    ~TKqpForwardWriteActor() override {
+        CleanupMiniKQLObjects();
+    }
+
     void PassAway() override {
         Counters->ForwardActorsCount->Dec();
 
-        if (TransformOutput) {
-            AFL_ENSURE(Alloc);
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
-            PendingResult.Reset();
-            TransformOutput.Reset();
-        }
+        CleanupMiniKQLObjects();
 
         TActorBootstrapped<TKqpForwardWriteActor>::PassAway();
+    }
+
+    void CleanupMiniKQLObjects() {
+        if (!TransformOutput && !PendingResult) {
+            return;
+        }
+        AFL_ENSURE(Alloc);
+        TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+        PendingResult.Reset();
+        TransformOutput.Reset();
     }
 
     TString LogPrefix;

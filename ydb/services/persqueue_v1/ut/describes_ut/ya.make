@@ -23,6 +23,7 @@ SRCS(
 PEERDIR(
     ydb/core/testlib/default
     ydb/core/client/server
+    ydb/core/persqueue/public/describer
     ydb/services/persqueue_v1
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/api/grpc

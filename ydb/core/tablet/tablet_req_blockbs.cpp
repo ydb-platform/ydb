@@ -12,16 +12,19 @@ public:
     ui32 GroupId;
     ui32 Generation;
     ui64 IssuerGuid;
+    ui32 Version;
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { }) {
-        Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason));
+    void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { },
+            bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0) {
+        Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason,
+            isTabletStorageInfoVersionObsolete, actualGeneration));
         PassAway();
     }
 
     void SendRequest() {
         const TActorId proxy = MakeBlobStorageProxyID(GroupId);
         auto event = MakeHolder<TEvBlobStorage::TEvBlock>(TabletId, Generation, TInstant::Max(), IssuerGuid,
-            TWriteSource::BlockBlobStorage);
+            TWriteSource::BlockBlobStorage, Version);
         event->IsMonitored = false;
         SendToBSProxy(TlsActivationContext->AsActorContext(), proxy, event.Release());
     }
@@ -41,9 +44,11 @@ public:
         case NKikimrProto::RACE:
         case NKikimrProto::NO_GROUP:
             // The request will never succeed
-            return ReplyAndDie(msg->Status, msg->ErrorReason);
+            return ReplyAndDie(msg->Status, msg->ErrorReason, msg->IsTabletStorageInfoVersionObsolete,
+                msg->ActualGeneration);
         default:
-            return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason);
+            return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason, msg->IsTabletStorageInfoVersionObsolete,
+                msg->ActualGeneration);
         }
     }
 
@@ -65,11 +70,12 @@ public:
         Become(&TThis::StateWait);
     }
 
-    TTabletReqBlockBlobStorageGroup(ui64 tabletId, ui32 groupId, ui32 gen, ui64 issuerGuid)
+    TTabletReqBlockBlobStorageGroup(ui64 tabletId, ui32 groupId, ui32 gen, ui64 issuerGuid, ui32 version)
         : TabletId(tabletId)
         , GroupId(groupId)
         , Generation(gen)
         , IssuerGuid(issuerGuid)
+        , Version(version)
     {}
 };
 
@@ -77,6 +83,7 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
     TActorId Owner;
     ui64 TabletId;
     ui32 Generation;
+    ui32 Version;
     ui32 Replied = 0;
     TVector<THolder<TTabletReqBlockBlobStorageGroup>> Requests;
     TVector<TActorId> ReqActors;
@@ -90,8 +97,10 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
         TActor::PassAway();
     }
 
-    void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { }) {
-        Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason));
+    void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { },
+            bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0) {
+        Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason,
+            isTabletStorageInfoVersionObsolete, actualGeneration));
         PassAway();
     }
 
@@ -107,7 +116,8 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
                 return ReplyAndDie(NKikimrProto::OK);
             break;
         default:
-            return ReplyAndDie(msg->Status, msg->ErrorReason);
+            return ReplyAndDie(msg->Status, msg->ErrorReason, msg->IsTabletStorageInfoVersionObsolete,
+                msg->ActualGeneration);
         }
     }
 
@@ -116,6 +126,7 @@ public:
         : Owner(owner)
         , TabletId(info->TabletID)
         , Generation(generation)
+        , Version(info->Version)
     {
         std::unordered_set<ui32> blocked;
         Requests.reserve(blockPrevEntry ? info->Channels.size() * 2 : info->Channels.size());
@@ -132,7 +143,7 @@ public:
             }
             if (blocked.insert(itEntry->GroupID).second) {
                 Requests.emplace_back(new TTabletReqBlockBlobStorageGroup(TabletId, itEntry->GroupID, Generation,
-                    IssuerGuid));
+                    IssuerGuid, Version));
             }
 
             if (blockPrevEntry) {
@@ -142,7 +153,7 @@ public:
                 }
                 if (blocked.insert(itEntry->GroupID).second) {
                     Requests.emplace_back(new TTabletReqBlockBlobStorageGroup(TabletId, itEntry->GroupID, Generation,
-                        IssuerGuid));
+                        IssuerGuid, Version));
                 }
             }
         }

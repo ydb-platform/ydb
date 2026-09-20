@@ -1,9 +1,7 @@
 #include "s3_router.h"
 
-#include "events.h"
-
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
@@ -15,12 +13,10 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/random_provider/random_provider.h>
 
-#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/string/cast.h>
 #include <util/string/strip.h>
 
-#include <algorithm>
 #include <atomic>
 #include <deque>
 
@@ -30,88 +26,70 @@ namespace NKikimr::NBlobDepot {
 
     namespace {
 
-    struct TLatencyHistogram {
-        static constexpr ui64 Bounds[] = {
+    struct TRouteMonCounters {
+        NMonitoring::TDynamicCounters::TCounterPtr Requests;
+        NMonitoring::TDynamicCounters::TCounterPtr Errors;
+        NMonitoring::TDynamicCounters::TCounterPtr BytesRead;
+        NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
+        NMonitoring::THistogramPtr Latency;
+    };
+
+    struct TRouterMonCounters {
+        TRouteMonCounters Balancer;
+        TRouteMonCounters NonBalancer;
+        NMonitoring::TDynamicCounters::TCounterPtr BalancerResolveRequests;
+        NMonitoring::TDynamicCounters::TCounterPtr BalancerResolveSuccesses;
+        NMonitoring::TDynamicCounters::TCounterPtr BalancerResolveFailures;
+        NMonitoring::TDynamicCounters::TCounterPtr EndpointSwitches;
+        NMonitoring::TDynamicCounters::TCounterPtr FiveXxRefreshTriggers;
+        NMonitoring::TDynamicCounters::TCounterPtr PendingRejects;
+        NMonitoring::TDynamicCounters::TCounterPtr RetiringWrappersAborted;
+        NMonitoring::TDynamicCounters::TCounterPtr IsUsingProxy;
+        NMonitoring::THistogramPtr BalancerResolveLatency;
+        NMonitoring::THistogramPtr PendingLatency;
+    };
+
+    static NMonitoring::IHistogramCollectorPtr MakeLatencyHistogram() {
+        return NMonitoring::ExplicitHistogram({
             1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000
-        };
+        });
+    }
 
-        static constexpr size_t BucketCount = std::size(Bounds) + 1; // last bucket is +inf
-
-        std::atomic<ui64> Buckets[BucketCount] = {};
-
-        void Record(ui64 valueMs) {
-            const auto* end = Bounds + std::size(Bounds);
-            const size_t i = std::lower_bound(Bounds, end, valueMs) - Bounds;
-            Buckets[i].fetch_add(1, std::memory_order_relaxed);
+    static void IncCounter(const NMonitoring::TDynamicCounters::TCounterPtr& counter, ui64 value = 1) {
+        if (counter && value) {
+            *counter += value;
         }
+    }
 
-        template <typename TRepeated>
-        void Take(TRepeated* out) {
-            ui64 snapshot[BucketCount];
-            bool any = false;
-            for (size_t i = 0; i < BucketCount; ++i) {
-                snapshot[i] = Buckets[i].exchange(0, std::memory_order_relaxed);
-                any = any || snapshot[i];
-            }
-
-            if (!any) {
-                return;
-            }
-
-            out->Clear();
-            out->Reserve(BucketCount);
-            for (size_t i = 0; i < BucketCount; ++i) {
-                out->Add(snapshot[i]);
-            }
+    static void SetCounter(const NMonitoring::TDynamicCounters::TCounterPtr& counter, i64 value) {
+        if (counter) {
+            *counter = value;
         }
-    };
+    }
 
-    struct TRouteStats {
-        std::atomic<ui64> Requests{0};
-        std::atomic<ui64> Errors{0};
-        std::atomic<ui64> BytesRead{0};
-        std::atomic<ui64> BytesWritten{0};
-        TLatencyHistogram Latency;
-    };
-
-    struct TRouterStats {
-        TRouteStats BalancerRoute;
-        TRouteStats NonBalancerRoute;
-
-        std::atomic<ui64> BalancerResolveRequests{0};
-        std::atomic<ui64> BalancerResolveSuccesses{0};
-        std::atomic<ui64> BalancerResolveFailures{0};
-        std::atomic<ui64> EndpointSwitches{0};
-        std::atomic<ui64> FiveXxRefreshTriggers{0};
-        std::atomic<ui64> PendingRejects{0};
-        std::atomic<ui64> RetiringWrappersAborted{0};
-        std::atomic<bool> IsUsingProxy{false};
-
-        TLatencyHistogram BalancerResolveLatency;
-        TLatencyHistogram PendingLatency;
-    };
+    static void CollectHistogram(const NMonitoring::THistogramPtr& histogram, ui64 valueMs) {
+        if (histogram) {
+            histogram->Collect(static_cast<i64>(valueMs));
+        }
+    }
 
     class TRouteCounters : public TThrRefBase {
-        TRouterStats& Stats;
-        const bool NonBalancer;
+        TRouteMonCounters Route;
 
     public:
-        TRouteCounters(TRouterStats& stats, bool nonBalancer)
-            : Stats(stats)
-            , NonBalancer(nonBalancer)
+        explicit TRouteCounters(TRouteMonCounters route)
+            : Route(std::move(route))
         {}
 
         void Collect(const NWrappers::NExternalStorage::IReplyAdapter::TRequestStats& requestStats) const {
-            TRouteStats& route = NonBalancer ? Stats.NonBalancerRoute : Stats.BalancerRoute;
-            ++route.Requests;
+            IncCounter(Route.Requests);
             if (requestStats.Success) {
-                route.BytesRead += requestStats.BytesRead;
-                route.BytesWritten += requestStats.BytesWritten;
+                IncCounter(Route.BytesRead, requestStats.BytesRead);
+                IncCounter(Route.BytesWritten, requestStats.BytesWritten);
             } else {
-                ++route.Errors;
+                IncCounter(Route.Errors);
             }
-
-            route.Latency.Record(requestStats.Latency.MilliSeconds());
+            CollectHistogram(Route.Latency, requestStats.Latency.MilliSeconds());
         }
     };
 
@@ -189,16 +167,12 @@ namespace NKikimr::NBlobDepot {
 #undef IMPL_REBUILD
     };
 
-    static ui64 ExchangeAtomic(std::atomic<ui64>& value) {
-        return value.exchange(0);
-    }
-
     class TBlobDepotS3Router : public TActorBootstrapped<TBlobDepotS3Router> {
         struct TEvPrivate {
             enum {
                 EvBalancerTick = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvRefreshNow,
-                EvPushMetrics,
+                EvSweepRetiring,
             };
         };
 
@@ -220,8 +194,6 @@ namespace NKikimr::NBlobDepot {
         std::deque<TRetiringWrapper> RetiringWrappers;
 
         TActorId HttpProxyId;
-        TActorId PipeId;
-        bool PipeConnected = false;
         bool RefreshInFlight = false;
         bool RefreshScheduled = false;
 
@@ -233,7 +205,7 @@ namespace NKikimr::NBlobDepot {
         static constexpr size_t MaxPendingRequests = 256;
         std::deque<TPendingRequest> PendingRequests;
 
-        TRouterStats Stats;
+        TRouterMonCounters Mon;
 
         TMonotonic BalancerRequestStartedAt;
 
@@ -263,13 +235,46 @@ namespace NKikimr::NBlobDepot {
             return TDuration::Seconds(Settings.GetMinRetireGracePeriodSec());
         }
 
-        TDuration MetricsPushInterval() const {
+        TDuration SweepRetiringInterval() const {
             const ui32 ms = Settings.GetMetricsPushIntervalMs();
             return TDuration::MilliSeconds(ms ? ms : 2500);
         }
 
+        static TRouteMonCounters MakeRouteMonCounters(::NMonitoring::TDynamicCounterPtr group) {
+            TRouteMonCounters route;
+            route.Requests = group->GetCounter("Requests", true);
+            route.Errors = group->GetCounter("Errors", true);
+            route.BytesRead = group->GetCounter("BytesRead", true);
+            route.BytesWritten = group->GetCounter("BytesWritten", true);
+            route.Latency = group->GetHistogram("LatencyMs", MakeLatencyHistogram());
+            return route;
+        }
+
+        void SetupCounters() {
+            auto group = GetServiceCounters(AppData()->Counters, "tablets")
+                ->GetSubgroup("subsystem", "blob_depot")
+                ->GetSubgroup("module_id", "s3_router")
+                ->GetSubgroup("tablet", ::ToString(TabletId));
+
+            Mon.Balancer = MakeRouteMonCounters(group->GetSubgroup("route", "Balancer"));
+            Mon.NonBalancer = MakeRouteMonCounters(group->GetSubgroup("route", "NonBalancer"));
+
+            auto resolve = group->GetSubgroup("component", "BalancerResolve");
+            Mon.BalancerResolveRequests = resolve->GetCounter("Requests", true);
+            Mon.BalancerResolveSuccesses = resolve->GetCounter("Successes", true);
+            Mon.BalancerResolveFailures = resolve->GetCounter("Failures", true);
+            Mon.BalancerResolveLatency = resolve->GetHistogram("LatencyMs", MakeLatencyHistogram());
+
+            Mon.EndpointSwitches = group->GetCounter("EndpointSwitches", true);
+            Mon.FiveXxRefreshTriggers = group->GetCounter("FiveXxRefreshTriggers", true);
+            Mon.PendingRejects = group->GetSubgroup("component", "Pending")->GetCounter("Rejects", true);
+            Mon.PendingLatency = group->GetSubgroup("component", "Pending")->GetHistogram("LatencyMs", MakeLatencyHistogram());
+            Mon.RetiringWrappersAborted = group->GetCounter("RetiringWrappersAborted", true);
+            Mon.IsUsingProxy = group->GetCounter("IsUsingProxy", false);
+        }
+
         TIntrusivePtr<TRouteCounters> MakeRouteCounters(bool nonBalancer) {
-            return MakeIntrusive<TRouteCounters>(Stats, nonBalancer);
+            return MakeIntrusive<TRouteCounters>(nonBalancer ? Mon.NonBalancer : Mon.Balancer);
         }
 
         ui16 BalancerProxyPort() const {
@@ -328,7 +333,7 @@ namespace NKikimr::NBlobDepot {
                     {"endpoint", wrapper.Endpoint},
                     {"inFlight", inFlight},
                     {"reason", reason});
-                ++Stats.RetiringWrappersAborted;
+                IncCounter(Mon.RetiringWrappersAborted);
             }
 
             Send(wrapper.ActorId, new TEvents::TEvPoison());
@@ -372,7 +377,7 @@ namespace NKikimr::NBlobDepot {
                 {"type", ev->GetTypeRewrite()},
                 {"pending", PendingRequests.size()});
 
-            ++Stats.PendingRejects;
+            IncCounter(Mon.PendingRejects);
 
             auto response = NWrappers::NExternalStorage::MakeErrorResponse(
                 *ev,
@@ -389,7 +394,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void RecordPendingLatency(const TPendingRequest& pending, TMonotonic now) {
-            Stats.PendingLatency.Record((now - pending.EnqueuedAt).MilliSeconds());
+            CollectHistogram(Mon.PendingLatency, (now - pending.EnqueuedAt).MilliSeconds());
         }
 
         void FlushPendingRequests() {
@@ -426,7 +431,7 @@ namespace NKikimr::NBlobDepot {
                 {"id", LogId},
                 {"endpoint", endpoint});
 
-            Stats.IsUsingProxy.store(false);
+            SetCounter(Mon.IsUsingProxy, 0);
         }
 
         void BuildInnerWrapperViaProxy(const TString& host, ui16 port) {
@@ -450,83 +455,22 @@ namespace NKikimr::NBlobDepot {
                 {"proxyHost", host},
                 {"proxyPort", port});
 
-            ++Stats.EndpointSwitches;
-            Stats.IsUsingProxy.store(true);
+            IncCounter(Mon.EndpointSwitches);
+            SetCounter(Mon.IsUsingProxy, 1);
         }
 
         bool BalancerEnabled() const {
             return Settings.HasBalancerHost() && Settings.GetBalancerHost();
         }
 
-        void CreatePipe() {
-            Y_ABORT_UNLESS(!PipeId);
-            PipeId = Register(NTabletPipe::CreateClient(SelfId(), TabletId,
-                NTabletPipe::TClientRetryPolicy::WithRetries()));
-        }
-
-        void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
-            auto& msg = *ev->Get();
-            if (msg.ClientId != PipeId) {
-                return;
-            }
-            if (msg.Status == NKikimrProto::OK) {
-                PipeConnected = true;
-            } else {
-                PipeConnected = false;
-                PipeId = {};
-                CreatePipe();
-            }
-        }
-
-        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
-            if (ev->Get()->ClientId != PipeId) {
-                return;
-            }
-
-            PipeConnected = false;
-            PipeId = {};
-            CreatePipe();
-        }
-
-        void SchedulePushMetrics() {
-            TActivationContext::Schedule(MetricsPushInterval(), new IEventHandle(TEvPrivate::EvPushMetrics, 0,
+        void ScheduleSweepRetiring() {
+            TActivationContext::Schedule(SweepRetiringInterval(), new IEventHandle(TEvPrivate::EvSweepRetiring, 0,
                 SelfId(), {}, nullptr, 0));
         }
 
-        void HandlePushMetrics() {
+        void HandleSweepRetiring() {
             SweepRetiringWrappers();
-
-            if (PipeConnected) {
-                auto event = std::make_unique<TEvBlobDepot::TEvPushS3RouterMetrics>();
-                auto& record = event->Record;
-                record.SetNodeId(SelfId().NodeId());
-
-                record.SetBalancerRequests(ExchangeAtomic(Stats.BalancerRoute.Requests));
-                record.SetBalancerErrors(ExchangeAtomic(Stats.BalancerRoute.Errors));
-
-                record.SetNonBalancerRequests(ExchangeAtomic(Stats.NonBalancerRoute.Requests));
-                record.SetNonBalancerErrors(ExchangeAtomic(Stats.NonBalancerRoute.Errors));
-                record.SetNonBalancerBytesRead(ExchangeAtomic(Stats.NonBalancerRoute.BytesRead));
-                record.SetNonBalancerBytesWritten(ExchangeAtomic(Stats.NonBalancerRoute.BytesWritten));
-
-                record.SetBalancerResolveRequests(ExchangeAtomic(Stats.BalancerResolveRequests));
-                record.SetBalancerResolveSuccesses(ExchangeAtomic(Stats.BalancerResolveSuccesses));
-                record.SetBalancerResolveFailures(ExchangeAtomic(Stats.BalancerResolveFailures));
-                record.SetEndpointSwitches(ExchangeAtomic(Stats.EndpointSwitches));
-                record.SetFiveXxRefreshTriggers(ExchangeAtomic(Stats.FiveXxRefreshTriggers));
-                record.SetPendingRejects(ExchangeAtomic(Stats.PendingRejects));
-                record.SetRetiringWrappersAborted(ExchangeAtomic(Stats.RetiringWrappersAborted));
-                record.SetIsUsingProxy(Stats.IsUsingProxy.load());
-
-                Stats.BalancerRoute.Latency.Take(record.MutableBalancerLatencyHistogram());
-                Stats.NonBalancerRoute.Latency.Take(record.MutableNonBalancerLatencyHistogram());
-                Stats.BalancerResolveLatency.Take(record.MutableBalancerResolveLatencyHistogram());
-                Stats.PendingLatency.Take(record.MutablePendingLatencyHistogram());
-
-                NTabletPipe::SendData(SelfId(), PipeId, event.release());
-            }
-
-            SchedulePushMetrics();
+            ScheduleSweepRetiring();
         }
 
         void IssueBalancerRequest() {
@@ -548,7 +492,7 @@ namespace NKikimr::NBlobDepot {
                 TDuration::Seconds(10)));
             RefreshInFlight = true;
             BalancerRequestStartedAt = TActivationContext::Monotonic();
-            ++Stats.BalancerResolveRequests;
+            IncCounter(Mon.BalancerResolveRequests);
         }
 
         void ScheduleNextRefresh() {
@@ -572,7 +516,7 @@ namespace NKikimr::NBlobDepot {
                 {"id", LogId},
                 {"currentEndpoint", CurrentEndpoint});
 
-            ++Stats.FiveXxRefreshTriggers;
+            IncCounter(Mon.FiveXxRefreshTriggers);
 
             if (!RefreshInFlight) {
                 IssueBalancerRequest();
@@ -582,7 +526,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr ev) {
             RefreshInFlight = false;
             const TDuration latency = TActivationContext::Monotonic() - BalancerRequestStartedAt;
-            Stats.BalancerResolveLatency.Record(latency.MilliSeconds());
+            CollectHistogram(Mon.BalancerResolveLatency, latency.MilliSeconds());
 
             const auto& msg = *ev->Get();
             if (msg.Response && msg.Response->Status.StartsWith("2")) {
@@ -595,7 +539,7 @@ namespace NKikimr::NBlobDepot {
                     {"body", host},
                     {"latencyMs", latency.MilliSeconds()});
 
-                ++Stats.BalancerResolveSuccesses;
+                IncCounter(Mon.BalancerResolveSuccesses);
 
                 if (!host.empty()) {
                     ui16 port = BalancerProxyPort();
@@ -618,7 +562,7 @@ namespace NKikimr::NBlobDepot {
                     {"error", msg.Error},
                     {"latencyMs", latency.MilliSeconds()});
 
-                ++Stats.BalancerResolveFailures;
+                IncCounter(Mon.BalancerResolveFailures);
             }
             ScheduleNextRefresh();
         }
@@ -673,8 +617,8 @@ namespace NKikimr::NBlobDepot {
         void Bootstrap() {
             const TString& endpoint = Settings.GetSettings().GetEndpoint();
             OriginalEndpoint = endpoint;
-            CreatePipe();
-            SchedulePushMetrics();
+            SetupCounters();
+            ScheduleSweepRetiring();
 
             YDB_LOG_INFO("S3Router bootstrap",
                 {"marker", "BDTS24"},
@@ -721,10 +665,6 @@ namespace NKikimr::NBlobDepot {
                 Send(HttpProxyId, new TEvents::TEvPoison());
                 HttpProxyId = {};
             }
-            if (PipeId) {
-                NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
-                PipeId = {};
-            }
             TActor::PassAway();
         }
 
@@ -736,11 +676,9 @@ namespace NKikimr::NBlobDepot {
             }
             switch (type) {
                 hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
-                hFunc(TEvTabletPipe::TEvClientConnected, Handle);
-                hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
                 cFunc(TEvPrivate::EvBalancerTick, HandleBalancerTick);
                 cFunc(TEvPrivate::EvRefreshNow, HandleRefreshNow);
-                cFunc(TEvPrivate::EvPushMetrics, HandlePushMetrics);
+                cFunc(TEvPrivate::EvSweepRetiring, HandleSweepRetiring);
                 cFunc(TEvents::TSystem::Poison, PassAway);
             }
         }

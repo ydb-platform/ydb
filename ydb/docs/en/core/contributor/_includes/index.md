@@ -1,3 +1,6 @@
 * [Working on a change](../suggest-change.md)
 * [Build and test using Ya Make build system](../build-ya.md)
 * [Releases](../manage-releases.md)
+* [Actor system development](../actor-system/index.md)
+* [Distributed storage architecture](../distributed-storage.md)
+* [Testing with load actors](../load-actors-overview.md)

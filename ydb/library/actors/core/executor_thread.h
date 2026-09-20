@@ -88,7 +88,7 @@ namespace NActors {
 
         TProcessingResult Execute(TMailbox* mailbox, bool isTailExecution, NHPTimer::STime mailboxScheduledTimestampTs);
 
-        void UpdateThreadStats();
+        TExecutorThreadStats* UpdateThreadStats();
 
     public:
         TActorSystem* const ActorSystem;
@@ -102,6 +102,9 @@ namespace NActors {
     protected:
         // Pool-specific
         TStackVec<TExecutorThreadStats, DefaultPoolCountForExecutorThread> Stats;
+        // Published for off-thread collectors. Stats is fully initialized before
+        // threads start and never moves; ExecutionStats remains executor-owned.
+        std::atomic<TExecutorThreadStats*> CurrentStats = nullptr;
 
         // Event-specific (currently executing)
         TVector<THolder<IActor>> DyingActors;

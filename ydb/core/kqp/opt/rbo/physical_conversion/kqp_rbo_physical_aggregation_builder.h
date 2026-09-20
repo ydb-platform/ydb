@@ -42,9 +42,10 @@ class TPhysicalAggregationBuilder: public TPhysicalUnaryOpBuilderWithMemLimit {
     };
 
 public:
-    TPhysicalAggregationBuilder(TIntrusivePtr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos)
+    TPhysicalAggregationBuilder(TIntrusivePtr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos, bool pruneUnusedOutputs = false)
         : TPhysicalUnaryOpBuilderWithMemLimit(ctx, pos)
-        , Aggregate(aggregate) {
+        , Aggregate(aggregate)
+        , PruneUnusedOutputs(pruneUnusedOutputs) {
     }
 
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) override;
@@ -128,6 +129,7 @@ private:
 
     // Holds an aggregate operator.
     TIntrusivePtr<TOpAggregate> Aggregate;
+    const bool PruneUnusedOutputs;
     // This Map represents a simple physical aggregation functions.
     const THashMap<TString, TString> AggregationFunctionToAggregationCallable{{"sum", "AggrAdd"}, {"min", "AggrMin"}, {"max", "AggrMax"}};
     // The name of the physical aggregation.

@@ -533,3 +533,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, cons
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

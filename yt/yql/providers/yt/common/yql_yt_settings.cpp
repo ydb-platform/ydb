@@ -515,6 +515,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, UseQLFilter);
     REGISTER_SETTING(*this, PruneQLFilterLambda).Deprecated();
     REGISTER_SETTING(*this, _EnableQLFilter);
+    REGISTER_SETTING(*this, QLFilterDepthLimit);
     REGISTER_SETTING(*this, MergeAdjacentPointRanges);
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
     REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
@@ -648,6 +649,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _SecureTmpTokenUsersAccessPeriod);
     REGISTER_SETTING(*this, _FixEndlessLoopInDropIfExists);
     REGISTER_SETTING(*this, _ForbidReservedColumns);
+    REGISTER_SETTING(*this, _ReplaceEmptyOpWithTouch);
     REGISTER_SETTING(*this, ApplyMaxJobCountToAll);
 }
 

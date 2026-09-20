@@ -55,13 +55,13 @@ class LocalBloomNgramFilterIndex;
 namespace NYdb::inline Dev {
 
 namespace NRetry::Async {
-template <typename TClient, typename TStatusType>
-class TRetryContext;
+    template <typename TClient, typename TOperation, bool WithSession>
+    class TRetryContext;
 } // namespace NRetry::Async
 
 namespace NRetry::Sync {
-template <typename TClient, typename TStatusType>
-class TRetryContext;
+    template <typename TClient, typename TOperation, bool WithSession>
+    class TRetryContext;
 } // namespace NRetry::Sync
 
 namespace NRetry {
@@ -339,6 +339,8 @@ public:
         Uint8,
         Int8,
         Bit,
+        Float16,
+        BFloat16,
     };
 
     EMetric Metric = EMetric::Unspecified;
@@ -369,6 +371,8 @@ public:
         Uint8,
         Int8,
         Bit,
+        Float16,
+        BFloat16,
     };
 
     TVectorIndexSettings Settings;
@@ -407,9 +411,11 @@ public:
         std::optional<int32_t> FilterLengthMin;
         std::optional<int32_t> FilterLengthMax;
         std::optional<bool> UseFilterSnowball;
+        std::optional<bool> UseFilterSuperLemmer;
 
         static TAnalyzers Standard();
         static TAnalyzers Snowball(std::string language);
+        static TAnalyzers SuperLemmer(std::string language);
         static TAnalyzers Keyword();
     };
 
@@ -1044,6 +1050,7 @@ enum class EStoreType {
 enum class EMultiColumnStatisticsType {
     Unknown = 0,
     CountMinSketch = 1,
+    EqHeightHistogram = 2,
 };
 
 //! Represents multi-column table statistics description
@@ -1674,13 +1681,13 @@ enum class EDataFormat {
 };
 
 class TTableClient {
+    template <typename, typename, bool>
+    friend class NRetry::Async::TRetryContext;
+    template <typename, typename, bool>
+    friend class NRetry::Sync::TRetryContext;
     friend class TSession;
     friend class TTransaction;
     friend class TSessionPool;
-    friend class NRetry::Sync::TRetryContext<TTableClient, TStatus>;
-    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncStatus>;
-    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncBulkUpsertResult>;
-    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncReadRowsResult>;
 
 public:
     using TOperationFunc = std::function<TAsyncStatus(TSession session)>;

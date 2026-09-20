@@ -1780,6 +1780,44 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
             return writeOp;
     }
 
+    bool hasWriteSeqNum = false;
+    size_t opsWithWriteSeqNum = 0;
+    std::optional<ui64> writerIndex;
+    for (const auto& op : rec.GetOperations()) {
+        if (!op.HasWriteSeqNum()) {
+            continue;
+        }
+        hasWriteSeqNum = true;
+        ++opsWithWriteSeqNum;
+        const auto& writeSeqNum = op.GetWriteSeqNum();
+        const ui64 opWriterIndex = writeSeqNum.GetWriterIndex();
+        const ui64 seqNum = writeSeqNum.GetWriteSeqNum();
+        if (seqNum == 0
+            || !rec.GetLockTxId()
+            || rec.txmode() != NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
+            || rec.HasLocks())
+        {
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                << "WriteSeqNum " << opWriterIndex << ":" << seqNum
+                << " requires a non-zero WriteSeqNum, LockTxId, MODE_IMMEDIATE and no Locks");
+            return writeOp;
+        }
+        // All operations must share the same WriterIndex — reject if they differ.
+        if (writerIndex && *writerIndex != opWriterIndex) {
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                << "Different WriterIndex values in operations: " << *writerIndex
+                << " and " << opWriterIndex);
+            return writeOp;
+        }
+        writerIndex = opWriterIndex;
+    }
+    if (hasWriteSeqNum && opsWithWriteSeqNum != rec.OperationsSize()) {
+        badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+            << "WriteSeqNum must be set on all operations or none, got "
+            << opsWithWriteSeqNum << " of " << rec.OperationsSize());
+        return writeOp;
+    }
+
     // Make config checks for immediate op.
     if (writeOp->IsImmediate()) {
         if (Config.NoImmediate() || (Config.ForceOnlineRW())) {
@@ -2581,3 +2619,7 @@ void TPipeline::ProvideGlobalTxId(const TOperation::TPtr& op, ui64 globalTxId) {
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

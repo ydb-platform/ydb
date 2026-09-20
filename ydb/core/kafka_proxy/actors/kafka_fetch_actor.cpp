@@ -106,6 +106,11 @@ TVector<NKikimr::NPQ::TPartitionFetchRequest> TKafkaFetchActor::PrepareFetchRequ
         partPQRequest.Partition = partKafkaRequest.Partition;
         partPQRequest.Offset = partKafkaRequest.FetchOffset;
         partPQRequest.MaxBytes = partKafkaRequest.PartitionMaxBytes;
+        // librdkafka treats Fetch records length -1 (null) as a protocol error
+        // ("invalid MessageSetSize -1"). Empty partitions must be encoded as
+        // zero-length bytes, like Apache Kafka and the pre-26-3 TKafkaRecords
+        // serializer (which wrote size 0 for unset). See LOGBROKER-10644.
+        topicKafkaResponse.Partitions[partIndex].Records = TString();
     }
     return partPQRequests;
 }
@@ -182,6 +187,8 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
             Context->RememberTopicAclOk(TString(topicResponse.Topic.value()));
         }
         if (partPQResponse.GetReadResult().GetResult().size() == 0) {
+            // Keep zero-length records set in PrepareFetchRequestData; do not
+            // clear back to null (would serialize as MessageSetSize=-1).
             continue;
         }
 

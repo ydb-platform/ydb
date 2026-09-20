@@ -419,12 +419,7 @@ bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& nod
         return false;
     }
     LegacyHoppingWindowSpec_->Delay = processIntervalParam(node.GetRule_expr9());
-    if (!LegacyHoppingWindowSpec_->Delay) {
-        return false;
-    }
-    LegacyHoppingWindowSpec_->DataWatermarks = Ctx_.PragmaDataWatermarks;
-
-    return true;
+    return static_cast<bool>(LegacyHoppingWindowSpec_->Delay);
 }
 
 bool TGroupByClause::AllowUnnamed(TPosition pos, EGroupByFeatures featureContext) {

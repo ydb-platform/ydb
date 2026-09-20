@@ -1,6 +1,7 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/program/aggr_keys.h>
+#include <ydb/core/formats/arrow/program/ascii_contains/ascii_contains.h>
 #include <ydb/core/formats/arrow/program/assign_const.h>
 #include <ydb/core/formats/arrow/program/assign_internal.h>
 #include <ydb/core/formats/arrow/program/collection.h>
@@ -499,6 +500,28 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             UNIT_ASSERT_VALUES_EQUAL(res[2], true);
             UNIT_ASSERT_VALUES_EQUAL(res[3], false);
         }
+    }
+
+    Y_UNIT_TEST(AsciiContainsIgnoreCaseMemchrDirect) {
+        UNIT_ASSERT(AsciiContainsIgnoreCaseMemchr("", ""));
+        UNIT_ASSERT(AsciiContainsIgnoreCaseMemchr("abc", ""));
+        UNIT_ASSERT(!AsciiContainsIgnoreCaseMemchr("", "a"));
+
+        UNIT_ASSERT(AsciiContainsIgnoreCaseMemchr("fdsa", "DS"));
+        UNIT_ASSERT(AsciiContainsIgnoreCaseMemchr("fdsa", "FdSa"));
+        UNIT_ASSERT(!AsciiContainsIgnoreCaseMemchr("fdsa", "AS"));
+        UNIT_ASSERT(!AsciiContainsIgnoreCaseMemchr("fdsa", "xyz"));
+
+        UNIT_ASSERT(AsciiContainsIgnoreCaseMemchr("AbC", "b"));
+        UNIT_ASSERT(AsciiContainsIgnoreCaseMemchr("AbC", "B"));
+        UNIT_ASSERT(AsciiContainsIgnoreCaseMemchr("a12b", "12"));
+        UNIT_ASSERT(!AsciiContainsIgnoreCaseMemchr("a12b", "13"));
+
+        UNIT_ASSERT(AsciiContainsIgnoreCaseMemchr("xxxAAAyyy", "aaa"));
+        UNIT_ASSERT(AsciiContainsIgnoreCaseMemchr("ababcabcd", "AbCd"));
+
+        UNIT_ASSERT(AsciiContainsIgnoreCaseMemchr("`Привет, мир!`", "Привет"));
+        UNIT_ASSERT(!AsciiContainsIgnoreCaseMemchr("`Привет, мир!`", "привет"));
     }
 
     Y_UNIT_TEST(ScalarTest) {

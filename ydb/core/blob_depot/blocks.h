@@ -19,6 +19,7 @@ namespace NKikimr::NBlobDepot {
 
             ui32 BlockedGeneration = 0;
             ui64 IssuerGuid = 0;
+            ui32 Version = 0;
             THashMap<ui32, TPerAgentInfo> PerAgentInfo;
 
             bool CanSetNewBlock(ui32 blockedGeneration, ui64 issuerGuid) const {
@@ -30,23 +31,43 @@ namespace NKikimr::NBlobDepot {
         TBlobDepot* const Self;
         THashMap<ui64, TBlock> Blocks;
 
+        // tablets whose data still has to be dropped after a complete deletion has been seen; the
+        // set is drained by TTxDeleteTabletData once the data is loaded
+        THashSet<ui64> TabletsToDelete;
+        bool DeleteTabletDataInFlight = false;
+
     private:
         class TTxUpdateBlock;
+        class TTxDeleteTabletData;
         class TBlockProcessorActor;
+
+        void OnTabletDeleted(ui64 tabletId);
+        void ProcessTabletsToDelete();
 
     public:
         TBlocksManager(TBlobDepot *self)
             : Self(self)
         {}
 
-        void AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration, ui64 issuerGuid);
+        void AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration, ui64 issuerGuid, ui32 version);
         void AddBlockOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlock& block, NTabletFlatExecutor::TTransactionContext& txc);
         void OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
-            std::unique_ptr<IEventHandle> response);
+            std::optional<ui32> version, std::unique_ptr<IEventHandle> response);
         void Handle(TEvBlobDepot::TEvBlock::TPtr ev);
         void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev);
+        void OnDataLoaded();
 
         bool CheckBlock(ui64 tabletId, ui32 generation) const;
+
+        // A block with generation Max<ui32>() is the tombstone Hive writes when it deletes a tablet
+        // for good; from that moment on none of the tablet's data is needed and nothing can ever be
+        // written for it again. We must not wait for the hard barrier that Hive sends next -- a
+        // VDisk that has seen this block is free to drop the barrier records themselves, so during
+        // decommission they may never reach us.
+        bool IsTabletDeleted(ui64 tabletId) const {
+            const auto it = Blocks.find(tabletId);
+            return it != Blocks.end() && IsCompleteTabletDeletionBlock(it->second.BlockedGeneration);
+        }
 
         template<typename TCallback>
         void Enumerate(TCallback&& callback) const {

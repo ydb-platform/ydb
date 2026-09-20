@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/cgiparam
     yql/essentials/core/url_lister/interface
+    yt/yql/providers/yt/lib/config_clusters
     yt/yql/providers/yt/lib/init_yt_api
     yql/essentials/utils/fetch
     yql/essentials/utils/log

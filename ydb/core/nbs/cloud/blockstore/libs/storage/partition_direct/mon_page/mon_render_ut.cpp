@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/size_literals.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,13 +17,14 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .TabletInfo =
                 {.TabletId = 42,
                  .Generation = 7,
+                 .BlockSize = 4096,
+                 .BlockCount = 16384,
+                 .VChunkSize = 1_MB,
+                 .VolumeDirectBlockGroupCount = 32,
+                 .TouchedVChunkCount = 17,
                  .DiskId = "vol-1",
                  .State = "WORK"},
-            .FastPathServiceInfo =
-                TFastPathServiceInfo{
-                    .LsnCounter = 100,
-                    .TotalVChunks = 7,
-                    .DbgCount = 3},
+            .FastPathServiceInfo = TFastPathServiceInfo{.LsnCounter = 100},
         };
     }
 
@@ -38,9 +41,12 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .InflightByOperation = inflightByOperation,
             .Errors =
                 {.ConsecutiveErrorCount = 1, .ConsecutiveSuccessCount = 7},
-            .PBuffersUsage{.Count = 1, .Size = 4096},
-            .AheadBlocks{.Count = 2, .Size = 8192},
-            .BehindBlocks{.Count = 3, .Size = 12288},
+            .DirtyMapStats =
+                {
+                    .PBuffersUsage = {.Count = 1, .Size = 4096},
+                    .FreshTotalBytes = 8192,
+                    .RottenTotalBytes = 12288,
+                },
         };
         THostSnapshot sufferer{
             .Index = 1,
@@ -68,19 +74,100 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
     Y_UNIT_TEST(OverviewShowsHeaderAndSummary)
     {
         const TString html = RenderMonPage(MakeData());
-        UNIT_ASSERT_STRING_CONTAINS(html, "partition_direct tablet");
         UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=chaos");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=localdb");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunk");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunkcounters");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=latency");
-        UNIT_ASSERT_STRING_CONTAINS(html, "DirectBlockGroups");
-        UNIT_ASSERT_STRING_CONTAINS(html, "VChunks (total)");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=memory");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Volume DirectBlockGroup Count");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "Volume DirectBlockGroup Count</td><td>32</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Last safe barrier");
         UNIT_ASSERT_STRING_CONTAINS(html, "vol-1");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "VChunk size</td><td>1.00 MiB = 4.00 KiB * 256(block)");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "Region size</td><td>32.00 MiB = 1.00 MiB * 32(vpr) = "
+            "4.00 KiB * 8192(block)");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "VChunk count</td><td>64 = 2(region) * 32(vpr)");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "Touched VChunks</td><td>17 / 64</td>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "Disk size</td><td>64.00 MiB = 4.00 KiB * 16384(block) = "
+            "1.00 MiB * 64(vchunk) = 32.00 MiB * 2(region)");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Regions</td><td>2</td>");
+    }
+
+    Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)
+    {
+        TDbgSnapshot first = MakeDbg(1);
+        first.MemoryStats.UsedSize = 1024;
+        first.MemoryStats.ReservedSize = 4096;
+        first.DetailedMemoryStats = {
+            {.SlotSize = 256,
+             .ArenaSize = 1_MB,
+             .ReservedSize = 16_KB,
+             .UsedSize = 5_KB,
+             .MaxUsedSize = 8_KB}};
+        TDbgSnapshot second = MakeDbg(2);
+        second.MemoryStats.UsedSize = 2048;
+        second.MemoryStats.ReservedSize = 8192;
+        second.DetailedMemoryStats = {
+            {.SlotSize = 512,
+             .ArenaSize = 2_MB,
+             .ReservedSize = 32_KB,
+             .UsedSize = 7_KB,
+             .MaxUsedSize = 12_KB}};
+
+        TMonPageData data{
+            .Page = EMonPage::Memory,
+            .TabletInfo = {.TabletId = 42},
+            .FastPathServiceInfo =
+                TFastPathServiceInfo{
+                    .ArenaMemoryUsage =
+                        {.Slots =
+                             {{.SlotSize = 256,
+                               .ArenaSize = 1_MB,
+                               .ReservedSize = 16_KB,
+                               .UsedSize = 5_KB,
+                               .MaxUsedSize = 8_KB},
+                              {.SlotSize = 512,
+                               .ArenaSize = 2_MB,
+                               .ReservedSize = 32_KB,
+                               .UsedSize = 7_KB,
+                               .MaxUsedSize = 12_KB}}}},
+            .Dbgs = {std::move(first), std::move(second)},
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Arena allocator");
+        UNIT_ASSERT(!html.Contains("partition_direct tablet"));
+        UNIT_ASSERT(!html.Contains("<td>TabletId</td>"));
+        UNIT_ASSERT_STRING_CONTAINS(html, "Memory usage by DBG");
+        UNIT_ASSERT_STRING_CONTAINS(html, "256 B");
+        UNIT_ASSERT_STRING_CONTAINS(html, "512 B");
+        UNIT_ASSERT_STRING_CONTAINS(html, "5.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "8.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "16.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "48.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=2");
+        UNIT_ASSERT_STRING_CONTAINS(html, "1.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "2.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "3.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "12.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Total");
     }
 
     TLatencyStats MakeStats(
@@ -163,6 +250,82 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "initializing");
     }
 
+    Y_UNIT_TEST(ChaosPageShowsNodeByDbgControls)
+    {
+        using EChaosMode = TChaosConfig::TChaosNodeConfig::EChaosMode;
+
+        const TMonPageData data{
+            .Page = EMonPage::Chaos,
+            .TabletInfo = {.TabletId = 42},
+            .Dbgs =
+                {
+                    TDbgSnapshot{
+                        .Index = 0,
+                        .Connections =
+                            {
+                                TConnectionSnapshot{
+                                    .DDiskId = {10, 100, 1},
+                                },
+                            },
+                    },
+                    TDbgSnapshot{
+                        .Index = 1,
+                        .Connections =
+                            {
+                                TConnectionSnapshot{
+                                    .DDiskId = {10, 101, 1},
+                                },
+                            },
+                    },
+                },
+            .Chaos =
+                TChaosConfig{
+                    .NodeConfigs =
+                        {
+                            {
+                                TChaosConfig::TDbgAndNodeId{
+                                    .NodeId = 10,
+                                    .DbgIndex = 1,
+                                },
+                                TChaosConfig::TChaosNodeConfig{
+                                    .Mode = EChaosMode::Disabled,
+                                },
+                            },
+                        },
+                },
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Chaos");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Node 10");
+        UNIT_ASSERT_STRING_CONTAINS(html, "DBG #0");
+        UNIT_ASSERT_STRING_CONTAINS(html, "DBG #1");
+        UNIT_ASSERT_STRING_CONTAINS(html, "action=disable&node=10&dbg=0");
+        UNIT_ASSERT_STRING_CONTAINS(html, "action=enable&node=10&dbg=1");
+        UNIT_ASSERT_STRING_CONTAINS(html, "chaos-toggle-on");
+        UNIT_ASSERT_STRING_CONTAINS(html, "chaos-toggle-off");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "title='Disable node 10 in all DBGs'");
+        UNIT_ASSERT(!html.Contains("All DBGs</th>"));
+        UNIT_ASSERT(!html.Contains(">Disable</button>"));
+        UNIT_ASSERT(!html.Contains(">Enable</button>"));
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<input type='hidden' name='dbg' value='all'/>");
+    }
+
+    Y_UNIT_TEST(ChaosPageHandlesEmptyDbgList)
+    {
+        const TMonPageData data{
+            .Page = EMonPage::Chaos,
+            .TabletInfo = {.TabletId = 42},
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "No Direct Block Groups.");
+    }
+
     Y_UNIT_TEST(DbgListShowsRollupAndDrilldownLinks)
     {
         const TMonPageData data{
@@ -177,11 +340,11 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Online");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Sufferer");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Consecutive success");
-        UNIT_ASSERT_STRING_CONTAINS(html, "PBuffers usage");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Consecutive<br>success");
+        UNIT_ASSERT_STRING_CONTAINS(html, "PBuffers<br>usage");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 / 4.00 KiB");
-        UNIT_ASSERT_STRING_CONTAINS(html, "2 / 8.00 KiB");
-        UNIT_ASSERT_STRING_CONTAINS(html, "3 / 12.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "8.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "12.00 KiB");
         // The add-host button lives on the detail page only.
         UNIT_ASSERT(!html.Contains("action=addhost"));
     }
@@ -194,7 +357,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             /*vChunkIndex*/ 17,
             /*hostCount*/ 5,
             /*primaryCount*/ 3);
-        config.PromoteHost(3);
+        config.PromoteHost(3, true);
         config.SetWatermark(3, 42 * BlockSize);
         dbg.VChunkConfigs.emplace(config.GetVChunkIndex(), std::move(config));
 
@@ -227,8 +390,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         // Host indexes render in the log format ("H0"), not as raw ui8 bytes.
         UNIT_ASSERT_STRING_CONTAINS(html, "<td>H0</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 / 4.00 KiB");
-        UNIT_ASSERT_STRING_CONTAINS(html, "2 / 8.00 KiB");
-        UNIT_ASSERT_STRING_CONTAINS(html, "3 / 12.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "8.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "12.00 KiB");
         // The add-host form: POST with parameters both in the URL (read by
         // the tablet) and as hidden fields (read by the mon proxy router).
         UNIT_ASSERT_STRING_CONTAINS(html, "<form method='post'");
@@ -244,7 +407,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             "<input type='hidden' name='action' value='addhost'/>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Add host");
         UNIT_ASSERT_STRING_CONTAINS(html, "Connections");
-        UNIT_ASSERT_STRING_CONTAINS(html, "DDisk session");
         // The DDisk id links to its actor page on the owning node (1).
         UNIT_ASSERT_STRING_CONTAINS(
             html,
@@ -257,7 +419,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             "/node/1/actors/persistent_buffer?pb=");
         UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:18</a>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Locked");
-        UNIT_ASSERT_STRING_CONTAINS(html, "yes");
+        UNIT_ASSERT_STRING_CONTAINS(html, "connected");
     }
 
     Y_UNIT_TEST(DbgDetailNotFound)
@@ -645,8 +807,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         const TMonPageData data{
             .Page = EMonPage::VChunkCounters,
             .TabletInfo = {.TabletId = 42},
+            .SelectedDbg = 0,
             .VChunkStats = gathered,
-            .SelectedVChunkDbg = 0,
             .ShowVChunks = true,
         };
 
@@ -675,9 +837,9 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         TMonPageData data{
             .Page = EMonPage::VChunkCounters,
             .TabletInfo = {.TabletId = 42},
+            .SelectedDbg = 0,
             .VChunkStats = gathered,
             .VChunkStatsLimit = 1,
-            .SelectedVChunkDbg = 0,
             .ShowVChunks = true,
         };
 

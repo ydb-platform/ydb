@@ -31,6 +31,9 @@ namespace NKikimr {
         TIntrusivePtr<TFreshSegment> Cur;
         ui64 OldSegLastKeepLsn = ui64(-1);
         bool WaitForCommit = false;
+        // Old was selected for compaction, that compaction gave up without writing
+        // anything, and the very same segment is waiting to be tried again.
+        bool RetryOldSegment = false;
         const bool UseDreg;
         std::shared_ptr<TRopeArena> Arena;
 
@@ -58,10 +61,12 @@ namespace NKikimr {
         // Compaction
         bool NeedsCompaction(ui64 yardFreeUpToLsn, bool force) const;
         ui64 GetFreeInPlaceSizeApproximation() const;
+        TFreshSpaceDebt GetSpaceDebt() const;
 
         TIntrusivePtr<TFreshSegment> FindSegmentForCompaction();
         void CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment);
         void CompactionFinished();
+        void CompactionAborted();
         bool CompactionInProgress() const { return Old.Get() || WaitForCommit; }
 
         // Appendix Compact/ApplyCompactionResult
@@ -70,6 +75,14 @@ namespace NKikimr {
 
         // you can't read from TFreshData directly, take a snapshot instead
         TFreshDataSnapshot GetSnapshot();
+        template <class TCallback>
+        void ForEachHugeBlob(TCallback&& callback) const {
+            if (Old)
+                Old->ForEachHugeBlob(callback);
+            if (Dreg)
+                Dreg->ForEachHugeBlob(callback);
+            Cur->ForEachHugeBlob(callback);
+        }
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
         ui64 GetFirstLsnToKeep() const;
         ui64 GetFirstLsn() const;
@@ -111,7 +124,12 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     bool TFreshData<TKey, TMemRec>::NeedsCompaction(ui64 yardFreeUpToLsn, bool force) const {
-        if (CompactionInProgress()) {
+        if (RetryOldSegment) {
+            // Old is still held by an attempt that gave up; it has to be written out
+            // before anything else can be compacted, and until it is the recovery log
+            // can not be cut past it.
+            return true;
+        } else if (CompactionInProgress()) {
             return false;
         } else if (force) {
             return true;
@@ -136,8 +154,28 @@ namespace NKikimr {
         return threshold;
     }
 
+    // Bytes every segment still owes to a compaction: the one being compacted right
+    // now included, since its space has not been released yet. They are reported one
+    // by one because each of them is compacted into an sst of its own.
+    template <class TKey, class TMemRec>
+    TFreshSpaceDebt TFreshData<TKey, TMemRec>::GetSpaceDebt() const {
+        return {
+            .OldBytes = Old ? Old->InPlaceSizeApproximation() : 0,
+            .DregBytes = Dreg ? Dreg->InPlaceSizeApproximation() : 0,
+            .CurBytes = Cur ? Cur->InPlaceSizeApproximation() : 0,
+        };
+    }
+
     template <class TKey, class TMemRec>
     TIntrusivePtr<TFreshSegment<TKey, TMemRec>> TFreshData<TKey, TMemRec>::FindSegmentForCompaction() {
+        if (RetryOldSegment) {
+            // Retry the segment the previous attempt gave up on. Nothing is swapped:
+            // the segments keep the order they already have and OldSegLastKeepLsn still
+            // describes this one.
+            Y_VERIFY_S(Old && !WaitForCommit, HullCtx->VCtx->VDiskLogPrefix);
+            RetryOldSegment = false;
+            return Old;
+        }
         Y_VERIFY_S(!CompactionInProgress(), HullCtx->VCtx->VDiskLogPrefix);
         if (Dreg) {
             Old.Swap(Dreg);
@@ -165,6 +203,17 @@ namespace NKikimr {
         Y_VERIFY_S(!Old && WaitForCommit, HullCtx->VCtx->VDiskLogPrefix);
         WaitForCommit = false;
         OldSegLastKeepLsn = ui64(-1);
+    }
+
+    // The compaction of Old gave up before creating an sst, so Old stays exactly where
+    // it is and is marked for another attempt. Dropping it here would lose the records;
+    // leaving it without this mark would keep CompactionInProgress() true forever, which
+    // is what stops NeedsCompaction() from ever asking for it again and pins the
+    // recovery log at this segment's first lsn.
+    template <class TKey, class TMemRec>
+    void TFreshData<TKey, TMemRec>::CompactionAborted() {
+        Y_VERIFY_S(Old && !WaitForCommit, HullCtx->VCtx->VDiskLogPrefix);
+        RetryOldSegment = true;
     }
 
     template <class TKey, class TMemRec>

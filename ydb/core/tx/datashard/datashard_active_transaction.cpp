@@ -951,3 +951,7 @@ void TActiveTransaction::OnCleanup(TDataShard& self, std::vector<std::unique_ptr
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

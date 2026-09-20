@@ -3,6 +3,7 @@ PY3_LIBRARY(dstool_lib)
 PY_SRCS(
     arg_parser.py
     bs_layout.py
+    cluster_workload_config.py
     commands.py
     common.py
     grouptool.py
@@ -57,6 +58,7 @@ PY_SRCS(
 )
 
 PEERDIR(
+    contrib/python/PyYAML
     ydb/apps/dstool/protos
     ydb/core/protos
     ydb/public/api/protos
@@ -71,9 +73,12 @@ IF (OS_LINUX)
     PY_SRCS(
         dstool_cmd_nbs_partition_create.py
         dstool_cmd_nbs_partition_delete.py
+        dstool_cmd_nbs_partition_resize.py
         dstool_cmd_nbs_partition_get_load_actor_adapter_actor_id.py
         dstool_cmd_nbs_partition_io.py
     )
 ENDIF()
 
 END()
+
+RECURSE_FOR_TESTS(ut)

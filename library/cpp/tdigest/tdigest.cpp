@@ -230,3 +230,7 @@ TString TDigest::Serialize() {
 i64 TDigest::GetCount() const {
     return std::llround(N);
 }
+
+i64 TDigest::ComputeWeight() const {
+    return sizeof(TDigest) + sizeof(TCentroid) * (Centroids.capacity() + Unmerged.capacity() + Merged.capacity());
+}

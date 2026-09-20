@@ -77,6 +77,28 @@ namespace NKikimr {
         };
 
         ////////////////////////////////////////////////////////////////////////////
+        // Compact statistics used for space accounting. These structures contain
+        // no chunk or slot identifiers, so their size depends only on the number
+        // of configured Huge slot classes.
+        ////////////////////////////////////////////////////////////////////////////
+        struct TSizeClassSpaceStat {
+            ui64 SlotSize = 0;
+            ui64 SlotsPerChunk = 0;
+            ui64 ChunkCount = 0;
+            ui64 AllocatedSlots = 0;
+            ui64 FreeSlots = 0;
+            ui64 LockedChunkCount = 0;
+            ui64 LockedFreeSlots = 0;
+        };
+
+        struct THeapSpaceStat {
+            std::vector<TSizeClassSpaceStat> SizeClasses;
+            ui64 FreeChunkCount = 0;
+            ui64 FreeChunkReservation = 0;
+            ui64 ForbiddenChunkCount = 0;
+        };
+
+        ////////////////////////////////////////////////////////////////////////////
         // THugeSlot
         ////////////////////////////////////////////////////////////////////////////
         class THugeSlot {
@@ -190,12 +212,16 @@ namespace NKikimr {
             TLogoBlobID LogoBlobID;
             TIngress Ingress;
             TDiskPart DiskAddr;
+            bool IsStripe = false;
+
+            TPutRecoveryLogRec() = default;
 
             TPutRecoveryLogRec(const TLogoBlobID &logoBlobID, const TIngress &ingress,
-                               const TDiskPart &diskAddr)
+                               const TDiskPart &diskAddr, bool isStripe = false)
                 : LogoBlobID(logoBlobID)
                 , Ingress(ingress)
                 , DiskAddr(diskAddr)
+                , IsStripe(isStripe)
             {}
 
             TString Serialize() const;
@@ -214,4 +240,3 @@ struct THash<NKikimr::NHuge::THugeSlot> {
         return x.Hash();
     }
 };
-

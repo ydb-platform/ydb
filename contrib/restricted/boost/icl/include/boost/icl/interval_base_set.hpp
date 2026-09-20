@@ -11,14 +11,6 @@ Copyright (c) 1999-2006: Cortex Software GmbH, Kantstrasse 57, Berlin
 
 #include <boost/icl/impl_config.hpp>
 
-#if defined(ICL_USE_BOOST_MOVE_IMPLEMENTATION)
-#   include <boost/container/set.hpp>
-#elif defined(ICL_USE_STD_IMPLEMENTATION)
-#   include <set>
-#else // Default for implementing containers
-#   include <set>
-#endif
-
 #include <limits>
 #include <boost/next_prior.hpp>
 #include <boost/icl/associative_interval_container.hpp>
@@ -30,6 +22,7 @@ Copyright (c) 1999-2006: Cortex Software GmbH, Kantstrasse 57, Berlin
 #include <boost/icl/type_traits/is_interval_splitter.hpp>
 #include <boost/icl/detail/interval_set_algo.hpp>
 #include <boost/icl/detail/exclusive_less_than.hpp>
+#include <boost/icl/detail/set_adaptor.hpp>
 
 #include <boost/icl/right_open_interval.hpp>
 #include <boost/icl/continuous_interval.hpp>
@@ -116,7 +109,7 @@ public:
     typedef Alloc<DomainT> domain_allocator_type;
 
     /// Container type for the implementation
-    typedef typename ICL_IMPL_SPACE::set<interval_type,key_compare,allocator_type> ImplSetT;
+    typedef detail::set_adaptor<interval_type,key_compare,allocator_type> ImplSetT;
 
     /// key type of the implementing container
     typedef typename ImplSetT::key_type   key_type;

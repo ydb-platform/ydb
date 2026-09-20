@@ -73,7 +73,7 @@ std::optional<TExpression> BuildFetchedRowFilter(const TOpRead& read, const TInt
         conjuncts.insert(conjuncts.end(), original.begin(), original.end());
     }
     if (filter) {
-        const auto filters = filter->FilterExpr.SplitConjunct();
+        const auto filters = filter->GetFilterExpression().SplitConjunct();
         conjuncts.insert(conjuncts.end(), filters.begin(), filters.end());
     }
 
@@ -142,16 +142,28 @@ bool IsUsablePointPrefix(const TOpRead::TRangeInfo& ranges, const TVector<TStrin
     return ranges.ExpectedMaxPoints.Defined() && *ranges.ExpectedMaxPoints <= pointsLimit;
 }
 
+// Checks whether a node is single consumer.
+bool IsSingleConsumerRelNode(const std::shared_ptr<IBaseOptimizerNode>& node) {
+    if (node->Kind != EOptimizerNodeKind::RelNodeType) {
+        return true;
+    }
+    const auto& op = std::static_pointer_cast<TRBORelOptimizerNode>(node)->Op;
+    return op->IsSingleConsumer();
+}
+
 bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& node, const TVector<TJoinColumn>& joinColumns, EJoinKind joinKind, const TKqpProviderContext& ctx) {
     auto rel = std::static_pointer_cast<TRBORelOptimizerNode>(node);
     auto rightInput = rel->Op;
     TIntrusivePtr<TOpFilter> rightFilter;
 
     if (rightInput->Kind == EOperator::Filter) {
+        if (!rightInput->IsSingleConsumer()) {
+            return false;
+        }
         rightFilter = CastOperator<TOpFilter>(rightInput);
         rightInput = rightFilter->GetInput();
     }
-    if (rightInput->Kind != EOperator::Source) {
+    if (rightInput->Kind != EOperator::Source || !rightInput->IsSingleConsumer()) {
         return false;
     }
 
@@ -220,7 +232,12 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     EJoinKind joinKind,
     TKqpProviderContext& ctx
 ) {
-    Y_UNUSED(left, leftJoinKeys);
+    Y_UNUSED(leftJoinKeys);
+
+    // We need to follow rewrite rule.
+    if (!IsSingleConsumerRelNode(left)) {
+        return false;
+    }
 
     if (!(right->Stats.StorageType == NKikimr::NKqp::EStorageType::RowStorage)) {
         return false;

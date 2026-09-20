@@ -83,6 +83,10 @@ namespace NKikimr::NBlobDepot {
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
         TControlWrapper MaxLoadedTrashRecords = 1'000'000;
 
+        TControlWrapper S3MaxWritesInFlight = 32;
+        TControlWrapper S3MaxDeletesInFlight = 3;
+        TControlWrapper S3MaxObjectsToDeleteAtOnce = 10;
+
         struct TAgent {
             struct TConnection {
                 TActorId PipeServerId;
@@ -108,10 +112,6 @@ namespace NKikimr::NBlobDepot {
             float LastPushedApproximateFreeSpaceShare = 0.0f;
 
             THashSet<TS3Locator> S3WritesInFlight;
-
-            ui64 S3GetsInFlight = 0;
-            ui64 S3GetsMaxInFlight = 0;
-            ui64 S3GetsPendingQueueSize = 0;
         };
 
         struct TPipeServerContext {
@@ -141,12 +141,17 @@ namespace NKikimr::NBlobDepot {
             std::set<ui64> AssimilatedBlobsInFlight;
             std::optional<TBlobSeqId> LastReportedLeastId;
 
-            // Obtain the least BlobSeqId that is not yet committed, but may be written by any agent
-            TBlobSeqId GetLeastExpectedBlobId(ui32 generation) {
-                const auto result = TBlobSeqId::FromSequentalNumber(Index, generation, Min(NextBlobSeqId,
+            // Same as GetLeastExpectedBlobId, but without the monotonicity bookkeeping -- for monitoring only
+            TBlobSeqId PeekLeastExpectedBlobId(ui32 generation) const {
+                return TBlobSeqId::FromSequentalNumber(Index, generation, Min(NextBlobSeqId,
                     GivenIdRanges.IsEmpty() ? Max<ui64>() : GivenIdRanges.GetMinimumValue(),
                     SequenceNumbersInFlight.empty() ? Max<ui64>() : *SequenceNumbersInFlight.begin(),
                     AssimilatedBlobsInFlight.empty() ? Max<ui64>() : *AssimilatedBlobsInFlight.begin()));
+            }
+
+            // Obtain the least BlobSeqId that is not yet committed, but may be written by any agent
+            TBlobSeqId GetLeastExpectedBlobId(ui32 generation) {
+                const auto result = PeekLeastExpectedBlobId(generation);
                 // this value can't decrease, because it may lead to data loss
                 Y_VERIFY_S(!LastReportedLeastId || *LastReportedLeastId <= result,
                     "decreasing LeastExpectedBlobId"
@@ -176,7 +181,10 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev);
         TAgent& GetAgent(const TActorId& pipeServerId);
         TAgent& GetAgent(ui32 nodeId);
-        void ResetAgent(TAgent& agent);
+        // Same as GetAgent(pipeServerId), but returns nullptr instead of aborting when the pipe server is already
+        // gone or has been superseded by a newer connection of the same agent
+        TAgent *FindAgent(const TActorId& pipeServerId);
+        void ResetAgent(ui32 nodeId, TAgent& agent);
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
 
@@ -199,7 +207,11 @@ namespace NKikimr::NBlobDepot {
                 {"marker", "BDT24"},
                 {"id", GetLogId()});
             if (AppData()->Icb) {
-                TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, AppData()->Icb->BlobDepotControls.MaxLoadedTrashRecords);
+                auto& controls = AppData()->Icb->BlobDepotControls;
+                TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, controls.MaxLoadedTrashRecords);
+                TControlBoard::RegisterSharedControl(S3MaxWritesInFlight, controls.S3MaxWritesInFlight);
+                TControlBoard::RegisterSharedControl(S3MaxDeletesInFlight, controls.S3MaxDeletesInFlight);
+                TControlBoard::RegisterSharedControl(S3MaxObjectsToDeleteAtOnce, controls.S3MaxObjectsToDeleteAtOnce);
             }
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
@@ -459,18 +471,7 @@ namespace NKikimr::NBlobDepot {
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
         void Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev);
-        void Handle(TEvBlobDepot::TEvPushS3RouterMetrics::TPtr ev);
         void UpdateThroughputs(bool reschedule = true);
-
-        THashMap<ui32, bool> S3RouterIsUsingProxyByNode;
-        ui64 S3RouterNodeCount = 0;
-        ui64 S3RouterNodesWithUsingProxy = 0;
-
-        ui64 S3GetsInFlightTotal = 0;
-        ui64 S3GetsMaxInFlightTotal = 0;
-        ui64 S3GetsPendingQueueSizeTotal = 0;
-
-        void ApplyAgentS3GetGauges(TAgent& agent, ui64 inFlight, ui64 maxInFlight, ui64 pendingQueueSize);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Validation

@@ -77,6 +77,10 @@ message THullDbEntryPoint {
     optional uint32 HullCompLevel0MaxSstsAtOnce = 5;
     optional uint32 HullCompSortedPartsNum = 6;
 
+    // Stripe-heap allocations (variable-size extents). Removed parts are still listed
+    // in RemovedHugeBlobs and dispatched by chunk ownership at recovery.
+    optional TDiskPartVec AllocatedStripeBlobs = 7;
+
     // obsolete field
     repeated TUncommittedRemovedHugeBlob UncommittedRemovedHugeBlobs = 3;
 };
@@ -267,6 +271,8 @@ message THullHugeRecoveryLogPos {
     optional uint64 HugeBlobLoggedLsn = 3;
     optional uint64 LogoBlobsDbSlotDelLsn = 4;
     optional uint64 EntryPointLsn = 5;
+    optional uint64 BlocksDbSlotDelLsn = 6;
+    optional uint64 BarriersDbSlotDelLsn = 7;
 }
 
 message THugeKeeperHeap {
@@ -292,9 +298,16 @@ message THugeKeeperHeap {
     optional uint32 FreeChunksReservation = 7;
 }
 
+message THugeKeeperStripeHeap {
+    optional uint32 ChunkSize = 1;
+    optional uint32 AppendBlockSize = 2;
+    repeated uint32 ChunkIds = 3 [packed = true];
+}
+
 message THugeKeeperEntryPoint {
     optional THullHugeRecoveryLogPos LogPos = 1;
     optional THugeKeeperHeap Heap = 2;
+    optional THugeKeeperStripeHeap StripeHeap = 3;
 }
 
 message TMetadataEntryPoint {

@@ -152,6 +152,72 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         TestBasicBlock(tenv, 100, tenv.BlobDepot);
     }
 
+    Y_UNIT_TEST(StorageInfoVersion) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+
+        auto& env = *tenv.Env;
+        const TActorId sender = env.Runtime->AllocateEdgeActor(1);
+        const ui64 tabletId = 100;
+        const ui64 issuerGuid = 1;
+
+        auto block = [&](ui32 generation, ui32 version) {
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvBlock(tabletId, generation,
+                    TInstant::Max(), issuerGuid, TWriteSource::Unknown, version));
+            });
+            return CaptureTEvBlockResult(env, sender, false);
+        };
+
+        auto result = block(10, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(20, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        result = block(11, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(10, 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(!result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        // The rejected version bump must not mutate either value.
+        result = block(12, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(13, 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvBlock(~tabletId, 4, TInstant::Max(),
+                TWriteSource::SyncerMergeBlock));
+        });
+        result = CaptureTEvBlockResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        const std::optional<ui64> blobDepotTabletId = TryGetBlobDepotTabletId(env, tenv.BlobDepot);
+        UNIT_ASSERT(blobDepotTabletId);
+        RebootBlobDepotTablet(env, *blobDepotTabletId);
+
+        result = block(14, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvBlock(tabletId, 16,
+                TInstant::Max(), issuerGuid));
+        });
+        result = CaptureTEvBlockResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(17, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+    }
+
     Y_UNIT_TEST(BasicCollectGarbage) {
         ui32 seed;
         LoadSeed(seed);
@@ -181,6 +247,58 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             true, Max<ui32>(), Max<ui32>(), nullptr, nullptr, false, true);
         auto collectResult = CaptureTEvCollectGarbageResult(env, sender);
         UNIT_ASSERT_VALUES_EQUAL_C(collectResult->Get()->Status, NKikimrProto::OK, collectResult->Get()->ToString());
+    }
+
+    Y_UNIT_TEST(MaxGenerationBlockCollectsBlobs) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+
+        auto& env = *tenv.Env;
+        const ui32 nodeId = 1;
+        const ui32 groupId = tenv.BlobDepot;
+        const ui64 tabletId = 100;
+        auto sender = env.Runtime->AllocateEdgeActor(nodeId);
+
+        const TString data = tenv.DataGen(100);
+        const TLogoBlobID id(tabletId, 1, 1, 0, data.size(), 0);
+
+        SendTEvPut(env, sender, groupId, id, data);
+        auto putResult = CaptureTEvPutResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(putResult->Get()->Status, NKikimrProto::OK, putResult->Get()->ToString());
+
+        SendTEvGet(env, sender, groupId, id);
+        auto getResult = CaptureTEvGetResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Status, NKikimrProto::OK, getResult->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Responses[0].Status, NKikimrProto::OK,
+            getResult->Get()->ToString());
+
+        // Hive deletes the tablet for good: the Max generation block alone has to collect its data,
+        // because the hard barrier that normally follows may never be observed -- a VDisk that has
+        // seen this block is free to drop the barrier records of this tablet
+        SendTEvBlock(env, sender, groupId, tabletId, Max<ui32>());
+        auto blockResult = CaptureTEvBlockResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(blockResult->Get()->Status, NKikimrProto::OK, blockResult->Get()->ToString());
+
+        env.Sim(TDuration::Seconds(1));
+
+        SendTEvGet(env, sender, groupId, id);
+        getResult = CaptureTEvGetResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Status, NKikimrProto::OK, getResult->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Responses[0].Status, NKikimrProto::NODATA,
+            getResult->Get()->ToString());
+
+        // The hard barrier Hive sends after the block is redundant by now and must not be recorded:
+        // Hive retries it, and each retry would otherwise bring back a barrier row we have purged.
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            SendTEvCollectGarbage(env, sender, groupId, tabletId, Max<ui32>(), Max<ui32>(), id.Channel(),
+                true, Max<ui32>(), Max<ui32>(), nullptr, nullptr, false, true);
+            auto collectResult = CaptureTEvCollectGarbageResult(env, sender, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(collectResult->Get()->Status, NKikimrProto::OK,
+                collectResult->Get()->ToString());
+        }
     }
 
     Y_UNIT_TEST(TrashBatchReloadAfterRestartWithTinyLimit) {

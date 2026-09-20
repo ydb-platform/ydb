@@ -123,3 +123,7 @@ void TDataShard::Handle(TEvChangeExchange::TEvActivateSenderAck::TPtr& ev, const
 
 } // NDataShard
 } // NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

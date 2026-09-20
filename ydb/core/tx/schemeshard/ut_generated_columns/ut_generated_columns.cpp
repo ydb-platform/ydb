@@ -1,4 +1,5 @@
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
@@ -22,8 +23,42 @@ const NKikimrSchemeOp::TColumnDescription* FindColumn(const NKikimrScheme::TEvDe
     return nullptr;
 }
 
+NKikimrSchemeOp::TTableDescription GetDataShardTableDescription(TTestActorRuntime& runtime, const TString& path) {
+    auto describe = DescribePath(runtime, path, /* returnPartitioning */ true);
+    const auto& partitions = describe.GetPathDescription().GetTablePartitions();
+    UNIT_ASSERT_C(partitions.size() > 0, "no partitions for " << path);
+    const ui64 datashardTabletId = partitions.Get(0).GetDatashardId();
+
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(datashardTabletId, sender, new TEvDataShard::TEvGetInfoRequest(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+
+    const auto tableName = TStringBuf(path).RNextTok('/');
+    for (const auto& table : response->Record.GetUserTables()) {
+        if (table.GetName() == tableName) {
+            return table.GetDescription();
+        }
+    }
+
+    UNIT_FAIL("table " << path << " not found on datashard " << datashardTabletId);
+    return {};
+}
+
+const NKikimrSchemeOp::TColumnDescription* FindDataShardColumn(
+    const NKikimrSchemeOp::TTableDescription& description, const TString& name)
+{
+    for (const auto& column : description.GetColumns()) {
+        if (column.GetName() == name) {
+            return &column;
+        }
+    }
+    return nullptr;
+}
+
 void CheckGeneratedColumn(const NKikimrScheme::TEvDescribeSchemeResult& describe, const TString& name, const TString& expectedExprText,
-    bool expectedStored, const TVector<TString>& expectedDependencies, const TString& expectedContext)
+    bool expectedStored, const TVector<TString>& expectedDependencies)
 {
     const auto* column = FindColumn(describe, name);
     UNIT_ASSERT_C(column, "column '" << name << "' not found in describe result: " << describe.ShortDebugString());
@@ -33,7 +68,6 @@ void CheckGeneratedColumn(const NKikimrScheme::TEvDescribeSchemeResult& describe
     const auto& generated = column->GetDefaultFromExpression();
     UNIT_ASSERT_VALUES_EQUAL(generated.GetExprText(), expectedExprText);
     UNIT_ASSERT_VALUES_EQUAL(generated.GetStored(), expectedStored);
-    UNIT_ASSERT_VALUES_EQUAL(generated.GetContext(), expectedContext);
 
     TVector<TString> dependencies(generated.GetDependencyColumnNames().begin(), generated.GetDependencyColumnNames().end());
     UNIT_ASSERT_VALUES_EQUAL_C(dependencies.size(), expectedDependencies.size(), "dependency mismatch: " << generated.ShortDebugString());
@@ -64,7 +98,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: "PRAGMA classic_division = \"0\";"
                   }
               }
               KeyColumnNames: ["key"]
@@ -75,8 +108,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
         CheckGeneratedColumn(describe, "sum",
             /* expr */ "a + b",
             /* stored */ true,
-            /* dependencies */ { "a", "b" },
-            /* context */ "PRAGMA classic_division = \"0\";");
+            /* dependencies */ { "a", "b" });
 
         // Non-generated columns keep no generated descriptor
         const auto* keyColumn = FindColumn(describe, "key");
@@ -102,7 +134,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "first || \" \" || last"
                       Stored: false
                       DependencyColumnNames: ["first", "last"]
-                      Context: "USE `/MyRoot`;"
                   }
               }
               KeyColumnNames: ["key"]
@@ -113,8 +144,92 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
         CheckGeneratedColumn(describe, "full",
             /* expr */ "first || \" \" || last",
             /* stored */ false,
-            /* dependencies */ { "first", "last" },
-            /* context */ "USE `/MyRoot`;");
+            /* dependencies */ { "first", "last" });
+    }
+
+    Y_UNIT_TEST(VirtualColumnAbsentFromDataShard) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "a" Type: "Int32" }
+              Columns {
+                  Name: "sum"
+                  Type: "Int32"
+                  DefaultFromExpression {
+                      ExprText: "a + 1"
+                      Stored: true
+                      DependencyColumnNames: ["a"]
+                  }
+              }
+              Columns {
+                  Name: "diff"
+                  Type: "Int32"
+                  DefaultFromExpression {
+                      ExprText: "a - 1"
+                      Stored: false
+                      DependencyColumnNames: ["a"]
+                  }
+              }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        CheckGeneratedColumn(describe, "diff", "a - 1", /* expectedStored */ false, { "a" });
+
+        const auto datashardSchema = GetDataShardTableDescription(runtime, "/MyRoot/Table");
+        UNIT_ASSERT(FindDataShardColumn(datashardSchema, "key"));
+        UNIT_ASSERT(FindDataShardColumn(datashardSchema, "a"));
+        UNIT_ASSERT(FindDataShardColumn(datashardSchema, "sum"));
+        UNIT_ASSERT_C(!FindDataShardColumn(datashardSchema, "diff"),
+            "virtual generated column leaked into the datashard schema");
+    }
+
+    Y_UNIT_TEST(DropVirtualColumnDoesNotReachDataShard) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "a" Type: "Int32" }
+              Columns {
+                  Name: "diff"
+                  Type: "Int32"
+                  DefaultFromExpression {
+                      ExprText: "a - 1"
+                      Stored: false
+                      DependencyColumnNames: ["a"]
+                  }
+              }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              DropColumns { Name: "diff" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT(!FindColumn(DescribePath(runtime, "/MyRoot/Table"), "diff"));
+        UNIT_ASSERT(!FindDataShardColumn(GetDataShardTableDescription(runtime, "/MyRoot/Table"), "diff"));
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "b" Type: "Int32" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT(FindDataShardColumn(GetDataShardTableDescription(runtime, "/MyRoot/Table"), "b"));
     }
 
     Y_UNIT_TEST(GeneratedColumnSurvivesSchemeShardRestart) {
@@ -136,7 +251,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: "PRAGMA classic_division = \"0\";"
                   }
               }
               Columns {
@@ -146,7 +260,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a - b"
                       Stored: false
                       DependencyColumnNames: ["a", "b"]
-                      Context: "USE `/MyRoot`;"
                   }
               }
               KeyColumnNames: ["key"]
@@ -155,8 +268,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
 
         auto checkSchema = [&]() {
             auto describe = DescribePath(runtime, "/MyRoot/Table");
-            CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" }, "PRAGMA classic_division = \"0\";");
-            CheckGeneratedColumn(describe, "diff", "a - b", /* expectedStored */ false, { "a", "b" }, "USE `/MyRoot`;");
+            CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" });
+            CheckGeneratedColumn(describe, "diff", "a - b", /* expectedStored */ false, { "a", "b" });
         };
 
         checkSchema();
@@ -185,7 +298,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -201,7 +313,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
         // The table is untouched: both the dependency and the generated column remain
         auto describe = DescribePath(runtime, "/MyRoot/Table");
         UNIT_ASSERT(FindColumn(describe, "a"));
-        CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" }, "");
+        CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" });
     }
 
     Y_UNIT_TEST(DropGeneratedColumnAllowed) {
@@ -223,7 +335,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -272,7 +383,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -289,7 +399,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
         auto describe = DescribePath(runtime, "/MyRoot/Table");
         const auto* a = FindColumn(describe, "a");
         UNIT_ASSERT(a && !a->GetNotNull());
-        CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" }, "");
+        CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" });
     }
 
     Y_UNIT_TEST(DropNotNullOnDependencyColumnRejected) {
@@ -311,7 +421,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -328,7 +437,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
         auto describe = DescribePath(runtime, "/MyRoot/Table");
         const auto* a = FindColumn(describe, "a");
         UNIT_ASSERT(a && a->GetNotNull());
-        CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" }, "");
+        CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" });
     }
 
     Y_UNIT_TEST(SetAndDropDefaultOnDependencyColumnAllowed) {
@@ -350,7 +459,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -375,7 +483,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
             const auto* a = FindColumn(describe, "a");
             UNIT_ASSERT(a && a->HasDefaultFromLiteral());
             // Generated column is unaffected
-            CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" }, "");
+            CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" });
         }
 
         // Drop the default again
@@ -389,7 +497,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
             auto describe = DescribePath(runtime, "/MyRoot/Table");
             const auto* a = FindColumn(describe, "a");
             UNIT_ASSERT(a && !a->HasDefaultFromLiteral());
-            CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" }, "");
+            CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" });
         }
     }
 
@@ -412,7 +520,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: "USE `/MyRoot`;"
                   }
               }
               KeyColumnNames: ["key"]
@@ -425,7 +532,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), { NLs::PathNotExist });
 
         auto describe = DescribePath(runtime, "/MyRoot/TableRenamed");
-        CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" }, "USE `/MyRoot`;");
+        CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" });
     }
 
     Y_UNIT_TEST(TtlOnGeneratedColumnRejected) {
@@ -446,7 +553,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "created"
                       Stored: true
                       DependencyColumnNames: ["created"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -475,7 +581,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "created"
                       Stored: true
                       DependencyColumnNames: ["created"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -505,7 +610,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: ""
                   }
               }
               Columns {
@@ -515,7 +619,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: false
                       DependencyColumnNames: ["a", "b"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -579,7 +682,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -607,7 +709,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: false
                       DependencyColumnNames: ["a", "b"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -636,7 +737,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -658,7 +758,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
             { { NKikimrScheme::StatusInvalidParameter, "Can't change nullability of generated column 'sum'" } });
 
         auto describe = DescribePath(runtime, "/MyRoot/Table");
-        CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" }, "");
+        CheckGeneratedColumn(describe, "sum", "a + b", /* expectedStored */ true, { "a", "b" });
     }
 
     Y_UNIT_TEST(AlterDependencyNotNullAllowedAfterDropGenerated) {
@@ -680,7 +780,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + b"
                       Stored: true
                       DependencyColumnNames: ["a", "b"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -744,7 +843,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "created"
                       Stored: true
                       DependencyColumnNames: ["created"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -793,7 +891,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + 1"
                       Stored: true
                       DependencyColumnNames: ["a"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -821,7 +918,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + 1"
                       Stored: false
                       DependencyColumnNames: ["a"]
-                      Context: ""
                   }
               }
               KeyColumnNames: ["key"]
@@ -857,7 +953,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       ExprText: "a + 1"
                       Stored: true
                       DependencyColumnNames: ["a"]
-                      Context: ""
                   }
               }
         )",

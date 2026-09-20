@@ -473,3 +473,7 @@ void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TAct
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -24,15 +24,6 @@ class TestIamAuth(StreamingTestBase):
             CREATE SECRET `{secret_name}` WITH (value="{USER_TOKEN}");
         """)
 
-    def set_cloud_id(self, kikimr: Kikimr, cloud_id: str = "test-cloud-id") -> None:
-        """Set cloud_id user attribute on the database root path (/Root).
-
-        DescribeResourceId reads GetAttributes() of the database root, so we must
-        use ESchemeOpAlterUserAttributes rather than ALTER TABLE which only supports
-        table-level settings.
-        """
-        kikimr.cluster.client.add_attr("/", "Root", {"cloud_id": cloud_id}, token="root@builtin")
-
     def create_iam_source(
         self,
         kikimr: Kikimr,
@@ -97,18 +88,17 @@ class TestIamAuth(StreamingTestBase):
             END DO;'''
 
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
-        path = f"/Root/{query_name}"
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
         # 4. Write a message to the input topic and read the result from the output topic.
         self.write_stream(['{"time": "iam lunch time"}'], endpoint=endpoint)
         result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
         assert json.loads(result) == {"time": "iam lunch time"}
 
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_completed_checkpoints(kikimr, query_name)
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
         self.write_stream(['{"time": "new iam lunch time"}'], endpoint=endpoint)
         result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]

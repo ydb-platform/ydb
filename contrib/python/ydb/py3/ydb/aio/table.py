@@ -44,6 +44,7 @@ class Session(BaseSession):
         row_limit=None,
         settings=None,
         use_snapshot=None,
+        return_not_null_data_as_optional=None,
     ):  # pylint: disable=W0236
         request = _session_impl.read_table_request_factory(
             self._state,
@@ -53,6 +54,7 @@ class Session(BaseSession):
             ordered,
             row_limit,
             use_snapshot=use_snapshot,
+            return_not_null_data_as_optional=return_not_null_data_as_optional,
         )
         stream_it = await self._driver(
             request,
@@ -207,7 +209,7 @@ class TableClient(BaseTableClient["AsyncDriver"]):
         Create a YDB table.
 
         :param path: A table path
-        :param table_description: TableDescription instanse.
+        :param table_description: TableDescription instance.
         :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
 
         :return: Operation or YDB error otherwise.
@@ -459,7 +461,7 @@ async def retry_operation(callee, retry_settings=None, *args, **kwargs):  # pyli
     :param args: A tuple with positional arguments to be passed into the coroutine.
     :param kwargs: A dictionary with keyword arguments to be passed into the coroutine.
 
-    Returns awaitable result of coroutine. If retries are not succussful exception is raised.
+    Returns awaitable result of coroutine. If retries are not successful exception is raised.
     """
 
     opt_generator = ydb.retry_operation_impl(callee, retry_settings, *args, **kwargs)

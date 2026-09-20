@@ -19,7 +19,6 @@
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -32,6 +31,8 @@
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
+
+#include <utility>
 
 namespace Ydb::Maintenance {
     class Node;
@@ -710,6 +711,7 @@ class TClusterInfo : public TThrRefBase {
 public:
     using TNodes = THashMap<ui32, TNodeInfoPtr>;
     using TTablets = THashMap<ui64, TTabletInfo>;
+    using TRunningSystemTabletsByNode = THashMap<ui32, THashSet<ui64>>;
     using TPDisks = THashMap<TPDiskID, TPDiskInfoPtr, TPDiskIDHash>;
     using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
     using TBSGroups = THashMap<ui32, TBSGroupInfo>;
@@ -858,6 +860,10 @@ public:
     const TTablets &AllTablets() const {
         return Tablets;
     }
+
+    bool NodeHasRunningSystemTablet(ui32 nodeId) const;
+
+    bool HostHasRunningSystemTablet(const TString &hostName) const;
 
     bool HasPDisk(TPDiskID pdId) const {
         return PDisks.contains(pdId);
@@ -1100,6 +1106,7 @@ private:
 
     TNodes Nodes;
     TTablets Tablets;
+    TRunningSystemTabletsByNode RunningSystemTabletsByNode;
     TPDisks PDisks;
     TVDisks VDisks;
     TBSGroups BSGroups;

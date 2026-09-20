@@ -60,6 +60,12 @@ public:
 
     THistoryCutter HistoryCutter;
 
+    // Marks dropped by the sentinel guard since the last drain; the executor moves
+    // this into the GcSentinelDroppedMarks cumulative counter on its periodic
+    // counters update (open item 7).
+    ui64 TakeSentinelDroppedMarks() { return std::exchange(SentinelDroppedMarks, 0); }
+    ui64 SentinelDroppedMarks = 0;
+
 
     struct TIntrospection {
         ui64 UncommitedEntries;
@@ -113,7 +119,9 @@ protected:
         ui32 FailCount;
 
         inline TChannelInfo();
-        void SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& executor);
+        // Returns the number of GC marks dropped by the sentinel guard (group resolves
+        // to Max<ui32>() below the first surviving history entry).
+        ui64 SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& executor);
         void SendCollectGarbageEntry(const TActorContext &ctx, TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep, ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation, bool hard, std::optional<TGCTime> barrier = std::nullopt);
         bool OnCollectGarbageSuccess();
         void OnCollectGarbageFailure();

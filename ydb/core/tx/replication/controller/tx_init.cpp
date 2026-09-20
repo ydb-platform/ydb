@@ -63,6 +63,9 @@ class TController::TTxInit: public TTxBase {
             replication->SetState(state, issue);
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
+            if (rowset.GetValueOrDefault<Schema::Replications::DeferredAlter>(false)) {
+                Self->DeferredAlters.insert(rid);
+            }
 
             if (!database) {
                 Self->UnresolvedDatabaseReplications.emplace(replication->GetId(), ResolveDatabaseAttemptsLimit);
@@ -90,6 +93,8 @@ class TController::TTxInit: public TTxBase {
             const auto dstPath = rowset.GetValue<Schema::Targets::DstPath>();
             const auto dstState = rowset.GetValue<Schema::Targets::DstState>();
             const auto issue = rowset.GetValue<Schema::Targets::Issue>();
+            const auto workerSetComplete =
+                rowset.GetValueOrDefault<Schema::Targets::WorkerSetComplete>(false);
             const auto dstPathId = TPathId(
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
@@ -117,6 +122,17 @@ class TController::TTxInit: public TTxBase {
             target->SetDstState(dstState);
             target->SetDstPathId(dstPathId);
             target->SetIssue(issue);
+            if (workerSetComplete) {
+                Self->CompleteWorkerSets.insert({rid, tid});
+            }
+            const auto barrierPhase = rowset.GetValueOrDefault<Schema::Targets::SchemaBarrierPhase>(0);
+            if (barrierPhase) {
+                auto& barrier = Self->SchemaBarriers[{rid, tid}];
+                barrier.Phase = static_cast<ESchemaBarrierPhase>(barrierPhase);
+                Y_ABORT_UNLESS(barrier.Schema.ParseFromString(
+                    rowset.GetValue<Schema::Targets::SchemaBarrierChange>()));
+                barrier.DstAlterTxId = rowset.GetValueOrDefault<Schema::Targets::DstAlterTxId>(0);
+            }
 
             if (!rowset.Next()) {
                 return false;
@@ -201,15 +217,50 @@ class TController::TTxInit: public TTxBase {
             );
 
             auto* worker = Self->GetOrCreateWorker(id);
-            worker->SetHeartbeat(version);
-            Self->WorkersWithHeartbeat.insert(id);
-            Self->WorkersByHeartbeat[version].insert(id);
+            // Zero denotes a registered worker that has not reported a
+            // heartbeat yet and must not join a recovered heartbeat quorum.
+            if (version != TRowVersion::Min()) {
+                worker->SetHeartbeat(version);
+                Self->WorkersWithHeartbeat.insert(id);
+                Self->WorkersByHeartbeat[version].insert(id);
+            }
 
             if (!rowset.Next()) {
                 return false;
             }
         }
 
+        return true;
+    }
+
+    bool LoadSchemaBarrierWorkers(NIceDb::TNiceDb& db) {
+        auto workers = db.Table<Schema::SchemaBarrierWorkers>().Select();
+        if (!workers.IsReady()) {
+            return false;
+        }
+        while (!workers.EndOfSet()) {
+            const auto key = std::make_pair(
+                workers.GetValue<Schema::SchemaBarrierWorkers::ReplicationId>(),
+                workers.GetValue<Schema::SchemaBarrierWorkers::TargetId>());
+            auto it = Self->SchemaBarriers.find(key);
+            Y_ABORT_UNLESS(it != Self->SchemaBarriers.end(), "Barrier member without barrier");
+            const auto id = TWorkerId(key.first, key.second,
+                workers.GetValue<Schema::SchemaBarrierWorkers::WorkerId>());
+            it->second.ExpectedWorkers.insert(id);
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Reported>()) {
+                it->second.ReportedWorkers.insert(id);
+                it->second.WorkerOffsets[id] = workers.GetValue<Schema::SchemaBarrierWorkers::Offset>();
+            }
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Applied>()) {
+                it->second.AppliedWorkers.insert(id);
+            }
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Completed>()) {
+                it->second.CompletedWorkers.insert(id);
+            }
+            if (!workers.Next()) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -220,7 +271,8 @@ class TController::TTxInit: public TTxBase {
             && LoadTargets(db)
             && LoadSrcStreams(db)
             && LoadTxIds(db)
-            && LoadWorkers(db);
+            && LoadWorkers(db)
+            && LoadSchemaBarrierWorkers(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

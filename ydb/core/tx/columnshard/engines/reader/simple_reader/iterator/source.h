@@ -189,7 +189,8 @@ public:
 
     void ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
+    virtual NArrow::TSimpleRow GetFirstPK() const = 0;
+    virtual NArrow::TSimpleRow GetLastPK() const = 0;
 
     void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
@@ -230,10 +231,11 @@ public:
 
     bool OnIntervalFinished(const ui32 intervalIdx);
 
-    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context, const bool isConflicting,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId)
-        : TBase(type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions, deprecatedPortionId)
+        : TBase(type, sourceIdx, context, isConflicting, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions,
+              deprecatedPortionId)
     {
     }
 
@@ -359,11 +361,19 @@ public:
         TBase::InitializeProcessing(sourcePtr);
     }
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
+    virtual NArrow::TSimpleRow GetFirstPK() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
             return Portion->IndexKeyEnd();
         } else {
             return Portion->IndexKeyStart();
+        }
+    }
+
+    virtual NArrow::TSimpleRow GetLastPK() const override {
+        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
+            return Portion->IndexKeyStart();
+        } else {
+            return Portion->IndexKeyEnd();
         }
     }
 
@@ -426,8 +436,8 @@ public:
         return Portion->GetPortionId();
     }
 
-    TPortionDataSource(
-        const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context);
+    TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion,
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, const bool isConflicting);
 };
 
 class TAggregationDataSource: public IDataSource {
@@ -436,7 +446,6 @@ private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
     const ui32 LastSourceIdx;
     const ui64 LastSourceRecordsCount;
-    const ui64 LastDeprecatedPortionId;
     const std::optional<ui64> LastPortionIdOptional;
 
     void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
@@ -547,10 +556,6 @@ public:
         return LastSourceRecordsCount;
     }
 
-    ui64 GetLastDeprecatedPortionId() const {
-        return LastDeprecatedPortionId;
-    }
-
     const std::optional<ui64>& GetLastPortionIdOptional() const {
         return LastPortionIdOptional;
     }
@@ -580,8 +585,13 @@ public:
         return 0;
     }
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
+    virtual NArrow::TSimpleRow GetFirstPK() const override {
         AFL_VERIFY(false);
+        return NArrow::TSimpleRow(nullptr, 0);
+    }
+
+    virtual NArrow::TSimpleRow GetLastPK() const override {
+        AFL_VERIFY(false)("error", "GetLastPK not implemented");
         return NArrow::TSimpleRow(nullptr, 0);
     }
 
@@ -623,12 +633,11 @@ public:
 
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
-              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetDeprecatedPortionId())
+        : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, /*isConflicting*/ false, TSnapshot::Zero(), TSnapshot::Zero(),
+              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetSourceId())
         , Sources(std::move(sources))
         , LastSourceIdx(Sources.back()->GetSourceIdx())
         , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
-        , LastDeprecatedPortionId(Sources.back()->GetDeprecatedPortionId())
         , LastPortionIdOptional(Sources.back()->GetPortionIdOptional())
     {
         AFL_VERIFY(Sources.size());

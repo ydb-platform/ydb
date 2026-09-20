@@ -47,8 +47,7 @@ void TMessageEnricherActor::Bootstrap() {
 }
 
 void TMessageEnricherActor::PassAway() {
-    YDB_LOG_DEBUG("PassAway",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("PassAway");
 
     for (size_t i = 0; i < PendingResponses.size(); ++i) {
         if (!PendingResponses[i].Sent) {
@@ -89,13 +88,13 @@ void TMessageEnricherActor::SendPartialReply(size_t replyIndex) {
 }
 
 void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPersQueue::TEvResponse");
 
     if (!IsSucess(ev)) {
-        YDB_LOG_WARN("Fetch messages",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"failed", ev->Get()->Record.DebugString()});
+        LOG_W(
+            "Fetch messages",
+            {"failed", ev->Get()->Record.DebugString()}
+        );
         return PassAway();
     }
 
@@ -189,8 +188,7 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 }
 
 void TMessageEnricherActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     PassAway();
 }
 
@@ -200,9 +198,10 @@ STFUNC(TMessageEnricherActor::StateWork) {
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            YDB_LOG_ERROR("Unexpected",
-                {"logPrefix", NPQ_LOG_PREFIX},
-                {"event", EventStr("StateWork", ev)});
+            LOG_E(
+                "Unexpected",
+                {"event", EventStr("StateWork", ev)}
+            );
     }
 }
 

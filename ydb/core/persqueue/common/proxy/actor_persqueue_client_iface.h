@@ -170,4 +170,24 @@ public:
     }
 };
 
+class TPersQueueInsecureMirrorReaderFactory : public TPersQueueMirrorReaderFactory {
+protected:
+    NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr> GetCredentialsProviderImpl(
+        const NKikimrPQ::TMirrorPartitionConfig::TCredentials& /*cred*/
+    ) const override {
+        return NThreading::MakeFuture(NYdb::CreateInsecureCredentialsProviderFactory());
+    }
+
+        NYdb::NTopic::TTopicClient GetTopicClient(const NKikimrPQ::TMirrorPartitionConfig& config, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) const {
+        NYdb::NTopic::TTopicClientSettings clientSettings = NYdb::NTopic::TTopicClientSettings()
+            .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
+            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+            .CredentialsProviderFactory(std::move(credentialsProviderFactory))
+            .SslCredentials(NYdb::TSslCredentials(config.GetUseSecureConnection()));
+        if (config.HasDatabase()) {
+            clientSettings.Database(config.GetDatabase());
+        }
+        return NYdb::NTopic::TTopicClient(*Driver, clientSettings);
+    }
+};
 } // namespace NKikimr::NSQS

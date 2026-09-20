@@ -31,6 +31,7 @@
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
+#include <ydb/services/ydb/ydb_udf.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
 #include <ydb/services/ydb/ydb_logstore.h>
@@ -122,6 +123,7 @@
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/statistics/service/service.h>
+#include <ydb/services/udf_store/compile_controller/compile_controller.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/blob_depot/blob_depot.h>
 #include <ydb/core/test_tablet/test_tablet.h>
@@ -684,9 +686,7 @@ namespace Tests {
         }
 
         TCpuManagerConfig cpuManager;
-        for (int poolId = 0; poolId < actorSystemConfig.GetExecutor().size(); poolId++) {
-            NActorSystemConfigHelpers::AddExecutorPool(cpuManager, actorSystemConfig.GetExecutor(poolId), actorSystemConfig, poolId, nullptr);
-        }
+        NActorSystemConfigHelpers::AddExecutorPools(cpuManager, actorSystemConfig, nullptr);
 
         const NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(actorSystemConfig, useAutoConfig);
 
@@ -696,7 +696,8 @@ namespace Tests {
             .MonitorStuckActors = actorSystemConfig.GetMonitorStuckActors()
         }, TTestActorRuntime::TActorSystemPools{
             pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
-            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig)
+            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig),
+            NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(actorSystemConfig)
         });
     }
 
@@ -740,12 +741,11 @@ namespace Tests {
             Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
         }
 
-        for (IActor* configurator : NConsole::CreateJaegerTracingConfigurators(
-                appData.TracingConfigurator,
-                appData.UserFacingTracingConfigurator,
-                *Settings->AppConfig)) {
-            system->Register(configurator, TMailboxType::ReadAsFilled, appData.UserPoolId);
-        }
+        system->Register(
+            NConsole::CreateJaegerTracingConfigurator(appData.TracingConfigurator, Settings->AppConfig->GetTracingConfig()),
+            TMailboxType::ReadAsFilled,
+            appData.UserPoolId
+        );
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData.UserPoolId);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
@@ -829,6 +829,7 @@ namespace Tests {
         grpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcReplicationService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcViewService(system, counters, grpcRequestProxies[0], true));
+        grpcServer->AddService(new NGRpcService::TGRpcYdbUdfService(system, counters, grpcRequestProxies[0], true));
         grpcServer->Start();
     }
 
@@ -1215,6 +1216,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NStat::CreateStatisticsAggregator, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::WasmCompileController] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NUdfStore::CreateWasmCompileController, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
     }
 
     void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
@@ -1462,6 +1467,9 @@ namespace Tests {
                     .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
                 });
 
+                auto s3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3());
+                s3ReadActorFactoryConfig.EnableScheduling = Settings->AppConfig->GetFeatureFlags().GetEnableS3Scheduling();
+
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
                     connectorClient,
@@ -1473,7 +1481,7 @@ namespace Tests {
                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
                     queryServiceConfig.GetSolomon(),
                     Settings->ComputationFactory,
-                    NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
+                    s3ReadActorFactoryConfig,
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
                     Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,

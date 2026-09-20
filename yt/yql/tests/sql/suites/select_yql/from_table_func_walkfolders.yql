@@ -5,4 +5,4 @@ $postHandler = ($nodes, $state, $_) -> {
     RETURN ListExtend($state, ListExtract($tables, 'Path'));
 };
 
-SELECT * FROM plato.WalkFolders(``, $postHandler AS PostHandler);
+SELECT ListSort(State) as State FROM plato.WalkFolders(``, $postHandler AS PostHandler);

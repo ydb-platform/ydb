@@ -52,9 +52,8 @@ class TestStreamingLarge(StreamingTestBase):
                 INSERT INTO {out} SELECT * FROM $json;
                 END DO;"""
 
-            path = f"/Root/{name}"
             kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
-            self.wait_completed_checkpoints(kikimr, path)
+            self.wait_completed_checkpoints(kikimr, name)
 
         for i, _ in enumerate(self.roll(kikimr)):
             logger.debug(f"RollingUpgrade {i}")
@@ -93,35 +92,34 @@ class TestStreamingLarge(StreamingTestBase):
         query_name2 = "test_restart_nodes2"
         kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
         kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
-        path1 = f"/Root/{query_name1}"
-        path2 = f"/Root/{query_name2}"
-        self.wait_completed_checkpoints(kikimr, path1)
-        self.wait_completed_checkpoints(kikimr, path2)
+        self.wait_completed_checkpoints(kikimr, query_name1)
+        self.wait_completed_checkpoints(kikimr, query_name2)
 
         message_count = 9
         for i in range(message_count):
             self.write_stream(['{"value": "value0"}'], partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint)
         expected_data = ['value0'] * message_count * 2
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
-        self.wait_completed_checkpoints(kikimr, path1)
-        self.wait_completed_checkpoints(kikimr, path2)
+        self.wait_completed_checkpoints(kikimr, query_name1)
+        self.wait_completed_checkpoints(kikimr, query_name2)
 
         def test(i):
-            restart_node_id = random.randint(1, 9)
+            restart_node_id = random.randint(1, len(kikimr.cluster.slots))
             logger.debug(f"Restart node {restart_node_id}")
-            node = kikimr.cluster.nodes[restart_node_id]
+            node = kikimr.cluster.slots[restart_node_id]
             node.stop()
             node.start()
+            kikimr.recreate_driver()
             value = f"value{i}"
             for i in range(message_count):
                 self.write_stream([f'{{"value": "{value}"}}'], partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint)
 
             expected_data = [value] * message_count * 2
-            self.wait_completed_checkpoints(kikimr, path1)
-            self.wait_completed_checkpoints(kikimr, path2)
+            self.wait_completed_checkpoints(kikimr, query_name1)
+            self.wait_completed_checkpoints(kikimr, query_name2)
             assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
-            self.wait_completed_checkpoints(kikimr, path1)
-            self.wait_completed_checkpoints(kikimr, path2)
+            self.wait_completed_checkpoints(kikimr, query_name1)
+            self.wait_completed_checkpoints(kikimr, query_name2)
 
         test(1)
         test(2)
@@ -142,8 +140,11 @@ class TestStreamingLarge(StreamingTestBase):
             shared=True,
             partitions_count=9
         )
-        node1 = kikimr.cluster.nodes[9]
+        node1_id = len(kikimr.cluster.slots)
+        node1 = kikimr.cluster.slots[node1_id]
         node1.stop()
+
+        kikimr.recreate_driver(next(node_id for node_id in kikimr.cluster.slots if node_id != node1_id))
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -170,11 +171,12 @@ class TestStreamingLarge(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         time.sleep(2)
 
-        stop_node_id = random.randint(1, 8)
+        stop_node_id = random.randint(1, len(kikimr.cluster.slots) - 1)
         logger.debug(f"Stop node {stop_node_id}, start node 1")
-        node2 = kikimr.cluster.nodes[stop_node_id]
+        node2 = kikimr.cluster.slots[stop_node_id]
         node2.stop()
         node1.start()
+        kikimr.recreate_driver(node1_id)
 
         def write_read(i):
             value = f"value {i}"
@@ -196,6 +198,7 @@ class TestStreamingLarge(StreamingTestBase):
         write_read(4)
         node2.stop()
         node1.start()
+        kikimr.recreate_driver(node1_id)
         write_read(5)
         sql = R'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql.format(query_name=query_name1))

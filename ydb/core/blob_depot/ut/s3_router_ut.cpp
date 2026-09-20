@@ -484,6 +484,50 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         WaitReal(runtime, [&] { return result->Done.load(); }, holdDuration * 3);
         UNIT_ASSERT_C(result->Ok.load(), result->Error);
     }
+
+    Y_UNIT_TEST(RouterPoisonedWithRequestInFlight) {
+        const TDuration holdDuration = TDuration::Seconds(3);
+        TStallingS3Server s3Server(/*bodySize=*/4096, holdDuration);
+
+        TTestActorRuntime runtime;
+        runtime.SetUseRealInterconnect();
+        runtime.Initialize(TAppPrepare().Unwrap());
+        runtime.GetAppData(0).AwsClientConfig.SetRequestTimeoutMs(TDuration::Hours(1).MilliSeconds());
+        runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) { return false; });
+
+        NKikimrBlobDepot::TS3BackendSettings settings;
+        auto* s3 = settings.MutableSettings();
+        s3->SetEndpoint(TStringBuilder() << "127.0.0.1:" << s3Server.GetPort());
+        s3->SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+        s3->SetBucket("test-bucket");
+        s3->SetAccessKey("access-key");
+        s3->SetSecretKey("secret-key");
+        s3->SetRegion("ru-central1");
+        s3->SetUseVirtualAddressing(false);
+
+        TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
+        TActorId edgeId = runtime.AllocateEdgeActor();
+
+        auto result = MakeIntrusive<TGetResult>();
+        TActorId collectorId = runtime.Register(new TGetCollector(result));
+
+        Aws::S3::Model::GetObjectRequest request;
+        request.SetBucket("test-bucket");
+        request.SetKey("held-object");
+        request.SetRange("bytes=0-4095");
+        runtime.Send(new IEventHandle(routerId, collectorId,
+            new NWrappers::NExternalStorage::TEvGetObjectRequest(request)), 0, true);
+
+        WaitReal(runtime, [&] { return s3Server.GetRequestsReceived() >= 1; });
+
+        // NodeWarden poisons the router when its last agent releases it; the inner
+        // wrapper still holds the request and reports its stats after the router is gone.
+        runtime.Send(new IEventHandle(routerId, edgeId, new TEvents::TEvPoison()), 0, true);
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        // The dying wrapper disables request processing, so the reply may carry the abort error; it must still arrive.
+        WaitReal(runtime, [&] { return result->Done.load(); }, holdDuration * 3);
+    }
 }
 
 }  // namespace NKikimr::NBlobDepot

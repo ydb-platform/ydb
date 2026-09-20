@@ -127,6 +127,12 @@ void TCheckpointCoordinator::ScheduleNextCheckpoint() {
         ScheduleCheckpointContext.MetricsReportedAt = now;
     }
 
+    YDB_LOG_DEBUG("Try to schedule next checkpoint",
+        {"coordinatorId", CoordinatorId},
+        {"monotonicNow", TInstant::FromValue(now.MicroSeconds())},
+        {"nextCheckpointStartAt", TInstant::FromValue(ScheduleCheckpointContext.NextCheckpointStartAt.MicroSeconds())},
+        {"waitScheduleNextCheckpointEventForCheckpointStartAt", ScheduleCheckpointContext.WaitScheduleNextCheckpointEventForCheckpointStartAt});
+
     if (ScheduleCheckpointContext.NextCheckpointStartAt > now) {
         // Checkpoint time in the future
 
@@ -138,7 +144,7 @@ void TCheckpointCoordinator::ScheduleNextCheckpoint() {
     }
 
     if (const auto report = now - ScheduleCheckpointContext.MetricsReportedAt >= checkpointPeriod; !CanStartNewCheckpoint(report)) {
-        // Checkpoint can not be created due to inflight limit, schedule metrics refresh and wait for current checkpoint completion
+        // Checkpoint cannot be created due to inflight limit, schedule metrics refresh and wait for current checkpoint completion
         if (report) {
             ScheduleCheckpointContext.MetricsReportedAt = now;
         }

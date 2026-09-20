@@ -143,7 +143,8 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
 
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
             const NDDisk::TDDiskConfig ddiskConfig =
-                MakeDDiskConfig(DDiskTestProto, !TBase::Cfg.DisableDDiskChecksums);
+                MakeDDiskConfig(!TBase::Cfg.DisableDDiskChecksums,
+                    TBase::Cfg.ForcePDiskFallback);
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(ServerNodeId, i + 1, DDiskSlotId);
@@ -158,7 +159,10 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
                     NKikimrBlobStorage::TVDiskKind::Default,
                     1000,
                     "ddisk_pool");
-                NDDisk::TPersistentBufferFormat pbFormat{512, 512, 128_MB, 8, 5000, 4096_MB * 8, 64, 1024};
+                NDDisk::TPersistentBufferFormat pbFormat{
+                    TBase::Cfg.PersistentBufferChunks,
+                    TBase::Cfg.PersistentBufferChunks,
+                    128_MB, 8, 5000, 4096_MB * 8, 64, 1024};
                 TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbFormat),
                     NDDisk::TDDiskConfig(ddiskConfig), TBase::Counters),
                     TMailboxType::Revolving, 1);

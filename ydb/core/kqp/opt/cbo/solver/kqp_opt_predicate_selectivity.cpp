@@ -89,6 +89,44 @@ namespace {
         return Nothing();
     }
 
+    enum class EValueParseClass {
+        Bool,
+        SignedInt,
+        UnsignedInt,
+        Float,
+        Text
+    };
+
+    EValueParseClass GetValueParseClass(TStringBuf typeName) {
+        static const THashSet<TStringBuf> unsignedTypes = {
+            "Uint8", "Uint16", "Uint32", "Uint64", "Date", "Datetime", "Timestamp"};
+        static const THashSet<TStringBuf> signedTypes = {
+            "Int8", "Int16", "Int32", "Int64", "Date32", "Datetime64", "Interval", "Timestamp64", "Interval64"};
+
+        if (typeName == "Bool") {
+            return EValueParseClass::Bool;
+        } else if (unsignedTypes.contains(typeName)) {
+            return EValueParseClass::UnsignedInt;
+        } else if (signedTypes.contains(typeName)) {
+            return EValueParseClass::SignedInt;
+        } else if (typeName == "Float" || typeName == "Double" || typeName.StartsWith("Decimal")) {
+            return EValueParseClass::Float;
+        }
+        return EValueParseClass::Text;
+    }
+
+    TMaybe<EValueParseClass> GetValueParseClass(const TExprBase& input) {
+        const TTypeAnnotationNode* type = input.Ref().GetTypeAnn();
+        if (!type) {
+            return Nothing();
+        }
+        type = RemoveAllOptionals(type);
+        if (!type || type->GetKind() != ETypeAnnotationKind::Data) {
+            return Nothing();
+        }
+        return GetValueParseClass(type->Cast<TDataExprType>()->GetName());
+    }
+
     double DefaultEqualitySelectivity(const std::shared_ptr<NKikimr::NKqp::TOptimizerStatistics>& stats, const TString& attributeName) {
         if (stats == nullptr) {
             return 1.0;
@@ -212,7 +250,7 @@ namespace {
         return Nothing();
     }
 
-    i8 CompareValues(const TString& left, const TString& right, const TString columnType) {
+    i8 CompareValuesImpl(const TString& left, const TString& right, const TString columnType) {
         if (columnType == "Bool") {
             ui8 l = FromString<bool>(left);
             ui8 r = FromString<bool>(right);
@@ -284,8 +322,16 @@ namespace {
         return (left < right) ? -1 : (left > right) ? 1 : 0;
     }
 
+    i8 CompareValues(const TString& left, const TString& right, const TString columnType) {
+        try {
+            return CompareValuesImpl(left, right, columnType);
+        } catch (const yexception&) {
+            return (left < right) ? -1 : (left > right) ? 1 : 0;
+        }
+    }
+
     // Returns a number of rows based on predicate.
-    TMaybe<ui64> EstimateInequalityPredicateByHistogram(NYql::NNodes::TExprBase maybeLiteral, const TString& columnType,
+    TMaybe<ui64> EstimateInequalityPredicateByHistogramImpl(NYql::NNodes::TExprBase maybeLiteral, const TString& columnType,
                                             const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& eqWidthHistogram,
                                             EInequalityPredicateType predicate) {
         const TMaybe<TString> literal = ExtractLiteral(maybeLiteral);
@@ -335,7 +381,17 @@ namespace {
         return Nothing();
     }
 
-    TMaybe<ui64> EstimateRangePredicateByHistogram(NYql::NNodes::TExprBase maybeLeftLiteral, NYql::NNodes::TExprBase maybeRightLiteral,
+    TMaybe<ui64> EstimateInequalityPredicateByHistogram(NYql::NNodes::TExprBase maybeLiteral, const TString& columnType,
+                                            const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& eqWidthHistogram,
+                                            EInequalityPredicateType predicate) {
+        try {
+            return EstimateInequalityPredicateByHistogramImpl(maybeLiteral, columnType, eqWidthHistogram, predicate);
+        } catch (const yexception&) {
+            return Nothing();
+        }
+    }
+
+    TMaybe<ui64> EstimateRangePredicateByHistogramImpl(NYql::NNodes::TExprBase maybeLeftLiteral, NYql::NNodes::TExprBase maybeRightLiteral,
                                             const TString& columnType,
                                             const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& eqWidthHistogram,
                                             EInequalityPredicateType leftPredicate, EInequalityPredicateType rightPredicate) {
@@ -402,7 +458,18 @@ namespace {
         return Nothing();
     }
 
-    TMaybe<ui32> EstimateEqualityPredicateBySketch(NYql::NNodes::TExprBase maybeLiteral, TString columnType,
+    TMaybe<ui64> EstimateRangePredicateByHistogram(NYql::NNodes::TExprBase maybeLeftLiteral, NYql::NNodes::TExprBase maybeRightLiteral,
+                                            const TString& columnType,
+                                            const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& eqWidthHistogram,
+                                            EInequalityPredicateType leftPredicate, EInequalityPredicateType rightPredicate) {
+        try {
+            return EstimateRangePredicateByHistogramImpl(maybeLeftLiteral, maybeRightLiteral, columnType, eqWidthHistogram, leftPredicate, rightPredicate);
+        } catch (const yexception&) {
+            return Nothing();
+        }
+    }
+
+    TMaybe<ui32> EstimateEqualityPredicateBySketchImpl(NYql::NNodes::TExprBase maybeLiteral, TString columnType,
                                         const std::shared_ptr<NKikimr::TCountMinSketch>& countMinSketch) {
         const TMaybe<TString> literal = ExtractLiteral(maybeLiteral);
         if (literal.Defined()) {
@@ -468,6 +535,15 @@ namespace {
         }
 
         return Nothing();
+    }
+
+    TMaybe<ui32> EstimateEqualityPredicateBySketch(NYql::NNodes::TExprBase maybeLiteral, TString columnType,
+                                        const std::shared_ptr<NKikimr::TCountMinSketch>& countMinSketch) {
+        try {
+            return EstimateEqualityPredicateBySketchImpl(maybeLiteral, columnType, countMinSketch);
+        } catch (const yexception&) {
+            return Nothing();
+        }
     }
 }
 
@@ -902,12 +978,29 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessSetPredicate(
     auto logicalOperator = underNot ? ELogicalOperator::And : ELogicalOperator::Or;
     node->Operator = logicalOperator;
 
+    TMaybe<EValueParseClass> columnParseClass;
+    if (auto member = IsMember(left)) {
+        columnParseClass = GetValueParseClass(TExprBase(member.GetRef()));
+    }
+
+    bool droppedElements = false;
     for (const auto& element : list->Children()) {
         TExprBase right = TExprBase(element);
+
+        auto elementParseClass = GetValueParseClass(right);
+        if (columnParseClass.Defined() && elementParseClass.Defined() && *columnParseClass != *elementParseClass) {
+            droppedElements = true;
+            continue;
+        }
+
         auto child = ConvertEqualityToRange(left, right, underNot, collectMembers);
         if (child) {
             node->Children.push_back(child);
         }
+    }
+
+    if (droppedElements && node->Children.empty()) {
+        return nullptr;
     }
 
     return node;

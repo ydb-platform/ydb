@@ -57,6 +57,18 @@ TInfoUnit MakeGeneratedIgnoreIU(TPlanProps& props) {
     return TInfoUnit(TString(name));
 }
 
+bool ReferencesUnresolvedSubplan(const TExpression& expr, const TPlanProps& props) {
+    if (props.Subplans.Empty()) {
+        return false;
+    }
+    for (const auto& iu : expr.GetRawInputIUs()) {
+        if (props.Subplans.Find(iu)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op) {
     if (!op) {
         return {};
@@ -64,7 +76,7 @@ TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op) {
 
     if (op->Kind == EOperator::Map) {
         TVector<TInfoUnit> result;
-        for (const auto& mapElement : CastOperator<TOpMap>(op)->MapElements) {
+        for (const auto& mapElement : CastOperator<TOpMap>(op)->GetMapElements()) {
             const auto element = mapElement.GetElementName();
             if (!IsGeneratedIgnoreIU(element)) {
                 result.push_back(element);
@@ -100,6 +112,27 @@ TString GetValidJoinKind(const TString& joinKind) {
         return "Cross";
     }
     return joinKind;
+}
+
+bool CanEliminateAggregateShuffle(const TOpAggregate& aggregate, const TRBOContext& ctx) {
+    if (aggregate.KeyColumns.empty() || aggregate.IsDistinctAll()) {
+        return false;
+    }
+
+    const bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get()
+        .GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
+    if (!enableShuffleElimination) {
+        return false;
+    }
+
+    const auto& input = aggregate.GetInput();
+    if (!input->Props.Metadata || input->Props.Metadata->ShuffledByColumns.empty()) {
+        return false;
+    }
+
+    // Example: input partitioned by {id} needs no reshuffle for GROUP BY {id, date},
+    // because every group has a single id and is already colocated.
+    return IUIsSubset(input->Props.Metadata->ShuffledByColumns, aggregate.KeyColumns);
 }
 
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {

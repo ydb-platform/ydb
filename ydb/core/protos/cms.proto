@@ -22,6 +22,10 @@ message TStatus {
         NO_SUCH_HOST = 10;
         NO_SUCH_DEVICE = 11;
         NO_SUCH_SERVICE = 12;
+        // Temporary disallow: the action would be allowed, but the node currently
+        // hosts a running system tablet. Such actions can still be granted to fill
+        // a batch when no tablet-free nodes are left.
+        DISALLOW_TEMP_SYS_TABLET = 13;
     }
 
     optional ECode   Code = 1;
@@ -457,6 +461,7 @@ message TCmsConfig {
             UNKNOWN = 0;
             DISABLED = 1;
             FAULTY = 2;
+            MAINTENANCE = 3;
         }
 
         optional bool Enable = 1 [default = true];
@@ -605,6 +610,8 @@ message TLogRecordData {
         optional TAvailabilityStats NodeAvailabilityStats = 7;
         optional string Host = 8;
         optional string Reason = 9;
+        optional NKikimrBlobStorage.TMaintenanceStatus.E CurrentMaintenanceStatus = 10;
+        optional NKikimrBlobStorage.TMaintenanceStatus.E RequiredMaintenanceStatus = 11;
     }
 
     message TMarkersModification {
@@ -699,6 +706,9 @@ message TPDiskInfo {
     optional string LastStatusChange = 11;
     optional EIgnoreReason IgnoreReason = 12;
     optional bool StatusChangeFailed = 13;
+    optional uint32 MaintenanceStatus = 14;
+    optional uint32 DesiredMaintenanceStatus = 15;
+    optional uint32 PrevDesiredMaintenanceStatus = 16;
 }
 
 message TPDisk {

@@ -15,6 +15,6 @@ message TDDiskState {
 }
 
 message TDirtyMapState {
-    uint32 StateGeneration = 1;
+    // The map of ahead and behind blocks.
     repeated TDDiskState DDiskStates = 2;
 }

@@ -44,6 +44,7 @@ namespace NActors {
         std::vector<TPoolShortInfo> PoolInfos;
         TStackVec<TPoolThreadRange, 8> PoolThreadRanges;
         TStackVec<i16, 8> PriorityOrder;
+        std::vector<i16> AdjacentOwnerByPool;
 
         TPoolManager(const std::vector<TPoolShortInfo> &poolInfos);
     };
@@ -163,6 +164,7 @@ namespace NActors {
         i16 GetSharedThreadCount() const override;
 
         bool WakeUpLocalThreads(i16 poolId);
+        bool WakeUpAdjacentOwner(i16 poolId);
         bool WakeUpGlobalThreads(i16 poolId);
 
         void FillForeignThreadsAllowed(std::vector<i16>& foreignThreadsAllowed) const override;

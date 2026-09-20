@@ -2,7 +2,6 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/parser/lexer_common/lexer.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -12,58 +11,17 @@
 #include <yql/essentials/sql/v1/translation/sql.h>
 
 #include <util/generic/hash_set.h>
-#include <util/string/ascii.h>
+#include <util/string/builder.h>
 
 namespace NYql {
 
-TString AssembleGeneratedQuery(const TString& context, const TString& exprBody) {
-    return TStringBuilder() << context << "SELECT " << exprBody << " FROM `__yql_generated_column_source`;";
+TString AssembleGeneratedQuery(const TString& exprBody) {
+    return TStringBuilder() << "SELECT " << exprBody << " FROM `__yql_generated_column_source`;";
 }
 
 namespace {
 
 using namespace NNodes;
-
-const NSQLTranslation::TParsedToken* FindFirstMeaningfulToken(const NSQLTranslation::TParsedTokenList& tokens) {
-    for (const auto& token : tokens) {
-        if (token.Name != "WS" && token.Name != "COMMENT" && token.Name != "EOF") {
-            return &token;
-        }
-    }
-    return nullptr;
-}
-
-bool DropParameterDeclarations(const TString& sqlText, const NSQLTranslationV1::TLexers& lexers,
-    bool ansiLexer, TString& result, TExprContext& ctx)
-{
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, ansiLexer);
-
-    TIssues issues;
-    TVector<TString> statements;
-    if (!NSQLTranslationV1::SplitQueryToStatements(sqlText, lexer, statements, issues)) {
-        ctx.IssueManager.AddIssues(issues);
-        return false;
-    }
-
-    TStringBuilder kept;
-    for (const auto& statement : statements) {
-        NSQLTranslation::TParsedTokenList tokens;
-        if (!NSQLTranslation::Tokenize(*lexer, statement, "", tokens, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
-            ctx.IssueManager.AddIssues(issues);
-            return false;
-        }
-
-        const auto* first = FindFirstMeaningfulToken(tokens);
-        if (first && AsciiEqualsIgnoreCase(first->Content, "declare")) {
-            continue;
-        }
-
-        kept << statement << '\n';
-    }
-
-    result = kept;
-    return true;
-}
 
 TExprNode::TPtr CompileText(const TString& sqlText, TExprContext& ctx, NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,
     const IModuleResolver::TPtr& moduleResolver)
@@ -79,14 +37,9 @@ TExprNode::TPtr CompileText(const TString& sqlText, TExprContext& ctx, NKikimr::
     parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(settingsBuilder.GetIsAmbiguityError());
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
-    TString query;
-    if (!DropParameterDeclarations(sqlText, lexers, translationSettings.AnsiLexer, query, ctx)) {
-        return nullptr;
-    }
-
     NSQLTranslation::TTranslators translators(nullptr, NSQLTranslationV1::MakeTranslator(lexers, parsers), nullptr);
 
-    auto queryAst = NSQLTranslation::SqlToYql(translators, query, translationSettings);
+    auto queryAst = NSQLTranslation::SqlToYql(translators, sqlText, translationSettings);
     ctx.IssueManager.AddIssues(queryAst.Issues);
     if (!queryAst.IsOk()) {
         return nullptr;

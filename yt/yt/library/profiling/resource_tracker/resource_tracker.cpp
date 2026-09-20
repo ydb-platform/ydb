@@ -570,6 +570,14 @@ private:
         writer->AddGauge("/open_fds", fileDescriptorCount);
         YT_TLOG_DEBUG("Assessed open file descriptors")
             .With("Count", fileDescriptorCount);
+
+        if (auto fileDescriptorLimit = GetFileDescriptorLimit()) {
+            writer->AddGauge("/open_fds_limit", *fileDescriptorLimit);
+            YT_TLOG_DEBUG("Assessed open file descriptors limit")
+                .With("Limit", *fileDescriptorLimit);
+        } else {
+            YT_TLOG_DEBUG("Open file descriptors limit seems to be disabled");
+        }
     }
 };
 

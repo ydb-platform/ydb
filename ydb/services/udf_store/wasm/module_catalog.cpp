@@ -7,36 +7,17 @@ namespace NKikimr::NUdfStore::NWasm {
 
 void TWasmModuleCatalog::Register(TWasmModuleArtifactPtr artifact) {
     Y_ENSURE(artifact);
-    Y_ENSURE(!artifact->Md5.empty());
     Y_ENSURE(!artifact->ModuleName.empty());
 
     with_lock (Mutex_) {
-        if (auto it = ByMd5_.find(artifact->Md5); it != ByMd5_.end()) {
-            ByModuleName_.erase(it->second->ModuleName);
-        }
-        ByMd5_[artifact->Md5] = artifact;
         ByModuleName_[artifact->ModuleName] = artifact;
     }
 }
 
-void TWasmModuleCatalog::Unregister(const TString& md5) {
+void TWasmModuleCatalog::Unregister(const TString& moduleName) {
     with_lock (Mutex_) {
-        auto it = ByMd5_.find(md5);
-        if (it == ByMd5_.end()) {
-            return;
-        }
-        ByModuleName_.erase(it->second->ModuleName);
-        ByMd5_.erase(it);
+        ByModuleName_.erase(moduleName);
     }
-}
-
-TWasmModuleArtifactPtr TWasmModuleCatalog::FindByMd5(const TString& md5) const {
-    with_lock (Mutex_) {
-        if (auto it = ByMd5_.find(md5); it != ByMd5_.end()) {
-            return it->second;
-        }
-    }
-    return {};
 }
 
 TWasmModuleArtifactPtr TWasmModuleCatalog::FindByModuleName(const TString& moduleName) const {

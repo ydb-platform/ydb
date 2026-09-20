@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <ydb/core/tx/locks/sys_tables.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -15,6 +17,28 @@ struct TKqpLock {
     bool Invalidated(const TKqpLock& newLock) const {
         AFL_ENSURE(GetKey() == newLock.GetKey());
         return Proto.GetGeneration() != newLock.Proto.GetGeneration() || Proto.GetCounter() != newLock.Proto.GetCounter();
+    }
+
+    // Merge the shard echo's per-writer WriteSeqNums into the stored lock.
+    // Returns false when an incoming WriteSeqNum for a known writer regresses
+    // below the stored one, i.e. the shard's uncommitted write chain collapsed
+    // underneath us so the stored lock is no longer consistent with the shard.
+    bool MergeWriteSeqNums(const NKikimrDataEvents::TLock& incoming) {
+        bool consistent = true;
+        for (const auto& writeSeqNum : incoming.GetWriteSeqNums()) {
+            auto* existing = FindIfPtr(*Proto.MutableWriteSeqNums(),
+                [&](const auto& entry) { return entry.GetWriterIndex() == writeSeqNum.GetWriterIndex(); });
+            if (existing) {
+                if (writeSeqNum.GetWriteSeqNum() >= existing->GetWriteSeqNum()) {
+                    existing->SetWriteSeqNum(writeSeqNum.GetWriteSeqNum());
+                } else {
+                    consistent = false;
+                }
+            } else {
+                *Proto.AddWriteSeqNums() = writeSeqNum;
+            }
+        }
+        return consistent;
     }
 
     TKqpLock(const NKikimrDataEvents::TLock& proto)
@@ -109,10 +133,15 @@ public:
             if (lock.Proto.GetHasWrites()) {
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
+            // Merge per writer so an echo from a later write can't drop another writer's entry.
+            // A regression (incoming < stored for a known writer) means the shard's uncommitted
+            // write chain collapsed and the stored lock no longer matches the shard, so treat it
+            // as an invalidation rather than crashing.
+            const bool writeSeqNumsConsistent = lockPtr->Lock.MergeWriteSeqNums(lock.Proto);
 
             lockPtr->LocksAcquireFailure |= isLocksAcquireFailure;
             if (!lockPtr->LocksAcquireFailure) {
-                isInvalidated |= lockPtr->Lock.Invalidated(lock);
+                isInvalidated |= lockPtr->Lock.Invalidated(lock) || !writeSeqNumsConsistent;
                 lockPtr->Invalidated |= isInvalidated;
             }
             broken = lockPtr->Invalidated || lockPtr->LocksAcquireFailure;
@@ -356,7 +385,7 @@ public:
     }
 
     bool CanUseImmediateCommit() const override {
-        return IsSingleShard() && !HasOlapTable() 
+        return IsSingleShard() && !HasOlapTable()
             && GetTopicOperations().GetSize() <= 1
             && IsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
     }

@@ -651,14 +651,10 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
             queryPlanPrinter.Print(res.GetQueryPlan());
         }
         {
-            TPlanVisualizer pv;
+            NPlan2Svg::TPlanVisualizer pv;
             TFileOutput out(planFName + "svg");
-            try {
-                pv.LoadPlans(res.GetQueryPlan());
-                out << pv.PrintSvg();
-            } catch (std::exception& e) {
-                out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";
-            }
+            pv.LoadPlansSafe(res.GetQueryPlan());
+            out << pv.PrintSvgSafe();
         }
     }
     if (res.GetPlanAst()) {

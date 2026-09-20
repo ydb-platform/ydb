@@ -208,7 +208,6 @@ public:
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     TMaybe<TActorId> PoolHandlerActor;
-    bool WaitingForWmAdmission = false;
 
     std::shared_ptr<NYql::TExprContext> SplittedCtx;
     TVector<NYql::TExprNode::TPtr> SplittedExprs;
@@ -420,7 +419,7 @@ public:
         }
     }
 
-    void FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views);
+    void FiilTablesAndViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos);
 
     bool NeedCheckTableVersions() const {
         return CompileStats.FromCache;
@@ -660,6 +659,10 @@ public:
         }
 
         return cStats;
+    }
+
+    bool GetCollectAffectedRows() const {
+        return RequestEv->GetCollectAffectedRows();
     }
 
     bool ReportStats() const {

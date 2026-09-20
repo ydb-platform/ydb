@@ -41,7 +41,7 @@ TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     InBuffer.resize(8_KB);
     OutBuffer.resize(64_KB);
     Zero(Z_);
-    YQL_ENSURE(inflateInit2(&Z_, 31) == Z_OK, "Can not init inflate engine.");
+    YQL_ENSURE(inflateInit2(&Z_, 31) == Z_OK, "Cannot init inflate engine.");
 }
 
 TReadBuffer::~TReadBuffer() {
@@ -85,7 +85,7 @@ class TCompressor : public TOutputQueue<> {
 public:
     TCompressor(int level) {
         Zero(Z_);
-        YQL_ENSURE(deflateInit2(&Z_, level, Z_DEFLATED, 16 | MAX_WBITS, MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY) == Z_OK, "Can not init deflate engine.");
+        YQL_ENSURE(deflateInit2(&Z_, level, Z_DEFLATED, 16 | MAX_WBITS, MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY) == Z_OK, "Cannot init deflate engine.");
     }
 
     ~TCompressor() {

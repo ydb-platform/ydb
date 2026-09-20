@@ -635,3 +635,7 @@ IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& d
 
 } // NDataShard
 } // NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

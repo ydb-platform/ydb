@@ -415,6 +415,18 @@ void SetSubscriptions(TTenantTestRuntime &runtime, TActorId aid, TVector<ui32> k
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
+    Y_UNIT_TEST(TestCompositeConveyorConfigSubscription) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem});
+
+        runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
+        auto notification = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT(!notification->Config.HasCompositeConveyorConfig());
+    }
+
     Y_UNIT_TEST(TestSubscriptionNotification) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         TAutoPtr<IEventHandle> handle;
@@ -1562,6 +1574,84 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         TTenantTestConfig cfg = DefaultConsoleTestConfig();
         cfg.CreateConfigsDispatcher = false;
         return cfg;
+    }
+
+    Y_UNIT_TEST(TestStartupReplayDoesNotAccumulateConfigTrace) {
+        auto recorded = std::make_shared<NConfig::TRecordedInitialConfiguratorDeps>();
+        recorded->ErrorCollector = NConfig::MakeDefaultErrorCollector();
+        auto files = std::make_unique<NConfig::TProtoConfigFileProviderMock>();
+        NConfig::AddProtoConfigOptions(*files);
+        files->SavedFiles["config.yaml"] = R"(
+metadata:
+  kind: MainConfig
+  version: 0
+  cluster: test_cluster
+config:
+  default_disk_type: NVME
+  self_management_config:
+    enabled: true
+  actor_system_config:
+    use_auto_config: true
+    node_type: COMPUTE
+    cpu_count: 10
+  host_configs:
+  - nvme:
+    - disk1
+  hosts:
+  - host: localhost
+    port: 19001
+  log_config:
+    default_level: 5
+allowed_labels: {}
+selector_config: []
+)";
+        files->SavedFiles["kikimr.token"] = "StaffApiUserToken: \"test-token\"";
+        recorded->ProtoConfigFileProvider = std::move(files);
+        recorded->ConfigUpdateTracer = NConfig::MakeDefaultConfigUpdateTracer();
+        recorded->MemLogInit = NConfig::MakeNoopMemLogInitializer();
+        recorded->NodeBrokerClient = NConfig::MakeNoopNodeBrokerClient();
+        recorded->DynConfigClient = NConfig::MakeNoopDynConfigClient();
+        recorded->ConfigClient = NConfig::MakeNoopConfigClient();
+        auto env = std::make_unique<NConfig::TEnvMock>();
+        env->SavedHostName = "localhost";
+        env->SavedFQDNHostName = "localhost";
+        recorded->Env = std::move(env);
+        recorded->Logger = NConfig::MakeNoopInitLogger();
+
+        NConfig::TConfigsDispatcherInitInfo initInfo;
+        initInfo.RecordedInitialConfiguratorDeps = recorded;
+        initInfo.Args = {"server", "--yaml-config", "config.yaml", "--node", "static",
+            "--mon-port", "8765", "--grpc-port", "2135", "--ic-port", "19001",
+            "--auth-token-file", "kikimr.token", "--mbus", "--mbus-port", "2134",
+            "--mbus-worker-count=4", "--mbus-max-in-flight", "10000",
+            "--mbus-max-in-flight-by-size", "5000000000", "--mbus-max-message-size", "140000000"};
+
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher());
+        auto dispatcherId = runtime.Register(CreateConfigsDispatcher(initInfo));
+        runtime.EnableScheduleForActor(dispatcherId, true);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionNotification);
+            runtime.DispatchEvents(options);
+        }
+        QueryState(runtime, dispatcherId);
+
+        const auto initialTrace = recorded->ConfigUpdateTracer->Dump();
+        // This update is recorded near the end of startup parsing.
+        UNIT_ASSERT(initialTrace.contains(NKikimrConsole::TConfigItem::MessageBusConfigItem));
+
+        for (ui32 i = 0; i < 10; ++i) {
+            // Even an unchanged notification replays the startup configuration.
+            runtime.Send(new IEventHandle(dispatcherId, runtime.Sender,
+                new TEvConsole::TEvConfigSubscriptionNotification()));
+            QueryState(runtime, dispatcherId);
+
+            const auto trace = recorded->ConfigUpdateTracer->Dump();
+            UNIT_ASSERT_VALUES_EQUAL(trace.size(), initialTrace.size());
+            for (const auto& [kind, info] : initialTrace) {
+                UNIT_ASSERT_VALUES_EQUAL(trace.at(kind).Updates.size(), info.Updates.size());
+            }
+        }
     }
     
     Y_UNIT_TEST(TestGetStateRequestResponse) {

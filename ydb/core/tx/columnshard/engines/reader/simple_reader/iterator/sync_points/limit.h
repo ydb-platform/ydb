@@ -3,14 +3,14 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-class TScanWithLimitCollection;
+class TOrderedResultWithLimitCollection;
 
 class TSyncPointLimitControl: public ISyncPoint {
 private:
     using TBase = ISyncPoint;
 
     const ui32 Limit;
-    std::shared_ptr<TScanWithLimitCollection> Collection;
+    std::shared_ptr<TOrderedResultWithLimitCollection> Collection;
     ui32 FetchedCount = 0;
     std::optional<ui32> PKPrefixSize;
 
@@ -61,8 +61,9 @@ private:
             , Delta(Reverse ? -1 : 1)
         {
             AFL_VERIFY(Source);
-            AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion)("type", Source->GetType());
-            auto batch = Source->GetAs<TPortionDataSource>()->GetStart().GetValue().ToBatch();
+            AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion || Source->GetType() == IDataSource::EType::SimpleSysInfo)(
+                                                                                 "type", Source->GetType());
+            auto batch = Source->GetAs<IDataSource>()->GetFirstPK().ToBatch();
             SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse);
         }
 
@@ -143,7 +144,7 @@ private:
 
 public:
     TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context,
-        const std::shared_ptr<TScanWithLimitCollection>& collection);
+        const std::shared_ptr<TOrderedResultWithLimitCollection>& collection);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

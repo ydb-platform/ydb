@@ -91,3 +91,7 @@ void TDataShard::Handle(TEvDataShard::TEvCompactBorrowed::TPtr& ev, const TActor
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

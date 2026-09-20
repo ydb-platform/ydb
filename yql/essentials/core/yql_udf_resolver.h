@@ -34,7 +34,7 @@ struct TFilePathWithMd5 {
     TFilePathWithMd5& operator=(const TFilePathWithMd5& other) = default;
 };
 
-class IUdfResolver : public TThrRefBase {
+class IUdfResolver: public TThrRefBase {
 public:
     using TPtr = TIntrusiveConstPtr<IUdfResolver>;
 
@@ -78,7 +78,7 @@ public:
     */
     virtual TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const = 0;
     virtual bool LoadMetadata(const TVector<TImport*>& imports,
-        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const = 0;
+                              const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const = 0;
 
     virtual TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const = 0;
     virtual bool ContainsModule(const TStringBuf& moduleName) const = 0;
@@ -88,4 +88,4 @@ public:
 TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
 TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TString>& paths, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
 
-}
+} // namespace NYql

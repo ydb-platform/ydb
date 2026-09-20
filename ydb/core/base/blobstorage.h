@@ -100,6 +100,15 @@ inline bool SendToBSProxy(const TActorContext &ctx, TGroupId groupId, IEventBase
     return ctx.Send(CreateEventForBSProxy(ctx.SelfID, groupId, ev, cookie, std::move(traceId)));
 }
 
+// A block with generation Max<ui32>() is the persistent tombstone of a complete tablet deletion:
+// Hive sets it (see THive::BlockStorageForDelete) right before collecting the tablet's data, and
+// afterwards nothing can ever be written for that tablet again. So whoever stores data for this
+// tablet may drop all of it, along with any barrier bookkeeping, without waiting for the hard
+// barrier that Hive sends next -- that barrier may legitimately never be observed.
+inline constexpr bool IsCompleteTabletDeletionBlock(ui32 blockedGeneration) {
+    return blockedGeneration == Max<ui32>();
+}
+
 struct TEvBlobStorage {
     enum EEv {
         // user <-> proxy interface
@@ -416,6 +425,12 @@ struct TEvBlobStorage {
         EvRecoveryLogCutDone,
         EvFreshCompactionStarted,
         EvGetLogoBlobIndexStatResponseAck,
+        EvHugeQueryStripeChunks,
+        EvHugeStripeChunks,
+        EvGetVDiskSpaceReportRequest,
+        EvHugeSpaceStat,
+        EvSyncLogSpaceStat,
+        EvChunkKeeperSpaceStat,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -487,6 +502,10 @@ struct TEvBlobStorage {
         EvCompactionTokenRequest,
         EvCompactionTokenResult,
         EvReleaseCompactionToken,
+        EvGetVDiskSpaceReportResponse,
+        EvHugeSpaceStatResult,
+        EvSyncLogSpaceStatResult,
+        EvChunkKeeperSpaceStatResult,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184
@@ -515,6 +534,7 @@ struct TEvBlobStorage {
         EvProxySessionsState,
         EvBunchOfEvents,
         EvDeadline,
+        EvSetProxyDormant,
 
         // blobstorage controller interface
         EvControllerRegisterNode                    = 0x10031602,
@@ -1483,6 +1503,7 @@ struct TEvBlobStorage {
         const TInstant Deadline;
         const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
         const TWriteSource WriteSource;
+        const std::optional<ui32> Version;
         bool IsMonitored = true;
 
         TEvBlock(TCloneEventPolicy, const TEvBlock& origin)
@@ -1492,32 +1513,38 @@ struct TEvBlobStorage {
             , Deadline(origin.Deadline)
             , IssuerGuid(origin.IssuerGuid)
             , WriteSource(origin.WriteSource)
+            , Version(origin.Version)
             , IsMonitored(origin.IsMonitored)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
-                TWriteSource writeSource = UnknownWriteSource())
+                TWriteSource writeSource = UnknownWriteSource(), std::optional<ui32> version = std::nullopt)
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
             , WriteSource(writeSource)
+            , Version(version)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline, ui64 issuerGuid,
-                TWriteSource writeSource = UnknownWriteSource())
+                TWriteSource writeSource = UnknownWriteSource(), std::optional<ui32> version = std::nullopt)
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
             , IssuerGuid(issuerGuid)
             , WriteSource(writeSource)
+            , Version(version)
         {}
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvBlock {TabletId# " << TabletId
-                << " Generation# " << Generation
-                << " Deadline# " << Deadline.MilliSeconds()
+                << " Generation# " << Generation;
+            if (Version) {
+                str << " Version# " << *Version;
+            }
+            str << " Deadline# " << Deadline.MilliSeconds()
                 << " IsMonitored# " << IsMonitored
                 << "}";
             return str.Str();
@@ -1541,14 +1568,22 @@ struct TEvBlobStorage {
         : TEventLocal<TEvBlockResult, EvBlockResult>
         , TEvResultCommon
     {
-        TEvBlockResult(NKikimrProto::EReplyStatus status)
+        bool IsTabletStorageInfoVersionObsolete = false;
+        ui32 ActualGeneration = 0;
+
+        TEvBlockResult(NKikimrProto::EReplyStatus status,
+                bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0)
             : TEvResultCommon(status)
+            , IsTabletStorageInfoVersionObsolete(isTabletStorageInfoVersionObsolete)
+            , ActualGeneration(actualGeneration)
         {}
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
+            str << " IsTabletStorageInfoVersionObsolete# " << IsTabletStorageInfoVersionObsolete;
+            str << " ActualGeneration# " << ActualGeneration;
             if (ErrorReason.size()) {
                 str << " ErrorReason# \"" << ErrorReason << "\"";
             }

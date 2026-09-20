@@ -1374,6 +1374,35 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
         .Seal().Build();
 }
 
+} // namespace
+
+TVector<TCoNameValueTuple> BuildBlockHashJoinSettings(
+    TPositionHandle pos,
+    EJoinAlgoType joinAlgo,
+    ui32 keyCount,
+    TExprContext& ctx,
+    bool enableEqualNulls)
+{
+    TVector<TCoNameValueTuple> joinSettings;
+    if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
+        joinSettings.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build("BuildSide")
+                .Value<TCoAtom>().Build("Left")
+                .Done());
+    }
+    if (enableEqualNulls) {
+        for (ui32 keyIndex = 0; keyIndex < keyCount; ++keyIndex) {
+            joinSettings.push_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name().Build("EqualNulls")
+                    .Value<TCoUint32>()
+                        .Literal().Build(ToString(keyIndex))
+                        .Build()
+                    .Done());
+        }
+    }
+    return joinSettings;
 }
 
 TExprBase DqBuildHashJoin(
@@ -1385,7 +1414,8 @@ TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
-    bool blockHashJoinBuildSideLeft
+    bool blockHashJoinBuildSideLeft,
+    bool enableBlockHashJoinEqualNulls
 ) {
 
     Y_UNUSED(blockHashJoinBuildSideLeft);
@@ -1757,14 +1787,8 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                TVector<TCoNameValueTuple> joinSettings;
-                if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
-                    joinSettings.push_back(
-                        Build<TCoNameValueTuple>(ctx, join.Pos())
-                            .Name().Build("BuildSide")
-                            .Value<TCoAtom>().Build("Left")
-                            .Done());
-                }
+                const auto joinSettings = BuildBlockHashJoinSettings(
+                    join.Pos(), joinAlgo, leftKeys.size(), ctx, enableBlockHashJoinEqualNulls);
 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)
@@ -2190,20 +2214,20 @@ TDqLookupSourceWrap LookupSourceFromRead(TDqReadWrap read, TExprContext& ctx, TT
 }
 
 // Recursively walk join tree and replace right-side of StreamLookupJoin
-ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEquiJoinTuple& joinTuple, std::vector<TExprNode::TPtr>& args, TExprContext& ctx, TTypeAnnotationContext& typeCtx, bool& changed) {
+ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEquiJoinTuple& joinTuple, std::vector<TExprNode::TPtr>& args, TExprContext& ctx, TTypeAnnotationContext& typeCtx, bool& changed, std::function<TExprNode::TPtr(const TExprBase&, TExprContext&)> lookupFromExtra) {
     // recursion depth O(args.size())
     Y_ENSURE(idx < args.size());
 
     // handle left side
     if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
-        idx = RewriteStreamJoinTuple(idx, equiJoin, joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), args, ctx, typeCtx, changed);
+        idx = RewriteStreamJoinTuple(idx, equiJoin, joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), args, ctx, typeCtx, changed, lookupFromExtra);
     } else {
         ++idx;
     }
 
     // handle right side
     if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
-        return RewriteStreamJoinTuple(idx, equiJoin, joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), args, ctx, typeCtx, changed);
+        return RewriteStreamJoinTuple(idx, equiJoin, joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), args, ctx, typeCtx, changed, lookupFromExtra);
     }
 
     Y_ENSURE(idx < args.size());
@@ -2223,6 +2247,7 @@ ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEqui
         lookupSourceWrap = LookupSourceFromSource(maybeSource.Cast(), ctx).Ptr();
     } else if (auto maybeRead = rightList.Maybe<TDqReadWrap>()) {
         lookupSourceWrap = LookupSourceFromRead(maybeRead.Cast(), ctx, typeCtx).Ptr();
+    } else if (lookupFromExtra && (lookupSourceWrap = lookupFromExtra(rightList, ctx))) {
     } else {
         return idx + 1;
     }
@@ -2239,13 +2264,13 @@ ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEqui
 
 } // anonymous namespace
 
-TExprBase DqRewriteStreamEquiJoinWithLookup(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
+TExprBase DqRewriteStreamEquiJoinWithLookup(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx, std::function<TExprNode::TPtr(const TExprBase&, TExprContext&)> lookupFromExtra) {
     const auto equiJoin = node.Cast<TCoEquiJoin>();
     auto argCount = equiJoin.ArgCount();
     const auto joinTuple = equiJoin.Arg(argCount - 2).Cast<TCoEquiJoinTuple>();
     std::vector<TExprNode::TPtr> args(argCount);
     bool changed = false;
-    auto rightIdx = RewriteStreamJoinTuple(0u, equiJoin, joinTuple, args, ctx, typeCtx, changed);
+    auto rightIdx = RewriteStreamJoinTuple(0u, equiJoin, joinTuple, args, ctx, typeCtx, changed, lookupFromExtra);
     Y_ENSURE(rightIdx + 2 == argCount);
 
     if (!changed) {

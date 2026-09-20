@@ -55,6 +55,7 @@
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/config_metrics.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/storage_pool_kinds.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/tablet_types.h>
@@ -156,11 +157,13 @@
 #include <ydb/services/ydb/ydb_secret.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
+#include <ydb/services/ydb/ydb_udf.h>
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/view/grpc_service.h>
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
+#include <ydb/services/nbs/classic_grpc_service_factory.h>
 #include <ydb/services/nbs/grpc_service.h>
 #endif
 
@@ -780,6 +783,9 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
 }
 
 void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
+    const auto& appConfig = runConfig.AppConfig;
+    EnabledGrpcService = appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy();
+
     if (!GRpcServersWrapper) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
@@ -897,6 +903,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
 #endif
         TServiceCfg hasSecretService = services.empty();
         names["secret"] = &hasSecretService;
+        TServiceCfg hasUdfService = services.empty();
+        names["udf"] = &hasUdfService;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -1057,6 +1065,11 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (hasSecretService) {
             server.AddService(new NGRpcService::TGRpcYdbSecretService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasSecretService.IsRlAllowed()));
+        }
+
+        if (hasUdfService) {
+            server.AddService(new NGRpcService::TGRpcYdbUdfService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasUdfService.IsRlAllowed()));
         }
 
         if (hasOperationService) {
@@ -1232,7 +1245,6 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
     if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy()) {
         const auto& grpcConfig = appConfig.GetGRpcConfig();
 
-        EnabledGrpcService = true;
         NYdbGrpc::TServerOptions opts;
         opts.SetHost(grpcConfig.GetHost());
         opts.SetPort(grpcConfig.GetPort());
@@ -1327,7 +1339,15 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (grpcConfig.GetPort()) {
             grpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(opts, Counters) });
 
-            fillFn(grpcConfig, *grpcServers.back().second, opts);
+            auto& server = *grpcServers.back().second;
+            fillFn(grpcConfig, server, opts);
+
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
+            if (auto blockStore = NYdb::NBS::NBlockStore::GetNbsFrontendBlockStore()) {
+                server.AddService(NGRpcService::CreateClassicNbsGrpcService(
+                    std::move(blockStore)));
+            }
+#endif
         }
 
         for (auto &ex : grpcConfig.GetExtEndpoints()) {
@@ -1436,7 +1456,8 @@ void TKikimrRunner::InitializeXdsBootstrapConfig(const TKikimrRunConfig& runConf
                 xdsServerJson.EraseValue("channel_creds");
                 for (auto& channelCredJson : channelCreds) {
                     if (channelCredJson.Has("config")) {
-                        ConvertStringToJsonValue(channelCredJson["config"].GetString(), &channelCredJson["config"]);
+                        const TString configJson = channelCredJson["config"].GetString();
+                        ConvertStringToJsonValue(configJson, &channelCredJson["config"]);
                     }
                     xdsServerJson["channel_creds"].AppendValue(channelCredJson);
                 }
@@ -1481,7 +1502,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     const auto& cfg = runConfig.AppConfig;
 
     bool useAutoConfig = !cfg.HasActorSystemConfig() || NeedToUseAutoConfig(cfg.GetActorSystemConfig());
-    bool useSharedThreads = cfg.HasActorSystemConfig() && cfg.GetActorSystemConfig().HasUseSharedThreads() && cfg.GetActorSystemConfig().GetUseSharedThreads();
+    bool useSharedThreads = useAutoConfig && cfg.GetActorSystemConfig().GetUseSharedThreads();
     NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
     TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
 
@@ -1504,6 +1525,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
+    if (ModuleFactories && !ModuleFactories->PersQueueMirrorReaderFactory && runConfig.AppConfig.GetFeatureFlags().GetEnableInsecureMirrorFactory()) {
+        ModuleFactories->PersQueueMirrorReaderFactory =
+             std::make_shared<NKikimr::NPQ::TPersQueueInsecureMirrorReaderFactory>();
+    }
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
     AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
@@ -1699,6 +1724,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasLongTxServiceConfig()) {
         AppData->LongTxServiceConfig.CopyFrom(runConfig.AppConfig.GetLongTxServiceConfig());
+    }
+
+    if (runConfig.AppConfig.HasUdfStoreConfig()) {
+        AppData->UdfStoreConfig.CopyFrom(runConfig.AppConfig.GetUdfStoreConfig());
     }
 
     AppData->KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(Counters, runConfig.AppConfig);

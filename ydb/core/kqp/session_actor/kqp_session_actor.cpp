@@ -347,16 +347,16 @@ public:
             "Cannot send to workload manager: PoolConfig is already resolved");
 
         Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvPlaceRequestIntoPool(
+            QueryState->QueryId,
             QueryState->UserRequestContext->DatabaseId,
             SessionId,
             QueryState->UserRequestContext->PoolId,
             QueryState->UserToken,
             QueryState->GetQuery(),
             QueryState->RequestEv->GetWmSessionUpdater()
-        ), IEventHandle::FlagTrackDelivery);
+        ), IEventHandle::FlagTrackDelivery, QueryState->QueryId);
 
         QueryState->PoolHandlerActor = NWorkloadManager::MakeServiceId(SelfId().NodeId());
-        QueryState->WaitingForWmAdmission = true;
         Become(&TKqpSessionActor::ExecuteState);
     }
 
@@ -668,7 +668,7 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == NWorkloadManager::TWorkloadManagerEvents::EvPlaceRequestIntoPool) {
-            if (!AcceptWmAdmissionReply("TEvUndelivered")) {
+            if (!AcceptWmAdmissionReply(ev->Cookie, "TEvUndelivered")) {
                 return;
             }
             YDB_LOG_WARN("Failed to deliver request to workload service, bypassing WLM",
@@ -694,24 +694,27 @@ public:
         }
     }
 
-    // Replies are addressed to the session, not to the query,
-    // so a duplicated or late one would otherwise re-enter the
-    // pipeline of the query that is running now and execute it a second time.
-    bool AcceptWmAdmissionReply(TStringBuf eventName) {
-        if (!QueryState || !QueryState->WaitingForWmAdmission) {
+    // Replies are addressed to the session, not to the query, so a duplicated
+    // or late one would otherwise re-enter the pipeline of a query that is
+    // running now. The reply carries the QueryId of the query that issued
+    // the admission request; a reply is valid only if it matches the current
+    // query and has not already been accepted for it.
+    bool AcceptWmAdmissionReply(ui64 queryId, TStringBuf eventName) {
+        if (!QueryState || queryId != QueryState->QueryId || queryId <= LastAcceptedWmAdmissionQueryId) {
             YDB_LOG_WARN("Ignoring stale workload manager reply",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
                 {"event", eventName},
+                {"queryId", queryId},
                 {"traceId", TraceId()});
             return false;
         }
-        QueryState->WaitingForWmAdmission = false;
+        LastAcceptedWmAdmissionQueryId = queryId;
         return true;
     }
 
     void Handle(NWorkloadManager::TEvContinueRequest::TPtr& ev) {
-        if (!AcceptWmAdmissionReply("TEvContinueRequest")) {
+        if (!AcceptWmAdmissionReply(ev->Get()->QueryId, "TEvContinueRequest")) {
             return;
         }
         QueryState->ContinueTime = TInstant::Now();
@@ -1569,6 +1572,45 @@ public:
             AFL_ENSURE(checkSchemeTx());
         }
 
+        // Only modes that promise repeatable reads are aborted: the rest are documented to
+        // observe newer data between statements.
+        if (QueryState->TxCtx->EffectiveIsolationLevel
+                && GuaranteesRepeatableReads(*QueryState->TxCtx->EffectiveIsolationLevel)) {
+            const NKqpProto::TKqpTableInfo* changed = nullptr;
+
+            auto rememberOrCompare = [&](const auto& infos) {
+                for (const auto& info : infos) {
+                    if (!info.GetSchemaVersion()) {
+                        continue;
+                    }
+
+                    const TKqpTransactionContext::TSchemaIdentity identity{
+                        .PathId = NYql::TKikimrPathId(
+                            info.GetTableId().GetOwnerId(), info.GetTableId().GetTableId()),
+                        .SchemaVersion = info.GetSchemaVersion(),
+                    };
+
+                    const auto [it, inserted] =
+                        QueryState->TxCtx->SchemaObjects.emplace(info.GetTableName(), identity);
+                    if (!inserted && it->second != identity) {
+                        changed = &info;
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            // Views carry their own version and their own path, so a view redefined over an
+            // untouched table has to be caught here as well.
+            if (!rememberOrCompare(phyQuery.GetTableInfos()) || !rememberOrCompare(phyQuery.GetViewInfos())) {
+                std::vector<TIssue> issues{YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                    TStringBuilder() << "Scheme changed for '" << changed->GetTableName()
+                        << "' during transaction execution.")};
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "", MessageFromIssues(issues));
+                return false;
+            }
+        }
+
         const bool hasOlapWrite = ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
         const bool hasOltpWrite = ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
         const bool hasOlapRead = ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery);
@@ -1692,6 +1734,7 @@ public:
             }
 
             request.StatsMode = queryState->GetStatsMode();
+            request.CollectAffectedRows = queryState->GetCollectAffectedRows();
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
             request.QueryType = queryState->GetType();
             request.OutputChunkMaxSize = queryState->GetOutputChunkMaxSize();
@@ -1699,6 +1742,8 @@ public:
                 ui64 resultSetsCount = queryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize();
                 request.AllowTrailingResults = (resultSetsCount == 1 && queryState->Statements.size() <= 1);
                 request.AllowTrailingResults &= (QueryState->RequestEv->GetSupportsStreamTrailingResult());
+                request.DisablePessimisticLocks =
+                    queryState->PreparedQuery->GetPhysicalQuery().GetDisablePessimisticLocks();
             }
         }
 
@@ -4236,6 +4281,7 @@ private:
     std::shared_ptr<TKqpQueryState> QueryState;
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
     ui32 QueryId = 0;
+    ui64 LastAcceptedWmAdmissionQueryId = 0;
     TIntrusiveConstPtr<TKikimrConfiguration> Config;
     IDataProvider::TFillSettings FillSettings;
     TTransactionsCache Transactions;

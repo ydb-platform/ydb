@@ -33,6 +33,7 @@ SRCS(
     private_events.cpp
     replication.cpp
     resource_id_resolver.cpp
+    dst_schema_changer.cpp
     secret_resolver.cpp
     session_info.cpp
     stream_consumer_remover.cpp
@@ -59,10 +60,12 @@ SRCS(
     tx_drop_stream_result.cpp
     tx_heartbeat.cpp
     tx_init.cpp
+    tx_schema_change.cpp
     tx_init_schema.cpp
     tx_resolve_database_result.cpp
     tx_resolve_resource_id_result.cpp
     tx_resolve_secret_result.cpp
+    tx_run_worker.cpp
     tx_worker_error.cpp
 )
 
@@ -76,6 +79,7 @@ RECURSE_FOR_TESTS(
     ut_assign_tx_id
     ut_dst_creator
     ut_replication
+    ut_schema_change
     ut_stream_creator
     ut_target_discoverer
 )

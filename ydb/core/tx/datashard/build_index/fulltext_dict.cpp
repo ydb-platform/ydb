@@ -705,3 +705,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

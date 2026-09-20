@@ -10405,6 +10405,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "DomainLocalId",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "OperationId",
                 "ColumnType": "Uint64"
@@ -10478,12 +10483,18 @@
                 "ColumnId": 15,
                 "ColumnName": "CancellationReason",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "DomainOwnerId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -10498,7 +10509,8 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

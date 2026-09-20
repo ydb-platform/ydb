@@ -3,6 +3,9 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ../cpu_spec.cpp
+    bridge_host.cpp
+    bridge_node_table.cpp
+    bridge_resident.cpp
     compartment_manager.cpp
     call_stack.cpp
     host.cpp
@@ -26,11 +29,13 @@ CFLAGS(
 )
 
 PEERDIR(
+    ydb/public/lib/udf/manifest
     ydb/services/udf_store/wasm/abi
     ydb/library/wasm/api
     ydb/library/wasm/engine
     ydb/library/yql/dq/proto
     yql/essentials/public/udf
+    yql/essentials/ast
     yql/essentials/minikql
     library/cpp/json
     contrib/restricted/wavm_llvm16/Lib

@@ -247,7 +247,7 @@
 
 - Java
 
-    Создайте таблицу для документов и их векторных представлений. Используйте `SessionRetryContext` из раздела [Подключение к {{ ydb-short-name }}]({#connect-ydb}).
+    Создайте таблицу для документов и их векторных представлений. Используйте `SessionRetryContext` из раздела [Подключение к {{ ydb-short-name }}](#connect-ydb).
 
     ```java
     import tech.ydb.common.transaction.TxMode;

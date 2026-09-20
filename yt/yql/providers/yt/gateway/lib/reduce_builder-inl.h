@@ -44,6 +44,7 @@ void TReduceJobBuilder::SetReduceJobParams(
     reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
     reduceJob->SetLangVer(execCtx->Options_.LangVer());
     reduceJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
+    reduceJob->SetBridgeMode(execCtx->Options_.BridgeMode());
 }
 
 } // namespace NYql

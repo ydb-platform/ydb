@@ -1,0 +1,258 @@
+# Build wavm_llvm16 on Windows.
+#
+# - Lib/Platform/Windows is imported via copy_sources in .yandex_meta/__init__.py.
+# - Use GetSystemTimeAsFileTime for older Windows SDKs (CI).
+# - Make VectorOverMMap and deadline API portable (no POSIX mmap/clock_gettime).
+# - Lib/ya.make OS gating is handled by .yandex_meta/__init__.py post_install.
+#
+--- contrib/restricted/wavm_llvm16/Include/WAVM/Platform/VectorOverMMap.h	(index)
++++ contrib/restricted/wavm_llvm16/Include/WAVM/Platform/VectorOverMMap.h	(index)
+@@ -1,4 +1,5 @@
+-#include <sys/mman.h>
++#pragma once
++
+ #include <cstddef>
+ 
+ namespace WAVM { namespace Runtime {
+--- contrib/restricted/wavm_llvm16/Lib/Runtime/Intrinsics.cpp	(index)
++++ contrib/restricted/wavm_llvm16/Lib/Runtime/Intrinsics.cpp	(index)
+@@ -1,5 +1,7 @@
+ #include "WAVM/Runtime/Intrinsics.h"
++#include <ctime>
+ #include <initializer_list>
++#include <optional>
+ #include <string>
+ #include <utility>
+ #include <vector>
+@@ -12,8 +14,12 @@
+ #include "WAVM/Inline/Errors.h"
+ #include "WAVM/Inline/Hash.h"
+ #include "WAVM/Inline/HashMap.h"
++#include "WAVM/Inline/I128.h"
+ #include "WAVM/Inline/Serialization.h"
++#include "WAVM/Inline/Time.h"
+ #include "WAVM/Inline/Timing.h"
++#include "WAVM/Platform/Clock.h"
++#include "WAVM/Platform/Defines.h"
+ #include "WAVM/Platform/RWMutex.h"
+ #include "WAVM/Runtime/Runtime.h"
+ 
+@@ -258,11 +264,18 @@
+ 
+ namespace WAVM { namespace Runtime {
+ 
+-#ifdef __APPLE__
+-static constexpr auto WAVM_CLOCK_TYPE = _CLOCK_MONOTONIC_RAW;
+-#else
+-static constexpr auto WAVM_CLOCK_TYPE = CLOCK_MONOTONIC_COARSE;
+-#endif
++static timespec wavmTimeToTimespec(Time t)
++{
++	timespec result;
++	result.tv_sec = time_t(U64(t.ns / 1000000000));
++	result.tv_nsec = long(U64(t.ns % 1000000000));
++	return result;
++}
++
++static Time timespecToWavmTime(timespec t)
++{
++	return Time{I128(U64(t.tv_sec)) * 1000000000 + U64(t.tv_nsec)};
++}
+ 
+ class Deadline {
+ public:
+@@ -270,15 +283,9 @@
+ 		if (!deadline.has_value()) {
+ 			return false;
+ 		}
+-	
+-		struct timespec current = {};
+-		if (clock_gettime(WAVM_CLOCK_TYPE, &current) != 0) {
+-			// The simplest thing to do here is to assume that the deadline just hasn't arrived.
+-			return false;
+-		}
+-	
+-		return current.tv_sec > deadline->tv_sec ||
+-			(current.tv_sec == deadline->tv_sec && current.tv_nsec >= deadline->tv_nsec);
++
++		const Time current = Platform::getClockTime(Platform::Clock::monotonic);
++		return current.ns >= timespecToWavmTime(*deadline).ns;
+ 	}
+ 	
+ 	void setDeadline(std::optional<struct timespec> newDeadline) {
+@@ -291,21 +298,19 @@
+ 
+ static thread_local Deadline currentDeadline;
+ 
+-__attribute__((__noinline__)) void setCurrentDeadline(std::optional<struct timespec> deadline)
++WAVM_FORCENOINLINE void setCurrentDeadline(std::optional<struct timespec> deadline)
+ {
+ 	currentDeadline.setDeadline(deadline);
+ }
+ 
+-__attribute__((__noinline__)) bool isCurrentDeadlineReached()
++WAVM_FORCENOINLINE bool isCurrentDeadlineReached()
+ {
+ 	return currentDeadline.isDeadlineReached();
+ }
+ 
+ struct timespec getInstant()
+ {
+-	struct timespec current = {};
+-	WAVM_ASSERT(clock_gettime(WAVM_CLOCK_TYPE, &current) == 0);
+-	return current;
++	return wavmTimeToTimespec(Platform::getClockTime(Platform::Clock::monotonic));
+ }
+ 	
+ }}
+--- contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h	(index)
++++ contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h	(index)
+@@ -2,8 +2,10 @@
+ 
+ #include <atomic>
+ #include <cstddef>
++#include <ctime>
+ #include <functional>
+ #include <memory>
++#include <optional>
+ #include "WAVM/IR/Module.h"
+ #include "WAVM/Inline/BasicTypes.h"
+ #include "WAVM/Inline/DenseStaticIntSet.h"
+--- contrib/restricted/wavm_llvm16/Lib/Runtime/VectorOverMMap.cpp	(index)
++++ contrib/restricted/wavm_llvm16/Lib/Runtime/VectorOverMMap.cpp	(index)
+@@ -1,20 +1,30 @@
+ #include "WAVM/Platform/VectorOverMMap.h"
+ 
+-#include <limits.h>
+-#include <unistd.h>
+-
+ #include <algorithm>
+-#include <cerrno>
+ #include <cstddef>
+ #include <cstdint>
+ #include <cstdio>
+ #include <cstring>
++#include <cstdlib>
+ 
+-#include <iostream>
+ #include "WAVM/Inline/Assert.h"
++#include "WAVM/Inline/BasicTypes.h"
++#include "WAVM/Platform/Memory.h"
+ 
+ using namespace WAVM;
+ using namespace WAVM::Runtime;
++
++namespace {
++	constexpr size_t WasmPageSize = 65536;
++	constexpr size_t GuardPageCount = 2;
++
++	size_t hostPagesPerWasmPage()
++	{
++		const size_t hostPageSize = Platform::getBytesPerPage();
++		WAVM_ASSERT(WasmPageSize % hostPageSize == 0);
++		return WasmPageSize / hostPageSize;
++	}
++}
+ 
+ VectorOverMMap::VectorOverMMap()
+ : committedPageCount(0), capacityPageCount(2), data(allocateAndProtect(0, 2))
+@@ -23,8 +33,8 @@
+ 
+ VectorOverMMap::~VectorOverMMap()
+ {
+-	int err = ::munmap(data, (capacityPageCount + guardPageCount) * pageSize);
+-	if(err < 0) { checkForOOM("Failed to unmap VectorOverMMap; terminating"); }
++	const size_t hostPages = (capacityPageCount + GuardPageCount) * hostPagesPerWasmPage();
++	Platform::freeVirtualPages(static_cast<U8*>(data), hostPages);
+ }
+ 
+ void VectorOverMMap::grow(size_t morePages)
+@@ -35,16 +45,17 @@
+ 		return;
+ 	}
+ 
+-	int err = ::mprotect(static_cast<uint8_t*>(data) + (committedPageCount * pageSize),
+-						 morePages * pageSize,
+-						 PROT_READ | PROT_WRITE);
+-
+-	if(err < 0) { checkForOOM("Failed to protect VectorOverMMap; terminating"); }
++	if(!Platform::commitVirtualPages(
++		   static_cast<U8*>(data) + (committedPageCount * WasmPageSize),
++		   morePages * hostPagesPerWasmPage()))
++	{
++		checkForOOM("Failed to protect VectorOverMMap; terminating");
++	}
+ 
+ 	committedPageCount += morePages;
+ };
+ 
+-size_t VectorOverMMap::getNumReservedBytes() const { return committedPageCount * pageSize; }
++size_t VectorOverMMap::getNumReservedBytes() const { return committedPageCount * WasmPageSize; }
+ 
+ void* VectorOverMMap::getData() const { return data; }
+ 
+@@ -59,41 +70,37 @@
+ 	auto oldData = data;
+ 	auto newData = allocateAndProtect(newCommitted, newCapacity);
+ 
+-	::memcpy(newData, oldData, oldCommitted * pageSize);
++	::memcpy(newData, oldData, oldCommitted * WasmPageSize);
+ 
+ 	committedPageCount = newCommitted;
+ 	capacityPageCount = newCapacity;
+ 	data = newData;
+ 
+-	int err = ::munmap(oldData, (oldCapacity + guardPageCount) * pageSize);
+-	if(err < 0) { checkForOOM("Failed to unmap VectorOverMMap; terminating"); }
++	const size_t hostPages = (oldCapacity + GuardPageCount) * hostPagesPerWasmPage();
++	Platform::freeVirtualPages(static_cast<U8*>(oldData), hostPages);
+ }
+ 
+ void* VectorOverMMap::allocateAndProtect(size_t committed, size_t capacity)
+ {
+ 	WAVM_ASSERT(committed <= capacity);
+ 
+-	auto allocated
+-		= ::mmap(nullptr, (capacity + guardPageCount) * pageSize, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
++	const size_t hostPages = (capacity + GuardPageCount) * hostPagesPerWasmPage();
++	auto allocated = Platform::allocateVirtualPages(hostPages);
+ 
+ 	if(!allocated) { checkForOOM("Failed to allocate VectorOverMMap; terminating"); }
+ 
+-	int err = ::mprotect(allocated, committed * pageSize, PROT_READ | PROT_WRITE);
+-
+-	if(err < 0) { checkForOOM("Failed to protect VectorOverMMap; terminating"); }
++	if(committed > 0
++	   && !Platform::commitVirtualPages(allocated, committed * hostPagesPerWasmPage()))
++	{
++		Platform::freeVirtualPages(allocated, hostPages);
++		checkForOOM("Failed to protect VectorOverMMap; terminating");
++	}
+ 
+ 	return allocated;
+ }
+ 
+ void VectorOverMMap::checkForOOM(const char* message)
+ {
+-	if(errno == ENOMEM)
+-	{
+-		fprintf(stderr,
+-				"Out-of-memory condition detected while allocating VectorOverMMap; terminating\n");
+-		_exit(9);
+-	}
+-
+ 	fprintf(stderr, "%s\n", message);
+-	_exit(9);
++	std::_Exit(9);
+ }
+--- contrib/restricted/wavm_llvm16/Lib/Platform/Windows/ClockWindows.cpp	(index)
++++ contrib/restricted/wavm_llvm16/Lib/Platform/Windows/ClockWindows.cpp	(index)
+@@ -77,7 +77,7 @@ Time Platform::getClockTime(Clock clock)
+ 	{
+ 	case Clock::realtime: {
+ 		FILETIME realtimeClock;
+-		GetSystemTimePreciseAsFileTime(&realtimeClock);
++		GetSystemTimeAsFileTime(&realtimeClock);
+ 
+ 		return Time{fileTimeToWAVMRealTime(realtimeClock)};
+ 	}

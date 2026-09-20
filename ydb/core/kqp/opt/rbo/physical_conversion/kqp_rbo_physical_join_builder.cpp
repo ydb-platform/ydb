@@ -481,6 +481,15 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 
     if (!Join->JoinFilters.empty() && joinAlgo == NKikimr::NKqp::EJoinAlgoType::MapJoin) {
         Y_ENSURE(useBlockHashJoin, "Join filters are supported only with BlockHashJoin.");
+    }
+
+    if (joinAlgo == NKikimr::NKqp::EJoinAlgoType::MapJoin && useBlockHashJoin) {
+        joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
+    }
+
+    if (joinAlgo != NKikimr::NKqp::EJoinAlgoType::MapJoin && joinAlgo != NKikimr::NKqp::EJoinAlgoType::GraceJoin &&
+        joinAlgo != NKikimr::NKqp::EJoinAlgoType::ReverseBlockJoin) {
+        YQL_CLOG(DEBUG, CoreDq) << "Join algo " << static_cast<int>(joinAlgo) << " has no physical implementation here taking GraceJoin";
         joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
     }
 

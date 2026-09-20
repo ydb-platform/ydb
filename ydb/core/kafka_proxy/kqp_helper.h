@@ -15,7 +15,7 @@ class TKqpTxHelper {
 public:
     TKqpTxHelper(TString database);
     // kqp actor id can be changed for testing purposes
-    void SendCreateSessionRequest(const TActorContext& ctx);
+    void SendCreateSessionRequest(const TActorContext& ctx, ui64 cookie = 0);
     void BeginTransaction(ui64 cookie, const TActorContext& ctx);
     bool HandleCreateSessionResponse(TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
     void CloseKqpSession(const TActorContext& ctx);

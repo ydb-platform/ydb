@@ -1,9 +1,5 @@
 #include "yqlrun_lib.h"
 
-#ifndef DONT_ADD_SPARK
-#include <yql/spark/tools/tool_lib/tool_lib.h>
-#endif
-
 #include <yt/yql/providers/yt/provider/yql_yt_provider_impl.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
@@ -97,19 +93,14 @@ TYqlRunTool::TYqlRunTool()
                 });
             });
         opts.AddLongOption("tmp-dir", "Directory for temporary tables").RequiredArgument("DIR").StoreResult(&TmpDir_);
-#ifndef DONT_ADD_SPARK
-        NSparkTool::AddSparkOptions(opts, SparkSettings_);
-#endif
+        InitSparkSettings(SparkSettings_);
+        AddSparkOptions(opts, SparkSettings_, /*withSyntax=*/true);
     });
 
     GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
         Y_UNUSED(res);
-
-#ifndef DONT_ADD_SPARK
-        NSparkTool::ValidateSparkSettings(SparkSettings_);
-        NSparkTool::ApplySparkSettings(GetRunOptions(), SparkSettings_);
-#endif
-
+        ValidateSparkSettings(SparkSettings_);
+        ApplySparkSettings(GetRunOptions(), SparkSettings_);
         if (GetRunOptions().GatewaysConfig) {
             auto ytConfig = GetRunOptions().GatewaysConfig->GetYt();
             FillClusterMapping(ytConfig, TString{YtProviderName});
@@ -131,9 +122,7 @@ TYqlRunTool::TYqlRunTool()
 
 int TYqlRunTool::DoRun(TProgramFactory& factory) {
     NSQLTranslation::TTranslatorsRegistry translatorsRegistry;
-#ifndef DONT_ADD_SPARK
-    NSparkTool::AddSparkTranslator(translatorsRegistry, SparkSettings_);
-#endif
+    AddSparkTranslator(translatorsRegistry, SparkSettings_);
     factory.SetTranslatorsRegistry(std::move(translatorsRegistry));
     return TFacadeRunner::DoRun(factory);
 }

@@ -3,9 +3,8 @@
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/tools/yql_facade_run/yql_facade_run.h>
-#ifndef DONT_ADD_SPARK
-#include <yql/spark/tools/tool_lib/tool_lib.h>
-#endif
+
+#include "yqlrun_lib_spark.h"
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
@@ -27,9 +26,7 @@ private:
     THashMap<TString, TString> TablesDirMapping_;
     bool KeepTemp_ = false;
     TString TmpDir_;
-#ifndef DONT_ADD_SPARK
-    NSparkTool::TSparkSettings SparkSettings_;
-#endif
+    std::shared_ptr<NSparkTool::TSparkSettings> SparkSettings_;
 };
 
 } // NYql

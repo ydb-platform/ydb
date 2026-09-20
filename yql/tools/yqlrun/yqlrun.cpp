@@ -1,5 +1,6 @@
 #include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/tools/yqlrun/lib/yqlrun_lib.h>
+#include <yql/tools/yqlrun/lib/yqlrun_lib_spark.h>
 #include <yql/tools/yqlrun/http/yql_server.h>
 
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
@@ -30,10 +31,6 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
-
-#ifndef DONT_ADD_SPARK
-#include <yql/spark/tools/tool_lib/tool_lib.h>
-#endif
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/logger/stream.h>
@@ -133,9 +130,7 @@ int RunUI(int argc, const char* argv[])
     TString gatewaysCfgFile;
     TString fsCfgFile;
     TString pgExtConfig;
-#ifndef DONT_ADD_SPARK
-    NSparkTool::TSparkSettings sparkSettings;
-#endif
+    std::shared_ptr<NSparkTool::TSparkSettings> sparkSettings;
 
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = YtProviderName;
@@ -157,19 +152,15 @@ int RunUI(int argc, const char* argv[])
     opts.AddLongOption("fs-cfg", "fs configuration file").Optional().RequiredArgument("FILE").StoreResult(&fsCfgFile);
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
     opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&sqlFlags, ',');
-#ifndef DONT_ADD_SPARK
-    opts.AddLongOption("spark-parser-path", "Path to Spark SQL parser").StoreResult(&sparkSettings.ParserPath);
-    opts.AddLongOption("spark-parser-port", "Spark SQL parser port").StoreResult(&sparkSettings.ParserPort);
-#endif
+    InitSparkSettings(sparkSettings);
+    AddSparkOptions(opts, sparkSettings, /*withSyntax=*/false);
 
     TServerConfig config;
     config.SetAssetsPath("http/www");
     config.InitCliOptions(opts);
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
     config.ParseFromCli(res);
-#ifndef DONT_ADD_SPARK
-    NSparkTool::ValidateSparkSettings(sparkSettings);
-#endif
+    ValidateSparkSettings(sparkSettings);
 
     TUserDataTable userData;
     for (auto& s : filesMappingList) {
@@ -300,9 +291,7 @@ int RunUI(int argc, const char* argv[])
     NLog::YqlLogger().SetComponentLevel(NLog::EComponent::CorePeepHole, NLog::ELevel::DEBUG);
 
     NSQLTranslation::TTranslatorsRegistry translatorsRegistry;
-#ifndef DONT_ADD_SPARK
-    NSparkTool::AddSparkTranslator(translatorsRegistry, sparkSettings);
-#endif
+    AddSparkTranslator(translatorsRegistry, sparkSettings);
 
     auto server = CreateYqlServer(config,
                 funcRegistry.Get(), udfIndex, ctx.NextUniqueId,

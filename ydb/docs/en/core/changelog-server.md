@@ -14,7 +14,7 @@ Release date: TBD.
 * Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
 * Column-oriented tables use an updated compaction strategy to organize data more efficiently.
 * Bulk authorization requests to AccessService are enabled by default, reducing authorization request overhead.
-* Streaming YQL queries can access system virtual attributes such as __ydb_create_time, __ydb_write_time, and others, as well as user attributes __ydb_user_attributes. [Feature documentation](./concepts/query_execution/topics.md?version=v26.3#system-metadata).
+* Streaming YQL queries can access system virtual attributes such as `__ydb_create_time`, `__ydb_write_time`, and others, as well as user attributes `__ydb_user_attributes`. [Feature documentation](./concepts/query_execution/topics.md?version=v26.3#system-metadata).
 * Full VDisk synchronization is faster because processed SyncLog data is removed locally by default.
 * Added transfer metrics and statistics to `DescribeTransfer` for monitoring and diagnostics.
 * Added a configurable limit for stored forced-compaction operations. Completed and cancelled operations can be removed automatically when the limit is reached.

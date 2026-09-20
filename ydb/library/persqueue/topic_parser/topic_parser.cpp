@@ -1,6 +1,7 @@
 #include "topic_parser.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/folder/path.h>
@@ -151,62 +152,6 @@ TDiscoveryConverterPtr TDiscoveryConverter::ForFederation(
     return NPersQueue::TDiscoveryConverterPtr(res);
 }
 
-TDiscoveryConverter::TDiscoveryConverter(bool firstClass,
-                                         const TString& pqNormalizedPrefix,
-                                         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
-                                         const TString& ydbDatabaseRootOverride
-)
-    : PQPrefix(pqNormalizedPrefix)
-{
-    auto name = pqTabletConfig.GetTopicName();
-    auto path = pqTabletConfig.GetTopicPath();
-    if (name.empty()) {
-        AFL_ENSURE(!path.empty())("topic_path", path)("topic_name", name);
-        TStringBuf pathBuf(path), fst, snd;
-        auto res = pathBuf.TryRSplit("/", fst, snd);
-        AFL_ENSURE(res)("topic_path", path);
-        name = snd;
-    } else if (path.empty()) {
-        path = name;
-    }
-    if (!ydbDatabaseRootOverride.empty()) {
-        TStringBuf pathBuf(path);
-        TStringBuf dbRoot(ydbDatabaseRootOverride);
-        auto res_ = pathBuf.SkipPrefix(dbRoot);
-        if (res_) {
-            dbRoot.SkipPrefix("/");
-            res_ = pathBuf.SkipPrefix("/");
-            TStringBuf acc, rest;
-            res_ = pathBuf.TrySplit("/", acc, rest);
-            if (res_) {
-            Database = NKikimr::JoinPath({TString(dbRoot), TString(acc)});
-            } else {
-                Database = TString(dbRoot);
-            }
-        }
-    }
-    if (!Database.Defined()) {
-        TStringBuf dbPath = pqTabletConfig.GetYdbDatabasePath();
-        dbPath.SkipPrefix("/");
-        dbPath.ChopSuffix("/");
-        Database = dbPath;
-    }
-    FstClass = firstClass;
-    Dc = pqTabletConfig.GetDC();
-    auto& acc = pqTabletConfig.GetFederationAccount();
-    if (!acc.empty()) {
-        Account_ = acc;
-    }
-    if (FstClass) {
-        // No legacy names required;
-        OriginalTopic = pqTabletConfig.GetTopicPath();
-        BuildFstClassNames();
-        return;
-    } else {
-        BuildForFederation(*Database, path);
-    }
-}
-
 void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStringBuf topicPath
                                              //, const TVector<TString>& rootDatabases
 ) {
@@ -292,7 +237,7 @@ TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
 }
 
 TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
-        const NKikimr::NPQ::NNameResolver::TTopicNames::TPtr& names,
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& names,
         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
         const TString& ydbDatabaseRootOverride,
         const TMaybe<TString>& clientsideNameOverride

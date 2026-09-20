@@ -7,7 +7,7 @@
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver_fwd.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 #include <ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public/topic_parser.h>
@@ -70,10 +70,6 @@ protected:
     static TDiscoveryConverterPtr ForFederation(const TString& topic, const TString& dc, const TString& localDc,
                                                 const TString& database, const TString& pqNormalizedPrefix);
 
-
-    TDiscoveryConverter(bool firstClass, const TString& pqNormalizedPrefix,
-                        const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& ydbDatabaseRootOverride);
-
     [[nodiscard]] bool BuildFromLegacyName(const TString& rootPrefix, bool forceFullname = false);
     [[nodiscard]] bool TryParseModernMirroredPath(TStringBuf path);
     [[nodiscard]] bool ParseModernPath(const TStringBuf& path);
@@ -90,7 +86,7 @@ public:
     // Falls back to tablet config only if names is null.
     // Uses names.FirstClassCitizen so FCC names are not mixed with a federation discovery converter.
     TTopicConverterPtr UpgradeToFullConverter(
-        const NKikimr::NPQ::NNameResolver::TTopicNames::TPtr& names,
+        const NKikimr::NPQ::NNameResolver::TTopicNamesPtr& names,
         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
         const TString& ydbDatabaseRootOverride,
         const TMaybe<TString>& clientsideNameOverride = {});

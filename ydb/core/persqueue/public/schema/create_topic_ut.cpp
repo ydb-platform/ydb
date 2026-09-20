@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 

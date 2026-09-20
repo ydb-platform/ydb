@@ -4,7 +4,7 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver_fwd.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -247,7 +247,7 @@ struct TSchemeCacheNavigate {
         std::shared_ptr<NPQ::IPartitionChooser> PartitionChooser;
         std::shared_ptr<NPQ::TPartitionGraph> PartitionGraph;
         // Object-level names: NamesFromConfig(scheme path, PQTabletConfig, node PQConfig).
-        NPQ::NNameResolver::TTopicNames::TPtr Names;
+        NPQ::NNameResolver::TTopicNamesPtr Names;
     };
 
     struct TRtmrVolumeInfo : public TAtomicRefCount<TRtmrVolumeInfo> {

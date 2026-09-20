@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 

@@ -1,12 +1,13 @@
 #pragma once
 
+#include "nameresolver_fwd.h"
+
 #include <ydb/core/protos/pqconfig.pb.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 
 #include <expected>
-#include <memory>
 #include <optional>
 
 namespace NKikimr::NPQ::NNameResolver {
@@ -92,7 +93,7 @@ std::optional<TFederationAccountTarget> TryFederationAccountTarget(
 
 /**
  * All names derived from a tablet config.
- * Value type; pass TTopicNames::TPtr where a shared handle is needed.
+ * Value type; pass TTopicNamesPtr where a shared handle is needed.
  *
  * Field comments use two federation topics and one FCC topic:
  *   Fed:     "/Root/PQ/rt3.dc1--account--topic"
@@ -100,7 +101,7 @@ std::optional<TFederationAccountTarget> TryFederationAccountTarget(
  *   FCC:     "/lb/database/my-stream"
  */
 struct TTopicNames {
-    using TPtr = std::shared_ptr<const TTopicNames>;
+    using TPtr = TTopicNamesPtr;
 
     // False if parsing failed; then only Reason is meaningful.
     bool Valid = false;

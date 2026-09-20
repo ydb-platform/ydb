@@ -112,15 +112,6 @@ The implementation of distributed transactions is covered in a separate article 
 
 An **implicit transaction** is the query execution mode used when the [transaction mode](transactions.md#modes) is not specified. {{ ydb-short-name }} automatically determines the behavior for each statement — whether to wrap it in a transaction or execute it outside one. This mode is described in more detail in [{#T}](transactions.md#implicit).
 
-### Interactive transactions {#interactive-transaction}
-
-The term **interactive transactions** refers to transactions that are split into multiple queries and involve data processing by an application between these queries. For example:
-
-1. Select some data.
-1. Process the selected data in the application.
-1. Update some data in the database.
-1. Commit the transaction in a separate query.
-
 ### Sessions
 
 Logical connections to the database that store the context needed for executing queries and managing transactions. Sessions are described in more detail in the section [{#T}](query_execution/index.md#sessions).
@@ -134,6 +125,10 @@ If the client-side timeout is shorter than the query execution time on the {{ yd
 ### Implicit transactions {#implicit-transactions}
 
 **Implicit transaction** is a query execution mode in which the [transaction mode](transactions.md#modes) is not specified. In this case, {{ ydb-short-name }} independently determines whether to wrap them in a transaction. This mode is described in more detail in [{#T}](transactions.md#implicit).
+
+### Interactive transactions {#interactive-transaction}
+
+An **interactive transaction** is a transaction in which multiple queries are executed, with application logic potentially running between them. It allows the program to send multiple queries and make decisions about the further course of the transaction based on the data received. Such a transaction can explicitly begin with a separate step (or open together with the first query) and complete separately. Unlike a single query that is executed and committed atomically, an interactive transaction enables building complex workflows in which multiple related operations are treated as a single atomic unit. At the same time, it incurs overhead on the system, as it requires holding [optimistic locks](#optimistic-locking) and uncommitted changes for longer, and also increases the complexity of the application-side code.
 
 ### Multi-version concurrency control {#mvcc}
 

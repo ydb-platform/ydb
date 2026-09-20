@@ -40,12 +40,15 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     TVector<TExpression> pushRight;
     TVector<TExpression> remainingFilters;
 
-    const bool canPushRight = join->JoinKind == "Inner" || join->JoinKind == "Cross";
+    // A join filter comes from the ON clause, so we can follow it semantics.
+    const bool canPushRight = join->JoinKind == "Inner" || join->JoinKind == "Cross" || join->JoinKind == "Left" ||
+                              join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly";
+    const bool canPushLeft = join->JoinKind == "Inner" || join->JoinKind == "Cross" || join->JoinKind == "LeftSemi";
 
     for (const auto& filter : join->JoinFilters) {
-        if (IUSetDiff(filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), leftIUs).empty()) {
+        if (canPushLeft && IUSetDiff(filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), leftIUs).empty()) {
             pushLeft.push_back(filter);
-        } else if (IUSetDiff(filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), rightIUs).empty() && canPushRight) {
+        } else if (canPushRight && IUSetDiff(filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), rightIUs).empty()) {
             pushRight.push_back(filter);
         } else {
             remainingFilters.push_back(filter);

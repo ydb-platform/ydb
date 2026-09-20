@@ -5416,6 +5416,101 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST(JoinFiltersOnClauseOuterJoins) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto tableSession = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows1;
+        rows1.BeginList();
+        for (size_t i = 0; i < 4; ++i) {
+            rows1.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows1.EndList();
+        auto resultUpsert = db.BulkUpsert("/Root/t1", rows1.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows2;
+        rows2.BeginList();
+        for (size_t i = 0; i < 3; ++i) {
+            rows2.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows2.EndList();
+        resultUpsert = db.BulkUpsert("/Root/t2", rows2.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+        std::vector<std::pair<std::string, std::string>> cases = {
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b, t2.a, t2.b FROM `/Root/t1` AS t1
+                LEFT JOIN `/Root/t2` AS t2 ON t1.a = t2.a AND t1.b > 2 ORDER BY t1.a, t2.a;
+            )", R"([[0;[1];#;#];[1;[2];#;#];[2;[3];[2];[3]];[3;[4];#;#]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b, t2.a, t2.b FROM `/Root/t1` AS t1
+                LEFT JOIN `/Root/t2` AS t2 ON t1.a = t2.a AND t2.b > 2 ORDER BY t1.a, t2.a;
+            )", R"([[0;[1];#;#];[1;[2];#;#];[2;[3];[2];[3]];[3;[4];#;#]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t1.b > 2) ORDER BY t1.a;
+            )", R"([[2;[3]]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t2.b > 2) ORDER BY t1.a;
+            )", R"([[2;[3]]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t1.b > 2) ORDER BY t1.a;
+            )", R"([[0;[1]];[1;[2]];[3;[4]]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t2.b > 2) ORDER BY t1.a;
+            )", R"([[0;[1]];[1;[2]];[3;[4]]])"},
+        };
+
+        for (ui32 i = 0; i < cases.size(); ++i) {
+            const auto& [query, expected] = cases[i];
+            auto result = session.ExecuteQuery(TString(query), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "case " << i << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, "case " << i);
+        }
+    }
+
     Y_UNIT_TEST(JoinFiltersAdvanced) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

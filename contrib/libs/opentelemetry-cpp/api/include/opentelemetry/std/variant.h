@@ -33,7 +33,7 @@ using monostate = std::monostate;
 // Apple Platforms provide std::bad_variant_access only in newer versions of OS.
 // To keep API compatible with any version of OS - we are providing our own
 // implementation of nostd::bad_variant_access exception.
-#  if __EXCEPTIONS
+#  if OPENTELEMETRY_HAVE_EXCEPTIONS
 
 // nostd::bad_variant_access
 class bad_variant_access : public std::exception
@@ -48,7 +48,7 @@ public:
 }
 #  endif
 
-#  if __EXCEPTIONS
+#  if OPENTELEMETRY_HAVE_EXCEPTIONS
 #    define THROW_BAD_VARIANT_ACCESS throw_bad_variant_access()
 #  else
 #    define THROW_BAD_VARIANT_ACCESS std::terminate()

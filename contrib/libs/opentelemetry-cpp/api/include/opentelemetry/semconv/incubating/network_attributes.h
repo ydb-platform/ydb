@@ -64,7 +64,9 @@ static constexpr const char *kNetworkConnectionType = "network.connection.type";
 static constexpr const char *kNetworkInterfaceName = "network.interface.name";
 
 /**
-  The network IO operation direction.
+  The direction of traffic from the perspective of the observing host's physical or virtual network
+  interface. It should not be used to represent the logical direction of a stateful connection or
+  network flow.
  */
 static constexpr const char *kNetworkIoDirection = "network.io.direction";
 

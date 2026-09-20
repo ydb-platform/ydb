@@ -26,11 +26,13 @@ SRCS(
     query_builder_ut.cpp
     queue_static_export_config_ut.cpp
     read_limit_ut.cpp
+    replication_card_serialization_ut.cpp
     replication_card_ut.cpp
     replication_progress_ut.cpp
     row_ut.cpp
     schema_ut.cpp
     table_consumer_ut.cpp
+    table_mount_cache_ut.cpp
     unordered_reader_ut.cpp
     unversioned_row_ut.cpp
     validate_logical_type_ut.cpp
@@ -41,6 +43,8 @@ SRCS(
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
+    library/cpp/type_info/tz
+
     yt/yt/build
     yt/yt/core/test_framework
     yt/yt/core

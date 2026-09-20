@@ -5,24 +5,16 @@
 namespace NKikimr::NPQ {
 
 struct TPartitionInfo {
-    TPartitionInfo(const TActorId& actor,
-                   TMaybe<TPartitionKeyRange>&& keyRange)
+    explicit TPartitionInfo(const TActorId& actor)
         : Actor(actor)
-        , KeyRange(std::move(keyRange))
         , InitDone(false)
     {
     }
 
-    TPartitionInfo(const TPartitionInfo& info)
-        : Actor(info.Actor)
-        , KeyRange(info.KeyRange)
-        , InitDone(info.InitDone)
-        , PendingRequests(info.PendingRequests)
-    {
-    }
+    TPartitionInfo(const TPartitionInfo& info) = delete;
+    TPartitionInfo(TPartitionInfo&& info) = default;
 
     TActorId Actor;
-    TMaybe<TPartitionKeyRange> KeyRange;
     bool InitDone;
     THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
     size_t ReservedBytes = 0;

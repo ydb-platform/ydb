@@ -7,8 +7,10 @@ repo for information on this and other language SIGs.
 See the [public meeting
 notes](https://docs.google.com/document/d/1i1E4-_y4uJ083lCutKGDhkpi3n4_e774SBLi9hPLocw/edit)
 for a summary description of past meetings. To request edit access, join the
-meeting or get in touch on
-[Slack](https://cloud-native.slack.com/archives/C01N3AT62SJ).
+meeting or get in touch on the
+[#otel-cpp](https://cloud-native.slack.com/archives/C01N3AT62SJ)
+channel on CNCF Slack. If you are new to the CNCF Slack community,
+you can [create an account](https://slack.cncf.io/).
 
 See the [community membership
 document](https://github.com/open-telemetry/community/blob/main/community-membership.md)
@@ -126,6 +128,22 @@ bash ci/do_ci.sh cmake.exporter.otprotocol.test
 
 This command initiates the CI pipeline, executing tests specifically for the
 **cmake.exporter.otprotocol** module.
+
+To reproduce CI's `include-what-you-use` warnings locally, run from inside
+the dev container (where IWYU is preinstalled):
+
+```bash
+OTELCPP_CMAKE_CACHE_FILE=all-options-abiv1-preview.cmake \
+  bash ci/do_ci.sh cmake.iwyu.test
+```
+
+The target defaults to `clang-22`/`clang++-22` to match the LLVM version
+the dev container's IWYU was built against. Export `CC`/`CXX` to override
+if you need a different compiler.
+
+Set `OTELCPP_CMAKE_CACHE_FILE` to any of `all-options-abiv1.cmake`,
+`all-options-abiv1-preview.cmake`, or `all-options-abiv2-preview.cmake`
+to match each CI matrix entry.
 
 #### Troubleshooting
 

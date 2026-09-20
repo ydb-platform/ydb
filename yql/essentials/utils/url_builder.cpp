@@ -25,7 +25,7 @@ TUrlBuilder& TUrlBuilder::AddPathComponent(const TString& value) {
     if (!MainUri_.EndsWith('/')) {
         res << '/';
     }
-    res << UrlEscapeRet(value, true);
+    res << UrlEscapeRet(value, /*forceEscape=*/true);
 
     MainUri_ = std::move(res);
     return *this;

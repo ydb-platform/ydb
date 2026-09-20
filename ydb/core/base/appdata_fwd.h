@@ -54,15 +54,18 @@ namespace NKikimrStream {
 
 namespace NKikimrConfig {
     class TAppConfig;
+    class TStateStorageConfig;
     class TStreamingConfig;
     class TMeteringConfig;
     class TSqsConfig;
     class TKafkaProxyConfig;
+    class THttpProxyConfig;
     class TAuthConfig;
 
     class THiveConfig;
     class TDataShardConfig;
     class TColumnShardConfig;
+    class TSmallBlobsQuotaConfig;
     class TSchemeShardConfig;
     class TMeteringConfig;
     class TAuditConfig;
@@ -182,6 +185,11 @@ namespace NAudit {
     class TAuditConfig;
 }
 
+namespace NKqp::NScheduler {
+    class TComputeScheduler;
+    using TComputeSchedulerPtr = std::shared_ptr<TComputeScheduler>; // TODO: duplicates forward declaration
+}
+
 struct TAppData {
     static const ui32 MagicTag = 0x2991AAF8;
     const ui32 Magic;
@@ -243,6 +251,7 @@ struct TAppData {
     NKikimrPQ::TPQConfig& PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig& PQClusterDiscoveryConfig;
     NKikimrConfig::TKafkaProxyConfig& KafkaProxyConfig;
+    NKikimrConfig::THttpProxyConfig& HttpProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig& NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig& NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig& SqsConfig;
@@ -253,6 +262,7 @@ struct TAppData {
     NKikimrConfig::THiveConfig& HiveConfig;
     NKikimrConfig::TDataShardConfig& DataShardConfig;
     NKikimrConfig::TColumnShardConfig& ColumnShardConfig;
+    NKikimrConfig::TSmallBlobsQuotaConfig& SmallBlobsQuotaConfig;
     NKikimrConfig::TSchemeShardConfig& SchemeShardConfig;
     NKikimrConfig::TMeteringConfig& MeteringConfig;
     NKikimr::NAudit::TAuditConfig& AuditConfig;
@@ -282,6 +292,7 @@ struct TAppData {
     NKikimrConfig::TLongTxServiceConfig& LongTxServiceConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
+    bool AlwaysSetSystemOwner = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;
     bool AllowShadowDataInSchemeShardForTests = false;
@@ -335,6 +346,8 @@ struct TAppData {
 
     // Immutable snapshot registry for fast snapshot queries
     TIntrusivePtr<IImmutableSnapshotRegistryHolder> SnapshotRegistryHolder;
+
+    NKqp::NScheduler::TComputeSchedulerPtr KqpComputeScheduler;
 
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,

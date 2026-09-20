@@ -12,6 +12,7 @@ SRCDIR(contrib/libs/tcmalloc/tcmalloc)
 
 PEERDIR(
     contrib/libs/tcmalloc/tcmalloc/internal
+    contrib/libs/tcmalloc/internal_utils
     contrib/restricted/abseil-cpp
     contrib/libs/protobuf
 )

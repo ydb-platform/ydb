@@ -8,10 +8,13 @@
 #include "journal_reader.h"
 #include "journal_writer.h"
 #include "private.h"
+#include "request_annotations.h"
+#include "request_info.h"
 #include "table_reader.h"
 #include "table_writer.h"
 #include "transaction.h"
 
+#include <yt/yt/client/api/distributed_file_session.h>
 #include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/file_reader.h>
 #include <yt/yt/client/api/file_writer.h>
@@ -20,8 +23,6 @@
 #include <yt/yt/client/api/rowset.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
-
-#include <yt/yt/client/rpc/request_info.h>
 
 #include <yt/yt/client/signature/signature.h>
 
@@ -57,14 +58,14 @@ using namespace NYPath;
 using namespace NYTree;
 using namespace NYson;
 
-using NYT::ToProto;
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr i64 MaxTracingTagLength = 1'000;
 constexpr i64 MinQueryTailPartSize = 100;
-static const TString DisabledSelectQueryTracingTag = "Tag is disabled, look for enable_select_query_tracing_tag parameter";
+static const std::string DisabledSelectQueryTracingTag = "Tag is disabled, look for enable_select_query_tracing_tag parameter";
 
 std::string SanitizeTracingTag(TStringBuf originalTag)
 {
@@ -191,8 +192,10 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
         ToProto(req->mutable_attributes(), *options.Attributes);
     }
     if (options.StartTimestamp != NullTimestamp) {
-        req->set_start_timestamp(options.StartTimestamp);
+        req->set_start_timestamp(ToProto(options.StartTimestamp));
     }
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().Apply(BIND(
         [
@@ -230,7 +233,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
                 pingPeriod,
                 std::move(stickyParameters),
                 rsp->sequence_number_source_id(),
-                "Transaction started");
+                "Started");
         }));
 }
 
@@ -252,6 +255,8 @@ TFuture<bool> TClientBase::NodeExists(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_master_read_options(), options);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspExistsNodePtr& rsp) {
         return rsp->exists();
@@ -289,6 +294,8 @@ TFuture<TYsonString> TClientBase::GetNode(
         ToProto(req->mutable_options(), *options.Options);
     }
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetNodePtr& rsp) {
         return TYsonString(rsp->value());
     }));
@@ -322,6 +329,8 @@ TFuture<TYsonString> TClientBase::ListNode(
     ToProto(req->mutable_master_read_options(), options);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListNodePtr& rsp) {
         return TYsonString(rsp->value());
     }));
@@ -353,6 +362,8 @@ TFuture<NCypressClient::TNodeId> TClientBase::CreateNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateNodePtr& rsp) {
         return FromProto<NCypressClient::TNodeId>(rsp->node_id());
     }));
@@ -376,6 +387,8 @@ TFuture<void> TClientBase::RemoveNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -398,6 +411,8 @@ TFuture<void> TClientBase::SetNode(
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -428,6 +443,8 @@ TFuture<void> TClientBase::MultisetAttributesNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().As<void>();
 }
 
@@ -452,6 +469,8 @@ TFuture<TLockNodeResult> TClientBase::LockNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspLockNodePtr& rsp) {
         TLockNodeResult result;
         FromProto(&result.NodeId, rsp->node_id());
@@ -475,6 +494,8 @@ TFuture<void> TClientBase::UnlockNode(
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -511,6 +532,8 @@ TFuture<NCypressClient::TNodeId> TClientBase::CopyNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCopyNodePtr& rsp) {
         return FromProto<NCypressClient::TNodeId>(rsp->node_id());
     }));
@@ -546,6 +569,8 @@ TFuture<NCypressClient::TNodeId> TClientBase::MoveNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspMoveNodePtr& rsp) {
         return FromProto<NCypressClient::TNodeId>(rsp->node_id());
     }));
@@ -577,6 +602,8 @@ TFuture<NCypressClient::TNodeId> TClientBase::LinkNode(
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspLinkNodePtr& rsp) {
         return FromProto<NCypressClient::TNodeId>(rsp->node_id());
     }));
@@ -598,6 +625,8 @@ TFuture<void> TClientBase::ConcatenateNodes(
     // TODO(babenko)
     // ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke().As<void>();
 }
@@ -648,6 +677,8 @@ TFuture<NObjectClient::TObjectId> TClientBase::CreateObject(
         ToProto(req->mutable_attributes(), *options.Attributes);
     }
 
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateObjectPtr& rsp) {
         return FromProto<NObjectClient::TObjectId>(rsp->object_id());
     }));
@@ -674,6 +705,8 @@ TFuture<IFileReaderPtr> TClientBase::CreateFileReader(
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
+    AnnotateReadFileRequestInfo(req, *req);
+
     return NRpcProxy::CreateFileReader(std::move(req));
 }
 
@@ -694,6 +727,8 @@ IFileWriterPtr TClientBase::CreateFileWriter(
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
+
+    AnnotateWriteFileRequestInfo(req, path, *req);
 
     return NRpcProxy::CreateFileWriter(std::move(req));
 }
@@ -760,10 +795,7 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
 
     FillRequest(req.Get(), path, /*format*/ std::nullopt, options);
 
-    SetReadTableRequestInfo(
-        req,
-        path,
-        *req);
+    AnnotateReadTableRequestInfo(req, path, *req);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -786,6 +818,8 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
     }
 
     ToProto(req->mutable_transactional_options(), options);
+
+    AnnotateWriteTableRequestInfo(req, path);
 
     auto schema = New<TTableSchema>();
     return NRpc::CreateRpcClientOutputStream(
@@ -816,6 +850,10 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
     auto req = proxy.StartDistributedWriteSession();
     FillRequest(req.Get(), path, options);
 
+    AnnotateStartDistributedWriteSessionRequestInfo(req, path);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke()
         .AsUnique().Apply(BIND([] (TRsp&& result) -> TDistributedWriteSessionWithCookies {
             std::vector<TSignedWriteFragmentCookiePtr> cookies;
@@ -839,6 +877,11 @@ TFuture<void> TClientBase::PingDistributedWriteSession(
     auto req = proxy.PingDistributedWriteSession();
 
     FillRequest(req.Get(), session, options);
+
+    AnnotatePingDistributedWriteSessionRequestInfo(req, session);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().AsVoid();
 }
 
@@ -851,6 +894,11 @@ TFuture<void> TClientBase::FinishDistributedWriteSession(
     auto req = proxy.FinishDistributedWriteSession();
 
     FillRequest(req.Get(), sessionWithResults, options);
+
+    AnnotateFinishDistributedWriteSessionRequestInfo(req, sessionWithResults.Session);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().AsVoid();
 }
 
@@ -866,6 +914,10 @@ TFuture<TDistributedWriteFileSessionWithCookies> TClientBase::StartDistributedWr
 
     auto req = proxy.StartDistributedWriteFileSession();
     FillRequest(req.Get(), path, options);
+
+    AnnotateStartDistributedWriteFileSessionRequestInfo(req, path);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
     return req->Invoke()
         .AsUnique().Apply(BIND([] (TRsp&& result) {
@@ -890,6 +942,11 @@ TFuture<void> TClientBase::PingDistributedWriteFileSession(
     auto req = proxy.PingDistributedWriteFileSession();
 
     FillRequest(req.Get(), session, options);
+
+    AnnotatePingDistributedWriteFileSessionRequestInfo(req, session);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().AsVoid();
 }
 
@@ -902,6 +959,11 @@ TFuture<void> TClientBase::FinishDistributedWriteFileSession(
     auto req = proxy.FinishDistributedWriteFileSession();
 
     FillRequest(req.Get(), session, options);
+
+    AnnotateFinishDistributedWriteFileSessionRequestInfo(req, session.Session);
+
+    SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
+
     return req->Invoke().AsVoid();
 }
 
@@ -929,8 +991,8 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
         }
     }
     EnrichTracingForLookupRequest(req->TracingTags(), path, req->columns());
-    req->set_timestamp(options.Timestamp);
-    req->set_retention_timestamp(options.RetentionTimestamp);
+    req->set_timestamp(ToProto(options.Timestamp));
+    req->set_retention_timestamp(ToProto(options.RetentionTimestamp));
     req->set_keep_missing_rows(options.KeepMissingRows);
     req->set_enable_partial_result(options.EnablePartialResult);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
@@ -982,7 +1044,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
         }
     }
     EnrichTracingForLookupRequest(req->TracingTags(), path, req->columns());
-    req->set_timestamp(options.Timestamp);
+    req->set_timestamp(ToProto(options.Timestamp));
     req->set_keep_missing_rows(options.KeepMissingRows);
     req->set_enable_partial_result(options.EnablePartialResult);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
@@ -1079,8 +1141,8 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
     }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
-    req->set_timestamp(options.Timestamp);
-    req->set_retention_timestamp(options.RetentionTimestamp);
+    req->set_timestamp(ToProto(options.Timestamp));
+    req->set_retention_timestamp(ToProto(options.RetentionTimestamp));
     req->set_multiplexing_band(static_cast<NProto::EMultiplexingBand>(options.MultiplexingBand));
     ToProto(req->mutable_tablet_read_options(), options);
 
@@ -1128,7 +1190,7 @@ void FillRequestBySelectRowsOptionsBase(
     const std::optional<NYPath::TYPath>& defaultUdfRegistryPath,
     TRequest request)
 {
-    request->set_timestamp(options.Timestamp);
+    request->set_timestamp(ToProto(options.Timestamp));
     if (options.UdfRegistryPath) {
         request->set_udf_registry_path(*options.UdfRegistryPath);
     } else if (defaultUdfRegistryPath) {
@@ -1163,7 +1225,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
 
     FillRequestBySelectRowsOptionsBase(options, config->UdfRegistryPath, req);
     // TODO(ifsmirnov): retention timestamp in explain_query.
-    req->set_retention_timestamp(options.RetentionTimestamp);
+    req->set_retention_timestamp(ToProto(options.RetentionTimestamp));
     // TODO(lukyan): Move to FillRequestBySelectRowsOptionsBase
     req->SetTimeout(options.Timeout.value_or(config->DefaultSelectRowsTimeout));
 
@@ -1200,6 +1262,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
     YT_OPTIONAL_SET_PROTO(req, expression_builder_version, options.ExpressionBuilderVersion);
     YT_OPTIONAL_SET_PROTO(req, use_order_by_in_join_subqueries, options.UseOrderByInJoinSubqueries);
+    YT_OPTIONAL_SET_PROTO(req, enable_parallelize_unordered_group_by, options.EnableParallelizeUnorderedGroupBy);
     YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
     YT_OPTIONAL_SET_PROTO(req, max_join_batch_size, options.MaxJoinBatchSize);
     YT_OPTIONAL_SET_PROTO(req, rowset_processing_batch_size, options.RowsetProcessingBatchSize);
@@ -1245,7 +1308,7 @@ TFuture<TPullRowsResult> TClientBase::PullRows(
     req->set_tablet_rows_per_read(options.TabletRowsPerRead);
     ToProto(req->mutable_replication_progress(), options.ReplicationProgress);
     if (options.UpperTimestamp != NullTimestamp) {
-        req->set_upper_timestamp(options.UpperTimestamp);
+        req->set_upper_timestamp(ToProto(options.UpperTimestamp));
     }
     for (auto [tabletId, rowIndex] : options.StartReplicationRowIndexes) {
         auto* protoReplicationRowIndex = req->add_start_replication_row_indexes();
@@ -1265,7 +1328,7 @@ TFuture<TPullRowsResult> TClientBase::PullRows(
             int rowIndex = protoReplicationRowIndex.row_index();
             if (result.EndReplicationRowIndexes.contains(tabletId)) {
                 THROW_ERROR_EXCEPTION("Duplicate tablet id in end replication row indexes")
-                    << TErrorAttribute("tablet_id", tabletId);
+                    .With("tablet_id", tabletId);
             }
             InsertOrCrash(result.EndReplicationRowIndexes, std::pair(tabletId, rowIndex));
         }

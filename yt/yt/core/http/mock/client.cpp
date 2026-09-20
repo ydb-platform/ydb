@@ -49,14 +49,14 @@ public:
     {
         TSharedRef result;
         if (!Body_.empty()) {
-            result = TSharedRef::FromString(std::exchange(Body_, TString()));
+            result = TSharedRef::FromString(std::exchange(Body_, std::string()));
         }
         return MakeFuture(result);
     }
 
 private:
     EStatusCode StatusCode_;
-    TString Body_;
+    std::string Body_;
     THeadersPtr Headers_;
     THeadersPtr Trailers_;
 };

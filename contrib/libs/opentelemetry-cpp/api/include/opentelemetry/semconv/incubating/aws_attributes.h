@@ -227,7 +227,7 @@ static constexpr const char *kAwsLambdaInvokedArn = "aws.lambda.invoked_arn";
   href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-lambda-eventsourcemapping.html">AWS
   Lambda EvenSource Mapping</a>. An event source is mapped to a lambda function. It's contents are
   read by Lambda and used to trigger a function. This isn't available in the lambda execution
-  context or the lambda runtime environtment. This is going to be populated by the AWS SDK for each
+  context or the lambda runtime environment. This is going to be populated by the AWS SDK for each
   language when that UUID is present. Some of these operations are Create/Delete/Get/List/Update
   EventSourceMapping.
  */
@@ -378,7 +378,7 @@ static constexpr const char *kAwsS3PartNumber = "aws.s3.part_number";
 static constexpr const char *kAwsS3UploadId = "aws.s3.upload_id";
 
 /**
-  The ARN of the Secret stored in the Secrets Mangger
+  The ARN of the Secret stored in the Secrets Manager
  */
 static constexpr const char *kAwsSecretsmanagerSecretArn = "aws.secretsmanager.secret.arn";
 

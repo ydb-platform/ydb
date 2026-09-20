@@ -93,6 +93,11 @@ public:
     virtual bool HasSnapshot() const = 0;
     virtual void SetHasSnapshot(bool hasSnapshot) = 0;
 
+    virtual void SetIsolationLevel(NKqpProto::EIsolationLevel level) = 0;
+    virtual NKqpProto::EIsolationLevel GetIsolationLevel() const = 0;
+
+    virtual bool CanUseImmediateCommit() const = 0;
+
     virtual bool BrokenLocks() const = 0;
     virtual ui64 GetBrokenLocksCount() const = 0;
     virtual const std::optional<NYql::TIssue>& GetLockIssue() const = 0;

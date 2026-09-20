@@ -50,7 +50,7 @@ public:
     bool IsStopping() const;
 
     TThreadId GetThreadId() const;
-    TString GetThreadName() const;
+    std::string GetThreadName() const;
 
 protected:
     virtual void StartPrologue();
@@ -61,7 +61,7 @@ protected:
     virtual void ThreadMain() = 0;
 
 private:
-    const TString ThreadName_;
+    const std::string ThreadName_;
     const TThreadOptions Options_;
 
     const TThreadId UniqueThreadId_;

@@ -14,6 +14,8 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+GENERATE_ENUM_SERIALIZATION(cms_maintenance_api_ut_enums.h)
+
 SRCS(
     cluster_info_ut.cpp
     cms_ut.cpp
@@ -23,6 +25,7 @@ SRCS(
     cms_ut_common.h
     downtime_ut.cpp
     http_dump_ut.cpp
+    json_proxy_toggle_config_validator_ut.cpp
     ut_helpers.cpp
 )
 

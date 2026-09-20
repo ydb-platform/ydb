@@ -16,11 +16,11 @@ constexpr bool SupportsBitCode = false;
 constexpr bool SupportsBitCode = true;
     #endif
 
-extern "C" int mul(int x, int y) {
+extern "C" int Mul(int x, int y) {
     return x * y;
 }
 
-extern "C" int sum(int x, int y) {
+extern "C" int Sum(int x, int y) {
     return x + y;
 }
 
@@ -30,7 +30,7 @@ struct T128 {
     ui64 Lo;
     ui64 Hi;
 
-    T128(ui64 x)
+    explicit T128(ui64 x)
         : Lo(x)
         , Hi(0)
     {
@@ -42,7 +42,7 @@ struct T128 {
 };
 
 Function* CreateFibFunction(Module& M, LLVMContext& Context) {
-    const auto funcType = FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context)}, false);
+    const auto funcType = FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context)}, /*isVarArg=*/false);
 
     // Create the fib function and insert it into module M. This function is said
     // to return an int and take an int parameter.
@@ -92,7 +92,7 @@ Function* CreateFibFunction(Module& M, LLVMContext& Context) {
 }
 
 Function* CreateBadFibFunction(Module& M, LLVMContext& Context) {
-    const auto funcType = FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context)}, false);
+    const auto funcType = FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context)}, /*isVarArg=*/false);
 
     // Create the fib function and insert it into module M. This function is said
     // to return an int and take an int parameter.
@@ -108,7 +108,7 @@ Function* CreateBadFibFunction(Module& M, LLVMContext& Context) {
 }
 
 Function* CreateMulFunction(Module& M, LLVMContext& Context) {
-    const auto funcType = FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context), Type::getInt32Ty(Context)}, false);
+    const auto funcType = FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context), Type::getInt32Ty(Context)}, /*isVarArg=*/false);
 
     Function* MulF = cast<Function>(M.getOrInsertFunction("mul", funcType).getCallee());
 
@@ -130,7 +130,7 @@ Function* CreateMulFunction(Module& M, LLVMContext& Context) {
 }
 
 Function* CreateUseNativeFunction(Module& M, LLVMContext& Context) {
-    const auto funcType = FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context), Type::getInt32Ty(Context)}, false);
+    const auto funcType = FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context), Type::getInt32Ty(Context)}, /*isVarArg=*/false);
 
     Function* func = cast<Function>(M.getOrInsertFunction("add", funcType).getCallee());
 
@@ -145,9 +145,9 @@ Function* CreateUseNativeFunction(Module& M, LLVMContext& Context) {
     Function* func_mul = M.getFunction("mul");
     if (!func_mul) {
         func_mul = Function::Create(
-            /*Type=*/FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context), Type::getInt32Ty(Context)}, false),
+            /*Ty=*/FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context), Type::getInt32Ty(Context)}, /*isVarArg=*/false),
             /*Linkage=*/GlobalValue::ExternalLinkage,
-            /*Name=*/"mul", &M); // (external, no body)
+            /*N=*/"mul", &M); // (external, no body)
         func_mul->setCallingConv(CallingConv::C);
     }
 
@@ -160,7 +160,7 @@ Function* CreateUseNativeFunction(Module& M, LLVMContext& Context) {
 }
 
 Function* CreateUseExternalFromGeneratedFunction(Module& main, LLVMContext& Context) {
-    const auto funcType = FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context), Type::getInt32Ty(Context), Type::getInt32Ty(Context)}, false);
+    const auto funcType = FunctionType::get(Type::getInt32Ty(Context), {Type::getInt32Ty(Context), Type::getInt32Ty(Context), Type::getInt32Ty(Context)}, /*isVarArg=*/false);
 
     Function* func = cast<Function>(main.getOrInsertFunction("sum_sqr_3", funcType).getCallee());
 
@@ -189,7 +189,7 @@ Function* CreateUseExternalFromGeneratedFunction128(const ICodegen::TPtr& codege
     LLVMContext& Context = codegen->GetContext();
     auto typeInt128 = Type::getInt128Ty(Context);
     auto pointerInt128 = PointerType::getUnqual(typeInt128);
-    const auto funcType = codegen->GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ? FunctionType::get(typeInt128, {typeInt128, typeInt128, typeInt128}, false) : FunctionType::get(Type::getVoidTy(Context), {pointerInt128, pointerInt128, pointerInt128, pointerInt128}, false);
+    const auto funcType = codegen->GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ? FunctionType::get(typeInt128, {typeInt128, typeInt128, typeInt128}, /*isVarArg=*/false) : FunctionType::get(Type::getVoidTy(Context), {pointerInt128, pointerInt128, pointerInt128, pointerInt128}, /*isVarArg=*/false);
 
     Function* func = cast<Function>(main.getOrInsertFunction("sum_sqr_3", funcType).getCallee());
 
@@ -209,12 +209,12 @@ Function* CreateUseExternalFromGeneratedFunction128(const ICodegen::TPtr& codege
     auto ArgZ = args++; // Get the arg 3.
     ArgZ->setName("z");
 
-    const auto type = FunctionType::get(Type::getVoidTy(Context), {pointerInt128, pointerInt128, pointerInt128}, false);
+    const auto type = FunctionType::get(Type::getVoidTy(Context), {pointerInt128, pointerInt128, pointerInt128}, /*isVarArg=*/false);
     const auto sum_sqr = main.getOrInsertFunction(ir ? "sum_sqr_128_ir" : "sum_sqr_128", type);
 
     if (codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {
-        Value* tmp1 = new AllocaInst(typeInt128, 0U, nullptr, llvm::Align(16), "tmp1", BB);
-        Value* tmp2 = new AllocaInst(typeInt128, 0U, nullptr, llvm::Align(16), "tmp2", BB);
+        Value* tmp1 = new AllocaInst(typeInt128, /*AddrSpace=*/0U, /*ArraySize=*/nullptr, llvm::Align(16), "tmp1", BB);
+        Value* tmp2 = new AllocaInst(typeInt128, /*AddrSpace=*/0U, /*ArraySize=*/nullptr, llvm::Align(16), "tmp2", BB);
         CallInst::Create(sum_sqr, {&*tmp1, &*ArgX, &*ArgY}, "", BB);
         CallInst::Create(sum_sqr, {&*tmp2, &*ArgZ, &*tmp1}, "", BB);
         auto res = new LoadInst(typeInt128, tmp2, "load_res", BB);
@@ -222,11 +222,11 @@ Function* CreateUseExternalFromGeneratedFunction128(const ICodegen::TPtr& codege
         // Create the return instruction and add it to the basic block
         ReturnInst::Create(Context, BB);
     } else {
-        Value* tmp1 = new AllocaInst(typeInt128, 0U, nullptr, llvm::Align(16), "tmp1", BB);
-        Value* tmp2 = new AllocaInst(typeInt128, 0U, nullptr, llvm::Align(16), "tmp2", BB);
-        Value* argXPtr = new AllocaInst(typeInt128, 0U, nullptr, llvm::Align(16), "argXptr", BB);
-        Value* argYPtr = new AllocaInst(typeInt128, 0U, nullptr, llvm::Align(16), "argYptr", BB);
-        Value* argZPtr = new AllocaInst(typeInt128, 0U, nullptr, llvm::Align(16), "argZptr", BB);
+        Value* tmp1 = new AllocaInst(typeInt128, /*AddrSpace=*/0U, /*ArraySize=*/nullptr, llvm::Align(16), "tmp1", BB);
+        Value* tmp2 = new AllocaInst(typeInt128, /*AddrSpace=*/0U, /*ArraySize=*/nullptr, llvm::Align(16), "tmp2", BB);
+        Value* argXPtr = new AllocaInst(typeInt128, /*AddrSpace=*/0U, /*ArraySize=*/nullptr, llvm::Align(16), "argXptr", BB);
+        Value* argYPtr = new AllocaInst(typeInt128, /*AddrSpace=*/0U, /*ArraySize=*/nullptr, llvm::Align(16), "argYptr", BB);
+        Value* argZPtr = new AllocaInst(typeInt128, /*AddrSpace=*/0U, /*ArraySize=*/nullptr, llvm::Align(16), "argZptr", BB);
         new StoreInst(&*ArgX, argXPtr, BB);
         new StoreInst(&*ArgY, argYPtr, BB);
         new StoreInst(&*ArgZ, argZPtr, BB);
@@ -250,7 +250,7 @@ Y_UNIT_TEST(FibNative) {
     auto func = CreateFibFunction(codegen->GetModule(), codegen->GetContext());
     codegen->Verify();
     codegen->Compile();
-    typedef int (*TFunc)(int);
+    using TFunc = int (*)(int);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT_VALUES_EQUAL(funcPtr(24), 46368);
 }
@@ -260,7 +260,7 @@ Y_UNIT_TEST(FibCurrentOS) {
     auto func = CreateFibFunction(codegen->GetModule(), codegen->GetContext());
     codegen->Verify();
     codegen->Compile();
-    typedef int (*TFunc)(int);
+    using TFunc = int (*)(int);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT_VALUES_EQUAL(funcPtr(24), 46368);
 }
@@ -284,7 +284,7 @@ Y_UNIT_TEST(FibFromBitCode) {
     codegen->Verify();
     codegen->ExportSymbol(func);
     codegen->Compile();
-    typedef int (*TFunc)(int);
+    using TFunc = int (*)(int);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT_VALUES_EQUAL(funcPtr(24), 46368);
 }
@@ -298,11 +298,11 @@ Y_UNIT_TEST(LinkWithNativeFunction) {
     auto bitcode = NResource::Find("/llvm_bc/Funcs");
     codegen->LoadBitCode(bitcode, "Funcs");
     auto func = codegen->GetModule().getFunction("sum_sqr");
-    codegen->AddGlobalMapping("mul", (void*)&sum);
+    codegen->AddGlobalMapping("mul", (void*)&Sum);
     codegen->ExportSymbol(func);
     codegen->Verify();
     codegen->Compile();
-    typedef int (*TFunc)(int, int);
+    using TFunc = int (*)(int, int);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT_VALUES_EQUAL(funcPtr(3, 4), 14);
 }
@@ -321,7 +321,7 @@ Y_UNIT_TEST(LinkWithGeneratedFunction) {
     codegen->ExportSymbol(func);
     codegen->Verify();
     codegen->Compile();
-    typedef int (*TFunc)(int, int);
+    using TFunc = int (*)(int, int);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT_VALUES_EQUAL(funcPtr(3, 4), 25);
 }
@@ -338,7 +338,7 @@ Y_UNIT_TEST(ReuseExternalCode) {
     codegen->ExportSymbol(func);
     codegen->Verify();
     codegen->Compile();
-    typedef int (*TFunc)(int, int);
+    using TFunc = int (*)(int, int);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT_VALUES_EQUAL(funcPtr(3, 4), 25);
 }
@@ -355,7 +355,7 @@ Y_UNIT_TEST(UseObjectReference) {
     codegen->ExportSymbol(func);
     codegen->Verify();
     codegen->Compile();
-    typedef size_t (*TFunc)(const std::string&);
+    using TFunc = size_t (*)(const std::string&);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     const std::string hw("Hello World!");
     UNIT_ASSERT_VALUES_EQUAL(funcPtr(hw), 12);
@@ -364,11 +364,11 @@ Y_UNIT_TEST(UseObjectReference) {
 Y_UNIT_TEST(UseNativeFromGeneratedFunction) {
     auto codegen = ICodegen::Make(ETarget::Native);
     auto func = CreateUseNativeFunction(codegen->GetModule(), codegen->GetContext());
-    codegen->AddGlobalMapping("mul", (void*)&mul);
+    codegen->AddGlobalMapping("mul", (void*)&Mul);
     codegen->ExportSymbol(func);
     codegen->Verify();
     codegen->Compile();
-    typedef int (*TFunc)(int, int);
+    using TFunc = int (*)(int, int);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT_VALUES_EQUAL(funcPtr(3, 4), 12);
 }
@@ -383,10 +383,10 @@ Y_UNIT_TEST(UseExternalFromGeneratedFunction) {
     codegen->LoadBitCode(bitcode, "Funcs");
     auto func = CreateUseExternalFromGeneratedFunction(codegen->GetModule(), codegen->GetContext());
     codegen->ExportSymbol(func);
-    codegen->AddGlobalMapping("mul", (void*)&mul);
+    codegen->AddGlobalMapping("mul", (void*)&Mul);
     codegen->Verify();
     codegen->Compile();
-    typedef int (*TFunc)(int, int, int);
+    using TFunc = int (*)(int, int, int);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT_VALUES_EQUAL(funcPtr(7, 4, 8), 4289);
 }
@@ -399,18 +399,18 @@ Y_UNIT_TEST(UseExternalFromGeneratedFunction_128bit_Compiled) {
     auto codegen = ICodegen::Make(ETarget::Native);
     auto bitcode = NResource::Find("/llvm_bc/Funcs");
     codegen->LoadBitCode(bitcode, "Funcs");
-    auto func = CreateUseExternalFromGeneratedFunction128(codegen, false);
+    auto func = CreateUseExternalFromGeneratedFunction128(codegen, /*ir=*/false);
     codegen->ExportSymbol(func);
     codegen->Verify();
     codegen->Compile();
     TStringStream str;
     codegen->ShowGeneratedFunctions(&str);
     #ifdef _win_
-    typedef T128 (*TFunc)(T128, T128, T128);
+    using TFunc = T128 (*)(T128, T128, T128);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT(funcPtr(T128(7), T128(4), T128(8)) == T128(4289));
     #else
-    typedef unsigned __int128 (*TFunc)(__int128, __int128, __int128);
+    using TFunc = unsigned __int128 (*)(__int128, __int128, __int128);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT(funcPtr(7, 4, 8) == 4289);
     #endif
@@ -429,18 +429,18 @@ Y_UNIT_TEST(UseExternalFromGeneratedFunction_128bit_Bitcode) {
     auto codegen = ICodegen::Make(ETarget::Native);
     auto bitcode = NResource::Find("/llvm_bc/Funcs");
     codegen->LoadBitCode(bitcode, "Funcs");
-    auto func = CreateUseExternalFromGeneratedFunction128(codegen, true);
+    auto func = CreateUseExternalFromGeneratedFunction128(codegen, /*ir=*/true);
     codegen->ExportSymbol(func);
     codegen->Verify();
     codegen->Compile();
     TStringStream str;
     codegen->ShowGeneratedFunctions(&str);
     #ifdef _win_
-    typedef T128 (*TFunc)(T128, T128, T128);
+    using TFunc = T128 (*)(T128, T128, T128);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT(funcPtr(T128(7), T128(4), T128(8)) == T128(4289));
     #else
-    typedef unsigned __int128 (*TFunc)(__int128, __int128, __int128);
+    using TFunc = unsigned __int128 (*)(__int128, __int128, __int128);
     auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
     UNIT_ASSERT(funcPtr(7, 4, 8) == 4289);
     #endif

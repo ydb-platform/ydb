@@ -1,0 +1,1 @@
+SELECT COUNT(*) FROM `/Root/hits` WHERE URL LIKE '%google%';

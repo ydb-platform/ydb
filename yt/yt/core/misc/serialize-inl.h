@@ -6,7 +6,6 @@
 
 #include "collection_helpers.h"
 #include "maybe_inf.h"
-#include "mpl.h"
 
 #include <yt/yt/core/phoenix/concepts.h>
 
@@ -19,6 +18,10 @@
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 #include <library/cpp/yt/containers/non_empty.h>
+
+#include <library/cpp/yt/mpl/type_traits.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 #include <library/cpp/yt/assert/assert.h>
 
@@ -36,8 +39,8 @@ void ReadRef(TInput& input, TMutableRef ref)
     if (bytesLoaded != ref.Size()) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Premature end-of-stream")
-            << TErrorAttribute("bytes_loaded", bytesLoaded)
-            << TErrorAttribute("bytes_expected", ref.Size());
+            .With("bytes_loaded", bytesLoaded)
+            .With("bytes_expected", ref.Size());
     }
 }
 
@@ -119,8 +122,8 @@ void ReadPadding(TInput& input, size_t sizeToPad)
     if (bytesSkipped != bytesToSkip) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Premature end-of-stream")
-            << TErrorAttribute("bytes_skipped", bytesSkipped)
-            << TErrorAttribute("bytes_expected", bytesToSkip);
+            .With("bytes_skipped", bytesSkipped)
+            .With("bytes_expected", bytesToSkip);
     }
 }
 
@@ -221,7 +224,7 @@ void UnpackRefs(const TSharedRef& packedRef, T* parts)
     if (size < 0) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Packed ref size is negative")
-            << TErrorAttribute("size", size);
+            .With("size", size);
     }
 
     parts->clear();
@@ -233,15 +236,15 @@ void UnpackRefs(const TSharedRef& packedRef, T* parts)
         if (partSize < 0) {
             TCrashOnDeserializationErrorGuard::OnError();
             THROW_ERROR_EXCEPTION("A part of a packed ref has negative size")
-                << TErrorAttribute("index", index)
-                << TErrorAttribute("size", partSize);
+                .With("index", index)
+                .With("size", partSize);
         }
         if (packedRef.End() - input.Buf() < partSize) {
             TCrashOnDeserializationErrorGuard::OnError();
             THROW_ERROR_EXCEPTION("A part of a packed ref is too large")
-                << TErrorAttribute("index", index)
-                << TErrorAttribute("size", partSize)
-                << TErrorAttribute("bytes_left", packedRef.End() - input.Buf());
+                .With("index", index)
+                .With("size", partSize)
+                .With("bytes_left", packedRef.End() - input.Buf());
         }
 
         parts->push_back(packedRef.Slice(input.Buf(), input.Buf() + partSize));
@@ -252,7 +255,7 @@ void UnpackRefs(const TSharedRef& packedRef, T* parts)
     if (input.Buf() < packedRef.End()) {
         TCrashOnDeserializationErrorGuard::OnError();
         THROW_ERROR_EXCEPTION("Packed ref is too large")
-            << TErrorAttribute("extra_bytes", packedRef.End() - input.Buf());
+            .With("extra_bytes", packedRef.End() - input.Buf());
     }
 }
 
@@ -924,6 +927,25 @@ struct TAtomicSerializer
     }
 };
 
+//! NB: Makes a copy of the value during serialization.
+template <class TUnderlyingSerializer = TDefaultSerializer>
+struct TAtomicObjectSerializer
+{
+    template <class T, class C>
+    static void Save(C& context, const NThreading::TAtomicObject<T>& object)
+    {
+        TUnderlyingSerializer::Save(context, object.Load());
+    }
+
+    template <class T, class C>
+    static void Load(C& context, NThreading::TAtomicObject<T>& object)
+    {
+        T value;
+        TUnderlyingSerializer::Load(context, value);
+        object.Store(std::move(value));
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // Sorters
 
@@ -1365,7 +1387,7 @@ struct TEnumIndexedArraySerializer
     {
         using NYT::Save;
 
-        auto keys = TEnumTraits<E>::GetDomainValues();
+        const auto& keys = TEnumTraits<E>::template GetDomainValues</*AllowAmbiguousValues*/ true>();
         size_t count = 0;
         for (auto key : keys) {
             if (!vector.IsValidIndex(key)) {
@@ -2083,20 +2105,13 @@ struct TSerializerTraits<TMaybeInf<T>, C, void>
 template <class T, class C>
 struct TSerializerTraits<NThreading::TAtomicObject<T>, C, void>
 {
+    // NB: Neither default is safe: in-place serialization holds the spinlock across IO that
+    // may wait for a future (Cf. checkpointable_stream.cpp), and copying an arbitrary T may
+    // be too expensive. The caller chooses; see TAtomicObjectSerializer.
     struct TSerializer
     {
-        static void Save(C& context, const NThreading::TAtomicObject<T>& object)
-        {
-            object.Read([&] (const T& value) {
-                TDefaultSerializer::Save(context, value);
-            });
-        }
-        static void Load(C& context, NThreading::TAtomicObject<T>& object)
-        {
-            object.Transform([&] (T& value) {
-                TDefaultSerializer::Load(context, value);
-            });
-        }
+        static void Save(C& context, const NThreading::TAtomicObject<T>& object) = delete;
+        static void Load(C& context, NThreading::TAtomicObject<T>& object) = delete;
     };
 };
 

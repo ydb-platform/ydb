@@ -6,7 +6,10 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/shutdown/controller.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/session_actor/kqp_query_state.h>
+#include <ydb/services/workload_manager/events.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/util/ulid.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <library/cpp/iterator/functools.h>
@@ -14,6 +17,7 @@
 #include <util/system/sanitizers.h>
 
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
+#include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -49,7 +53,7 @@ namespace {
         runtime.SetObserverFunc(grab);
 
         auto shutdownState = new TKqpShutdownState();
-        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, 
+        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {},
                      new TEvKqp::TEvInitiateShutdownRequest(shutdownState)), nodeIndexToShutdown);
 
         auto future = kikimr.RunInThreadPool([&queryClient, &query](){
@@ -66,15 +70,82 @@ namespace {
 
         auto result = runtime.WaitFuture(future);
 
-        UNIT_ASSERT_C(nodeShuttingDownCount >= expectedMinShutdownEvents, 
-            stageDescription << ": Expected at least " << expectedMinShutdownEvents 
+        UNIT_ASSERT_C(nodeShuttingDownCount >= expectedMinShutdownEvents,
+            stageDescription << ": Expected at least " << expectedMinShutdownEvents
             << " NODE_SHUTTING_DOWN responses, got: " << nodeShuttingDownCount);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus,
             stageDescription << ": Unexpected result status. Got issues: " << result.GetIssues().ToString());
     }
 } // anonymous namespace
+
 Y_UNIT_TEST_SUITE(KqpService) {
+    Y_UNIT_TEST(QueryTxIdResetUnsetsValue) {
+        TULIDGenerator ulidGen;
+        TKqpQueryState::TQueryTxId txId;
+
+        UNIT_ASSERT(!txId.HasValue());
+
+        const auto firstId = ulidGen.Next();
+        txId.SetValue(firstId);
+        UNIT_ASSERT(txId.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(txId.GetValue().GetHumanStr(), firstId.ToString());
+
+        // Reset() must return the id to the unset state. Storing a default constructed
+        // TTxId instead leaves the underlying TMaybe engaged, and then every later
+        // SetValue() fails with "SetValue(): requirement !Id failed".
+        txId.Reset();
+        UNIT_ASSERT(!txId.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(txId.GetValue().GetHumanStr(), "");
+
+        const auto secondId = ulidGen.Next();
+        txId.SetValue(secondId);
+        UNIT_ASSERT(txId.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(txId.GetValue().GetHumanStr(), secondId.ToString());
+    }
+
+    Y_UNIT_TEST(DuplicatedWorkloadManagerContinueRequest) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(app)
+            .SetWithSampleTables(false)
+            .SetUseRealThreads(false));
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(R"(
+                    CREATE RESOURCE POOL test_pool WITH (concurrent_query_limit = 1);
+                )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        ui32 continueRequests = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NWorkloadManager::TEvContinueRequest::EventType && ++continueRequests == 1) {
+                const auto* msg = ev->Get<NWorkloadManager::TEvContinueRequest>();
+                auto copy = std::make_unique<NWorkloadManager::TEvContinueRequest>(
+                    msg->QueryId, msg->Status, msg->PoolId, msg->PoolConfig, msg->Issues);
+                runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, copy.release(), ev->Flags, ev->Cookie));
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteQuery("SELECT 42;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ResourcePool("test_pool")).GetValueSync();
+        });
+
+        UNIT_ASSERT_C(continueRequests > 0, "Query did not go through workload manager admission");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(Shutdown) {
         const ui32 Inflight = 50;
         const TDuration WaitDuration = TDuration::Seconds(1);
@@ -187,6 +258,287 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
         auto result = kikimr.GetTestServer().GetRuntime()->WaitFuture(future);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::CANCELLED, result.GetIssues().ToString());
+    }
+
+    // Verifies issue #39166: the executer must terminate every still-running compute actor
+    // when the query is aborted (e.g. session close, client lost), via TEvAbortExecution.
+    // Compute actors no longer arm their own timeout timer (the planner now passes an empty
+    // Deadline to the CA factory, matching kqp_query_control_plane.cpp), so the executer's
+    // broadcast is the sole mechanism that stops them on cancellation. This test asserts:
+    //   (a) every CA that registered with the executer received TEvAbortExecution, and
+    //   (b) no CA ever called Schedule(... TEvWakeup(TimeoutTag) ...) on itself.
+    // (b) is checked at schedule time via SetScheduledEventFilter, not at delivery time:
+    // the cancel arrives within seconds, while any plausible CA self-timeout would be far
+    // longer, so delivery-time observation would silently pass even on the old code.
+    Y_UNIT_TEST(CancelTerminatesAllComputeActors) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        auto kikimr = TKikimrRunner(settings);
+
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+            auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+            kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
+        }
+
+        // Origin tracking: a KQP compute actor is uniquely characterised by being the sender
+        // of TEvDqCompute::TEvState whose recipient is the query's executer. We capture the
+        // executer from the first TEvState we see (only one query runs in this test), then
+        // accept further events only if they tie back to that exact executer:
+        //   - TEvState        : recipient must be `executerActor` (else: foreign CA, rejected)
+        //   - TEvAbortExecution: sender must be `executerActor` AND recipient a tracked CA
+        // The scheduled-event filter records every TimeoutTag wakeup as it is armed; we
+        // intersect that set with the CA set at the end of the test (Bootstrap schedules
+        // the timer before the "Hello" TEvState, so recipients are not yet known when the
+        // schedule happens). EEvWakeupTag::TimeoutTag = 1 in dq_compute_actor_impl.h.
+        constexpr ui64 timeoutWakeupTag = 1;
+        TActorId executerActor;
+        THashSet<TActorId> computeActors;
+        THashSet<TActorId> abortedComputeActors;
+        THashSet<TActorId> timeoutTagScheduleRecipients;
+        ui32 stateEvents = 0;
+        ui32 foreignStateEvents = 0;
+        ui32 foreignAbortEvents = 0;
+
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            const auto type = ev->GetTypeRewrite();
+            if (type == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                const auto recipient = ev->GetRecipientRewrite();
+                if (!executerActor) {
+                    executerActor = recipient;
+                }
+                if (recipient == executerActor) {
+                    computeActors.insert(ev->Sender);
+                    ++stateEvents;
+                } else {
+                    ++foreignStateEvents;
+                }
+            } else if (type == TEvKqp::TEvAbortExecution::EventType) {
+                if (computeActors.contains(ev->GetRecipientRewrite())) {
+                    if (ev->Sender == executerActor) {
+                        abortedComputeActors.insert(ev->GetRecipientRewrite());
+                    } else {
+                        ++foreignAbortEvents;
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        // Filter fires inside Schedule(...) before the event enters the queue. Returning
+        // false keeps the event scheduled (we observe, we don't drop). We can't yet tell
+        // whether the recipient is a CA at this point, so record all candidates and
+        // resolve against `computeActors` after the test completes.
+        auto prevScheduledFilter = runtime->SetScheduledEventFilter(
+            [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev, TDuration, TInstant&) {
+                if (ev->GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType) {
+                    if (auto* msg = ev->Get<NActors::TEvents::TEvWakeup>(); msg && msg->Tag == timeoutWakeupTag) {
+                        timeoutTagScheduleRecipients.insert(ev->GetRecipientRewrite());
+                    }
+                }
+                return false;
+            });
+        Y_DEFER { runtime->SetScheduledEventFilter(prevScheduledFilter); };
+
+        // Stall reads so the query hangs with all its compute actors alive.
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER { NDataShard::gSkipReadIteratorResultFailPoint.Disable(); };
+
+        auto session = kikimr.RunCall([&] { return db.GetSession().ExtractValueSync().GetSession(); });
+
+        auto future = kikimr.RunInThreadPool([&] {
+            return session.ExecuteQuery("select * from `/Root/LargeTable`",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        });
+
+        // Wait until at least a few compute actors have come up.
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) { return stateEvents >= 3; });
+            runtime->DispatchEvents(opts);
+        }
+
+        const auto computeActorsBeforeCancel = computeActors;
+        UNIT_ASSERT_C(!computeActorsBeforeCancel.empty(),
+            "Expected at least one compute actor to register before cancel");
+        UNIT_ASSERT_C(executerActor, "Failed to capture executer actor id from TEvState recipient");
+        UNIT_ASSERT_VALUES_EQUAL_C(foreignStateEvents, 0u,
+            "Observed TEvDqCompute::TEvState events with recipient != executerActor "
+            "(unexpected second executer in test). executer=" << executerActor);
+
+        // Trigger cancellation: session close -> session actor -> executer ->
+        //   TerminateComputeActors -> TEvAbortExecution to every alive CA.
+        auto close = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+        close->Record.MutableRequest()->SetSessionId(TString(session.GetId()));
+        auto sender = runtime->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeKqpProxyID(runtime->GetNodeId(0)), sender, close.release()));
+
+        auto result = runtime->WaitFuture(future);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::CANCELLED, result.GetIssues().ToString());
+
+        // Every CA that registered before cancel must have received TEvAbortExecution.
+        TVector<TActorId> notAborted;
+        for (const auto& ca : computeActorsBeforeCancel) {
+            if (!abortedComputeActors.contains(ca)) {
+                notAborted.push_back(ca);
+            }
+        }
+        UNIT_ASSERT_C(notAborted.empty(),
+            "Compute actors not terminated by executer broadcast: "
+                << JoinSeq(", ", notAborted)
+                << " (registered=" << computeActorsBeforeCancel.size()
+                << ", aborted=" << abortedComputeActors.size()
+                << ", executer=" << executerActor << ")");
+        UNIT_ASSERT_VALUES_EQUAL_C(foreignAbortEvents, 0u,
+            "Observed TEvAbortExecution to a tracked CA from a sender other than executerActor "
+            "(" << executerActor << "); CAs must be terminated by their own executer.");
+
+        // Fix verification: no compute actor armed its own TimeoutTag timer. Checked at
+        // schedule time, not delivery time — see header comment.
+        TVector<TActorId> selfTimedCAs;
+        for (const auto& ca : computeActors) {
+            if (timeoutTagScheduleRecipients.contains(ca)) {
+                selfTimedCAs.push_back(ca);
+            }
+        }
+        UNIT_ASSERT_C(selfTimedCAs.empty(),
+            "Compute actors armed their own TimeoutTag timer (see issue #39166): "
+                << JoinSeq(", ", selfTimedCAs));
+    }
+
+    // Repro for the cross-node client-cancel "subscription race" (the Proxy/Forwarded
+    // path). When a query-service request is served by a session on a different node than
+    // the gRPC request actor, the session learns about client cancel only by subscribing
+    // (TEvSubscribeGrpcCancel) to that remote gRPC actor. If the gRPC actor already died on
+    // its own client-lost before the subscription is delivered, the subscription is
+    // silently dropped and the session never tears down -> the executer and all its compute
+    // actors leak until the query deadline.
+    //
+    // Reproduced deterministically on a single node: drive KqpProxy with a TEvQueryRequest
+    // that has no RequestCtx (so the session takes the remote CancelationActor cancel path,
+    // exactly as a forwarded request does) and a CancelationActor that is dead by the time
+    // the subscription is delivered. We hold the subscription until the compute actors are
+    // up (emulating cross-node latency), then deliver it to the dead actor. With the fix the
+    // FlagTrackDelivery bounce (TEvUndelivered) makes the session treat it as client-lost
+    // and abort every compute actor; without the fix nothing happens and they leak (this
+    // assertion fails).
+    Y_UNIT_TEST(RemoteClientLostSubscriptionRaceTerminatesComputeActors) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        auto kikimr = TKikimrRunner(settings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+
+        {
+            auto tdb = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+            kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
+        }
+
+        // The "remote gRPC request actor" the session subscribes to for client-cancel.
+        // It is never registered, so by the time the held subscription is delivered the
+        // actor is dead -> FlagTrackDelivery bounces TEvUndelivered back to the session.
+        const TActorId deadRpcActor(runtime->GetNodeId(0), 0, 0xDEAD, 0);
+
+        TActorId executerActor;
+        THashSet<TActorId> computeActors;
+        THashSet<TActorId> abortedComputeActors;
+        ui32 stateEvents = 0;
+        THolder<IEventHandle> heldSubscribe;
+
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            const auto type = ev->GetTypeRewrite();
+            if (type == NGRpcService::TEvSubscribeGrpcCancel::EventType &&
+                ev->GetRecipientRewrite() == deadRpcActor && !heldSubscribe) {
+                // Emulate cross-node latency: hold the subscription until the compute
+                // actors are up, so any teardown happens with CAs still alive.
+                heldSubscribe.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (type == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                const auto recipient = ev->GetRecipientRewrite();
+                if (!executerActor) {
+                    executerActor = recipient;
+                }
+                if (recipient == executerActor) {
+                    computeActors.insert(ev->Sender);
+                    ++stateEvents;
+                }
+            } else if (type == TEvKqp::TEvAbortExecution::EventType) {
+                if (computeActors.contains(ev->GetRecipientRewrite()) && ev->Sender == executerActor) {
+                    abortedComputeActors.insert(ev->GetRecipientRewrite());
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        // Stall reads so the query hangs with all its compute actors alive.
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER { NDataShard::gSkipReadIteratorResultFailPoint.Disable(); };
+
+        // Drive KqpProxy directly with a request that looks forwarded from another node:
+        // no RequestCtx (so the session uses the remote CancelationActor cancel path) and a
+        // CancelationActor pointing at the already-dead gRPC request actor.
+        auto edge = runtime->AllocateEdgeActor();
+        auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
+        ActorIdToProto(edge, ev->Record.MutableRequestActorId());
+        ActorIdToProto(deadRpcActor, ev->Record.MutableCancelationActor());
+        auto& req = *ev->Record.MutableRequest();
+        req.SetDatabase("/Root");
+        req.SetQuery("SELECT * FROM `/Root/LargeTable`");
+        req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        auto* txControl = req.MutableTxControl();
+        txControl->mutable_begin_tx()->mutable_serializable_read_write();
+        txControl->set_commit_tx(true);
+        runtime->Send(new IEventHandle(MakeKqpProxyID(runtime->GetNodeId(0)), edge, ev.release()));
+
+        // Wait until the compute actors are up AND the session has issued its cancel
+        // subscription (which we are holding).
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) { return stateEvents >= 3 && heldSubscribe; });
+            runtime->DispatchEvents(opts);
+        }
+        UNIT_ASSERT_C(!computeActors.empty(), "Expected compute actors to start");
+        UNIT_ASSERT_C(heldSubscribe, "Session did not issue a remote cancel subscription");
+        UNIT_ASSERT_C(abortedComputeActors.empty(), "Compute actors aborted before client-lost");
+
+        const auto computeActorsBeforeCancel = computeActors;
+
+        // The client "cancels": deliver the subscription to the now-dead gRPC actor.
+        runtime->Send(heldSubscribe.Release());
+
+        // The session must learn the client is gone and terminate every compute actor.
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return abortedComputeActors.size() >= computeActorsBeforeCancel.size();
+            });
+            runtime->DispatchEvents(opts, TDuration::Seconds(10));
+        }
+
+        TVector<TActorId> notAborted;
+        for (const auto& ca : computeActorsBeforeCancel) {
+            if (!abortedComputeActors.contains(ca)) {
+                notAborted.push_back(ca);
+            }
+        }
+        UNIT_ASSERT_C(notAborted.empty(),
+            "Compute actors leaked after client-lost (subscription race): "
+                << JoinSeq(", ", notAborted)
+                << " (registered=" << computeActorsBeforeCancel.size()
+                << ", aborted=" << abortedComputeActors.size() << ")");
     }
 
     TVector<TAsyncDataQueryResult> simulateSessionBusy(ui32 count, TSession& session) {
@@ -607,7 +959,7 @@ struct TDictCase {
     Y_UNIT_TEST(ThreeNodesGradualShutdown) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableShuttingDownNodeState(true);
-        
+
         TKikimrRunner kikimr(TKikimrSettings()
                                         .SetFeatureFlags(featureFlags)
                                         .SetNodeCount(3)
@@ -705,6 +1057,65 @@ struct TDictCase {
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS,
             "Expected SUCCESS because retry to another node was in progress, but got: " << result.GetIssues().ToString());
+    }
+
+    /* Scenario (rolling upgrade / node drain):
+        - Every TEvStartKqpTasksRequest bounces back as undelivered with ReasonActorUnknown,
+          so the executer keeps rescheduling internal retries until the budget is exhausted.
+        - A node going away is a transient condition, so the query must terminate with the
+          retriable UNAVAILABLE, just like the Disconnected and NODE_SHUTTING_DOWN paths do,
+          and not with the non-retriable INTERNAL_ERROR.
+     */
+    Y_UNIT_TEST(RetriesExhaustedByActorUnknownIsUnavailable) {
+        TKikimrSettings settings = TKikimrSettings()
+                                    .SetNodeCount(2)
+                                    .SetUseRealThreads(false);
+        auto* retriesConfig = settings.AppConfig.MutableTableServiceConfig()->MutableExecuterRetriesConfig();
+        retriesConfig->SetMaxRetryNumber(2);
+        retriesConfig->SetMinDelayToRetryMs(1);
+        retriesConfig->SetMaxDelayToRetryMs(5);
+
+        TKikimrRunner kikimr(settings);
+        kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 2); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto queryClient = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+
+        ui32 bouncedRequests = 0;
+
+        // Imitate a draining node: the KQP node-service actor is already gone, so every
+        // attempt to start tasks there comes back with ReasonActorUnknown. Bounce the
+        // requests to all the nodes, otherwise the planner may hand the tasks over to a
+        // node that is not tracked yet and the outcome becomes timing dependent.
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksRequest::EventType) {
+                ++bouncedRequests;
+                auto undeliveredEv = new TEvents::TEvUndelivered(
+                    TEvKqpNode::TEvStartKqpTasksRequest::EventType,
+                    TEvents::TEvUndelivered::ReasonActorUnknown);
+                auto senderNodeIndex = ev->Recipient.NodeId() - runtime.GetNodeId(0);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, undeliveredEv, 0, ev->Cookie),
+                    senderNodeIndex, true);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto result = kikimr.RunCall([&queryClient]() {
+            return queryClient.ExecuteQuery(R"(
+                SELECT COUNT(*) AS cnt, SUM(Data) AS sum_data
+                FROM `/Root/LargeTable`
+                LIMIT 100
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+
+        UNIT_ASSERT_C(bouncedRequests > 0, "The query did not send a single TEvStartKqpTasksRequest, "
+            "so the ActorUnknown retry path was never reached");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::UNAVAILABLE,
+            "Expected the retriable UNAVAILABLE after the ActorUnknown retries are exhausted, but got: "
+                << result.GetStatus() << ", " << result.GetIssues().ToString());
     }
 
 }

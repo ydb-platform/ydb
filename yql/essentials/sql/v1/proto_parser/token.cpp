@@ -7,7 +7,8 @@
 namespace NSQLTranslationV1 {
 
 TToken Beginning(const TRule_select_stmt& rule) {
-    const auto& parenthesis = rule.GetRule_select_stmt_intersect1()
+    const auto& parenthesis = rule.GetRule_select_stmt_core2()
+                                  .GetRule_select_stmt_intersect1()
                                   .GetRule_select_kind_parenthesis1();
     return Beginning(Unpack(parenthesis).GetRule_select_kind1());
 }

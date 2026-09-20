@@ -1,4 +1,4 @@
-#include "../helpers/aggregation.h"
+#include "../helpers/test_case.h"
 #include "../helpers/local.h"
 #include "../helpers/writer.h"
 
@@ -487,6 +487,79 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
             SELECT `resource_id`, COUNT(DISTINCT `level`) AS c
             FROM `/Root/olapStore/olapTable`
             GROUP BY `resource_id`
+        )";
+
+        auto res = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        const auto planRes = CollectStreamResult(res);
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
+    }
+
+    Y_UNIT_TEST(ForceDistinctLimitZero_DoesNotPushItemsLimit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "level";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "0";
+
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable` LIMIT 10
+        )";
+
+        auto res = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        const auto planRes = CollectStreamResult(res);
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
+        UNIT_ASSERT_C(ast.find("ItemsLimit") == TString::npos, ast);
+    }
+
+    Y_UNIT_TEST(TwoColumnDistinct_WithForcePragma_DoesNotPush) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "level";
+
+            SELECT DISTINCT `level`, `resource_id` FROM `/Root/olapStore/olapTable` LIMIT 10
+        )";
+
+        auto res = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        const auto planRes = CollectStreamResult(res);
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
+    }
+
+    // With aggregate pushdown enabled, standalone DISTINCT is not fused into KqpOlapDistinct.
+    Y_UNIT_TEST(SimpleDistinct_WithAggPushdownAndForcePragma_NoOlapDistinctInPlan) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "level";
+
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable` LIMIT 10
         )";
 
         auto res = StreamExplainQuery(query, tableClient);

@@ -1,4 +1,3 @@
-/* postgres can not */
 select cast(cast(18000u as date) as string);
 select cast(cast(18000u*86400ul+1u*3600u+2u*60u+3u as datetime) as string);
 select cast(cast(18000u*86400000000ul+1u*3600000000ul+2u*60000000ul+3000000ul+4u as timestamp) as string);

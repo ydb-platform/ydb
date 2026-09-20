@@ -157,6 +157,13 @@ message TEvPropagateSnapshots {
 message TEvPropagateSnapshotsResult {
 }
 
+message TEvRemoteSnapshotsPrefill {
+}
+
+message TEvRemoteSnapshotsPrefillResult {
+    optional TRemoteSnapshots Snapshots = 1;
+}
+
 message TSnapshotExchangeBoardNodeInfo {
     optional bytes DataCenterId = 1;
     optional NActorsProto.TActorId Owner = 2;

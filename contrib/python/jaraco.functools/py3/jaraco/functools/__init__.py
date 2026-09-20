@@ -8,7 +8,8 @@ import operator
 import time
 import types
 import warnings
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 import more_itertools
 
@@ -297,6 +298,8 @@ def passthrough(func: Callable[..., object]) -> Callable[[_T], _T]:
     """
     Wrap the function to always return the first parameter.
 
+    Useful for wrapping functions called for their side effects.
+
     >>> passthrough(print)('3')
     3
     '3'
@@ -441,6 +444,32 @@ def pass_none(func):
     return wrapper
 
 
+def signed(func):
+    """
+    Wrap a formatting function so a positive first argument is rendered
+    with an explicit leading ``+``.
+
+    A negative argument already carries a ``-`` from the wrapped
+    function, and zero is left unsigned. The sign is inferred by
+    comparing the argument to a zero of its own type.
+
+    >>> fixed = '{:.1f}'.format
+    >>> signed(fixed)(3.9)
+    '+3.9'
+    >>> signed(fixed)(-3.9)
+    '-3.9'
+    >>> signed(fixed)(0)
+    '0.0'
+    """
+
+    @functools.wraps(func)
+    def wrapper(value, /, *args, **kwargs):
+        sign = '+' if value > type(value)() else ''
+        return sign + func(value, *args, **kwargs)
+
+    return wrapper
+
+
 def none_as(value, replacement=None):
     """
     >>> none_as(None, 'foo')
@@ -580,6 +609,16 @@ def identity(x):
     return x
 
 
+@functools.singledispatch
+def _as_invocable(check):
+    return lambda: check
+
+
+@_as_invocable.register(collections.abc.Callable)
+def _(check):
+    return check
+
+
 def bypass_when(check, *, _op=identity):
     """
     Decorate a function to return its parameter when ``check``.
@@ -594,12 +633,24 @@ def bypass_when(check, *, _op=identity):
     >>> bypassed[:] = [object()]  # True
     >>> double(2)
     2
+
+    ``check`` may also be a callable returning the condition.
+
+    >>> enabled = False
+    >>> @bypass_when(lambda: enabled)
+    ... def double(x):
+    ...     return x * 2
+    >>> double(2)
+    4
+    >>> enabled = True
+    >>> double(2)
+    2
     """
 
     def decorate(func):
         @functools.wraps(func)
         def wrapper(param, /):
-            return param if _op(check) else func(param)
+            return param if _op(_as_invocable(check)()) else func(param)
 
         return wrapper
 

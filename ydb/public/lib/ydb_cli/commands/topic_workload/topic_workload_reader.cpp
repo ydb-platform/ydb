@@ -6,6 +6,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
+#include <util/generic/scope.h>
+
 using namespace NYdb::NConsoleClient;
 
 void TTopicWorkloadReader::RetryableReaderLoop(const TTopicWorkloadReaderParams& params) {
@@ -65,6 +67,12 @@ void TTopicWorkloadReader::ReaderLoop(const TTopicWorkloadReaderParams& params, 
         NYdb::NTopic::TPartitionSession::TPtr Stream;
     };
     THashMap<std::pair<TString, ui64>, TPartitionStreamState> streamState;
+    Y_DEFER {
+        streamState.clear();
+        if (!readSession->Close(TDuration::Seconds(5))) {
+            WRITE_LOG(params.Log, ELogPriority::TLOG_WARNING, "Reader session was not gracefully closed.");
+        }
+    };
 
     TInstant LastPartitionStatusRequestTime = TInstant::Zero();
 
@@ -149,6 +157,11 @@ void TTopicWorkloadReader::ReaderLoop(const TTopicWorkloadReaderParams& params, 
         if (txSupport) {
             TryCommitTx(params, txSupport, commitTime, stopPartitionSessionEvents);
         }
+    }
+
+    if (txSupport) {
+        TryCommitTableChanges(params, txSupport);
+        GracefullShutdown(stopPartitionSessionEvents);
     }
 }
 

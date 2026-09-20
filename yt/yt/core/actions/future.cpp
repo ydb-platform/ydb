@@ -29,7 +29,29 @@ public:
     }
 };
 
-constinit NDetail::TOKPromiseState OKPromiseState;
+struct TOKFutureGlobals
+{
+    TOKPromiseState PromiseState;
+    const TFuture<void> Future{TOKFutureTag(), &PromiseState};
+};
+
+// OKFuture is intended to be initialized at compile time so other global
+// constructors would already have an access to it. But at the same time
+// it should not be destroyed because it may be accessed at static destruction
+// phase. Wrap it into a union to satisfy both conditions.
+union TOKFutureGlobalsStorage
+{
+    constexpr TOKFutureGlobalsStorage()
+        : Globals()
+    { }
+
+    ~TOKFutureGlobalsStorage()
+    { }
+
+    TOKFutureGlobals Globals;
+};
+
+constinit TOKFutureGlobalsStorage OKFutureGlobalsStorage;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -51,7 +73,7 @@ TFutureCallbackCookie TFutureState<void>::Subscribe(TVoidResultHandler handler)
             return NullFutureCallbackCookie;
         } else {
             HasHandlers_ = true;
-            return VoidResultHandlers_.Add(std::move(handler));
+            return EncodeFutureCallbackCookie(VoidResultHandlers_.Insert(std::move(handler)), VoidResultHandlerCookieBase);
         }
     }
 }
@@ -205,7 +227,7 @@ void TFutureState<void>::SetErrorGuarded(const TError& error, TGuard<NThreading:
 bool TFutureState<void>::DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard)
 {
     YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
-    return VoidResultHandlers_.TryRemove(cookie, guard);
+    return TryUnsubscribe(&VoidResultHandlers_, cookie, VoidResultHandlerCookieBase, guard);
 }
 
 void TFutureState<void>::WaitUntilSet() const
@@ -291,7 +313,7 @@ void TFutureState<void>::OnLastPromiseRefLost()
     ] () mutable {
 #ifdef YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE
         // NB: Backtrace symbolization can take a quite and thus is being offloaded to Finalizer thread.
-        error <<= TErrorAttribute("backtrace_origin", NBacktrace::SymbolizeBacktrace(backtrace));
+        error.Add("backtrace_origin", NBacktrace::SymbolizeBacktrace(backtrace));
 #endif
         // Set the promise if the value is still missing.
         TrySetError(error);
@@ -306,7 +328,7 @@ void TFutureState<void>::OnLastPromiseRefLost()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const TFuture<void> OKFuture(NDetail::TOKFutureTag(), &NDetail::OKPromiseState);
+constinit const TFuture<void>& OKFuture = NDetail::OKFutureGlobalsStorage.Globals.Future;
 
 ////////////////////////////////////////////////////////////////////////////////
 

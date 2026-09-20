@@ -1664,10 +1664,6 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
             ".sys/nodes/permissions.pb",
             ".sys/partition_stats/system_view.pb",
             ".sys/partition_stats/permissions.pb",
-            ".sys/pg_class/system_view.pb",
-            ".sys/pg_class/permissions.pb",
-            ".sys/pg_tables/system_view.pb",
-            ".sys/pg_tables/permissions.pb",
             ".sys/query_metrics_one_minute/system_view.pb",
             ".sys/query_metrics_one_minute/permissions.pb",
             ".sys/query_sessions/system_view.pb",
@@ -1678,8 +1674,6 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
             ".sys/resource_pools/permissions.pb",
             ".sys/streaming_queries/system_view.pb",
             ".sys/streaming_queries/permissions.pb",
-            ".sys/tables/system_view.pb",
-            ".sys/tables/permissions.pb",
             ".sys/top_partitions_by_tli_one_hour/system_view.pb",
             ".sys/top_partitions_by_tli_one_hour/permissions.pb",
             ".sys/top_partitions_by_tli_one_minute/system_view.pb",
@@ -1704,6 +1698,8 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
             ".sys/top_queries_by_request_units_one_hour/permissions.pb",
             ".sys/top_queries_by_request_units_one_minute/system_view.pb",
             ".sys/top_queries_by_request_units_one_minute/permissions.pb",
+            ".sys/udf_modules/system_view.pb",
+            ".sys/udf_modules/permissions.pb",
         ])
 
 
@@ -1879,10 +1875,6 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
             ".sys/nodes/permissions.pb",
             ".sys/partition_stats/system_view.pb",
             ".sys/partition_stats/permissions.pb",
-            ".sys/pg_class/system_view.pb",
-            ".sys/pg_class/permissions.pb",
-            ".sys/pg_tables/system_view.pb",
-            ".sys/pg_tables/permissions.pb",
             ".sys/query_metrics_one_minute/system_view.pb",
             ".sys/query_metrics_one_minute/permissions.pb",
             ".sys/query_sessions/system_view.pb",
@@ -1893,8 +1885,6 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
             ".sys/resource_pools/permissions.pb",
             ".sys/streaming_queries/system_view.pb",
             ".sys/streaming_queries/permissions.pb",
-            ".sys/tables/system_view.pb",
-            ".sys/tables/permissions.pb",
             ".sys/top_partitions_by_tli_one_hour/system_view.pb",
             ".sys/top_partitions_by_tli_one_hour/permissions.pb",
             ".sys/top_partitions_by_tli_one_minute/system_view.pb",
@@ -1919,6 +1909,8 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
             ".sys/top_queries_by_request_units_one_hour/permissions.pb",
             ".sys/top_queries_by_request_units_one_minute/system_view.pb",
             ".sys/top_queries_by_request_units_one_minute/permissions.pb",
+            ".sys/udf_modules/system_view.pb",
+            ".sys/udf_modules/permissions.pb",
         ])
 
         self.restore_cluster_backup(input="cluster_backup")
@@ -2108,7 +2100,7 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
         # Backup the domain
         backup_files_dir = output_path(self.test_name, 'test_replace_sys_acl_disabled', 'backup_files_dir')
         self.ydb_cli(['tools', 'dump', '--path', '/Root', '--output', backup_files_dir])
-        assert_that(os.listdir(backup_files_dir), is_(['.sys', 'folder']))
+        assert_that(os.listdir(backup_files_dir), contains_inanyorder('.sys', 'folder'))
 
         # Remove directory
         self.driver.scheme_client.remove_directory('/Root/folder')
@@ -2189,7 +2181,7 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
         # Backup the domain
         backup_files_dir = output_path(self.test_name, 'test_replace_sys_acl_disabled', 'backup_files_dir')
         self.ydb_cli(['tools', 'dump', '--path', '/Root', '--output', backup_files_dir])
-        assert_that(os.listdir(backup_files_dir), is_(['.sys', 'folder']))
+        assert_that(os.listdir(backup_files_dir), contains_inanyorder('.sys', 'folder'))
 
         # Remove directory
         self.driver.scheme_client.remove_directory('/Root/folder')

@@ -118,30 +118,88 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
 
-    void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
-        if (Empty()){
-            return;
+    // resumeIndex is where the scan of this probe continues, 0 once every match was consumed
+    bool Lookup(TSingleTuple row, size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
+                std::predicate auto isFull) {
+        if (Empty()) {
+            resumeIndex = 0;
+            return true;
         }
-        Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
-            if (TrackUsed_) {
-                size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / RowWidth_;
-                MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
-                Used_[index] = 1;
-            }
-            consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
+        bool full = false;
+        Table_.Apply(row.PackedData, row.OverflowBegin, resumeIndex, [&](const ui8* packed) {
+            consume(TSingleTuple{packed, BuildData_.Overflow.data()});
+            full = isFull();
+            return !full;
         });
+        if (full) {
+            return false;
+        }
+        resumeIndex = 0;
+        return true;
     }
 
-    void ForEachUnused(std::invocable<TSingleTuple> auto consume) const {
-        MKQL_ENSURE(TrackUsed_, "ForEachUnused called but not tracking used tuples");
-        for (size_t i = 0; i < static_cast<size_t>(BuildData_.NTuples); ++i) {
-            if (!Used_[i]) {
-                consume(TSingleTuple{
-                    BuildData_.PackedTuples.data() + i * RowWidth_,
-                    BuildData_.Overflow.data()
-                });
+    // Stops on the first accepted match. Semi/only joins only need existence, so
+    // walking the rest of a duplicate chain is wasted work.
+    bool LookupAny(TSingleTuple row, std::predicate<TSingleTuple> auto accept) {
+        if (Empty()) {
+            return false;
+        }
+        bool found = false;
+        Table_.Apply(row.PackedData, row.OverflowBegin, [&](const ui8* packed) {
+            found = accept(TSingleTuple{packed, BuildData_.Overflow.data()});
+            return !found;
+        });
+        return found;
+    }
+
+    bool ForEachFrom(size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
+                     std::predicate auto isFull) const {
+        const size_t nTuples = static_cast<size_t>(BuildData_.NTuples);
+        for (; resumeIndex < nTuples; ++resumeIndex) {
+            consume(TSingleTuple{
+                BuildData_.PackedTuples.data() + resumeIndex * RowWidth_,
+                BuildData_.Overflow.data()
+            });
+            if (isFull()) {
+                ++resumeIndex;
+                return false;
             }
         }
+        return true;
+    }
+
+    // Call only after the pair is accepted, including join filters. Marking inside Lookup would
+    // treat filter-rejected matches as used and drop them from unmatched Left/LeftOnly output.
+    void MarkUsed(TSingleTuple tuple) {
+        if (!TrackUsed_) {
+            return;
+        }
+        const size_t index = Table_.IndexOfPackedRow(tuple.PackedData);
+        MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
+        Used_[index] = 1;
+    }
+
+    // Scans tuples whose used flag equals `used`, starting at `resumeIndex`. Stops as soon as isFull
+    // reports the output is full, so a large table is drained across several calls. Returns true when
+    // the whole table has been scanned, otherwise leaves resumeIndex pointing at the next tuple.
+    bool ForEachWhereUsed(bool used, size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
+                          std::predicate auto isFull) const {
+        MKQL_ENSURE(TrackUsed_, "ForEachWhereUsed called but not tracking used tuples");
+        const size_t nTuples = static_cast<size_t>(BuildData_.NTuples);
+        for (; resumeIndex < nTuples; ++resumeIndex) {
+            if (bool(Used_[resumeIndex]) != used) {
+                continue;
+            }
+            consume(TSingleTuple{
+                Table_.PackedRow(resumeIndex),
+                BuildData_.Overflow.data()
+            });
+            if (isFull()) {
+                ++resumeIndex;
+                return false;
+            }
+        }
+        return true;
     }
 
   private:

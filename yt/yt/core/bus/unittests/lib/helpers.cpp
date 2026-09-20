@@ -1,5 +1,12 @@
 #include "helpers.h"
 
+#include <yt/yt/core/bus/server.h>
+
+#include <yt/yt/core/yson/string.h>
+
+#include <yt/yt/core/ytree/convert.h>
+#include <yt/yt/core/ytree/ypath_client.h>
+
 #include <library/cpp/yt/assert/assert.h>
 
 #include <vector>
@@ -20,16 +27,27 @@ TSharedRefArray CreateMessage(int partCount, int partSize)
     return TSharedRefArray(std::move(parts), TSharedRefArray::TMoveParts{});
 }
 
-TSharedRefArray Serialize(TString str)
+TSharedRefArray Serialize(std::string str)
 {
     return TSharedRefArray(TSharedRef::FromString(std::move(str)));
 }
 
-TString Deserialize(TSharedRefArray message)
+std::string Deserialize(TSharedRefArray message)
 {
     YT_VERIFY(message.Size() == 1);
     const auto& part = message[0];
-    return TString(part.Begin(), part.Size());
+    return std::string(part.Begin(), part.Size());
+}
+
+int ReadActiveConnectionCount(const IBusServerPtr& server)
+{
+    auto countsYson = NYTree::SyncYPathGet(server->GetOrchidService(), "/connection_counts");
+    auto counts = NYTree::ConvertTo<THashMap<std::string, int>>(countsYson);
+    int total = 0;
+    for (const auto& [_, count] : counts) {
+        total += count;
+    }
+    return total;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

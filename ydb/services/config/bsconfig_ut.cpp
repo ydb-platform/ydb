@@ -14,6 +14,7 @@
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_dynamic_config_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/services/dynamic_config/grpc_service.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
@@ -225,7 +226,7 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
         checker(response);
     }
 
-    void EnableConfigV2(auto& channel) {
+    void EnableConfigV2(TKikimrWithGrpcAndRootSchema* server) {
         TString enableV2Config = R"(
 metadata:
   kind: MainConfig
@@ -237,7 +238,7 @@ config:
 )";
 
         std::unique_ptr<Ydb::DynamicConfig::V1::DynamicConfigService::Stub> stub;
-        stub = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(channel);
+        stub = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(server->GetChannel());
 
         Ydb::DynamicConfig::ReplaceConfigRequest request;
         request.set_config(enableV2Config);
@@ -248,6 +249,13 @@ config:
 
         stub->ReplaceConfig(&context, request, &response);
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        while (!server->GetRuntime()->GetAppData(0).FeatureFlags.GetSwitchToConfigV2()) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline,
+                "SwitchToConfigV2 was not applied on the gRPC node");
+            Sleep(TDuration::MilliSeconds(10));
+        }
     }
 
     void FetchConfig(
@@ -295,7 +303,7 @@ config:
 
     Y_UNIT_TEST(ReplaceConfig) {
         TKikimrWithGrpcAndRootSchema server;
-        EnableConfigV2(server.GetChannel());
+        EnableConfigV2(&server);
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
 metadata:
@@ -345,7 +353,7 @@ config:
 
     Y_UNIT_TEST(ReplaceConfigWithInvalidHostConfig) {
         TKikimrWithGrpcAndRootSchema server;
-        EnableConfigV2(server.GetChannel());
+        EnableConfigV2(&server);
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
 metadata:
@@ -376,7 +384,7 @@ config:
     Y_UNIT_TEST(FetchConfig) {
         TKikimrWithGrpcAndRootSchema server;
 
-        EnableConfigV2(server.GetChannel());
+        EnableConfigV2(&server);
 
         auto* runtime = server.GetRuntime();
         auto sender = runtime->AllocateEdgeActor();
@@ -416,7 +424,7 @@ config:
         NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
 
         TKikimrWithGrpcAndRootSchema server;
-        EnableConfigV2(server.GetChannel());
+        EnableConfigV2(&server);
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
 metadata:
@@ -486,7 +494,7 @@ config:
     Y_UNIT_TEST(CheckDryRun) {
         NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TKikimrWithGrpcAndRootSchema server;
-        EnableConfigV2(server.GetChannel());
+        EnableConfigV2(&server);
 
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
 
@@ -611,6 +619,234 @@ config:
         UNIT_ASSERT(yamlConfigFetched);
         UNIT_ASSERT(!storageYamlConfigFetched);
         UNIT_ASSERT_VALUES_EQUAL(originalConfig, *yamlConfigFetched);
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(ConfigGRPCServiceAuth) {
+
+    using TServerWithAuth = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth>;
+
+    struct TKikimrTestWithAuthDynamicPools : TKikimrTestWithAuth {
+        static constexpr bool PrecreatePools = false;
+    };
+
+    using TServerWithAuthDynamicPools = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthDynamicPools>;
+
+    template <class TServer>
+    void ConfigureAuth(TServer& server, const TVector<TString>& adminSids, bool enableDatabaseAdmin) {
+        auto& appData = server.GetRuntime()->GetAppData(0);
+        appData.AdministrationAllowedSIDs = adminSids;
+        appData.FeatureFlags.SetEnableDatabaseAdmin(enableDatabaseAdmin);
+    }
+
+    template <class TServer>
+    TString CreateDatabaseWithOwner(TServer& server, const TString& name, const TString& owner) {
+        const TString path = "/Root/" + name;
+
+        Ydb::Cms::CreateDatabaseRequest request;
+        request.set_path(path);
+        auto& storage = *request.mutable_resources()->add_storage_units();
+        storage.set_unit_kind("ssd");
+        storage.set_count(1);
+        server.Tenants_->CreateTenant(std::move(request));
+
+        NKikimr::Tests::TClient client(*server.ServerSettings);
+        client.TestModifyOwner("/Root", name, owner);
+        server.ResetSchemeCache(path);
+
+        return path;
+    }
+
+    Ydb::Config::FetchConfigResponse DoFetchConfig(
+            auto& channel,
+            std::optional<TString> token,
+            std::optional<TString> database) {
+        auto stub = Ydb::Config::V1::ConfigService::NewStub(channel);
+
+        Ydb::Config::FetchConfigRequest request;
+        request.mutable_all();
+
+        Ydb::Config::FetchConfigResponse response;
+        grpc::ClientContext ctx;
+        if (token) {
+            ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, *token);
+        }
+        if (database) {
+            ctx.AddMetadata(NYdb::YDB_DATABASE_HEADER, *database);
+        }
+        stub->FetchConfig(&ctx, request, &response);
+        return response;
+    }
+
+    Ydb::Config::ReplaceConfigResponse DoReplaceConfig(
+            auto& channel,
+            std::optional<TString> token,
+            std::optional<TString> database,
+            const TString& yaml) {
+        auto stub = Ydb::Config::V1::ConfigService::NewStub(channel);
+
+        Ydb::Config::ReplaceConfigRequest request;
+        request.set_replace(yaml);
+
+        Ydb::Config::ReplaceConfigResponse response;
+        grpc::ClientContext ctx;
+        if (token) {
+            ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, *token);
+        }
+        if (database) {
+            ctx.AddMetadata(NYdb::YDB_DATABASE_HEADER, *database);
+        }
+        stub->ReplaceConfig(&ctx, request, &response);
+        return response;
+    }
+
+    TString MakeClusterConfigYaml() {
+        return R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 1
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: SectorMap:1:64
+      type: SSD
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)";
+    }
+
+    TString MakeDatabaseConfigYaml(const TString& database) {
+        return TStringBuilder() << R"(
+metadata:
+  kind: DatabaseConfig
+  database: ")" << database << R"("
+  version: 0
+config:
+  feature_flags: {}
+)";
+    }
+
+    void AssertAllowed(const auto& op, const TString& what) {
+        UNIT_ASSERT_C(op.status() != Ydb::StatusIds::UNAUTHORIZED,
+            what << ": expected the authorization gate to pass, but got UNAUTHORIZED, issues# " << op.issues());
+    }
+
+    static constexpr const char* NOT_CLUSTER_ADMIN_MSG = "User is not a cluster administrator.";
+    static constexpr const char* NOT_DATABASE_ADMIN_MSG = "User is not a database administrator.";
+
+    void AssertDenied(const auto& op, const TString& what, std::optional<TString> expectedMessage = std::nullopt) {
+        UNIT_ASSERT_C(op.status() == Ydb::StatusIds::UNAUTHORIZED,
+            what << ": expected UNAUTHORIZED, but got " << Ydb::StatusIds::StatusCode_Name(op.status())
+                << ", issues# " << op.issues());
+        if (expectedMessage) {
+            UNIT_ASSERT_C(op.issues_size() > 0, what << ": expected a denial issue, but issues are empty");
+            UNIT_ASSERT_STRING_CONTAINS_C(op.issues(0).message(), *expectedMessage, what);
+        }
+    }
+
+    void CheckClusterConfigAccess(auto& channel, std::optional<TString> token, bool allowed) {
+        auto fetch = DoFetchConfig(channel, token, std::nullopt);
+        auto replace = DoReplaceConfig(channel, token, std::nullopt, MakeClusterConfigYaml());
+        if (allowed) {
+            AssertAllowed(fetch.operation(), "FetchConfig");
+            AssertAllowed(replace.operation(), "ReplaceConfig");
+        } else {
+            AssertDenied(fetch.operation(), "FetchConfig", NOT_CLUSTER_ADMIN_MSG);
+            AssertDenied(replace.operation(), "ReplaceConfig", NOT_CLUSTER_ADMIN_MSG);
+        }
+    }
+
+    void CheckDatabaseConfigAccess(auto& channel, std::optional<TString> token, const TString& database, bool allowed,
+                                   std::optional<TString> expectedDeniedMessage = std::nullopt) {
+        auto fetch = DoFetchConfig(channel, token, database);
+        auto replace = DoReplaceConfig(channel, token, std::nullopt, MakeDatabaseConfigYaml(database));
+        if (allowed) {
+            AssertAllowed(fetch.operation(), "FetchConfig");
+            AssertAllowed(replace.operation(), "ReplaceConfig");
+        } else {
+            AssertDenied(fetch.operation(), "FetchConfig", expectedDeniedMessage);
+            AssertDenied(replace.operation(), "ReplaceConfig", expectedDeniedMessage);
+        }
+    }
+
+    Y_UNIT_TEST(AnonymousClusterConfigAllowedWhenAdminSidsEmpty) {
+        TServerWithAuth server;
+        // empty AdministrationAllowedSIDs, so there is no admin restriction and everyone is a cluster admin
+        ConfigureAuth(server, /*adminSids*/ {}, /*enableDatabaseAdmin*/ false);
+        CheckClusterConfigAccess(server.GetChannel(), std::nullopt, /*allowed*/ true);
+    }
+
+    Y_UNIT_TEST(UserClusterConfigAllowedWhenAdminSidsEmpty) {
+        TServerWithAuth server;
+        // empty AdministrationAllowedSIDs, so there is no admin restriction and everyone is a cluster admin
+        ConfigureAuth(server, /*adminSids*/ {}, /*enableDatabaseAdmin*/ false);
+        CheckClusterConfigAccess(server.GetChannel(), "user@builtin", /*allowed*/ true);
+    }
+
+    Y_UNIT_TEST(AnonymousClusterConfigDeniedWhenAdminSidsNotEmpty) {
+        TServerWithAuth server;
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        CheckClusterConfigAccess(server.GetChannel(), std::nullopt, /*allowed*/ false);
+    }
+
+    Y_UNIT_TEST(UserClusterConfigDeniedWhenNotInAdminSids) {
+        TServerWithAuth server;
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        CheckClusterConfigAccess(server.GetChannel(), "user@builtin", /*allowed*/ false);
+    }
+
+    Y_UNIT_TEST(UserClusterConfigAllowedWhenInAdminSids) {
+        TServerWithAuth server;
+        ConfigureAuth(server, /*adminSids*/ {"user@builtin"}, /*enableDatabaseAdmin*/ false);
+        CheckClusterConfigAccess(server.GetChannel(), "user@builtin", /*allowed*/ true);
+    }
+
+    Y_UNIT_TEST(DatabaseConfigDeniedForOwnerWhenDatabaseAdminDisabled) {
+        TServerWithAuthDynamicPools server;
+        const TString database = CreateDatabaseWithOwner(server, "db_owner_user", "user@builtin");
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ false,
+            NOT_CLUSTER_ADMIN_MSG);
+    }
+
+    Y_UNIT_TEST(DatabaseConfigAllowedForOwnerWhenDatabaseAdminEnabled) {
+        TServerWithAuthDynamicPools server;
+        const TString database = CreateDatabaseWithOwner(server, "db_owner_user", "user@builtin");
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ true);
+        CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ true);
+    }
+
+    Y_UNIT_TEST(DatabaseConfigDeniedForNonOwnerWhenDatabaseAdminDisabled) {
+        TServerWithAuthDynamicPools server;
+        const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ false, NOT_CLUSTER_ADMIN_MSG);
+    }
+
+    Y_UNIT_TEST(DatabaseConfigDeniedForNonOwnerWhenDatabaseAdminEnabled) {
+        TServerWithAuthDynamicPools server;
+        const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ true);
+        CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ false, NOT_DATABASE_ADMIN_MSG);
+    }
+
+    Y_UNIT_TEST(DatabaseConfigAllowedForClusterAdminWhenDatabaseAdminDisabled) {
+        TServerWithAuthDynamicPools server;
+        const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");
+        ConfigureAuth(server, /*adminSids*/ {"user@builtin"}, /*enableDatabaseAdmin*/ false);
+        CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ true);
+    }
+
+    Y_UNIT_TEST(DatabaseConfigAllowedForClusterAdminWhenDatabaseAdminEnabled) {
+        TServerWithAuthDynamicPools server;
+        const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");
+        ConfigureAuth(server, /*adminSids*/ {"user@builtin"}, /*enableDatabaseAdmin*/ true);
+        CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ true);
     }
 
 }

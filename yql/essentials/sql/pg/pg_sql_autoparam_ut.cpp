@@ -22,7 +22,7 @@ Y_UNIT_TEST(AutoParamValues_NoParametersWithDefaults) {
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
 
     UNIT_ASSERT_C(res.Issues.Empty(), "Failed to parse statement, issues: " + res.Issues.ToString());
@@ -72,7 +72,7 @@ void TestAutoParam(const TString& query, const THashMap<TString, TString>& expec
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     UNIT_ASSERT_C(res.Issues.Empty(), "Failed to parse statement, issues: " + res.Issues.ToString());
     auto params = dynamic_cast<TTestAutoParamBuilder*>(res.PgAutoParamValues.Get());

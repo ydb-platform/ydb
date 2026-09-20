@@ -3,6 +3,7 @@
 
 #include <ydb/public/lib/ydb_cli/common/completion.h>
 #include <ydb/public/lib/ydb_cli/common/completion_generator.h>
+#include <ydb/public/lib/ydb_cli/common/completion_graph_json.h>
 
 #include <library/cpp/getopt/small/completer.h>
 
@@ -55,6 +56,10 @@ int TCommandCompletion::Run(TConfig& config) {
         NLastGetoptFork::TBashCompletionGenerator(&modChooser, &RootTree->Opts.GetOpts()).Generate("ydb", Cout);
     } else if (Shell == "zsh") {
         NLastGetoptFork::TZshCompletionGenerator(&modChooser, &RootTree->Opts.GetOpts()).Generate("ydb", Cout);
+    } else if (Shell == "json") {
+        // Internal machine-readable format. Not advertised in Choice completer
+        // above to keep tab completion limited to bash/zsh for end users.
+        GenerateJsonCompletion(modChooser, RootTree->Opts.GetOpts(), Cout);
     } else {
         Cerr << "Unknown shell name " << Shell.Quote() << Endl;
         return EXIT_FAILURE;

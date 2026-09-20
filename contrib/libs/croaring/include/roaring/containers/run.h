@@ -1,6 +1,14 @@
 /*
  * run.h
  *
+ * Run containers store a set of 16-bit integers as a sorted array of
+ * non-overlapping runs. Each run is represented by a starting value and a
+ * length, encoding one contiguous interval of present integers.
+ *
+ * This representation is effective when the data contains long consecutive
+ * ranges because it compresses many adjacent values into a small number of
+ * run records while still supporting search and set operations over the
+ * interval list.
  */
 
 #ifndef INCLUDE_CONTAINERS_RUN_H_

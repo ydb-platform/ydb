@@ -338,4 +338,30 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         root.SetAttr("quux", "literal");
         root.SetAttr("frob", 500);
     }
+
+    Y_UNIT_TEST(Cdata) {
+        using namespace NXml;
+        const TString xml = "<?xml version=\"1.0\"?>\n"
+                            "<example><![CDATA[Some & data]]> test</example>\n";
+
+        TDocument docDefault(xml, TDocument::String);
+        UNIT_ASSERT(docDefault.Root().FirstChild().IsText());
+
+        TDocument docWithCdata(xml, TDocument::String, XML_PARSE_NOCDATA);
+        UNIT_ASSERT(docWithCdata.Root().FirstChild().IsText());
+
+        TDocument docWithoutCdata(xml, TDocument::String, 0);
+        UNIT_ASSERT(!docWithoutCdata.Root().FirstChild().IsText());
+    }
+
+    Y_UNIT_TEST(InvalidXml) {
+        using namespace NXml;
+        const TString xml = "<?xml version=\"1.0\"?>\n"
+                            "<root><item>value</root>\n";
+
+        UNIT_CHECK_GENERATED_EXCEPTION(TDocument(xml, TDocument::String), yexception);
+
+        TDocument doc(xml, TDocument::String, XML_PARSE_RECOVER);
+        UNIT_ASSERT_EQUAL(doc.Root().FirstChild().Value<TString>(), "value");
+    }
 }

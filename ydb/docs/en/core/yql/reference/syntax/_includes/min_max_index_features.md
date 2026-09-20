@@ -1,0 +1,3 @@
+* The index is always [local](../../../../concepts/glossary.md#local-index) (`LOCAL`); there is no [global](../../../../concepts/glossary.md#secondary-index) variant.
+* Queries do not use the `VIEW <index>` syntax (unlike, for example, [full-text indexes](../../../../dev/fulltext-indexes.md)).
+* The filter is applied during reads only to data fragments for which the minimum and maximum values of the indexed column have already been computed and stored with the table data at write time or [merge](../../../../concepts/glossary.md#compaction). For other fragments, no skip by this index is performed.

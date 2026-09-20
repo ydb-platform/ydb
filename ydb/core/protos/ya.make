@@ -15,6 +15,7 @@ SRCS(
     backup.proto
     base.proto
     bind_channel_storage_pool.proto
+    blob_checker.proto
     blob_depot.proto
     blob_depot_config.proto
     blobstorage.proto
@@ -70,7 +71,9 @@ SRCS(
     counters_testshard.proto
     counters_tx_allocator.proto
     counters_tx_proxy.proto
+    counters_wasm_compile_controller.proto
     data_events.proto
+    data_format_settings.proto
     data_integrity_trails.proto
     database_basic_sausage_metainfo.proto
     datashard_backup.proto
@@ -83,6 +86,7 @@ SRCS(
     feature_flags.proto
     filestore_config.proto
     flat_scheme_op.proto
+    analyze_operation.proto
     flat_tx_scheme.proto
     follower_group.proto
     forced_compaction.proto
@@ -103,6 +107,7 @@ SRCS(
     kqp.proto
     kqp_physical.proto
     kqp_stats.proto
+    kqp_lookup_source.proto
     labeled_counters.proto
     load_test.proto
     local.proto
@@ -125,6 +130,7 @@ SRCS(
     node_whiteboard.proto
     pdiskfit.proto
     pqconfig.proto
+    pqdata_deferred_publish_destination.proto
     pqdata_mlp.proto
     pqdata_transaction.proto
     pqevents_global.proto
@@ -141,6 +147,7 @@ SRCS(
     scheme_type_operation.proto
     schemeshard_config.proto
     serverless_proxy_config.proto
+    set_column_constraint.proto
     shared_cache.proto
     sqs.proto
     statestorage.proto
@@ -149,6 +156,7 @@ SRCS(
     subdomains.proto
     sys_view.proto
     sys_view_types.proto
+    table_metrics_settings.proto
     table_service_config.proto
     table_stats.proto
     tablet.proto
@@ -161,6 +169,7 @@ SRCS(
     tenant_pool.proto
     tenant_slot_broker.proto
     test_shard.proto
+    test_shard_control.proto
     tracing.proto
     tx.proto
     tx_columnshard.proto
@@ -190,7 +199,6 @@ PEERDIR(
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos
     ydb/core/tx/columnshard/common/protos
-    ydb/core/tx/columnshard/engines/protos
     ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/library/actors/protos
     ydb/library/formats/arrow/protos

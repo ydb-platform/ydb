@@ -1,0 +1,70 @@
+/* dq can not */
+/* dqfile can not */
+
+use plato;
+
+pragma AnsiInForEmptyOrNullableItemsCollections;
+pragma config.flags('OptimizerFlags', 'EmitPruneKeys');
+
+select * from Input3
+where Input3.value in (
+    select a.value
+    from Input1 as a inner join Input2 as b
+    on a.value = b.value and a.key = b.key
+);
+
+select * from Input3
+where Input3.value in (
+    select a.value
+    from Input1 as a left join Input2 as b
+    on a.value = b.value and a.key = b.key
+);
+
+select * from Input3
+where Input3.value in (
+    select b.value
+    from Input1 as a right join Input2 as b
+    on a.value = b.value and a.key = b.key
+);
+
+select * from Input3
+where Input3.value in (
+    select a.value
+    from Input1 as a full join Input2 as b
+    on a.value = b.value and a.key = b.key
+);
+
+select * from Input3
+where Input3.value in (
+    select a.value
+    from Input1 as a exclusion join Input2 as b
+    on a.value = b.value and a.key = b.key
+);
+
+select * from Input3
+where Input3.value in (
+    select a.value
+    from Input1 as a left semi join Input2 as b
+    on a.value = b.value and a.key = b.key
+);
+
+select * from Input3
+where Input3.value in (
+    select b.value
+    from Input1 as a right semi join Input2 as b
+    on a.value = b.value and a.key = b.key
+);
+
+select * from Input3
+where Input3.value in (
+    select a.value
+    from Input1 as a left only join Input2 as b
+    on a.value = b.value and a.key = b.key
+);
+
+select * from Input3
+where Input3.value in (
+    select b.value
+    from Input1 as a right only join Input2 as b
+    on a.value = b.value and a.key = b.key
+);

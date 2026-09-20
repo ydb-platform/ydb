@@ -7,7 +7,9 @@
 #include "tx_processor.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/hive.h>
 #include <ydb/core/base/location.h>
+#include <ydb/core/base/storage_pool_kinds.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -23,6 +25,7 @@
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -280,6 +283,7 @@ public:
             NOT_UPDATED,
             ALLOCATED,
             DELETED,
+            SHRINKING,
         };
 
         TStoragePool(
@@ -309,8 +313,9 @@ public:
 
         TStoragePool(const TStoragePool &other) = default;
 
-        void AddRequiredGroups(ui64 count)
+        void ChangeRequiredGroups(i64 count)
         {
+            Y_ABORT_UNLESS(static_cast<i64>(Config.GetNumGroups()) + count > 0);
             Config.SetNumGroups(Config.GetNumGroups() + count);
         }
 
@@ -351,6 +356,7 @@ public:
         TString Issue;
         TActorId Worker;
         size_t GroupFitErrors = 0;
+        TVector<ui32> GroupsToDecommit;
     };
 
     struct TTenantSlotKind {
@@ -458,6 +464,7 @@ public:
             REMOVING_SUBDOMAIN,
             REMOVING_POOLS,
             CONFIGURING_SUBDOMAIN,
+            REMOVING_GROUPS,
         };
 
         enum EAction {
@@ -536,6 +543,7 @@ public:
         bool IsExternalStatisticsAggregator;
         bool IsExternalBackupController;
         bool IsGraphShardEnabled = false;
+        bool IsWasmCompileControllerEnabled = false;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
 
@@ -597,6 +605,8 @@ public:
             EvPoolAllocated,
             EvPoolFailed,
             EvPoolDeleted,
+            EvPoolShrinking,
+            EvGroupsDecommitted,
 
             EvEnd
         };
@@ -710,6 +720,30 @@ public:
             TTenant::TPtr Tenant;
             TStoragePool::TPtr Pool;
         };
+
+        struct TEvPoolShrinking : public TEventLocal<TEvPoolShrinking, EvPoolShrinking> {
+            TEvPoolShrinking(TTenant::TPtr tenant, TStoragePool::TPtr pool)
+                : Tenant(tenant)
+                , Pool(pool)
+            {
+            }
+
+            TTenant::TPtr Tenant;
+            TStoragePool::TPtr Pool;
+        };
+
+        struct TEvGroupsDecommitted : public TEventLocal<TEvGroupsDecommitted, EvGroupsDecommitted> {
+            TEvGroupsDecommitted(TTenant::TPtr tenant, TStoragePool::TPtr pool, TVector<ui32> groups)
+                : Tenant(tenant)
+                , Pool(pool)
+                , Groups(std::move(groups))
+            {
+            }
+
+            TTenant::TPtr Tenant;
+            TStoragePool::TPtr Pool;
+            TVector<ui32> Groups;
+        };
     };
 
 public:
@@ -725,6 +759,7 @@ public:
     class TTxUpdateSubDomainKey;
     class TTxUpdateTenantState;
     class TTxUpdateTenantPoolConfig;
+    class TTxDecommitGroups;
 
     ITransaction *CreateTxAlterTenant(TEvConsole::TEvAlterTenantRequest::TPtr &ev);
     ITransaction *CreateTxCreateTenant(TEvConsole::TEvCreateTenantRequest::TPtr &ev);
@@ -751,6 +786,7 @@ public:
                                           TStoragePool::TPtr pool,
                                           TActorId worker);
     ITransaction *CreateTxUpdateTenantPoolConfig(TEvConsole::TEvUpdateTenantPoolConfig::TPtr &ev);
+    ITransaction *CreateTxDecommitGroups(TTenant::TPtr tenant, TStoragePool::TPtr pool, TActorId worker, TVector<ui32> groups);
 
     void ClearState();
     void SetConfig(const NKikimrConsole::TTenantsConfig &config);
@@ -943,6 +979,7 @@ public:
     void Handle(TEvPrivate::TEvPoolAllocated::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPoolDeleted::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvPoolShrinking::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvRetryAllocateResources::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvStateLoaded::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvSubdomainFailed::TPtr &ev, const TActorContext &ctx);
@@ -950,10 +987,12 @@ public:
     void Handle(TEvPrivate::TEvSubdomainKey::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvSubdomainReady::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvSubdomainRemoved::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvGroupsDecommitted::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTenantSlotBroker::TEvSlotStats::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr &ev, const TActorContext &ctx);
 
     STFUNC(StateWork)
     {
@@ -972,6 +1011,7 @@ public:
             HFuncTraced(TEvPrivate::TEvPoolAllocated, Handle);
             HFuncTraced(TEvPrivate::TEvPoolDeleted, Handle);
             HFuncTraced(TEvPrivate::TEvPoolFailed, Handle);
+            HFuncTraced(TEvPrivate::TEvPoolShrinking, Handle);
             HFuncTraced(TEvPrivate::TEvRetryAllocateResources, Handle);
             HFuncTraced(TEvPrivate::TEvSubdomainFailed, Handle);
             HFuncTraced(TEvPrivate::TEvSubdomainCreated, Handle);
@@ -982,6 +1022,8 @@ public:
             HFuncTraced(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFuncTraced(TEvTenantSlotBroker::TEvSlotStats, Handle);
             HFuncTraced(TEvTenantSlotBroker::TEvTenantState, Handle);
+            HFuncTraced(TEvHive::TEvShrinkStoragePoolDone, Handle);
+            HFuncTraced(TEvPrivate::TEvGroupsDecommitted, Handle);
 
         default:
             Y_ABORT("TTenantsManager::StateWork unexpected event type: %" PRIx32 " event: %s",
@@ -1034,6 +1076,7 @@ private:
     TSlotStats SlotStats;
     TCounters Counters;
     NKikimrConfig::TFeatureFlags FeatureFlags;
+    THashSet<ui32> DecommittedGroups;
 };
 
 } // namespace NKikimr::NConsole
@@ -1054,6 +1097,8 @@ inline void Out<NKikimr::NConsole::TTenantsManager::TTenant::EState>(IOutputStre
         o << "REMOVING_POOLS";
     else if (x == NKikimr::NConsole::TTenantsManager::TTenant::CONFIGURING_SUBDOMAIN)
         o << "CONFIGURING_SUBDOMAIN";
+    else if (x == NKikimr::NConsole::TTenantsManager::TTenant::REMOVING_GROUPS)
+        o << "REMOVING_GROUPS";
     else
         o << "<UNKNOWN>";
     return;
@@ -1069,6 +1114,8 @@ inline void Out<NKikimr::NConsole::TTenantsManager::TStoragePool::EState>(IOutpu
         o << "ALLOCATED";
     else if (x == NKikimr::NConsole::TTenantsManager::TStoragePool::DELETED)
         o << "DELETED";
+    else if (x == NKikimr::NConsole::TTenantsManager::TStoragePool::SHRINKING)
+        o << "SHRINKING";
     else
         o << "<UNKNOWN>";
     return;

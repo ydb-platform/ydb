@@ -12,6 +12,7 @@
 #include "opentelemetry/sdk/trace/random_id_generator_factory.h"
 #include "opentelemetry/sdk/trace/sampler.h"
 #include "opentelemetry/sdk/trace/samplers/always_on_factory.h"
+#include "opentelemetry/sdk/trace/span_limits.h"
 #include "opentelemetry/sdk/trace/tracer_config.h"
 #include "opentelemetry/sdk/trace/tracer_context.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
@@ -69,10 +70,22 @@ std::unique_ptr<opentelemetry::sdk::trace::TracerProvider> TracerProviderFactory
     std::unique_ptr<IdGenerator> id_generator,
     std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>> tracer_configurator)
 {
+  return Create(std::move(processor), resource, std::move(sampler), std::move(id_generator),
+                std::move(tracer_configurator), SpanLimits::NoLimits());
+}
+
+std::unique_ptr<opentelemetry::sdk::trace::TracerProvider> TracerProviderFactory::Create(
+    std::unique_ptr<SpanProcessor> processor,
+    const opentelemetry::sdk::resource::Resource &resource,
+    std::unique_ptr<Sampler> sampler,
+    std::unique_ptr<IdGenerator> id_generator,
+    std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>> tracer_configurator,
+    SpanLimits span_limits)
+{
   std::unique_ptr<opentelemetry::sdk::trace::TracerProvider> provider(
       new opentelemetry::sdk::trace::TracerProvider(std::move(processor), resource,
                                                     std::move(sampler), std::move(id_generator),
-                                                    std::move(tracer_configurator)));
+                                                    std::move(tracer_configurator), span_limits));
   return provider;
 }
 
@@ -121,10 +134,22 @@ std::unique_ptr<opentelemetry::sdk::trace::TracerProvider> TracerProviderFactory
     std::unique_ptr<IdGenerator> id_generator,
     std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>> tracer_configurator)
 {
+  return Create(std::move(processors), resource, std::move(sampler), std::move(id_generator),
+                std::move(tracer_configurator), SpanLimits::NoLimits());
+}
+
+std::unique_ptr<opentelemetry::sdk::trace::TracerProvider> TracerProviderFactory::Create(
+    std::vector<std::unique_ptr<SpanProcessor>> &&processors,
+    const opentelemetry::sdk::resource::Resource &resource,
+    std::unique_ptr<Sampler> sampler,
+    std::unique_ptr<IdGenerator> id_generator,
+    std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>> tracer_configurator,
+    SpanLimits span_limits)
+{
   std::unique_ptr<opentelemetry::sdk::trace::TracerProvider> provider(
       new opentelemetry::sdk::trace::TracerProvider(std::move(processors), resource,
                                                     std::move(sampler), std::move(id_generator),
-                                                    std::move(tracer_configurator)));
+                                                    std::move(tracer_configurator), span_limits));
   return provider;
 }
 

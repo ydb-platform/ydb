@@ -15,7 +15,11 @@ PY_SRCS(
     exceptions.py
     init.py
     device.py
+    logging_setup.py
+    logs.py
+    output.py
     progress.py
+    progress_live.py
     templates.py
     service.py
     term.py

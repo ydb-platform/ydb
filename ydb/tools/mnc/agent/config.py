@@ -17,6 +17,7 @@ managed_partlabel_regexps = []
 def ensure_mnc_home():
     path = Path(mnc_home)
     path.mkdir(parents=True, exist_ok=True)
+    (path / "run").mkdir(parents=True, exist_ok=True)
     return str(path)
 
 
@@ -42,5 +43,9 @@ def load_config(path: str):
 
 def is_managed_partlabel(partlabel: str) -> bool:
     if not managed_partlabels and not managed_partlabel_regexps:
-        return True
+        return False
     return partlabel in managed_partlabels or any(pattern.fullmatch(partlabel) for pattern in managed_partlabel_regexps)
+
+
+def has_managed_partlabel_rules() -> bool:
+    return bool(managed_partlabels or managed_partlabel_regexps)

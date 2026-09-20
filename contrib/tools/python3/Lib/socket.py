@@ -634,18 +634,22 @@ def _fallback_socketpair(family=AF_INET, type=SOCK_STREAM, proto=0):
     # Authenticating avoids using a connection from something else
     # able to connect to {host}:{port} instead of us.
     # We expect only AF_INET and AF_INET6 families.
-    try:
-        if (
-            ssock.getsockname() != csock.getpeername()
-            or csock.getsockname() != ssock.getpeername()
-        ):
-            raise ConnectionError("Unexpected peer connection")
-    except:
-        # getsockname() and getpeername() can fail
-        # if either socket isn't connected.
-        ssock.close()
-        csock.close()
-        raise
+    #
+    # Note that we skip this on WASI because on that platorm the client socket
+    # may not have finished connecting by the time we've reached this point (gh-146139).
+    if sys.platform != "wasi":
+        try:
+            if (
+                    ssock.getsockname() != csock.getpeername()
+                    or csock.getsockname() != ssock.getpeername()
+            ):
+                raise ConnectionError("Unexpected peer connection")
+        except:
+            # getsockname() and getpeername() can fail
+            # if either socket isn't connected.
+            ssock.close()
+            csock.close()
+            raise
 
     return (ssock, csock)
 
@@ -881,7 +885,9 @@ def has_dualstack_ipv6():
     try:
         with socket(AF_INET6, SOCK_STREAM) as sock:
             sock.setsockopt(IPPROTO_IPV6, IPV6_V6ONLY, 0)
-            return True
+            # On some platforms (e.g. DragonFly BSD) setting IPV6_V6ONLY to 0
+            # silently has no effect, so check that it was actually cleared.
+            return sock.getsockopt(IPPROTO_IPV6, IPV6_V6ONLY) == 0
     except error:
         return False
 

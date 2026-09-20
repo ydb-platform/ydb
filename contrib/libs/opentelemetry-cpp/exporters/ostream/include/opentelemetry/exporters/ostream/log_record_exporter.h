@@ -38,6 +38,13 @@ public:
   std::unique_ptr<sdk::logs::Recordable> MakeRecordable() noexcept override;
 
   /**
+   * The ostream exporter uses ReadWriteLogRecord, which applies the configured
+   * LogRecord attribute limits, so the SDK should push the limits onto each
+   * record it produces.
+   */
+  bool RecordableEnforcesLogRecordLimits() const noexcept override { return true; }
+
+  /**
    * Exports a span of logs sent from the processor.
    */
   opentelemetry::sdk::common::ExportResult Export(

@@ -67,7 +67,7 @@
                                                                 ],
                                                                 "E-Cost": "0",
                                                                 "E-Rows": "1",
-                                                                "E-Size": "0",
+                                                                "E-Size": "100000",
                                                                 "LookupKeyColumns": [
                                                                     "i"
                                                                 ],

@@ -9,20 +9,15 @@
 
 namespace NKikimr::NPQ {
 
-// This class is used to control in-flight data.
-// Contoller handles layout of data units, max units count is MAX_LAYOUT_COUNT constant.
-// Layout is a deque of offsets
-// Each item (associated with data unit) in the deque is max offset which intersects with this unit
-// For example, if we have 3 units:
-// Unit 1: [0, 100]
-// Unit 2: [100, 200]
-// Unit 3: [200, 300]
-// Offsets are:
-// 1 - Size 60
-// 2 - Size 60
-// 3 - Size 60
-// 4 - Size 80
-// Then the deque will be [2, 4, 4]
+// Tracks in-flight read data volume against MaxAllowedSize.
+// Layout is a deque of at most MAX_LAYOUT_COUNT buckets (see LayoutUnitSize).
+// Each bucket is TUnit{Offset, Size}:
+//   Offset — max message offset charged to this bucket;
+//   Size   — bytes attributed to this bucket (normally up to LayoutUnitSize; the last bucket may grow when Layout is full).
+// TotalSize is the sum of all in-flight bytes; Remove(Offset) drops buckets with Offset < Offset.
+//
+// Example (LayoutUnitSize = 60): Add(1, 60), Add(2, 60), Add(3, 60), Add(4, 80)
+//   -> Layout = [{1, 60}, {2, 60}, {3, 60}, {4, 60}, {4, 20}], TotalSize = 260
 struct TInFlightController {
     constexpr static ui64 MAX_LAYOUT_COUNT = 1024;
     constexpr static TDuration SLIDING_WINDOW_SIZE = TDuration::Seconds(60);
@@ -31,8 +26,13 @@ struct TInFlightController {
     TInFlightController();
     TInFlightController(ui64 MaxAllowedSize);
 
+    struct TUnit {
+        ui64 Offset;
+        ui64 Size;
+    };
+
     ui64 LayoutUnitSize = 0;
-    std::deque<ui64> Layout;
+    std::deque<TUnit> Layout;
     ui64 TotalSize = 0;
     ui64 MaxAllowedSize = 0;
 
@@ -41,7 +41,7 @@ struct TInFlightController {
 
     // Adds an offset with size
     bool Add(ui64 Offset, ui64 Size);
-    // Removes offsets <= given offset
+    // Drops layout buckets with offset < Offset (committed/read past this offset).
     bool Remove(ui64 Offset);
     bool IsMemoryLimitReached() const;
 

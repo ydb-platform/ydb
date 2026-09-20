@@ -1,4 +1,3 @@
-/* postgres can not */
 select cast("2000-01-01,GMT" as tzdate) > tzdate("2000-01-01,Europe/Moscow");
 select cast("1999-12-31,GMT" as tzdate) == tzdate("2000-01-01,Europe/Moscow");
 select RemoveTimezone(cast("1999-12-31,GMT" as tzdate)) == RemoveTimezone(tzdate("2000-01-01,Europe/Moscow"));

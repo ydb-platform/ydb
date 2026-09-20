@@ -18,6 +18,8 @@ struct TJsonParserConfig {
     TDuration LatencyLimit;
     ui64 BufferCellCount = 1000000;  // (number rows) * (number columns) limit
     bool SkipErrors = false;
+    bool StructuredParsing = true;
+    std::shared_ptr<NYql::NDq::IMemoryQuotaManager> MemoryQuotaManager;
 };
 
 TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters);

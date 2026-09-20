@@ -2,6 +2,8 @@
 
 #include <ydb/library/accessor/validator.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GROUPED_MEMORY_LIMITER
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 TProcessMemory* TManager::GetProcessMemoryByExternalIdOptional(const ui64 externalProcessId) {
@@ -13,8 +15,12 @@ TProcessMemory* TManager::GetProcessMemoryByExternalIdOptional(const ui64 extern
 }
 
 void TManager::RegisterGroup(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId) {
-    AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "register_group")("external_process_id", externalProcessId)(
-        "external_group_id", externalGroupId)("size", ProcessIds.GetSize())("external_scope_id", externalScopeId);
+    YDB_LOG_DEBUG("",
+        {"event", "register_group"},
+        {"externalProcessId", externalProcessId},
+        {"externalGroupId", externalGroupId},
+        {"size", ProcessIds.GetSize()},
+        {"externalScopeId", externalScopeId});
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
         process->RegisterGroup(externalScopeId, externalGroupId);
         UpdateWaitingProcesses(process);
@@ -23,8 +29,11 @@ void TManager::RegisterGroup(const ui64 externalProcessId, const ui64 externalSc
 }
 
 void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId) {
-    AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "unregister_group")("external_process_id", externalProcessId)(
-        "external_group_id", externalGroupId)("size", ProcessIds.GetSize());
+    YDB_LOG_DEBUG("",
+        {"event", "unregister_group"},
+        {"externalProcessId", externalProcessId},
+        {"externalGroupId", externalGroupId},
+        {"size", ProcessIds.GetSize()});
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
         auto g = BuildProcessOrderGuard(*process);
         process->UnregisterGroup(externalScopeId, externalGroupId);
@@ -133,7 +142,11 @@ void TManager::RegisterProcess(const ui64 externalProcessId, const std::vector<s
         ProcessesOrdered.emplace(info.first->second.BuildUsageAddress(), &info.first->second);
         UpdateWaitingProcesses(&info.first->second);
     } else {
-        ++Processes.find(*internalId)->second.MutableLinksCount();
+        auto& process = Processes.find(*internalId)->second;
+        AFL_VERIFY(process.GetStages().size() == stages.size())("external_process_id", externalProcessId)(
+            "registered_stages", process.GetStages().size())("new_stages", stages.size())(
+            "reason", "process_id_collision: externalProcessId reused for a different set of stages");
+        ++process.MutableLinksCount();
     }
     RefreshSignals();
 }

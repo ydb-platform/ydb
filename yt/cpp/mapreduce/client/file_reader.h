@@ -50,6 +50,8 @@ private:
     std::unique_ptr<TPingableTransaction> ReadTransaction_;
 
     ui64 CurrentOffset_ = 0;
+
+    NTracing::TTraceContextWrapperPtr TraceContext_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

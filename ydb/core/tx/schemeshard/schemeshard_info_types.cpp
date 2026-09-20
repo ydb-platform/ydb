@@ -1,5 +1,6 @@
 #include "schemeshard_info_types.h"
 
+#include "schemeshard_generated_column_utils.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
 #include "schemeshard_import_helpers.h"  // for ValidateImportDstPath
@@ -14,7 +15,9 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/util/pb.h>
@@ -29,14 +32,9 @@ using namespace NKikimr::NSchemeShard;
 using TDiskSpaceQuotas = TSubDomainInfo::TDiskSpaceQuotas;
 using TQuotasPair = TDiskSpaceQuotas::TQuotasPair;
 using TStoragePoolUsage = TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
+using TSmallBlobsQuotas = TSubDomainInfo::TSmallBlobsQuotas;
 
-enum class EDiskUsageStatus {
-    AboveHardQuota,
-    InBetween,
-    BelowSoftQuota,
-};
-
-EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsage>& storagePoolsUsage,
+EQuotaUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsage>& storagePoolsUsage,
                                          const THashMap<TString, TQuotasPair>& storagePoolsQuotas
 ) {
     bool softQuotaExceeded = false;
@@ -45,7 +43,7 @@ EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsa
             const auto totalSize = usage.DataSize + usage.IndexSize;
             // If a quota is equal to zero, then it sets no limit on the disk space usage.
             if (quota->HardQuota && totalSize > quota->HardQuota) {
-                return EDiskUsageStatus::AboveHardQuota;
+                return EQuotaUsageStatus::AboveHardQuota;
             }
             if (quota->SoftQuota && totalSize >= quota->SoftQuota) {
                 softQuotaExceeded = true;
@@ -53,8 +51,8 @@ EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsa
         }
     }
     return softQuotaExceeded
-            ? EDiskUsageStatus::InBetween
-            : EDiskUsageStatus::BelowSoftQuota;
+            ? EQuotaUsageStatus::InBetween
+            : EQuotaUsageStatus::BelowSoftQuota;
 }
 
 /*
@@ -146,26 +144,68 @@ TDiskSpaceQuotas TSubDomainInfo::GetDiskSpaceQuotas() const {
     return TDiskSpaceQuotas{hardQuota, softQuota, std::move(storagePoolsQuotas)};
 }
 
+void TSubDomainInfo::RecomputeSmallBlobsStorageUnits() {
+    SmallBlobsStorageUnits = 0;
+    if (!DatabaseQuotas) {
+        return;
+    }
+
+    // Columnshards report only the total small-blobs usage, not a per-pool split, so we
+    // collapse the quota into a single budget to compare that total against
+    ui64 diskHardQuotaBytes = 0;
+    if (!AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()) {
+        diskHardQuotaBytes = DatabaseQuotas->data_size_hard_quota();
+    } else {
+        for (const auto& storageQuota : DatabaseQuotas->storage_quotas()) {
+            diskHardQuotaBytes += storageQuota.data_size_hard_quota();
+        }
+    }
+
+    constexpr ui64 TenTiB = 10ull << 40;
+    SmallBlobsStorageUnits = static_cast<double>(diskHardQuotaBytes) / TenTiB;
+}
+
+TSmallBlobsQuotas TSubDomainInfo::GetSmallBlobsQuotas() const {
+    if (!DatabaseQuotas || SmallBlobsStorageUnits <= 0.0) {
+        return {};
+    }
+
+    const auto& config = AppData()->SmallBlobsQuotaConfig;
+
+    const double softRatio = std::clamp(config.GetSoftRatio(), 0.0, 0.999);
+
+    TSmallBlobsQuotas quotas;
+    quotas.VolumeHardQuota = static_cast<ui64>(SmallBlobsStorageUnits * config.GetVolumeBytesPer10TiB());
+    quotas.CountHardQuota = static_cast<ui64>(SmallBlobsStorageUnits * config.GetCountPer10TiB());
+    quotas.VolumeSoftQuota = static_cast<ui64>(quotas.VolumeHardQuota * softRatio);
+    quotas.CountSoftQuota = static_cast<ui64>(quotas.CountHardQuota * softRatio);
+    return quotas;
+}
+
+bool TSubDomainInfo::ApplyQuotaExceededStatus(EQuotaUsageStatus status, bool& exceeded, ESimpleCounters counter, IQuotaCounters* counters) {
+    if (status == EQuotaUsageStatus::AboveHardQuota && !exceeded) {
+        counters->ChangeSimpleCounter(counter, +1);
+        exceeded = true;
+        ++DomainStateVersion;
+        return true;
+    }
+    if (status == EQuotaUsageStatus::BelowSoftQuota && exceeded) {
+        counters->ChangeSimpleCounter(counter, -1);
+        exceeded = false;
+        ++DomainStateVersion;
+        return true;
+    }
+    return false;
+}
+
 bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
-    const auto changeSubdomainState = [&](EDiskUsageStatus diskUsage) {
-        if (diskUsage == EDiskUsageStatus::AboveHardQuota && !DiskQuotaExceeded) {
-            counters->ChangeDiskSpaceQuotaExceeded(+1);
-            DiskQuotaExceeded = true;
-            ++DomainStateVersion;
-            return true;
-        }
-        if (diskUsage == EDiskUsageStatus::BelowSoftQuota && DiskQuotaExceeded) {
-            counters->ChangeDiskSpaceQuotaExceeded(-1);
-            DiskQuotaExceeded = false;
-            ++DomainStateVersion;
-            return true;
-        }
-        return false;
+    const auto changeSubdomainState = [&](EQuotaUsageStatus diskUsage) {
+        return ApplyQuotaExceededStatus(diskUsage, DiskQuotaExceeded, COUNTER_DISK_SPACE_QUOTA_EXCEEDED, counters);
     };
 
     auto quotas = GetDiskSpaceQuotas();
     if (!quotas) {
-        return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+        return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
     }
 
     if (!AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()) {
@@ -178,10 +218,10 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
         const bool isTotalUsageBelowSoftQuota = !quotas.SoftQuota || totalUsage < quotas.SoftQuota;
 
         if (isHardQuotaExceeded) {
-            return changeSubdomainState(EDiskUsageStatus::AboveHardQuota);
+            return changeSubdomainState(EQuotaUsageStatus::AboveHardQuota);
         }
         if (isTotalUsageBelowSoftQuota) {
-            return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+            return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
         }
     } else {
         // If the feature flag is turned on, then the overall quota is ignored:
@@ -189,20 +229,73 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
         const auto storagePoolsUsageStatus = CheckStoragePoolsQuotas(DiskSpaceUsage.StoragePoolsUsage, quotas.StoragePoolsQuotas);
 
         const bool isSomeStoragePoolHardQuotaExceeded = !quotas.StoragePoolsQuotas.empty()
-                                                            && storagePoolsUsageStatus == EDiskUsageStatus::AboveHardQuota;
+                                                            && storagePoolsUsageStatus == EQuotaUsageStatus::AboveHardQuota;
         const bool isEachStoragePoolUsageBelowSoftQuota = quotas.StoragePoolsQuotas.empty()
-                                                            || storagePoolsUsageStatus == EDiskUsageStatus::BelowSoftQuota;
+                                                            || storagePoolsUsageStatus == EQuotaUsageStatus::BelowSoftQuota;
 
         if (isSomeStoragePoolHardQuotaExceeded) {
-            return changeSubdomainState(EDiskUsageStatus::AboveHardQuota);
+            return changeSubdomainState(EQuotaUsageStatus::AboveHardQuota);
         }
         if (isEachStoragePoolUsageBelowSoftQuota) {
-            return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+            return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
         }
     }
 
     // made no changes to the state of the subdomain
     return false;
+}
+
+bool TSubDomainInfo::CheckSmallBlobsQuotas(IQuotaCounters* counters) {
+    const auto metricStatus = [](ui64 usage, ui64 hardQuota, ui64 softQuota) -> EQuotaUsageStatus {
+        if (hardQuota && usage > hardQuota) {
+            return EQuotaUsageStatus::AboveHardQuota;
+        }
+        if (!softQuota || usage < softQuota) {
+            return EQuotaUsageStatus::BelowSoftQuota;
+        }
+        return EQuotaUsageStatus::InBetween;
+    };
+
+    const auto quotas = GetSmallBlobsQuotas();
+
+    const EQuotaUsageStatus volumeStatus = metricStatus(SmallBlobsUsage.VolumeBytes, quotas.VolumeHardQuota, quotas.VolumeSoftQuota);
+    const EQuotaUsageStatus countStatus = metricStatus(SmallBlobsUsage.Count, quotas.CountHardQuota, quotas.CountSoftQuota);
+
+    EQuotaUsageStatus combinedStatus;
+    if (volumeStatus == EQuotaUsageStatus::AboveHardQuota || countStatus == EQuotaUsageStatus::AboveHardQuota) {
+        combinedStatus = EQuotaUsageStatus::AboveHardQuota;
+    } else if (volumeStatus == EQuotaUsageStatus::BelowSoftQuota && countStatus == EQuotaUsageStatus::BelowSoftQuota) {
+        combinedStatus = EQuotaUsageStatus::BelowSoftQuota;
+    } else {
+        combinedStatus = EQuotaUsageStatus::InBetween;
+    }
+
+    return ApplyQuotaExceededStatus(combinedStatus, SmallBlobsQuotaExceeded, COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED, counters);
+}
+
+bool TSubDomainInfo::CheckQuotas(IQuotaCounters* counters) {
+    const ui64 versionBefore = DomainStateVersion;
+    const bool diskQuotaChanged = CheckDiskSpaceQuotas(counters);
+    const bool smallBlobsQuotaChanged = CheckSmallBlobsQuotas(counters);
+    if (DomainStateVersion > versionBefore + 1) {
+        DomainStateVersion = versionBefore + 1;
+    }
+    return diskQuotaChanged || smallBlobsQuotaChanged;
+}
+
+void TSubDomainInfo::CountSmallBlobsQuotas(IQuotaCounters* counters, const TSmallBlobsQuotas& prev, const TSmallBlobsQuotas& next) {
+    if (const i64 delta = static_cast<i64>(next.VolumeHardQuota) - static_cast<i64>(prev.VolumeHardQuota); delta != 0) {
+        counters->ChangeSmallBlobsVolumeHardQuotaBytes(delta);
+    }
+    if (const i64 delta = static_cast<i64>(next.VolumeSoftQuota) - static_cast<i64>(prev.VolumeSoftQuota); delta != 0) {
+        counters->ChangeSmallBlobsVolumeSoftQuotaBytes(delta);
+    }
+    if (const i64 delta = static_cast<i64>(next.CountHardQuota) - static_cast<i64>(prev.CountHardQuota); delta != 0) {
+        counters->ChangeSmallBlobsCountHardQuota(delta);
+    }
+    if (const i64 delta = static_cast<i64>(next.CountSoftQuota) - static_cast<i64>(prev.CountSoftQuota); delta != 0) {
+        counters->ChangeSmallBlobsCountSoftQuota(delta);
+    }
 }
 
 void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) {
@@ -244,6 +337,17 @@ void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskS
                 counters->AddDiskSpaceSoftQuotaBytes(GetUserFacingStorageType(poolKind), addend);
             }
         }
+    }
+}
+
+void TSubDomainInfo::AggrSmallBlobsUsage(IQuotaCounters* counters, i64 bytesDelta, i64 countDelta) {
+    if (bytesDelta != 0) {
+        SmallBlobsUsage.VolumeBytes = std::max<i64>(0, static_cast<i64>(SmallBlobsUsage.VolumeBytes) + bytesDelta);
+        counters->ChangeSmallBlobsVolumeBytes(bytesDelta);
+    }
+    if (countDelta != 0) {
+        SmallBlobsUsage.Count = std::max<i64>(0, static_cast<i64>(SmallBlobsUsage.Count) + countDelta);
+        counters->ChangeSmallBlobsCount(countDelta);
     }
 }
 
@@ -315,6 +419,17 @@ void TSubDomainInfo::AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopic
     auto& topics = DiskSpaceUsage.Topics;
     topics.DataSize += (newAggr.DataSize - oldAggr.DataSize);
     topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
+}
+
+// TODO(flown4qqqq):: rework this into a fast way.
+ui32 TTableInfo::GetColumnIdByNameSlow(const TString& columnName) const {
+    for (const auto& [id, col] : Columns) {
+        if (!col.IsDropped() && col.Name == columnName) {
+            return id;
+        }
+    }
+
+    return InvalidColumnId;
 }
 
 TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
@@ -399,9 +514,21 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            bool isChangeNotNullConstraint = col.HasNotNull();
+            if (col.HasDefaultFromExpression()) {
+                errStr = Sprintf("Cannot add a generated (GENERATED ALWAYS AS) expression to the existing column '%s'", colName.data());
+                return nullptr;
+            }
 
-            if (!isChangeNotNullConstraint && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault() && !col.HasDefaultFromLiteral()) {
+            bool isChangeNotNullConstraint = col.HasNotNull();
+            bool isChangeSetNotNullInProgress = col.HasSetNotNullInProgress();
+
+            if (!isChangeNotNullConstraint
+                && !isChangeSetNotNullInProgress
+                && !columnFamily
+                && !col.HasDefaultFromSequence()
+                && !col.HasEmptyDefault()
+                && !col.HasDefaultFromLiteral())
+            {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -432,9 +559,43 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromSequence) {
-                if (isChangeNotNullConstraint || columnFamily) {
+                if (isChangeSetNotNullInProgress || isChangeNotNullConstraint || columnFamily) {
                     errStr = Sprintf("Cannot alter serial column '%s'", colName.c_str());
                     return nullptr;
+                }
+            }
+
+            if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression && columnFamily && columnFamily->GetId() != 0) {
+                NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+                if (generatedDesc.ParseFromString(sourceColumn.DefaultValue) && !generatedDesc.GetStored()) {
+                    errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
+            }
+
+            if (isChangeNotNullConstraint || isChangeSetNotNullInProgress) {
+                if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+                    errStr = Sprintf("Can't change nullability of generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
+
+                for (const auto& [_, srcCol] : source->Columns) {
+                    if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
+                        continue;
+                    }
+
+                    NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+                    if (!generatedDesc.ParseFromString(srcCol.DefaultValue)) {
+                        continue;
+                    }
+
+                    for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
+                        if (dependency == colName) {
+                            errStr = Sprintf("Can't change nullability of column '%s': it is used by generated column '%s'", colName.c_str(),
+                                srcCol.Name.data());
+                            return nullptr;
+                        }
+                    }
                 }
             }
 
@@ -487,26 +648,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             column = sourceColumn;
 
             if (isChangeNotNullConstraint) {
-                if (col.GetNotNull()) { // SET NOT NULL
-                    if (!featureFlags.EnableSetColumnConstraint) {
-                        errStr = Sprintf("Type '%s' specified for column '%s', but support for SET NOT NULL is disabled (EnableSetColumnConstraint feature flag is off)", col.GetType().data(), colName.data());
-                        return nullptr;
-                    }
+                column.NotNull = col.GetNotNull();
+            }
 
-                    /*
-                        Note that here we are setting the NotNull value to true, although we can't just leave it that way,
-                        because first we need to check the column for null values.
-
-                        Thus, after that, such a check will be started. Based on the results of this check, one of two decisions will be made:
-                        1. Leave the NotNull value as true if the column did not contain Nulls.
-                        2. Set NotNull back to false if there is at least one Null in the column.
-                    */
-
-                    column.NotNull = true;
-                } else { // DROP NOT NULL
-                    column.NotNull = false;
-                }
-
+            if (isChangeSetNotNullInProgress) {
+                column.SetNotNullInProgress = col.GetSetNotNullInProgress();
             }
 
             if (columnFamily) {
@@ -585,6 +731,24 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
+            if (col.HasDefaultFromExpression()) {
+                const bool stored = col.GetDefaultFromExpression().GetStored();
+                if (stored && !featureFlags.EnableGeneratedStored) {
+                    errStr = Sprintf("STORED GENERATED columns are disabled. Column: %s", colName.c_str());
+                    return nullptr;
+                }
+
+                if (!stored && !featureFlags.EnableGeneratedVirtual) {
+                    errStr = Sprintf("VIRTUAL GENERATED columns are disabled. Column: %s", colName.c_str());
+                    return nullptr;
+                }
+
+                if (!stored && columnFamily && columnFamily->GetId() != 0) {
+                    errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
+            }
+
             alterData->NextColumnId = Max(colId + 1, alterData->NextColumnId);
 
             colName2Id[colName] = colId;
@@ -592,6 +756,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             column = TTableInfo::TColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
             column.Family = columnFamily ? columnFamily->GetId() : 0;
             column.IsBuildInProgress = col.GetIsBuildInProgress();
+            column.SetNotNullInProgress = col.GetSetNotNullInProgress();
             if (source)
                 column.CreateVersion = alterData->AlterVersion;
             if (col.HasDefaultFromSequence()) {
@@ -600,6 +765,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             } else if (col.HasDefaultFromLiteral()) {
                 column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
                 column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
+            } else if (col.HasDefaultFromExpression()) {
+                column.DefaultKind = ETableColumnDefaultKind::FromExpression;
+                column.DefaultValue = col.GetDefaultFromExpression().SerializeAsString();
             }
         }
     }
@@ -639,9 +807,26 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 errStr = Sprintf("Can't drop TTL column: '%s', disable TTL first ", colName.data());
                 return nullptr;
             }
-            if (colIt->second.DefaultKind == ETableColumnDefaultKind::FromSequence) {
-                errStr = Sprintf("Can't drop serial column: '%s'", colName.data());
-                return nullptr;
+            for (const auto& [srcColId, srcCol] : source->Columns) {
+                if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
+                    continue;
+                }
+
+                if (auto it = alterData->Columns.find(srcColId);
+                    it != alterData->Columns.end() && it->second.DeleteVersion == alterData->AlterVersion)
+                {
+                    continue;
+                }
+
+                NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+                if (generatedDesc.ParseFromString(srcCol.DefaultValue)) {
+                    for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
+                        if (dependency == colName) {
+                            errStr = Sprintf("Can't drop column '%s': it is used by generated column '%s'", colName.data(), srcCol.Name.data());
+                            return nullptr;
+                        }
+                    }
+                }
             }
 
             alterData->Columns[colId] = colIt->second;
@@ -676,7 +861,103 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
     }
 
-    if (op.HasDetailedMetricsSettings()) {
+    // Multi-column statistics.
+    {
+        const bool hasMultiColumnStatisticsChanges = (op.MultiColumnStatisticsSize() != 0 || op.DropMultiColumnStatisticsSize() != 0);
+        if (hasMultiColumnStatisticsChanges && !featureFlags.EnableColumnStatistics) {
+            errStr = "Multi-column statistics support is disabled";
+            return nullptr;
+        }
+
+        THashSet<TString> dropNames(op.GetDropMultiColumnStatistics().begin(), op.GetDropMultiColumnStatistics().end());
+        THashSet<TString> resultNames;
+        auto* outMultiColumnStatistics = alterData->TableDescriptionFull->MutableMultiColumnStatistics();
+
+        // Carry over existing statistics, skipping the dropped ones.
+        if (source) {
+            for (const auto& stat : source->MultiColumnStatistics()) {
+                if (dropNames.erase(stat.GetName())) {
+                    continue;
+                }
+                outMultiColumnStatistics->Add()->CopyFrom(stat);
+                resultNames.insert(stat.GetName());
+            }
+        }
+
+        if (!dropNames.empty()) {
+            errStr = TStringBuilder() << "MultiColumnStatistics not found: " << *dropNames.begin();
+            return nullptr;
+        }
+
+        for (const auto& add : op.GetMultiColumnStatistics()) {
+            if (add.GetName().empty()) {
+                errStr = "MultiColumnStatistics name must be specified";
+                return nullptr;
+            }
+            if (!resultNames.insert(add.GetName()).second) {
+                errStr = TStringBuilder() << "MultiColumnStatistics " << add.GetName() << " must be defined once";
+                return nullptr;
+            }
+            if (add.ColumnNamesSize() == 0) {
+                errStr = TStringBuilder() << "MultiColumnStatistics " << add.GetName() << " must have at least one column";
+                return nullptr;
+            }
+            auto* desc = outMultiColumnStatistics->Add();
+            desc->SetName(add.GetName());
+            for (const auto& colName : add.GetColumnNames()) {
+                auto it = colName2Id.find(colName);
+                if (it == colName2Id.end()) {
+                    errStr = TStringBuilder() << "Undefined column: " << colName;
+                    return nullptr;
+                }
+                desc->AddColumnNames(colName);
+                desc->AddColumnIds(it->second);
+            }
+            bool hasEqHeightHistogram = false;
+            for (const auto rawType : add.GetTypes()) {
+                const auto type = static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(rawType);
+                switch (type) {
+                    case NKikimrSchemeOp::EMultiColumnStatisticsType::MULTI_COLUMN_STATISTICS_UNSPECIFIED:
+                        errStr = TStringBuilder() << "MultiColumnStatistics " << add.GetName() << " type must be specified";
+                        return nullptr;
+                    case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+                        break;
+                    case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                        hasEqHeightHistogram = true;
+                        break;
+                    default:
+                        errStr = TStringBuilder() << "Unknown statistic type: " << rawType;
+                        return nullptr;
+                }
+                desc->AddTypes(type);
+            }
+            if (hasEqHeightHistogram) {
+                for (const auto& colName : add.GetColumnNames()) {
+                    const ui32 colId = colName2Id.at(colName);
+                    const TColumn* column = nullptr;
+                    if (auto it = alterData->Columns.find(colId); it != alterData->Columns.end()) {
+                        column = &it->second;
+                    } else if (source) {
+                        if (auto it = source->Columns.find(colId); it != source->Columns.end()) {
+                            column = &it->second;
+                        }
+                    }
+                    if (!column || column->IsDropped()) {
+                        errStr = TStringBuilder() << "Undefined column: " << colName;
+                        return nullptr;
+                    }
+                    if (!NScheme::NTypeIds::IsPresortEncodable(column->PType.GetTypeId())) {
+                        errStr = TStringBuilder()
+                            << "EQ_HEIGHT_HISTOGRAM is not supported for column '" << colName
+                            << "' of type " << NScheme::TypeName(column->PType, column->PTypeMod);
+                        return nullptr;
+                    }
+                }
+            }
+        }
+    }
+
+    if (featureFlags.EnableDetailedMetrics && op.HasDetailedMetricsSettings()) {
         switch (op.GetDetailedMetricsSettings().GetStatusCase()) {
         case NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured:
             if (op.GetDetailedMetricsSettings().HasConfigured()) {
@@ -794,6 +1075,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             errStr = Sprintf("Key column '%s' must belong to the default family", keyName.data());
             return nullptr;
         }
+        if (column.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+            errStr = Sprintf("Generated column '%s' cannot be part of the primary key", keyName.data());
+            return nullptr;
+        }
         column.KeyOrder = keyOrder;
         keyColIds.push_back(colId);
         ++keyOrder;
@@ -808,15 +1093,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         return nullptr;
     }
 
-    if (op.GetUniqueIndexKeySize()) {
-        if (op.GetUniqueIndexKeySize() >= keyColIds.size()) {
-            errStr = TStringBuilder()
-                << "Too many unique key prefix columns"
-                << ": " << op.GetUniqueIndexKeySize()
-                << ", max: " << (keyColIds.size()-1);
-            return nullptr;
-        }
-        alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
+    if (op.GetPartitionConfig().GetUniqueIndexKeySize() >= keyColIds.size()) {
+        errStr = TStringBuilder()
+            << "Too many unique key prefix columns"
+            << ": " << op.GetPartitionConfig().GetUniqueIndexKeySize()
+            << ", max: " << (keyColIds.size()-1);
+        return nullptr;
     }
 
     if (source) {
@@ -869,6 +1151,11 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
             if (column.IsDropped()) {
                 continue;
             }
+            // A VIRTUAL generated column is computed at read time by KQP: the datashards
+            // must never learn about it
+            if (IsVirtualGeneratedColumn(column)) {
+                continue;
+            }
             auto colDescr = TableDescription.AddColumns();
             colDescr->SetName(column.Name);
             colDescr->SetId(column.Id);
@@ -878,6 +1165,7 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
                 *colDescr->MutableTypeInfo() = *columnType.TypeInfo;
             }
             colDescr->SetNotNull(column.NotNull);
+            colDescr->SetSetNotNullInProgress(column.SetNotNullInProgress);
             colDescr->SetFamily(column.Family);
         }
         for (auto ci : keyColumnIds) {
@@ -1165,6 +1453,19 @@ bool TPartitionConfigMerger::ApplyChanges(
         }
     }
 
+    if (changes.DropByKeyFilterPrefixLengthsSize() > 0) {
+        // Remove specific bloom filter prefixes (used when dropping a row-table prefix bloom index).
+        TSet<ui32> toRemove(changes.GetDropByKeyFilterPrefixLengths().begin(),
+                            changes.GetDropByKeyFilterPrefixLengths().end());
+        google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TByKeyFilterPrefix> kept;
+        for (auto& p : *result.MutableByKeyFilterPrefixes()) {
+            if (!toRemove.contains(p.GetPrefixLength())) {
+                kept.Add()->Swap(&p);
+            }
+        }
+        result.MutableByKeyFilterPrefixes()->Swap(&kept);
+    }
+
     if (changes.HasExecutorFastLogPolicy()) {
         result.SetExecutorFastLogPolicy(changes.GetExecutorFastLogPolicy());
     }
@@ -1194,6 +1495,14 @@ bool TPartitionConfigMerger::ApplyChanges(
 
     if (changes.HasKeepSnapshotTimeout()) {
         result.SetKeepSnapshotTimeout(changes.GetKeepSnapshotTimeout());
+    }
+
+    if (changes.HasUniqueIndexKeySize()) {
+        result.SetUniqueIndexKeySize(changes.GetUniqueIndexKeySize());
+    }
+
+    if (changes.HasSpecialTableType()) {
+        result.SetSpecialTableType(changes.GetSpecialTableType());
     }
 
     return true;
@@ -1717,6 +2026,7 @@ void TTableInfo::FinishAlter() {
             oldCol->DefaultKind = cinfo.DefaultKind;
             oldCol->DefaultValue = cinfo.DefaultValue;
             oldCol->NotNull = cinfo.NotNull;
+            oldCol->SetNotNullInProgress = cinfo.SetNotNullInProgress;
         } else {
             Columns[col.first] = cinfo;
             if (cinfo.KeyOrder != (ui32)-1) {
@@ -1834,6 +2144,10 @@ void TTableInfo::FinishAlter() {
 
     if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasIncrementalBackupConfig()) {
         MutableIncrementalBackupConfig().Swap(AlterData->TableDescriptionFull->MutableIncrementalBackupConfig());
+    }
+
+    if (AlterData->TableDescriptionFull.Defined()) {
+        MutableMultiColumnStatistics()->Swap(AlterData->TableDescriptionFull->MutableMultiColumnStatistics());
     }
 
     // Force FillDescription to regenerate TableDescription
@@ -2047,6 +2361,14 @@ void TTableInfo::ApplySplitMerge(
 }
 
 void TTableInfo::VerifyConsistency() const {
+    // AppData is absent in lowlevel unit tests
+    if (HasAppData() && !AppData()->FeatureFlags.GetEnableTablePartitionsConsistencyCheck()) {
+        LastVerifyConsistencyTime = 0;
+        return;
+    }
+
+    THPTimer cpuTimer;
+
     Y_ABORT_UNLESS(PartitionStore.size() == Partitions.size());
     Y_ABORT_UNLESS(Stats.PartitionStats.size() == Partitions.size());
     Y_ABORT_UNLESS(Stats.Aggregated.PartCount == Partitions.size());
@@ -2077,6 +2399,8 @@ void TTableInfo::VerifyConsistency() const {
         Y_ABORT_UNLESS(CondEraseSchedule.Empty());
         Y_ABORT_UNLESS(InFlightCondErase.empty());
     }
+
+    LastVerifyConsistencyTime = ui64(1e9 * cpuTimer.PassedReset());
 }
 
 void TTableAggregatedStats::RemoveShardStats(const TVector<TShardIdx>& keys, TInstant now) {
@@ -2160,6 +2484,12 @@ void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsag
         Aggregated.DataSize += delta.DataSize;
         Aggregated.IndexSize += delta.IndexSize;
     }
+
+    Aggregated.SmallBlobsVolumeBytes = std::max<i64>(
+        0, static_cast<i64>(Aggregated.SmallBlobsVolumeBytes) + (static_cast<i64>(newStats.SmallBlobsVolumeBytes) - static_cast<i64>(oldStats.SmallBlobsVolumeBytes)));
+    Aggregated.SmallBlobsCount = std::max<i64>(
+        0, static_cast<i64>(Aggregated.SmallBlobsCount) + (static_cast<i64>(newStats.SmallBlobsCount) - static_cast<i64>(oldStats.SmallBlobsCount)));
+
     // second, aggregation of space separated by storage pool kinds
     for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
         const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolKind);
@@ -3071,7 +3401,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         if (TString objectPath = CanonizePath(path)) {
             result << objectPath;
         }
-        return std::move(result);
+        return result;
     };
 
     auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {
@@ -3182,7 +3512,9 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         result.AddError("no items to import");
     }
 
-    Items.swap(items);
+    if (result.Success) {
+        Items.swap(items);
+    }
 
     return result;
 }

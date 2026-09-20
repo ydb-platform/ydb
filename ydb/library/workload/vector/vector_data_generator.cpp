@@ -274,8 +274,8 @@ private:
         TStringBuilder buffer;
         NKnnVectorSerialization::TSerializer<T> serializer(&buffer.Out);
         for (size_t j = 0; j < VectorOpts.VectorDimension; ++j) {
-            if constexpr (std::is_same<T, float>::value) {
-                serializer.HandleElement(Distribution(RandomGenerator) * 2 - 1);
+            if constexpr (std::is_same_v<T, float> || std::is_same_v<T, TFloat16> || std::is_same_v<T, TBFloat16>) {
+                serializer.HandleElement(static_cast<T>(Distribution(RandomGenerator) * 2 - 1));
             } else if constexpr (std::is_same<T, uint8_t>::value) {
                 serializer.HandleElement(Distribution(RandomGenerator) * (UINT8_MAX + 1));
             } else if constexpr (std::is_same<T, int8_t>::value) {
@@ -338,6 +338,10 @@ public:
             std::function<TStringBuilder()> generateEmbedding;
             if (VectorOpts.VectorType == "float") {
                 generateEmbedding = [this]() { return GenerateEmbedding<float>(); };
+            } else if (VectorOpts.VectorType == "float16") {
+                generateEmbedding = [this]() { return GenerateEmbedding<TFloat16>(); };
+            } else if (VectorOpts.VectorType == "bfloat16") {
+                generateEmbedding = [this]() { return GenerateEmbedding<TBFloat16>(); };
             } else if (VectorOpts.VectorType == "uint8") {
                 generateEmbedding = [this]() { return GenerateEmbedding<uint8_t>(); };
             } else if (VectorOpts.VectorType == "int8") {
@@ -450,10 +454,14 @@ int TWorkloadVectorDataInitializerBase::PostImport() {
     ddlQuery << "WITH (\n";
     ddlQuery << "    " << VectorParams.GetDistanceDDL() << ",\n";
     ddlQuery << "    vector_type=" << VectorParams.VectorOpts.VectorType << ",\n";
-    ddlQuery << "    vector_dimension=" << VectorParams.VectorOpts.VectorDimension << ",\n";
-    ddlQuery << "    levels=" << VectorParams.KmeansTreeLevels << ",\n";
-    ddlQuery << "    clusters=" << VectorParams.KmeansTreeClusters << "\n";
-    ddlQuery << ");";
+    ddlQuery << "    vector_dimension=" << VectorParams.VectorOpts.VectorDimension;
+    if (VectorParams.KmeansTreeLevels) {
+        ddlQuery << ",\n    levels=" << VectorParams.KmeansTreeLevels;
+    }
+    if (VectorParams.KmeansTreeClusters) {
+        ddlQuery << ",\n    clusters=" << VectorParams.KmeansTreeClusters;
+    }
+    ddlQuery << "\n);";
 
     Cout << "Building vector index ..." << Endl;
     auto result = VectorParams.QueryClient->RetryQuerySync([&ddlQuery](NYdb::NQuery::TSession session) {

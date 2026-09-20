@@ -3,6 +3,8 @@
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 namespace {
@@ -64,8 +66,10 @@ private:
         for (const ui64 portionId : Request.GetBatch().GetPortionIds()) {
             AFL_VERIFY(portionAddresses.emplace(Request.GetGlobalContext().GetPortion(portionId)->GetAddress()).second);
         }
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-        ("component", "duplicates_manager")("type", "ask_column_data")("addresses_count", portionAddresses.size());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"type", "ask_column_data"},
+            {"addressesCount", portionAddresses.size()});
         auto columnDataManager = Request.GetGlobalContext().GetColumnDataManager();
         auto columns = Request.GetGlobalContext().GetFetchingColumnIds();
         columnDataManager->AskColumnData(NBlobOperations::EConsumer::DUPLICATE_FILTERING, portionAddresses, std::move(columns),
@@ -185,8 +189,10 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
 
     ui64 portionsCount = bordersBatch.GetPortionIds().size();
 
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-    ("component", "duplicates_manager")("type", "schedule_next")("portions_count", portionsCount);
+    YDB_LOG_TRACE("",
+        {"component", "duplicates_manager"},
+        {"type", "schedule_next"},
+        {"portionsCount", portionsCount});
 
     TActorId owner = context.GetOwner();
     TBuildFilterTaskContext request(std::move(context), shared_from_this(), std::move(bordersBatch));

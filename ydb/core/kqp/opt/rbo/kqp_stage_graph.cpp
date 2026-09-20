@@ -1,6 +1,13 @@
 #include "kqp_stage_graph.h"
 
+#include <yql/essentials/utils/log/log.h>
+
+#include <util/generic/guid.h>
+
+namespace NKikimr::NKqp {
+
 namespace {
+
 using namespace NKikimr;
 using namespace NKqp;
 using namespace NYql;
@@ -35,13 +42,19 @@ NJson::TJsonValue MakeKeyColumnsJson(const TVector<TInfoUnit>& keys) {
     }
     return keyColumns;
 }
+
+NJson::TJsonValue MakeSortColumnsJson(const TVector<TSortElement>& sortElements) {
+    NJson::TJsonValue sortColumns(NJson::EJsonValueType::JSON_ARRAY);
+    for (const auto& sortElement : sortElements) {
+        TStringBuilder sortColumn;
+        sortColumn << sortElement.SortColumn.GetFullName()
+            << " (" << (sortElement.Ascending ? "Asc" : "Desc") << ")";
+        sortColumns.AppendValue(TString(sortColumn));
+    }
+    return sortColumns;
 }
 
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYql;
-using namespace NNodes;
+} // anonymous namespace
 
 TString TSortElement::ToString() const {
     TStringBuilder result;
@@ -66,7 +79,7 @@ TExprNode::TPtr TConnection::BuildConnectionImpl(TExprNode::TPtr inputStage, TPo
 NJson::TJsonValue TConnection::ToJson() const {
     NJson::TJsonValue json(NJson::EJsonValueType::JSON_MAP);
     json["PlanNodeType"] = "Connection";
-    json["Node Type"] = GetExplainName();
+    json["Node Type"] = Type;
     return json;
 }
 
@@ -80,6 +93,14 @@ TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TPos
 
 TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
     return Parallel ? BuildConnectionImpl<TDqCnParallelUnionAll>(inputStage, pos, ctx) : BuildConnectionImpl<TDqCnUnionAll>(inputStage, pos, ctx);
+}
+
+NJson::TJsonValue TUnionAllConnection::ToJson() const {
+    auto json = TConnection::ToJson();
+    if (Parallel) {
+        json["Parallel"] = "True";
+    }
+    return json;
 }
 
 TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
@@ -106,6 +127,10 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
     // clang-format on
 }
 
+TVector<TInfoUnit> TShuffleConnection::GetUsedIUs() const {
+    return Keys;
+}
+
 NJson::TJsonValue TShuffleConnection::ToJson() const {
     auto json = TConnection::ToJson();
     Y_ENSURE(HashFuncType, "Hash function type must be assigned before building explain JSON.");
@@ -115,10 +140,6 @@ NJson::TJsonValue TShuffleConnection::ToJson() const {
 
     const auto keyColumns = MakeKeyColumnsJson(Keys);
     json["KeyColumns"] = keyColumns;
-    json["Node Type"] = TStringBuilder()
-        << GetExplainName()
-        << " (KeyColumns: " << keyColumns
-        << ", HashFunc: \"" << hashFunc << "\")";
     return json;
 }
 
@@ -146,13 +167,20 @@ TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TP
     // clang-format on
 }
 
+TVector<TInfoUnit> TMergeConnection::GetUsedIUs() const {
+    TVector<TInfoUnit> result;
+    result.reserve(Order.size());
+    for (const auto& sortElement : Order) {
+        result.push_back(sortElement.SortColumn);
+    }
+    return result;
+}
+
 NJson::TJsonValue TMergeConnection::ToJson() const {
     auto json = TConnection::ToJson();
     const auto sortBy = FormatSortElements(Order);
     json["SortBy"] = sortBy;
-    json["Node Type"] = TStringBuilder()
-        << GetExplainName()
-        << " (SortBy: " << sortBy << ")";
+    json["SortColumns"] = MakeSortColumnsJson(Order);
     return json;
 }
 
@@ -160,6 +188,31 @@ TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, T
     Y_UNUSED(pos);
     Y_UNUSED(ctx);
     return inputStage;
+}
+
+TExprNode::TPtr TStreamLookupConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
+    Y_ENSURE(InputType, "Stream lookup input type has not been set");
+    // clang-format off
+    return Build<TKqpCnStreamLookup>(ctx, pos)
+        .Output()
+            .Stage(inputStage)
+            .Index().Build(ToString(OutputIndex))
+        .Build()
+        .Table(Table)
+        .Columns(Columns)
+        .InputType(InputType)
+        .Settings(Settings)
+    .Done().Ptr();
+    // clang-format on
+}
+
+ui32 TStageGraph::AddStage() {
+    ui32 newStageId = StageIds.size();
+    StageIds.push_back(newStageId);
+    StageInputs[newStageId] = TVector<ui32>();
+    StageOutputs[newStageId] = TVector<ui32>();
+    StageGUIDs[newStageId] = CreateGuidAsString();
+    return newStageId;
 }
 
 std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(ui32& stageInputCounter, TPositionHandle pos, TExprContext& ctx) const {
@@ -194,5 +247,5 @@ TList<ui32> TStageGraph::GetTopologicalOrder() const {
 void TStageGraph::TopologicalSort() {
     StageIds = GetTopologicalOrder();
 }
-}
-}
+
+} // namespace NKikimr::NKqp

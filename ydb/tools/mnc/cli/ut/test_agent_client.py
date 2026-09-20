@@ -51,6 +51,36 @@ class AgentClientTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(session.get_calls, ["http://host1:8999/path"])
 
+    async def test_post_json_and_wait_polls_returned_task(self):
+        calls = []
+
+        async def post_json(host, path, payload, port=8999, parent_task=None):
+            calls.append(("post", host, path, payload, port, parent_task))
+            return {"task_id": "task-1"}
+
+        async def wait_task(host, task_id, port=8999):
+            calls.append(("wait", host, task_id, port))
+            return {"success": True}
+
+        with mock.patch.object(agent_client, "post_json", post_json), \
+                mock.patch.object(agent_client, "wait_task", wait_task):
+            self.assertEqual(
+                await agent_client.post_json_and_wait("host1", "/path", {"key": "value"}, parent_task="task"),
+                {"success": True},
+            )
+
+        self.assertEqual(calls, [
+            ("post", "host1", "/path", {"key": "value"}, 8999, "task"),
+            ("wait", "host1", "task-1", 8999),
+        ])
+
+    async def test_post_json_and_wait_returns_none_without_task_id(self):
+        async def post_json(host, path, payload, port=8999, parent_task=None):
+            return {"success": True}
+
+        with mock.patch.object(agent_client, "post_json", post_json):
+            self.assertIsNone(await agent_client.post_json_and_wait("host1", "/path", {}))
+
     async def test_health_check_succeeds_when_required_features_enabled(self):
         session = ClientSession(Response(payload={"enabled_features": ["nodes", "disks"]}))
 

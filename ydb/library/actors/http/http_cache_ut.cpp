@@ -5,6 +5,8 @@
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace {
@@ -27,6 +29,50 @@ TString CompressDeflate(TStringBuf data) {
     NHttp::TCompressContext ctx;
     ctx.InitCompress("deflate");
     return ctx.Compress(data, true);
+}
+
+NJson::TJsonValue ReadDumpJson(const TString& body) {
+    NJson::TJsonValue json;
+    UNIT_ASSERT(NJson::ReadJsonTree(body, &json, true));
+    return json;
+}
+
+NJson::TJsonValue DumpActorState(NActors::TTestActorRuntimeBase& actorSystem, const NActors::TActorId& actorId) {
+    TAutoPtr<NActors::IEventHandle> handle;
+    const NActors::TActorId edgeId = actorSystem.AllocateEdgeActor();
+    actorSystem.Send(new NActors::IEventHandle(actorId, edgeId, new NHttp::TEvHttpProxy::TEvHttpDumpStateRequest()), 0, true);
+    auto* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpDumpStateResponse>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(response->ContentType, "application/json");
+    return ReadDumpJson(response->Body);
+}
+
+void AssertTwoHeaderVariantsStats(const NJson::TJsonValue& json) {
+    UNIT_ASSERT_VALUES_EQUAL(json["CacheRecordsCount"].GetInteger(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(json["CacheHits"].GetInteger(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(json["CacheMisses"].GetInteger(), 2);
+
+    const auto& records = json["CacheRecords"].GetArraySafe();
+    UNIT_ASSERT_VALUES_EQUAL(records.size(), 2);
+    ui32 hitRecordCount = 0;
+    ui32 missOnlyRecordCount = 0;
+    for (const NJson::TJsonValue& record : records) {
+        UNIT_ASSERT(record.Has("Id"));
+        UNIT_ASSERT(record.Has("Url"));
+        if (record["Hits"].GetInteger() == 1 && record["Misses"].GetInteger() == 1) {
+            ++hitRecordCount;
+        } else if (record["Hits"].GetInteger() == 0 && record["Misses"].GetInteger() == 1) {
+            ++missOnlyRecordCount;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(hitRecordCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(missOnlyRecordCount, 1);
+
+    const auto& stats = json["CacheStats"].GetArraySafe();
+    UNIT_ASSERT_VALUES_EQUAL(stats.size(), 2);
+    for (const NJson::TJsonValue& item : stats) {
+        UNIT_ASSERT(item.Has("Id"));
+        UNIT_ASSERT(item.Has("Url"));
+    }
 }
 
 }
@@ -316,6 +362,64 @@ Y_UNIT_TEST_SUITE(HttpOutgoingCache) {
         UNIT_ASSERT_VALUES_EQUAL(clientResponse2->Response->Status, "200");
         UNIT_ASSERT_VALUES_EQUAL(clientResponse2->Response->Body, responseBody);
     }
+
+    Y_UNIT_TEST(OutgoingCacheDumpState) {
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NHttp::TCachePolicy policy;
+        policy.TimeToExpire = TDuration::Seconds(60);
+        policy.TimeToRefresh = TDuration::Seconds(30);
+        TString headersToCacheKey[] = {"X-Variant"};
+        policy.HeadersToCacheKey = headersToCacheKey;
+        NActors::IActor* cache = NHttp::CreateOutgoingHttpCache(proxyId, [policy](const NHttp::THttpRequest*) {
+            return policy;
+        });
+        NActors::TActorId cacheId = actorSystem.Register(cache);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(cacheId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/data", serverId)), 0, true);
+
+        NActors::TActorId clientAId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr requestA = NHttp::THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:" + ToString(port) + "/data");
+        requestA->Set("X-Variant", "a");
+        actorSystem.Send(new NActors::IEventHandle(cacheId, clientAId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(requestA)), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* serverRequestA = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        TString responseBodyA = "response A";
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(serverRequestA->Request->CreateResponseOK(responseBodyA, "text/plain"))), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* clientResponseA = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(clientResponseA->Response->Body, responseBodyA);
+
+        NActors::TActorId clientBId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr requestB = NHttp::THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:" + ToString(port) + "/data");
+        requestB->Set("X-Variant", "b");
+        actorSystem.Send(new NActors::IEventHandle(cacheId, clientBId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(requestB)), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* serverRequestB = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        TString responseBodyB = "response B";
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(serverRequestB->Request->CreateResponseOK(responseBodyB, "text/plain"))), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* clientResponseB = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(clientResponseB->Response->Body, responseBodyB);
+
+        NActors::TActorId clientHitId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr requestHit = NHttp::THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:" + ToString(port) + "/data");
+        requestHit->Set("X-Variant", "a");
+        actorSystem.Send(new NActors::IEventHandle(cacheId, clientHitId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(requestHit)), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* hitResponse = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(hitResponse->Response->Body, responseBodyA);
+
+        NJson::TJsonValue dump = DumpActorState(actorSystem, cacheId);
+        UNIT_ASSERT_VALUES_EQUAL(dump["Component"].GetString(), "outgoing_http_cache");
+        UNIT_ASSERT_VALUES_EQUAL(dump["OutgoingRequestsCount"].GetInteger(), 0);
+        AssertTwoHeaderVariantsStats(dump);
+    }
 }
 
 Y_UNIT_TEST_SUITE(HttpIncomingCache) {
@@ -441,5 +545,69 @@ Y_UNIT_TEST_SUITE(HttpIncomingCache) {
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse* clientResponse2 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(clientResponse2->Response->Status, "200");
         UNIT_ASSERT_VALUES_EQUAL(clientResponse2->Response->Body, responseBody);
+    }
+
+    Y_UNIT_TEST(IncomingCacheDumpState) {
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NHttp::TCachePolicy policy;
+        policy.TimeToExpire = TDuration::Seconds(60);
+        policy.TimeToRefresh = TDuration::Seconds(30);
+        TString headersToCacheKey[] = {"X-Variant"};
+        policy.HeadersToCacheKey = headersToCacheKey;
+        NActors::IActor* cache = NHttp::CreateIncomingHttpCache(proxyId, [policy](const NHttp::THttpRequest*) {
+            return policy;
+        });
+        NActors::TActorId cacheId = actorSystem.Register(cache);
+
+        NActors::TActorId handlerId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(cacheId, handlerId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/api/data", handlerId)), 0, true);
+
+        NActors::TActorId clientAId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr requestA = NHttp::THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:" + ToString(port) + "/api/data");
+        requestA->Set("X-Variant", "a");
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientAId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(requestA)), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* handlerRequestA = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        TString responseBodyA = "incoming response A";
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, handlerId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(handlerRequestA->Request->CreateResponseOK(responseBodyA, "text/plain"))), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* clientResponseA = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(clientResponseA->Response->Body, responseBodyA);
+
+        NActors::TActorId clientBId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr requestB = NHttp::THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:" + ToString(port) + "/api/data");
+        requestB->Set("X-Variant", "b");
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientBId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(requestB)), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* handlerRequestB = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        TString responseBodyB = "incoming response B";
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, handlerId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(handlerRequestB->Request->CreateResponseOK(responseBodyB, "text/plain"))), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* clientResponseB = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(clientResponseB->Response->Body, responseBodyB);
+
+        NActors::TActorId clientHitId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr requestHit = NHttp::THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:" + ToString(port) + "/api/data");
+        requestHit->Set("X-Variant", "a");
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientHitId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(requestHit)), 0, true);
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* hitResponse = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(hitResponse->Response->Body, responseBodyA);
+
+        NJson::TJsonValue dump = DumpActorState(actorSystem, cacheId);
+        UNIT_ASSERT_VALUES_EQUAL(dump["Component"].GetString(), "incoming_http_cache");
+        UNIT_ASSERT_VALUES_EQUAL(dump["IncomingRequestsCount"].GetInteger(), 0);
+        AssertTwoHeaderVariantsStats(dump);
+
+        const auto& handlers = dump["Handlers"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(handlers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(handlers[0]["Path"].GetString(), "/api/data");
+        UNIT_ASSERT_VALUES_EQUAL(handlers[0]["Hits"].GetInteger(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(handlers[0]["Misses"].GetInteger(), 2);
     }
 }

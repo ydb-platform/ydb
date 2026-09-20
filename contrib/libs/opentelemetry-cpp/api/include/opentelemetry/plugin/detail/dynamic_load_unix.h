@@ -21,6 +21,10 @@ class DynamicLibraryHandleUnix final : public DynamicLibraryHandle
 {
 public:
   explicit DynamicLibraryHandleUnix(void *handle) noexcept : handle_{handle} {}
+  DynamicLibraryHandleUnix(const DynamicLibraryHandleUnix &)            = delete;
+  DynamicLibraryHandleUnix(DynamicLibraryHandleUnix &&)                 = delete;
+  DynamicLibraryHandleUnix &operator=(const DynamicLibraryHandleUnix &) = delete;
+  DynamicLibraryHandleUnix &operator=(DynamicLibraryHandleUnix &&)      = delete;
 
   ~DynamicLibraryHandleUnix() override { ::dlclose(handle_); }
 

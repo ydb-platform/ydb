@@ -3,6 +3,7 @@
 #include "collection.h"
 
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
 #include <library/cpp/object_factory/object_factory.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
@@ -163,6 +164,19 @@ public:
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiContainsIgnoreCase>(GetClassNameStatic());
 };
 
+class TLogicMatchOlapKernelsAsciiContainsIgnoreCase: public TLogicMatchString {
+private:
+    static TString GetClassNameStatic() {
+        return "OlapKernels._yql_AsciiContainsIgnoreCase";
+    }
+
+public:
+    TLogicMatchOlapKernelsAsciiContainsIgnoreCase()
+        : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
+    }
+    static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchOlapKernelsAsciiContainsIgnoreCase>(GetClassNameStatic());
+};
+
 class TLogicMatchAsciiStartsWithIgnoreCase: public TLogicMatchString {
 private:
     static TString GetClassNameStatic() {
@@ -294,7 +308,9 @@ private:
         }
         const auto buffer = std::static_pointer_cast<arrow::StringScalar>(jsonPathScalar)->value;
         std::string_view svPath((const char*)buffer->data(), buffer->size());
-        // Here we should have the valid path (the validation is done in KQP, so do no check it here)
+        if (const auto pathValidation = NAccessor::NSubColumns::ValidateJsonPath(svPath); pathValidation.IsFail()) {
+            return pathValidation;
+        }
 
         return TDescription(resources.GetAccessorOptional(input.front().GetColumnId()), svPath);
     }

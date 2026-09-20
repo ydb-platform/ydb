@@ -5,7 +5,6 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 SRCS(
     admin_commands.cpp
     authentication_commands.cpp
-    ban_commands.cpp
     bundle_controller_commands.cpp
     chaos_commands.cpp
     command.cpp

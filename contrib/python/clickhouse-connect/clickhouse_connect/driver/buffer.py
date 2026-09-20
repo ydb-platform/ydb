@@ -1,16 +1,16 @@
-import sys
 import array
-from typing import Any, Iterable
+import sys
+from collections.abc import Iterable
+from typing import Any
 
 from clickhouse_connect.driver.exceptions import StreamCompleteException
 from clickhouse_connect.driver.types import ByteSource
 
-must_swap = sys.byteorder == 'big'
+must_swap = sys.byteorder == "big"
 
 
-# pylint: disable=too-many-instance-attributes
 class ResponseBuffer(ByteSource):
-    slots = 'slice_sz', 'buf_loc', 'end', 'gen', 'buffer', 'slice'
+    slots = "slice_sz", "buf_loc", "end", "gen", "buffer", "slice"
 
     def __init__(self, source):
         self.slice_sz = 4096
@@ -18,12 +18,15 @@ class ResponseBuffer(ByteSource):
         self.buf_sz = 0
         self.source = source
         self.gen = source.gen
-        self.buffer = bytes()
+        self.buffer = b""
         self.exception_tag = getattr(source, "exception_tag", None)
         if self.exception_tag:
             tag_bytes = self.exception_tag.encode()
-            self._open_marker = b"__exception__" + tag_bytes
-            self._close_marker = tag_bytes + b"__exception__"
+            # The server separates __exception__ from the tag with a CRLF on both markers, e.g.
+            # __exception__\r\n<tag> ... <tag>\r\n__exception__. Matching the exact wire bytes is what
+            # lets the scan fire; without the CRLF these markers never match and detection goes dead.
+            self._open_marker = b"__exception__\r\n" + tag_bytes
+            self._close_marker = tag_bytes + b"\r\n__exception__"
             self._carryover = b""
             self._exception_buf = None
 
@@ -56,9 +59,9 @@ class ResponseBuffer(ByteSource):
     def read_bytes(self, sz: int):
         if self.buf_loc + sz <= self.buf_sz:
             self.buf_loc += sz
-            return self.buffer[self.buf_loc - sz: self.buf_loc]
+            return self.buffer[self.buf_loc - sz : self.buf_loc]
         # Create a temporary buffer that bridges two or more source chunks
-        bridge = bytearray(self.buffer[self.buf_loc: self.buf_sz])
+        bridge = bytearray(self.buffer[self.buf_loc : self.buf_sz])
         self.buf_loc = 0
         self.buf_sz = 0
         while len(bridge) < sz:
@@ -99,7 +102,7 @@ class ResponseBuffer(ByteSource):
         shift = 0
         while True:
             b = self.read_byte()
-            sz += ((b & 0x7f) << shift)
+            sz += (b & 0x7F) << shift
             if (b & 0x80) == 0:
                 return sz
             shift += 7
@@ -109,14 +112,16 @@ class ResponseBuffer(ByteSource):
         return self.read_bytes(sz).decode()
 
     def read_uint64(self) -> int:
-        return int.from_bytes(self.read_bytes(8), 'little', signed=False)
+        return int.from_bytes(self.read_bytes(8), "little", signed=False)
 
-    def read_str_col(self,
-                     num_rows: int,
-                     encoding: str,
-                     nullable: bool = False,
-                     null_obj: Any = None) -> Iterable[str]:
-        column = []
+    def read_str_col(
+        self,
+        num_rows: int,
+        encoding: str | None,
+        nullable: bool = False,
+        null_obj: Any = None,
+    ) -> Iterable[str]:
+        column: list[Any] = []
         app = column.append
         null_map = self.read_bytes(num_rows) if nullable else None
         for ix in range(num_rows):
@@ -124,7 +129,7 @@ class ResponseBuffer(ByteSource):
             shift = 0
             while True:
                 b = self.read_byte()
-                sz += ((b & 0x7f) << shift)
+                sz += (b & 0x7F) << shift
                 if (b & 0x80) == 0:
                     break
                 shift += 7
@@ -142,17 +147,17 @@ class ResponseBuffer(ByteSource):
 
     def read_bytes_col(self, sz: int, num_rows: int) -> Iterable[bytes]:
         source = self.read_bytes(sz * num_rows)
-        return [bytes(source[x:x+sz]) for x in range(0, sz * num_rows, sz)]
+        return [bytes(source[x : x + sz]) for x in range(0, sz * num_rows, sz)]
 
     def read_fixed_str_col(self, sz: int, num_rows: int, encoding: str) -> Iterable[str]:
         source = self.read_bytes(sz * num_rows)
-        column = []
+        column: list[str] = []
         app = column.append
         for ix in range(0, sz * num_rows, sz):
             try:
-                app(str(source[ix: ix + sz], encoding).rstrip('\x00'))
+                app(str(source[ix : ix + sz], encoding).rstrip("\x00"))
             except UnicodeDecodeError:
-                app(source[ix: ix + sz].hex())
+                app(source[ix : ix + sz].hex())
         return column
 
     def read_array(self, array_type: str, num_rows: int) -> Iterable[Any]:
@@ -165,7 +170,7 @@ class ResponseBuffer(ByteSource):
         return column
 
     @property
-    def last_message(self) -> bytes:
+    def last_message(self) -> bytes | None:  # type: ignore[override]  # overrides writable attr with property
         return self.buffer
 
     def close(self):

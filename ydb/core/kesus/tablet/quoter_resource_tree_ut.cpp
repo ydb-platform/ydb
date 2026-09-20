@@ -254,10 +254,10 @@ public:
         auto& updateSend =
             EXPECT_CALL(*session.Sink, OnSend(_, 0.0, _))
                 .After(oldSettingsAllocation)
-                .WillOnce(Invoke([](ui64, double, const NKikimrKesus::TStreamingQuoterResource* props) {
+                .WillOnce([](ui64, double, const NKikimrKesus::TStreamingQuoterResource* props) {
                     UNIT_ASSERT(props != nullptr);
                     UNIT_ASSERT_DOUBLES_EQUAL(props->GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(), 400, 0.001);
-                }));
+                });
         EXPECT_CALL(*session.Sink, OnSend(_, DoubleNear(40, 0.01), nullptr))
             .After(updateSend);
 

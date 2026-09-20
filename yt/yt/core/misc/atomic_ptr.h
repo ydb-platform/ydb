@@ -54,7 +54,7 @@ public:
     explicit operator bool() const;
 
 private:
-    explicit TAtomicPtr(T* ptr);
+    explicit TAtomicPtr(TTaggedPtr<T> taggedPtr);
 
     template <class T_, bool EnableAcquireHazard_>
     friend bool operator==(const TAtomicPtr<T_, EnableAcquireHazard_>& lhs, const T_* rhs);
@@ -62,10 +62,20 @@ private:
     template <class T_, bool EnableAcquireHazard_>
     friend bool operator==(const T_* lhs, const TAtomicPtr<T_, EnableAcquireHazard_>& rhs);
 
-    std::atomic<T*> Ptr_ = nullptr;
+    // Packed (typed pointer, vbase offset). The offset is computed once at
+    // store time when the caller still owns a live reference and the vbase
+    // lookup is safe. Subsequent readers can compute the canonical
+    // TRefCountedBase* address as |ptr + offset| without dereferencing
+    // |*ptr|, which may have been retired by a concurrent writer.
+    std::atomic<TPackedPtr> Ptr_;
+    static_assert(decltype(Ptr_)::is_always_lock_free);
+
+    static TTaggedPtr<T> MakeTagged(T* ptr);
+    static TTaggedPtr<T> UnpackTagged(TPackedPtr packed);
+    TTaggedPtr<T> LoadTagged() const;
 
     THazardPtr<T> DoAcquireHazard() const;
-    void Drop(T* ptr);
+    void Drop(TTaggedPtr<T> taggedPtr);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

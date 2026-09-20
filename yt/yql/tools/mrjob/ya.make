@@ -1,10 +1,10 @@
 PROGRAM(mrjob)
 
-IF (OS_LINUX)
-    ALLOCATOR(TCMALLOC)
-ELSE()
-    ALLOCATOR(J)
-ENDIF()
+ALLOCATOR(J)
+
+INCLUDE(
+    ${ARCADIA_ROOT}/yql/essentials/udfs/common/python/sanitizer_suppressions.inc
+)
 
 SRCS(
     mrjob.cpp

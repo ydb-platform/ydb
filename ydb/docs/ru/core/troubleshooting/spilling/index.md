@@ -7,7 +7,6 @@
 - [Permission denied](permission-denied.md) - Недостаточные права доступа к директории спиллинга
 - [Spilling Service not started](service-not-started.md) - Попытка использования спиллинга при выключенном Spilling Service
 - [Total size limit exceeded](total-size-limit-exceeded.md) - Превышен максимальный суммарный размер файлов спиллинга
-- [Can not run operation](can-not-run-operation.md) - Переполнение очереди операций в пуле потоков I/O
 
 ## См. также
 

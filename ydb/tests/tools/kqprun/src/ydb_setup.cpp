@@ -9,8 +9,10 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/core/util/aws.h>
+#include <ydb/library/aws_init/aws.h>
 
+#include <ydb/services/keyvalue/grpc_service_v1.h>
+#include <ydb/services/keyvalue/grpc_service_v2.h>
 #include <ydb/services/persqueue_v1/grpc_pq_schema.h>
 #include <ydb/services/persqueue_v1/services_initializer.h>
 
@@ -314,7 +316,7 @@ private:
             if (usedSlots > totalSlots) {
                 ythrow yexception() << "Too many storage groups requested: " << usedSlots - 1 << ", try to format storage" << storageInfo;
             } else {
-                ythrow yexception() << "Too many tenants requested, can not allocate at least one storage group for " << tenantsToDistribute
+                ythrow yexception() << "Too many tenants requested, cannot allocate at least one storage group for " << tenantsToDistribute
                     << " tenants" << (usedSlots - 1 ? TStringBuilder() << ", already used storage groups: " << usedSlots - 1 : TStringBuilder()) << ", try to format storage" << storageInfo;
             }
         }
@@ -380,7 +382,12 @@ private:
         serverSettings
             .SetNodeCount(Settings_.NodeCount)
             .SetDataCenterCount(Settings_.DcCount)
-            .SetPqGateway(Settings_.PqGateway);
+            .SetPqGateway(Settings_.PqGateway)
+            .SetDataShardExportFactory(Settings_.DataShardExportFactory);
+
+        serverSettings
+            .RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcServiceV1>("keyvalue")
+            .RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcServiceV2>("keyvalue");
 
         serverSettings.StoragePoolTypes.clear();
         serverSettings.AddStoragePool("test", TStringBuilder() << NKikimr::CanonizePath(Settings_.DomainName) << ":test", Settings_.StorageGroupCount);
@@ -414,10 +421,10 @@ private:
             UpdateStorageMeta();
         } else {
             if (it->second.GetType() != tenantInfo.GetType()) {
-                ythrow yexception() << "Can not change tenant " << absolutePath << " type without formatting storage, current type " << TStorageMeta::TTenant::EType_Name(it->second.GetType()) << ", please use --format-storage";
+                ythrow yexception() << "Cannot change tenant " << absolutePath << " type without formatting storage, current type " << TStorageMeta::TTenant::EType_Name(it->second.GetType()) << ", please use --format-storage";
             }
             if (it->second.GetSharedTenant() != tenantInfo.GetSharedTenant()) {
-                ythrow yexception() << "Can not change tenant " << absolutePath << " shared resources without formatting storage from '" << it->second.GetSharedTenant() << "', please use --format-storage";
+                ythrow yexception() << "Cannot change tenant " << absolutePath << " shared resources without formatting storage from '" << it->second.GetSharedTenant() << "', please use --format-storage";
             }
             if (it->second.GetNodesCount() != tenantInfo.GetNodesCount() || it->second.GetStorageGroupsCount() != tenantInfo.GetStorageGroupsCount()) {
                 it->second.SetNodesCount(tenantInfo.GetNodesCount());
@@ -470,10 +477,10 @@ private:
         for (auto [tenantPath, tenantInfo] : serverlessTenants) {
             if (!tenantInfo.GetSharedTenant()) {
                 if (sharedTenants.empty()) {
-                    ythrow yexception() << "Can not create serverless tenant, there is no shared tenants, please use `--shared <shared name>`";
+                    ythrow yexception() << "Cannot create serverless tenant, there is no shared tenants, please use `--shared <shared name>`";
                 }
                 if (sharedTenants.size() > 1) {
-                    ythrow yexception() << "Can not create serverless tenant, there is more than one shared tenant, please use `--serverless " << tenantPath << "@<shared name>`";
+                    ythrow yexception() << "Cannot create serverless tenant, there is more than one shared tenant, please use `--serverless " << tenantPath << "@<shared name>`";
                 }
                 tenantInfo.SetSharedTenant(*sharedTenants.begin());
             }
@@ -761,7 +768,7 @@ public:
 
     TString GetDefaultDatabase() const {
         if (StorageMeta_.TenantsSize() > 1) {
-            ythrow yexception() << "Can not choose default database, there is more than one tenants, please use `-D <database name>`";
+            ythrow yexception() << "Cannot choose default database, there is more than one tenants, please use `-D <database name>`";
         }
         if (StorageMeta_.TenantsSize() == 1) {
             return GetTenantPath(StorageMeta_.GetTenants().begin()->first);
@@ -817,7 +824,7 @@ private:
         request->SetQuery(query.Query);
         request->SetType(type);
         request->SetAction(query.Action);
-        request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
+        request->SetCollectStats(query.StatsCollectionMode);
         request->SetDatabase(database);
         request->SetPoolId(query.PoolId);
         request->MutableYdbParameters()->insert(query.Params.begin(), query.Params.end());
@@ -838,7 +845,7 @@ private:
     TQueryRequest GetQueryRequest(const TRequestOptions& query) {
         ui32 targetNodeIndex = GetNodeIndexForDatabase(query.Database);
         auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
-        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, targetNodeIndex, event->Record);
+        FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY, targetNodeIndex, event->Record);
 
         if (auto progressStatsPeriodMs = Settings_.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
             event->SetProgressStatsPeriod(TDuration::MilliSeconds(progressStatsPeriodMs));

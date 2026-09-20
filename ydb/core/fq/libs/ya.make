@@ -7,6 +7,7 @@ RECURSE(
     cloud_audit
     common
     compute
+    credentials
     config
     control_plane_config
     control_plane_proxy
@@ -30,6 +31,7 @@ RECURSE(
     result_formatter
     row_dispatcher
     shared_resources
+    state
     signer
     tasks_packer
     test_connection

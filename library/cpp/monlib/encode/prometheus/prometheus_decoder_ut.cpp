@@ -4,6 +4,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <cmath>
+
 using namespace NMonitoring;
 
 #define ASSERT_LABEL_EQUAL(label, name, value) do { \
@@ -103,6 +105,30 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
             ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "no_labels");
             ASSERT_DOUBLE_POINT(s, TInstant::Zero(), 3.0);
         }
+    }
+
+    // ReadTokenAsLabelValue's loop runs MAX_LABEL_VALUE_LEN times: one iteration per
+    // appended character plus one final iteration to detect the closing quote. So the
+    // longest value it can successfully parse is (MAX_LABEL_VALUE_LEN - 1) characters.
+    Y_UNIT_TEST(LabelValueAtNewLimitIsAccepted) {
+        const auto value = TString(1023, 'a');
+        const auto inputMetrics = TString("m{l=\"") + value + "\"} 1\n";
+
+        auto samples = Decode(inputMetrics);
+
+        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1);
+        auto& s = samples.GetSamples(0);
+        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
+        ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "m");
+        ASSERT_LABEL_EQUAL(s.GetLabels(1), "l", value);
+    }
+
+    Y_UNIT_TEST(LabelValueOverNewLimitStillThrows) {
+        const auto value = TString(1024, 'a');
+        const auto inputMetrics = TString("m{l=\"") + value + "\"} 1\n";
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Decode(inputMetrics), TPrometheusDecodeException,
+            "trying to parse too long label value, size >= 1024");
     }
 
     Y_UNIT_TEST(NameAlreadyPresent) {
@@ -499,6 +525,32 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
                     { 1, 0, 0 });
             ASSERT_HIST_POINT(s, TInstant::Seconds(1512216000), *hist);
         }
+    }
+
+    Y_UNIT_TEST(ParseGoDoubleCaseInsensitive) {
+        TPrometheusDecodeSettings settings;
+        settings.Mode = EPrometheusDecodeMode::RAW;
+
+        auto decodeValue = [&](TStringBuf valueStr) -> double {
+            auto input = TString("m ") + valueStr + "\n";
+            auto samples = Decode(input, settings);
+            UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1);
+            return samples.GetSamples(0).GetFloat64();
+        };
+
+        UNIT_ASSERT(std::isinf(decodeValue("+Inf")) && decodeValue("+Inf") > 0);
+        UNIT_ASSERT(std::isinf(decodeValue("+INF")) && decodeValue("+INF") > 0);
+        UNIT_ASSERT(std::isinf(decodeValue("+inf")) && decodeValue("+inf") > 0);
+        UNIT_ASSERT(std::isinf(decodeValue("Inf")) && decodeValue("Inf") > 0);
+        UNIT_ASSERT(std::isinf(decodeValue("INF")) && decodeValue("INF") > 0);
+        UNIT_ASSERT(std::isinf(decodeValue("inf")) && decodeValue("inf") > 0);
+        UNIT_ASSERT(std::isinf(decodeValue("-Inf")) && decodeValue("-Inf") < 0);
+        UNIT_ASSERT(std::isinf(decodeValue("-INF")) && decodeValue("-INF") < 0);
+        UNIT_ASSERT(std::isinf(decodeValue("-inf")) && decodeValue("-inf") < 0);
+        UNIT_ASSERT(std::isnan(decodeValue("NaN")));
+        UNIT_ASSERT(std::isnan(decodeValue("nan")));
+        UNIT_ASSERT(std::isnan(decodeValue("NAN")));
+        UNIT_ASSERT(std::isnan(decodeValue("nAn")));
     }
 
     Y_UNIT_TEST(MixedTypes) {

@@ -25,8 +25,8 @@ public:
 std::unique_ptr<IScanSnapshotGuard> CreateScanSnapshotGuard(ui64 passedStep, ui64 schemeShardId, const NOlap::TSnapshot& lastCleanupSnapshot,
     const TInFlightReadsTracker& inFlightReadsTracker, const NOlap::IPathIdTranslator& pathIdTranslator);
 
-std::unique_ptr<IScanSnapshotGuard> CreateLocalScanSnapshotGuard(
-    ui64 passedStep, const NOlap::TSnapshot& lastCleanupSnapshot, const TInFlightReadsTracker& inFlightReadsTracker);
+std::unique_ptr<IScanSnapshotGuard> CreateLocalScanSnapshotGuard(ui64 passedStep, const NOlap::TSnapshot& lastCleanupSnapshot,
+    const TInFlightReadsTracker& inFlightReadsTracker, const NOlap::IPathIdTranslator& pathIdTranslator);
 
 std::unique_ptr<IScanSnapshotGuard> CreateRegistryNotReadySnapshotGuard();
 

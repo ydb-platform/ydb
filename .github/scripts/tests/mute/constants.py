@@ -14,6 +14,7 @@ _REQUIRED_KEYS = (
     'mute_window_days',
     'unmute_window_days',
     'delete_window_days',
+    'stable_branch_grace_days',
     'manual_unmute_issue_closed_lookback_days',
     'manual_unmute_currently_muted_lookback_days',
 )
@@ -66,6 +67,12 @@ def get_unmute_window_days():
 
 def get_delete_window_days():
     return _positive_int('delete_window_days')
+
+
+def get_stable_branch_grace_days():
+    """Calendar days a newly added stable branch keeps inherited ``muted_ya`` lines
+    (protected from zero-run delete) before normal mute/unmute/delete rules take over."""
+    return _positive_int('stable_branch_grace_days')
 
 
 def get_manual_unmute_issue_closed_lookback_days():

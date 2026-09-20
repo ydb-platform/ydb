@@ -75,6 +75,7 @@ public:
         UndeliveredEvent /* "UndeliveredEvent" */,
         CannotAddInFlight /* "CannotAddInFlight" */,
         ProblemOnStart /*ProblemOnStart*/,
+        BrokenLock /* "BrokenLock" */,
 
         COUNT
     };
@@ -164,6 +165,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByHeader;
     NMonitoring::TDynamicCounters::TCounterPtr DictionaryOnlyOptimizationCount;
     NMonitoring::TDynamicCounters::TCounterPtr DistinctLimitSyncPointInvocations;
+    NMonitoring::TDynamicCounters::TCounterPtr PredicateFilterInvocations;
+    NMonitoring::TDynamicCounters::TCounterPtr EarlyInFlightReleaseCount;
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
     std::shared_ptr<TDuplicateFilteringCounters> DuplicateFilteringCounters;
     std::shared_ptr<TSimpleDuplicateFilteringCounters> SimpleDuplicateFilteringCounters;
@@ -220,6 +223,14 @@ public:
         DistinctLimitSyncPointInvocations->Add(1);
     }
 
+    void OnPredicateFilterInvocation() const {
+        PredicateFilterInvocations->Add(1);
+    }
+
+    void OnEarlyInFlightRelease() const {
+        EarlyInFlightReleaseCount->Add(1);
+    }
+
     NMonitoring::TDynamicCounters::TCounterPtr AcceptedByIndex;
     NMonitoring::TDynamicCounters::TCounterPtr DeniedByIndex;
 
@@ -269,6 +280,8 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRawBytes;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRecords;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceEmptyCount;
+    NMonitoring::TDynamicCounters::TCounterPtr StartedSourceConflictingCount;
+    NMonitoring::TDynamicCounters::TCounterPtr StartedSourceNonconflictingCount;
     NMonitoring::THistogramPtr HistogramFilteredResultCount;
 
     TScanCounters(const TString& module = "Scan");
@@ -280,6 +293,15 @@ public:
         HistogramFilteredResultCount->Collect(filteredRecordsCount);
         if (!filteredRecordsCount) {
             ProcessedSourceEmptyCount->Add(1);
+        }
+    }
+
+    // Sources handed to the scan pipeline, whatever becomes of them afterwards
+    void OnSourceStartProcessing(const bool conflicting) const {
+        if (conflicting) {
+            StartedSourceConflictingCount->Add(1);
+        } else {
+            StartedSourceNonconflictingCount->Add(1);
         }
     }
 

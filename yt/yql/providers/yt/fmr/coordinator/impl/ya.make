@@ -23,6 +23,7 @@ PEERDIR(
 
 RESOURCE(
     default_operation_settings.yson default_operation_settings.yson
+    default_coordinator_settings.yson default_coordinator_settings.yson
 )
 
 YQL_LAST_ABI_VERSION()

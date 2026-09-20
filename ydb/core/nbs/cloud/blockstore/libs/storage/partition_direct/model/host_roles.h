@@ -1,5 +1,6 @@
 #pragma once
 
+#include "host.h"
 #include "host_mask.h"
 
 #include <array>
@@ -14,12 +15,17 @@ public:
     THostRoles() = default;
     explicit THostRoles(size_t hostCount);
 
-    static THostRoles
-    MakeRotating(size_t hostCount, ui32 vChunkIndex, size_t primaryCount);
+    static THostRoles MakeRotating(
+        size_t hostCount,
+        ui32 vChunkIndex,
+        size_t primaryCount,
+        EHostRole secondaryRole);
 
     [[nodiscard]] size_t HostCount() const;
     [[nodiscard]] EHostRole GetRole(THostIndex host) const;
     void SetRole(THostIndex host, EHostRole assignment);
+
+    void AppendRole(EHostRole assignment);
 
     [[nodiscard]] THostMask GetPrimary() const;
     [[nodiscard]] THostMask GetHandOff() const;
@@ -27,7 +33,7 @@ public:
 
     bool operator==(const THostRoles& other) const = default;
 
-    [[nodiscard]] TString DebugPrint() const;
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 
 private:
     std::array<EHostRole, MaxHostCount> Assignments{};

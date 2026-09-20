@@ -2,12 +2,17 @@
 #include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
 namespace {
 
 class TPropose : public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
 public:
     explicit TPropose(TOperationId id)
         : OperationId(std::move(id))
@@ -15,7 +20,9 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -36,7 +43,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -47,15 +54,12 @@ public:
     }
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder() << "TAlterResourcePool TPropose, operationId: " << OperationId << ", ";
-    }
-
-private:
     const TOperationId OperationId;
 };
 
 class TAlterResourcePool : public TSubOperation {
+    virtual const char* Name() const override final { return "TAlterResourcePool"; }
+
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -120,7 +124,9 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& resourcePoolDescription = Transaction.GetCreateResourcePool();
         const TString& name = resourcePoolDescription.GetName();
-        LOG_N("TAlterResourcePool Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", parentPathStr + "/" + name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -149,12 +155,27 @@ public:
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
         const TPathElement::TPtr resourcePool = ReplaceResourcePoolPathElement(dstPath);
-        NResourcePool::CreateTransaction(OperationId, context, resourcePool->PathId, TTxState::TxAlterResourcePool);
-        NResourcePool::RegisterParentPathDependencies(OperationId, context, parentPath);
 
-        NIceDb::TNiceDb db(context.GetDB());
-        NResourcePool::AdvanceTransactionStateToPropose(OperationId, context, db);
-        NResourcePool::PersistResourcePool(OperationId, context, db, resourcePool, resourcePoolInfo, /* acl */ TString());
+        auto guard = context.DbGuard();
+
+        context.MemChanges.GrabPath(context.SS, resourcePool->PathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabResourcePool(context.SS, resourcePool->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(resourcePool->PathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistResourcePool(resourcePool->PathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        context.SS->ResourcePools.Set(resourcePool->PathId, resourcePoolInfo);
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterResourcePool, resourcePool->PathId);
+        txState.Shards.clear();
+        txState.State = TTxState::Propose;
+        context.OnComplete.ActivateTx(OperationId);
+
+        RegisterParentPathDependencies(OperationId, context, parentPath);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
@@ -163,12 +184,15 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TAlterResourcePool AbortPropose: opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TAlterResourcePool");
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TAlterResourcePool AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterResourcePool AbortUnsafe",
+            {"operationId", OperationId},
+            {"txId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -185,3 +209,5 @@ ISubOperation::TPtr CreateAlterResourcePool(TOperationId id, TTxState::ETxState 
 }
 
 }  // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

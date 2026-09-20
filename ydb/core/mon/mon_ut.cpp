@@ -13,17 +13,6 @@ using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::Tests;
 
-void GrantConnect(Tests::TClient& client) {
-    client.CreateUser("/Root", "username", "password");
-    client.GrantConnect("username");
-
-    const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
-        { "folder_id", "test_folder_id" },
-        { "database_id", "test_database_id" },
-    });
-    UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
-}
-
 void AssertCorsHeaders(const THttpHeaders& headers) {
     UNIT_ASSERT(headers.HasHeader("Access-Control-Allow-Origin"));
     UNIT_ASSERT(headers.HasHeader("Access-Control-Allow-Credentials"));
@@ -173,6 +162,41 @@ Y_UNIT_TEST_SUITE(ActorPage) {
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 1);
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 0);
+    }
+
+    Y_UNIT_TEST(PreservesRequestIdAtTicketParser) {
+        THttpMonTestEnv env({
+            .RegKind = THttpMonTestEnvOptions::ERegKind::ActorPage,
+            .ActorAllowedSIDs = {"valid_group"},
+            .TicketParserGroupSIDs = {"valid_group"},
+        });
+        const TString requestId = "monitoring-inbound-request-id";
+        auto headers = env.MakeAuthHeaders();
+        headers["x-request-id"] = requestId;
+
+        TStringStream responseStream;
+        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, headers);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->CapturedRequestId, requestId);
+    }
+
+    Y_UNIT_TEST(GeneratesRequestIdAtTicketParser) {
+        THttpMonTestEnv env({
+            .RegKind = THttpMonTestEnvOptions::ERegKind::ActorPage,
+            .ActorAllowedSIDs = {"valid_group"},
+            .TicketParserGroupSIDs = {"valid_group"},
+        });
+
+        TStringStream responseStream;
+        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, env.MakeAuthHeaders());
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
+        UNIT_ASSERT(!ticketParser->CapturedRequestId.empty());
     }
 
     Y_UNIT_TEST(NoValidGroupForbidden) {

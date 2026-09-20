@@ -309,7 +309,8 @@ Y_UNIT_TEST_SUITE(Deadlines) {
             TInstant now = TAppData::TimeProvider->Now();
             ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
                 SendToBSProxy(ctx.Edge, ctx.GroupId, new TEvBlobStorage::TEvCollectGarbage(tabletId, generation, 1, channel,
-                        true, generation, steps / 2, keep.release(), nullptr, now + timeout, multicollect, hard));
+                        true, generation, steps / 2, keep.release(), nullptr, now + timeout, multicollect,
+                        TWriteSource::Unknown, hard));
             });
         };
 

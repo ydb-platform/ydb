@@ -13,7 +13,10 @@
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/gateway/fmr/yql_yt_fmr.h>
 #include <yt/yql/providers/yt/fmr/fmr_tool_lib/yql_yt_fmr_initializer.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/discovery/file/yql_yt_file_service_discovery.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/core/cbo/simple/cbo_simple.h>
@@ -93,8 +96,12 @@ TYtRunTool::TYtRunTool(TString name)
                             counters << TStringBuf(" (") << (100ul * progress.Counters->Completed / progress.Counters->Total) << TStringBuf("%)");
                         }
                     }
+                    TStringBuilder waitingRemoteId;
+                    if (progress.WaitingRemoteId) {
+                        waitingRemoteId << ", waitingRemoteId: " << progress.WaitingRemoteId;
+                    }
                     Cerr << "Operation: [" << progress.Category << "] " << progress.Id
-                        << ", state: " << progress.State << remoteId << counters
+                        << ", state: " << progress.State << remoteId << waitingRemoteId << counters
                         << ", current stage: " << progress.Stage.first << Endl;
                 });
             });
@@ -130,6 +137,15 @@ TYtRunTool::TYtRunTool(TString name)
         opts.AddLongOption( "fmr-coordinator-url", "Fmr coordinator URL")
             .Optional()
             .StoreResult(&FmrCoordinatorUrl_);
+        opts.AddLongOption("fmr-coordinator-yson-path", "Path to YSON file with coordinator settings")
+            .Optional()
+            .StoreResult(&CoordinatorYsonPath_);
+        opts.AddLongOption("fmr-worker-yson-path", "Path to YSON file with worker settings")
+            .Optional()
+            .StoreResult(&WorkerYsonPath_);
+        opts.AddLongOption("fmr-yt-server-for-upload", "YT server used for uploading files in FMR")
+            .Optional()
+            .StoreResult(&FmrYtServerForUpload_);
         opts.AddLongOption("tvm-cfg", "TVM configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
             TFacadeRunOptions::ParseProtoConfig(file, &TvmConfig_);
         });
@@ -145,19 +161,25 @@ TYtRunTool::TYtRunTool(TString name)
             GetRunOptions().GatewaysConfig = MakeHolder<TGatewaysConfig>();
         }
 
+        if (!GetRunOptions().StaticGatewaysConfig) {
+            GetRunOptions().StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+            SyncWithStaticGateways(*GetRunOptions().StaticGatewaysConfig, *GetRunOptions().GatewaysConfig);
+        }
+
         auto ytConfig = GetRunOptions().GatewaysConfig->MutableYt();
+        auto staticYtConfig = GetRunOptions().StaticGatewaysConfig->MutableYt();
         ytConfig->SetGatewayThreads(NumYtThreads_);
         if (MrJobBin_.empty()) {
-            ytConfig->ClearMrJobBin();
+            staticYtConfig->ClearMrJobBin();
         } else {
-            ytConfig->SetMrJobBin(MrJobBin_);
-            ytConfig->SetMrJobBinMd5(MD5::File(MrJobBin_));
+            staticYtConfig->SetMrJobBin(MrJobBin_);
+            staticYtConfig->SetMrJobBinMd5(MD5::File(MrJobBin_));
         }
 
         if (MrJobUdfsDir_.empty()) {
-            ytConfig->ClearMrJobUdfsDir();
+            staticYtConfig->ClearMrJobUdfsDir();
         } else {
-            ytConfig->SetMrJobUdfsDir(MrJobUdfsDir_);
+            staticYtConfig->SetMrJobUdfsDir(MrJobUdfsDir_);
         }
         auto attr = ytConfig->MutableDefaultSettings()->Add();
         attr->SetName("KeepTempTables");
@@ -165,7 +187,7 @@ TYtRunTool::TYtRunTool(TString name)
 
         FillClusterMapping(*ytConfig, TString{YtProviderName});
 
-        DefYtServer_ = NYql::TConfigClusters::GetDefaultYtServer(*ytConfig);
+        YtClusters_ = MakeIntrusive<TConfigClusters>(*ytConfig);
 
         if (GetRunOptions().GatewayTypes.contains(NFmr::FastMapReduceGatewayName)) {
             GetRunOptions().GatewayTypes.emplace(YtProviderName);
@@ -176,11 +198,11 @@ TYtRunTool::TYtRunTool(TString name)
     GetRunOptions().GatewayTypes.emplace(YtProviderName);
 
     AddFsDownloadFactory([this]() -> NFS::IDownloaderPtr {
-        return MakeYtDownloader(*GetRunOptions().FsConfig, DefYtServer_);
+        return MakeYtDownloader(*GetRunOptions().FsConfig, YtClusters_);
     });
 
-    AddUrlListerFactory([]() -> IUrlListerPtr {
-        return MakeYtUrlLister();
+    AddUrlListerFactory([this]() -> IUrlListerPtr {
+        return MakeYtUrlLister(YtClusters_);
     });
 
     AddProviderFactory([this]() -> NYql::TDataProviderInitializer {
@@ -198,6 +220,7 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     services.FunctionRegistry = GetFuncRegistry().Get();
     services.FileStorage = GetFileStorage();
     services.Config = std::make_shared<TYtGatewayConfig>(GetRunOptions().GatewaysConfig->GetYt());
+    services.StaticConfig = std::make_shared<TYtStaticGatewayConfig>(GetRunOptions().StaticGatewaysConfig->GetYt());
     services.SecretMasker = CreateSecretMasker();
     services.TvmClient = CreateTvmClient(TvmConfig_);
     services.YtAccessProvider = CreateYtAccessProvider(services.TvmClient, AccessProviderConfig_);
@@ -243,19 +266,29 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     fmrServices.YtJobService = NFmr::MakeYtJobSerivce();
     fmrServices.YtCoordinatorService = NFmr::MakeYtCoordinatorService();
     fmrServices.FmrOperationSpecFilePath = FmrOperationSpecFilePath_;
+    fmrServices.CoordinatorYsonPath = CoordinatorYsonPath_;
+    fmrServices.WorkerYsonPath = WorkerYsonPath_;
+    const bool useFmrJobUpload = !FmrYtServerForUpload_.empty();
     fmrServices.JobLauncher = MakeIntrusive<NFmr::TFmrUserJobLauncher>(NFmr::TFmrUserJobLauncherOptions{
         .RunInSeparateProcess = true,
-        .FmrJobBinaryPath = FmrJobBin_,
+        .FmrJobBinaryPath = useFmrJobUpload ? TString{} : FmrJobBin_,
         .GatewayType = "native",
         .TableDataServiceDiscoveryFilePath = TableDataServiceDiscoveryFilePath_
     });
+    if (!FmrJobBin_.empty() && useFmrJobUpload) {
+        fmrServices.FmrJobBinaryPath = FmrJobBin_;
+        fmrServices.FmrJobBinaryMd5 = MD5::File(FmrJobBin_);
+    }
 
     fmrServices.FileUploadService = fmrInitializationOpts.FmrFileUploadService;
     fmrServices.FileMetadataService = fmrInitializationOpts.FmrFileMetadataService;
     fmrServices.TvmSettings = fmrInitializationOpts.FmrTvmSettings;
+    if (!FmrYtServerForUpload_.empty()) {
+        fmrServices.YtServerForUpload = FmrYtServerForUpload_;
+    }
 
     if (!DisableLocalFmrWorker_) {
-        auto jobPreparer = NFmr::MakeFmrJobPreparer(GetFileStorage(), TableDataServiceDiscoveryFilePath_);
+        auto jobPreparer = NFmr::MakeFmrJobPreparer(GetFileStorage(), NFmr::MakeFileTableDataServiceDiscovery({.Path = TableDataServiceDiscoveryFilePath_}));
         auto fmrDistCacheSettings = fmrInitializationOpts.FmrDistributedCacheSettings;
         TString distFileCacheBaseUrl = "yt://" + fmrDistCacheSettings.YtServerName + "/" + fmrDistCacheSettings.Path;
         jobPreparer->InitalizeDistributedCache(distFileCacheBaseUrl, fmrDistCacheSettings.YtToken);

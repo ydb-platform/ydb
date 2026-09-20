@@ -20,11 +20,11 @@ def add_arguments(parser):
     update_cfg_parser = subparsers.add_parser('update_cfg')
     common.add_common_options(update_cfg_parser)
     update_cfg_parser.add_argument('--nodes', '-N', dest='nodes', nargs='*', default=None, help='default: All')
-    update_cfg_parser.add_argument('--exclude-nodes', '--exclude_nodes', dest='exclude_nodes', nargs='*', default=None)
+    update_cfg_parser.add_argument('--exclude-nodes', dest='exclude_nodes', nargs='*', default=None)
 
     update_bin_parser = subparsers.add_parser('update_bin')
     common.add_common_options(update_bin_parser)
-    update_bin_parser.add_argument('--bin-path', '--bin_path', default=None, type=str, help='path to binary file')
+    update_bin_parser.add_argument('--bin-path', default=None, type=str, help='path to binary file')
 
 
 async def do_install(args):

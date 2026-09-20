@@ -56,8 +56,8 @@ void PrepareAttributes(
     NYT::MergeNodes(attrs, out.AttrSpec);
 
     if (createTable) {
-        const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
-        attrs["schema"] = RowSpecToYTSchema(out.Spec[YqlRowSpecAttribute], nativeTypeCompat, out.ColumnGroups).ToNode();
+        const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *execCtx->Options_.Config());
+        attrs["schema"] = RowSpecToYTSchema(out.Spec[YqlRowSpecAttribute], nativeYtTypeCompatibility, out.ColumnGroups).ToNode();
     }
 
     if (!securityTags.empty()) {

@@ -37,6 +37,8 @@ struct TFmrInitializationOptions {
     NFmr::IFileUploadService::TPtr FmrFileUploadService;
     TFmrDistributedCacheSettings FmrDistributedCacheSettings = TFmrDistributedCacheSettings(); // return fmr cache settings explicitly for jobPrerarer initialization.
     TMaybe<TFmrTvmGatewaySettings> FmrTvmSettings;
+    // Set when connecting to a vanilla FMR operation.
+    TMaybe<TVanillaFmrCoordinatorClientSettings> VanillaCoordinatorClientSettings;
 };
 
 TFmrInitializationOptions GetFmrInitializationInfoFromConfig(

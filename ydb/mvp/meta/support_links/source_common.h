@@ -1,5 +1,8 @@
 #pragma once
 
+#include "entity.h"
+
+#include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/string/builder.h>
@@ -28,6 +31,30 @@ inline TString AppendQueryParam(const TString& url, TStringBuf key, TStringBuf v
     TStringBuilder result;
     result << url << (url.Contains('?') ? '&' : '?') << key << "=" << CGIEscapeRet(value);
     return result;
+}
+
+inline void ApplyEntityIdentityParameters(TCgiParameters& queryParameters, const TEntityIdentity& entityIdentity) {
+    if (!entityIdentity.Cluster.empty()) {
+        queryParameters.InsertUnescaped("cluster", entityIdentity.Cluster);
+    }
+    if (entityIdentity.Database && !entityIdentity.Database->empty()) {
+        queryParameters.InsertUnescaped("database", *entityIdentity.Database);
+    }
+    if (entityIdentity.Node && !entityIdentity.Node->empty()) {
+        queryParameters.InsertUnescaped("node", *entityIdentity.Node);
+    }
+    if (entityIdentity.Host && !entityIdentity.Host->empty()) {
+        queryParameters.InsertUnescaped("host", *entityIdentity.Host);
+    }
+}
+
+inline TCgiParameters BuildForwardedParameters(const TEntityIdentity& entityIdentity, const TCgiParameters& additionalRequestParams) {
+    TCgiParameters queryParameters;
+    ApplyEntityIdentityParameters(queryParameters, entityIdentity);
+    for (const auto& [name, value] : additionalRequestParams) {
+        queryParameters.InsertUnescaped(name, value);
+    }
+    return queryParameters;
 }
 
 } // namespace NMVP::NSupportLinks

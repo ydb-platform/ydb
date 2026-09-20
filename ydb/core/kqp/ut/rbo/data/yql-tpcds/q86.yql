@@ -14,6 +14,7 @@ SELECT
             Grouping(i_category) + Grouping(i_class),
             CASE
                 WHEN Grouping(i_class) == 0 THEN i_category
+                ELSE NULL
             END
         ORDER BY
             Sum(ws_net_paid) DESC
@@ -33,7 +34,8 @@ GROUP BY
 ORDER BY
     lochierarchy DESC,
     CASE
-        WHEN lochierarchy == 0 THEN i_category
+        WHEN CAST(lochierarchy AS Int32) == 0 THEN i_category
+        ELSE NULL
     END,
     rank_within_parent
 LIMIT 100;

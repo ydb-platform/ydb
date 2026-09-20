@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/formats/arrow
+    ydb/core/tx/columnshard/engines/reader/abstract
 )
 
 END()

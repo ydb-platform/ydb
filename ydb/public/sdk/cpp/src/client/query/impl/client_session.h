@@ -18,8 +18,8 @@ public:
             std::shared_ptr<TQueryClient::TImpl> client,
             std::weak_ptr<ISessionClient> sessionClient)
             : Promise(promise)
-            , SessionId(sessionId)
-            , Endpoint(endpoint)
+            , SessionId(std::move(sessionId))
+            , Endpoint(std::move(endpoint))
             , Client(client)
             , SessionClient(sessionClient)
         { }
@@ -38,6 +38,8 @@ public:
 
     static void MakeImplAsync(TStreamProcessorPtr processor, std::shared_ptr<TAttachSessionArgs> args);
 
+    std::shared_ptr<ISessionClient> GetSessionClient() const override;
+
 private:
     static void NewSmartShared(TStreamProcessorPtr ptr, std::shared_ptr<TAttachSessionArgs> args, NYdb::TStatus status);
 
@@ -45,6 +47,7 @@ private:
 
 private:
     TStreamProcessorPtr StreamProcessor_;
+    std::weak_ptr<ISessionClient> SessionClient_;
     std::shared_ptr<TSafeTSessionImplHolder> SessionHolder;
 };
 

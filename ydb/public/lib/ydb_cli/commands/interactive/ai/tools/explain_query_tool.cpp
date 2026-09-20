@@ -21,19 +21,17 @@ class TExplainQueryTool final : public TToolBase, public TInterruptableCommand {
     using TBase = TToolBase;
 
     static constexpr char DESCRIPTION[] = R"(
-Explain query in Yandex Data Base (YDB) on YQL (SQL dialect). Use cases:
-- Explain data query to get query plan, statistics and AST
-- Validate query syntax, column and table names and semantics
+Validate / explain a YQL (SQL dialect) query in Yandex Data Base (YDB) WITHOUT executing it. Safe to call freely — does not execute, does not modify data, does not prompt the user — so it is the standard way to validate a query before passing it to `exec_query`.
+
+Returns query plan and AST when the query is valid; returns the parser / semantic error otherwise. Use the error to iterate on the query until it is valid.
 
 IMPORTANT:
-- Tool CAN NOT be used for any DDL queries.
 - NEVER guess column names, types or keys. If you do not know the exact schema of a table, use the `describe` tool FIRST.
 - NEVER guess data values for filtering. Do not assume specific values exist in the table.
   Instead, query the distinct values first (e.g., `SELECT DISTINCT column_name FROM my_table LIMIT 20`) to verify the actual values in the database.
 - To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
+- For any unfamiliar YQL syntax or YDB-specific feature, consult `docs_search` BEFORE composing the query — the docs are authoritative.
 - If path to table contains '/' or '@', wrap it into back ticks, for example `path/to/table`. Add back ticks only if they are really needed, for example table some_table do not need backticks.
-
-Returns query plan and AST.
 )";
 
     static constexpr char QUERY_PROPERTY[] = "query";

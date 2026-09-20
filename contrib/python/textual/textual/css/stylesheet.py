@@ -464,6 +464,7 @@ class Stylesheet:
         "odd",
         "even",
         "focus-within",
+        "empty",
     }
 
     def apply(
@@ -505,7 +506,7 @@ class Stylesheet:
         node._has_hover_style = "hover" in all_pseudo_classes
         node._has_focus_within = "focus-within" in all_pseudo_classes
         node._has_order_style = not all_pseudo_classes.isdisjoint(
-            {"first-of-type", "last-of-type", "first-child", "last-child"}
+            {"first-of-type", "last-of-type", "first-child", "last-child", "empty"}
         )
         node._has_odd_or_even = (
             "odd" in all_pseudo_classes or "even" in all_pseudo_classes
@@ -697,7 +698,6 @@ class Stylesheet:
 
             for key in modified_rule_keys:
                 setattr(base_styles, key, get_rule(key))
-
         node.notify_style_update()
 
     def update(self, root: DOMNode, animate: bool = False) -> None:
@@ -723,9 +723,15 @@ class Stylesheet:
         for node in nodes:
             apply(node, animate=animate, cache=cache)
             if isinstance(node, Widget) and node.is_scrollable:
-                if node.show_vertical_scrollbar:
+                show_vertical_scrollbar = (
+                    node.show_vertical_scrollbar and node.scrollbar_size_vertical
+                )
+                show_horizontal_scrollbar = (
+                    node.show_horizontal_scrollbar and node.scrollbar_size_horizontal
+                )
+                if show_vertical_scrollbar:
                     apply(node.vertical_scrollbar, cache=cache)
-                if node.show_horizontal_scrollbar:
+                if show_horizontal_scrollbar:
                     apply(node.horizontal_scrollbar, cache=cache)
-                if node.show_horizontal_scrollbar and node.show_vertical_scrollbar:
+                if show_horizontal_scrollbar and show_vertical_scrollbar:
                     apply(node.scrollbar_corner, cache=cache)

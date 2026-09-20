@@ -27,10 +27,13 @@ public:
         const TMaybe<TString>& jobEnvironmentDir = Nothing(),
         const std::vector<TFileInfo>& jobFiles = {},
         const std::vector<TYtResourceInfo>& jobYtResources = {},
-        const std::vector<TFmrResourceTaskInfo>& jobFmrResources = {}
+        const std::vector<TFmrResourceTaskInfo>& jobFmrResources = {},
+        std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr
     );
 
     bool RunInSeperateProcess() const;
+
+    TString GetFmrJobBinaryPath() const;
 
 private:
     void InitializeJobEnvironment(

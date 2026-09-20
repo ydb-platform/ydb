@@ -36,6 +36,9 @@ public:
 
     virtual void SetPrompt(const TString& prompt) = 0;
 
+    // Omit scheme (DDL) keywords from YQL TAB-completion (interactive transaction mode).
+    virtual void SetExcludeSchemeQueryCompletion(bool exclude) = 0;
+
     virtual ~ILineReader() = default;
 };
 
@@ -45,7 +48,11 @@ struct TLineReaderSettings {
     TString Database;
     TString Prompt;
     std::optional<TString> HistoryFilePath;
+    // Slash-prefixed commands suggested when the input starts with '/'.
     std::vector<TString> AdditionalCommands;
+    // TCL command lines (e.g. BEGIN ..., COMMIT, ROLLBACK ...) suggested when
+    // the input looks like a transaction control statement.
+    std::vector<TString> TclCommands;
     TString Placeholder;
     bool EnableYqlCompletion = true;
     bool EnableSwitchMode = true;

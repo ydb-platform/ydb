@@ -28,7 +28,7 @@ TCommandTools::TCommandTools()
     AddCommand(std::make_unique<TCommandRestore>());
     AddCommand(std::make_unique<TCommandCopy>());
     AddCommand(std::make_unique<TCommandRename>());
-    AddCommand(std::make_unique<TCommandPgConvert>());
+    AddHiddenCommand(std::make_unique<TCommandPgConvert>());
     AddCommand(std::make_unique<TCommandToolsInfer>());
 }
 
@@ -116,7 +116,8 @@ int TCommandDump::Run(TConfig& config) {
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Dump(Path, FilePath, settings));
 
     return EXIT_SUCCESS;
@@ -218,7 +219,8 @@ void TCommandRestore::Config(TConfig& config) {
     config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data."
             " ImportData will throw an error if you try to upload data into an existing table that has"
             " secondary indexes or is in the process of building them. If you need to restore a table"
-            " with secondary indexes, make sure it's not already present in the scheme.")
+            " with secondary indexes, make sure it's not already present in the scheme."
+            " Column-oriented (OLAP) tables are restored via BulkUpsert because ImportData does not support them.")
         .StoreTrue(&UseImportData);
 
     config.Opts->AddLongOption("replace", "Remove existing objects from the database that match those in the backup before restoration."
@@ -300,7 +302,8 @@ int TCommandRestore::Run(TConfig& config) {
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Restore(FilePath, Path, settings));
 
     return EXIT_SUCCESS;
@@ -368,7 +371,7 @@ int TCommandCopy::Run(TConfig& config) {
         }
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).CopyTables(
+        GetSession(driver).CopyTables(
             copyItems,
             FillSettings(NTable::TCopyTablesSettings())
         ).GetValueSync()
@@ -452,6 +455,7 @@ void TCommandRename::ExtractParams(TConfig& config) {
 }
 
 int TCommandRename::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
     TVector<NYdb::NTable::TRenameItem> renameItems;
     renameItems.reserve(Items.size());
     for (auto& item : Items) {
@@ -461,13 +465,17 @@ int TCommandRename::Run(TConfig& config) {
         }
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).RenameTables(
+        GetSession(driver).RenameTables(
             renameItems,
             FillSettings(NTable::TRenameTablesSettings())
         ).GetValueSync()
     );
     return EXIT_SUCCESS;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+//  PgConvert
+////////////////////////////////////////////////////////////////////////////////
 
 TCommandPgConvert::TCommandPgConvert()
     : TToolsCommand("pg-convert", {}, "Convert pg_dump result SQL file to format readable by YDB postgres layer")

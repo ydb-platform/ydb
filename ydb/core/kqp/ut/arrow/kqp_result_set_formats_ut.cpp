@@ -20,17 +20,19 @@ namespace NTypeIds = NScheme::NTypeIds;
 
 namespace {
 
-TKikimrRunner CreateKikimrRunner(bool withSampleTables, ui64 channelBufferSize = 8_MB) {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableArrowResultSetFormat(true);
+constexpr ui64 DefaultChannelBufferSize = 8_MB;
+constexpr ui64 SmallChannelBufferSize = 1_KB;
 
+TKikimrRunner CreateKikimrRunner(bool withSampleTables, ui64 channelBufferSize, bool enableIndexStreamWrite, bool enableChannelsV2 ) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+    appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
+    appConfig.MutableTableServiceConfig()->SetDqChannelVersion(enableChannelsV2 ? 2 : 1);
     appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(channelBufferSize);
     appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(std::min(2_KB, channelBufferSize));
     appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelChunkSizeLimit(channelBufferSize);
 
-    auto settings = TKikimrSettings(appConfig).SetFeatureFlags(featureFlags).SetWithSampleTables(withSampleTables);
+    auto settings = TKikimrSettings(appConfig).SetWithSampleTables(withSampleTables);
     return TKikimrRunner(settings);
 }
 
@@ -276,8 +278,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * By default, unspecified format is Value for compatibility with previous versions.
      */
-    Y_UNIT_TEST(DefaultFormat) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(DefaultFormat, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         auto result = client.ExecuteQuery(R"(
@@ -298,8 +300,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * Set Value format explicitly in TExecuteQuerySettings.
      */
-    Y_UNIT_TEST(ValueFormat_Simple) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(ValueFormat_Simple, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Value);
@@ -322,8 +324,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * Small channel buffer size, rows from many ExecuteQueryResponePart parts are filled into a single ResultSet.
      */
-    Y_UNIT_TEST(ValueFormat_SmallChannelBufferSize) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+    Y_UNIT_TEST_QUAD(ValueFormat_SmallChannelBufferSize, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, SmallChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
@@ -344,8 +346,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * By default, SchemaInclusionMode is ALWAYS for Value format.
      */
-    Y_UNIT_TEST(ValueFormat_SchemaInclusionMode_Unspecified) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+    Y_UNIT_TEST_QUAD(ValueFormat_SchemaInclusionMode_Unspecified, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, SmallChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
@@ -380,8 +382,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * Set SchemaInclusionMode ALWAYS for Value format explicitly in TExecuteQuerySettings.
      */
-    Y_UNIT_TEST(ValueFormat_SchemaInclusionMode_Always) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+    Y_UNIT_TEST_QUAD(ValueFormat_SchemaInclusionMode_Always, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, SmallChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
@@ -416,8 +418,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * Set SchemaInclusionMode FIRST_ONLY for Value format explicitly in TExecuteQuerySettings.
      */
-    Y_UNIT_TEST(ValueFormat_SchemaInclusionMode_FirstOnly) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+    Y_UNIT_TEST_QUAD(ValueFormat_SchemaInclusionMode_FirstOnly, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, SmallChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
@@ -457,8 +459,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * For Value format, FirstOnly schema inclusion mode is supported for multistatement queries.
      */
-    Y_UNIT_TEST(ValueFormat_SchemaInclusionMode_FirstOnly_Multistatement) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+    Y_UNIT_TEST_QUAD(ValueFormat_SchemaInclusionMode_FirstOnly_Multistatement, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, SmallChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 200, 2, 2, 10, 2);
@@ -506,8 +508,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * Set Arrow format explicitly in TExecuteQuerySettings.
      */
-    Y_UNIT_TEST(ArrowFormat_Simple) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Simple, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
@@ -546,8 +548,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         UNIT_ASSERT_VALUES_EQUAL(arrowBatch->ToString(), expected->ToString());
     }
 
-    Y_UNIT_TEST(ArrowFormat_EmptyBatch) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(ArrowFormat_EmptyBatch, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
@@ -587,19 +589,31 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * Arrow format is supported for all types of columns.
      */
-    Y_UNIT_TEST_TWIN(ArrowFormat_AllTypes, isOlap) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_AllTypes_Row, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
-        if (isOlap) {
-            CreateAllTypesColumnTable(client);
-        } else {
-            CreateAllTypesRowTable(client);
-        }
+        CreateAllTypesRowTable(client);
 
-        const TString query = Sprintf(R"(
-            SELECT * FROM `/Root/%s`;
-        )", (isOlap) ? "ColumnTable" : "RowTable");
+        const TString query = R"(
+            SELECT * FROM `/Root/RowTable`;
+        )";
+
+        Y_UNUSED(ExecuteAndCombineBatches(client, query, /* assertSize */ true));
+    }
+
+    /**
+     * Arrow format is supported for all types of columns (OLAP).
+     */
+    Y_UNIT_TEST_QUAD(ArrowFormat_AllTypes_Column, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
+        auto client = kikimr.GetQueryClient();
+
+        CreateAllTypesColumnTable(client);
+
+        const TString query = R"(
+            SELECT * FROM `/Root/ColumnTable`;
+        )";
 
         Y_UNUSED(ExecuteAndCombineBatches(client, query, /* assertSize */ true));
     }
@@ -607,8 +621,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * Arrow format is supported for large batches.
      */
-    Y_UNIT_TEST(ArrowFormat_LargeTable) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_LargeTable, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 10000, 4, 10, 5000, 10);
@@ -623,8 +637,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * Arrow format is supported for large batches with LIMIT.
      */
-    Y_UNIT_TEST(ArrowFormat_LargeTable_Limit) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_LargeTable_Limit, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 10000, 4, 10, 5000, 10);
@@ -639,42 +653,46 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * Arrow format is supported for returning.
      */
-    Y_UNIT_TEST_TWIN(ArrowFormat_Returning, isOlap) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Returning_Row, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
-        TString query;
+        CreateAllTypesRowTable(client);
+        TString query = R"(
+            UPSERT INTO `/Root/RowTable` (Key, BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, IntervalValue, DecimalValue, JsonValue, YsonValue, JsonDocumentValue, DyNumberValue, Int32NotNullValue) VALUES
+            (43, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123),
+            (44, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123),
+            (45, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123)
+            RETURNING *;
+        )";
+        Y_UNUSED(ExecuteAndCombineBatches(client, query, /* assertSize */ true));
+    }
 
-        if (isOlap) {
-            CreateAllTypesColumnTable(client);
-            query = R"(
-                UPSERT INTO `/Root/ColumnTable` (Key, BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, JsonValue, YsonValue, JsonDocumentValue) VALUES
-                (43, false, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
-                (44, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
-                (45, false, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]"))
-                RETURNING *;
-            )";
-            auto arrowSettings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
-            auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), arrowSettings).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(arrowResponse.GetStatus(), EStatus::BAD_REQUEST, arrowResponse.GetIssues().ToString());
-        } else {
-            CreateAllTypesRowTable(client);
-            query = R"(
-                UPSERT INTO `/Root/RowTable` (Key, BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, IntervalValue, DecimalValue, JsonValue, YsonValue, JsonDocumentValue, DyNumberValue, Int32NotNullValue) VALUES
-                (43, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123),
-                (44, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123),
-                (45, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123)
-                RETURNING *;
-            )";
-            Y_UNUSED(ExecuteAndCombineBatches(client, query, /* assertSize */ true));
-        }
+    /**
+     * Arrow format is supported for returning (OLAP).
+     */
+    Y_UNIT_TEST_QUAD(ArrowFormat_Returning_Column, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
+        auto client = kikimr.GetQueryClient();
+
+        CreateAllTypesColumnTable(client);
+        TString query = R"(
+            UPSERT INTO `/Root/ColumnTable` (Key, BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, JsonValue, YsonValue, JsonDocumentValue) VALUES
+            (43, false, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
+            (44, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
+            (45, false, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]"))
+            RETURNING *;
+        )";
+        auto arrowSettings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
+        auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), arrowSettings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(arrowResponse.GetStatus(), EStatus::BAD_REQUEST, arrowResponse.GetIssues().ToString());
     }
 
     /**
      * Check different orders of columns in SELECT with Arrow format.
      */
-    Y_UNIT_TEST(ArrowFormat_ColumnOrder) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(ArrowFormat_ColumnOrder, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -736,8 +754,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * Small channel buffer size, data bytes and schema from many ExecuteQueryResponePart parts are filled into a single ResultSet as a std::vector with a single schema.
      */
-    Y_UNIT_TEST(ArrowFormat_SmallChannelBufferSize) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+    Y_UNIT_TEST_QUAD(ArrowFormat_SmallChannelBufferSize, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, SmallChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
@@ -755,8 +773,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * These YQL types are supported for Arrow format as arithmetic types:
      */
-    Y_UNIT_TEST(ArrowFormat_Types_Arithmetic) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Arithmetic, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -823,8 +841,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * These YQL types are supported for Arrow format as string types:
      */
-    Y_UNIT_TEST(ArrowFormat_Types_String) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_String, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -877,8 +895,8 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     /**
      * These YQL types are supported for Arrow format as binary types:
      */
-    Y_UNIT_TEST(ArrowFormat_Types_Binary) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Binary, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -986,8 +1004,8 @@ UuidNotNullValue:   [
     /**
      * These YQL types are supported for Arrow format as integer and time types:
      */
-    Y_UNIT_TEST(ArrowFormat_Types_Time) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Time, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1032,11 +1050,69 @@ UuidNotNullValue:   [
     }
 
     /**
+     * Arrow format correctly preserves IEEE 754 special float values (NaN, +Infinity, -Infinity)
+     * for both Float and Double columns.
+     * Both VALUE and ARROW formats must return semantically equivalent results.
+     */
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Float_SpecialValues, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
+        auto client = kikimr.GetQueryClient();
+
+        const TString query = R"(
+            SELECT
+                Float('nan') AS float_nan,
+                Float('inf') AS float_pos_inf,
+                Float('-inf') AS float_neg_inf,
+                Double('nan') AS double_nan,
+                Double('inf') AS double_pos_inf,
+                Double('-inf') AS double_neg_inf;
+        )";
+
+        // Verify Arrow format preserves NaN and Infinity as IEEE 754 special values
+        auto arrowBatches = ExecuteAndCombineBatches(client, query, /* assertSize */ true);
+
+        UNIT_ASSERT_C(!arrowBatches.empty(), "Batches must not be empty");
+
+        const auto& batch = arrowBatches.front();
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 6);
+
+        auto floatNanCol    = static_pointer_cast<arrow::FloatArray>(batch->column(0));
+        auto floatPosInfCol = static_pointer_cast<arrow::FloatArray>(batch->column(1));
+        auto floatNegInfCol = static_pointer_cast<arrow::FloatArray>(batch->column(2));
+        auto doubleNanCol    = static_pointer_cast<arrow::DoubleArray>(batch->column(3));
+        auto doublePosInfCol = static_pointer_cast<arrow::DoubleArray>(batch->column(4));
+        auto doubleNegInfCol = static_pointer_cast<arrow::DoubleArray>(batch->column(5));
+
+        UNIT_ASSERT_C(std::isnan(floatNanCol->Value(0)), "Float NaN must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(floatPosInfCol->Value(0)) && floatPosInfCol->Value(0) > 0, "Float +Inf must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(floatNegInfCol->Value(0)) && floatNegInfCol->Value(0) < 0, "Float -Inf must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isnan(doubleNanCol->Value(0)), "Double NaN must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(doublePosInfCol->Value(0)) && doublePosInfCol->Value(0) > 0, "Double +Inf must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(doubleNegInfCol->Value(0)) && doubleNegInfCol->Value(0) < 0, "Double -Inf must be preserved in Arrow format");
+
+        // Verify VALUE format sees the same special values (format consistency check)
+        auto valueSettings = TExecuteQuerySettings().Format(TResultSet::EFormat::Value);
+        auto valueResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), valueSettings).GetValueSync();
+        UNIT_ASSERT_C(valueResponse.IsSuccess(), valueResponse.GetIssues().ToString());
+
+        TResultSetParser parser(valueResponse.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+
+        UNIT_ASSERT_C(std::isnan(parser.ColumnParser("float_nan").GetFloat()), "Value format Float NaN must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("float_pos_inf").GetFloat()) && parser.ColumnParser("float_pos_inf").GetFloat() > 0, "Value format Float +Inf must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("float_neg_inf").GetFloat()) && parser.ColumnParser("float_neg_inf").GetFloat() < 0, "Value format Float -Inf must match Arrow format");
+        UNIT_ASSERT_C(std::isnan(parser.ColumnParser("double_nan").GetDouble()), "Value format Double NaN must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("double_pos_inf").GetDouble()) && parser.ColumnParser("double_pos_inf").GetDouble() > 0, "Value format Double +Inf must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("double_neg_inf").GetDouble()) && parser.ColumnParser("double_neg_inf").GetDouble() < 0, "Value format Double -Inf must match Arrow format");
+    }
+
+    /**
      * Arrow format is supported for compression.
      * By default, unspecified compression codec is None (without compression).
      */
-    Y_UNIT_TEST(ArrowFormat_Compression_None) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Compression_None, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CompareCompressedAndDefaultBatches(client, std::nullopt, /* assertEqual */ true);
@@ -1048,8 +1124,8 @@ UuidNotNullValue:   [
      * Arrow format is supported for compression by ZSTD codec.
      * Compression level is supported.
      */
-    Y_UNIT_TEST(ArrowFormat_Compression_ZSTD) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Compression_ZSTD, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CompareCompressedAndDefaultBatches(client, TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd).Level(12), /* assertEqual */ false);
@@ -1059,8 +1135,8 @@ UuidNotNullValue:   [
      * Arrow format is supported for compression by LZ4_FRAME codec.
      * Compression level is not supported.
      */
-    Y_UNIT_TEST(ArrowFormat_Compression_LZ4_FRAME) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Compression_LZ4_FRAME, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CompareCompressedAndDefaultBatches(client, TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Lz4Frame), /* assertEqual */ false);
@@ -1083,10 +1159,75 @@ UuidNotNullValue:   [
     }
 
     /**
+     * ZSTD edge-case compression levels are accepted without error
+     */
+    Y_UNIT_TEST_QUAD(ArrowFormat_Compression_ZSTD_LevelEdgeCases, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
+        auto client = kikimr.GetQueryClient();
+
+        // Level 0: ZSTD maps this to its default level (3). Should produce compressed output.
+        CompareCompressedAndDefaultBatches(client,
+            TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd).Level(0),
+            /* assertEqual */ false);
+
+        // Level -5: valid ZSTD fast mode. Should produce compressed output.
+        CompareCompressedAndDefaultBatches(client,
+            TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd).Level(-5),
+            /* assertEqual */ false);
+
+        // Level 100: above ZSTD maximum (22). ZSTD silently clamps to 22. Should produce compressed output.
+        CompareCompressedAndDefaultBatches(client,
+            TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd).Level(100),
+            /* assertEqual */ false);
+    }
+
+    /**
+     * Compression with ZSTD and LZ4_FRAME works correctly when the result set is empty (0 rows).
+     * The compressed empty batch must be deserializable and contain 0 rows.
+     */
+    Y_UNIT_TEST_QUAD(ArrowFormat_Compression_EmptyBatch, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
+        auto client = kikimr.GetQueryClient();
+
+        const TString query = R"(
+            SELECT Comment, Amount, Name FROM Test WHERE Amount >= 999999;
+        )";
+
+        for (auto codecType : {
+                TArrowFormatSettings::TCompressionCodec::EType::Zstd,
+                TArrowFormatSettings::TCompressionCodec::EType::Lz4Frame }) {
+            auto settings = TExecuteQuerySettings()
+                .Format(TResultSet::EFormat::Arrow)
+                .ArrowFormatSettings(TArrowFormatSettings()
+                    .CompressionCodec(TArrowFormatSettings::TCompressionCodec().Type(codecType)));
+
+            auto result = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto resultSet = result.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
+
+            const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+            const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
+
+            UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty even for empty result");
+            UNIT_ASSERT_C(!batches.empty(), "Expected at least one batch even for empty result");
+
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
+
+            UNIT_ASSERT_C(arrowBatch, "Empty compressed batch must be deserializable");
+            UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Empty compressed batch validation failed");
+            UNIT_ASSERT_VALUES_EQUAL(arrowBatch->num_rows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(arrowBatch->num_columns(), 3);
+        }
+    }
+
+    /**
      * Arrow batches are returned for different result set indexes.
      */
-    Y_UNIT_TEST(ArrowFormat_Multistatement) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Multistatement, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         auto settings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
@@ -1160,8 +1301,8 @@ UuidNotNullValue:   [
     /**
      * By default, SchemaInclusionMode is ALWAYS for Arrow format.
      */
-    Y_UNIT_TEST(ArrowFormat_SchemaInclusionMode_Unspecified) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+    Y_UNIT_TEST_QUAD(ArrowFormat_SchemaInclusionMode_Unspecified, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, SmallChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
@@ -1219,8 +1360,8 @@ UuidNotNullValue:   [
     /**
      * Set SchemaInclusionMode ALWAYS for Arrow format explicitly in TExecuteQuerySettings.
      */
-    Y_UNIT_TEST(ArrowFormat_SchemaInclusionMode_Always) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+    Y_UNIT_TEST_QUAD(ArrowFormat_SchemaInclusionMode_Always, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, SmallChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
@@ -1278,8 +1419,8 @@ UuidNotNullValue:   [
     /**
      * Set SchemaInclusionMode FIRST_ONLY for Arrow format explicitly in TExecuteQuerySettings.
      */
-    Y_UNIT_TEST(ArrowFormat_SchemaInclusionMode_FirstOnly) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+    Y_UNIT_TEST_QUAD(ArrowFormat_SchemaInclusionMode_FirstOnly, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, SmallChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 100, 2, 2, 10, 2);
@@ -1337,8 +1478,8 @@ UuidNotNullValue:   [
     /**
      * For Arrow format, FirstOnly schema inclusion mode is supported for multistatement queries.
      */
-    Y_UNIT_TEST(ArrowFormat_SchemaInclusionMode_FirstOnly_Multistatement) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+    Y_UNIT_TEST_QUAD(ArrowFormat_SchemaInclusionMode_FirstOnly_Multistatement, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, SmallChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         CreateLargeTable(kikimr, 200, 2, 2, 10, 2);
@@ -1408,8 +1549,8 @@ UuidNotNullValue:   [
      * - SchemaInclusionMode is FIRST_ONLY
      * - ChannelBufferSize is 1KB
      */
-    Y_UNIT_TEST(ArrowFormat_Stress) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Stress, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, SmallChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         std::unordered_map<size_t, std::shared_ptr<arrow::Schema>> arrowSchemas;
@@ -1500,12 +1641,12 @@ UuidNotNullValue:   [
 
     /**
      * More tests for different types with correctness and convertations between Arrow and UV :
-     * ydb/core/kqp/common/result_set_format/ut/kqp_formats_arrow_ut.cpp
+     * ydb/library/formats/arrow/minikql/ut/minikql_ut.cpp
     */
 
     // Optional<T>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_1) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Optional_1, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1542,8 +1683,8 @@ Name:   [
     }
 
     // Optional<Optional<T>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_2) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Optional_2, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1584,8 +1725,8 @@ column1:   -- is_valid: all not null
     }
 
     // Optional<Variant<T, F>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_3) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Optional_3, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1624,8 +1765,8 @@ R"(column0:   -- is_valid: all not null
     }
 
     // Optional<Optional<Variant<T, F, G>>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_4) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Optional_4, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1668,8 +1809,8 @@ R"(column0:   -- is_valid: all not null
     }
 
     // List<T>
-    Y_UNIT_TEST(ArrowFormat_Types_List_1) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_List_1, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1699,8 +1840,8 @@ R"(column0:   [
     }
 
     // List<Optional<T>>
-    Y_UNIT_TEST(ArrowFormat_Types_List_2) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_List_2, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1731,8 +1872,8 @@ R"(column0:   [
     }
 
     // List<Optional<T>> of columns
-    Y_UNIT_TEST(ArrowFormat_Types_List_3) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_List_3, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1794,8 +1935,8 @@ R"(column0:   [
     }
 
     // List<>
-    Y_UNIT_TEST(ArrowFormat_Types_EmptyList) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_EmptyList, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1819,8 +1960,8 @@ R"(column0:   -- is_valid: all not null
     }
 
     // Tuple<T, F>
-    Y_UNIT_TEST(ArrowFormat_Types_Tuple) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Tuple, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1852,8 +1993,8 @@ R"(column0:   -- is_valid: all not null
     }
 
     // Dict<K, V>
-    Y_UNIT_TEST(ArrowFormat_Types_Dict_1) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Dict_1, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1892,8 +2033,8 @@ R"(column0:   [
     }
 
     // Dict<Optional<K>, V>
-    Y_UNIT_TEST(ArrowFormat_Types_Dict_2) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Dict_2, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1932,8 +2073,8 @@ R"(column0:   [
     }
 
     // Dict<>
-    Y_UNIT_TEST(ArrowFormat_Types_EmptyDict) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_EmptyDict, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1957,8 +2098,8 @@ R"(column0:   -- is_valid: all not null
     }
 
     // Struct<first:T, second:F>
-    Y_UNIT_TEST(ArrowFormat_Types_Struct) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Struct, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -1990,8 +2131,8 @@ R"(column0:   -- is_valid: all not null
     }
 
     // Variant<T, F>
-    Y_UNIT_TEST(ArrowFormat_Types_Variant) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_Types_Variant, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto client = kikimr.GetQueryClient();
 
         {
@@ -2026,8 +2167,8 @@ R"(column0:   -- is_valid: all not null
         }
     }
 
-    Y_UNIT_TEST_TWIN(ArrowFormat_BulkUpsert, IsOlap) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+    Y_UNIT_TEST_QUAD(ArrowFormat_BulkUpsert_Row, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
         auto queryClient = kikimr.GetQueryClient();
         auto tableClient = kikimr.GetTableClient();
 
@@ -2055,14 +2196,11 @@ R"(column0:   -- is_valid: all not null
             {"Json", "Json"},
             {"JsonDocument", "JsonDocument"},
             {"Yson", "Yson"},
-            {"Decimal", "Decimal(22, 9)"}
+            {"Decimal", "Decimal(22, 9)"},
+            {"Interval", "Interval"},
+            {"DyNumber", "DyNumber"},
+            {"Uuid", "Uuid"}
         };
-
-        if (!IsOlap) {
-            types.push_back({"Interval", "Interval"});
-            types.push_back({"DyNumber", "DyNumber"});
-            types.push_back({"Uuid", "Uuid"});
-        }
 
         {
             std::string query = "CREATE TABLE SomeTypes (";
@@ -2071,10 +2209,6 @@ R"(column0:   -- is_valid: all not null
                 query += std::format(", {}Value {}", name, type);
             }
             query += ", PRIMARY KEY (Key))";
-
-            if (IsOlap) {
-                query += " WITH (STORE = COLUMN)";
-            }
 
             auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -2087,26 +2221,11 @@ R"(column0:   -- is_valid: all not null
                 query += std::format(", {}Value", name);
             }
             query += ") VALUES ";
-            query += "(1, true, 1, -1, 1, -1, 1, -1, 1, -1, 1.0f, 1.0, Date('2025-01-01'), Datetime('2025-01-01T00:00:00Z'), Timestamp('2025-01-01T00:00:00Z'), '1', '1'u, Date32('2025-01-01'), Datetime64('2025-01-01T00:00:00Z'), Timestamp64('2025-01-01T00:00:00Z'), Interval64('P1D'), Json(@@[1]@@), JsonDocument('[1]'), Yson('[1]'), Decimal('1', 22, 9)";
+            query += "(1, true, 1, -1, 1, -1, 1, -1, 1, -1, 1.0f, 1.0, Date('2025-01-01'), Datetime('2025-01-01T00:00:00Z'), Timestamp('2025-01-01T00:00:00Z'), '1', '1'u, Date32('2025-01-01'), Datetime64('2025-01-01T00:00:00Z'), Timestamp64('2025-01-01T00:00:00Z'), Interval64('P1D'), Json(@@[1]@@), JsonDocument('[1]'), Yson('[1]'), Decimal('1', 22, 9), Interval('P1D'), DyNumber('1'), Uuid('f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc1')),";
 
-            if (!IsOlap) {
-                query += ", Interval('P1D'), DyNumber('1'), Uuid('f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc1')";
-            }
-            query += "),";
+            query += "(2, false, 2, -2, 2, -2, 2, -2, 2, -2, 2.0f, 2.0, Date('2025-02-02'), Datetime('2025-02-02T00:00:00Z'), Timestamp('2025-02-02T00:00:00Z'), '2', '2'u, Date32('2025-02-02'), Datetime64('2025-02-02T00:00:00Z'), Timestamp64('2025-02-02T00:00:00Z'), Interval64('P2D'), Json(@@[2]@@), JsonDocument('[2]'), Yson('[2]'), Decimal('2', 22, 9), Interval('P2D'), DyNumber('2'), Uuid('f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc2')),";
 
-            query += "(2, false, 2, -2, 2, -2, 2, -2, 2, -2, 2.0f, 2.0, Date('2025-02-02'), Datetime('2025-02-02T00:00:00Z'), Timestamp('2025-02-02T00:00:00Z'), '2', '2'u, Date32('2025-02-02'), Datetime64('2025-02-02T00:00:00Z'), Timestamp64('2025-02-02T00:00:00Z'), Interval64('P2D'), Json(@@[2]@@), JsonDocument('[2]'), Yson('[2]'), Decimal('2', 22, 9)";
-
-            if (!IsOlap) {
-                query += ", Interval('P2D'), DyNumber('2'), Uuid('f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc2')";
-            }
-            query += "),";
-
-            query += "(3, true, 3, -3, 3, -3, 3, -3, 3, -3, 3.0f, 3.0, Date('2025-03-03'), Datetime('2025-03-03T00:00:00Z'), Timestamp('2025-03-03T00:00:00Z'), '3', '3'u, Date32('2025-03-03'), Datetime64('2025-03-03T00:00:00Z'), Timestamp64('2025-03-03T00:00:00Z'), Interval64('P3D'), Json(@@[3]@@), JsonDocument('[3]'), Yson('[3]'), Decimal('3', 22, 9)";
-
-            if (!IsOlap) {
-                query += ", Interval('P3D'), DyNumber('3'), Uuid('f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc3')";
-            }
-            query += ")";
+            query += "(3, true, 3, -3, 3, -3, 3, -3, 3, -3, 3.0f, 3.0, Date('2025-03-03'), Datetime('2025-03-03T00:00:00Z'), Timestamp('2025-03-03T00:00:00Z'), '3', '3'u, Date32('2025-03-03'), Datetime64('2025-03-03T00:00:00Z'), Timestamp64('2025-03-03T00:00:00Z'), Interval64('P3D'), Json(@@[3]@@), JsonDocument('[3]'), Yson('[3]'), Decimal('3', 22, 9), Interval('P3D'), DyNumber('3'), Uuid('f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc3'))";
 
             auto result = queryClient.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -2150,41 +2269,122 @@ R"(column0:   -- is_valid: all not null
 
             TString expected = "[";
 
-            expected += R"([1u;[%true];[1u];[-1];[1u];[-1];[1u];[-1];[1u];[-1];[1.];[1.];[20089u];[1735689600u];[1735689600000000u];["1"];["1"];[20089];[1735689600];[1735689600000000];[86400000000];["[1]"];["[1]"];["[1]"];["1"])";
-            if (!IsOlap) {
-                expected += R"(;[86400000000];[".1e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc1"])";
-            }
-            expected += "];";
+            expected += R"([1u;[%true];[1u];[-1];[1u];[-1];[1u];[-1];[1u];[-1];[1.];[1.];[20089u];[1735689600u];[1735689600000000u];["1"];["1"];[20089];[1735689600];[1735689600000000];[86400000000];["[1]"];["[1]"];["[1]"];["1"];[86400000000];[".1e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc1"]];)";
+            expected += R"([2u;[%false];[2u];[-2];[2u];[-2];[2u];[-2];[2u];[-2];[2.];[2.];[20121u];[1738454400u];[1738454400000000u];["2"];["2"];[20121];[1738454400];[1738454400000000];[172800000000];["[2]"];["[2]"];["[2]"];["2"];[172800000000];[".2e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc2"]];)";
+            expected += R"([3u;[%true];[3u];[-3];[3u];[-3];[3u];[-3];[3u];[-3];[3.];[3.];[20150u];[1740960000u];[1740960000000000u];["3"];["3"];[20150];[1740960000];[1740960000000000];[259200000000];["[3]"];["[3]"];["[3]"];["3"];[259200000000];[".3e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc3"]];)";
+            expected += R"([4u;[%true];[1u];[-1];[1u];[-1];[1u];[-1];[1u];[-1];[1.];[1.];[20089u];[1735689600u];[1735689600000000u];["1"];["1"];[20089];[1735689600];[1735689600000000];[86400000000];["[1]"];["[1]"];["[1]"];["1"];[86400000000];[".1e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc1"]];)";
+            expected += R"([5u;[%false];[2u];[-2];[2u];[-2];[2u];[-2];[2u];[-2];[2.];[2.];[20121u];[1738454400u];[1738454400000000u];["2"];["2"];[20121];[1738454400];[1738454400000000];[172800000000];["[2]"];["[2]"];["[2]"];["2"];[172800000000];[".2e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc2"]];)";
+            expected += R"([6u;[%true];[3u];[-3];[3u];[-3];[3u];[-3];[3u];[-3];[3.];[3.];[20150u];[1740960000u];[1740960000000000u];["3"];["3"];[20150];[1740960000];[1740960000000000];[259200000000];["[3]"];["[3]"];["[3]"];["3"];[259200000000];[".3e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc3"]]])";
 
-            expected += R"([2u;[%false];[2u];[-2];[2u];[-2];[2u];[-2];[2u];[-2];[2.];[2.];[20121u];[1738454400u];[1738454400000000u];["2"];["2"];[20121];[1738454400];[1738454400000000];[172800000000];["[2]"];["[2]"];["[2]"];["2"])";
-            if (!IsOlap) {
-                expected += R"(;[172800000000];[".2e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc2"])";
-            }
-            expected += "];";
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 
-            expected += R"([3u;[%true];[3u];[-3];[3u];[-3];[3u];[-3];[3u];[-3];[3.];[3.];[20150u];[1740960000u];[1740960000000000u];["3"];["3"];[20150];[1740960000];[1740960000000000];[259200000000];["[3]"];["[3]"];["[3]"];["3"])";
-            if (!IsOlap) {
-                expected += R"(;[259200000000];[".3e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc3"])";
-            }
-            expected += "];";
+    Y_UNIT_TEST_QUAD(ArrowFormat_BulkUpsert_Column, UseStreamIndex, UseChannelsV2) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, DefaultChannelBufferSize, UseStreamIndex, UseChannelsV2);
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
 
-            expected += R"([4u;[%true];[1u];[-1];[1u];[-1];[1u];[-1];[1u];[-1];[1.];[1.];[20089u];[1735689600u];[1735689600000000u];["1"];["1"];[20089];[1735689600];[1735689600000000];[86400000000];["[1]"];["[1]"];["[1]"];["1"])";
-            if (!IsOlap) {
-                expected += R"(;[86400000000];[".1e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc1"])";
-            }
-            expected += "];";
+        std::vector<std::pair<std::string, std::string>> types = {
+            {"Bool", "Bool"},
+            {"Uint8", "Uint8"},
+            {"Int8", "Int8"},
+            {"Uint16", "Uint16"},
+            {"Int16", "Int16"},
+            {"Uint32", "Uint32"},
+            {"Int32", "Int32"},
+            {"Uint64", "Uint64"},
+            {"Int64", "Int64"},
+            {"Float", "Float"},
+            {"Double", "Double"},
+            {"Date", "Date"},
+            {"Datetime", "Datetime"},
+            {"Timestamp", "Timestamp"},
+            {"String", "String"},
+            {"Utf8", "Utf8"},
+            {"Date32", "Date32"},
+            {"Datetime64", "Datetime64"},
+            {"Timestamp64", "Timestamp64"},
+            {"Interval64", "Interval64"},
+            {"Json", "Json"},
+            {"JsonDocument", "JsonDocument"},
+            {"Yson", "Yson"},
+            {"Decimal", "Decimal(22, 9)"}
+        };
 
-            expected += R"([5u;[%false];[2u];[-2];[2u];[-2];[2u];[-2];[2u];[-2];[2.];[2.];[20121u];[1738454400u];[1738454400000000u];["2"];["2"];[20121];[1738454400];[1738454400000000];[172800000000];["[2]"];["[2]"];["[2]"];["2"])";
-            if (!IsOlap) {
-                expected += R"(;[172800000000];[".2e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc2"])";
+        {
+            std::string query = "CREATE TABLE SomeTypes (";
+            query += "Key Uint64 NOT NULL";
+            for (const auto& [name, type] : types) {
+                query += std::format(", {}Value {}", name, type);
             }
-            expected += "];";
+            query += ", PRIMARY KEY (Key)) WITH (STORE = COLUMN)";
 
-            expected += R"([6u;[%true];[3u];[-3];[3u];[-3];[3u];[-3];[3u];[-3];[3.];[3.];[20150u];[1740960000u];[1740960000000000u];["3"];["3"];[20150];[1740960000];[1740960000000000];[259200000000];["[3]"];["[3]"];["[3]"];["3"])";
-            if (!IsOlap) {
-                expected += R"(;[259200000000];[".3e1"];["f9d5cc3f-f1dc-4d9c-b97e-766e57ca4cc3"])";
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            std::string query = "INSERT INTO SomeTypes (";
+            query += "Key";
+
+            for (const auto& [name, type] : types) {
+                query += std::format(", {}Value", name);
             }
-            expected += "]]";
+            query += ") VALUES ";
+            query += "(1, true, 1, -1, 1, -1, 1, -1, 1, -1, 1.0f, 1.0, Date('2025-01-01'), Datetime('2025-01-01T00:00:00Z'), Timestamp('2025-01-01T00:00:00Z'), '1', '1'u, Date32('2025-01-01'), Datetime64('2025-01-01T00:00:00Z'), Timestamp64('2025-01-01T00:00:00Z'), Interval64('P1D'), Json(@@[1]@@), JsonDocument('[1]'), Yson('[1]'), Decimal('1', 22, 9)),";
+
+            query += "(2, false, 2, -2, 2, -2, 2, -2, 2, -2, 2.0f, 2.0, Date('2025-02-02'), Datetime('2025-02-02T00:00:00Z'), Timestamp('2025-02-02T00:00:00Z'), '2', '2'u, Date32('2025-02-02'), Datetime64('2025-02-02T00:00:00Z'), Timestamp64('2025-02-02T00:00:00Z'), Interval64('P2D'), Json(@@[2]@@), JsonDocument('[2]'), Yson('[2]'), Decimal('2', 22, 9)),";
+
+            query += "(3, true, 3, -3, 3, -3, 3, -3, 3, -3, 3.0f, 3.0, Date('2025-03-03'), Datetime('2025-03-03T00:00:00Z'), Timestamp('2025-03-03T00:00:00Z'), '3', '3'u, Date32('2025-03-03'), Datetime64('2025-03-03T00:00:00Z'), Timestamp64('2025-03-03T00:00:00Z'), Interval64('P3D'), Json(@@[3]@@), JsonDocument('[3]'), Yson('[3]'), Decimal('3', 22, 9))";
+
+            auto result = queryClient.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            TString query = "SELECT ";
+            query += "Key + 3 AS Key";
+            for (const auto& [name, type] : types) {
+                query += std::format(", {}Value", name);
+            }
+            query += " FROM SomeTypes ORDER BY Key;";
+
+            auto batches = ExecuteAndCombineBatches(queryClient, query);
+
+            UNIT_ASSERT_C(batches.size() == 1, "Batches must be exactly one");
+
+            const auto& batch = batches.front();
+            const auto& schema = batch->schema();
+
+            UNIT_ASSERT_C(schema->field(0)->name() == "Key", "Key column must be present");
+            for (size_t i = 0; i < types.size(); ++i) {
+                UNIT_ASSERT_C(schema->field(i + 1)->name() == std::format("{}Value", types[i].first), "Column " << types[i].first << "Value must be present");
+            }
+
+            auto serializedSchema = NArrow::SerializeSchema(*schema);
+            auto serializedBatch = NArrow::SerializeBatchNoCompression(batch);
+
+            auto bulkResult = tableClient.BulkUpsert("/Root/SomeTypes", NYdb::NTable::EDataFormat::ApacheArrow, serializedBatch, serializedSchema).GetValueSync();
+            UNIT_ASSERT_C(bulkResult.IsSuccess(), bulkResult.GetIssues().ToString());
+
+            std::string selectQuery = "SELECT ";
+            selectQuery += "Key";
+            for (const auto& [name, type] : types) {
+                selectQuery += std::format(", {}Value", name);
+            }
+            selectQuery += " FROM SomeTypes ORDER BY Key;";
+
+
+            auto result = queryClient.ExecuteQuery(selectQuery, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TString expected = "[";
+
+            expected += R"([1u;[%true];[1u];[-1];[1u];[-1];[1u];[-1];[1u];[-1];[1.];[1.];[20089u];[1735689600u];[1735689600000000u];["1"];["1"];[20089];[1735689600];[1735689600000000];[86400000000];["[1]"];["[1]"];["[1]"];["1"]];)";
+            expected += R"([2u;[%false];[2u];[-2];[2u];[-2];[2u];[-2];[2u];[-2];[2.];[2.];[20121u];[1738454400u];[1738454400000000u];["2"];["2"];[20121];[1738454400];[1738454400000000];[172800000000];["[2]"];["[2]"];["[2]"];["2"]];)";
+            expected += R"([3u;[%true];[3u];[-3];[3u];[-3];[3u];[-3];[3u];[-3];[3.];[3.];[20150u];[1740960000u];[1740960000000000u];["3"];["3"];[20150];[1740960000];[1740960000000000];[259200000000];["[3]"];["[3]"];["[3]"];["3"]];)";
+            expected += R"([4u;[%true];[1u];[-1];[1u];[-1];[1u];[-1];[1u];[-1];[1.];[1.];[20089u];[1735689600u];[1735689600000000u];["1"];["1"];[20089];[1735689600];[1735689600000000];[86400000000];["[1]"];["[1]"];["[1]"];["1"]];)";
+            expected += R"([5u;[%false];[2u];[-2];[2u];[-2];[2u];[-2];[2u];[-2];[2.];[2.];[20121u];[1738454400u];[1738454400000000u];["2"];["2"];[20121];[1738454400];[1738454400000000];[172800000000];["[2]"];["[2]"];["[2]"];["2"]];)";
+            expected += R"([6u;[%true];[3u];[-3];[3u];[-3];[3u];[-3];[3u];[-3];[3.];[3.];[20150u];[1740960000u];[1740960000000000u];["3"];["3"];[20150];[1740960000];[1740960000000000];[259200000000];["[3]"];["[3]"];["[3]"];["3"]]])";
 
             CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
         }

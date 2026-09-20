@@ -67,7 +67,7 @@ class TRuntimeTypeSaver: public TSaver<TRuntimeTypeSaver<TSaver>> {
 
 public:
     explicit TRuntimeTypeSaver(typename TBase::TConsumer& consumer)
-        : TBase(consumer, false)
+        : TBase(consumer, /*extendedForm=*/false)
     {
     }
 
@@ -270,13 +270,13 @@ struct TRuntimeTypeLoader {
         return Builder.NewTupleType(elements);
     }
     TMaybe<TType> LoadDictType(TType keyType, TType valType, ui32 /*level*/) {
-        return Builder.NewDictType(keyType, valType, false);
+        return Builder.NewDictType(keyType, valType, /*multi=*/false);
     }
     TMaybe<TType> LoadLinearType(TType itemType, ui32 /*level*/) {
-        return Builder.NewLinearType(itemType, false);
+        return Builder.NewLinearType(itemType, /*isDynamic=*/false);
     }
     TMaybe<TType> LoadDynamicLinearType(TType itemType, ui32 /*level*/) {
-        return Builder.NewLinearType(itemType, true);
+        return Builder.NewLinearType(itemType, /*isDynamic=*/true);
     }
     TMaybe<TType> LoadCallableType(TType returnType, const TVector<TType>& argTypes, const TVector<TString>& argNames,
                                    const TVector<ui64>& argFlags, size_t optionalCount, const TString& payload, ui32 /*level*/) {

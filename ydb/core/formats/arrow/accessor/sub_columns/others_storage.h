@@ -2,10 +2,10 @@
 
 #include "stats.h"
 
-#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
+#include <ydb/core/formats/arrow/accessor/common/json_value_view.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -20,7 +20,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
-    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path, const ui32 recordsCount) const;
+    static std::shared_ptr<TJsonPathAccessor> BuildEmptyPathAccessor(ui32 recordsCount);
+    std::shared_ptr<TJsonPathAccessor> GetPathAccessor(TDictStats::TResolvedPath path, ui32 recordsCount) const;
 
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
@@ -117,7 +118,18 @@ public:
             return res;
         }
 
-        NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
+        // The Others store is always BinaryJson; exposed as (array, local index) like the column
+        // iterator so the general iterator reads both uniformly.
+        const arrow::Array& GetArray() const {
+            AFL_VERIFY(IsValid());
+            return *Values;
+        }
+        ui32 GetLocalIndex() const {
+            AFL_VERIFY(IsValid());
+            return CurrentIndex;
+        }
+
+        NArrow::NAccessor::TJsonValueView GetValue() const;
 
         bool HasValue() const {
             AFL_VERIFY(IsValid());

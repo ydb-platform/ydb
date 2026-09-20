@@ -98,6 +98,7 @@ class TableService(object):
     CopyTables = "CopyTables"
     RenameTables = "RenameTables"
     DescribeTable = "DescribeTable"
+    DescribeSystemView = "DescribeSystemView"
     CreateSession = "CreateSession"
     DeleteSession = "DeleteSession"
     ExecuteSchemeQuery = "ExecuteSchemeQuery"

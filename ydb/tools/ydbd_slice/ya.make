@@ -1,5 +1,6 @@
 RECURSE(
     bin
+    ut
 )
 
 PY3_LIBRARY(ydbd_slice)
@@ -9,6 +10,7 @@ PY_SRCS(
     cluster_description.py
     yaml_configurator.py
     config_client.py
+    blobstorage_init.py
     kube/__init__.py
     kube/api.py
     kube/cms.py

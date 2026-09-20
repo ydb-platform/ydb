@@ -1,7 +1,6 @@
 from _typeshed import SupportsWrite
 from collections.abc import Callable, Iterable
-from typing import Any, TypeVar
-from typing_extensions import TypeAlias
+from typing import Any, TypeAlias, TypeVar
 
 from .descriptor import FieldDescriptor
 from .descriptor_pool import DescriptorPool
@@ -139,6 +138,7 @@ def Parse(
     allow_field_number: bool = False,
     descriptor_pool: DescriptorPool | None = None,
     allow_unknown_field: bool = False,
+    max_recursion_depth: int | None = None,
 ) -> _M: ...
 def Merge(
     text: str | bytes,
@@ -147,6 +147,7 @@ def Merge(
     allow_field_number: bool = False,
     descriptor_pool: DescriptorPool | None = None,
     allow_unknown_field: bool = False,
+    max_recursion_depth: int | None = None,
 ) -> _M: ...
 def MergeLines(
     lines: Iterable[str | bytes],
@@ -155,6 +156,7 @@ def MergeLines(
     allow_field_number: bool = False,
     descriptor_pool: DescriptorPool | None = None,
     allow_unknown_field: bool = False,
+    max_recursion_depth: int | None = None,
 ) -> _M: ...
 
 class _Parser:
@@ -162,12 +164,15 @@ class _Parser:
     allow_field_number: bool
     descriptor_pool: DescriptorPool | None
     allow_unknown_field: bool
+    max_recursion_depth: int | None
+    recursion_depth: int
     def __init__(
         self,
         allow_unknown_extension: bool = False,
         allow_field_number: bool = False,
         descriptor_pool: DescriptorPool | None = None,
         allow_unknown_field: bool = False,
+        max_recursion_depth: int | None = None,
     ) -> None: ...
     def ParseLines(self, lines: Iterable[str | bytes], message: _M) -> _M: ...
     def MergeLines(self, lines: Iterable[str | bytes], message: _M) -> _M: ...

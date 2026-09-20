@@ -21,6 +21,7 @@ public:
     ui64 AlterVersion = 0;
     TPtr AlterData;
     bool IsRestore = false;
+    bool IsReadOnly = false;
 
     TPathId GetOlapStorePathIdVerified() const;
 

@@ -1,0 +1,329 @@
+name: Run Clang Codecov Suite
+description: Build/test with clang coverage, upload LCOV to Codecov, publish HTML to S3
+inputs:
+  suite:
+    description: "Suite name: cpp_sdk | cli | cli_workload"
+    required: true
+  codecov_token:
+    description: Codecov upload token
+    required: true
+  github_token:
+    description: GitHub token used to revalidate a PR head before publication
+    required: false
+    default: ""
+  aws_access_key_id:
+    description: Yandex Object Storage access key
+    required: false
+    default: ""
+  aws_secret_access_key:
+    description: Yandex Object Storage secret key
+    required: false
+    default: ""
+  bazel_remote_uri:
+    description: Remote cache URI
+    required: false
+    default: ""
+  bazel_remote_username:
+    description: Remote cache username
+    required: false
+    default: ""
+  bazel_remote_password:
+    description: Remote cache password
+    required: false
+    default: ""
+  test_threads:
+    description: ya --test-threads
+    required: false
+    default: "28"
+  link_threads:
+    description: ya --link-threads
+    required: false
+    default: "12"
+  pr_number:
+    description: PR number (empty on push)
+    required: false
+    default: ""
+  commit_sha:
+    description: Commit SHA for meta/links
+    required: true
+  branch:
+    description: Branch name for Codecov (ref_name / head_ref)
+    required: false
+    default: ""
+  storage_prefix:
+    description: Object Storage prefix containing suite directories
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Resolve suite config
+      id: suite
+      shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+      run: |
+        set -euo pipefail
+        case "${SUITE}" in
+          cpp_sdk|cli|cli_workload) ;;
+          *) echo "Unknown suite: ${SUITE}" >&2; exit 1 ;;
+        esac
+        CFG_FILE=$(mktemp)
+        trap 'rm -f "$CFG_FILE"' EXIT
+        python3 .github/scripts/codecov/codecov_suites.py json-suite "${SUITE}" > "$CFG_FILE"
+        EXCL=$(python3 .github/scripts/codecov/codecov_suites.py exclude-regexp)
+        echo "exclude_regexp=${EXCL}" >> "$GITHUB_OUTPUT"
+        python3 -c 'import json,os,sys; cfg=json.load(open(sys.argv[1],encoding="utf-8")); out=os.environ["GITHUB_OUTPUT"]; open(out,"a",encoding="utf-8").write("regexp="+cfg["regexp"]+"\nflag="+cfg["flag"]+"\ntargets_json="+json.dumps(cfg["targets"])+"\n")' "$CFG_FILE"
+
+    - name: Ya make with clang coverage
+      id: ya
+      shell: bash
+      env:
+        BUILD_PRESET: profile
+        SUITE: ${{ inputs.suite }}
+        REGEXP: ${{ steps.suite.outputs.regexp }}
+        EXCL: ${{ steps.suite.outputs.exclude_regexp }}
+        TARGETS_JSON: ${{ steps.suite.outputs.targets_json }}
+        TEST_THREADS: ${{ inputs.test_threads }}
+        LINK_THREADS: ${{ inputs.link_threads }}
+        BAZEL_REMOTE_URI: ${{ inputs.bazel_remote_uri }}
+        BAZEL_REMOTE_USERNAME: ${{ inputs.bazel_remote_username }}
+        BAZEL_REMOTE_PASSWORD: ${{ inputs.bazel_remote_password }}
+      run: |
+        set -euo pipefail
+        OUT="$(pwd)/coverage_workspace/${SUITE}"
+        mkdir -p "$OUT"
+        echo "out_dir=$OUT" >> "$GITHUB_OUTPUT"
+
+        BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
+        trap 'rm -f "$BAZEL_REMOTE_PASSWORD_FILE"' EXIT
+        printf '%s' "${BAZEL_REMOTE_PASSWORD}" > "$BAZEL_REMOTE_PASSWORD_FILE"
+
+        mapfile -t TARGETS < <(python3 -c 'import json,sys; print("\n".join(json.loads(sys.argv[1])))' "${TARGETS_JSON}")
+        if [ "${#TARGETS[@]}" -eq 0 ]; then
+          echo "No ya targets resolved for suite ${SUITE}" >&2
+          exit 1
+        fi
+
+        params=(
+          -tA --build profile
+          --clang-coverage --coverage-report --keep-temps
+          "-DCOVERAGE_TARGET_REGEXP=${REGEXP}"
+          "--coverage-exclude-regexp=${EXCL}"
+          --test-threads "${TEST_THREADS}"
+          --link-threads "${LINK_THREADS}"
+          --output "$OUT"
+          --no-dir-outputs
+        )
+        if [ -n "${BAZEL_REMOTE_URI}" ]; then
+          params+=(--bazel-remote-store --bazel-remote-base-uri "${BAZEL_REMOTE_URI}")
+          params+=(--bazel-remote-username "${BAZEL_REMOTE_USERNAME}")
+          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
+          params+=(
+            --bazel-remote-put
+            --dist-cache-max-file-size=209715200
+            --dist-cache-evict-test-runs
+            --dist-cache-evict-bins
+          )
+        fi
+
+        ./ya make "${params[@]}" "${TARGETS[@]}"
+
+    - name: Export filtered LCOV
+      id: export
+      shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+        OUT: ${{ steps.ya.outputs.out_dir }}
+      run: |
+        set -euo pipefail
+        python3 .github/scripts/codecov/export_coverage_lcov.py \
+          --suite "${SUITE}" \
+          --ya-output "$OUT" \
+          --output "$OUT/coverage.lcov"
+
+    - name: Install Codecov CLI
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Prefer PyPI: self-hosted runners often cannot download cli.codecov.io.
+        pip3 install --user 'codecov-cli==11.3.1'
+
+    - name: Generate filtered HTML report
+      id: html
+      if: >-
+        ${{
+          always() &&
+          steps.ya.outcome == 'success' &&
+          steps.export.outcome == 'success' &&
+          inputs.aws_access_key_id != '' &&
+          inputs.aws_secret_access_key != ''
+        }}
+      continue-on-error: true
+      shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+        OUT: ${{ steps.ya.outputs.out_dir }}
+      run: |
+        set -euo pipefail
+        python3 .github/scripts/codecov/export_coverage_lcov.py \
+          --suite "${SUITE}" \
+          --ya-output "$OUT" \
+          --html-input "$OUT/coverage.lcov" \
+          --html-output "$OUT/coverage.filtered.report"
+
+    - name: Install AWS CLI
+      if: >-
+        ${{
+          always() &&
+          steps.ya.outcome == 'success' &&
+          steps.export.outcome == 'success' &&
+          steps.html.outcome == 'success' &&
+          inputs.aws_access_key_id != '' &&
+          inputs.aws_secret_access_key != ''
+        }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        set -euo pipefail
+        export PATH="${HOME}/.local/bin:${PATH}"
+        if ! command -v aws >/dev/null 2>&1; then
+          pip3 install --user 'awscli==1.46.0'
+        fi
+
+    - name: Verify current PR head before publication
+      id: pr_head
+      if: ${{ inputs.pr_number != '' }}
+      uses: actions/github-script@v8
+      env:
+        EXPECTED_SHA: ${{ inputs.commit_sha }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const expectedSha = process.env.EXPECTED_SHA;
+          const pullNumber = Number(process.env.PR_NUMBER);
+          if (!/^[0-9a-f]{40}$/i.test(expectedSha)) {
+            core.setFailed('Expected PR head must be a 40-character hexadecimal SHA.');
+            return;
+          }
+          if (!Number.isSafeInteger(pullNumber) || pullNumber <= 0) {
+            core.setFailed('PR number must be a positive integer.');
+            return;
+          }
+          const { data: pr } = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: pullNumber,
+          });
+          if (pr.state !== 'open' || pr.head.sha !== expectedSha) {
+            core.setFailed(
+              `Refusing to publish stale coverage: expected open PR head ${expectedSha}, ` +
+              `current state=${pr.state}, head=${pr.head.sha}.`
+            );
+          }
+
+    - name: Upload to Codecov
+      shell: bash
+      env:
+        CODECOV_TOKEN: ${{ inputs.codecov_token }}
+        OUT: ${{ steps.ya.outputs.out_dir }}
+        FLAG: ${{ steps.suite.outputs.flag }}
+        SUITE: ${{ inputs.suite }}
+        COMMIT_SHA: ${{ inputs.commit_sha }}
+        BRANCH: ${{ inputs.branch }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        REPOSITORY_SLUG: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        if [ -z "${CODECOV_TOKEN}" ]; then
+          echo "CODECOV_TOKEN is empty" >&2
+          exit 1
+        fi
+        if [[ ! "${COMMIT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+          echo "Codecov commit SHA must contain exactly 40 hexadecimal characters" >&2
+          exit 1
+        fi
+        if [ -z "${BRANCH}" ]; then
+          echo "Codecov branch is empty" >&2
+          exit 1
+        fi
+        export PATH="${HOME}/.local/bin:${PATH}"
+        upload_args=(
+          --fail-on-error
+          --git-service github
+          --slug "${REPOSITORY_SLUG}"
+          --sha "${COMMIT_SHA}"
+          --branch "${BRANCH}"
+          --disable-search
+          --plugin noop
+          --file "${OUT}/coverage.lcov"
+          --flag "${FLAG}"
+          --name "${SUITE}"
+        )
+        # Needed so Codecov attaches the upload to the PR (statuses / comment), not only the commit.
+        if [ -n "${PR_NUMBER}" ]; then
+          upload_args+=(--pull-request-number "${PR_NUMBER}")
+        fi
+        codecovcli upload-coverage "${upload_args[@]}"
+
+    - name: Publish HTML report to Object Storage
+      # Still publish HTML if Codecov upload fails.
+      if: >-
+        ${{
+          always() &&
+          steps.ya.outcome == 'success' &&
+          steps.export.outcome == 'success' &&
+          steps.html.outcome == 'success' &&
+          (inputs.pr_number == '' || steps.pr_head.outcome == 'success') &&
+          inputs.aws_access_key_id != '' &&
+          inputs.aws_secret_access_key != ''
+        }}
+      continue-on-error: true
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws_access_key_id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws_secret_access_key }}
+        AWS_DEFAULT_REGION: ru-central1
+        SUITE: ${{ inputs.suite }}
+        OUT: ${{ steps.ya.outputs.out_dir }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        COMMIT_SHA: ${{ inputs.commit_sha }}
+        STORAGE_PREFIX: ${{ inputs.storage_prefix }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -euo pipefail
+        export PATH="${HOME}/.local/bin:${PATH}"
+        if ! command -v aws >/dev/null 2>&1; then
+          echo "AWS CLI is unavailable; skip best-effort S3 upload" >&2
+          exit 0
+        fi
+
+        bucket=ydb-appteam-sdk-reports
+        endpoint=https://storage.yandexcloud.net
+
+        if [ -z "${STORAGE_PREFIX}" ]; then
+          echo "Object Storage prefix is empty" >&2
+          exit 1
+        fi
+        prefix="${STORAGE_PREFIX}"
+
+        # Publish the same suite-owned source set that is uploaded to Codecov,
+        # not ya's raw report for the complete dependency closure.
+        report_dir="${OUT}/coverage.filtered.report"
+        if [ ! -f "${report_dir}/index.html" ]; then
+          echo "No filtered coverage HTML directory; skip object storage upload"
+          exit 0
+        fi
+
+        # Keep meta.json inside report_dir so sync --delete does not try to remove
+        # a separately uploaded key (Yandex Object Storage returned AccessDenied).
+        meta="${report_dir}/meta.json"
+        META="$meta" python3 -c 'import json,os; from datetime import datetime,timezone; meta={"suite":os.environ["SUITE"],"sha":os.environ["COMMIT_SHA"],"commit":os.environ["COMMIT_SHA"][:12],"event":os.environ.get("GITHUB_EVENT_NAME",""),"run_url":os.environ["RUN_URL"],"generated_at":datetime.now(timezone.utc).isoformat(),"pr":os.environ.get("PR_NUMBER") or None}; open(os.environ["META"],"w",encoding="utf-8").write(json.dumps(meta,indent=2)+"\n")'
+
+        aws --endpoint-url "$endpoint" s3 sync \
+          "${report_dir}/" \
+          "s3://${bucket}/${prefix}/${SUITE}/" \
+          --exclude "coverage.profdata" \
+          --delete
+
+        echo "Uploaded coverage HTML for ${SUITE} to object storage (prefix ${prefix}/${SUITE}/)" >> "$GITHUB_STEP_SUMMARY"

@@ -20,6 +20,11 @@ class TCheckpointCoordinatorConfig;
 
 } // namespace NConfig
 
+// Current checkpoint lifecycle assumptions:
+// - Checkpoint cleanup is performed only after a successful snapshot checkpoint.
+// So if a query has many aborted checkpoints / restarts before saving the first successful checkpoint,
+// checkpoint storage may leak until a successful checkpoint is performed.
+
 class TCheckpointCoordinatorSettings {
 public:
     inline static TDuration DefaultCheckpointingPeriod = TDuration::Seconds(30);
@@ -33,7 +38,16 @@ private:
     YDB_ACCESSOR(ui64, MaxInflight, 1);
 };
 
-class TCheckpointCoordinator : public NActors::TActor<TCheckpointCoordinator>  {
+class TCheckpointCoordinator : public NActors::TActor<TCheckpointCoordinator> {
+    struct TScheduleCheckpointContext {
+        static constexpr TDuration MIN_METRICS_REPORT_GRANULARITY = TDuration::Seconds(1);
+
+        TMonotonic NextCheckpointStartAt; // Minimal time bound for next checkpoint, it may be started after it in case of slow checkpoints
+        TMonotonic MetricsReportedAt;
+        bool WaitScheduleNextCheckpointEventForStatistics = false;
+        bool WaitScheduleNextCheckpointEventForCheckpointStartAt = false;
+    };
+
 public:
     TCheckpointCoordinator(TCoordinatorId coordinatorId,
                            const TActorId& storageProxy,
@@ -102,6 +116,7 @@ private:
     void InitCheckpoint();
     void InjectCheckpoint(const TCheckpointId& checkpointId, NYql::NDqProto::ECheckpointType type);
     void ScheduleNextCheckpoint();
+    bool CanStartNewCheckpoint(const bool log);
     void UpdateInProgressMetric();
     void PassAway() override;
     void RestoreFromOwnCheckpoint(const TCheckpointMetadata& checkpoint);
@@ -140,6 +155,7 @@ private:
             RestoredFromSavedCheckpoint = subgroup->GetCounter("RestoredFromSavedCheckpoint", true);
             StartedFromEmptyCheckpoint = subgroup->GetCounter("StartedFromEmptyCheckpoint", true);
             RestoredStreamingOffsetsFromCheckpoint = subgroup->GetCounter("RestoredStreamingOffsetsFromCheckpoint", true);
+            AllCheckpointsSizeBytes = subgroup->GetCounter("AllCheckpointsSizeBytes");
         }
 
         ~TCheckpointCoordinatorMetrics() {
@@ -150,6 +166,7 @@ private:
             LastCheckpointBarrierDeliveryTimeMillis->Set(0);
             LastCheckpointDurationMillis->Set(0);
             LastCheckpointSizeBytes->Set(0);
+            AllCheckpointsSizeBytes->Set(0);
             // SkippedDueToInFlightLimit resets in PassAway
         }
 
@@ -169,6 +186,7 @@ private:
         ::NMonitoring::TDynamicCounters::TCounterPtr RestoredFromSavedCheckpoint;
         ::NMonitoring::TDynamicCounters::TCounterPtr StartedFromEmptyCheckpoint;
         ::NMonitoring::TDynamicCounters::TCounterPtr RestoredStreamingOffsetsFromCheckpoint;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AllCheckpointsSizeBytes;
         NMonitoring::THistogramPtr CheckpointBarrierDeliveryTimeMillis;
         NMonitoring::THistogramPtr CheckpointDurationMillis;
         NMonitoring::THistogramPtr CheckpointSizeBytes;
@@ -202,6 +220,7 @@ private:
     THashMap<TCheckpointId, TPendingCheckpoint, TCheckpointIdHash> PendingCommitCheckpoints;
     TMaybe<TPendingRestoreCheckpoint> PendingRestoreCheckpoint;
     std::unique_ptr<TPendingInitCoordinator> PendingInit;
+    TScheduleCheckpointContext ScheduleCheckpointContext;
     bool GraphIsRunning = false;
     bool InitingZeroCheckpoint = false;
     bool FailedZeroCheckpoint = false;

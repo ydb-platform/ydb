@@ -68,6 +68,13 @@ std::filesystem::path TAbsoluteNormalizedPath::TryMakeAbsoluteNormalizedPath(con
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void FormatValue(TStringBuilderBase* builder, const TAbsoluteNormalizedPath& path, TStringBuf /*spec*/)
+{
+    builder->AppendFormat("%v", path.Path().string());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT
 
 size_t THash<NYT::TAbsoluteNormalizedPath>::operator()(const NYT::TAbsoluteNormalizedPath& value) const

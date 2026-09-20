@@ -10,13 +10,11 @@
 #include <unordered_map>
 #include <utility>
 
-#include "opentelemetry/common/key_value_iterable.h"
 #include "opentelemetry/nostd/function_ref.h"
 #include "opentelemetry/sdk/common/attribute_utils.h"
 #include "opentelemetry/sdk/common/attributemap_hash.h"
 #include "opentelemetry/sdk/metrics/aggregation/aggregation.h"
 #include "opentelemetry/sdk/metrics/state/filtered_ordered_attribute_map.h"
-#include "opentelemetry/sdk/metrics/view/attributes_processor.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -28,11 +26,17 @@ namespace metrics
 using opentelemetry::sdk::common::OrderedAttributeMap;
 
 constexpr size_t kAggregationCardinalityLimit = 2000;
-const std::string kAttributesLimitOverflowKey = "otel.metrics.overflow";
 const bool kAttributesLimitOverflowValue      = true;
-const MetricAttributes kOverflowAttributes    = {
-    {kAttributesLimitOverflowKey,
-        kAttributesLimitOverflowValue}};  // precalculated for optimization
+
+constexpr char kAttributesLimitOverflowKey[] = "otel.metric.overflow";
+
+inline const MetricAttributes &GetOverflowAttributes()
+{
+  static const MetricAttributes value = {
+      {kAttributesLimitOverflowKey,
+       kAttributesLimitOverflowValue}};  // precalculated for optimization
+  return value;
+}
 
 class AttributeHashGenerator
 {
@@ -81,30 +85,6 @@ public:
    * value and store in the hash
    */
   Aggregation *GetOrSetDefault(
-      const opentelemetry::common::KeyValueIterable &attributes,
-      const AttributesProcessor *attributes_processor,
-      nostd::function_ref<std::unique_ptr<Aggregation>()> aggregation_callback)
-  {
-    // TODO: avoid constructing MetricAttributes from KeyValueIterable for
-    // hash_map_.find which is a heavy operation
-    MetricAttributes attr{attributes, attributes_processor};
-
-    auto it = hash_map_.find(attr);
-    if (it != hash_map_.end())
-    {
-      return it->second.get();
-    }
-
-    if (IsOverflowAttributes(attr))
-    {
-      return GetOrSetOveflowAttributes(aggregation_callback);
-    }
-
-    auto result = hash_map_.emplace(std::move(attr), aggregation_callback());
-    return result.first->second.get();
-  }
-
-  Aggregation *GetOrSetDefault(
       const MetricAttributes &attributes,
       nostd::function_ref<std::unique_ptr<Aggregation>()> aggregation_callback)
   {
@@ -144,13 +124,6 @@ public:
   /**
    * Set the value for given key, overwriting the value if already present
    */
-  void Set(const opentelemetry::common::KeyValueIterable &attributes,
-           const AttributesProcessor *attributes_processor,
-           std::unique_ptr<Aggregation> aggr)
-  {
-    Set(MetricAttributes{attributes, attributes_processor}, std::move(aggr));
-  }
-
   void Set(const MetricAttributes &attributes, std::unique_ptr<Aggregation> aggr)
   {
     auto it = hash_map_.find(attributes);
@@ -160,7 +133,7 @@ public:
     }
     else if (IsOverflowAttributes(attributes))
     {
-      hash_map_[kOverflowAttributes] = std::move(aggr);
+      hash_map_[GetOverflowAttributes()] = std::move(aggr);
     }
     else
     {
@@ -177,7 +150,7 @@ public:
     }
     else if (IsOverflowAttributes(attributes))
     {
-      hash_map_[kOverflowAttributes] = std::move(aggr);
+      hash_map_[GetOverflowAttributes()] = std::move(aggr);
     }
     else
     {
@@ -224,13 +197,13 @@ private:
 
   Aggregation *GetOrSetOveflowAttributes(std::unique_ptr<Aggregation> agg)
   {
-    auto it = hash_map_.find(kOverflowAttributes);
+    auto it = hash_map_.find(GetOverflowAttributes());
     if (it != hash_map_.end())
     {
       return it->second.get();
     }
 
-    auto result = hash_map_.emplace(kOverflowAttributes, std::move(agg));
+    auto result = hash_map_.emplace(GetOverflowAttributes(), std::move(agg));
     return result.first->second.get();
   }
 
@@ -238,22 +211,15 @@ private:
   {
     // If the incoming attributes are exactly the overflow sentinel, route
     // directly to the overflow entry.
-    if (attributes == kOverflowAttributes)
+    if (attributes == GetOverflowAttributes())
     {
       return true;
     }
-    // Determine if overflow entry already exists.
-    bool has_overflow = (hash_map_.find(kOverflowAttributes) != hash_map_.end());
-    // If overflow already present, total size already includes it; trigger overflow
-    // when current size (including overflow) is >= limit.
-    if (has_overflow)
-    {
-      return hash_map_.size() >= attributes_limit_;
-    }
-    // If overflow not present yet, simulate adding a new distinct key. If that
-    // would exceed the limit, we redirect to overflow instead of creating a
-    // new real attribute entry.
-    return (hash_map_.size() + 1) >= attributes_limit_;
+    // The configured limit applies to distinct non-overflow attribute sets.
+    // The overflow point is an additional reserved entry.
+    const bool has_overflow        = (hash_map_.find(GetOverflowAttributes()) != hash_map_.end());
+    const size_t non_overflow_size = hash_map_.size() - (has_overflow ? 1 : 0);
+    return non_overflow_size >= attributes_limit_;
   }
 };
 

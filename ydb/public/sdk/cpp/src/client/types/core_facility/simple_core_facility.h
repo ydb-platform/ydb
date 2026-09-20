@@ -42,6 +42,7 @@ private:
     };
 
     void EnqueueTaskNoLock(TTimePoint executeAt, TPostTaskCb&& task);
+    void RunPeriodicTask(std::shared_ptr<TPeriodicCb> periodicCb, TDeadline::Duration period);
     void SchedulePeriodic(std::shared_ptr<TPeriodicCb> periodicCb, TDeadline::Duration period);
     std::optional<TTimePoint> DrainReadyTasks(std::vector<TPostTaskCb>& ready);
     void WorkerLoop();
@@ -50,7 +51,6 @@ private:
     std::condition_variable Cv_;
     std::priority_queue<TScheduledTask, std::vector<TScheduledTask>, TScheduledTaskLess> Queue_;
     bool Stop_ = false;
-    bool PeriodicStarted_ = false;
     std::uint64_t NextSeqNo_ = 0;
 
     std::thread WorkerThread_;

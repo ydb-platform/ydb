@@ -1,4 +1,3 @@
-/* postgres can not */
 use plato;
 
 $_data = (SELECT key as kk, subkey as sk, value as val FROM plato.Input WHERE key == '075');

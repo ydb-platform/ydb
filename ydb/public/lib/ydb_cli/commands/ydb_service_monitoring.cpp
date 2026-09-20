@@ -41,7 +41,8 @@ void TCommandSelfCheck::Parse(TConfig& config) {
 }
 
 int TCommandSelfCheck::Run(TConfig& config) {
-    NMonitoring::TMonitoringClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NMonitoring::TMonitoringClient client(driver);
     NMonitoring::TSelfCheckSettings settings;
 
     if (Verbose) {

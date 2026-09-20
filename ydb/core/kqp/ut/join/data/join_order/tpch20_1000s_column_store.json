@@ -16,16 +16,16 @@
                       [
                         {
                           "op_name":"TableFullScan",
-                          "table":"lineitem"
+                          "table":"partsupp"
                         }
                       ]
                   },
                   {
-                    "op_name":"HashShuffle",
+                    "op_name":"InnerJoin (BlockHash)",
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (BlockHash)",
+                          "op_name":"HashShuffle",
                           "args":
                             [
                               {
@@ -34,15 +34,15 @@
                                   [
                                     {
                                       "op_name":"TableFullScan",
-                                      "table":"partsupp"
+                                      "table":"lineitem"
                                     }
                                   ]
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"part"
                               }
                             ]
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"part"
                         }
                       ]
                   }

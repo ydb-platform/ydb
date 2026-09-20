@@ -1,5 +1,4 @@
-// Copyright (c) 2010 Google Inc.
-// All rights reserved.
+// Copyright 2010 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -11,7 +10,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -37,6 +36,8 @@
 #include <stdio.h>
 
 #include <algorithm>
+#include <memory>
+#include <utility>
 
 #include "common/stabs_to_module.h"
 #include "common/using_std_string.h"
@@ -136,7 +137,7 @@ bool StabsToModule::Line(uint64_t address, const char *name, int number) {
 }
 
 bool StabsToModule::Extern(const string& name, uint64_t address) {
-  Module::Extern *ext = new Module::Extern(address);
+  auto ext = std::make_unique<Module::Extern>(address);
   // Older libstdc++ demangle implementations can crash on unexpected
   // input, so be careful about what gets passed in.
   if (name.compare(0, 3, "__Z") == 0) {
@@ -146,7 +147,7 @@ bool StabsToModule::Extern(const string& name, uint64_t address) {
   } else {
     ext->name = name;
   }
-  module_->AddExtern(ext);
+  module_->AddExtern(std::move(ext));
   return true;
 }
 

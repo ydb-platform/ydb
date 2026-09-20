@@ -61,6 +61,8 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kMaxOf:
                 case NYql::NConnector::NApi::TExpression::kCurrentUtcTimestamp:
                 case NYql::NConnector::NApi::TExpression::kPredicate:
+                case NYql::NConnector::NApi::TExpression::kStructMember:
+                case NYql::NConnector::NApi::TExpression::kTupleNth:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return false;
             }
@@ -82,6 +84,8 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kMaxOf:
                 case NYql::NConnector::NApi::TExpression::kCurrentUtcTimestamp:
                 case NYql::NConnector::NApi::TExpression::kPredicate:
+                case NYql::NConnector::NApi::TExpression::kStructMember:
+                case NYql::NConnector::NApi::TExpression::kTupleNth:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return false;
             }
@@ -103,6 +107,9 @@ namespace NYql::NGenericPushDown {
             }
             auto leastTimestamp = TInstant::FromValue(least.value().int64_value() * multiplier);
             auto greatestTimestamp = TInstant::FromValue(greatest.value().int64_value() * multiplier);
+            if (leastTimestamp > greatestTimestamp) {
+                return Triple::False;
+            }
             return timestampStatistics.lowValue <= greatestTimestamp && timestampStatistics.highValue >= leastTimestamp ? Triple::True : Triple::False;
         }
 
@@ -186,11 +193,6 @@ namespace NYql::NGenericPushDown {
                 return Triple::Unknown;
             }
 
-            auto it = columns.find(columnName);
-            if (it == columns.end()) {
-                return Triple::Unknown;
-            }
-
             Ydb::TypedValue least;
             if (!GetTypedValue(between.least(), least)) { // TODO: ArithmeticalExpression
                 return Triple::Unknown;
@@ -198,6 +200,25 @@ namespace NYql::NGenericPushDown {
 
             Ydb::TypedValue greatest;
             if (!GetTypedValue(between.greatest(), greatest)) { // TODO: ArithmeticalExpression
+                return Triple::Unknown;
+            }
+
+            if (least.type().has_type_id() && greatest.type().has_type_id() && least.type().type_id() == greatest.type().type_id()) {
+                switch (least.type().type_id()) {
+                    case Ydb::Type::TIMESTAMP:
+                    case Ydb::Type::DATETIME:
+                    case Ydb::Type::DATE:
+                        if (least.value().int64_value() > greatest.value().int64_value()) {
+                            return Triple::False;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            auto it = columns.find(columnName);
+            if (it == columns.end()) {
                 return Triple::Unknown;
             }
 
@@ -305,6 +326,8 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kMaxOf:
                 case NYql::NConnector::NApi::TExpression::kCurrentUtcTimestamp:
                 case NYql::NConnector::NApi::TExpression::kPredicate:
+                case NYql::NConnector::NApi::TExpression::kStructMember:
+                case NYql::NConnector::NApi::TExpression::kTupleNth:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return Triple::Unknown;
             }

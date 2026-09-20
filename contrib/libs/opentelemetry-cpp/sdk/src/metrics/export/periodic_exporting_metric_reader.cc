@@ -8,7 +8,6 @@
 #include <memory>
 #include <mutex>
 #include <ostream>
-#include <ratio>
 #include <thread>
 #include <utility>
 
@@ -19,7 +18,6 @@
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_options.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_runtime_options.h"
-#include "opentelemetry/sdk/metrics/instruments.h"
 #include "opentelemetry/sdk/metrics/push_metric_exporter.h"
 #include "opentelemetry/version.h"
 
@@ -71,6 +69,14 @@ PeriodicExportingMetricReader::PeriodicExportingMetricReader(
         "export_timeout_millis_ should be less than export_interval_millis_, using default values");
     export_interval_millis_ = kExportIntervalMillis;
     export_timeout_millis_  = kExportTimeOutMillis;
+  }
+}
+
+PeriodicExportingMetricReader::~PeriodicExportingMetricReader()
+{
+  if (!IsShutdown())
+  {
+    Shutdown();
   }
 }
 

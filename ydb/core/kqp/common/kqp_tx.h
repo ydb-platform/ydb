@@ -140,7 +140,7 @@ public:
     }
 
     bool TxHasEffects() const {
-        return HasImmediateEffects || !DeferredEffects.Empty();
+        return HasImmediateEffects || HasUnflushedEffectsInBuffer || !DeferredEffects.Empty();
     }
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
@@ -149,15 +149,25 @@ public:
 
     void Finish() final {
         YQL_ENSURE(DeferredEffects.Empty());
+        YQL_ENSURE(!HasUnflushedEffectsInBuffer);
         YQL_ENSURE(!BufferActorId);
 
         FinishTime = TInstant::Now();
+
+        SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
 
         if (Implicit) {
             Reset();
         } else {
             Closed = true;
         }
+    }
+
+    void Invalidate() override {
+        SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+        TKikimrTransactionContextBase::Invalidate();
     }
 
     void Touch() {
@@ -182,6 +192,7 @@ public:
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         SnapshotHandle.Handle = NKqp::TSnapshotHandle();
         HasImmediateEffects = false;
+        HasUnflushedEffectsInBuffer = false;
 
         HasOlapTable = false;
         HasOltpTable = false;
@@ -200,9 +211,15 @@ public:
                 Readonly = false;
                 break;
 
+            case Ydb::Table::TransactionSettings::kStrictSerializableReadWrite:
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
+                Readonly = false;
+                break;
+
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
                 if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
                     EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                    IsSnapshotROConvertedFromOnlineRO = true;
                 } else {
                     EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
                         ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
@@ -239,7 +256,7 @@ public:
 
     bool ShouldExecuteDeferredEffects() const {
         if (NeedUncommittedChangesFlush || HasOlapTable) {
-            return !DeferredEffects.Empty();
+            return !DeferredEffects.Empty() || HasUnflushedEffectsInBuffer;
         }
 
         return false;
@@ -314,12 +331,14 @@ public:
     bool HasOltpTable = false;
     bool HasTableWrite = false;
     bool HasTableRead = false;
+    bool IsSnapshotROConvertedFromOnlineRO = false;
 
     std::optional<bool> EnableOlapSink;
     std::optional<bool> EnableHtapTx;
 
     bool NeedUncommittedChangesFlush = false;
     THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;
+    bool HasUnflushedEffectsInBuffer = false;
 
     TActorId BufferActorId;
     IKqpTransactionManagerPtr TxManager = nullptr;

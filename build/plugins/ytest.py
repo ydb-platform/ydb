@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import base64
 import collections
 import copy
@@ -7,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import typing
 
 try:
     from StringIO import StringIO
@@ -53,6 +52,7 @@ YTEST_FIELDS_BASE = (
     df.TestIosDeviceType.value,
     df.TestIosRuntimeType.value,
     df.TestRecipes.value,
+    df.TestPersistentRecipes.value,
 )
 
 YTEST_FIELDS_EXTRA = (
@@ -85,6 +85,7 @@ PY_EXEC_FIELDS_BASE = (
     df.TestFiles.test_srcs,
     df.TestPartition.value,
     df.TestRecipes.value,
+    df.TestPersistentRecipes.value,
     df.TestTimeout.from_unit_with_default,
     df.UseArcadiaPython.value,
 )
@@ -115,7 +116,8 @@ LINTER_FIELDS_BASE = (
 tidy_config_map = None
 
 
-def ontest_data(unit, *args):
+@ymake.macro
+def TEST_DATA(unit: ymake.Unit, *args: str):
     ymake.report_configure_error("TEST_DATA is removed in favour of DATA")
 
 
@@ -169,8 +171,7 @@ def validate_test(unit, kw):
     is_fuzzing = valid_kw.get("FUZZING", False)
     is_kvm = 'kvm' in requirements_orig
     requirements = {}
-    secret_requirements = ('sb_vault', 'yav')
-    list_requirements = secret_requirements
+    secret_requirements = reqs.SECRET_REQUIREMENT_NAMES
     for req in requirements_orig:
         if req in ('kvm',):
             requirements[req] = str(True)
@@ -178,8 +179,11 @@ def validate_test(unit, kw):
 
         if ":" in req:
             req_name, req_value = req.split(":", 1)
-            if req_name in list_requirements:
-                requirements[req_name] = ",".join(filter(None, [requirements.get(req_name), req_value]))
+            if req_name in secret_requirements:
+                if req_name in requirements:
+                    requirements[req_name] += reqs.SECRET_REQUIREMENT_SEPARATOR + req_value
+                else:
+                    requirements[req_name] = req_value
             else:
                 if req_name in requirements:
                     if req_value in ["0"]:
@@ -219,6 +223,13 @@ def validate_test(unit, kw):
                 error_msg = str(e)
             if error_msg:
                 errors += [error_msg]
+
+    if not errors:
+        error_msg = reqs.validate_secret_requirement_conflicts(requirements)
+        if error_msg:
+            errors.append(error_msg)
+        else:
+            reqs.deduplicate_secret_requirements(requirements)
 
     invalid_requirements_for_distbuild = [
         requirement for requirement in requirements.keys() if requirement not in ('ram', 'ram_disk', 'cpu', 'network')
@@ -768,7 +779,8 @@ def detekt_report(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
-def onadd_check(unit, *args):
+@ymake.macro
+def ADD_CHECK(unit: ymake.Unit, *args: str):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
@@ -805,12 +817,14 @@ def onadd_check(unit, *args):
         detekt_report(unit, *args)
 
 
-def on_register_no_check_imports(unit):
+@ymake.macro
+def _REGISTER_NO_CHECK_IMPORTS(unit: ymake.Unit):
     s = unit.get('NO_CHECK_IMPORTS_FOR_VALUE')
     if s not in ('', 'None'):
         unit.onresource(['DONT_COMPRESS', '-', 'py/no_check_imports/{}="{}"'.format(_common.pathid(s), s)])
 
 
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.TestedProjectName.normalized_basename,
@@ -822,7 +836,7 @@ def on_register_no_check_imports(unit):
         df.NoCheck.value,
     )
 )
-def onadd_check_py_imports(fields, unit, *args):
+def ADD_CHECK_PY_IMPORTS(fields: typing.Any, unit: ymake.Unit, *args: str):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
@@ -848,6 +862,7 @@ def onadd_check_py_imports(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     PY_EXEC_FIELDS_BASE
     + (
@@ -861,7 +876,7 @@ def onadd_check_py_imports(fields, unit, *args):
         df.ParallelTestsInSingleNode.value,
     )
 )
-def onadd_pytest_bin(fields, unit, *args):
+def ADD_PYTEST_BIN(fields: typing.Any, unit: ymake.Unit, *args: str):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
     flat_args, spec_args = _common.sort_by_keywords({'RUNNER_BIN': 1}, args)
@@ -888,6 +903,7 @@ def onadd_pytest_bin(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.SourceFolderPath.normalized,
@@ -920,9 +936,10 @@ def onadd_pytest_bin(fields, unit, *args):
         df.TestClasspathDeps.value,
         df.TestJar.value,
         df.DockerImage.value,
+        df.ParallelTestsInSingleNode.value,
     )
 )
-def onjava_test(fields, unit, *args):
+def JAVA_TEST(fields: typing.Any, unit: ymake.Unit, *args: str):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
@@ -949,6 +966,7 @@ def onjava_test(fields, unit, *args):
         unit.set_property(['DART_DATA', data])
 
 
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.SourceFolderPath.normalized,
@@ -961,7 +979,7 @@ def onjava_test(fields, unit, *args):
         df.Classpath.value,
     )
 )
-def onjava_test_deps(fields, unit, *args):
+def JAVA_TEST_DEPS(fields: typing.Any, unit: ymake.Unit, *args: str):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
 
@@ -980,19 +998,22 @@ def onjava_test_deps(fields, unit, *args):
     unit.set_property(['DART_DATA', data])
 
 
-def onsetup_pytest_bin(unit, *args):
+@ymake.macro
+def SETUP_PYTEST_BIN(unit: ymake.Unit, *args: str):
     use_arcadia_python = unit.get('USE_ARCADIA_PYTHON') == "yes"
     if use_arcadia_python:
         unit.onresource(['DONT_COMPRESS', '-', 'PY_MAIN={}'.format("library.python.pytest.main:main")])  # XXX
         unit.onadd_pytest_bin(list(args))
 
 
-def onrun(unit, *args):
+@ymake.macro
+def RUN(unit: ymake.Unit, *args: str):
     exectest_cmd = unit.get(["EXECTEST_COMMAND_VALUE"]) or ''
     exectest_cmd += "\n" + subprocess.list2cmdline(args)
     unit.set(["EXECTEST_COMMAND_VALUE", exectest_cmd])
 
 
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     PY_EXEC_FIELDS_BASE
     + (
@@ -1002,7 +1023,7 @@ def onrun(unit, *args):
         df.DockerImage.value,
     )
 )
-def onsetup_exectest(fields, unit, *args):
+def SETUP_EXECTEST(fields: typing.Any, unit: ymake.Unit, *args: str):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":  # graph changed for clang_tidy and iwyu tests
         return
     command = unit.get(["EXECTEST_COMMAND_VALUE"])
@@ -1032,11 +1053,13 @@ def onsetup_exectest(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
-def onsetup_run_python(unit):
+@ymake.macro
+def SETUP_RUN_PYTHON(unit: ymake.Unit):
     if unit.get("USE_ARCADIA_PYTHON") == "yes":
         unit.ondepends('contrib/tools/python')
 
 
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.TestFiles.cpp_linter_files,
@@ -1044,7 +1067,7 @@ def onsetup_run_python(unit):
     )
     + LINTER_FIELDS_BASE
 )
-def on_add_cpp_linter_check(fields, unit, *args):
+def _ADD_CPP_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: str):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":
         return
 
@@ -1078,6 +1101,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.TestFiles.py_linter_files,
@@ -1085,7 +1109,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
     )
     + LINTER_FIELDS_BASE
 )
-def on_add_py_linter_check(fields, unit, *args):
+def _ADD_PY_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: str):
     if unit.get("CPP_ANALYSIS_MODE") == "yes":
         return
 
@@ -1120,6 +1144,7 @@ def on_add_py_linter_check(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.TestFiles.from_macro_args,
@@ -1127,7 +1152,7 @@ def on_add_py_linter_check(fields, unit, *args):
     )
     + LINTER_FIELDS_BASE
 )
-def on_add_custom_explicit_linter_check(fields, unit, *args):
+def _ADD_CUSTOM_EXPLICIT_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: str):
     if unit.get("TIDY") == "yes":
         return
     no_lint_value = _common.get_no_lint_value(unit)
@@ -1557,7 +1582,8 @@ def go_bench(fields, unit, *args):
         unit.set_property(["DART_DATA", data])
 
 
-def onadd_ytest(unit, *args):
+@ymake.macro
+def ADD_YTEST(unit: ymake.Unit, *args: str):
     keywords = {
         "DEPENDS": -1,
         "DATA": -1,

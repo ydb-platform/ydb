@@ -83,7 +83,6 @@ protected:
 
     std::shared_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TActorId GRpcServersManager;
-    TDuration GRpcWarmupTimeout;
 
     virtual ~TKikimrRunner();
 
@@ -126,6 +125,8 @@ protected:
         const TKikimrRunConfig& runConfig,
         TIntrusivePtr<TServiceInitializersList> serviceInitializers,
         const TBasicKikimrServicesMask& serviceMask = {});
+
+    void RecordEmptyDomainSensor();
 
     TIntrusivePtr<TServiceInitializersList> CreateServiceInitializersList(
         const TKikimrRunConfig& runConfig,

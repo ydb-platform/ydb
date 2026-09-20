@@ -6,6 +6,10 @@ PEERDIR(
     library/cpp/resource
 )
 
+CFLAGS(
+    $CORE_LIBS_OPTIMIZATION
+)
+
 IF (USE_PYTHON3_PREV)
     PEERDIR(
         contrib/tools/python3_prev

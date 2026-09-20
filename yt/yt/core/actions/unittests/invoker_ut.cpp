@@ -94,7 +94,7 @@ TEST(TSyncInvokerTest, SleepyFiber)
 
     auto completionFlag = NewPromise<void>();
 
-    std::vector<TString> events;
+    std::vector<std::string> events;
 
     auto actionA = [&] {
         events.push_back("A started");
@@ -137,7 +137,7 @@ TEST(TSyncInvokerTest, SleepyFiber)
     WaitForFast(AllSucceeded(std::vector<TFuture<void>>{asyncA, asyncC}))
         .ThrowOnError();
 
-    std::vector<TString> expectedEvents{
+    std::vector<std::string> expectedEvents{
         "A started", "B started", "B out", "C started", "D started", "D finished", "C finished", "B in", "B finished", "A finished",
     };
 
@@ -146,10 +146,83 @@ TEST(TSyncInvokerTest, SleepyFiber)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TMakeGuardedCallbackTest, RunsOnSuccessWhenInvoked)
+{
+    bool success = false;
+    bool cancel = false;
+    {
+        auto callback = MakeGuardedCallback(
+            BIND([&] { success = true; }),
+            BIND([&] { cancel = true; }));
+        callback.Run();
+        // Releasing the last reference to the guard must not fire onCancel.
+        callback.Reset();
+        EXPECT_TRUE(success);
+        EXPECT_FALSE(cancel);
+    }
+    EXPECT_TRUE(success);
+    EXPECT_FALSE(cancel);
+}
+
+TEST(TMakeGuardedCallbackTest, RunsOnCancelWhenDiscarded)
+{
+    bool success = false;
+    bool cancel = false;
+    {
+        auto callback = MakeGuardedCallback(
+            BIND([&] { success = true; }),
+            BIND([&] { cancel = true; }));
+        // Callback is discarded without being run.
+    }
+    EXPECT_FALSE(success);
+    EXPECT_TRUE(cancel);
+}
+
+TEST(TMakeGuardedCallbackTest, OnCancelFiresOnlyAfterLastReferenceDropped)
+{
+    bool success = false;
+    bool cancel = false;
+    auto callback = MakeGuardedCallback(
+        BIND([&] { success = true; }),
+        BIND([&] { cancel = true; }));
+    auto copy = callback;
+    callback.Reset();
+    // The guard is still alive via #copy.
+    EXPECT_FALSE(success);
+    EXPECT_FALSE(cancel);
+    copy.Reset();
+    EXPECT_FALSE(success);
+    EXPECT_TRUE(cancel);
+}
+
+TEST(TMakeGuardedCallbackTest, DiscardedByNullInvoker)
+{
+    bool success = false;
+    bool cancel = false;
+    GetNullInvoker()->Invoke(MakeGuardedCallback(
+        BIND([&] { success = true; }),
+        BIND([&] { cancel = true; })));
+    EXPECT_FALSE(success);
+    EXPECT_TRUE(cancel);
+}
+
+TEST(TMakeGuardedCallbackTest, ExecutedBySyncInvoker)
+{
+    bool success = false;
+    bool cancel = false;
+    GetSyncInvoker()->Invoke(MakeGuardedCallback(
+        BIND([&] { success = true; }),
+        BIND([&] { cancel = true; })));
+    EXPECT_TRUE(success);
+    EXPECT_FALSE(cancel);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Returns the aggregated summary of all duration-like time series with sensor name #sensorName within #sensorDump.
 const NProfiling::NProto::TSummaryDuration& GetSummaryDuration(
     const NProfiling::NProto::TSensorDump& sensorDump,
-    const TString& sensorName)
+    const std::string& sensorName)
 {
     for (const auto& cube : sensorDump.cubes()) {
         if (cube.name() == sensorName) {

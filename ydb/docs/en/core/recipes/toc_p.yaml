@@ -1,9 +1,9 @@
 items:
-- name: Backup collections recipes
-  href: backup-collections/index.md
+- name: Backup recipes
+  href: backup/index.md
   include:
     mode: link
-    path: backup-collections/toc_p.yaml
+    path: backup/toc_p.yaml
 - name: YDB SDK
   include:
     mode: link
@@ -27,13 +27,21 @@ items:
   include:
     mode: link
     path: fulltext-search/toc_p.yaml
+- name: JSON search
+  href: json-search/index.md
+  include:
+    mode: link
+    path: json-search/toc_p.yaml
+- name: Local indexes
+  href: local-indexes/index.md
+  include:
+    mode: link
+    path: local-indexes/toc_p.yaml
 - name: Transfer
   href: transfer/index.md
   include:
     mode: link
     path: transfer/toc_p.yaml
-- name: Import and export data to column tables
-  href: import-export-column-tables.md
 - name: Streaming queries
   href: streaming_queries/index.md
   include:

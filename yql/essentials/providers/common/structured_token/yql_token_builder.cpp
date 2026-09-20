@@ -3,8 +3,7 @@
 #include <utility>
 
 namespace NYql {
-TStructuredTokenBuilder::TStructuredTokenBuilder() {
-}
+TStructuredTokenBuilder::TStructuredTokenBuilder() = default;
 
 TStructuredTokenBuilder::TStructuredTokenBuilder(TStructuredToken data)
     : Data_(std::move(data))

@@ -158,6 +158,11 @@ struct TConfig
     bool ForceIpV6;
     bool UseHosts;
 
+    /// @brief Use https if no schema was provided in proxy url.
+    bool PreferHttps;
+
+    bool UseTLS;
+
     TDuration HostListUpdateInterval;
 
     TNode Spec;
@@ -185,6 +190,9 @@ struct TConfig
     int RetryCount;
     int ReadRetryCount;
     int StartOperationRetryCount;
+
+    // The CheckClusterLiveness operation should be retried, but fewer times than other operations.
+    int CheckLivenessRetryCount;
 
     /// @brief Period for checking status of running operation.
     TDuration OperationTrackerPollPeriod = TDuration::Seconds(5);
@@ -226,6 +234,14 @@ struct TConfig
 
     // @brief Minimum byte size for files to undergo deduplication at upload
     i64 CacheUploadDeduplicationThreshold;
+
+    /// @brief Take a shared lock on the file cache directory during operation preparation.
+    ///
+    /// Prevents periodic cleaners from removing the cache directory between its creation and operation files upload to the cache.
+    ///
+    /// Only non-default file storages are locked.
+    /// The default one is expected to be protected on the cluster side.
+    bool LockFileStorage = false;
 
     bool MountSandboxInTmpfs;
 
@@ -293,6 +309,10 @@ struct TConfig
 
     /// Allow to create trace_id on client side and propogate with request
     bool EnableClientTracing = true;
+
+    /// If true, all RPC requests share a single connection,
+    //  and the native client sends lightweight control requests via a separate multiplexing band.
+    bool EnableControlMultiplexingBand = false;
 
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);

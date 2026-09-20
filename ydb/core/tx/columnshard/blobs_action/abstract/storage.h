@@ -4,6 +4,7 @@
 #include "remove.h"
 #include "write.h"
 
+#include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/remove_gc.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
@@ -11,6 +12,9 @@
 #include <ydb/core/tx/tiering/abstract/manager.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#include <optional>
 
 namespace NKikimr::NOlap {
 
@@ -26,6 +30,11 @@ protected:
 public:
     virtual bool IsBlobInUsage(const NOlap::TUnifiedBlobId& blobId) const override;
     virtual void OnBlobFree(const TUnifiedBlobId& blobId) = 0;
+};
+
+struct TSmallBlobsStat {
+    ui64 VolumeBytes = 0;
+    ui64 Count = 0;
 };
 
 class IBlobsStorageOperator {
@@ -82,9 +91,23 @@ public:
 
     void Stop();
 
-    const NSplitter::TSplitSettings& GetBlobSplitSettings() const;
+    NSplitter::TSplitSettings GetBlobSplitSettings() const;
 
     virtual TTabletsByBlob GetBlobsToDelete() const = 0;
+
+    virtual TSmallBlobsStat CalcSmallBlobsToDelete() const {
+        return {};
+    }
+
+    // Makes sense only for the blob storage.
+    // We assume that all the blob storage groups for a database have the same type.
+    virtual std::optional<TBlobStorageGroupType> GetBlobStorageLayout() const {
+        return std::nullopt;
+    }
+
+    // Makes sense only for the blob storage.
+    ui64 GetSmallBlobThresholdBytes() const;
+
     virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId initiatorTabletId) const = 0;
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;
 
@@ -119,6 +142,9 @@ public:
         AFL_VERIFY(IsReady());
         auto result = DoStartReadingAction();
         result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetReadCounters());
+        if (consumerId == NBlobOperations::EConsumer::GENERAL_COMPACTION) {
+            result->SetCacheAfterRead(false);
+        }
         return result;
     }
 
@@ -129,14 +155,17 @@ public:
     }
 
     [[nodiscard]] std::shared_ptr<IBlobsGCAction> CreateGC() {
-        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)(
-            "storage_id", GetStorageId())("tablet_id", GetSelfTabletId());
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS,
+            {"storageId", GetStorageId()},
+            {"tabletId", GetSelfTabletId()});
         if (CurrentGCAction && CurrentGCAction->IsInProgress()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "gc_in_progress");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS, "",
+                {"event", "gc_in_progress"});
             return nullptr;
         }
         if (Stopped) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "stopped_on_gc");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS, "",
+                {"event", "stopped_on_gc"});
             return nullptr;
         }
         auto task = CreateGCAction(Counters->GetConsumerCounter(NBlobOperations::EConsumer::GC)->GetRemoveGCCounters());

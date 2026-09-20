@@ -2,7 +2,7 @@
 #include "manager.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/tiering/fetcher.h>
@@ -13,6 +13,8 @@
 
 #include <library/cpp/retry/retry_policy.h>
 #include <util/string/vector.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_TIERING
 
 namespace NKikimr::NColumnShard {
 
@@ -28,25 +30,38 @@ private:
 
         struct TEvSchemaSecretsResolved : TEventLocal<TEvSchemaSecretsResolved, EvSchemaSecretsResolved> {
             NTiers::TExternalStorageId TierId;
+            ui64 SeqNo = 0;
             NTiers::TTierConfig TierConfig;
             NKqp::TEvDescribeSecretsResponse::TDescription Description;
 
             TEvSchemaSecretsResolved(
                 NTiers::TExternalStorageId tierId,
+                ui64 seqNo,
                 NTiers::TTierConfig tierConfig,
                 NKqp::TEvDescribeSecretsResponse::TDescription description)
                 : TierId(std::move(tierId))
+                , SeqNo(seqNo)
                 , TierConfig(std::move(tierConfig))
                 , Description(std::move(description))
             {}
         };
     };
 
-    using IRetryPolicy = IRetryPolicy<const NTiers::TEvSchemeObjectResolutionFailed::EReason>;
+    struct TSchemaSecretsResolveState {
+        ui64 LatestSeqNo = 0;
+        ui64 InFlightSeqNo = 0;
+        bool InFlight = false;
+        NTiers::TTierConfig PendingConfig;
+        TVector<TString> SecretNames;
+    };
+
+    using IRetryPolicy = IRetryPolicy<const ERetryErrorClass>;
 
     std::shared_ptr<TTiersManager> Owner;
     IRetryPolicy::TPtr RetryPolicy;
     THashMap<NTiers::TExternalStorageId, IRetryPolicy::IRetryState::TPtr> RetryStateByObject;
+    THashMap<NTiers::TExternalStorageId, TSchemaSecretsResolveState> SchemaSecretsResolveByTier;
+    ui64 NextSchemaSecretsSeqNo = 0;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr SecretsFetcher;
     TActorId TiersFetcher;
 
@@ -55,19 +70,116 @@ private:
         return NMetadata::NProvider::MakeServiceId(SelfId().NodeId());
     }
 
-    void RetryTierRequest(const NTiers::TExternalStorageId& tier, const NTiers::TEvSchemeObjectResolutionFailed::EReason reason) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiers_manager")("event", "retry_watch_objects");
+    static ERetryErrorClass GetRetryErrorClass(const NTiers::TEvSchemeObjectResolutionFailed::EReason reason) {
+        switch (reason) {
+            case NTiers::TEvSchemeObjectResolutionFailed::NOT_FOUND:
+                return ERetryErrorClass::LongRetry;
+            case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
+                return ERetryErrorClass::ShortRetry;
+        }
+    }
+
+    static ERetryErrorClass GetRetryErrorClass(const Ydb::StatusIds::StatusCode status) {
+        switch (status) {
+            case Ydb::StatusIds::UNAVAILABLE:
+            case Ydb::StatusIds::OVERLOADED:
+            case Ydb::StatusIds::TIMEOUT:
+            case Ydb::StatusIds::UNDETERMINED:
+            case Ydb::StatusIds::INTERNAL_ERROR:
+            case Ydb::StatusIds::SESSION_BUSY:
+                return ERetryErrorClass::ShortRetry;
+            default:
+                return ERetryErrorClass::LongRetry;
+        }
+    }
+
+    // Re-requests the description of the external data source (the scheme cache re-sends the current description to
+    // an already subscribed watcher), so the whole chain including the resolution of secrets is re-run.
+    void RetryTierRequest(const NTiers::TExternalStorageId& tier, const ERetryErrorClass errorClass) {
         auto findRetryState = RetryStateByObject.find(tier);
         if (!findRetryState) {
             findRetryState = RetryStateByObject.emplace(tier, RetryPolicy->CreateRetryState()).first;
         }
-        auto retryDelay = findRetryState->second->GetNextRetryDelay(reason);
-        AFL_VERIFY(retryDelay)("object", tier.GetConfigPath());
+        auto retryDelay = findRetryState->second->GetNextRetryDelay(errorClass);
+        if (!retryDelay) {
+            YDB_LOG_ERROR("",
+                {"component", "tiers_manager"},
+                {"event", "retry_watch_objects_exhausted"},
+                {"object", tier.GetConfigPath()});
+            return;
+        }
+        YDB_LOG_DEBUG("",
+            {"component", "tiers_manager"},
+            {"event", "retry_watch_objects"},
+            {"object", tier.GetConfigPath()},
+            {"delay", *retryDelay});
         ActorContext().Schedule(*retryDelay, std::make_unique<IEventHandle>(SelfId(), TiersFetcher, new NTiers::TEvWatchSchemeObject(std::vector<TString>({ tier.GetConfigPath() }))));
+    }
+
+    // Secrets of the tier cannot be resolved right now (scheme shard / scheme cache unavailable, secret not created yet).
+    // A tier awaited by the shard is marked as unavailable to let the shard start; a tier that already has a working
+    // config keeps it. In both cases the request is retried, otherwise the tier would stay inaccessible until the next
+    // tablet restart or an ALTER of the external data source.
+    void OnSchemaSecretsResolutionFailed(const NTiers::TExternalStorageId& tierId, const ERetryErrorClass errorClass) {
+        const auto* tier = Owner->GetTiers().FindPtr(tierId);
+        if (!tier) {
+            return;
+        }
+        if (tier->GetState() == TTiersManager::ETierState::REQUESTED) {
+            Owner->UpdateTierConfig(std::nullopt, tierId);
+        }
+        RetryTierRequest(tierId, errorClass);
     }
 
     void ResetRetryState(const NTiers::TExternalStorageId& tier) {
         RetryStateByObject.erase(tier);
+    }
+
+    void DropSchemaSecretsResolveState(const NTiers::TExternalStorageId& tierId) {
+        SchemaSecretsResolveByTier.erase(tierId);
+    }
+
+    void StartSchemaSecretsResolve(const NTiers::TExternalStorageId& tierId) {
+        auto* state = SchemaSecretsResolveByTier.FindPtr(tierId);
+        AFL_VERIFY(state);
+        AFL_VERIFY(!state->InFlight);
+        AFL_VERIFY(!state->SecretNames.empty());
+        state->InFlight = true;
+        state->InFlightSeqNo = state->LatestSeqNo;
+
+        auto userToken = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
+        auto future = NSecret::DescribeSecret(
+            state->SecretNames,
+            userToken,
+            AppDataVerified().TenantName,
+            ActorContext().ActorSystem());
+
+        const auto selfId = SelfId();
+        const auto seqNo = state->InFlightSeqNo;
+        const auto tierIdCopy = tierId;
+        const auto tier = state->PendingConfig;
+        future.Subscribe([actorSystem = ActorContext().ActorSystem(), selfId, tierIdCopy, seqNo, tier](
+                             const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
+            actorSystem->Send(selfId, new TEvPrivate::TEvSchemaSecretsResolved(tierIdCopy, seqNo, tier, result.GetValue()));
+        });
+    }
+
+    void RequestSchemaSecretsResolve(
+        const NTiers::TExternalStorageId& tierId, NTiers::TTierConfig tier, TVector<TString> secretNames) {
+        auto& state = SchemaSecretsResolveByTier[tierId];
+        state.LatestSeqNo = ++NextSchemaSecretsSeqNo;
+        state.PendingConfig = std::move(tier);
+        state.SecretNames = std::move(secretNames);
+        if (state.InFlight) {
+            YDB_LOG_DEBUG("",
+                {"component", "tiers_manager"},
+                {"event", "schema_secrets_resolve_coalesced"},
+                {"object", tierId.GetConfigPath()},
+                {"seqNo", state.LatestSeqNo},
+                {"inFlightSeqNo", state.InFlightSeqNo});
+            return;
+        }
+        StartSchemaSecretsResolve(tierId);
     }
 
     STATEFN(StateMain) {
@@ -87,7 +199,9 @@ private:
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
         auto snapshot = ev->Get()->GetSnapshot();
         if (auto secrets = std::dynamic_pointer_cast<NMetadata::NSecret::TSnapshot>(snapshot)) {
-            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "TEvRefreshSubscriberData")("snapshot", "secrets");
+            YDB_LOG_DEBUG("",
+                {"event", "TEvRefreshSubscriberData"},
+                {"snapshot", "secrets"});
             Owner->UpdateSecretsSnapshot(secrets);
         } else {
             AFL_VERIFY(false);
@@ -100,10 +214,12 @@ private:
     }
 
     void Handle(NTiers::TEvNotifySchemeObjectUpdated::TPtr& ev) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_updated")("path", ev->Get()->GetObjectPath());
+        YDB_LOG_DEBUG("",
+            {"component", "tiering_manager"},
+            {"event", "object_updated"},
+            {"path", ev->Get()->GetObjectPath()});
         const NTiers::TExternalStorageId tierId(ev->Get()->GetObjectPath());
         const auto& description = ev->Get()->GetDescription();
-        ResetRetryState(tierId);
         if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeExternalDataSource) {
             NTiers::TTierConfig tier;
             if (HasAppData() && AppDataVerified().ColumnShardConfig.HasS3Client()) {
@@ -111,7 +227,11 @@ private:
             }
 
             if (const auto status = tier.DeserializeFromProto(description.GetExternalDataSourceDescription()); status.IsFail()) {
-                AFL_WARN(NKikimrServices::TX_TIERING)("event", "fetched_invalid_tier_settings")("error", status.GetErrorMessage());
+                YDB_LOG_WARN("",
+                    {"event", "fetched_invalid_tier_settings"},
+                    {"error", status.GetErrorMessage()});
+                DropSchemaSecretsResolveState(tierId);
+                ResetRetryState(tierId);
                 Owner->UpdateTierConfig(std::nullopt, tierId);
                 return;
             }
@@ -124,79 +244,107 @@ private:
                     aws.GetAwsSecretAccessKeySecretName()
                 };
 
-                if (NKqp::UseSchemaSecrets(AppDataVerified().FeatureFlags, schemaSecretNames)) {
-                    auto userToken = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
-
-                    auto future = NKqp::DescribeSecret(
-                        schemaSecretNames,
-                        userToken,
-                        AppDataVerified().TenantName,
-                        ActorContext().ActorSystem());
-
-                    const auto selfId = SelfId();
-                    const auto tierIdCopy = tierId;
-
-                    future.Subscribe([actorSystem = ActorContext().ActorSystem(),
-                                      selfId,
-                                      tierIdCopy,
-                                      tier](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
-                        actorSystem->Send(selfId, new TEvPrivate::TEvSchemaSecretsResolved(tierIdCopy, tier, result.GetValue()));
-                    });
-
+                if (NSecret::UseSchemaSecrets(AppDataVerified().FeatureFlags, schemaSecretNames)) {
+                    RequestSchemaSecretsResolve(tierId, std::move(tier), std::move(schemaSecretNames));
                     return;
                 }
             } else {
-                AFL_WARN(NKikimrServices::TX_TIERING)("event", "unsupported_auth_for_tiering")("path", tierId.GetConfigPath())("identity_case", static_cast<int>(auth.identity_case()));
+                YDB_LOG_WARN("",
+                    {"event", "unsupported_auth_for_tiering"},
+                    {"path", tierId.GetConfigPath()},
+                    {"identityCase", static_cast<int>(auth.identity_case())});
             }
 
+            DropSchemaSecretsResolveState(tierId);
+            ResetRetryState(tierId);
             Owner->UpdateTierConfig(tier, tierId);
         } else {
-            AFL_WARN(NKikimrServices::TX_TIERING)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", tierId.GetConfigPath());
+            YDB_LOG_WARN("",
+                {"error", "invalid_object_type"},
+                {"type", static_cast<ui64>(description.GetSelf().GetPathType())},
+                {"path", tierId.GetConfigPath()});
+            DropSchemaSecretsResolveState(tierId);
+            ResetRetryState(tierId);
             Owner->UpdateTierConfig(std::nullopt, tierId);
         }
     }
 
     void Handle(TEvPrivate::TEvSchemaSecretsResolved::TPtr& ev) {
-        if (ev->Get()->Description.Status != Ydb::StatusIds::SUCCESS) {
-            AFL_ERROR(NKikimrServices::TX_TIERING)(
-                "event", "cannot_read_schema_secrets")("tier", ev->Get()->TierId.GetConfigPath())(
-                "reason", ev->Get()->Description.Issues.ToOneLineString());
-            Owner->UpdateTierConfig(std::nullopt, ev->Get()->TierId);
+        const auto& event = *ev->Get();
+        auto* state = SchemaSecretsResolveByTier.FindPtr(event.TierId);
+        if (!state || !state->InFlight || event.SeqNo != state->InFlightSeqNo) {
+            YDB_LOG_DEBUG("",
+                {"event", "stale_schema_secrets_resolved"},
+                {"tier", event.TierId.GetConfigPath()},
+                {"seqNo", event.SeqNo},
+                {"latestSeqNo", state ? state->LatestSeqNo : 0},
+                {"inFlightSeqNo", state ? state->InFlightSeqNo : 0});
+            return;
+        }
+        state->InFlight = false;
+
+        if (event.SeqNo != state->LatestSeqNo) {
+            YDB_LOG_DEBUG("",
+                {"event", "superseded_schema_secrets_resolved"},
+                {"tier", event.TierId.GetConfigPath()},
+                {"seqNo", event.SeqNo},
+                {"latestSeqNo", state->LatestSeqNo});
+            StartSchemaSecretsResolve(event.TierId);
             return;
         }
 
-        if (ev->Get()->Description.SecretValues.size() != 2) {
-            AFL_ERROR(NKikimrServices::TX_TIERING)(
-                "event", "cannot_read_schema_secrets")("tier", ev->Get()->TierId.GetConfigPath())(
-                "reason", TStringBuilder() << "expected 2 secrets, got " << ev->Get()->Description.SecretValues.size());
-            Owner->UpdateTierConfig(std::nullopt, ev->Get()->TierId);
+        if (event.Description.Status != Ydb::StatusIds::SUCCESS) {
+            YDB_LOG_ERROR("",
+                {"event", "cannot_read_schema_secrets"},
+                {"tier", event.TierId.GetConfigPath()},
+                {"status", Ydb::StatusIds::StatusCode_Name(event.Description.Status)},
+                {"reason", event.Description.Issues.ToOneLineString()});
+            OnSchemaSecretsResolutionFailed(event.TierId, GetRetryErrorClass(event.Description.Status));
             return;
         }
 
+        if (event.Description.SecretValues.size() != 2) {
+            YDB_LOG_ERROR("",
+                {"event", "cannot_read_schema_secrets"},
+                {"tier", event.TierId.GetConfigPath()},
+                {"reason", TStringBuilder() << "expected 2 secrets, got " << event.Description.SecretValues.size()});
+            OnSchemaSecretsResolutionFailed(event.TierId, ERetryErrorClass::LongRetry);
+            return;
+        }
+
+        ResetRetryState(event.TierId);
         Owner->UpdateTierConfig(
-            ev->Get()->TierConfig.BuildWithPatchedSecrets(
-                ev->Get()->Description.SecretValues[0],
-                ev->Get()->Description.SecretValues[1]),
-            ev->Get()->TierId);
+            event.TierConfig.BuildWithPatchedSecrets(
+                event.Description.SecretValues[0],
+                event.Description.SecretValues[1]),
+            event.TierId);
     }
 
     void Handle(NTiers::TEvNotifySchemeObjectDeleted::TPtr& ev) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_deleted")("name", ev->Get()->GetObjectPath());
+        YDB_LOG_DEBUG("",
+            {"component", "tiering_manager"},
+            {"event", "object_deleted"},
+            {"name", ev->Get()->GetObjectPath()});
+        DropSchemaSecretsResolveState(ev->Get()->GetObjectPath());
+        ResetRetryState(ev->Get()->GetObjectPath());
         Owner->UpdateTierConfig(std::nullopt, ev->Get()->GetObjectPath());
     }
 
     void Handle(NTiers::TEvSchemeObjectResolutionFailed::TPtr& ev) {
         const TString objectPath = ev->Get()->GetObjectPath();
-        AFL_WARN(NKikimrServices::TX_TIERING)("event", "object_resolution_failed")("path", objectPath)(
-            "reason", static_cast<ui64>(ev->Get()->GetReason()));
+        YDB_LOG_WARN("",
+            {"event", "object_resolution_failed"},
+            {"path", objectPath},
+            {"reason", static_cast<ui64>(ev->Get()->GetReason())});
         switch (ev->Get()->GetReason()) {
             case NTiers::TEvSchemeObjectResolutionFailed::NOT_FOUND:
+                DropSchemaSecretsResolveState(objectPath);
                 Owner->UpdateTierConfig(std::nullopt, objectPath);
                 break;
             case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
                 break;
         }
-        RetryTierRequest(objectPath, ev->Get()->GetReason());
+        RetryTierRequest(objectPath, GetRetryErrorClass(ev->Get()->GetReason()));
     }
 
     void Handle(NTiers::TEvWatchSchemeObject::TPtr& ev) {
@@ -207,20 +355,16 @@ public:
     TActor(std::shared_ptr<TTiersManager> owner)
         : Owner(owner)
         , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
-              [](const NTiers::TEvSchemeObjectResolutionFailed::EReason reason) {
-                  switch (reason) {
-                      case NTiers::TEvSchemeObjectResolutionFailed::NOT_FOUND:
-                          return ERetryErrorClass::LongRetry;
-                      case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
-                          return ERetryErrorClass::ShortRetry;
-                  }
+              [](const ERetryErrorClass errorClass) {
+                  return errorClass;
               }, TDuration::MilliSeconds(10), TDuration::Seconds(29), TDuration::Seconds(30), 10000))
         , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
     {
     }
 
     void Bootstrap() {
-        AFL_INFO(NKikimrServices::TX_TIERING)("event", "start_subscribing_metadata");
+        YDB_LOG_INFO("",
+            {"event", "start_subscribing_metadata"});
         TiersFetcher = Register(new TSchemeObjectWatcher(SelfId()));
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
         Become(&TThis::StateMain);
@@ -234,7 +378,9 @@ public:
 namespace NTiers {
 
 TManager& TManager::Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Restarting tier '" << TierId << "' at tablet " << TabletId;
+    YDB_LOG_DEBUG("Restarting tier",
+        {"tierId", TierId},
+        {"tabletId", TabletId});
     Stop();
     Start(config, secrets);
     return *this;
@@ -242,7 +388,9 @@ TManager& TManager::Restart(const TTierConfig& config, std::shared_ptr<NMetadata
 
 bool TManager::Stop() {
     S3Settings.reset();
-    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << TierId << "' stopped at tablet " << TabletId;
+    YDB_LOG_DEBUG("Stopped tier",
+        {"tierId", TierId},
+        {"tabletId", TabletId});
     return true;
 }
 
@@ -250,11 +398,15 @@ bool TManager::Start(const TTierConfig& config, std::shared_ptr<NMetadata::NSecr
     AFL_VERIFY(!S3Settings)("tier", TierId)("event", "already started");
     auto patchedConfig = config.GetPatchedConfig(secrets);
     if (patchedConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_TIERING)("error", "cannot_read_secrets")("reason", patchedConfig.GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"error", "cannot_read_secrets"},
+            {"reason", patchedConfig.GetErrorMessage()});
         return false;
     }
     S3Settings = patchedConfig.DetachResult();
-    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << TierId << "' started at tablet " << TabletId;
+    YDB_LOG_DEBUG("Started tier",
+        {"tierId", TierId},
+        {"tabletId", TabletId});
     return true;
 }
 
@@ -288,8 +440,11 @@ void TTiersManager::OnConfigsUpdated(bool notifyShard) {
                 manager.Start(findTier->GetConfigVerified(), Secrets);
             }
         } else {
-            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_tier_manager_reloading")("tier", tierId)("has_secrets", !!Secrets)(
-                "found_tier_config", !!findTier);
+            YDB_LOG_DEBUG("",
+                {"event", "skip_tier_manager_reloading"},
+                {"tier", tierId},
+                {"hasSecrets", !!Secrets},
+                {"foundTierConfig", !!findTier});
         }
     }
 
@@ -297,7 +452,9 @@ void TTiersManager::OnConfigsUpdated(bool notifyShard) {
         ShardCallback(TActivationContext::AsActorContext());
     }
 
-    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "configs_updated")("configs", DebugString());
+    YDB_LOG_DEBUG("",
+        {"event", "configs_updated"},
+        {"configs", DebugString()});
 }
 
 void TTiersManager::RegisterTierManager(const NTiers::TExternalStorageId& tierId, std::optional<NTiers::TTierConfig> config) {
@@ -307,8 +464,11 @@ void TTiersManager::RegisterTierManager(const NTiers::TExternalStorageId& tierId
     if (Secrets && config) {
         emplaced.first->second.Start(*config, Secrets);
     } else {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_tier_manager_start")("tier", tierId)("has_secrets", !!Secrets)(
-            "tier_config", !!config);
+        YDB_LOG_DEBUG("",
+            {"event", "skip_tier_manager_start"},
+            {"tier", tierId},
+            {"hasSecrets", !!Secrets},
+            {"tierConfig", !!config});
     }
 }
 
@@ -367,7 +527,9 @@ void TTiersManager::ActivateTiers(const THashSet<NTiers::TExternalStorageId>& us
 }
 
 void TTiersManager::UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    AFL_INFO(NKikimrServices::TX_TIERING)("event", "update_secrets")("tablet", TabletId);
+    YDB_LOG_INFO("",
+        {"event", "update_secrets"},
+        {"tablet", TabletId});
     AFL_VERIFY(secrets);
     Secrets = secrets;
     OnConfigsUpdated();
@@ -375,7 +537,11 @@ void TTiersManager::UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TS
 
 void TTiersManager::UpdateTierConfig(
     std::optional<NTiers::TTierConfig> config, const NTiers::TExternalStorageId& tierId, const bool notifyShard) {
-    AFL_INFO(NKikimrServices::TX_TIERING)("event", "update_tier_config")("name", tierId.ToString())("tablet", TabletId)("has_config", !!config);
+    YDB_LOG_INFO("",
+        {"event", "update_tier_config"},
+        {"name", tierId},
+        {"tablet", TabletId},
+        {"hasConfig", !!config});
     TTierGuard* findTier = Tiers.FindPtr(tierId);
     AFL_VERIFY(findTier)("tier", tierId.ToString());
     if (config) {

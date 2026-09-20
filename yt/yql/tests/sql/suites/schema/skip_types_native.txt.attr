@@ -1,0 +1,27 @@
+{
+    "schema"=<strict=%false>[
+        {name=boobee;required=%true;type=int32;type_v3=int32};
+        {name=xx1;required=%true;type=string;type_v3={
+            type_name=decimal;
+            precision=9;
+            scale=2}};
+        {name=xx2;required=%true;type=string;type_v3={
+            type_name=decimal;
+            precision=18;
+            scale=2}};
+        {name=xx3;required=%true;type=string;type_v3={
+            type_name=decimal;
+            precision=35;
+            scale=2}};
+    ];
+    "_yql_row_spec"={
+        "NativeYtTypeFlags"=64u;
+        "StrictSchema"=%false;
+        "Type"=["StructType";[
+            ["boobee";["DataType";"Int32"]];
+            ["xx1";["DataType";"Decimal";"9";"2"]];
+            ["xx2";["DataType";"Decimal";"18";"2"]];
+            ["xx3";["DataType";"Decimal";"35";"2"]];
+        ]]
+    }
+}

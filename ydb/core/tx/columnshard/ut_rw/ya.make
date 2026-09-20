@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
+    ydb/core/tx/tx_proxy
     ydb/library/testlib/s3_recipe_helper
     ydb/public/lib/yson_value
     ydb/services/metadata
@@ -35,6 +36,7 @@ SRCS(
     ut_scan_snapshot_guard_integration.cpp
     ut_normalizer.cpp
     ut_backup.cpp
+    ut_flow_control_manager.cpp
 )
 
 END()

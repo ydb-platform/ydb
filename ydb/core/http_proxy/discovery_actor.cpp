@@ -1,11 +1,10 @@
 #include "discovery_actor.h"
 #include "events.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 
 #include <library/cpp/cache/cache.h>
 
@@ -17,15 +16,19 @@
 #include <map>
 #include <vector>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
+
 namespace NKikimr::NHttpProxy {
 
     using namespace NActors;
 
-    class TDiscoveryActor : public NActors::TActorBootstrapped<TDiscoveryActor> {
-        using TBase = NActors::TActorBootstrapped<TDiscoveryActor>;
+    class TDiscoveryActor : public NPQ::TBaseActor<TDiscoveryActor>
+                            , public NPQ::TConstantLogPrefix {
+        using TBase = NPQ::TBaseActor<TDiscoveryActor>;
     public:
         explicit TDiscoveryActor(std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, TDiscoverySettings&& settings)
-            : Settings(std::move(settings))
+            : TBase(NKikimrServices::PERSQUEUE)
+            , Settings(std::move(settings))
             , CredentialsProvider(credentialsProvider)
         {
             NYdbGrpc::TGRpcClientConfig grpcConf;
@@ -37,14 +40,16 @@ namespace NKikimr::NHttpProxy {
             Connection = GrpcClient.CreateGRpcServiceConnection<TProtoService>(grpcConf);
         }
 
-        void Bootstrap(const TActorContext& ctx) {
-            LOG_SP_INFO_S(ctx, NKikimrServices::PERSQUEUE, "discovery actor created");
+        void Bootstrap() {
+            LOG_I("Discovery actor created");
 
             TBase::Become(&TDiscoveryActor::StateWork);
         }
 
-        TStringBuilder LogPrefix() const {
-            return TStringBuilder() << "database: " << Settings.Database << " endpoint: " << Settings.DiscoveryEndpoint;
+        NPQ::TStructuredMessage BuildLogPrefix() const override {
+            return YDB_LOG_CREATE_MESSAGE(
+                {"database", Settings.Database},
+                {"endpoint", Settings.DiscoveryEndpoint});
         }
         ~TDiscoveryActor() {
             GrpcClient.Stop(true);
@@ -108,12 +113,15 @@ namespace NKikimr::NHttpProxy {
 
         Ydb::Discovery::ListEndpointsRequest request;
         request.set_database(Settings.Database);
-        LOG_SP_INFO_S(ctx, NKikimrServices::PERSQUEUE, "list endpoints request");
+        LOG_I("List endpoints request");
 
         NYdbGrpc::TResponseCallback<Ydb::Discovery::ListEndpointsResponse> responseCb =
                 [actorSystem = ctx.ActorSystem(), actorId = ctx.SelfID](NYdbGrpc::TGrpcStatus&& status, Ydb::Discovery::ListEndpointsResponse&& response) -> void {
                     auto res = std::make_unique<TEvServerlessProxy::TEvListEndpointsResponse>();
-                    LOG_INFO_S(*actorSystem, NKikimrServices::PERSQUEUE, "list endpoints result status: " << status.GRpcStatusCode << " " << status.Msg << " " << status.Details);
+                    YDB_LOG_INFO_CTX(*actorSystem, "List endpoints result",
+                        {"status", status.GRpcStatusCode},
+                        {"statusMsg", status.Msg},
+                        {"statusDetails", status.Details});
                     if (status.Ok()) {
                         res->Record = std::make_unique<Ydb::Discovery::ListEndpointsResponse>();
                         res->Record->CopyFrom(response);
@@ -177,3 +185,4 @@ namespace NKikimr::NHttpProxy {
         return new TDiscoveryProxyActor(credentialsProvider, config);
     }
 } // namespace NKikimr::NHttpProxy
+

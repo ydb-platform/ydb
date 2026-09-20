@@ -19,10 +19,12 @@ namespace configuration
 class GrpcTlsConfiguration
 {
 public:
+  static constexpr bool kDefaultInsecure = false;
+
   std::string ca_file;
   std::string key_file;
   std::string cert_file;
-  bool insecure{false};
+  bool insecure{kDefaultInsecure};
 };
 
 }  // namespace configuration

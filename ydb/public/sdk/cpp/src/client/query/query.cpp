@@ -66,4 +66,9 @@ TCommitTransactionResult::TCommitTransactionResult(TStatus&& status)
     : TStatus(std::move(status))
 {}
 
+TCommitTransactionResult::TCommitTransactionResult(TStatus&& status, std::optional<NScheme::TVirtualTimestamp>&& commitTimestamp)
+    : TStatus(std::move(status))
+    , CommitTimestamp_(std::move(commitTimestamp))
+{}
+
 } // namespace NYdb::NQuery

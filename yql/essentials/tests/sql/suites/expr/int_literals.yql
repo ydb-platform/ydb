@@ -1,4 +1,3 @@
-/* postgres can not */
 select
   23 as small_int,
   9262583611491805930 as unsigned_long,

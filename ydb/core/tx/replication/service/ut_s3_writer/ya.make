@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/tx/replication/ut_helpers
     ydb/core/tx/replication/ydb_proxy
     ydb/core/util
+    ydb/library/aws_init
     library/cpp/string_utils/base64
     library/cpp/testing/unittest
 )

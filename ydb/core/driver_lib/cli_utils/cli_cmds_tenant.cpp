@@ -316,6 +316,12 @@ public:
             }
             Cout << "  Data size hard quota: " << result.database_quotas().data_size_hard_quota() << Endl;
             Cout << "  Data size soft quota: " << result.database_quotas().data_size_soft_quota() << Endl;
+            if (!result.issues().empty()) {
+                Cout << "  Issues:" << Endl;
+                for (const auto &issue : result.issues()) {
+                    Cout << "    " << issue.message() << Endl;
+                }
+            }
             return true;
         }
     }

@@ -1,6 +1,6 @@
 #include "distinct_limit.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/abstract.h>
 
@@ -37,12 +37,27 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
 
     const auto keyAccessor = batch->GetAccessorByNameOptional(std::string(columnName.data(), columnName.size()));
     if (!keyAccessor) {
-        return ESourceAction::Finish;
+        // Column may not be materialized yet at this sync point; do not abort the scan.
+        return ESourceAction::ProvideNext;
     }
 
     const ui32 recordsCount = keyAccessor->GetRecordsCount();
     if (!recordsCount) {
         return ESourceAction::ProvideNext;
+    }
+
+    const auto existing = source->GetStageResult().GetNotAppliedFilter();
+    const bool hasRowFilter = existing && !existing->IsTotalAllowFilter();
+    const bool isDictionaryOnlyFetch = sr.IsDictionaryOnlyFetch(KeyColumnId);
+    bool applyRowFilter = false;
+    std::optional<NArrow::TColumnFilter::TIterator> filterIterator;
+    if (isDictionaryOnlyFetch) {
+        // Dictionary accessor is indexed by dict entries; portion-row deny filters are incompatible.
+        AFL_VERIFY(!hasRowFilter);
+    } else if (hasRowFilter) {
+        AFL_VERIFY(existing->GetRecordsCountVerified() == recordsCount);
+        applyRowFilter = true;
+        filterIterator.emplace(existing->GetBegin(false, recordsCount));
     }
 
     NArrow::TColumnFilter distinctFilter = NArrow::TColumnFilter::BuildAllowFilter();
@@ -54,6 +69,16 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
         }
 
         for (int64_t i = 0; i < chunk->length(); ++i) {
+            const bool rowAllowed = !applyRowFilter || filterIterator->GetCurrentAcceptance();
+            if (applyRowFilter) {
+                // Last row may return false (iterator exhausted).
+                filterIterator->Next(1);
+            }
+            if (!rowAllowed) {
+                distinctFilter.Add(false);
+                continue;
+            }
+
             bool isNew = false;
             if (Seen.size() < Limit) {
                 auto scalarRes = chunk->GetScalar(i);
@@ -71,7 +96,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
 
     AFL_VERIFY(distinctFilter.GetRecordsCountVerified() == recordsCount);
 
-    if (auto existing = source->GetStageResult().GetNotAppliedFilter()) {
+    if (existing && applyRowFilter) {
         distinctFilter = existing->And(distinctFilter);
     }
     source->MutableStageResult().SetNotAppliedFilter(std::make_shared<NArrow::TColumnFilter>(std::move(distinctFilter)));

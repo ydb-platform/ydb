@@ -30,6 +30,12 @@ private:
         }
     }
 
+    virtual void DoVisitDistinctValues(const TValuesSimpleVisitor& visitor) const override {
+        for (auto&& i : Chunks) {
+            i->VisitDistinctValues(visitor);
+        }
+    }
+
 protected:
     virtual ui32 DoGetNullsCount() const override {
         AFL_VERIFY(false);

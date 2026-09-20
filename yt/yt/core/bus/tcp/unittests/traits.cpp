@@ -7,16 +7,16 @@
 #include <yt/yt/core/bus/tcp/client.h>
 #include <yt/yt/core/bus/tcp/server.h>
 
-namespace NYT::NBus::NTests {
+namespace NYT::NBus::NTcp::NTests {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTcpBusTraits::TTcpBusTraits()
+TBusTraits::TBusTraits()
     : Port(NTesting::GetFreePort())
     , Address(Format("localhost:%v", Port))
 { }
 
-IBusServerPtr TTcpBusTraits::StartServer(IMessageHandlerPtr handler)
+NBus::IBusServerPtr TBusTraits::StartServer(IMessageHandlerPtr handler)
 {
     auto config = TBusServerConfig::CreateTcp(Port);
     auto server = CreateBusServer(config);
@@ -24,18 +24,22 @@ IBusServerPtr TTcpBusTraits::StartServer(IMessageHandlerPtr handler)
     return server;
 }
 
-IBusClientPtr TTcpBusTraits::CreateClient()
+NBus::IBusClientPtr TBusTraits::CreateClient()
 {
-    return CreateBusClient(TBusClientConfig::CreateTcp(Address));
+    return CreateClient(Address);
 }
 
-IBusClientPtr TTcpBusTraits::CreateUnreachableClient()
+NBus::IBusClientPtr TBusTraits::CreateClient(std::string address)
+{
+    return CreateBusClient(TBusClientConfig::CreateTcp(std::move(address)));
+}
+
+NBus::IBusClientPtr TBusTraits::CreateUnreachableClient()
 {
     auto unreachablePort = NTesting::GetFreePort();
-    return CreateBusClient(TBusClientConfig::CreateTcp(
-        Format("localhost:%v", unreachablePort)));
+    return CreateClient(Format("localhost:%v", unreachablePort));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus::NTests
+} // namespace NYT::NBus::NTcp::NTests

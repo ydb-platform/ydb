@@ -4,6 +4,8 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -13,7 +15,7 @@ class TCreateTopicInternalActor: public NPQ::TBaseActor<TCreateTopicInternalActo
 
 public:
     TCreateTopicInternalActor(
-        NThreading::TPromise<TCreateTopicResponse>&& promise,
+        NThreading::TPromise<TSchemaResponse>&& promise,
         TCreateTopicSettings&& settings
     )
         : NPQ::TBaseActor<TCreateTopicInternalActor>(NKikimrServices::PQ_SCHEMA)
@@ -30,24 +32,31 @@ public:
     }
 
     void OnException(const std::exception& exc) override {
-        LOG_E("OnException: " << exc.what());
+        LOG_E(
+            "Catch exception",
+            {"onException", exc.what()}
+        );
 
-        TEvCreateTopicResponse response;
-        response.Status = Ydb::StatusIds::INTERNAL_ERROR;
-        response.ErrorMessage = exc.what();
+        TEvSchemaResponse response(Path, Ydb::StatusIds::INTERNAL_ERROR, exc.what());
 
         Promise.SetValue(std::move(response));
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[" << Path << "] ";
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"path", Path});
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
-        LOG_D("Handle TEvCreateTopicResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
+        LOG_D(
+            "Handle TEvSchemaResponse",
+            {"status", ev->Get()->Status},
+                    {"errorMessage", ev->Get()->ErrorMessage}
+        );
 
         Promise.SetValue({
+            .Path = Path,
             .Status = ev->Get()->Status,
             .ErrorMessage = std::move(ev->Get()->ErrorMessage),
             .ModifyScheme = std::move(ev->Get()->ModifyScheme)
@@ -58,12 +67,12 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
         }
     }
 
 private:
-    NThreading::TPromise<TCreateTopicResponse> Promise;
+    NThreading::TPromise<TSchemaResponse> Promise;
     TCreateTopicSettings Settings;
     const TString Path;
 };
@@ -71,7 +80,7 @@ private:
 } // namespace
 
 NActors::IActor* CreateCreateTopicActor(
-    NThreading::TPromise<TCreateTopicResponse>&& promise,
+    NThreading::TPromise<TSchemaResponse>&& promise,
     TCreateTopicSettings&& settings
 ) {
     return new TCreateTopicInternalActor(std::move(promise), std::move(settings));

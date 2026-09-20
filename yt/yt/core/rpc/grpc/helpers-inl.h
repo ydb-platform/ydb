@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "helpers.h"
 #endif
-#undef HELPERS_INL_H_
 
 namespace NYT::NRpc::NGrpc {
 

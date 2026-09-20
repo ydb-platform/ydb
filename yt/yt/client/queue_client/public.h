@@ -1,7 +1,8 @@
 #pragma once
 
 #include <yt/yt/core/misc/common.h>
-#include <yt/yt/core/misc/error_code.h>
+
+#include <library/cpp/yt/error/error_code.h>
 
 #include <library/cpp/yt/memory/ref_counted.h>
 
@@ -38,7 +39,7 @@ DECLARE_REFCOUNTED_STRUCT(TQueueStaticExportDestinationConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_STRONG_TYPEDEF(TQueueProducerSessionId, TString);
+YT_DEFINE_STRONG_TYPEDEF(TQueueProducerSessionId, std::string);
 YT_DEFINE_STRONG_TYPEDEF(TQueueProducerEpoch, i64);
 YT_DEFINE_STRONG_TYPEDEF(TQueueProducerSequenceNumber, i64);
 

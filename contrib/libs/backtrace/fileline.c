@@ -1,5 +1,5 @@
 /* fileline.c -- Get file and line number information in a backtrace.
-   Copyright (C) 2012-2024 Free Software Foundation, Inc.
+   Copyright (C) 2012-2026 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -424,6 +424,9 @@ backtrace_syminfo_to_full_callback (void *data, uintptr_t pc,
 				    uintptr_t symsize ATTRIBUTE_UNUSED)
 {
   struct backtrace_call_full *bdata = (struct backtrace_call_full *) data;
+
+  /* If STATE->MOREDATA is set, then data will point to a
+     backtrace_moredata struct, which is what full_callback expects.  */
 
   bdata->ret = bdata->full_callback (bdata->full_data, pc, NULL, 0, symname);
 }

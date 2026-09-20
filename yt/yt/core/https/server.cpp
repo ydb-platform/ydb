@@ -101,11 +101,6 @@ private:
     IPollerPtr OwnPoller_;
 };
 
-static void ApplySslConfig(const TSslContextPtr& sslContext, const TServerCredentialsConfigPtr& sslConfig)
-{
-    sslContext->ApplyConfig(sslConfig);
-}
-
 IServerPtr CreateServer(
     const TServerConfigPtr& config,
     const IPollerPtr& poller,
@@ -113,13 +108,14 @@ IServerPtr CreateServer(
     const IInvokerPtr& controlInvoker,
     std::optional<NCrypto::TCertProfiler> certProfiler)
 {
-    auto sslContext = New<TSslContext>();
-    ApplySslConfig(sslContext, config->Credentials);
+    auto sslConfig = config->Credentials;
+    auto sslContext =  New<TSslContext>();
+    sslContext->ApplyConfig(sslConfig);
     sslContext->Commit();
 
-    auto sslConfig = config->Credentials;
     TPeriodicExecutorPtr certificateUpdater;
-    if (sslConfig->UpdatePeriod &&
+    if (sslConfig &&
+        sslConfig->UpdatePeriod &&
         sslConfig->CertificateChain->FileName &&
         sslConfig->PrivateKey->FileName)
     {
@@ -136,19 +132,19 @@ IServerPtr CreateServer(
                     if (modificationTime > sslContext->GetCommitTime() &&
                         modificationTime + sslConfig->UpdatePeriod <= TInstant::Now())
                     {
-                        YT_LOG_INFO("Updating TLS certificates (ServerName: %v, ModificationTime: %v)",
-                            config->ServerName,
-                            modificationTime);
+                        YT_TLOG_INFO("Updating TLS certificates")
+                            .With("ServerName", config->ServerName)
+                            .With("ModificationTime", modificationTime);
                         sslContext->Reset();
-                        ApplySslConfig(sslContext, sslConfig);
+                        sslContext->ApplyConfig(sslConfig);
                         sslContext->Commit(modificationTime);
-                        YT_LOG_INFO("TLS certificates updated (ServerName: %v)",
-                            config->ServerName);
+                        YT_TLOG_INFO("TLS certificates updated")
+                            .With("ServerName", config->ServerName);
                     }
                 } catch (const std::exception& ex) {
-                    YT_LOG_WARNING(ex,
-                        "Unexpected exception while updating TLS certificates (ServerName: %v)",
-                        config->ServerName);
+                    YT_TLOG_WARNING("Unexpected exception while updating TLS certificates")
+                        .With("ServerName", config->ServerName)
+                        .With(ex);
                 }
             }),
             sslConfig->UpdatePeriod);
@@ -166,7 +162,7 @@ IServerPtr CreateServer(
         acceptor);
 
     TPeriodicExecutorPtr certificateSensorsUpdater;
-    if (certProfiler && sslConfig->CertificateChain) {
+    if (certProfiler && sslConfig && sslConfig->CertificateChain) {
         auto certChainToExpiry = certProfiler->Profiler.Gauge("/cert_chain_to_expiry");
         // Update expiry time ASAP after creation.
         certChainToExpiry.Update(GetCertTimeToExpiry(sslConfig->CertificateChain));
@@ -177,7 +173,8 @@ IServerPtr CreateServer(
                 try {
                     certChainToExpiry.Update(GetCertTimeToExpiry(sslConfig->CertificateChain));
                 } catch (const std::exception& ex) {
-                    YT_LOG_WARNING(ex, "Failed to update HTTPS server certificate sensors");
+                    YT_TLOG_WARNING("Failed to update HTTPS server certificate sensors")
+                        .With(ex);
                 }
             }),
             sslConfig->UpdatePeriod);

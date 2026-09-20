@@ -12,7 +12,7 @@ ELSE()
 ENDIF()
 
 SRCS(
-    kqp_compile_fallback_ut.cpp
+    kqp_replay_log_ut.cpp
 )
 
 PEERDIR(

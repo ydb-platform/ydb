@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CAST(TZDATE('1970-01-02,Europe/Moscow') AS TzDatetime),
     CAST(TZDATE('1970-01-01,America/Los_Angeles') AS TzDatetime),

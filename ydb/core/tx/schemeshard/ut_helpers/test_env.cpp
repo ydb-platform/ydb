@@ -2,6 +2,7 @@
 
 #include "helpers.h"
 
+#include <ydb/core/base/backtrace.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -9,20 +10,26 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/test_tablet/test_tablet.h>
 
 #include <ydb/services/metadata/ds_table/service.h>
 
+#include <ydb/library/actors/core/log.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 bool NSchemeShardUT_Private::TTestEnv::ENABLE_SCHEMESHARD_LOG = true;
 static const bool ENABLE_DATASHARD_LOG = false;
@@ -229,8 +236,9 @@ private:
             const auto pipeActor = found->first;
             const auto txId = found->second;
 
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "tests -- TTxNotificationSubscriber for txId " << txId << ": disconnected from schemeshard, resend EvNotifyTxCompletion");
+            YDB_LOG_DEBUG_CTX(ctx, "tests -- TTxNotificationSubscriber for txId: disconnected from schemeshard, resend EvNotifyTxCompletion",
+                {"txId", txId},
+            );
 
             // Remove entry from the tx-pipe mapping. Pipe actor has already died.
             PipeToTx.erase(pipeActor);
@@ -244,8 +252,9 @@ private:
     void Handle(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const TActorContext &ctx) {
         ui64 txId = ev->Get()->Record.GetTxId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "tests -- TTxNotificationSubscriber for txId " << txId << ": send EvNotifyTxCompletion");
+        YDB_LOG_DEBUG_CTX(ctx, "tests -- TTxNotificationSubscriber for txId: send EvNotifyTxCompletion",
+            {"txId", txId},
+        );
 
         // Add txId, add waiter, recreate pipe and send notification request
 
@@ -261,8 +270,9 @@ private:
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext &ctx) {
         ui64 txId = ev->Get()->Record.GetTxId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "tests -- TTxNotificationSubscriber for txId " << txId << ": got EvNotifyTxCompletionResult");
+        YDB_LOG_DEBUG_CTX(ctx, "tests -- TTxNotificationSubscriber for txId: got EvNotifyTxCompletionResult",
+            {"txId", txId},
+        );
 
         if (!SchemeTxWaiters.contains(txId))
             return;
@@ -270,8 +280,10 @@ private:
         // Notify all waiters, forget txId, drop pipe
 
         for (TActorId waiter : SchemeTxWaiters[txId]) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "tests -- TTxNotificationSubscriber for txId " << txId <<": satisfy waiter " << waiter);
+            YDB_LOG_DEBUG_CTX(ctx, "tests -- TTxNotificationSubscriber for txId: satisfy waiter",
+                {"txId", txId},
+                {"waiter", waiter},
+            );
             ctx.Send(waiter, new TEvSchemeShard::TEvNotifyTxCompletionResult(txId));
         }
         SchemeTxWaiters.erase(txId);
@@ -290,8 +302,9 @@ private:
     }
 
     void SendToSchemeshard(ui64 txId, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "tests -- TTxNotificationSubscriber, SendToSchemeshard, txId " << txId);
+        YDB_LOG_DEBUG_CTX(ctx, "tests -- TTxNotificationSubscriber, SendToSchemeshard",
+            {"txId", txId},
+        );
 
         // NOTE: the only reason why we should send every EvNotifyTxCompletion to schemeshard
         // with a separate pipe is to avoid out-of-order reception of 2 events on the schemeshard side:
@@ -369,8 +382,7 @@ private:
     {
         Y_UNUSED(ctx);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "tests -- TFakeMetering got TEvMetering::TEvWriteMeteringJson");
+        YDB_LOG_DEBUG_CTX(ctx, "tests -- TFakeMetering got TEvMetering::TEvWriteMeteringJson");
 
         const auto* msg = ev->Get();
 
@@ -379,10 +391,10 @@ private:
 
     void HandleUnexpectedEvent(STFUNC_SIG)
     {
-        ALOG_DEBUG(NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TFakeMetering:"
-                        << " unhandled event type: " << ev->GetTypeRewrite()
-                        << " event: " << ev->ToString());
+        YDB_LOG_DEBUG("TFakeMetering: unhandled event",
+            {"eventType", ev->GetTypeRewrite()},
+            {"event", ev->ToString()},
+        );
     }
 
 private:
@@ -583,6 +595,13 @@ void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
     NKikimrConfig::TTableServiceConfig tableServiceConfig;
     SetupKqpResourceManager(runtime, tableServiceConfig, nodeIdx);
 
+    // Used by KqpComputeSchedulerService
+    {
+        NKikimrConfig::TAppConfig appConfig;
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        runtime.GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, appConfig);
+    }
+
     NKikimrConfig::TLogConfig logConfig;
     NKikimrConfig::TQueryServiceConfig queryServiceConfig;
     auto federatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
@@ -611,6 +630,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     , CoordinatorState(new TFakeCoordinator::TState)
     , ChannelsCount(opts.NChannels_)
 {
+    EnableYDBBacktraceFormat();
     ui64 hive = TTestTxConfig::Hive;
     ui64 schemeRoot = TTestTxConfig::SchemeShard;
     ui64 coordinator = TTestTxConfig::Coordinator;
@@ -632,8 +652,18 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableAddUniqueIndex(true);
     app.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);
+    app.FeatureFlags.SetEnableFulltextIndexPrefix(opts.EnableFulltextIndexPrefix_);
+    app.FeatureFlags.SetEnableFulltextIndexRowId(opts.EnableFulltextIndexRowId_);
+    if (opts.EnableCompactFulltextIndex_) {
+        app.FeatureFlags.SetEnableCompactFulltextIndex(*opts.EnableCompactFulltextIndex_);
+    }
+    app.FeatureFlags.SetEnableSuperLemmer(opts.EnableSuperLemmer_);
+    app.FeatureFlags.SetEnableJsonIndex(true);
+    app.FeatureFlags.SetEnableSetColumnConstraint(true);
     app.FeatureFlags.SetEnableColumnStore(true);
+    app.FeatureFlags.SetEnableColumnStatistics(true);
     app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
+    app.FeatureFlags.SetDisableFileStoreSSDSystemSpaceAccounting(opts.DisableFileStoreSSDSystemSpaceAccounting_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
@@ -685,6 +715,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     }
     if (opts.MaxBuildIndexShardsInFlight_) {
         app.SchemeShardConfig.SetMaxBuildIndexShardsInFlight(*opts.MaxBuildIndexShardsInFlight_);
+    }
+    if (opts.MaxStoredIndexBuilds_) {
+        app.SchemeShardConfig.SetMaxStoredIndexBuilds(*opts.MaxStoredIndexBuilds_);
     }
 
     // graph settings
@@ -1058,6 +1091,9 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
         return [](const TActorId& tablet, TTabletStorageInfo* info) {
             return new TFakeFileStore(tablet, info);
         };
+    case TTabletTypes::TestShard:
+        return &NKikimr::NTestShard::CreateTestShard;
+
     default:
         return nullptr;
     }
@@ -1196,6 +1232,7 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     NoRebootEventTypes.insert(TEvIndexBuilder::EvGetRequest);
     NoRebootEventTypes.insert(TEvIndexBuilder::EvCancelRequest);
     NoRebootEventTypes.insert(TEvIndexBuilder::EvForgetRequest);
+    NoRebootEventTypes.insert(TEvSetColumnConstraint::EvCreateRequest);
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::Run(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
@@ -1355,3 +1392,5 @@ NSchemeShardUT_Private::TTestEnvOptions NSchemeShardUT_Private::TTestWithReboots
             .EnableMoveIndex(true)
             ;
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

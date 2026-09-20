@@ -45,8 +45,6 @@ items:
       href: commands/explain-plan.md
     - name: Streaming table reads
       href: commands/readtable.md
-    - name: Scan queries
-      href: commands/scan-query.md
   - name: Importing and exporting data
     include: { mode: link, path: export-import/toc_p.yaml }
   - name: Working with topics
@@ -81,6 +79,10 @@ items:
       href: parameterized-query-execution.md
     - name: Interactive query execution mode
       href: interactive-cli.md
+    - name: AI assistant mode
+      href: interactive-cli-ai.md
+    - name: Scan queries
+      href: scan-query.md
 # Deprecated commands:
     - name: Running a script (with streaming support)
       href: yql.md
@@ -140,6 +142,10 @@ items:
       href: workload-tpcds.md
     - name: Query load
       href: workload-query.md
+    - name: Fulltext load
+      href: workload-fulltext.md
+    - name: Vector load
+      href: workload-vector.md
   - name: Managing configuration
     href: configs.md
     include:

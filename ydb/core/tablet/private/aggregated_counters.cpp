@@ -12,28 +12,15 @@ using TCountersVector = TVector<::NMonitoring::TDynamicCounters::TCounterPtr>;
 ** struct THistogramCounter
  */
 
-THistogramCounter::THistogramCounter(
-    const TVector<TTabletPercentileCounter::TRangeDef>& ranges,
-    TCountersVector&& values,
-    NMonitoring::THistogramPtr histogram)
-        : Ranges(ranges)
-        , Values(std::move(values))
-        , Histogram(histogram) {
-    Y_ABORT_UNLESS(!Ranges.empty() && Ranges.size() == Values.size());
+THistogramCounter::THistogramCounter(NMonitoring::THistogramPtr histogram)
+    : Histogram(histogram) {
 }
 
 void THistogramCounter::Clear() {
-    for (const ::NMonitoring::TDynamicCounters::TCounterPtr& cnt : Values) {
-        *cnt = 0;
-    }
-
     Histogram->Reset();
 }
 
 void THistogramCounter::IncrementFor(ui64 value) {
-    const size_t i = std::lower_bound(Ranges.begin(), Ranges.end(), value) - Ranges.begin();
-    Values[i]->Inc();
-
     Histogram->Collect(value);
 }
 
@@ -43,8 +30,11 @@ using THistogramVector = TVector<THolder<THistogramCounter>>;
 ** class TAggregatedSimpleCounters
  */
 
-TAggregatedSimpleCounters::TAggregatedSimpleCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
+TAggregatedSimpleCounters::TAggregatedSimpleCounters(
+    ::NMonitoring::TDynamicCounterPtr counterGroup,
+    ::NMonitoring::TCountableBase::EVisibility visibility)
     : CounterGroup(counterGroup)
+    , Visibility(visibility)
 {}
 
 void TAggregatedSimpleCounters::Reserve(size_t hint) {
@@ -63,7 +53,7 @@ void TAggregatedSimpleCounters::AddSimpleCounter(
     TString sumName = Sprintf("SUM(%s)", name);
 
     auto fnAddCounter = [this](const char* name, TCountersVector& container) {
-        auto counter = CounterGroup->GetCounter(name, false);
+        auto counter = CounterGroup->GetCounter(name, false, Visibility);
         container.push_back(counter);
     };
     fnAddCounter(maxName.data(), MaxSimpleCounters);
@@ -177,36 +167,37 @@ void TAggregatedSimpleCounters::RecalcAll() {
     }
 }
 
-TVector<TTabletCounterValue> TAggregatedSimpleCounters::Find(const TString& name) const {
-    TVector<TTabletCounterValue> result;
-
+bool TAggregatedSimpleCounters::Find(const TString& name, TVector<TTabletCounterValue>& results) const {
     for (ui32 i = 0; i < CounterNames.size(); ++i) {
         if (!CounterNames[i].contains(name)) {
             continue;
         }
 
-        result.reserve(CountersByTabletId.size());
+        results.reserve(results.size() + CountersByTabletId.size());
         for (const auto& [tabletId, values] : CountersByTabletId) {
             Y_ABORT_UNLESS(i < values.size(), "inconsistent counter values, %u >= %lu", i, values.size());
-            result.push_back({
+            results.push_back({
                 .Name = CounterNames[i],
                 .TabletId = tabletId,
                 .Value = values[i],
             });
         }
 
-        break;
+        return true;
     }
 
-    return result;
+    return false;
 }
 
 /*
 ** class TAggregatedCumulativeCounters
  */
 
-TAggregatedCumulativeCounters::TAggregatedCumulativeCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
+TAggregatedCumulativeCounters::TAggregatedCumulativeCounters(
+    ::NMonitoring::TDynamicCounterPtr counterGroup,
+    ::NMonitoring::TCountableBase::EVisibility visibility)
     : CounterGroup(counterGroup)
+    , Visibility(visibility)
 {}
 
 void TAggregatedCumulativeCounters::Reserve(size_t hint) {
@@ -223,7 +214,7 @@ void TAggregatedCumulativeCounters::AddCumulativeCounter(
     TString maxName = Sprintf("MAX(%s)", name);
 
     auto fnAddCounter = [this](const char* name, TCountersVector& container) {
-        auto counter = CounterGroup->GetCounter(name, false);
+        auto counter = CounterGroup->GetCounter(name, false, Visibility);
         container.push_back(counter);
     };
     fnAddCounter(maxName.data(), MaxCumulativeCounters);
@@ -320,42 +311,43 @@ void TAggregatedCumulativeCounters::RecalcAll() {
     }
 }
 
-TVector<TTabletCounterValue> TAggregatedCumulativeCounters::Find(const TString& name) const {
-    TVector<TTabletCounterValue> result;
-
+bool TAggregatedCumulativeCounters::Find(const TString& name, TVector<TTabletCounterValue>& results) const {
     for (ui32 i = 0; i < CounterNames.size(); ++i) {
         if (!CounterNames[i].contains(name)) {
             continue;
         }
 
-        result.reserve(CountersByTabletId.size());
+        results.reserve(results.size() + CountersByTabletId.size());
         for (const auto& [tabletId, values] : CountersByTabletId) {
             Y_ABORT_UNLESS(i < values.size(), "inconsistent counter values, %u >= %lu", i, values.size());
-            result.push_back({
+            results.push_back({
                 .Name = CounterNames[i],
                 .TabletId = tabletId,
                 .Value = values[i],
             });
         }
 
-        break;
+        return true;
     }
 
-    return result;
+    return false;
 }
 
 /*
 ** class TAggregatedHistogramCounters
  */
 
-TAggregatedHistogramCounters::TAggregatedHistogramCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
+TAggregatedHistogramCounters::TAggregatedHistogramCounters(
+    ::NMonitoring::TDynamicCounterPtr counterGroup,
+    ::NMonitoring::TCountableBase::EVisibility visibility)
     : CounterGroup(counterGroup)
+    , Visibility(visibility)
 {}
 
 void TAggregatedHistogramCounters::Reserve(size_t hint) {
-    PercentileCounters.reserve(hint);
     Histograms.reserve(hint);
     IsDerivative.reserve(hint);
+    IsHistogramAggregate.reserve(hint);
     BucketBounds.reserve(hint);
     CountersByTabletId.reserve(hint);
 }
@@ -364,27 +356,16 @@ void TAggregatedHistogramCounters::AddCounter(
     const char* name,
     const NKikimr::TTabletPercentileCounter& percentileCounter,
     THashMap<TString, THolder<THistogramCounter>>& histogramAggregates) {
-    // old style
-    PercentileCounters.push_back(TCountersVector());
-    auto& rangeCounters = PercentileCounters.back();
-
     TStringBuf counterName(name);
     TStringBuf simpleCounterName = GetHistogramAggregateSimpleName(counterName);
     bool histogramAggregate = !simpleCounterName.empty();
     bool isDerivative = !histogramAggregate && !percentileCounter.GetIntegral();
     IsDerivative.push_back(isDerivative);
+    IsHistogramAggregate.push_back(histogramAggregate);
 
     auto rangeCount = percentileCounter.GetRangeCount();
     Y_DEBUG_ABORT_UNLESS(rangeCount > 0);
 
-    for (ui32 r = 0; r < rangeCount; ++r) {
-        const char* rangeName = percentileCounter.GetRangeName(r);
-        auto subgroup = CounterGroup->GetSubgroup("range", rangeName);
-        auto counter = subgroup->GetCounter(name, isDerivative);
-        rangeCounters.push_back(counter);
-    }
-
-    // new style
     // note that inf bucket in histogram description is implicit
     NMonitoring::TBucketBounds bucketBounds;
     bucketBounds.reserve(rangeCount);
@@ -393,19 +374,14 @@ void TAggregatedHistogramCounters::AddCounter(
     }
 
     auto histogram = CounterGroup->GetHistogram(
-        name, NMonitoring::ExplicitHistogram(bucketBounds), isDerivative);
+        name, NMonitoring::ExplicitHistogram(bucketBounds), isDerivative, Visibility);
 
     if (histogramAggregate) {
         // either simple or cumulative aggregate will handle this histogram,
         // it is a special case for hists name HIST(name), which have corresponding
         // simple or cumulative counter updated by tablet (tablet doesn't update hist itself,
         // hist is updated here by aggregated values)
-        histogramAggregates.emplace(simpleCounterName, new THistogramCounter(
-            percentileCounter.GetRanges(), std::move(rangeCounters), histogram));
-
-        // we need this hack to access PercentileCounters by index easily skipping
-        // hists we moved to simple/cumulative aggregates
-        TCountersVector().swap(rangeCounters);
+        histogramAggregates.emplace(simpleCounterName, new THistogramCounter(histogram));
         BucketBounds.emplace_back();
     } else {
         // now save inf bound (note that in Percentile it is ui64, in Hist - double)
@@ -431,15 +407,13 @@ void TAggregatedHistogramCounters::SetValue(
              TTabletTypes::TypeToStr(tabletType),
              name);
 
-    Y_ABORT_UNLESS(counterIndex < PercentileCounters.size(),
+    Y_ABORT_UNLESS(counterIndex < IsHistogramAggregate.size(),
              "inconsistent counters for tablet type %s, counter %s",
              TTabletTypes::TypeToStr(tabletType),
              name);
 
-    auto& percentileRanges = PercentileCounters[counterIndex];
-
     // see comment in AddCounter() related to histogramAggregate
-    if (percentileRanges.empty())
+    if (IsHistogramAggregate[counterIndex])
         return;
 
     // just sanity check, normally should not happen
@@ -447,7 +421,7 @@ void TAggregatedHistogramCounters::SetValue(
     if (rangeCount == 0)
         return;
 
-    Y_ABORT_UNLESS(rangeCount <= percentileRanges.size(),
+    Y_ABORT_UNLESS(rangeCount <= BucketBounds[counterIndex].size(),
              "inconsistent counters for tablet type %s, counter %s",
              TTabletTypes::TypeToStr(tabletType),
              name);
@@ -503,14 +477,10 @@ NMonitoring::THistogramPtr TAggregatedHistogramCounters::GetHistogram(size_t i) 
 
 void TAggregatedHistogramCounters::SubValues(
     size_t counterIndex, const TAggregatedHistogramCounters::TValuesVec& values) {
-    auto& percentileRanges = PercentileCounters[counterIndex];
     auto& histogram = Histograms[counterIndex];
     auto snapshot = histogram->Snapshot();
     histogram->Reset();
     for (auto i: xrange(values.size())) {
-        Y_DEBUG_ABORT_UNLESS(static_cast<ui64>(*percentileRanges[i]) >= values[i]);
-        *percentileRanges[i] -= values[i];
-
         ui64 oldValue = snapshot->Value(i);
         ui64 negValue = 0UL - values[i];
         ui64 newValue = oldValue + negValue;
@@ -520,21 +490,17 @@ void TAggregatedHistogramCounters::SubValues(
 
 void TAggregatedHistogramCounters::AddValues(
     size_t counterIndex, const TAggregatedHistogramCounters::TValuesVec& values) {
-    auto& percentileRanges = PercentileCounters[counterIndex];
     auto& histogram = Histograms[counterIndex];
     for (auto i: xrange(values.size())) {
-        *percentileRanges[i] += values[i];
         histogram->Collect(BucketBounds[counterIndex][i], values[i]);
     }
 }
 
 void TAggregatedHistogramCounters::AddValues(
     size_t counterIndex, const NKikimr::TTabletPercentileCounter& percentileCounter) {
-    auto& percentileRanges = PercentileCounters[counterIndex];
     auto& histogram = Histograms[counterIndex];
     for (auto i: xrange(percentileCounter.GetRangeCount())) {
         auto value = percentileCounter.GetRangeValue(i);
-        *percentileRanges[i] += value;
         histogram->Collect(BucketBounds[counterIndex][i], value);
     }
 }

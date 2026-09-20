@@ -203,7 +203,7 @@ std::pair<ui64, ui64> MeasureOld() {
     timer.Reset();
     for (size_t n = 0; n < rowCount; ++n) {
         TPresortOps<Desc> ops{settings, values.begin()};
-        auto str = stream.Str();
+        const auto& str = stream.Str();
         NPresort::Decode(ops, TStringBuf(str.data(), str.size()));
     }
     auto decodeTime = timer.Get().MicroSeconds();
@@ -229,8 +229,8 @@ std::pair<ui64, ui64> MeasureNew() {
 
     for (size_t i = 0; i < count; ++i) {
         values.push_back(RandomValue<T>());
-        encoder.AddType(Slot, false, Desc);
-        decoder.AddType(Slot, false, Desc);
+        encoder.AddType(Slot, /*isOptional=*/false, Desc);
+        decoder.AddType(Slot, /*isOptional=*/false, Desc);
     }
 
     TSimpleTimer timer;

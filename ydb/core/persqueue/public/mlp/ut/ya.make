@@ -21,4 +21,5 @@ END()
 
 RECURSE(
     common
+    pipe
 )

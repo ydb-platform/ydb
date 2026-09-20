@@ -11,6 +11,8 @@ cdef extern from "library/cpp/svnversion/svnversion.h":
     cdef const char* GetTag() except +;
     cdef int GetArcadiaPatchNumber() except +;
     cdef int GetProgramBuildTimestamp() except +;
+    cdef const char* GetCustomVersion() except +;
+    cdef const char* GetReleaseVersion() except +;
 
 def svn_version():
     return fu.bytes_to_native_str(GetProgramSvnVersion())
@@ -41,3 +43,9 @@ def patch_number():
 
 def vcs():
     return fu.bytes_to_native_str(GetVCS())
+
+def custom_version():
+    return fu.bytes_to_native_str(GetCustomVersion())
+
+def release_version():
+    return fu.bytes_to_native_str(GetReleaseVersion())

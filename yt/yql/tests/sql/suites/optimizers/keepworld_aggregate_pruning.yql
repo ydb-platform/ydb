@@ -1,0 +1,16 @@
+/* syntax version 1 */
+/* postgres can not */
+
+pragma config.flags('OptimizerFlags', 'KeepWorld', 'CheckMissingWorld');
+use plato;
+
+$codes = (select subkey from Dict);
+
+$agg = (
+    select
+        count(*) as cnt,
+        max(key in $codes) as any_code
+    from Input
+);
+
+select cnt from $agg;

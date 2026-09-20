@@ -12,6 +12,8 @@
 #include <yt/yt/core/https/config.h>
 #include <yt/yt/core/https/client.h>
 
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
+
 #include <yt/yt/core/rpc/grpc/helpers.h>
 
 namespace NYT::NRpc::NHttp {
@@ -69,7 +71,7 @@ public:
         if (!TerminationError_.IsOK()) {
             auto error = TerminationError_;
             guard.Release();
-            responseHandler->HandleError(error);
+            responseHandler->HandleError(error, EndpointAddress_);
             return nullptr;
         }
 
@@ -176,6 +178,7 @@ private:
             const IClientRequestPtr& request,
             IClientResponseHandlerPtr responseHandler)
         {
+            request->Header().set_start_time(ToProto(TInstant::Now()));
             auto httpRequestHeaders = TranslateRequest(request);
 
             auto protocol = channel->IsHttps_ ? "https" : "http";
@@ -195,8 +198,9 @@ private:
                     httpRequestBody = requestBody[1];
                 }
             } catch (const std::exception& ex) {
-                responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
-                    << ex);
+                responseHandler->HandleError(
+                    TError(NRpc::EErrorCode::TransportError, "Request serialization failed").With(ex),
+                    channel->EndpointAddress_);
                 return;
             }
 
@@ -240,25 +244,30 @@ private:
         {
             try {
                 if (!responseOrError.IsOK()) {
-                    responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "HTTP client request failed")
-                        << responseOrError);
+                    responseHandler->HandleError(
+                        TError(NRpc::EErrorCode::TransportError, "HTTP client request failed").With(responseOrError),
+                        address);
                     return;
                 }
 
                 const auto& response = responseOrError.Value();
                 if (response->GetStatusCode() == EStatusCode::NotFound) {
-                    responseHandler->HandleError(TError(NRpc::EErrorCode::NoSuchService, "URL was not resolved to a service"));
+                    responseHandler->HandleError(
+                        TError(NRpc::EErrorCode::NoSuchService, "URL was not resolved to a service"),
+                        address);
                     return;
                 }
 
                 if (response->GetStatusCode() == EStatusCode::BadRequest) {
-                    responseHandler->HandleError(ParseYTError(response));
+                    responseHandler->HandleError(ParseYTError(response), address);
                     return;
                 }
 
                 if (response->GetStatusCode() != EStatusCode::OK) {
-                    responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Unexpected HTTP status code")
-                        << TErrorAttribute("status", response->GetStatusCode()));
+                    responseHandler->HandleError(
+                        TError(NRpc::EErrorCode::TransportError, "Unexpected HTTP status code")
+                            .With("status", response->GetStatusCode()),
+                        address);
                     return;
                 }
 
@@ -275,8 +284,9 @@ private:
                     /*attachments*/ {});
                 responseHandler->HandleResponse(responseMessage, address);
             } catch (const std::exception& ex) {
-                responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Response deserialization failed")
-                    << ex);
+                responseHandler->HandleError(
+                    TError(NRpc::EErrorCode::TransportError, "Response deserialization failed").With(ex),
+                    address);
             }
         }
 
@@ -310,6 +320,10 @@ private:
             if (rpcHeader.has_request_id()) {
                 auto requestId = FromProto<TRequestId>(rpcHeader.request_id());
                 httpHeaders->Add(RequestIdHeaderName, ToString(requestId));
+            }
+
+            if (rpcHeader.has_start_time()) {
+                httpHeaders->Add(StartTimeHeaderName, ToString(rpcHeader.start_time()));
             }
 
             if (rpcHeader.HasExtension(NRpc::NProto::TCredentialsExt::credentials_ext)) {
@@ -388,10 +402,43 @@ DEFINE_REFCOUNTED_TYPE(THttpChannel)
 IChannelPtr CreateHttpChannel(
     const std::string& address,
     const NConcurrency::IPollerPtr& poller,
-    bool isHttps,
+    bool secure,
     NHttps::TClientCredentialsConfigPtr credentials)
 {
-    return New<THttpChannel>(address, poller, isHttps, credentials);
+    return New<THttpChannel>(address, poller, secure, credentials);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+class THttpChannelFactory
+    : public IChannelFactory
+{
+public:
+    THttpChannelFactory(
+        TClientConfigPtr config,
+        NConcurrency::IPollerPtr poller)
+        : Config_(std::move(config))
+        , Poller_(std::move(poller))
+    { }
+
+    IChannelPtr CreateChannel(const std::string& address) override
+    {
+        return CreateHttpChannel(address, Poller_, Config_->Secure, Config_->Credentials);
+    }
+
+private:
+    const TClientConfigPtr Config_;
+    const NConcurrency::IPollerPtr Poller_;
+};
+
+} // namespace
+
+IChannelFactoryPtr CreateHttpChannelFactory(TClientConfigPtr config)
+{
+    auto poller = NConcurrency::CreateThreadPoolPoller(config->PollerThreadCount, "HttpChannel");
+    return New<THttpChannelFactory>(config, std::move(poller));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

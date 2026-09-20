@@ -61,7 +61,7 @@ TUnversionedOwningValue ApproximateMaxValue(TUnversionedValue value)
         // String was larger than any possible approximation.
         return MakeSentinelValue<TUnversionedValue>(EValueType::Max);
     } else {
-        auto string = TString{truncatedStringBuf};
+        auto string = std::string{truncatedStringBuf};
         int lastIndex = string.size() - 1;
         string[lastIndex] = static_cast<unsigned char>(string[lastIndex]) + 1;
         auto ref = TSharedRef::FromString(std::move(string));

@@ -2,16 +2,18 @@
 --
 -- Logic:
 --   1. Take all PRs from github_data/pull_requests (deduplicate by latest exported_at).
---   2. For each PR find the latest PR-check run within $test_lookback_days days.
---   3. Determine if PR is blocked by tests:
+--   2. For each PR and build_type find the latest PR-check run within $test_lookback_days days.
+--      relwithdebinfo and release-asan are tracked separately (same workflow run_id / job_id
+--      is shared across matrix jobs, so build_type must be in all aggregations).
+--   3. Determine if PR is blocked by tests (per build_type):
 --      - is_pr_blocked_by_tests_in_last_run_and_try = 1 if the latest run
 --        has failures on the third attempt (attempt = 3).
---      - Third attempt is final; if a test failed there, PR is blocked.
+--      - Third attempt is final; if a test failed there, PR is blocked for that build_type.
 --   4. LEFT JOIN to detailed info for each failed test:
 --      full_name, job_id, branch, logs, owners, etc.
 --
--- Result: one row per (PR, failed test) pair. PRs with no failures are included
--- (with empty test fields).
+-- Result: one row per (PR, build_type, failed test) pair. PRs with no failures are included
+-- (with empty test fields) per build_type that had a PR-check run.
 --
 -- Parameters:
 --   $test_lookback_days — test selection window (days). Limits scanning of
@@ -21,6 +23,7 @@
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
 $test_lookback_days = 65;
+$pr_check_build_types = ('relwithdebinfo', 'release-asan');
 
 SELECT 
     pr.pr_number AS pr_number,
@@ -64,22 +67,24 @@ SELECT
     pr.merged_by_url AS pr_merged_by_url,
     pr.info AS pr_info,
     pr.exported_at AS pr_exported_at,
-    CASE 
-        WHEN pr.merged = 1 THEN 'merged'
-        WHEN pr.state = 'OPEN' THEN 'open'
-        WHEN pr.state = 'CLOSED' THEN 'closed'
-        ELSE COALESCE(pr.state, 'unknown')
-    END AS pr_status,
+    CAST(
+        CASE
+            WHEN pr.merged = 1 THEN 'merged'
+            WHEN pr.state = 'OPEN' THEN 'open'
+            WHEN pr.state = 'CLOSED' THEN 'closed'
+            ELSE COALESCE(pr.state, 'unknown')
+        END AS String
+    ) AS pr_status,
     COALESCE(block.is_pr_blocked_by_tests_in_last_run_and_try, 0) AS is_pr_blocked_by_tests_in_last_run_and_try,
-    block.last_run_url AS last_run_url,
-    COALESCE(t.full_name, CAST("" AS Utf8)) AS full_name,
+    CAST(block.last_run_url AS String) AS last_run_url,
+    CAST(COALESCE(t.build_type, block.build_type, CAST("" AS String)) AS String) AS build_type,
+    CAST(COALESCE(t.full_name, CAST("" AS String)) AS String) AS full_name,
     t.suite_folder AS suite_folder,
     t.test_name AS test_name,
     COALESCE(t.job_id, 0UL) AS job_id,
-    t.run_url AS run_url,
+    CAST(t.run_url AS String) AS run_url,
     COALESCE(t.last_run_timestamp, Timestamp("1970-01-01T00:00:00.000000Z")) AS last_run_timestamp,
     t.branch AS branch,
-    t.build_type AS build_type,
     t.status_description AS status_description,
     t.attempt_number AS attempt_number,
     t.is_last_run_in_pr AS is_last_run_in_pr,
@@ -189,20 +194,23 @@ LEFT JOIN
     (
         SELECT 
             pr_number,
+            build_type,
             CASE WHEN attempt_number = 3 AND has_failure = 1 THEN 1 ELSE 0 END AS is_pr_blocked_by_tests_in_last_run_and_try,
             CASE WHEN attempt_number = 3 AND has_failure = 1 THEN 'https://github.com/ydb-platform/ydb/actions/runs/' || CAST(job_id AS UTF8) ELSE NULL END AS last_run_url
         FROM (
             SELECT 
                 pr_number,
+                build_type,
                 job_id,
                 run_timestamp,
                 attempt_number,
                 has_failure,
-                ROW_NUMBER() OVER (PARTITION BY pr_number ORDER BY run_timestamp DESC) AS rn
+                ROW_NUMBER() OVER (PARTITION BY pr_number, build_type ORDER BY run_timestamp DESC) AS rn
             FROM (
                 SELECT 
                     r.job_id AS job_id,
                     r.pr_number AS pr_number,
+                    r.build_type AS build_type,
                     MAX(r.run_timestamp) AS run_timestamp,
                     MAX_BY(r.attempt_number, r.run_timestamp) AS attempt_number,
                     MAX(CASE WHEN r.status = 'failure' AND r.attempt_number = la.last_attempt THEN 1 ELSE 0 END) AS has_failure
@@ -210,6 +218,7 @@ LEFT JOIN
                     SELECT 
                         job_id,
                         run_timestamp,
+                        build_type,
                         ListHead(
                             Unicode::SplitToList(
                                 CASE 
@@ -239,7 +248,7 @@ LEFT JOIN
                     FROM 
                         `test_results/test_runs_column`
                     WHERE 
-                        build_type = 'relwithdebinfo'
+                        build_type IN $pr_check_build_types
                         AND job_name = 'PR-check'
                         AND run_timestamp > CurrentUtcDate() - $test_lookback_days * Interval("P1D")
                         AND pull IS NOT NULL
@@ -251,11 +260,13 @@ LEFT JOIN
                     SELECT 
                         job_id,
                         pr_number,
+                        build_type,
                         MAX_BY(attempt_number, run_timestamp) AS last_attempt
                     FROM (
                         SELECT 
                             job_id,
                             run_timestamp,
+                            build_type,
                             ListHead(
                                 Unicode::SplitToList(
                                     CASE 
@@ -284,7 +295,7 @@ LEFT JOIN
                         FROM 
                             `test_results/test_runs_column`
                         WHERE 
-                            build_type = 'relwithdebinfo'
+                            build_type IN $pr_check_build_types
                             AND job_name = 'PR-check'
                             AND run_timestamp > CurrentUtcDate() - $test_lookback_days * Interval("P1D")
                             AND pull IS NOT NULL
@@ -294,12 +305,14 @@ LEFT JOIN
                     ) AS pr_check_runs
                     GROUP BY 
                         job_id,
-                        pr_number
+                        pr_number,
+                        build_type
                 ) AS la
-                ON r.job_id = la.job_id AND r.pr_number = la.pr_number
+                ON r.job_id = la.job_id AND r.pr_number = la.pr_number AND r.build_type = la.build_type
                 GROUP BY 
                     r.job_id,
-                    r.pr_number
+                    r.pr_number,
+                    r.build_type
             ) AS job_agg
         ) AS last_run_per_pr
         WHERE 
@@ -308,9 +321,10 @@ LEFT JOIN
     ON block.pr_number = CAST(pr.pr_number AS Utf8)
 LEFT JOIN 
     (
-        -- All failed tests from last job_id per PR (attempt 3)
+        -- All failed tests from last job_id per PR and build_type (attempt 3)
         SELECT 
             tests.pr_number AS pr_number,
+            tests.build_type AS build_type,
             tests.full_name AS full_name,
             tests.suite_folder AS suite_folder,
             tests.test_name AS test_name,
@@ -318,7 +332,6 @@ LEFT JOIN
             'https://github.com/ydb-platform/ydb/actions/runs/' || CAST(tests.job_id AS UTF8) AS run_url,
             tests.run_timestamp AS last_run_timestamp,
             tests.branch AS branch,
-            'relwithdebinfo' AS build_type,
             COALESCE(tests.status_description, '') AS status_description,
             tests.attempt_number AS attempt_number,
             1 AS is_last_run_in_pr,
@@ -335,6 +348,7 @@ LEFT JOIN
             SELECT 
                 job_id,
                 run_timestamp,
+                build_type,
                 suite_folder,
                 test_name,
                 suite_folder || '/' || test_name AS full_name,
@@ -376,7 +390,7 @@ LEFT JOIN
             FROM 
                 `test_results/test_runs_column`
             WHERE 
-                build_type = 'relwithdebinfo'
+                build_type IN $pr_check_build_types
                 AND job_name = 'PR-check'
                 AND status = 'failure'
                 AND run_timestamp > CurrentUtcDate() - $test_lookback_days * Interval("P1D")
@@ -393,14 +407,16 @@ LEFT JOIN
             ON o.suite_folder = tests.suite_folder
             AND o.test_name = tests.test_name
         INNER JOIN (
-            -- Last job_id for each PR (attempt 3)
+            -- Last job_id for each PR and build_type (attempt 3)
             SELECT 
                 pr_number,
+                build_type,
                 MAX_BY(job_id, run_timestamp) AS last_job_id
             FROM (
                 SELECT 
                     job_id,
                     run_timestamp,
+                    build_type,
                     ListHead(
                         Unicode::SplitToList(
                             CASE 
@@ -429,7 +445,7 @@ LEFT JOIN
                 FROM 
                     `test_results/test_runs_column`
                 WHERE 
-                    build_type = 'relwithdebinfo'
+                    build_type IN $pr_check_build_types
                     AND job_name = 'PR-check'
                     AND run_timestamp > CurrentUtcDate() - $test_lookback_days * Interval("P1D")
                     AND pull IS NOT NULL
@@ -438,14 +454,17 @@ LEFT JOIN
                     AND job_id IS NOT NULL
             ) AS all_runs
             WHERE attempt_number = 3
-            GROUP BY pr_number
+            GROUP BY pr_number, build_type
         ) AS last_job
         ON tests.pr_number = last_job.pr_number 
+        AND tests.build_type = last_job.build_type
         AND tests.job_id = last_job.last_job_id
         WHERE tests.attempt_number = 3
     ) AS t
     ON CAST(t.pr_number AS Uint64) = pr.pr_number
+    AND t.build_type = block.build_type
 ORDER BY 
     pr.pr_number,
+    build_type,
     t.last_run_timestamp DESC,
     t.full_name

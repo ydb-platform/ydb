@@ -997,6 +997,68 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         );
     }
 
+    // When the user overrides the endpoint with a non-SSL one on the command line,
+    // a ca-file from the active profile must be silently ignored — including the case
+    // when the profile points to a non-existent file (i.e. we must not even try to read it).
+    Y_UNIT_TEST_F(IgnoreCAFileFromProfileWhenEndpointIsNonSsl, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: grpcs://wrong-host:2135
+                database: {database}
+                ca-file: /nonexistent/path/to/ca.pem
+        active_profile: active_test_profile
+        )yaml",
+        "database"_a = GetDatabase()
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+    }
+
+    // Same as above, but ca-file comes from YDB_CA_FILE env: must be ignored without
+    // attempting to read the file.
+    Y_UNIT_TEST_F(IgnoreCAFileFromEnvWhenEndpointIsNonSsl, TCliTestFixture) {
+        ExpectToken("token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", "/nonexistent/path/to/ca.pem"},
+        });
+    }
+
+    // An explicitly provided --ca-file with a non-SSL endpoint is a clear user contradiction
+    // and must still fail. GetRootCAFile() is a valid CA file path; the failure must come
+    // from misuse validation, not from TLS handshake — hence the non-SSL fixture.
+    Y_UNIT_TEST_F(ExplicitCAFileWithNonSslEndpointFails, TCliTestFixture) {
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+    }
+
     Y_UNIT_TEST_F(ParseClientCertFile, TCliTestFixtureWithSsl) {
         ExpectToken("token");
         ExpectClientCert();
@@ -1143,6 +1205,36 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             },
             {
                 {"YDB_TOKEN", "token3"},
+            },
+            profile
+        );
+    }
+
+    // Same idea as IgnoreCAFileFromProfileWhenEndpointIsNonSsl, but for the whole pack
+    // of client cert options pulled from a profile.
+    Y_UNIT_TEST_F(IgnoreClientCertFromProfileWhenEndpointIsNonSsl, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: grpcs://wrong-host:2135
+                database: {database}
+                ca-file: /nonexistent/ca.pem
+                client-cert-file: /nonexistent/cert.pem
+                client-cert-key-file: /nonexistent/key.pem
+        active_profile: active_test_profile
+        )yaml",
+        "database"_a = GetDatabase()
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
             },
             profile
         );

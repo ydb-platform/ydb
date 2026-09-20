@@ -1,7 +1,8 @@
 #include "schemeshard_backup.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_restore_incremental_progress.h"
 
-#include <ydb/core/backup/impl/logging.h>
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONTINUOUS_BACKUP
 
 namespace NKikimr::NSchemeShard {
 
@@ -23,24 +24,7 @@ public:
     }
 
     void Fill(NKikimrBackup::TBackupCollectionRestore& restore, const TIncrementalRestoreState& restoreInfo) {
-        restore.SetId(restoreInfo.OriginalOperationId);
-        restore.SetStatus(Ydb::StatusIds::SUCCESS);
-
-        // Calculate progress based on incremental backup processing and overall state
-        if (restoreInfo.IncrementalBackups.empty()) {
-            restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_PREPARING);
-            restore.SetProgressPercent(0);
-        } else {
-            // Once incremental backups are defined and processing has started,
-            // consider the restore operation complete from the user's perspective
-            // Internal operations may still be running, but the main orchestration is done
-            restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
-            restore.SetProgressPercent(100);
-        }
-
-        // Set user information if available
-        // Note: TIncrementalRestoreState doesn't have direct user info,
-        // so we'll leave this empty for now
+        FillRestoreProgress(restore, restoreInfo);
     }
 
     bool Reply(const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString())
@@ -54,7 +38,9 @@ public:
             issue.set_message(errorMessage);
         }
 
-        LOG_D("Reply " << Response->Record.ShortDebugString());
+        YDB_LOG_DEBUG(GetLogPrefix() << "Reply",
+            {"record", Response->Record.ShortDebugString()},
+        );
 
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
@@ -62,7 +48,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("Execute " << record.ShortDebugString());
+        YDB_LOG_DEBUG(GetLogPrefix() << "Execute",
+            {"record", record.ShortDebugString()},
+        );
 
         Response = MakeHolder<TEvBackup::TEvGetBackupCollectionRestoreResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
@@ -93,7 +81,7 @@ public:
                 TStringBuilder() << "Incremental restore with id " << restoreId << " references invalid backup collection"
             );
         }
-        
+
         if (backupCollectionPath.GetPathIdForDomain() != domainPathId) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
@@ -101,11 +89,17 @@ public:
             );
         }
 
-        Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
         Fill(*Response->Record.MutableBackupCollectionRestore(), incrementalRestore);
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
-        return Reply();
+        Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+
+        // Don't go through Reply() — it would clobber the per-entry Status that Fill just set.
+        YDB_LOG_DEBUG(GetLogPrefix() << "Reply",
+            {"record", Response->Record.ShortDebugString()},
+        );
+        SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
+        return true;
     }
 
     void Complete(const TActorContext& ctx) override {
@@ -123,3 +117,5 @@ ITransaction* TSchemeShard::CreateTxGetRestore(TEvBackup::TEvGetBackupCollection
 }
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

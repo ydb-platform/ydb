@@ -24,11 +24,11 @@ public:
         Alloc_->Release(block);
     }
 
-    size_t GetAllocatedSize() const final {
+    [[nodiscard]] size_t GetAllocatedSize() const final {
         return Allocated_;
     }
 
-    size_t GetLimitSize() const final {
+    [[nodiscard]] size_t GetLimitSize() const final {
         return Limit_;
     }
 

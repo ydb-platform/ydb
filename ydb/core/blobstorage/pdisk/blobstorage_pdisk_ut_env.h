@@ -41,6 +41,7 @@ public:
         std::optional<ui64> NonceRandNum = std::nullopt;
         bool UseRdmaAllocator = false;
         bool EnablePDiskSpaceColorOverride = false;
+        bool EnableTightPDiskSpaceColors = false;
     };
 
 private:
@@ -107,6 +108,7 @@ public:
         pDiskConfig->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
         pDiskConfig->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
         pDiskConfig->FeatureFlags.SetEnablePDiskSpaceColorOverride(Settings.EnablePDiskSpaceColorOverride);
+        pDiskConfig->FeatureFlags.SetEnableTightPDiskSpaceColors(Settings.EnableTightPDiskSpaceColors);
         pDiskConfig->ReadOnly = Settings.ReadOnly;
         pDiskConfig->PlainDataChunks = Settings.PlainDataChunks;
         pDiskConfig->NonceRandNum = Settings.NonceRandNum;
@@ -153,6 +155,12 @@ public:
         return Runtime.Get();
     }
 
+    void FormatPDisk(const TIntrusivePtr<TPDiskConfig>& cfg) {
+        DoFormatPDisk(TestCtx.PDiskGuid + static_cast<ui64>(Settings.IsBad),
+            cfg->EnableFormatAndMetadataEncryption, cfg->FeatureFlags.GetEnablePDiskDataEncryption()
+        );
+    }
+
     void UpdateConfigRecreatePDisk(TIntrusivePtr<TPDiskConfig> cfg, bool reformat = false) {
         if (PDiskActor) {
             TestResponse<NPDisk::TEvYardControlResult>(
@@ -163,9 +171,7 @@ public:
         }
 
         if (reformat) {
-            DoFormatPDisk(TestCtx.PDiskGuid + static_cast<ui64>(Settings.IsBad),
-                cfg->EnableFormatAndMetadataEncryption, cfg->FeatureFlags.GetEnablePDiskDataEncryption()
-            );
+            FormatPDisk(cfg);
         }
 
         if (Settings.UsePDiskMock) {
@@ -287,15 +293,17 @@ struct TVDiskMock {
 
     TActorTestContext *TestCtx;
     const TVDiskID VDiskID;
+    const TActorId WhiteboardProxyId;
     TIntrusivePtr<TPDiskParams> PDiskParams;
     ui64 LastUsedLsn = 0;
     ui64 FirstLsnToKeep = 1;
 
     TMap<EChunkState, TSet<TChunkIdx>> Chunks;
 
-    TVDiskMock(TActorTestContext *testCtx, bool dynamicGroup = false)
+    TVDiskMock(TActorTestContext *testCtx, bool dynamicGroup = false, TActorId whiteboardProxyId = {})
         : TestCtx(testCtx)
         , VDiskID(MakeGroupId(dynamicGroup), 1, 0, 0, 0)
+        , WhiteboardProxyId(whiteboardProxyId)
     {}
 
     static ui32 MakeGroupId(bool dynamicGroup) {
@@ -318,7 +326,7 @@ struct TVDiskMock {
         const auto evInitRes = TestCtx->TestResponse<NPDisk::TEvYardInitResult>(
                 new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID,
                     TestCtx->TestCtx.PDiskGuid, TestCtx->Sender,
-                    {}, Max<ui32>(), groupSizeInUnits),
+                    WhiteboardProxyId, Max<ui32>(), groupSizeInUnits),
                 NKikimrProto::OK);
 
         PDiskParams = evInitRes->PDiskParams;

@@ -301,11 +301,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
         runtime.DispatchEvents(options);
 
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvInterconnect::EvNodeConnected);
-            runtime.DispatchEvents(options);
-        }
+        env.SimulateSleep(runtime, TDuration::Seconds(50));
 
         CheckTable(runtime, "/MyRoot/tmp/TempTable1", TTestTxConfig::SchemeShard, false);
         CheckTable(runtime, "/MyRoot/tmp/TempTable2", TTestTxConfig::SchemeShard, false);

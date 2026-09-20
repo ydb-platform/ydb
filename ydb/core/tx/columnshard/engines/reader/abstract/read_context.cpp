@@ -1,5 +1,6 @@
 #include "read_context.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/resolver.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
@@ -15,8 +16,8 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NColumnShard::TConcreteScanCounters& counters,
     const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
-    const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId,
-    const NConveyorComposite::TCPULimitsConfig& cpuLimits, const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit)
+    const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
+    const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , ColumnDataManager(columnDataManager)
@@ -26,10 +27,10 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     , ScanId(scanId)
     , ScanActorId(scanActorId)
     , ResourceSubscribeActorId(resourceSubscribeActorId)
-    , ReadCoordinatorActorId(readCoordinatorActorId)
     , ComputeShardingPolicy(computeShardingPolicy)
-    , ConveyorProcessGuard(NConveyorComposite::TScanServiceOperator::StartProcess(
-          ScanId, cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits))
+    , ConveyorProcessGuard(
+          NConveyorComposite::TScanServiceOperator::StartProcess(ScanId, cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits,
+              HasAppData() && scanActorId.PoolID() != AppDataVerified().UserPoolId))
     , ScanOrbit(scanOrbit)
 {
     Y_ABORT_UNLESS(ReadMetadata);

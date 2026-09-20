@@ -848,8 +848,8 @@ public:
         for (auto month = 1U; month < Months_.size(); ++month) {
             Months_[month] = monthDays;
             LeapMonths_[month] = leapMonthDays;
-            monthDays += GetMonthLength(month, false);
-            leapMonthDays += GetMonthLength(month, true);
+            monthDays += GetMonthLength(month, /*isLeap=*/false);
+            leapMonthDays += GetMonthLength(month, /*isLeap=*/true);
         }
 
         for (ui16 date = 0; date < Days_.size(); ++date) {
@@ -1170,7 +1170,6 @@ private:
     std::array<ui16, 13> Months_;                                        // cumulative days count for months
     std::array<ui16, 13> LeapMonths_;                                    // cumulative days count for months in a leap year
 
-private:
     void EnrichMonthDay(i32 year, ui32 dayOfYear, ui32& month, ui32& day) const {
         auto& months = IsLeapYear(year) ? LeapMonths_ : Months_;
         auto m = std::upper_bound(months.cbegin() + 1, months.cend(), dayOfYear) - 1;

@@ -25,7 +25,7 @@ SRCS(
 
 
 PEERDIR(
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     library/cpp/sliding_window
     ydb/core/backup/impl
     ydb/core/base

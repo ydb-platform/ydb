@@ -15,20 +15,21 @@ namespace trace
 // Get Span from explicit context
 inline nostd::shared_ptr<Span> GetSpan(const context::Context &context) noexcept
 {
-  context::ContextValue span = context.GetValue(kSpanKey);
-  if (nostd::holds_alternative<nostd::shared_ptr<Span>>(span))
+  context::ContextValue span_value = context.GetValue(kSpanKey);
+  if (const nostd::shared_ptr<Span> *value = nostd::get_if<nostd::shared_ptr<Span>>(&span_value))
   {
-    return nostd::get<nostd::shared_ptr<Span>>(span);
+    return *value;
   }
   return nostd::shared_ptr<Span>(new DefaultSpan(SpanContext::GetInvalid()));
 }
 
+// Check if the context is from a root span
 inline bool IsRootSpan(const context::Context &context) noexcept
 {
   context::ContextValue is_root_span = context.GetValue(kIsRootSpanKey);
-  if (nostd::holds_alternative<bool>(is_root_span))
+  if (const bool *value = nostd::get_if<bool>(&is_root_span))
   {
-    return nostd::get<bool>(is_root_span);
+    return *value;
   }
   return false;
 }

@@ -1,64 +1,21 @@
-/* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
- * All rights reserved.
- *
- * This package is an SSL implementation written
- * by Eric Young (eay@cryptsoft.com).
- * The implementation was written so as to conform with Netscapes SSL.
- *
- * This library is free for commercial and non-commercial use as long as
- * the following conditions are aheared to.  The following conditions
- * apply to all code found in this distribution, be it the RC4, RSA,
- * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
- * included with this distribution is covered by the same copyright terms
- * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- *
- * Copyright remains Eric Young's, and as such any Copyright notices in
- * the code are not to be removed.
- * If this package is used in a product, Eric Young should be given attribution
- * as the author of the parts of the library used.
- * This can be in the form of a textual message at program startup or
- * in documentation (online or textual) provided with the package.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    "This product includes cryptographic software written by
- *     Eric Young (eay@cryptsoft.com)"
- *    The word 'cryptographic' can be left out if the rouines from the library
- *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from
- *    the apps directory (application code) you must include an acknowledgement:
- *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- *
- * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * The licence and distribution terms for any publically available version or
- * derivative of this code cannot be changed.  i.e. this code cannot simply be
- * copied and put under another distribution licence
- * [including the GNU Public Licence.]
- */
+// Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef OPENSSL_HEADER_ASN1_H
 #define OPENSSL_HEADER_ASN1_H
 
-#include <contrib/restricted/google/boringssl/include/openssl/base.h>
+#include <contrib/restricted/google/boringssl/include/openssl/base.h>   // IWYU pragma: export
 
 #include <time.h>
 
@@ -171,21 +128,13 @@ extern "C" {
 #define B_ASN1_OCTET_STRING 0x0200
 #define B_ASN1_BIT_STRING 0x0400
 #define B_ASN1_BMPSTRING 0x0800
-#define B_ASN1_UNKNOWN 0x1000
 #define B_ASN1_UTF8STRING 0x2000
 #define B_ASN1_UTCTIME 0x4000
 #define B_ASN1_GENERALIZEDTIME 0x8000
 #define B_ASN1_SEQUENCE 0x10000
 
 // ASN1_tag2bit converts |tag| from the tag number of a universal type to a
-// corresponding |B_ASN1_*| constant, |B_ASN1_UNKNOWN|, or zero. If the
-// |B_ASN1_*| constant above is defined, it will map the corresponding
-// |V_ASN1_*| constant to it. Otherwise, whether it returns |B_ASN1_UNKNOWN| or
-// zero is ill-defined and callers should not rely on it.
-//
-// TODO(https://crbug.com/boringssl/412): Figure out what |B_ASN1_UNNOWN| vs
-// zero is meant to be. The main impact is what values go in |B_ASN1_PRINTABLE|.
-// To that end, we must return zero on types that can't go in |ASN1_STRING|.
+// corresponding |B_ASN1_*| constant, or zero if |tag| has no bitmask.
 OPENSSL_EXPORT unsigned long ASN1_tag2bit(int tag);
 
 // ASN1_tag2str returns a string representation of |tag|, interpret as a tag
@@ -382,8 +331,10 @@ OPENSSL_EXPORT void *ASN1_item_d2i_bio(const ASN1_ITEM *it, BIO *in, void *out);
 //
 // These functions may not be used with |ASN1_ITEM|s whose C type is
 // |ASN1_BOOLEAN|.
-OPENSSL_EXPORT int ASN1_item_i2d_fp(const ASN1_ITEM *it, FILE *out, void *in);
-OPENSSL_EXPORT int ASN1_item_i2d_bio(const ASN1_ITEM *it, BIO *out, void *in);
+OPENSSL_EXPORT int ASN1_item_i2d_fp(const ASN1_ITEM *it, FILE *out,
+                                    const void *in);
+OPENSSL_EXPORT int ASN1_item_i2d_bio(const ASN1_ITEM *it, BIO *out,
+                                     const void *in);
 
 // ASN1_item_unpack parses |oct|'s contents as |it|'s ASN.1 type. It returns a
 // newly-allocated instance of |it|'s C type on success, or NULL on error.
@@ -468,7 +419,8 @@ DECLARE_ASN1_ITEM(ASN1_FBOOLEAN)
 
 // An asn1_string_st (aka |ASN1_STRING|) represents a value of a string-like
 // ASN.1 type. It contains a |type| field, and a byte string |data| field with a
-// type-specific representation.
+// type-specific representation. This type-specific representation does not
+// always correspond to the DER encoding of the type.
 //
 // If |type| is one of |V_ASN1_OCTET_STRING|, |V_ASN1_UTF8STRING|,
 // |V_ASN1_NUMERICSTRING|, |V_ASN1_PRINTABLESTRING|, |V_ASN1_T61STRING|,
@@ -568,6 +520,10 @@ OPENSSL_EXPORT int ASN1_STRING_type(const ASN1_STRING *str);
 // ASN1_STRING_get0_data returns a pointer to |str|'s contents. Callers should
 // use |ASN1_STRING_length| to determine the length of the string. The string
 // may have embedded NUL bytes and may not be NUL-terminated.
+//
+// The contents of an |ASN1_STRING| encode the value in some type-specific
+// representation that does not always correspond to the DER encoding of the
+// type. See the documentation for |ASN1_STRING| for details.
 OPENSSL_EXPORT const unsigned char *ASN1_STRING_get0_data(
     const ASN1_STRING *str);
 
@@ -575,10 +531,18 @@ OPENSSL_EXPORT const unsigned char *ASN1_STRING_get0_data(
 // should use |ASN1_STRING_length| to determine the length of the string. The
 // string may have embedded NUL bytes and may not be NUL-terminated.
 //
+// The contents of an |ASN1_STRING| encode the value in some type-specific
+// representation that does not always correspond to the DER encoding of the
+// type. See the documentation for |ASN1_STRING| for details.
+//
 // Prefer |ASN1_STRING_get0_data|.
 OPENSSL_EXPORT unsigned char *ASN1_STRING_data(ASN1_STRING *str);
 
 // ASN1_STRING_length returns the length of |str|, in bytes.
+//
+// The contents of an |ASN1_STRING| encode the value in some type-specific
+// representation that does not always correspond to the DER encoding of the
+// type. See the documentation for |ASN1_STRING| for details.
 OPENSSL_EXPORT int ASN1_STRING_length(const ASN1_STRING *str);
 
 // ASN1_STRING_cmp compares |a| and |b|'s type and contents. It returns an
@@ -756,7 +720,10 @@ OPENSSL_EXPORT int ASN1_mbstring_ncopy(ASN1_STRING **out, const uint8_t *in,
 // |mask|, |minsize|, and |maxsize| based on |nid|. When |nid| is a recognized
 // X.509 attribute type, it will pick a suitable ASN.1 string type and bounds.
 // For most attribute types, it preferentially chooses UTF8String. If |nid| is
-// unrecognized, it uses UTF8String by default.
+// unrecognized, it uses UTF8String by default. This function will also enforce
+// any known attribute-specific constraints on the sizes of the string and fail
+// if the size is invalid. In RFC 5280, these bounds are specified by
+// constraints like "SIZE (1..ub-common-name)" in ASN.1.
 //
 // Slightly unlike |ASN1_mbstring_ncopy|, this function interprets |out| and
 // returns its result as follows: If |out| is NULL, it returns a newly-allocated
@@ -790,7 +757,7 @@ OPENSSL_EXPORT ASN1_STRING *ASN1_STRING_set_by_NID(ASN1_STRING **out,
 //
 // WARNING: This function affects global state in the library. If two libraries
 // in the same address space register information for the same OID, one call
-// will fail. Prefer directly passing the desired parametrs to
+// will fail. Prefer directly passing the desired parameters to
 // |ASN1_mbstring_copy| or |ASN1_mbstring_ncopy| instead.
 OPENSSL_EXPORT int ASN1_STRING_TABLE_add(int nid, long minsize, long maxsize,
                                          unsigned long mask,
@@ -835,10 +802,6 @@ OPENSSL_EXPORT ASN1_STRING *d2i_DIRECTORYSTRING(ASN1_STRING **out,
 // 5280), as described in |i2d_SAMPLE|.
 OPENSSL_EXPORT int i2d_DIRECTORYSTRING(const ASN1_STRING *in, uint8_t **outp);
 
-// DIRECTORYSTRING is an |ASN1_ITEM| whose ASN.1 type is X.509 DirectoryString
-// (RFC 5280) and C type is |ASN1_STRING*|.
-DECLARE_ASN1_ITEM(DIRECTORYSTRING)
-
 // B_ASN1_DISPLAYTEXT is a bitmask of types allowed in an X.509 DisplayText (RFC
 // 5280).
 #define B_ASN1_DISPLAYTEXT                                      \
@@ -867,10 +830,6 @@ OPENSSL_EXPORT ASN1_STRING *d2i_DISPLAYTEXT(ASN1_STRING **out,
 // i2d_DISPLAYTEXT marshals |in| as a DER-encoded X.509 DisplayText (RFC 5280),
 // as described in |i2d_SAMPLE|.
 OPENSSL_EXPORT int i2d_DISPLAYTEXT(const ASN1_STRING *in, uint8_t **outp);
-
-// DISPLAYTEXT is an |ASN1_ITEM| whose ASN.1 type is X.509 DisplayText (RFC
-// 5280) and C type is |ASN1_STRING*|.
-DECLARE_ASN1_ITEM(DISPLAYTEXT)
 
 
 // Bit strings.
@@ -972,7 +931,7 @@ OPENSSL_EXPORT int ASN1_BIT_STRING_set(ASN1_BIT_STRING *str,
 
 // ASN1_BIT_STRING_set_bit sets bit |n| of |str| to one if |value| is non-zero
 // and zero if |value| is zero, resizing |str| as needed. It then truncates
-// trailing zeros in |str| to align with the DER represention for a bit string
+// trailing zeros in |str| to align with the DER representation for a bit string
 // with named bits. It returns one on success and zero on error. |n| is indexed
 // beginning from zero.
 OPENSSL_EXPORT int ASN1_BIT_STRING_set_bit(ASN1_BIT_STRING *str, int n,
@@ -1216,10 +1175,6 @@ OPENSSL_EXPORT ASN1_UTCTIME *ASN1_UTCTIME_adj(ASN1_UTCTIME *s,
 // If |s| is NULL, this function validates |str| without copying it.
 OPENSSL_EXPORT int ASN1_UTCTIME_set_string(ASN1_UTCTIME *s, const char *str);
 
-// ASN1_UTCTIME_cmp_time_t compares |s| to |t|. It returns -1 if |s| < |t|, 0 if
-// they are equal, 1 if |s| > |t|, and -2 on error.
-OPENSSL_EXPORT int ASN1_UTCTIME_cmp_time_t(const ASN1_UTCTIME *s, time_t t);
-
 // ASN1_GENERALIZEDTIME_new calls |ASN1_STRING_type_new| with
 // |V_ASN1_GENERALIZEDTIME|. The resulting object contains empty contents and
 // must be initialized to be a valid GeneralizedTime.
@@ -1296,10 +1251,6 @@ OPENSSL_EXPORT ASN1_TIME *d2i_ASN1_TIME(ASN1_TIME **out, const uint8_t **inp,
 // described in |i2d_SAMPLE|.
 OPENSSL_EXPORT int i2d_ASN1_TIME(const ASN1_TIME *in, uint8_t **outp);
 
-// ASN1_TIME is an |ASN1_ITEM| whose ASN.1 type is X.509 Time (RFC 5280) and C
-// type is |ASN1_TIME*|.
-DECLARE_ASN1_ITEM(ASN1_TIME)
-
 // ASN1_TIME_diff computes |to| - |from|. On success, it sets |*out_days| to the
 // difference in days, rounded towards zero, sets |*out_seconds| to the
 // remainder, and returns one. On error, it returns zero.
@@ -1361,13 +1312,21 @@ OPENSSL_EXPORT int ASN1_TIME_set_string(ASN1_TIME *s, const char *str);
 OPENSSL_EXPORT int ASN1_TIME_set_string_X509(ASN1_TIME *s, const char *str);
 
 // ASN1_TIME_to_time_t converts |t| to a time_t value in |out|. On
-// success, one is returned. On failure zero is returned. This function
+// success, one is returned. On failure, zero is returned. This function
 // will fail if the time can not be represented in a time_t.
 OPENSSL_EXPORT int ASN1_TIME_to_time_t(const ASN1_TIME *t, time_t *out);
 
 // ASN1_TIME_to_posix converts |t| to a POSIX time value in |out|. On
-// success, one is returned. On failure zero is returned.
+// success, one is returned. On failure, zero is returned.
 OPENSSL_EXPORT int ASN1_TIME_to_posix(const ASN1_TIME *t, int64_t *out);
+
+// ASN1_TIME_to_posix_nonstandard converts |t| to a POSIX time value in
+// |out|. It is exactly the same as |ASN1_TIME_to_posix| but allows for
+// non-standard four-digit timezone offsets on UTC times. On success, one is
+// returned. On failure, zero is returned. |ASN1_TIME_to_posix| should normally
+// be used instead of this function.
+OPENSSL_EXPORT int ASN1_TIME_to_posix_nonstandard(
+    const ASN1_TIME *t, int64_t *out);
 
 // TODO(davidben): Expand and document function prototypes generated in macros.
 
@@ -1880,50 +1839,6 @@ OPENSSL_EXPORT void ASN1_STRING_TABLE_cleanup(void);
 #define M_ASN1_VISIBLESTRING_free(a) ASN1_VISIBLESTRING_free(a)
 #define M_ASN1_UTF8STRING_new() ASN1_UTF8STRING_new()
 #define M_ASN1_UTF8STRING_free(a) ASN1_UTF8STRING_free(a)
-
-// B_ASN1_PRINTABLE is a bitmask for an ad-hoc subset of string-like types. Note
-// the presence of |B_ASN1_UNKNOWN| means it includes types which |ASN1_tag2bit|
-// maps to |B_ASN1_UNKNOWN|.
-//
-// Do not use this. Despite the name, it has no connection to PrintableString or
-// printable characters. See https://crbug.com/boringssl/412.
-#define B_ASN1_PRINTABLE                                              \
-  (B_ASN1_NUMERICSTRING | B_ASN1_PRINTABLESTRING | B_ASN1_T61STRING | \
-   B_ASN1_IA5STRING | B_ASN1_BIT_STRING | B_ASN1_UNIVERSALSTRING |    \
-   B_ASN1_BMPSTRING | B_ASN1_UTF8STRING | B_ASN1_SEQUENCE | B_ASN1_UNKNOWN)
-
-// ASN1_PRINTABLE_new returns a newly-allocated |ASN1_STRING| with type -1, or
-// NULL on error. The resulting |ASN1_STRING| is not a valid ASN.1 value until
-// initialized with a value.
-OPENSSL_EXPORT ASN1_STRING *ASN1_PRINTABLE_new(void);
-
-// ASN1_PRINTABLE_free calls |ASN1_STRING_free|.
-OPENSSL_EXPORT void ASN1_PRINTABLE_free(ASN1_STRING *str);
-
-// d2i_ASN1_PRINTABLE parses up to |len| bytes from |*inp| as a DER-encoded
-// CHOICE of an ad-hoc subset of string-like types, as described in
-// |d2i_SAMPLE|.
-//
-// Do not use this. Despite, the name it has no connection to PrintableString or
-// printable characters. See https://crbug.com/boringssl/412.
-//
-// TODO(https://crbug.com/boringssl/354): This function currently also accepts
-// BER, but this will be removed in the future.
-OPENSSL_EXPORT ASN1_STRING *d2i_ASN1_PRINTABLE(ASN1_STRING **out,
-                                               const uint8_t **inp, long len);
-
-// i2d_ASN1_PRINTABLE marshals |in| as DER, as described in |i2d_SAMPLE|.
-//
-// Do not use this. Despite the name, it has no connection to PrintableString or
-// printable characters. See https://crbug.com/boringssl/412.
-OPENSSL_EXPORT int i2d_ASN1_PRINTABLE(const ASN1_STRING *in, uint8_t **outp);
-
-// ASN1_PRINTABLE is an |ASN1_ITEM| whose ASN.1 type is a CHOICE of an ad-hoc
-// subset of string-like types, and whose C type is |ASN1_STRING*|.
-//
-// Do not use this. Despite the name, it has no connection to PrintableString or
-// printable characters. See https://crbug.com/boringssl/412.
-DECLARE_ASN1_ITEM(ASN1_PRINTABLE)
 
 // ASN1_INTEGER_set sets |a| to an INTEGER with value |v|. It returns one on
 // success and zero on error.

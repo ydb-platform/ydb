@@ -10,7 +10,7 @@ import ydb
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .benchmark_abstract import BenchmarkAbstract, BenchmarkSample, DatabaseAccessor
 from .common import sanitize_identifier, sanitize_column_names, build_upsert_query, build_create_query
@@ -108,8 +108,8 @@ def answers_match(expected: Optional[str], extracted: Optional[str]) -> bool:
         return abs(expected_num - extracted_num) < 1e-6
     norm_expected = _normalize(expected)
     norm_extracted = _normalize(extracted)
-    if not norm_expected or not norm_extracted:
-        return False
+    if not norm_expected:
+        return norm_extracted == "" or norm_extracted == "null"
     return norm_expected == norm_extracted or norm_expected in norm_extracted
 
 
@@ -122,13 +122,15 @@ class WikiSqlSample(BenchmarkSample):
     _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
     _AUDIT_TOOL_CALL_RE = re.compile(r"\[AUDIT\] tool_call (\{.+\})")
     _AUDIT_AGENT_RESPONSE_RE = re.compile(r"\[AUDIT\] agent_response (\{.+\})")
+    _AUDIT_FATAL_ERROR_RE = re.compile(r"\[AUDIT\] fatal_error (\{.+\})")
+    _AUDIT_MODEL_USAGE_RE = re.compile(r"\[AUDIT\] model_usage (\{.+\})")
 
     RESULT_START_MARKER = "<BENCHMARK_RESULT>"
     RESULT_END_MARKER = "</BENCHMARK_RESULT>"
     RESULT_INSTRUCTION = (
-        "When you have the final answer, output it on a single line wrapped between "
+        "Solve question without plan confirmation. When you have the final answer, output it on a single line wrapped between "
         f"`{RESULT_START_MARKER}` and `{RESULT_END_MARKER}` markers, then stop responding. "
-        f"Use the markers exactly once. Example: {RESULT_START_MARKER}your answer{RESULT_END_MARKER}"
+        f"If there is no sufficient answer, leave an empty string between the markers. Use the markers exactly once. Example: {RESULT_START_MARKER}your answer{RESULT_END_MARKER}"
     )
     DRY_RUN_INSTRUCTION = (
         "All tools are disabled for this run. Provide your best instant answer based solely on the "
@@ -160,6 +162,16 @@ class WikiSqlSample(BenchmarkSample):
         """Extract structured agent-response records emitted by the AI handler at Info level."""
         return cls._parse_audit_records(raw_output, cls._AUDIT_AGENT_RESPONSE_RE)
 
+    @classmethod
+    def _parse_fatal_errors(cls, raw_output: str) -> List[Dict[str, Any]]:
+        """Extract structured fatal-error records emitted by the AI handler at Info level."""
+        return cls._parse_audit_records(raw_output, cls._AUDIT_FATAL_ERROR_RE)
+
+    @classmethod
+    def _parse_model_usage(cls, raw_output: str) -> List[Dict[str, Any]]:
+        """Extract structured per-call token usage records emitted by the AI handler at Info level."""
+        return cls._parse_audit_records(raw_output, cls._AUDIT_MODEL_USAGE_RE)
+
     def __init__(self, model: str, target: dict, side_tables: List[dict], sample_timeout: int, dry_run: bool = False):
         self.logger = logging.getLogger("wiki_sql_sample")
         self.model = model
@@ -183,13 +195,18 @@ class WikiSqlSample(BenchmarkSample):
         path += sanitize_identifier(raw_id, fallback_prefix="i_")
         return path
 
-    def _create_and_populate_table(self, database: DatabaseAccessor, table: dict) -> str:
+    def _create_and_populate_table(self, database: DatabaseAccessor, table: dict, created_tables: Set[str]) -> str:
         columns = sanitize_column_names(table.get("header", []), fallback_prefix="c_")
         types = list(map(WikiSqlSample._YDB_PRIMITIVE_TYPES.get, table.get("types", [])))
         if len(types) != len(columns):
             types = (types + [ydb.PrimitiveType.Utf8] * len(columns))[: len(columns)]
 
         table_id = self._build_table_path(table)
+        if table_id in created_tables:
+            self.logger.warning(f"Table {table_id} already created, skipping")
+            return table_id
+
+        created_tables.add(table_id)
         database.execute_query(build_create_query(table_id, columns, types))
         database.execute_query(*build_upsert_query(table_id, columns, types, list(table.get("rows", []))))
         return table_id
@@ -200,32 +217,55 @@ class WikiSqlSample(BenchmarkSample):
             target_table_id = ""
             side_table_ids: List[str] = []
         else:
-            target_table_id = self._create_and_populate_table(database, self.target["table"])
-            side_table_ids = [self._create_and_populate_table(database, t) for t in self.side_tables]
+            created_tables: Set[str] = set()
+            target_table_id = self._create_and_populate_table(database, self.target["table"], created_tables)
+            side_table_ids = [self._create_and_populate_table(database, t, created_tables) for t in self.side_tables]
 
         child = database.run_interactive(self.model, timeout=self.sample_timeout)
         captured: List[str] = []
         timed_out = False
+        question = self.target.get("question", "")
         try:
-            child.expect(self._AI_PROMPT_REGEX, timeout=self.INTERACTIVE_BANNER_TIMEOUT)
-            question = self.target.get("question", "")
-            instructions = self.RESULT_INSTRUCTION
-            if self.dry_run:
-                instructions = f"{self.DRY_RUN_INSTRUCTION}\n\n{instructions}"
-            child.sendline(f"{question}\n\n{instructions}")
-            child.send("\r")
+            if child.expect([self._AI_PROMPT_REGEX, pexpect.TIMEOUT], timeout=self.INTERACTIVE_BANNER_TIMEOUT) == 1:
+                timed_out = True
+                self.logger.warning("Interactive benchmark start timed out")
+                evaluation_started_at = None
+            else:
+                instructions = self.RESULT_INSTRUCTION
+                if self.dry_run:
+                    instructions = f"{self.DRY_RUN_INSTRUCTION}\n\n{instructions}"
+                child.sendline(f"{question}\n\n{instructions}")
+                child.send("\r")
 
-            evaluation_started_at = time.monotonic()
-            deadline = started_at + self.sample_timeout
-            while True:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    timed_out = True
-                    break
-                idx = child.expect([self._AI_PROMPT_REGEX, pexpect.TIMEOUT], timeout=remaining)
-                captured.append(child.before or "")
-                if idx == 0:
-                    break
+                evaluation_started_at = time.monotonic()
+                deadline = started_at + self.sample_timeout
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        timed_out = True
+                        break
+                    idx = child.expect([self._AI_PROMPT_REGEX, pexpect.TIMEOUT, pexpect.EOF], timeout=remaining)
+                    captured.append(child.before or "")
+                    if idx == 0:
+                        break
+                    if idx == 2:
+                        self.logger.warning("Interactive benchmark unexpectedly terminated by EOF")
+                        try:
+                            debug_dir = Path("wiki_sql_debug_logs")
+                            debug_dir.mkdir(parents=True, exist_ok=True)
+                            stem = re.sub(
+                                r"[^A-Za-z0-9_.-]",
+                                "_",
+                                f"{int(time.time() * 1000)}_{self._build_table_path(self.target.get('table') or {})}",
+                            )
+                            log_path = debug_dir / f"{stem}.log"
+                            log_path.write_text(
+                                str(getattr(child, "pty_log", "") or ""), encoding="utf-8", errors="replace"
+                            )
+                            self.logger.warning(f"Wrote PTY output to {log_path}")
+                        except OSError as exc:
+                            self.logger.warning(f"Failed to write PTY debug log: {exc}")
+                        break
         finally:
             try:
                 child.sendline("exit")
@@ -255,6 +295,10 @@ class WikiSqlSample(BenchmarkSample):
         agg_idx = sql.get("agg") or 0
         aggregation = _WIKISQL_AGG_OPS[agg_idx] if 0 < agg_idx < len(_WIKISQL_AGG_OPS) else ""
 
+        fatal_errors = self._parse_fatal_errors(response)
+        if fatal_errors:
+            self.logger.warning(f"Fatal errors: {fatal_errors}")
+
         return {
             "model": self.model,
             "question": question,
@@ -265,11 +309,15 @@ class WikiSqlSample(BenchmarkSample):
             "side_table_ids": side_table_ids,
             "tool_calls": self._parse_tool_calls(response),
             "agent_responses": self._parse_agent_responses(response),
+            "fatal_errors": fatal_errors,
+            "model_usage": self._parse_model_usage(response),
             "extracted_answer": extracted,
             "matched": answers_match(expected_answer, extracted),
             "timed_out": timed_out,
             "elapsed_seconds": finished_at - started_at,
-            "evaluation_elapsed_seconds": finished_at - evaluation_started_at,
+            "evaluation_elapsed_seconds": (
+                finished_at - evaluation_started_at if evaluation_started_at is not None else None
+            ),
         }
 
 
@@ -311,6 +359,7 @@ class WikiSqlBenchmark(BenchmarkAbstract):
         self.models = list(models)
         self.dry_run = bool(config.get("dry_run", False))
         self.include_samples = bool(config.get("include_samples", False))
+        self.statistics_prefix = str(config.get("statistics_prefix", ""))
         self._rng = random.Random(self.RANDOM_SEED)
         self._samples: List[BenchmarkSample] = self._build_samples()
 
@@ -419,6 +468,16 @@ class WikiSqlBenchmark(BenchmarkAbstract):
         }
 
     @staticmethod
+    def _aggregate_fatal_error_stats(samples: List[Dict[str, Any]]) -> Dict[str, Any]:
+        errors = []
+        for sample in samples:
+            errors.extend(sample.get("fatal_errors") or [])
+        return {
+            "total": len(errors),
+            "list": errors,
+        }
+
+    @staticmethod
     def _aggregate_match_stats(samples: List[Dict[str, Any]]) -> Dict[str, Any]:
         matched = sum(1 for s in samples if s.get("matched"))
         unmatched: List[Dict[str, Any]] = []
@@ -442,6 +501,82 @@ class WikiSqlBenchmark(BenchmarkAbstract):
         return {"matched": matched, "unmatched": unmatched}
 
     @staticmethod
+    def _percentile(values: List[float], pct: float) -> float:
+        if not values:
+            return 0.0
+        ordered = sorted(values)
+        if len(ordered) == 1:
+            return ordered[0]
+        rank = (pct / 100.0) * (len(ordered) - 1)
+        lo = int(rank)
+        hi = min(lo + 1, len(ordered) - 1)
+        frac = rank - lo
+        return ordered[lo] + (ordered[hi] - ordered[lo]) * frac
+
+    @classmethod
+    def _aggregate_latency_stats(cls, samples: List[Dict[str, Any]]) -> Dict[str, Any]:
+        evaluation = [
+            float(s["evaluation_elapsed_seconds"]) for s in samples if s.get("evaluation_elapsed_seconds") is not None
+        ]
+        total = [float(s["elapsed_seconds"]) for s in samples if s.get("elapsed_seconds") is not None]
+
+        def _summary(values: List[float]) -> Dict[str, float]:
+            if not values:
+                return {"avg": 0.0, "p50": 0.0, "p95": 0.0, "p99": 0.0, "max": 0.0}
+            return {
+                "avg": sum(values) / len(values),
+                "p50": cls._percentile(values, 50),
+                "p95": cls._percentile(values, 95),
+                "p99": cls._percentile(values, 99),
+                "max": max(values),
+            }
+
+        return {
+            "evaluation_seconds": _summary(evaluation),
+            "total_seconds": _summary(total),
+        }
+
+    @classmethod
+    def _aggregate_token_stats(cls, samples: List[Dict[str, Any]]) -> Dict[str, Any]:
+        per_run_input: List[int] = []
+        per_run_output: List[int] = []
+        per_run_cached: List[int] = []
+        per_run_calls: List[int] = []
+        for sample in samples:
+            usage = sample.get("model_usage") or []
+            per_run_input.append(sum(int(u.get("input_tokens", 0) or 0) for u in usage))
+            per_run_output.append(sum(int(u.get("output_tokens", 0) or 0) for u in usage))
+            per_run_cached.append(sum(int(u.get("cached_input_tokens", 0) or 0) for u in usage))
+            per_run_calls.append(len(usage))
+
+        if not samples:
+            return {
+                "model_calls_per_run": {"avg": 0.0, "p50": 0.0, "p95": 0.0, "max": 0},
+                "input_tokens_per_run": {"avg": 0.0, "p50": 0.0, "p95": 0.0, "max": 0, "total": 0},
+                "output_tokens_per_run": {"avg": 0.0, "p50": 0.0, "p95": 0.0, "max": 0, "total": 0},
+                "cached_input_tokens_per_run": {"avg": 0.0, "p50": 0.0, "p95": 0.0, "max": 0, "total": 0},
+            }
+
+        def _summary(values: List[int]) -> Dict[str, Any]:
+            floats = [float(v) for v in values]
+            return {
+                "avg": sum(floats) / len(floats),
+                "p50": cls._percentile(floats, 50),
+                "p95": cls._percentile(floats, 95),
+                "max": max(values),
+                "total": sum(values),
+            }
+
+        calls_summary = _summary(per_run_calls)
+        calls_summary.pop("total", None)
+        return {
+            "model_calls_per_run": calls_summary,
+            "input_tokens_per_run": _summary(per_run_input),
+            "output_tokens_per_run": _summary(per_run_output),
+            "cached_input_tokens_per_run": _summary(per_run_cached),
+        }
+
+    @staticmethod
     def _aggregate_aggregation_stats(samples: List[Dict[str, Any]]) -> Dict[str, Any]:
         agg_samples = [s for s in samples if s.get("aggregation")]
         per_op: Dict[str, Dict[str, int]] = {}
@@ -449,48 +584,45 @@ class WikiSqlBenchmark(BenchmarkAbstract):
             op = sample.get("aggregation") or "UNKNOWN"
             stats = per_op.setdefault(op, {"total": 0, "with_extracted_answer": 0, "matched": 0})
             stats["total"] += 1
-            if sample.get("extracted_answer"):
+            if sample.get("extracted_answer") is not None:
                 stats["with_extracted_answer"] += 1
             if sample.get("matched"):
                 stats["matched"] += 1
         return {
             "total": len(agg_samples),
-            "with_extracted_answer": sum(1 for s in agg_samples if s.get("extracted_answer")),
+            "with_extracted_answer": sum(1 for s in agg_samples if s.get("extracted_answer") is not None),
             "matched": sum(1 for s in agg_samples if s.get("matched")),
             "per_operator": per_op,
         }
 
+    def _build_statistics_filename(self, statistics_path: str) -> str:
+        filename_prefix = f"{self.statistics_prefix}-" if self.statistics_prefix else ""
+        filename_prefix += (
+            f"{'+'.join(self.models)}-tables{self.tables_count}-{'+'.join(self.splits)}{self.sample_rate}-run"
+        )
+
+        run_id = 0
+        while (Path(statistics_path) / f"{filename_prefix}{run_id}wiki-sql.json").exists():
+            run_id += 1
+
+        return f"{filename_prefix}{run_id}wiki-sql.json"
+
     def collect_statistics(self, samples: List[Any], statistics_path: str) -> None:
-        path = Path(statistics_path) / "wiki-sql.json"
+        self.logger.info(f"Collecting statistics for {len(samples)} samples with prefix {self.statistics_prefix}")
+        path = Path(statistics_path) / self._build_statistics_filename(statistics_path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
         normalized: List[Dict[str, Any]] = []
         timed_out = 0
         with_answer = 0
-        per_model_samples: Dict[str, List[Dict[str, Any]]] = {}
         for sample in samples:
             if not isinstance(sample, dict):
                 continue
             normalized.append(sample)
-            model = sample.get("model", "unknown")
-            per_model_samples.setdefault(model, []).append(sample)
             if sample.get("timed_out"):
                 timed_out += 1
-            if sample.get("extracted_answer"):
+            if sample.get("extracted_answer") is not None:
                 with_answer += 1
-
-        per_model: Dict[str, Dict[str, Any]] = {}
-        for model, model_samples in per_model_samples.items():
-            match_stats = self._aggregate_match_stats(model_samples)
-            per_model[model] = {
-                "total": len(model_samples),
-                "timed_out": sum(1 for s in model_samples if s.get("timed_out")),
-                "with_extracted_answer": sum(1 for s in model_samples if s.get("extracted_answer")),
-                "matched": match_stats["matched"],
-                "unmatched": match_stats["unmatched"],
-                "aggregation": self._aggregate_aggregation_stats(model_samples),
-                "tool_calls": self._aggregate_tool_call_stats(model_samples),
-            }
 
         match_stats = self._aggregate_match_stats(normalized)
         summary = {
@@ -501,7 +633,9 @@ class WikiSqlBenchmark(BenchmarkAbstract):
             "unmatched": match_stats["unmatched"],
             "aggregation": self._aggregate_aggregation_stats(normalized),
             "tool_calls": self._aggregate_tool_call_stats(normalized),
-            "per_model": per_model,
+            "fatal_errors": self._aggregate_fatal_error_stats(normalized),
+            "latency": self._aggregate_latency_stats(normalized),
+            "tokens": self._aggregate_token_stats(normalized),
         }
         if self.include_samples:
             summary["samples"] = normalized

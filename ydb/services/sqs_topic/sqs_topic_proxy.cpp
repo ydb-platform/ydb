@@ -41,12 +41,14 @@ namespace NKikimr::NSqsTopic::V1 {
     using namespace NGRpcProxy::V1;
 
     template <class TEvRequest>
-    class TNotImplementedRequestActor: public TRpcSchemeRequestActor<TNotImplementedRequestActor<TEvRequest>, TEvRequest> {
-        using TBase = TRpcSchemeRequestActor<TNotImplementedRequestActor, TEvRequest>;
+    class TNotImplementedRequestActor
+        : public TGrpcActorBase<TNotImplementedRequestActor<TEvRequest>, TEvRequest>
+    {
+        using TBase = TGrpcActorBase<TNotImplementedRequestActor, TEvRequest>;
 
     public:
         TNotImplementedRequestActor(NKikimr::NGRpcService::IRequestOpCtx* request)
-            : TBase(request)
+            : TBase(request, TString())
         {
         }
         ~TNotImplementedRequestActor() = default;
@@ -56,6 +58,10 @@ namespace NKikimr::NSqsTopic::V1 {
             this->Request_->RaiseIssue(FillIssue("Method is not implemented yet", static_cast<size_t>(NYds::EErrorCodes::ERROR)));
             this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNSUPPORTED);
             this->Die(ctx);
+        }
+
+        ui64 GetRUCost() override {
+            return 0;
         }
     };
 } // namespace NKikimr::NSqsTopic::V1

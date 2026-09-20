@@ -25,6 +25,11 @@ TSnapshotHoldersPerTable TRegistrySnapshotHolders::BuildHoldersForTable(
                 snapshots.emplace(snapshot);
             }
         }
+        if (const auto readOnlySnapshot = PathIdTranslator.GetCopyVersionOptional(schemeShardLocalPathId)) {
+            if (*readOnlySnapshot < MinSnapshotForNewReads) {
+                snapshots.emplace(*readOnlySnapshot);
+            }
+        }
     }
     std::vector<TSnapshot> txInFlight(snapshots.begin(), snapshots.end());
     return TSnapshotHoldersPerTable(MinSnapshotForNewReads, std::move(txInFlight));
@@ -42,6 +47,10 @@ const TSnapshotHoldersPerTable& TRegistrySnapshotHolders::GetHoldersByPathId(con
 
 bool TRegistrySnapshotHolders::CouldUsePortion(const TPortionInfo::TConstPtr& portion) const {
     return GetHoldersByPathId(portion->GetPathId()).CouldUsePortion(portion);
+}
+
+bool TRegistrySnapshotHolders::CouldUseTable(const TInternalPathId& pathId, const TSnapshot& dropSnapshot) const {
+    return GetHoldersByPathId(pathId).CouldUseTable(dropSnapshot);
 }
 
 }   // namespace NKikimr::NOlap

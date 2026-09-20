@@ -24,7 +24,10 @@ public:
 
     void Bootstrap() {
         if (const auto& vdisk = VDisk.lock()) {
-            STLOG(PRI_INFO, BS_NODE, NWM06, "VDisk starting", (VDiskId, vdisk->VDiskId), (VSlotId, vdisk->VSlotId));
+            YDB_LOG_INFO_COMP(BS_NODE, "VDisk starting",
+                {"marker", "NWM06"},
+                {"VDiskId", vdisk->VDiskId},
+                {"VSlotId", vdisk->VSlotId});
             if (vdisk->AllocatedSize) {
                 StartReadLog();
             } else {
@@ -79,7 +82,10 @@ public:
     void StartReplication() {
         State = EState::REPLICATION;
         if (const auto& vdisk = VDisk.lock()) {
-            STLOG(PRI_INFO, BS_NODE, NWM09, "VDisk REPLICATING", (VDiskId, vdisk->VDiskId), (VSlotId, vdisk->VSlotId));
+            YDB_LOG_INFO_COMP(BS_NODE, "VDisk REPLICATING",
+                {"marker", "NWM09"},
+                {"VDiskId", vdisk->VDiskId},
+                {"VSlotId", vdisk->VSlotId});
             vdisk->Status = NKikimrBlobStorage::EVDiskStatus::REPLICATING;
             InvokeOtherActor(*NodeWardenMockActor, &TNodeWardenMockActor::SendUpdateVDiskStatus, vdisk.get());
         }
@@ -101,7 +107,10 @@ public:
 
     void BecomeReady() {
         if (const auto& vdisk = VDisk.lock()) {
-            STLOG(PRI_INFO, BS_NODE, NWM08, "VDisk READY", (VDiskId, vdisk->VDiskId), (VSlotId, vdisk->VSlotId));
+            YDB_LOG_INFO_COMP(BS_NODE, "VDisk READY",
+                {"marker", "NWM08"},
+                {"VDiskId", vdisk->VDiskId},
+                {"VSlotId", vdisk->VSlotId});
             vdisk->Status = NKikimrBlobStorage::EVDiskStatus::READY;
             InvokeOtherActor(*NodeWardenMockActor, &TNodeWardenMockActor::SendUpdateVDiskStatus, vdisk.get());
             State = EState::READY;
@@ -129,7 +138,10 @@ public:
 
     void PassAway() override {
         if (const auto& vdisk = VDisk.lock()) {
-            STLOG(PRI_INFO, BS_NODE, NWM07, "VDisk stopping", (VDiskId, vdisk->VDiskId), (VSlotId, vdisk->VSlotId));
+            YDB_LOG_INFO_COMP(BS_NODE, "VDisk stopping",
+                {"marker", "NWM07"},
+                {"VDiskId", vdisk->VDiskId},
+                {"VSlotId", vdisk->VSlotId});
             UNIT_ASSERT_EQUAL(vdisk->Actor, this);
             vdisk->Actor = nullptr;
         }

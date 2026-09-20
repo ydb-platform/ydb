@@ -166,6 +166,26 @@ void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TDropTable& proto) c
 }
 
 template <>
+TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TMoveTable& proto) {
+    return TSchemeShardLocalPathId(proto.GetSrcPathId());
+}
+
+template <>
+void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TMoveTable& proto) const {
+    proto.SetSrcPathId(PathId);
+}
+
+template <>
+TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TCopyTable& proto) {
+    return TSchemeShardLocalPathId(proto.GetSrcPathId());
+}
+
+template <>
+void TSchemeShardLocalPathId::ToProto(NKikimrTxColumnShard::TCopyTable& proto) const {
+    proto.SetSrcPathId(PathId);
+}
+
+template <>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
     return TSchemeShardLocalPathId(proto.GetSchemeShardLocalPathId());
 }

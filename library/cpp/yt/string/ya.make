@@ -9,12 +9,14 @@ SRCS(
     format_string.cpp
     format.cpp
     string_builder.cpp
+    stream.cpp
 )
 
 PEERDIR(
     library/cpp/yt/assert
     library/cpp/yt/exception
     library/cpp/yt/misc
+    library/cpp/yt/mpl
 )
 
 CHECK_DEPENDENT_DIRS(
@@ -32,3 +34,9 @@ END()
 RECURSE_FOR_TESTS(
     unittests
 )
+
+IF (NOT OPENSOURCE)
+    RECURSE(
+        benchmark
+    )
+ENDIF()

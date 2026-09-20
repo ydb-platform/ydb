@@ -5,11 +5,18 @@ from aiohttp import web
 from ydb.tools.mnc.agent.schemas.disk import DiskCheckRequest, DiskInfoRequest, DiskOperationRequest
 from ydb.tools.mnc.agent.services.disks import disk_service
 from ydb.tools.mnc.agent.services.features import FeatureStatus, features_service
+from ydb.tools.mnc.agent.services.operations import DiskOperationTask
+from ydb.tools.mnc.agent.services.tasks import task_service
 
 
 features_service.set_feature_status("disks", FeatureStatus.ENABLED)
 
 routes = web.RouteTableDef()
+
+
+async def _add_task(task):
+    await task_service.add_task(task)
+    return web.json_response({"task_id": task.task_id, "status": task.status.value})
 
 
 @routes.post("/disks/check")
@@ -27,16 +34,16 @@ async def get_disks_info(request):
 @routes.post("/disks/split")
 async def split_disks(request):
     payload = await request.json()
-    return web.json_response(asdict(await disk_service.split(DiskOperationRequest.from_dict(payload))))
+    return await _add_task(DiskOperationTask("split", DiskOperationRequest.from_dict(payload)))
 
 
 @routes.post("/disks/unite")
 async def unite_disks(request):
     payload = await request.json()
-    return web.json_response(asdict(await disk_service.unite(DiskOperationRequest.from_dict(payload))))
+    return await _add_task(DiskOperationTask("unite", DiskOperationRequest.from_dict(payload)))
 
 
 @routes.post("/disks/obliterate")
 async def obliterate_disks(request):
     payload = await request.json()
-    return web.json_response(asdict(await disk_service.obliterate(DiskOperationRequest.from_dict(payload))))
+    return await _add_task(DiskOperationTask("obliterate", DiskOperationRequest.from_dict(payload)))

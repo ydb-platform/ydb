@@ -59,8 +59,8 @@ struct TTvmServiceConfig
     //! "SecretPrefix-" + ToString(ClientSelfId).
     bool RequireMockSecret = true;
 
-    //! Returns ClientSelfId or parsed value from ClientSelfIdEnv or just 0.
-    TTvmId GetClientSelfId() const;
+    //! Returns ClientSelfId or parsed value from ClientSelfIdEnv.
+    std::optional<TTvmId> GetClientSelfId() const;
 
     // Returns ClientSelfSecret or value from env  ClientSelfSecretEnv or value from file ClientSelfSecretPath or nullopt.
     std::optional<std::string> GetClientSelfSecret() const;
@@ -71,6 +71,37 @@ struct TTvmServiceConfig
 };
 
 DEFINE_REFCOUNTED_TYPE(TTvmServiceConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TUserTicketAuthenticationConfig
+    : public virtual NYTree::TYsonStruct
+{
+    bool CheckServiceTickets;
+
+    //! Services permitted to use UserTickets (requires an accompanying ServiceTicket).
+    THashSet<TTvmId> AllowedServiceTvmIds;
+
+    REGISTER_YSON_STRUCT(TUserTicketAuthenticationConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TUserTicketAuthenticationConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTvmServiceDynamicConfig
+    : public virtual NYTree::TYsonStruct
+{
+    TUserTicketAuthenticationConfigPtr UserTicketAuthentication;
+
+    REGISTER_YSON_STRUCT(TTvmServiceDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TTvmServiceDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

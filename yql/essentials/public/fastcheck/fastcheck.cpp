@@ -9,7 +9,7 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_user_data_storage.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
@@ -42,12 +42,19 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
         return false;
     }
 
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    NSQLTranslationV1::TLexers lexers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+    };
+
+    NSQLTranslationV1::TParsers parsers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false),
+    };
 
     NSQLTranslation::TTranslators translators(
         nullptr,
@@ -105,7 +112,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     }
 
     TExprContext libCtx;
-    libCtx.IssueManager.AddIssues(std::move(astRes.Issues));
+    libCtx.IssueManager.AddIssues(astRes.Issues);
     IModuleResolver::TPtr moduleResolver;
     TUserDataTable userDataTable = GetYqlModuleResolver(libCtx, moduleResolver, userData, options.ClusterMapping, {});
     if (!userDataTable) {
@@ -121,7 +128,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
 
     TExprContext exprCtx(libCtx.NextUniqueId);
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, moduleResolver.get(), nullptr, false, Max<ui32>(), options.SyntaxVersion)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, moduleResolver.get(), /*urlListerManager=*/nullptr, /*hasAnnotations=*/false, Max<ui32>(), options.SyntaxVersion)) {
         errors.AddIssues(exprCtx.IssueManager.GetIssues());
         exprCtx.IssueManager.Reset();
         return false;

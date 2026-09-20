@@ -17,6 +17,8 @@
 #include <yt/yt/core/misc/proc.h>
 #include "yt/yt/core/misc/protobuf_helpers.h"
 
+#include <library/cpp/yt/system/thread_id.h>
+
 #include <library/cpp/yt/cpu_clock/clock.h>
 
 #include <library/cpp/yt/misc/hash.h>
@@ -154,7 +156,7 @@ void TSignalSafeProfiler::RecordSample(NBacktrace::TFramePointerCursor* cursor, 
 
         if (!pushTid) {
             pushTid = true;
-            return {reinterpret_cast<void*>(GetCurrentThreadId()), true};
+            return {reinterpret_cast<void*>(GetSystemThreadId()), true};
         }
 
         if (Options_.RecordActionRunTime && !pushActionRunTime) {

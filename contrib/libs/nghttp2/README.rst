@@ -126,9 +126,9 @@ following libraries are required:
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_; or
   wolfSSL; or LibreSSL (does not support 0RTT); or aws-lc; or
   `BoringSSL <https://boringssl.googlesource.com/boringssl/>`_ (commit
-  664a985707470a62f436cca862ccec9524c561ca); or OpenSSL >= 3.5.0
-* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 1.16.0
-* `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 1.12.0
+  3c6315e00ab02d7bc9b8922aff1f85d8f81ee130); or OpenSSL >= 3.5.0
+* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 1.23.0
+* `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 1.17.0
 
 Use ``--enable-http3`` configure option to enable HTTP/3 feature for
 h2load and nghttpx.
@@ -149,8 +149,8 @@ executable.
 
 Compiling libnghttp2 C source code requires a C99 compiler.  gcc 4.8
 is known to be adequate.  In order to compile the C++ source code,
-C++20 compliant compiler is required.  At least g++ >= 12 and
-clang++ >= 18 are known to work.
+C++23 compliant compiler is required.  At least g++ >= 14 and clang++
+>= 19 are known to work.
 
 .. note::
 
@@ -340,7 +340,7 @@ Build aws-lc:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.72.0 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v5.4.0 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON --install-prefix=$PWD/opt
    $ make -j$(nproc) -C build
@@ -351,7 +351,7 @@ Build nghttp3:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.15.0 https://github.com/ngtcp2/nghttp3
+   $ git clone --depth 1 -b v1.18.0 https://github.com/ngtcp2/nghttp3
    $ cd nghttp3
    $ git submodule update --init --depth 1
    $ autoreconf -i
@@ -364,7 +364,7 @@ Build ngtcp2:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.22.1 https://github.com/ngtcp2/ngtcp2
+   $ git clone --depth 1 -b v1.25.0 https://github.com/ngtcp2/ngtcp2
    $ cd ngtcp2
    $ git submodule update --init --depth 1
    $ autoreconf -i

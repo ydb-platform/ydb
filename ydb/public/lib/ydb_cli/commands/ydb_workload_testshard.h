@@ -21,7 +21,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    uint64_t OwnerIdx = 0;
+    TString Path;
     TVector<TString> Channels;
     uint32_t Count = 1;
     TString ConfigFile;
@@ -36,8 +36,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    uint64_t OwnerIdx = 0;
-    uint32_t Count = 1;
+    TString Path;
 };
 
 } // namespace NYdb::NConsoleClient

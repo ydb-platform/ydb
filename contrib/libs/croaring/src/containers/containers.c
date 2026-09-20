@@ -299,6 +299,7 @@ extern inline container_t *container_andnot(const container_t *c1,
                                             uint8_t type2,
                                             uint8_t *result_type);
 
+CROARING_ALLOW_UNALIGNED
 roaring_container_iterator_t container_init_iterator(const container_t *c,
                                                      uint8_t typecode,
                                                      uint16_t *value) {
@@ -338,6 +339,7 @@ roaring_container_iterator_t container_init_iterator(const container_t *c,
     }
 }
 
+CROARING_ALLOW_UNALIGNED
 roaring_container_iterator_t container_init_iterator_last(const container_t *c,
                                                           uint8_t typecode,
                                                           uint16_t *value) {
@@ -417,6 +419,7 @@ bool container_iterator_lower_bound(const container_t *c, uint8_t typecode,
     }
 }
 
+CROARING_ALLOW_UNALIGNED
 bool container_iterator_read_into_uint32(const container_t *c, uint8_t typecode,
                                          roaring_container_iterator_t *it,
                                          uint32_t high16, uint32_t *buf,
@@ -460,8 +463,10 @@ bool container_iterator_read_into_uint32(const container_t *c, uint8_t typecode,
             const array_container_t *ac = const_CAST_array(c);
             uint32_t num_values =
                 minimum_uint32(ac->cardinality - it->index, count);
+            // Hoist so GCC can vectorize the uint16->uint32 widen-or.
+            const uint16_t *src = ac->array + it->index;
             for (uint32_t i = 0; i < num_values; i++) {
-                buf[i] = high16 | ac->array[it->index + i];
+                buf[i] = high16 | src[i];
             }
             *consumed += num_values;
             it->index += num_values;
@@ -506,6 +511,7 @@ bool container_iterator_read_into_uint32(const container_t *c, uint8_t typecode,
     }
 }
 
+CROARING_ALLOW_UNALIGNED
 bool container_iterator_read_into_uint64(const container_t *c, uint8_t typecode,
                                          roaring_container_iterator_t *it,
                                          uint64_t high48, uint64_t *buf,
@@ -549,8 +555,10 @@ bool container_iterator_read_into_uint64(const container_t *c, uint8_t typecode,
             const array_container_t *ac = const_CAST_array(c);
             uint32_t num_values =
                 minimum_uint32(ac->cardinality - it->index, count);
+            // Hoist so GCC can vectorize the uint16->uint64 widen-or.
+            const uint16_t *src = ac->array + it->index;
             for (uint32_t i = 0; i < num_values; i++) {
-                buf[i] = high48 | ac->array[it->index + i];
+                buf[i] = high48 | src[i];
             }
             *consumed += num_values;
             it->index += num_values;
@@ -581,6 +589,186 @@ bool container_iterator_read_into_uint64(const container_t *c, uint8_t typecode,
                     it->index++;
                     if (it->index < rc->n_runs) {
                         *value_out = rc->runs[it->index].value;
+                    } else {
+                        return false;
+                    }
+                }
+            } while (*consumed < count);
+            return true;
+        }
+        default:
+            assert(false);
+            roaring_unreachable;
+            return 0;
+    }
+}
+
+CROARING_ALLOW_UNALIGNED
+bool container_iterator_read_backward_into_uint32(
+    const container_t *c, uint8_t typecode, roaring_container_iterator_t *it,
+    uint32_t high16, uint32_t *buf, uint32_t count, uint32_t *consumed,
+    uint16_t *value_out) {
+    *consumed = 0;
+    if (count == 0) {
+        return false;
+    }
+    switch (typecode) {
+        case BITSET_CONTAINER_TYPE: {
+            const bitset_container_t *bc = const_CAST_bitset(c);
+            uint32_t wordindex = it->index / 64;
+            uint64_t word =
+                bc->words[wordindex] & (UINT64_MAX >> (63 - (it->index % 64)));
+            do {
+                // Read set bits.
+                while (word != 0 && *consumed < count) {
+                    uint32_t bit = 63 - roaring_leading_zeroes(word);
+                    *buf = high16 | (wordindex * 64 + bit);
+                    word &= ~(UINT64_C(1) << bit);
+                    buf++;
+                    (*consumed)++;
+                }
+                // Skip unset bits.
+                while (word == 0 && wordindex > 0) {
+                    wordindex--;
+                    word = bc->words[wordindex];
+                }
+            } while (word != 0 && *consumed < count);
+
+            if (word != 0) {
+                it->index =
+                    wordindex * 64 + (63 - roaring_leading_zeroes(word));
+                *value_out = it->index;
+                return true;
+            }
+            return false;
+        }
+        case ARRAY_CONTAINER_TYPE: {
+            const array_container_t *ac = const_CAST_array(c);
+            uint32_t num_values =
+                minimum_uint32((uint32_t)(it->index + 1), count);
+            // Walk backwards so GCC can vectorize the uint16->uint32 widen-or.
+            const uint16_t *src = ac->array + it->index + 1;
+            for (uint32_t i = 0; i < num_values; i++) {
+                buf[i] = high16 | *--src;
+            }
+            *consumed += num_values;
+            it->index -= num_values;
+            if (it->index >= 0) {
+                *value_out = ac->array[it->index];
+                return true;
+            }
+            return false;
+        }
+        case RUN_CONTAINER_TYPE: {
+            const run_container_t *rc = const_CAST_run(c);
+            do {
+                uint32_t run_start = rc->runs[it->index].value;
+                uint32_t num_values = minimum_uint32(*value_out - run_start + 1,
+                                                     count - *consumed);
+                for (uint32_t i = 0; i < num_values; i++) {
+                    buf[i] = high16 | (*value_out - i);
+                }
+                *value_out -= num_values;
+                buf += num_values;
+                *consumed += num_values;
+
+                // We check for `value == UINT16_MAX` because
+                // `*value_out -= num_values` can underflow when
+                // `value == 0` (run_start == 0). In this case `value`
+                // will underflow to UINT16_MAX.
+                if (*value_out < run_start || *value_out == UINT16_MAX) {
+                    it->index--;
+                    if (it->index >= 0) {
+                        *value_out = rc->runs[it->index].value +
+                                     rc->runs[it->index].length;
+                    } else {
+                        return false;
+                    }
+                }
+            } while (*consumed < count);
+            return true;
+        }
+        default:
+            assert(false);
+            roaring_unreachable;
+            return 0;
+    }
+}
+
+CROARING_ALLOW_UNALIGNED
+bool container_iterator_read_backward_into_uint64(
+    const container_t *c, uint8_t typecode, roaring_container_iterator_t *it,
+    uint64_t high48, uint64_t *buf, uint32_t count, uint32_t *consumed,
+    uint16_t *value_out) {
+    *consumed = 0;
+    if (count == 0) {
+        return false;
+    }
+    switch (typecode) {
+        case BITSET_CONTAINER_TYPE: {
+            const bitset_container_t *bc = const_CAST_bitset(c);
+            uint32_t wordindex = it->index / 64;
+            uint64_t word =
+                bc->words[wordindex] & (UINT64_MAX >> (63 - (it->index % 64)));
+            do {
+                // Read set bits.
+                while (word != 0 && *consumed < count) {
+                    uint32_t bit = 63 - roaring_leading_zeroes(word);
+                    *buf = high48 | (wordindex * 64 + bit);
+                    word &= ~(UINT64_C(1) << bit);
+                    buf++;
+                    (*consumed)++;
+                }
+                // Skip unset bits.
+                while (word == 0 && wordindex > 0) {
+                    wordindex--;
+                    word = bc->words[wordindex];
+                }
+            } while (word != 0 && *consumed < count);
+
+            if (word != 0) {
+                it->index =
+                    wordindex * 64 + (63 - roaring_leading_zeroes(word));
+                *value_out = it->index;
+                return true;
+            }
+            return false;
+        }
+        case ARRAY_CONTAINER_TYPE: {
+            const array_container_t *ac = const_CAST_array(c);
+            uint32_t num_values =
+                minimum_uint32((uint32_t)(it->index + 1), count);
+            // Walk backwards so GCC can vectorize the uint16->uint64 widen-or.
+            const uint16_t *src = ac->array + it->index + 1;
+            for (uint32_t i = 0; i < num_values; i++) {
+                buf[i] = high48 | *--src;
+            }
+            *consumed += num_values;
+            it->index -= num_values;
+            if (it->index >= 0) {
+                *value_out = ac->array[it->index];
+                return true;
+            }
+            return false;
+        }
+        case RUN_CONTAINER_TYPE: {
+            const run_container_t *rc = const_CAST_run(c);
+            do {
+                uint32_t run_start = rc->runs[it->index].value;
+                uint32_t num_values = minimum_uint32(*value_out - run_start + 1,
+                                                     count - *consumed);
+                for (uint32_t i = 0; i < num_values; i++) {
+                    buf[i] = high48 | (*value_out - i);
+                }
+                *value_out -= num_values;
+                buf += num_values;
+                *consumed += num_values;
+
+                if (*value_out < run_start || *value_out == UINT16_MAX) {
+                    it->index--;
+                    if (it->index >= 0) {
+                        *value_out = rc->runs[it->index].value +
+                                     rc->runs[it->index].length;
                     } else {
                         return false;
                     }
@@ -792,6 +980,171 @@ bool container_iterator_skip_backward(const container_t *c, uint8_t typecode,
     }
     *consumed_count = actually_skipped;
     return has_value;
+}
+
+uint16_t container_iterator_find_run_end(const container_t *c, uint8_t typecode,
+                                         roaring_container_iterator_t *it,
+                                         uint16_t *value, bool *has_more) {
+    switch (typecode) {
+        case RUN_CONTAINER_TYPE: {
+            const run_container_t *rc = const_CAST_run(c);
+            uint16_t run_end =
+                rc->runs[it->index].value + rc->runs[it->index].length;
+            it->index++;
+            if (it->index < rc->n_runs) {
+                *has_more = true;
+                *value = rc->runs[it->index].value;
+            } else {
+                *has_more = false;
+            }
+            return run_end;
+        }
+        case ARRAY_CONTAINER_TYPE: {
+            const array_container_t *ac = const_CAST_array(c);
+            uint16_t v = *value;
+            while (it->index + 1 < ac->cardinality &&
+                   ac->array[it->index + 1] == (uint16_t)(v + 1)) {
+                it->index++;
+                v++;
+            }
+            it->index++;
+            if (it->index < ac->cardinality) {
+                *has_more = true;
+                *value = ac->array[it->index];
+            } else {
+                *has_more = false;
+            }
+            return v;
+        }
+        case BITSET_CONTAINER_TYPE: {
+            const bitset_container_t *bc = const_CAST_bitset(c);
+            uint32_t pos = (uint32_t)*value + 1;
+            uint16_t run_end;
+            if (pos >= (1 << 16)) {
+                *has_more = false;
+                return UINT16_MAX;
+            }
+            uint32_t wordindex = pos / 64;
+            uint64_t word = ~bc->words[wordindex] & (UINT64_MAX << (pos % 64));
+            while (word == 0 &&
+                   wordindex + 1 < BITSET_CONTAINER_SIZE_IN_WORDS) {
+                wordindex++;
+                word = ~bc->words[wordindex];
+            }
+            if (word != 0) {
+                run_end = (uint16_t)(wordindex * 64 +
+                                     roaring_trailing_zeroes(word) - 1);
+            } else {
+                run_end = UINT16_MAX;
+            }
+            uint32_t next_pos = (uint32_t)run_end + 1;
+            if (next_pos >= (1 << 16)) {
+                *has_more = false;
+            } else {
+                wordindex = next_pos / 64;
+                word = bc->words[wordindex] & (UINT64_MAX << (next_pos % 64));
+                while (word == 0 &&
+                       wordindex + 1 < BITSET_CONTAINER_SIZE_IN_WORDS) {
+                    wordindex++;
+                    word = bc->words[wordindex];
+                }
+                if (word != 0) {
+                    *has_more = true;
+                    it->index = wordindex * 64 + roaring_trailing_zeroes(word);
+                    *value = (uint16_t)it->index;
+                } else {
+                    *has_more = false;
+                }
+            }
+            return run_end;
+        }
+        default:
+            assert(false);
+            roaring_unreachable;
+            return 0;
+    }
+}
+
+uint16_t container_iterator_find_run_start(const container_t *c,
+                                           uint8_t typecode,
+                                           roaring_container_iterator_t *it,
+                                           uint16_t *value, bool *has_more) {
+    switch (typecode) {
+        case RUN_CONTAINER_TYPE: {
+            const run_container_t *rc = const_CAST_run(c);
+            uint16_t run_start = rc->runs[it->index].value;
+            it->index--;
+            if (it->index >= 0) {
+                *has_more = true;
+                *value = rc->runs[it->index].value + rc->runs[it->index].length;
+            } else {
+                *has_more = false;
+            }
+            return run_start;
+        }
+        case ARRAY_CONTAINER_TYPE: {
+            const array_container_t *ac = const_CAST_array(c);
+            uint16_t v = *value;
+            while (it->index > 0 &&
+                   ac->array[it->index - 1] == (uint16_t)(v - 1)) {
+                it->index--;
+                v--;
+            }
+            it->index--;
+            if (it->index >= 0) {
+                *has_more = true;
+                *value = ac->array[it->index];
+            } else {
+                *has_more = false;
+            }
+            return v;
+        }
+        case BITSET_CONTAINER_TYPE: {
+            const bitset_container_t *bc = const_CAST_bitset(c);
+            if (*value == 0) {
+                *has_more = false;
+                return 0;
+            }
+            uint32_t pos = (uint32_t)*value - 1;
+            int32_t wordindex = (int32_t)(pos / 64);
+            uint64_t word =
+                ~bc->words[wordindex] & (UINT64_MAX >> (63 - (pos % 64)));
+            while (word == 0 && --wordindex >= 0) {
+                word = ~bc->words[wordindex];
+            }
+            uint16_t run_start;
+            if (word != 0) {
+                run_start = (uint16_t)(wordindex * 64 +
+                                       (63 - roaring_leading_zeroes(word)) + 1);
+            } else {
+                run_start = 0;
+            }
+            if (run_start == 0) {
+                *has_more = false;
+            } else {
+                int32_t prev_pos = (int32_t)run_start - 1;
+                wordindex = prev_pos / 64;
+                word = bc->words[wordindex] &
+                       (UINT64_MAX >> (63 - (prev_pos % 64)));
+                while (word == 0 && --wordindex >= 0) {
+                    word = bc->words[wordindex];
+                }
+                if (word != 0) {
+                    *has_more = true;
+                    it->index =
+                        wordindex * 64 + (63 - roaring_leading_zeroes(word));
+                    *value = (uint16_t)it->index;
+                } else {
+                    *has_more = false;
+                }
+            }
+            return run_start;
+        }
+        default:
+            assert(false);
+            roaring_unreachable;
+            return 0;
+    }
 }
 
 #ifdef __cplusplus

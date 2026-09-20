@@ -543,6 +543,66 @@ Y_UNIT_TEST(TestInvalidRepeatedFieldWithMapAsObject) {
     UNIT_ASSERT_EXCEPTION(Json2Proto(TStringBuf(R"({"Part":{"Boo":{}}})"), proto, config), yexception);
 }
 
+Y_UNIT_TEST(TestVectorizeObjects) {
+    // Non-empty JSON object is parsed as a single-element list for a repeated non-map field.
+    {
+        TCompositeRepeated proto;
+        TJson2ProtoConfig config;
+        config.VectorizeObjects = true;
+        Json2Proto(TStringBuf(R"({"Part":{"String":"hello","I32":42}})"), proto, config);
+        UNIT_ASSERT_VALUES_EQUAL(proto.PartSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetPart(0).GetString(), "hello");
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetPart(0).GetI32(), 42);
+    }
+    // Combined with MapAsObject: real maps stay maps, repeated non-map gets single-object path.
+    {
+        TCompositeRepeated proto;
+        TJson2ProtoConfig config;
+        config.MapAsObject = true;
+        config.VectorizeObjects = true;
+        Json2Proto(TStringBuf(R"({"Part":{"String":"x"}})"), proto, config);
+        UNIT_ASSERT_VALUES_EQUAL(proto.PartSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetPart(0).GetString(), "x");
+    }
+    // JSON array still works for the same field.
+    {
+        TCompositeRepeated proto;
+        TJson2ProtoConfig config;
+        config.VectorizeObjects = true;
+        Json2Proto(TStringBuf(R"({"Part":[{"String":"a"},{"String":"b"}]})"), proto, config);
+        UNIT_ASSERT_VALUES_EQUAL(proto.PartSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetPart(0).GetString(), "a");
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetPart(1).GetString(), "b");
+    }
+    // Empty {} stays no-op (matches prior behaviour when MapAsObject was on).
+    {
+        TCompositeRepeated proto;
+        TJson2ProtoConfig config;
+        config.MapAsObject = true;
+        config.VectorizeObjects = true;
+        Json2Proto(TStringBuf(R"({"Part":{}})"), proto, config);
+        UNIT_ASSERT_VALUES_EQUAL(proto.PartSize(), 0);
+    }
+    // Real proto map<> is still parsed as a map, not wrapped as a single element.
+    {
+        TMapType proto;
+        TJson2ProtoConfig config;
+        config.MapAsObject = true;
+        config.VectorizeObjects = true;
+        Json2Proto(TStringBuf(R"({"Items":{"k1":"v1","k2":"v2"}})"), proto, config);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetItems().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetItems().at("k1"), "v1");
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetItems().at("k2"), "v2");
+    }
+    // Without the flag — original behaviour (throw) is preserved.
+    {
+        TCompositeRepeated proto;
+        TJson2ProtoConfig config;
+        config.MapAsObject = true;
+        UNIT_ASSERT_EXCEPTION(Json2Proto(TStringBuf(R"({"Part":{"String":"x"}})"), proto, config), yexception);
+    }
+}
+
 Y_UNIT_TEST(TestStringTransforms) {
     // Check that strings and bytes are transformed
     {

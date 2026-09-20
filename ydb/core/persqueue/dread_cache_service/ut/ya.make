@@ -14,6 +14,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     caching_proxy_ut.cpp
+    deadline_map_ut.cpp
 )
 
 # RESOURCE(

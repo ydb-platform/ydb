@@ -31,6 +31,7 @@ class IFunctionRegistry;
 namespace NYql {
 class TFileStorageConfig;
 class TGatewaysConfig;
+class TStaticGatewaysConfig;
 } // namespace NYql
 
 namespace NYql::NProto {
@@ -86,11 +87,12 @@ public:
     TString OperationId;
     TQContext QPlayerContext;
 
-    THashSet<TString> SqlFlags;
+    NSQLTranslation::TExtendedSqlFlags SqlFlags;
     ui16 SyntaxVersion = 1;
     bool AnsiLexer = false;
     bool TestAntlr4 = false;
     bool AssumeYdbOnClusterWithSlash = false;
+    bool AutoUseYqlLibs = false;
     bool TestSqlFormat = false;
     bool TestLexers = false;
     bool TestComplete = false;
@@ -128,8 +130,10 @@ public:
     TString UdfResolverLog;
     bool UdfResolverFilterSyscalls = false;
     bool ScanUdfs = false;
+    TString UdfBridgePath;
     THolder<NYqlMountConfig::TMountConfig> MountConfig;
     THolder<TGatewaysConfig> GatewaysConfig;
+    THolder<TStaticGatewaysConfig> StaticGatewaysConfig;
     THolder<TFileStorageConfig> FsConfig;
     THolder<NProto::TPgExtensions> PgExtConfig;
     THolder<TGatewaysConfig> GatewaysPatch;

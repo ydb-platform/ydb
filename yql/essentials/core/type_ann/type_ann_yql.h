@@ -1,14 +1,71 @@
 #pragma once
 
 #include "type_ann_impl.h"
+#include "type_ann_sql.h"
 
 namespace NYql::NTypeAnnImpl {
+
+struct TYqlFromSettings {
+    bool IsExplicitlyColumnOrdered = false;
+
+    static TMaybe<TYqlFromSettings> Parse(const TExprNode::TPtr& settings, TExtContext& ctx);
+};
+
+struct TYqlColumnOrderItem {
+    TString Content;
+    bool IsSynthetic = false;
+
+    friend bool operator==(const TYqlColumnOrderItem& lhs, const TYqlColumnOrderItem& rhs) = default;
+    friend bool operator!=(const TYqlColumnOrderItem& lhs, const TYqlColumnOrderItem& rhs) = default;
+};
+
+struct TYqlResultItemLabel: TYqlColumnOrderItem {
+    TPositionHandle Position;
+    bool IsShadowingWarning = false;
+};
+
+using TYqlColumnOrder = TVector<TYqlColumnOrderItem>;
 
 IGraphTransformer::TStatus PromoteYqlAggOptions(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
 TVector<TExprNode::TPtr> InferYqlGroupRefTypes(
     const TExprNode& groupExprs, const TExprNode& groupSets, TExprContext& ctx);
+
+IGraphTransformer::TStatus InferYqlImplicitUsingJoinColumns(
+    const TExprNode::TPtr& predicate,
+    const TInputs& groupInputs,
+    const TVector<ui32>& lhsIndexes,
+    const TVector<ui32>& rhsIndexes,
+    TVector<std::pair<TString, TString>>& implicitUsing,
+    TExtContext& ctx);
+
+IGraphTransformer::TStatus InferYqlInferUnionType(
+    TPositionHandle pos,
+    const TExprNode::TListType& children,
+    TColumnOrder& resultColumnOrder,
+    const TStructExprType*& resultStructType,
+    TExtContext& ctx,
+    bool& areColumnsOrdered,
+    bool& isUniversal);
+
+/// NB: this is a light version only for a simple and sound static analysis.
+TMaybe<TYqlColumnOrder> InferYqlSimpleColumnOrder(const TExprNode::TPtr& input);
+
+IGraphTransformer::TStatus ValidateYqlExplicitColumnOrders(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExtContext& ctx,
+    TPositionHandle position,
+    const TVector<TPositionHandle>& expectedPositions,
+    const TVector<TString>& expectedOrder,
+    const TYqlColumnOrder& actualOrder);
+
+IGraphTransformer::TStatus ValidateYqlWarnShadow(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExtContext& ctx,
+    const TInputs& inputs);
 
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);

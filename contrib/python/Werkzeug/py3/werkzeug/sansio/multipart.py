@@ -1,14 +1,11 @@
+from __future__ import annotations
+
 import re
+import typing as t
 from dataclasses import dataclass
 from enum import auto
 from enum import Enum
-from typing import cast
-from typing import List
-from typing import Optional
-from typing import Tuple
 
-from .._internal import _to_bytes
-from .._internal import _to_str
 from ..datastructures import Headers
 from ..exceptions import RequestEntityTooLarge
 from ..http import parse_options_header
@@ -58,6 +55,7 @@ class State(Enum):
     PREAMBLE = auto()
     PART = auto()
     DATA = auto()
+    DATA_START = auto()
     EPILOGUE = auto()
     COMPLETE = auto()
 
@@ -86,9 +84,9 @@ class MultipartDecoder:
     def __init__(
         self,
         boundary: bytes,
-        max_form_memory_size: Optional[int] = None,
+        max_form_memory_size: int | None = None,
         *,
-        max_parts: Optional[int] = None,
+        max_parts: int | None = None,
     ) -> None:
         self.buffer = bytearray()
         self.complete = False
@@ -123,19 +121,19 @@ class MultipartDecoder:
         self._search_position = 0
         self._parts_decoded = 0
 
-    def last_newline(self) -> int:
+    def last_newline(self, data: bytes) -> int:
         try:
-            last_nl = self.buffer.rindex(b"\n")
+            last_nl = data.rindex(b"\n")
         except ValueError:
-            last_nl = len(self.buffer)
+            last_nl = len(data)
         try:
-            last_cr = self.buffer.rindex(b"\r")
+            last_cr = data.rindex(b"\r")
         except ValueError:
-            last_cr = len(self.buffer)
+            last_cr = len(data)
 
         return min(last_nl, last_cr)
 
-    def receive_data(self, data: Optional[bytes]) -> None:
+    def receive_data(self, data: bytes | None) -> None:
         if data is None:
             self.complete = True
         elif (
@@ -172,7 +170,11 @@ class MultipartDecoder:
             match = BLANK_LINE_RE.search(self.buffer, self._search_position)
             if match is not None:
                 headers = self._parse_headers(self.buffer[: match.start()])
-                del self.buffer[: match.end()]
+                # The final header ends with a single CRLF, however a
+                # blank line indicates the start of the
+                # body. Therefore the end is after the first CRLF.
+                headers_end = (match.start() + match.end()) // 2
+                del self.buffer[:headers_end]
 
                 if "content-disposition" not in headers:
                     raise ValueError("Missing Content-Disposition header")
@@ -180,7 +182,7 @@ class MultipartDecoder:
                 disposition, extra = parse_options_header(
                     headers["content-disposition"]
                 )
-                name = cast(str, extra.get("name"))
+                name = t.cast(str, extra.get("name"))
                 filename = extra.get("filename")
                 if filename is not None:
                     event = File(
@@ -193,7 +195,7 @@ class MultipartDecoder:
                         headers=headers,
                         name=name,
                     )
-                self.state = State.DATA
+                self.state = State.DATA_START
                 self._search_position = 0
                 self._parts_decoded += 1
 
@@ -205,28 +207,15 @@ class MultipartDecoder:
                 # safe buffer for part of the search target.
                 self._search_position = max(0, len(self.buffer) - SEARCH_EXTRA_LENGTH)
 
-        elif self.state == State.DATA:
-            if self.buffer.find(b"--" + self.boundary) == -1:
-                # No complete boundary in the buffer, but there may be
-                # a partial boundary at the end. As the boundary
-                # starts with either a nl or cr find the earliest and
-                # return up to that as data.
-                data_length = del_index = self.last_newline()
-                more_data = True
-            else:
-                match = self.boundary_re.search(self.buffer)
-                if match is not None:
-                    if match.group(1).startswith(b"--"):
-                        self.state = State.EPILOGUE
-                    else:
-                        self.state = State.PART
-                    data_length = match.start()
-                    del_index = match.end()
-                else:
-                    data_length = del_index = self.last_newline()
-                more_data = match is None
+        elif self.state == State.DATA_START:
+            data, del_index, more_data = self._parse_data(self.buffer, start=True)
+            del self.buffer[:del_index]
+            event = Data(data=data, more_data=more_data)
+            if more_data:
+                self.state = State.DATA
 
-            data = bytes(self.buffer[:data_length])
+        elif self.state == State.DATA:
+            data, del_index, more_data = self._parse_data(self.buffer, start=False)
             del self.buffer[:del_index]
             if data or not more_data:
                 event = Data(data=data, more_data=more_data)
@@ -242,15 +231,55 @@ class MultipartDecoder:
         return event
 
     def _parse_headers(self, data: bytes) -> Headers:
-        headers: List[Tuple[str, str]] = []
+        headers: list[tuple[str, str]] = []
         # Merge the continued headers into one line
         data = HEADER_CONTINUATION_RE.sub(b" ", data)
         # Now there is one header per line
         for line in data.splitlines():
-            if line.strip() != b"":
-                name, value = _to_str(line).strip().split(":", 1)
+            line = line.strip()
+
+            if line != b"":
+                name, _, value = line.decode().partition(":")
                 headers.append((name.strip(), value.strip()))
         return Headers(headers)
+
+    def _parse_data(self, data: bytes, *, start: bool) -> tuple[bytes, int, bool]:
+        # Body parts must start with CRLF (or CR or LF)
+        if start:
+            match = LINE_BREAK_RE.match(data)
+            data_start = t.cast(t.Match[bytes], match).end()
+        else:
+            data_start = 0
+
+        boundary = b"--" + self.boundary
+
+        if self.buffer.find(boundary) == -1:
+            # No complete boundary in the buffer, but there may be
+            # a partial boundary at the end. As the boundary
+            # starts with either a nl or cr find the earliest and
+            # return up to that as data.
+            data_end = del_index = self.last_newline(data[data_start:]) + data_start
+            # If amount of data after last newline is far from
+            # possible length of partial boundary, we should
+            # assume that there is no partial boundary in the buffer
+            # and return all pending data.
+            if (len(data) - data_end) > len(b"\n" + boundary):
+                data_end = del_index = len(data)
+            more_data = True
+        else:
+            match = self.boundary_re.search(data)
+            if match is not None:
+                if match.group(1).startswith(b"--"):
+                    self.state = State.EPILOGUE
+                else:
+                    self.state = State.PART
+                data_end = match.start()
+                del_index = match.end()
+            else:
+                data_end = del_index = self.last_newline(data[data_start:]) + data_start
+            more_data = match is None
+
+        return bytes(data[data_start:data_end]), del_index, more_data
 
 
 class MultipartEncoder:
@@ -267,17 +296,22 @@ class MultipartEncoder:
             State.PART,
             State.DATA,
         }:
-            self.state = State.DATA
             data = b"\r\n--" + self.boundary + b"\r\n"
-            data += b'Content-Disposition: form-data; name="%s"' % _to_bytes(event.name)
+            data += b'Content-Disposition: form-data; name="%s"' % event.name.encode()
             if isinstance(event, File):
-                data += b'; filename="%s"' % _to_bytes(event.filename)
+                data += b'; filename="%s"' % event.filename.encode()
             data += b"\r\n"
-            for name, value in cast(Field, event).headers:
+            for name, value in t.cast(Field, event).headers:
                 if name.lower() != "content-disposition":
-                    data += _to_bytes(f"{name}: {value}\r\n")
-            data += b"\r\n"
+                    data += f"{name}: {value}\r\n".encode()
+            self.state = State.DATA_START
             return data
+        elif isinstance(event, Data) and self.state == State.DATA_START:
+            self.state = State.DATA
+            if len(event.data) > 0:
+                return b"\r\n" + event.data
+            else:
+                return event.data
         elif isinstance(event, Data) and self.state == State.DATA:
             return event.data
         elif isinstance(event, Epilogue):

@@ -1,5 +1,6 @@
 #include "kqp_stream_lookup_worker.h"
 #include "kqp_stream_lookup_join_helpers.h"
+#include "kqp_vector_index_levels_cache.h"
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_types.h>
@@ -17,7 +18,20 @@ namespace NKikimr {
 namespace NKqp {
 
 constexpr ui64 SEQNO_SPACE = 40;
-constexpr ui64 MaxTaskId = (1ULL << (64 - SEQNO_SPACE));
+
+// Upper bound on the DQ task id whose rowSeqNo (taskId << SEQNO_SPACE) round-trips
+// losslessly through the cookie of the given format version. The cookie reserves
+// some low bits for flags, so taskId + counter must fit in 64 - reservedBits bits.
+//
+// v0 keeps the historical (intentionally too permissive) 2^24 bound so that with
+// the new-format feature flag disabled behavior is byte-identical to before; that
+// path still overflows for taskId >= 16, exactly as it does on current main.
+ui64 MaxTaskIdForCookieVersion(ui32 version) {
+    const ui64 reservedBits = (version == StreamLookupJoinCookieVersionLegacy)
+        ? 0
+        : StreamLookupJoinCookieV1ReservedBits;
+    return 1ULL << (64 - SEQNO_SPACE - reservedBits);
+}
 
 TStreamLookupShardReadResult::TStreamLookupShardReadResult(const ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, NMiniKQL::TAllocState* alloc)
     : ShardId(shardId)
@@ -42,9 +56,19 @@ TStreamLookupShardReadResult::~TStreamLookupShardReadResult() {
 
 namespace {
 
+// Check if this is a vector index level table
+bool IsVectorIndexLevelTable(const TString& tablePath) {
+    return tablePath.EndsWith(NTableIndex::NKMeans::LevelTable);
+}
+
+struct TCacheData {
+    ui64 PendingReads = 0;
+    TOwnedCellVecBatch Batch;
+};
 
 struct TReadState {
     std::vector<TOwnedTableRange> PendingKeys;
+    std::optional<TString> CacheKey;
 
     TMaybe<TOwnedCellVec> LastProcessedKey;
     ui32 FirstUnprocessedQuery = 0;
@@ -106,16 +130,20 @@ TTableId TKqpStreamLookupWorker::GetTableId() const {
 class TKqpLookupRows : public TKqpStreamLookupWorker {
 public:
     TKqpLookupRows(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
-        const NMiniKQL::THolderFactory& holderFactory)
+        const NMiniKQL::THolderFactory& holderFactory, TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache)
         : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory)
+        , VectorIndexLevelsCache(
+            IsVectorIndexLevelTable(Settings.TablePath) && vectorIndexLevelsCache && vectorIndexLevelsCache->MaxBytes() > 0
+                ? std::move(vectorIndexLevelsCache)
+                : nullptr)
     {
     }
 
-    virtual ~TKqpLookupRows() {
-        auto guard = TypeEnv.BindAllocator();
-        auto alloc = &guard.GetMutex()->Ref();
-        while(!ReadResults.empty()) {
-            ReadResults.front().Untrack(alloc);
+    virtual ~TKqpLookupRows() = default;
+
+    void ClearResults(NMiniKQL::TAllocState& allocState) final {
+        while (!ReadResults.empty()) {
+            ReadResults.front().Untrack(&allocState);
             ReadResults.pop_front();
         }
     }
@@ -145,7 +173,7 @@ public:
         const i32 lookupKeySize = std::min(Settings.KeyColumns.size(), Settings.InputColumns.size());
         NMiniKQL::TStringProviderBackend backend;
         std::vector<TCell> keyCells(lookupKeySize);
-        
+
         for (size_t colId = 0; colId < Settings.InputColumns.size(); ++colId) {
             const auto& lookupKeyColumn = Settings.InputColumns[colId];
             if (0 <= lookupKeyColumn.KeyOrder) {
@@ -160,6 +188,16 @@ public:
     }
 
     virtual void AddInputRowImpl(std::vector<TCell> keyCells) {
+        std::optional<TString> cacheKey;
+        if (VectorIndexLevelsCache) {
+            cacheKey = TSerializedCellVec::Serialize(keyCells);
+            auto result = VectorIndexLevelsCache->Get(Settings.TableId.PathId, cacheKey.value());
+            if (result && !result->BatchRows.empty()) {
+                PendingBatches.push_back(result);
+                return;
+            }
+        }
+
         if (keyCells.size() < Settings.KeyColumns.size()) {
             // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
             std::vector<TCell> fromCells(Settings.KeyColumns.size());
@@ -174,6 +212,10 @@ public:
         } else {
             // full pk, build point
             UnprocessedKeys.emplace_back(std::move(keyCells));
+        }
+
+        if (cacheKey.has_value()) {
+            CacheKeys.emplace_back(std::move(cacheKey.value()));
         }
     }
 
@@ -259,6 +301,28 @@ public:
             UnprocessedKeys.pop_front();
 
             auto partitions = partitioning->GetIntersectionWithRange(GetKeyColumnTypes(), range);
+            if (!CacheKeys.empty()) {
+                ui64 pendingReads = 0;
+                for(auto [shardId, range] : partitions) {
+                    THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+                    std::vector<TOwnedTableRange> ranges = {range};
+                    ui64 nextReadId = ++readId;
+                    FillReadRequest(nextReadId, request, ranges);
+                    ScheduledReads.emplace_back(shardId, std::move(request));
+                    ++pendingReads;
+                    YQL_ENSURE(ReadStateByReadId.emplace(
+                        nextReadId,
+                        TReadState{
+                            .PendingKeys = std::move(ranges),
+                            .CacheKey = CacheKeys.front(),
+                        }).second);
+                }
+
+                CacheKeysMap[CacheKeys.front()] = {.PendingReads = pendingReads};
+                CacheKeys.pop_front();
+                continue;
+            }
+
             for (auto [shardId, range] : partitions) {
                 if (range.Point) {
                     pointsPerShard[shardId].push_back(std::move(range));
@@ -292,7 +356,7 @@ public:
     }
 
     bool HasPendingResults() final {
-        return !ReadResults.empty();
+        return !ReadResults.empty() || !PendingBatches.empty();
     }
 
     void AddResult(TStreamLookupShardReadResult result) final {
@@ -309,9 +373,65 @@ public:
         ReadResults.emplace_back(std::move(result));
     }
 
+    void ProcessResultRow(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TConstArrayRef<TCell> resultRow, TReadResultStats& resultStats, ui64 shardId, bool hasReadStats) {
+        YQL_ENSURE(resultRow.size() <= Settings.Columns.size(), "Result columns mismatch");
+
+        if (Settings.VectorTopK && Settings.VectorTopK->DistinctColumnsSize()) {
+            TVector<TCell> uniqueKey;
+
+            for (auto& colIdx: Settings.VectorTopK->GetDistinctColumns()) {
+                YQL_ENSURE(colIdx < resultRow.size(), "Unique column index is too large");
+                uniqueKey.push_back(resultRow.at(colIdx));
+            }
+
+            TString serializedKey = TSerializedCellVec::Serialize(uniqueKey);
+
+            if (UniqueKeys.contains(serializedKey)) {
+                return;
+            }
+            UniqueKeys.insert(serializedKey);
+        }
+
+        NUdf::TUnboxedValue* rowItems = nullptr;
+        auto row = HolderFactory.CreateDirectArrayHolder(Settings.Columns.size(), rowItems);
+        i64 storageRowSize = 0;
+        for (size_t colIndex = 0, resultColIndex = 0; colIndex < Settings.Columns.size(); ++colIndex) {
+            const auto& column = Settings.Columns[colIndex];
+            if (IsSystemColumn(column.Name)) {
+                NMiniKQL::FillSystemColumn(rowItems[colIndex], shardId, column.Id, column.PType);
+            } else {
+                YQL_ENSURE(resultColIndex < resultRow.size());
+                storageRowSize += resultRow[resultColIndex].Size();
+                rowItems[colIndex] = NMiniKQL::GetCellValue(resultRow[resultColIndex], column.PType);
+                ++resultColIndex;
+            }
+        }
+
+        batch.push_back(std::move(row));
+        storageRowSize = std::max(storageRowSize, (i64)8);
+
+
+        if (!Settings.VectorTopK || !hasReadStats) {
+            resultStats.ReadRowsCount += 1;
+            resultStats.ReadBytesCount += storageRowSize;
+        }
+
+        resultStats.ResultRowsCount += 1;
+        resultStats.ResultBytesCount += storageRowSize;
+    }
+
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 ) final {
         TReadResultStats resultStats;
         batch.clear();
+
+        while(!PendingBatches.empty()) {
+            auto& frontline = PendingBatches.front();
+            for(const auto& row: frontline->BatchRows) {
+                ProcessResultRow(batch, row, resultStats, 0, false);
+            }
+
+            PendingBatches.pop_front();
+        }
 
         while (!ReadResults.empty() && !resultStats.SizeLimitExceeded) {
             auto& result = ReadResults.front();
@@ -322,52 +442,30 @@ public:
             }
             for (; result.UnprocessedResultRow < result.ReadResult->Get()->GetRowsCount(); ++result.UnprocessedResultRow) {
                 const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
-                YQL_ENSURE(resultRow.size() <= Settings.Columns.size(), "Result columns mismatch");
-
-                if (Settings.VectorTopK && Settings.VectorTopK->DistinctColumnsSize()) {
-                    TVector<TCell> uniqueKey;
-                    for (auto& colIdx: Settings.VectorTopK->GetDistinctColumns()) {
-                        YQL_ENSURE(colIdx < resultRow.size(), "Unique column index is too large");
-                        uniqueKey.push_back(resultRow.at(colIdx));
-                    }
-                    TString serializedKey = TSerializedCellVec::Serialize(uniqueKey);
-                    if (UniqueKeys.contains(serializedKey)) {
-                        continue;
-                    }
-                    UniqueKeys.insert(serializedKey);
-                }
-
-                NUdf::TUnboxedValue* rowItems = nullptr;
-                auto row = HolderFactory.CreateDirectArrayHolder(Settings.Columns.size(), rowItems);
-
-                i64 storageRowSize = 0;
-                for (size_t colIndex = 0, resultColIndex = 0; colIndex < Settings.Columns.size(); ++colIndex) {
-                    const auto& column = Settings.Columns[colIndex];
-                    if (IsSystemColumn(column.Name)) {
-                        NMiniKQL::FillSystemColumn(rowItems[colIndex], result.ShardId, column.Id, column.PType);
-                    } else {
-                        YQL_ENSURE(resultColIndex < resultRow.size());
-                        storageRowSize += resultRow[resultColIndex].Size();
-                        rowItems[colIndex] = NMiniKQL::GetCellValue(resultRow[resultColIndex], column.PType);
-                        ++resultColIndex;
-                    }
-                }
-
-                batch.push_back(std::move(row));
-                storageRowSize = std::max(storageRowSize, (i64)8);
-
-                if (!Settings.VectorTopK || !result.ReadResult->Get()->Record.HasStats()) {
-                    resultStats.ReadRowsCount += 1;
-                    resultStats.ReadBytesCount += storageRowSize;
-                }
-                resultStats.ResultRowsCount += 1;
-                resultStats.ResultBytesCount += storageRowSize;
+                ProcessResultRow(batch, resultRow, resultStats, result.ShardId, result.ReadResult->Get()->Record.HasStats());
             }
 
             if (result.UnprocessedResultRow == result.ReadResult->Get()->GetRowsCount()) {
                 if (result.ReadResult->Get()->Record.GetFinished()) {
                     // delete finished read
                     auto it = ReadStateByReadId.find(result.ReadResult->Get()->Record.GetReadId());
+                    if (it->second.CacheKey.has_value()) {
+                        auto entryIt = CacheKeysMap.find(it->second.CacheKey.value());
+                        YQL_ENSURE(entryIt != CacheKeysMap.end());
+                        auto& entry = entryIt->second;
+                        entry.PendingReads--;
+                        for(ui32 idx = 0; idx < result.ReadResult->Get()->GetRowsCount(); idx++) {
+                            entry.Batch.Append(result.ReadResult->Get()->GetCells(idx));
+                        }
+
+                        if (entry.PendingReads == 0) {
+                            auto ptr = MakeIntrusive<TCachedLevelTableData>();
+                            ptr->BatchRows = std::move(entry.Batch);
+                            VectorIndexLevelsCache->Put(Settings.TableId.PathId, it->second.CacheKey.value(), ptr);
+                            CacheKeysMap.erase(entryIt);
+                        }
+                    }
+
                     ReadStateByReadId.erase(it);
                 }
 
@@ -388,7 +486,11 @@ public:
                 const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
                 YQL_ENSURE(resultRow.size() <= Settings.Columns.size(), "Result columns mismatch");
 
-                const i64 storageRowSize = EstimateSize(resultRow);
+                const i64 storageRowSize = std::max(
+                    (i64)8,
+                    std::accumulate(resultRow.begin(), resultRow.end(), (i64)0, [](i64 sum, const TCell& cell) {
+                        return sum + cell.Size(); // Looks like it's better to use EstimateSize?
+                    }));
 
                 reader(resultRow);
 
@@ -417,7 +519,8 @@ public:
         return UnprocessedKeys.empty()
             && ReadStateByReadId.empty()
             && ReadResults.empty()
-            && ScheduledReads.empty();
+            && ScheduledReads.empty()
+            && PendingBatches.empty();
     }
 
     void ResetRowsProcessing(ui64 readId) final {
@@ -463,7 +566,7 @@ private:
             }
         }
 
-        if (Settings.VectorTopK) {
+        if (Settings.VectorTopK && !VectorIndexLevelsCache) {
             *record.MutableVectorTopK() = *Settings.VectorTopK;
         }
 
@@ -495,11 +598,15 @@ private:
     }
 
 private:
+    std::unordered_map<TString, TCacheData> CacheKeysMap;
+    std::deque<TString> CacheKeys;
     std::deque<TOwnedTableRange> UnprocessedKeys;
     std::deque<std::pair<ui64, THolder<TEvDataShard::TEvRead>>> ScheduledReads;
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
     std::deque<TStreamLookupShardReadResult> ReadResults;
     std::unordered_set<TString> UniqueKeys;
+    TIntrusivePtr<TVectorIndexLevelsCache> VectorIndexLevelsCache;
+    std::deque<TCachedLevelTableDataPtr> PendingBatches;
 };
 
 class TKqpJoinRows : public TKqpStreamLookupWorker {
@@ -512,7 +619,7 @@ public:
         , InputRowSeqNo(taskId << SEQNO_SPACE)
         , InputRowSeqNoLast((taskId + 1) << SEQNO_SPACE)
     {
-        YQL_ENSURE(taskId < MaxTaskId);
+        YQL_ENSURE(taskId < MaxTaskIdForCookieVersion(Settings.CookieFormatVersion));
         // read columns should contain join key and result columns
         for (const auto& joinKey : Settings.InputColumns) {
             ReadColumns.emplace(joinKey.Name, joinKey);
@@ -552,7 +659,7 @@ public:
         bool lastRow = true;
         if (IsInputTriplet()) {
             auto value = inputRow.GetElement(2).Get<ui64>();
-            auto cookie = TStreamLookupJoinRowCookie::Decode(value);
+            auto cookie = TStreamLookupJoinRowCookie::Decode(value, Settings.CookieFormatVersion);
             rowSeqNo = cookie.RowSeqNo;
             firstRow = cookie.FirstRow;
             lastRow = cookie.LastRow;
@@ -577,7 +684,7 @@ public:
         ui64 joinKeyId = JoinKeySeqNo++;
         TOwnedCellVec cellVec(std::move(joinKeyCells));
         auto [resIt, _] = ResultRowsBySeqNo.emplace(
-            rowSeqNo, MakeIntrusive<TResultBatch>(KeepRowsOrder() ? nullptr : &FlushedResultRows, HolderFactory, rowSeqNo, std::move(row)));
+            rowSeqNo, MakeIntrusive<TResultBatch>(KeepRowsOrder() ? nullptr : &FlushedResultRows, HolderFactory, rowSeqNo, std::move(row), Settings.CookieFormatVersion));
         auto resultBatch = resIt->second;
         resultBatch->AcceptLeftRow(firstRow, lastRow);
         if (!IsKeyAllowed(cellVec)) {
@@ -949,8 +1056,8 @@ public:
         while (!FlushedResultRows.empty()) {
             TResultBatch::TResultRow& row = FlushedResultRows.front();
             batch.emplace_back(std::move(row.Data));
-            FlushedResultRows.pop_front();
             resultStats.Add(row.Stats);
+            FlushedResultRows.pop_front();
         }
 
         return resultStats;
@@ -974,10 +1081,11 @@ private:
             TReadResultStats Stats;
         };
 
-        explicit TResultBatch(std::deque<TResultRow>* result, const NMiniKQL::THolderFactory& holderFactory, ui64 seqNo, TSizedUnboxedValue&& leftRow)
+        explicit TResultBatch(std::deque<TResultRow>* result, const NMiniKQL::THolderFactory& holderFactory, ui64 seqNo, TSizedUnboxedValue&& leftRow, ui32 cookieFormatVersion)
             : Result(result)
             , HolderFactory(holderFactory)
             , RowSeqNo(seqNo)
+            , CookieFormatVersion(cookieFormatVersion)
             , LeftRow(std::move(leftRow))
         {
         }
@@ -991,6 +1099,7 @@ private:
         bool FirstRow = false;
         bool LastRow = false;
         ui64 RowSeqNo = 0;
+        ui32 CookieFormatVersion = 0;
 
         TSizedUnboxedValue LeftRow;
         TSizedUnboxedValue RightRow;
@@ -1040,7 +1149,7 @@ private:
                 resultRowItems[0] = LeftRow.Data;
                 resultRowItems[1] = std::move(RightRow.Data);
                 auto rowCookie = TStreamLookupJoinRowCookie{.RowSeqNo=RowSeqNo, .LastRow=ProcessedAllJoinKeys(), .FirstRow=FirstRowInBatch()};
-                resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode());
+                resultRowItems[2] = NUdf::TUnboxedValuePod(rowCookie.Encode(CookieFormatVersion));
 
                 rowStats.ReadRowsCount += (hasValue ? 1 : 0);
                 rowStats.ReadBytesCount += RightRow.StorageBytes;
@@ -1231,7 +1340,8 @@ private:
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
     ui64 taskId,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
-    const NYql::NDqProto::TTaskInput& inputDesc) {
+    const NYql::NDqProto::TTaskInput& inputDesc,
+    TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache) {
 
     TLookupSettings preparedSettings;
     preparedSettings.TablePath = std::move(settings.GetTable().GetPath());
@@ -1244,6 +1354,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
 
     preparedSettings.AllowNullKeysPrefixSize = settings.HasAllowNullKeysPrefixSize() ? settings.GetAllowNullKeysPrefixSize() : 0;
     preparedSettings.KeepRowsOrder = settings.HasKeepRowsOrder() && settings.GetKeepRowsOrder();
+    preparedSettings.CookieFormatVersion = settings.GetCookieFormatVersion();
     preparedSettings.LookupStrategy = settings.GetLookupStrategy();
 
     preparedSettings.KeyColumns.reserve(settings.GetKeyColumns().size());
@@ -1333,7 +1444,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
         case NKqpProto::EStreamLookupStrategy::UNIQUE:
         case NKqpProto::EStreamLookupStrategy::LOCK_AND_LOOKUP:
-            return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory);
+            return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory, vectorIndexLevelsCache);
         case NKqpProto::EStreamLookupStrategy::JOIN:
         case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
             return std::make_unique<TKqpJoinRows>(std::move(preparedSettings), taskId, typeEnv, holderFactory, inputDesc);
@@ -1349,8 +1460,8 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& set
     AFL_ENSURE(!settings.KeepRowsOrder);
     AFL_ENSURE(!settings.AllowNullKeysPrefixSize);
     AFL_ENSURE(settings.InputColumns.size() <= settings.KeyColumns.size());
-    
-    return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory);
+
+    return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory, nullptr);
 }
 
 } // namespace NKqp

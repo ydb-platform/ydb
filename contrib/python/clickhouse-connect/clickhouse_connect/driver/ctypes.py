@@ -13,38 +13,35 @@ data_conv = pydc
 # numpy_conv is resolved lazily via __getattr__ to avoid eagerly importing numpy
 
 
-# pylint: disable=import-outside-toplevel,global-statement
-
 def connect_c_modules():
-    if not coerce_bool(os.environ.get('CLICKHOUSE_CONNECT_USE_C', True)):
-        logger.info('ClickHouse Connect C optimizations disabled')
+    if not coerce_bool(os.environ.get("CLICKHOUSE_CONNECT_USE_C", True)):
+        logger.info("ClickHouse Connect C optimizations disabled")
         return
 
     global RespBuffCls, data_conv
     try:
-        from clickhouse_connect.driverc.buffer import ResponseBuffer as CResponseBuffer
         import clickhouse_connect.driverc.dataconv as cdc
+        from clickhouse_connect.driverc.buffer import ResponseBuffer as CResponseBuffer
 
         data_conv = cdc
         RespBuffCls = CResponseBuffer
-        logger.debug('Successfully imported ClickHouse Connect C data optimizations')
+        logger.debug("Successfully imported ClickHouse Connect C data optimizations")
     except ImportError as ex:
-        logger.warning('Unable to connect optimized C data functions [%s], falling back to pure Python',
-                       str(ex))
+        logger.warning("Unable to connect optimized C data functions [%s], falling back to pure Python", str(ex))
 
 
 def _resolve_numpy_conv():
     if "numpy_conv" in globals():
         return
-    if coerce_bool(os.environ.get('CLICKHOUSE_CONNECT_USE_C', True)):
+    if coerce_bool(os.environ.get("CLICKHOUSE_CONNECT_USE_C", True)):
         try:
             import clickhouse_connect.driverc.npconv as cnc
+
             globals()["numpy_conv"] = cnc
-            logger.debug('Successfully import ClickHouse Connect C/Numpy optimizations')
+            logger.debug("Successfully import ClickHouse Connect C/Numpy optimizations")
             return
         except ImportError as ex:
-            logger.debug('Unable to connect ClickHouse Connect C to Numpy API [%s], falling back to pure Python',
-                         str(ex))
+            logger.debug("Unable to connect ClickHouse Connect C to Numpy API [%s], falling back to pure Python", str(ex))
     globals()["numpy_conv"] = pync
 
 

@@ -1,5 +1,3 @@
-/* syntax version 1 */
-
 $zero = unwrap( cast(0 as Interval) );
 $one = unwrap( cast (1 as Interval ) );
 

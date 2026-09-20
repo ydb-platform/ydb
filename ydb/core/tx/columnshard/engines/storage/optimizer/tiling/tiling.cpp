@@ -18,6 +18,8 @@
 #include <util/generic/hash_set.h>
 #include <util/system/types.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 struct TSettings {
@@ -32,6 +34,7 @@ struct TSettings {
     ui32 FullCompactionUntilLevel = 0;
     ui64 FullCompactionMaxBytes = -1;
     bool CompactNextLevelEdges = false;
+    ui32 CompactionThreads = 1;
     std::optional<ui64> NodePortionsCountLimit{};
     bool ShrinkLevel = true;
 
@@ -110,6 +113,9 @@ struct TSettings {
         MakeBooleanHandler("compact_next_level_edges", [](auto& self, auto value) {
             self.CompactNextLevelEdges = value;
         }),
+        MakeNumberHandler("compaction_threads", [](auto& self, auto value) {
+            self.CompactionThreads = static_cast<ui32>(value);
+        }),
     };
 
     void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
@@ -135,6 +141,9 @@ struct TSettings {
         }
 
         for (const auto& [name, value] : jsonInfo.GetMapSafe()) {
+            if (name == "node_portions_count_limit" || name == "weight_kff") {
+                continue;
+            }
             auto it = JsonValueHandlers.find(name);
             if (it == JsonValueHandlers.end()) {
                 return TConclusionStatus::Fail(TStringBuilder() << "unknown tiling compaction setting " << name);
@@ -170,6 +179,10 @@ struct TSettings {
         if (MaxCompactionBytes < ExpectedPortionSize * 4) {
             return TConclusionStatus::Fail(TStringBuilder() << "max_compaction_bytes (" << MaxCompactionBytes << ") is too small "
                                                             << "relative to expected_portion_size (" << ExpectedPortionSize << ")");
+        }
+
+        if (CompactionThreads < 1) {
+            return TConclusionStatus::Fail("compaction_threads must be at least 1");
         }
 
         SettingsJson = jsonInfo;
@@ -334,13 +347,16 @@ struct TLevel {
         }
         auto height = Intersections.GetMaxCount();
         Counters.Portions->SetHeight(height);
+        TOptimizationPriority priority;
         if (height < 2) {
-            return TOptimizationPriority::Zero();
+            priority = TOptimizationPriority::Zero();
+        } else if (height >= i32(settings.Factor)) {
+            priority = TOptimizationPriority::Critical(height);
+        } else {
+            priority = TOptimizationPriority::LevelOptimization(height);
         }
-        if (height >= i32(settings.Factor)) {
-            return TOptimizationPriority::Critical(height);
-        }
-        return TOptimizationPriority::LevelOptimization(height);
+        Counters.Portions->SetOverload(priority.GetLevel());
+        return priority;
     }
 
     void Add(const TPortionInfo::TPtr& p) {
@@ -427,7 +443,9 @@ struct TLevel {
                 }
                 const auto& p = it->second;
                 if (locksManager->IsLocked(*p, NDataLocks::ELockCategory::Compaction)) {
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: skipping level (portions locked)")("level", Level);
+                    YDB_LOG_DEBUG("",
+                        {"message", "tiling compaction: skipping level (portions locked)"},
+                        {"level", Level});
                     CheckCompactions = false;
                     return {};
                 }
@@ -682,7 +700,10 @@ private:
             return nullptr;
         }
 
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: compacting level")("level", level)("count", portions.size());
+        YDB_LOG_DEBUG("",
+            {"message", "tiling compaction: compacting level"},
+            {"level", level},
+            {"count", portions.size()});
 
         ui32 targetLevel = level + 1;
         if (targetLevel >= MaxLevels) {
@@ -719,8 +740,10 @@ private:
             return nullptr;
         }
 
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: compacting accumulator")("level", level)(
-            "count", portions.size());
+        YDB_LOG_DEBUG("",
+            {"message", "tiling compaction: compacting accumulator"},
+            {"level", level},
+            {"count", portions.size()});
 
         ui32 targetLevel = level + 1;
         if (targetLevel >= MaxLevels) {
@@ -758,6 +781,14 @@ private:
             RemovePortion(portion);
             PlacePortion(portion, newLevel);
         }
+    }
+
+    bool DoUsesPullCompactionScheduling() const override {
+        return true;
+    }
+
+    ui32 DoGetMaxCompactionInflight() const override {
+        return CompactionThreads;
     }
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
@@ -827,7 +858,8 @@ private:
     }
 
     void DoActualize(const TInstant currentInstant) override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: actualize called");
+        YDB_LOG_DEBUG("",
+            {"message", "tiling compaction: actualize called"});
         for (size_t level = 0; level < Accumulator.size(); ++level) {
             Accumulator[level].Actualize(*this, currentInstant);
         }
@@ -914,14 +946,16 @@ private:
 
     bool DoDeserializeFromProto(const TProto& proto) override {
         if (!proto.HasTiling()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling compaction optimizer from proto")(
-                "proto", proto.DebugString());
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse tiling compaction optimizer from proto"},
+                {"proto", proto.DebugString()});
             return false;
         }
         auto status = Settings.DeserializeFromProto(proto.GetTiling());
         if (!status.IsSuccess()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling compaction optimizer from proto")(
-                "description", status.GetErrorDescription());
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse tiling compaction optimizer from proto"},
+                {"description", status.GetErrorDescription()});
             return false;
         }
         Settings.NodePortionsCountLimit = GetNodePortionsCountLimit();
@@ -946,7 +980,8 @@ private:
     }
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "creating tiling compaction optimizer");
+        YDB_LOG_DEBUG("",
+            {"message", "creating tiling compaction optimizer"});
         return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
     }
 

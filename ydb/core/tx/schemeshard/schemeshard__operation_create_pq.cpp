@@ -1,5 +1,6 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
+
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
@@ -14,6 +15,8 @@
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <library/cpp/int128/int128.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -47,7 +50,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    if (partitionCount == 0 || partitionCount > TSchemeShard::MaxPQGroupPartitionsCount) {
+    if (partitionCount == 0) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = Sprintf("Invalid total partition count specified: %u", partitionCount);
         return nullptr;
@@ -144,7 +147,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
             }
         }
 
-        pqGroupInfo->PartitionsToAdd.emplace(i, i + 1, keyRange);
+        pqGroupInfo->PartitionsToAdd.emplace_back(i, i + 1, keyRange);
     }
 
     if (partsPerTablet == 0 || partsPerTablet > TSchemeShard::MaxPQTabletPartitionsCount) {
@@ -160,16 +163,10 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     pqGroupInfo->TotalPartitionCount = partitionCount;
     pqGroupInfo->ActivePartitionCount = partitionCount;
 
-    ui32 tabletCount = pqGroupInfo->ExpectedShardCount();
-    if (tabletCount > TSchemeShard::MaxPQGroupTabletsCount) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("Invalid tablet count specified: %u", tabletCount);
-        return nullptr;
-    }
-
     NKikimrPQ::TPQTabletConfig tabletConfig = op.GetPQTabletConfig();
     tabletConfig.ClearPartitionIds();
     tabletConfig.ClearPartitions();
+
 
     if (!CheckPersQueueConfig(tabletConfig, false, &errStr)) {
         status = NKikimrScheme::StatusSchemeError;
@@ -186,7 +183,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     if (auto it = attrs.find("database_id"); it != attrs.end()) {
         tabletConfig.SetYdbDatabaseId(it->second);
     }
-    if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
+    if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
         tabletConfig.SetMonitoringProjectId(it->second);
     }
 
@@ -240,7 +237,9 @@ void ApplySharding(TTxId txId,
         partition->PqId = it->PartitionId;
         partition->GroupId = it->GroupId;
         partition->KeyRange = it->KeyRange;
-        partition->AlterVersion = 1;
+        // Must match pqGroup->AlterVersion: init counts partitions with
+        // partition->AlterVersion <= alterData->AlterVersion when rebuilding PQPartitionsInside.
+        partition->AlterVersion = pqGroup->AlterVersion;
         partition->CreateVersion = 1;
         partition->Status = NKikimrPQ::ETopicPartitionStatus::Active;
         partition->CreationTimestamp = TInstant::Seconds(TAppData::TimeProvider->Now().Seconds());
@@ -251,6 +250,7 @@ void ApplySharding(TTxId txId,
 }
 
 class TCreatePQ: public TSubOperation {
+    virtual const char* Name() const override final { return "TCreatePQ"; }
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -302,11 +302,9 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = createDEscription.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreatePQ Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+        );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -469,6 +467,29 @@ public:
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
+        // Assign topic Id for SourceId→Partition mapping. For FirstClass topics use
+        // the LocalPathId; for federation topics the Id should already be set from
+        // the _id attribute via ProcessTopicAttributes.
+        // Re-serialization follows the same pattern as schemeshard__operation_alter_pq.cpp:347
+        // and schemeshard__operation_common_pq.cpp:830.
+        if (AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()) {
+            bool configChanged = false;
+            if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && !config.HasId()) {
+                config.MutableId()->SetId(dstPath.Base()->PathId.LocalPathId);
+                config.MutableId()->SetOwnerId(ui64(ssId));
+                configChanged = true;
+            }
+            if (config.HasId() && !config.GetId().HasTxStep()) {
+                // Sentinel: the id is filled at create, so writers must not use the
+                // name-keyed fallback (a brand-new topic has no legacy rows).
+                config.MutableId()->SetTxStep(0);
+                configChanged = true;
+            }
+            if (configChanged) {
+                Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&pqGroup->TabletConfig);
+            }
+        }
+
         context.SS->TabletCounters->Simple()[COUNTER_PQ_GROUP_COUNT].Add(1);
 
         TPathId pathId = dstPath.Base()->PathId;
@@ -487,9 +508,8 @@ public:
         TTopicInfo::TPtr emptyGroup = new TTopicInfo;
         emptyGroup->Shards.swap(pqGroup->Shards);
 
-        context.SS->Topics[pathId] = emptyGroup;
-        context.SS->Topics[pathId]->AlterData = pqGroup;
-        context.SS->IncrementPathDbRefCount(pathId);
+        emptyGroup->AlterData = pqGroup;
+        context.SS->Topics.Set(pathId, emptyGroup);
 
         context.DbChanges.PersistPersQueueGroup(pathId, emptyGroup);
         context.DbChanges.PersistAddPersQueueGroupAlter(pathId, pqGroup);
@@ -575,11 +595,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreatePQ AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreatePQ AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -623,3 +643,5 @@ ISubOperation::TPtr CreateNewPQ(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

@@ -114,7 +114,10 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
 
             Cerr << "=== PersQueueClient" << Endl;
             NYdb::TDriverConfig driverCfg;
-            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort).SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release())).SetDatabase("/Root");
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << Server->GrpcPort)
+                .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()))
+                .SetDatabase("/Root")
+                .SetAuthToken(BUILTIN_ACL_ROOT);
             YdbDriver.reset(new NYdb::TDriver(driverCfg));
             PersQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver);
 

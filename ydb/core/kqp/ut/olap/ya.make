@@ -17,6 +17,7 @@ SRCS(
     aggregations_ut.cpp
     clickbench_ut.cpp
     locks_ut.cpp
+    scan_cleanup_ut.cpp
     optimizer_ut.cpp
     peephole_ut.cpp
     sys_view_ut.cpp
@@ -34,6 +35,7 @@ PEERDIR(
     ydb/core/kqp/ut/olap/helpers
     ydb/core/kqp/ut/olap/combinatory
     ydb/core/tx/datashard/ut_common
+    ydb/library/aws_init
     ydb/public/sdk/cpp/src/client/operation
 )
 

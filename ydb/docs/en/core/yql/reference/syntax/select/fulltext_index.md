@@ -43,8 +43,8 @@ Only the first two arguments can be positional. Additional parameters must be pa
   * `Wildcard` — wildcard search: `%` matches any substring, `_` matches a single character (similar to `LIKE`); requires an n-gram index
 * `DefaultOperator` (String): term combination operator in `Keywords` mode:
   * `And` (default) — all query terms must be present in the text
-  * `Or` — matching at least one term is sufficient; use `MinimumShouldMatch` to set a minimum threshold
-* `MinimumShouldMatch` (String): minimum number of matched terms when `DefaultOperator = "Or"` — specified as an absolute number (for example, `"3"`) or a percentage of query terms (for example, `"50%"`)
+  * `Or` — terms split into **required** (prefixed with `+`, must appear in every result) and **optional** (no prefix, count toward `MinimumShouldMatch`). Without any `+` prefix, all terms are optional and at least one must match (see [example](../../builtins/fulltext.md#required-term-example))
+* `MinimumShouldMatch` (String): minimum number of **optional** terms that must match when `DefaultOperator = "Or"` — specified as an absolute number (for example, `"3"`) or a percentage of the optional terms (for example, `"50%"`). Required (`+`) terms are not counted
 
 ### `Wildcard` mode and `%` / `_` patterns (requires n-grams)
 
@@ -86,8 +86,8 @@ LIMIT 10;
 
 Additional parameters must be passed as **named arguments**:
 
-* `DefaultOperator` (String): term combination operator — `And` (default, all terms must be present) or `Or` (at least one term must match)
-* `MinimumShouldMatch` (String): when `DefaultOperator = "Or"`, minimum number of matched terms — specified as an absolute number (for example, `"2"`) or a percentage (for example, `"50%"`)
+* `DefaultOperator` (String): term combination operator — `And` (default, all terms must be present) or `Or` (terms split into **required** with `+` prefix and **optional** without; at least `MinimumShouldMatch` optional terms must match, and every required term must be present)
+* `MinimumShouldMatch` (String): when `DefaultOperator = "Or"`, minimum number of **optional** terms that must match — specified as an absolute number (for example, `"2"`) or a percentage of the optional terms (for example, `"50%"`). Required (`+`) terms are not counted
 * `K1` (Double): term frequency saturation parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — controls how strongly repeated occurrences of a term affect the score; typical range: 1.2–2.0
 * `B` (Double): document length normalization parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — `0.0` disables normalization, `1.0` fully normalizes by document length; typical value: 0.75
 

@@ -22,7 +22,7 @@ class TUnboxedKeyValueLruCacheWithTtl {
         TEntry(NUdf::TUnboxedValue key, NUdf::TUnboxedValue value, std::chrono::time_point<std::chrono::steady_clock> expiration)
             : Key(std::move(key))
             , Value(std::move(value))
-            , Expiration(std::move(expiration))
+            , Expiration(expiration)
         {
         }
         NUdf::TUnboxedValue Key;
@@ -49,12 +49,12 @@ public:
             Touch(it->second);
             auto& entry = *it->second;
             entry.Value = std::move(value);
-            entry.Expiration = std::move(expiration);
+            entry.Expiration = expiration;
         } else {
             if (Map_.size() == MaxSize_) {
                 RemoveLeastRecentlyUsedEntry();
             }
-            UsageList_.emplace_back(key, std::move(value), std::move(expiration));
+            UsageList_.emplace_back(key, std::move(value), expiration);
             Map_.emplace_hint(it, std::move(key), --UsageList_.end());
         }
     }
@@ -113,7 +113,6 @@ private:
         UsageList_.pop_front();
     }
 
-private:
     const size_t MaxSize_;
     TUsageList UsageList_;
     const TKeyTypeContanerHelper<true, true, false> KeyTypeHelper_;

@@ -75,7 +75,7 @@ public:
         const TKsvIndexes KsvIndexes_;
     };
 
-    explicit TDsvReadRecord(const TUnboxedValue& separator,
+    explicit TDsvReadRecord(TUnboxedValue separator,
                             const TResultIndexes& fieldIndexes,
                             const TKsvIndexes& ksvIndexes)
         : Separator_(std::move(separator))

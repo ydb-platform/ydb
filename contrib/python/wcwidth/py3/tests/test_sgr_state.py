@@ -1,4 +1,5 @@
 """Tests for SGR state tracking and propagation."""
+
 from __future__ import annotations
 
 # std imports

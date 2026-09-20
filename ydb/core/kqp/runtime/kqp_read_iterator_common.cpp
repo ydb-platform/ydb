@@ -74,7 +74,7 @@ TDuration TIteratorReadBackoffSettings::CalcShardDelay(size_t attempt, bool allo
         delay = Min(delay, MaxRetryDelay);
     }
 
-    delay *= (1 - UnsertaintyRatio * RandomNumber<double>());
+    delay *= (1 - UncertaintyRatio * RandomNumber<double>());
 
     return delay;
 }
@@ -117,6 +117,10 @@ ui64 MaxInFlightReadsStreamLookup() {
 
 ui64 MaxBytesPerFetchStreamLookup() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxBytesPerFetchStreamLookup;
+}
+
+ui64 MaxInFlightLocksStreamLookup() {
+    return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxInFlightLocksStreamLookup;
 }
 
 } // namespace NKqp

@@ -11,7 +11,10 @@ FORK_SUBTESTS()
 
 PEERDIR(
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/impl/observability
+    ydb/public/sdk/cpp/src/client/impl/internal/sdk_runtime
     ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/library/grpc/client
 )
 
 SRCS(

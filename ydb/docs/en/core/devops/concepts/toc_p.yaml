@@ -3,7 +3,11 @@ items:
   href: system-requirements.md
 - name: CPU settings for production
   href: cpu-production-settings.md
+- name: Storage capacity planning
+  href: capacity-planning.md
 - name: Versioning
   href: versioning.md
 - name: Maintenance
   href: maintenance-without-downtime.md
+- name: Authentication and authorization of database nodes
+  href: node-authorization.md

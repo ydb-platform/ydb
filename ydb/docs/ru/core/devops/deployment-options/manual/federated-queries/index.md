@@ -33,7 +33,7 @@
 
 ## Пошаговое руководство
 
-1. Выполните шаги инструкции по развёртыванию динамического узла {{ ydb-short-name }} до [подготовки конфигурационных файлов](../initial-deployment/index.md#config) включительно.
+1. Выполните шаги инструкции по развёртыванию динамического узла {{ ydb-short-name }} до [подготовки конфигурационных файлов](../initial-deployment/deployment-configuration-v1.md#config) включительно.
 2. Если для доступа к нужному вам источнику требуется развернуть коннектор, сделайте это [согласно инструкции](./connector-deployment.md).
 3. [В конфигурационном файле](../../../../reference/configuration/index.md) {{ ydb-short-name }} в секции `feature_flags` включите флаг `enable_external_data_sources`:
 

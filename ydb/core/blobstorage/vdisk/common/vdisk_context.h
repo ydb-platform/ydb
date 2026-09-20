@@ -116,31 +116,31 @@ namespace NKikimr {
             // check status
             switch (ev.Status) {
                 case NKikimrProto::OK:
-                    if constexpr (T::EventType != TEvBlobStorage::EvLogResult) {
-                        // we have different semantics for TEvLogResult StatusFlags
-                        OutOfSpaceState.UpdateLocalChunk(ev.StatusFlags);
-                    } else {
-                        // update log space flags
-                        OutOfSpaceState.UpdateLocalLog(ev.StatusFlags);
+                    if constexpr (T::EventType == TEvBlobStorage::EvLogResult) {
+                        // We have different semantics for TEvLogResult StatusFlags.
+                        OutOfSpaceState.ObserveLocalLog(ev.StatusFlags);
+                    } else if constexpr (T::EventType != TEvBlobStorage::EvCheckSpaceResult) {
+                        // TEvCheckSpaceResult carries both chunk and log flags and
+                        // is applied authoritatively by the polling actor.
+                        OutOfSpaceState.ObserveLocalChunk(ev.StatusFlags);
+                    }
+                    if constexpr (T::EventType != TEvBlobStorage::EvCheckSpaceResult) {
+                        if constexpr (requires { ev.Headroom; }) {
+                            OutOfSpaceState.ObserveSpaceHeadroom(ev.Headroom);
+                        }
                     }
                     return true;
                 case NKikimrProto::INVALID_OWNER:
                 case NKikimrProto::INVALID_ROUND:
                     // BlobStorage group reconfiguration, just return false and wait until
                     // node warden restarts VDisk
-                    LOG_NOTICE(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
-                            VDISKP(VDiskLogPrefix,
-                                "CheckPDiskResponse: Group Reconfiguration: %s",
-                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
+                    YDB_LOG_NOTICE_CTX_COMP(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER, VDISKP(VDiskLogPrefix, "CheckPDiskResponse: Group Reconfiguration: %s", FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
                     return false;
                 case NKikimrProto::ERROR:
                 case NKikimrProto::CORRUPTED:
                 case NKikimrProto::OUT_OF_SPACE: {
                     // Device is out of order
-                    LOG_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
-                            VDISKP(VDiskLogPrefix,
-                                "CheckPDiskResponse: Recoverable error from PDisk: %s",
-                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
+                    YDB_LOG_ERROR_CTX_COMP(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER, VDISKP(VDiskLogPrefix, "CheckPDiskResponse: Recoverable error from PDisk: %s", FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
                     actorSystemOrCtx.Send(VDiskActorId, new TEvPDiskErrorStateChange(ev.Status, ev.StatusFlags, ev.ErrorReason));
                     return false;
                 }

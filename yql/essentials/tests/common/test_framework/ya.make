@@ -30,6 +30,7 @@ PEERDIR(
 
 RESOURCE(
     yql/essentials/data/language/features.json yql/essentials/data/language/features.json
+    yql/essentials/data/language/langver.json yql/essentials/data/language/langver.json
 )
 
 END()

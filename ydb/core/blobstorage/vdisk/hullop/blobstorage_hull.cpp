@@ -9,6 +9,8 @@
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_HULLRECS
+
 template<>
 void Out<NKikimr::THullCheckStatus>(IOutputStream &str, const NKikimr::THullCheckStatus &status) {
     str << "{Status# " << status.Status;
@@ -53,9 +55,9 @@ namespace NKikimr {
             : LogoBlobsRunTimeCtx(std::make_shared<TLogoBlobsRunTimeCtx>(lsnMngr, pdiskCtx,
                         skeletonId, runHandoff, hullDs->LogoBlobs, hugeKeeperId))
             , BlocksRunTimeCtx(std::make_shared<TBlocksRunTimeCtx>(lsnMngr, pdiskCtx,
-                        skeletonId, runHandoff, hullDs->Blocks, TActorId()))
+                        skeletonId, runHandoff, hullDs->Blocks, hugeKeeperId))
             , BarriersRunTimeCtx(std::make_shared<TBarriersRunTimeCtx>(lsnMngr, pdiskCtx,
-                        skeletonId, runHandoff, hullDs->Barriers, TActorId()))
+                        skeletonId, runHandoff, hullDs->Barriers, hugeKeeperId))
             , LsnMngr(std::move(lsnMngr))
             , ActorSystem(as)
             , BarrierValidation(barrierValidation)
@@ -97,6 +99,10 @@ namespace NKikimr {
 
     THull::~THull() = default;
 
+    TFreshSpaceDebt THull::GetFreshSpaceDebt() const {
+        return HullDs->LogoBlobs->GetFreshSpaceDebt();
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Private
     ////////////////////////////////////////////////////////////////////////////
@@ -106,10 +112,7 @@ namespace NKikimr {
             // ensure that the new blob would not fall under GC
             TString explanation;
             if (!BarrierCache.Keep(id, issueKeepFlag, &explanation)) {
-                LOG_CRIT(ctx, NKikimrServices::BS_HULLRECS,
-                        VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
-                            "Db# LogoBlobs; putting blob beyond the barrier id# %s barrier# %s",
-                            id.ToString().data(), explanation.data()));
+                YDB_LOG_CRIT_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs; putting blob beyond the barrier id# %s barrier# %s", id.ToString().data(), explanation.data()));
                 *writtenBeyondBarrier = true;
             }
         }
@@ -231,7 +234,7 @@ namespace NKikimr {
         ReplayAddHugeLogoBlobCmd(ctx, id, ingress, diskAddr, lsn, THullDbRecovery::NORMAL);
 
         // run compaction if required
-        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddHugeLogoBlob"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddHugeLogoBlob"));
         CompactFreshLogoBlobsIfRequired(ctx);
     }
 
@@ -245,7 +248,7 @@ namespace NKikimr {
         ReplayAddLogoBlobCmd(ctx, id, ingress, seg.Point(), THullDbRecovery::NORMAL);
 
         // run compaction if required
-        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddLogoBlob with seg"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddLogoBlob with seg"));
         CompactFreshLogoBlobsIfRequired(ctx);
     }
 
@@ -260,21 +263,50 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////
     // Blocks
     ////////////////////////////////////////////////////////////////////////
-    THullCheckStatus THull::CheckBlockCmdAndAllocLsn(ui64 tabletID, ui32 gen, ui64 issuerGuid, ui32 *actGen, TLsnSeg *seg)
-    {
+    // Blocks issued by the machinery that has no knowledge of TTabletStorageInfo are written as is: the bridge syncer
+    // just replicates already validated records between piles, and the force-block done on behalf of a reader only
+    // raises the blocked generation obtained from the state storage (the version-aware block has already been
+    // confirmed by the very same tablet instance by that time).
+    static bool ShouldCheckVersion(ui64 tabletID, TWriteSource writeSource) {
+        return (~tabletID >> 63) // the version record itself carries no version to check
+            && writeSource != TWriteSource::SyncerMergeBlock
+            && writeSource != TWriteSource::SkeletonForceBlock;
+    }
+
+    THullCheckStatus THull::CheckBlockCmdAndAllocLsn(ui64 tabletID, ui32 gen, ui64 issuerGuid, std::optional<ui32> version,
+            TWriteSource writeSource, ui32 *actGen, TLsnSeg *seg, bool *versionChanged) {
         const TBlocksCache::TBlockedGen g(gen, issuerGuid);
         auto res = BlocksCache.IsBlocked(tabletID, g, actGen);
-        switch (res.Status) {
-            case TBlocksCache::EStatus::OK:
-                *actGen = gen;
-                // allocate lsn in case of success
-                *seg = Fields->LsnMngr->AllocLsnForHullAndSyncLog();
-                BlocksCache.UpdateInFlight(tabletID, g, seg->Point());
-                return {NKikimrProto::OK, "", false};
-            case TBlocksCache::EStatus::BLOCKED_PERS:
-                return {NKikimrProto::ALREADY, "already got", 0, false};
-            case TBlocksCache::EStatus::BLOCKED_INFLIGH:
-                return {NKikimrProto::ALREADY, "already got", res.Lsn, true};
+
+        // A missing Version field is a legacy client that predates TTabletStorageInfo::Version;
+        // those must still be able to boot against a VDisk that already stores a version. An
+        // explicit Version (including 0) is always checked.
+        if (ShouldCheckVersion(tabletID, writeSource) && version) {
+            const auto [actualVersion, lsn] = BlocksCache.FindMax(~tabletID);
+            if (*version < actualVersion) {
+                return {NKikimrProto::ERROR, "obsolete tablet storage info version", lsn, lsn != 0, true};
+            } else if (actualVersion < *version) {
+                if (res.Status != TBlocksCache::EStatus::OK) {
+                    // the version may only advance along with the block, so reject the whole command
+                    return {NKikimrProto::ERROR, "generation check failed while increasing tablet storage info version",
+                        res.Lsn, res.Status == TBlocksCache::EStatus::BLOCKED_INFLIGH};
+                }
+                *versionChanged = true;
+            }
+        }
+
+        if (res.Status == TBlocksCache::EStatus::OK) {
+            *actGen = gen;
+            *seg = *versionChanged
+                ? Fields->LsnMngr->AllocDiscreteLsnBatchForHullAndSyncLog(2)
+                : Fields->LsnMngr->AllocLsnForHullAndSyncLog();
+            if (*versionChanged) {
+                BlocksCache.UpdateInFlight(~tabletID, {*version, 0}, seg->First);
+            }
+            BlocksCache.UpdateInFlight(tabletID, g, seg->Last);
+            return {NKikimrProto::OK, "", false};
+        } else {
+            return {NKikimrProto::ALREADY, "obsolete generation", res.Lsn, res.Status == TBlocksCache::EStatus::BLOCKED_INFLIGH};
         }
     }
 
@@ -291,7 +323,7 @@ namespace NKikimr {
         Fields->DelayedResponses.ConfirmLsn(lsn, replySender);
 
         // run compaction if required
-        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddBlockCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddBlockCmd"));
         CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0, Fields->BlocksRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
     }
@@ -341,12 +373,7 @@ namespace NKikimr {
             if (memRec.CollectGen != collectGeneration || memRec.CollectStep != collectStep) {
                 // we have received GC command with the same key as the existing one, but with different barrier
                 // value -- this is not tolerable
-                LOG_CRIT(ctx, NKikimrServices::BS_HULLRECS,
-                    VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
-                           "Db# Barriers ValidateGCCmd: incorrect collect cmd: tabletID# %" PRIu64
-                            " key# %s existing barrier# %" PRIu32 ":%" PRIu32 " new barrier# %"
-                            PRIu32 ":%" PRIu32, tabletID, newKey.ToString().data(), memRec.CollectGen, memRec.CollectStep,
-                            collectGeneration, collectStep));
+                YDB_LOG_CRIT_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Barriers ValidateGCCmd: incorrect collect cmd: tabletID# %" PRIu64 " key# %s existing barrier# %" PRIu32 ":%" PRIu32 " new barrier# %" PRIu32 ":%" PRIu32, tabletID, newKey.ToString().data(), memRec.CollectGen, memRec.CollectStep, collectGeneration, collectStep));
                 return NKikimrProto::ERROR;
             }
 
@@ -370,11 +397,7 @@ namespace NKikimr {
 
             // we have the key from the same Tablet/Channel, but which is greater than the new one; this
             // means that keys came out-of-order, this key is from the past -- error condition
-            LOG_ERROR(ctx, NKikimrServices::BS_HULLRECS,
-                 VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
-                        "Db# Barriers ValidateGCCmd: out-of-order requests:"
-                        " existing key# %s new key# %s new barrier# %" PRIu32 ":%" PRIu32, key.ToString().data(),
-                        newKey.ToString().data(), collectGeneration, collectStep));
+            YDB_LOG_ERROR_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Barriers ValidateGCCmd: out-of-order requests:" " existing key# %s new key# %s new barrier# %" PRIu32 ":%" PRIu32, key.ToString().data(), newKey.ToString().data(), collectGeneration, collectStep));
             return NKikimrProto::ERROR;
         }
 
@@ -397,12 +420,7 @@ namespace NKikimr {
 
             if (newGenStep < existingGenStep) {
                 // we have a command with greater key than the existing one, but the value has decreased
-                LOG_CRIT(ctx, NKikimrServices::BS_HULLRECS,
-                     VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
-                            "Db# Barriers ValidateGCCmd: decreasing barrier:"
-                            " existing key# %s barrier# %" PRIu32 ":%" PRIu32 " new key# %s barrier# %" PRIu32 ":%"
-                            PRIu32, key.ToString().data(), memRec.CollectGen, memRec.CollectStep, newKey.ToString().data(),
-                            collectGeneration, collectStep));
+                YDB_LOG_CRIT_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Barriers ValidateGCCmd: decreasing barrier:" " existing key# %s barrier# %" PRIu32 ":%" PRIu32 " new key# %s barrier# %" PRIu32 ":%" PRIu32, key.ToString().data(), memRec.CollectGen, memRec.CollectStep, newKey.ToString().data(), collectGeneration, collectStep));
                 return NKikimrProto::ERROR;
             }
         }
@@ -428,9 +446,9 @@ namespace NKikimr {
             return {NKikimrProto::ERROR, "", false}; // record has duplicates
 
         if (!collect && !record.KeepSize() && !record.DoNotKeepSize()) {
-            LOG_ERROR_S(ctx, NKikimrServices::BS_HULLRECS, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                << "Db# Barriers ValidateGCCmd: empty garbage collection command"
-                << " TabletId# " << tabletID);
+            YDB_LOG_ERROR_CTX(ctx, "Barriers ValidateGCCmd: empty garbage collection command",
+                {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                {"tabletId", tabletID});
             return {NKikimrProto::ERROR, "empty garbage collection command"};
         }
 
@@ -490,9 +508,9 @@ namespace NKikimr {
         ReplayAddGCCmd(ctx, record, ingress, seg.Last);
 
         // run compaction if required
-        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddGCCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddGCCmd"));
         CompactFreshLogoBlobsIfRequired(ctx);
-        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddGCCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddGCCmd"));
         CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0, Fields->BarriersRunTimeCtx, ctx,
             false, Fields->AllowGarbageCollection);
     }
@@ -632,12 +650,12 @@ namespace NKikimr {
         Y_DEBUG_ABORT_UNLESS(curLsn == seg.Last + 1);
 
         // run compaction if required
-        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddSyncDataCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddSyncDataCmd"));
         CompactFreshLogoBlobsIfRequired(ctx);
-        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddSyncDataCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddSyncDataCmd"));
         CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0, Fields->BlocksRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
-        LOG_DEBUG(ctx, NKikimrServices::BS_HULLRECS, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddSyncDataCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddSyncDataCmd"));
         CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0, Fields->BarriersRunTimeCtx, ctx,
             false, Fields->AllowGarbageCollection);
     }
@@ -708,6 +726,18 @@ namespace NKikimr {
                 Fields->BarriersRunTimeCtx, *HullDs->Barriers, Fields->AllowGarbageCollection);
         }
         Y_VERIFY_S(curLsn == seg.Last + 1, HullDs->HullCtx->VCtx->VDiskLogPrefix);
+    }
+
+    void THull::AddLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize) {
+        LogoBlobSyncDataSizeInFlight += logoBlobsSize;
+        BlockSyncDataSizeInFlight += blocksSize;
+        BarrierSyncDataSizeInFlight += barriersSize;
+    }
+
+    void THull::RemoveLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize) {
+        LogoBlobSyncDataSizeInFlight -= logoBlobsSize;
+        BlockSyncDataSizeInFlight -= blocksSize;
+        BarrierSyncDataSizeInFlight -= barriersSize;
     }
 
     ///////////////// GET SNAPSHOT //////////////////////////////////////////////

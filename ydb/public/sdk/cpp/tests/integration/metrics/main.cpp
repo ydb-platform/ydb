@@ -188,14 +188,26 @@ TEST(QueryMetricsIntegration, CreateSessionRecordsDuration) {
     auto args = MakeRunArgs();
     TQueryClient client(args.Driver, TClientSettings().Database(args.Database));
 
-    auto session = client.GetSession().ExtractValueSync();
-    ASSERT_TRUE(session.IsSuccess()) << session.GetIssues().ToString();
+    std::string sessionId;
+    {
+        auto sessionResult = client.GetSession().ExtractValueSync();
+        ASSERT_TRUE(sessionResult.IsSuccess()) << sessionResult.GetIssues().ToString();
+        sessionId = sessionResult.GetSession().GetId();
+    }
+
+    ASSERT_EQ(client.GetCurrentPoolSize(), 1);
+
+    {
+        auto sessionResult = client.GetSession().ExtractValueSync();
+        ASSERT_TRUE(sessionResult.IsSuccess()) << sessionResult.GetIssues().ToString();
+        EXPECT_EQ(sessionResult.GetSession().GetId(), sessionId);
+    }
 
     auto duration = args.Registry->GetHistogram(
         "ydb.client.operation.duration",
         DurationLabels(args.Database, "CreateSession", args.ServerAddress, args.ServerPort));
     ASSERT_NE(duration, nullptr) << "CreateSession duration histogram not created";
-    EXPECT_GE(duration->Count(), 1u);
+    EXPECT_EQ(duration->Count(), 1u);
 
     args.Driver.Stop(true);
 }

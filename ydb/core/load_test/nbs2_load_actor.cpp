@@ -7,7 +7,7 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -34,6 +34,8 @@
 #include <util/random/shuffle.h>
 
 namespace {
+
+constexpr ui64 MaxSupportedBlockCount = 1048576;
 
 void FillLatency(
     const NYdb::NBS::TLatencyHistogram& hist,
@@ -104,8 +106,8 @@ public:
         DirectPartitionId.Parse(cmd.GetDirectPartitionId().data(), cmd.GetDirectPartitionId().size());
         google::protobuf::TextFormat::PrintToString(cmd, &ConfigString);
 
-        if (RangeTest.GetStart() >= RangeTest.GetEnd() || RangeTest.GetEnd() > 1048576) {
-            ythrow NKikimr::TLoadActorException() << "Range must be in [0, 1048576]";
+        if (RangeTest.GetStart() >= RangeTest.GetEnd() || RangeTest.GetEnd() >= MaxSupportedBlockCount) {
+            ythrow NKikimr::TLoadActorException() << "Range must be in [0, " << (MaxSupportedBlockCount - 1) << "]";
         }
         if (RangeTest.GetZeroRate() > 0) {
             ythrow NKikimr::TLoadActorException() << "ZeroRate is unsupported";
@@ -163,12 +165,12 @@ public:
         proto.SetRequestsFailed(suiteResults.RequestsFailed);
         proto.SetIops(suiteResults.RequestsCompleted / duration_s);
         proto.SetThroughputMbs(dataSizeMb / duration_s);
-        
-        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, 
-            "Tag# " << Tag << " Test final results: Status=" << static_cast<int>(suiteResults.Status) 
-            << " (0=OK, 1=FAILURE), RequestsCompleted=" << suiteResults.RequestsCompleted 
-            << ", RequestsFailed=" << suiteResults.RequestsFailed 
-            << ", BlocksRead=" << suiteResults.BlocksRead 
+
+        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST,
+            "Tag# " << Tag << " Test final results: Status=" << static_cast<int>(suiteResults.Status)
+            << " (0=OK, 1=FAILURE), RequestsCompleted=" << suiteResults.RequestsCompleted
+            << ", RequestsFailed=" << suiteResults.RequestsFailed
+            << ", BlocksRead=" << suiteResults.BlocksRead
             << ", BlocksWritten=" << suiteResults.BlocksWritten);
 
         if (suiteResults.BlocksRead) {

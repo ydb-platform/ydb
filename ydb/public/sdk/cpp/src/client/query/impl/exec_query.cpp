@@ -40,6 +40,9 @@ static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::Transaction
         case TTxSettings::TS_READ_COMMITTED_RW:
             proto->mutable_read_committed_read_write();
             break;
+        case TTxSettings::TS_STRICT_SERIALIZABLE_RW:
+            proto->mutable_strict_serializable_read_write();
+            break;
         default:
             throw TContractViolation("Unexpected transaction mode.");
     }
@@ -85,6 +88,7 @@ public:
 
                 std::optional<TExecStats> stats;
                 std::optional<TTransaction> tx;
+                std::optional<NScheme::TVirtualTimestamp> commitTimestamp;
                 if (self->Response_.has_exec_stats()) {
                     stats = TExecStats(std::move(*self->Response_.mutable_exec_stats()));
                 }
@@ -93,16 +97,21 @@ public:
                     tx = TTransaction(self->Session_.value(), self->Response_.tx_meta().id());
                 }
 
+                if (self->Response_.has_commit_timestamp()) {
+                    commitTimestamp = NScheme::TVirtualTimestamp(self->Response_.commit_timestamp());
+                }
+
                 if (self->Response_.has_result_set()) {
                     promise.SetValue({
                         std::move(status),
                         TResultSet(std::move(*self->Response_.mutable_result_set())),
                         self->Response_.result_set_index(),
                         std::move(stats),
-                        std::move(tx)
+                        std::move(tx),
+                        std::move(commitTimestamp)
                     });
                 } else {
-                    promise.SetValue({std::move(status), std::move(stats), std::move(tx)});
+                    promise.SetValue({std::move(status), std::move(stats), std::move(tx), std::move(commitTimestamp)});
                 }
             }
         };
@@ -157,8 +166,10 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     std::vector<Ydb::ResultSet> ResultSets_;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Tx_;
+    std::optional<NScheme::TVirtualTimestamp> CommitTimestamp_;
     std::vector<std::string> ArrowSchemas_;
     std::vector<std::vector<std::string>> BytesData_;
+    std::vector<bool> ResultSetSeen_;
 
     void Next() {
         TPtr self(this);
@@ -170,6 +181,10 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 self->Stats_ = st;
             }
 
+            if (const auto& ct = part.GetCommitTimestamp()) {
+                self->CommitTimestamp_ = ct;
+            }
+
             if (!part.IsSuccess()) {
                 std::optional<TExecStats> stats;
                 std::swap(self->Stats_, stats);
@@ -178,12 +193,14 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     std::vector<NYdb::NIssue::TIssue> issues;
                     std::vector<Ydb::ResultSet> resultProtos;
                     std::optional<TTransaction> tx;
+                    std::optional<NScheme::TVirtualTimestamp> commitTimestamp;
                     std::vector<std::string> arrowSchemas;
                     std::vector<std::vector<std::string>> bytesData;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
                     std::swap(self->Tx_, tx);
+                    std::swap(self->CommitTimestamp_, commitTimestamp);
                     std::swap(self->ArrowSchemas_, arrowSchemas);
                     std::swap(self->BytesData_, bytesData);
 
@@ -200,10 +217,11 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                         TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues(std::move(issues))),
                         std::move(resultSets),
                         std::move(stats),
-                        std::move(tx)
+                        std::move(tx),
+                        std::move(commitTimestamp)
                     ));
                 } else {
-                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, std::move(stats), {}));
+                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, std::move(stats), {}));  // No commit timestamp on error
                 }
 
                 return;
@@ -213,29 +231,36 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
             if (part.HasResultSet()) {
                 auto inRs = part.ExtractResultSet();
-                auto& inRsProto = TProtoAccessor::GetProto(inRs);
+                auto& inRsProto = inRs.MutableProto();
 
                 // TODO: Use result sets metadata
                 if (self->ResultSets_.size() <= part.GetResultSetIndex()) {
                     self->ResultSets_.resize(part.GetResultSetIndex() + 1);
+                    self->ResultSetSeen_.resize(part.GetResultSetIndex() + 1);
                 }
 
                 auto& resultSet = self->ResultSets_[part.GetResultSetIndex()];
-                resultSet.set_format(inRsProto.format());
+                const auto resultSetIndex = part.GetResultSetIndex();
 
-                switch (resultSet.format()) {
+                switch (inRsProto.format()) {
                     case Ydb::ResultSet::FORMAT_UNSPECIFIED:
                     case Ydb::ResultSet::FORMAT_VALUE: {
-                        self->CollectYdbValues(resultSet, inRsProto);
+                        if (!self->ResultSetSeen_[resultSetIndex]) {
+                            resultSet = std::move(inRsProto);
+                        } else {
+                            self->CollectYdbValues(resultSet, inRsProto);
+                        }
                         break;
                     }
                     case Ydb::ResultSet::FORMAT_ARROW: {
-                        self->CollectArrowBytes(resultSet, inRs.MutableProto(), part.GetResultSetIndex());
+                        resultSet.set_format(inRsProto.format());
+                        self->CollectArrowBytes(resultSet, inRsProto, part.GetResultSetIndex());
                         break;
                     }
                     default:
                         break;
                 }
+                self->ResultSetSeen_[resultSetIndex] = true;
             }
 
             if (const auto& tx = part.GetTransaction()) {
@@ -297,6 +322,7 @@ public:
         auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
         request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
         request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
+        request.set_collect_affected_rows(settings.CollectAffectedRows_);
         request.set_pool_id(TStringType{settings.ResourcePool_});
         request.mutable_query_content()->set_text(TStringType{query});
         request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));

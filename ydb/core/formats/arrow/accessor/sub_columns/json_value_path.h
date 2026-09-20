@@ -1,11 +1,12 @@
 #pragma once
 
+#include "value_type.h"
+
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/library/conclusion/result.h>
 #include <yql/essentials/minikql/jsonpath/parser/parser.h>
 #include <ydb/library/accessor/accessor.h>
 
-#include <util/generic/map.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -19,6 +20,9 @@ using TJsonPath = TString;
 using TJsonPathBuf = TStringBuf;
 
 TString QuoteJsonItem(TStringBuf item);
+void AppendSubcolumnName(TString& currentPrefix, TStringBuf item);
+TString BuildSubcolumnName(TStringBuf currentPrefix, TStringBuf item);
+size_t EstimateSubcolumnNameSize(TStringBuf path, size_t pathItemsCount);
 TJsonPath ToJsonPath(TStringBuf path);
 
 struct TSplittedJsonPath {
@@ -27,13 +31,18 @@ struct TSplittedJsonPath {
     TVector<TJsonPathBuf::size_type> StartPositions;
 };
 
-struct TJsonPathSplitSettings {
-    bool FillTypes = false;
-    bool FillStartPositions = false;
+struct TParsedJsonPath {
+    TJsonPathBuf Source;
+    TSplittedJsonPath Items;
 };
 
+TConclusion<TParsedJsonPath> ParseJsonPath(TJsonPathBuf jsonPath);
 
-TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonPathSplitSettings& settings = {});
+TConclusionStatus ValidateJsonPath(TJsonPathBuf jsonPath);
+
+inline bool IsValidJsonPath(TJsonPathBuf jsonPath) {
+    return ValidateJsonPath(jsonPath).IsSuccess();
+}
 
 TString ToSubcolumnName(TStringBuf path);
 
@@ -41,37 +50,24 @@ TString ToSubcolumnName(TStringBuf path);
 class TJsonPathAccessor {
     YDB_READONLY_DEF(std::shared_ptr<IChunkedArray>, ChunkedArrayAccessor);
     YDB_READONLY_DEF(TString, RemainingPath);
-    YDB_READONLY_DEF(std::optional<ui64>, Cookie);
+    YDB_READONLY(EValueType, ValueType, EValueType::BinaryJson);
     NYql::NJsonPath::TJsonPathPtr RemainingPathPtr;
 
 public:
     using TValuesVisitor = std::function<void(const std::optional<TStringBuf>& value)>;
 
-    TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const std::optional<ui64>& cookie = std::nullopt);
+    TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, EValueType valueType);
 
+    std::shared_ptr<IChunkedArray> GetNativeStringArray() const;
     void VisitValues(const TValuesVisitor& visitor) const;
 
     bool IsValid() const {
-        return ChunkedArrayAccessor != nullptr || Cookie.has_value();
+        return ChunkedArrayAccessor != nullptr;
     }
 
     ui64 GetRecordsCount() const {
         return ChunkedArrayAccessor ? ChunkedArrayAccessor->GetRecordsCount() : 0;
     }
-};
-
-class TJsonPathAccessorTrie {
-    struct TrieNode {
-        TMap<TString, std::unique_ptr<TrieNode>> Children;
-        std::shared_ptr<IChunkedArray> Accessor;
-        std::optional<ui64> Cookie;
-    };
-
-    TrieNode Root;
-
-public:
-    TConclusionStatus Insert(TJsonPathBuf jsonPath, std::shared_ptr<IChunkedArray> accessor, const std::optional<ui64>& cookie = std::nullopt);
-    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetAccessor(TJsonPathBuf jsonPath) const;
 };
 
 } // namespace NKikimr::NArrow::NAccessor::NSubColumns

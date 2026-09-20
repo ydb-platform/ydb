@@ -16,18 +16,14 @@ from asyncio import (
     get_running_loop,
     sleep,
 )
+from collections.abc import Callable, Coroutine, Generator, Hashable, Iterable, Iterator
 from contextlib import ExitStack, contextmanager
 from subprocess import Popen
 from traceback import format_tb
 from typing import (
     Any,
-    Callable,
-    Coroutine,
-    Generator,
     Generic,
-    Hashable,
-    Iterable,
-    Iterator,
+    Literal,
     TypeVar,
     cast,
     overload,
@@ -174,7 +170,7 @@ class Application(Generic[_AppResult]):
     :param output: :class:`~prompt_toolkit.output.Output` instance. (Probably
                    Vt100_Output or Win32Output.)
 
-    Usage:
+    Usage::
 
         app = Application(...)
         app.run()
@@ -731,9 +727,11 @@ class Application(Generic[_AppResult]):
                         f.set_exception(EOFError)
 
             # Enter raw mode, attach input and attach WINCH event handler.
-            with self.input.raw_mode(), self.input.attach(
-                read_from_input_in_context
-            ), attach_winch_signal_handler(self._on_resize):
+            with (
+                self.input.raw_mode(),
+                self.input.attach(read_from_input_in_context),
+                attach_winch_signal_handler(self._on_resize),
+            ):
                 # Draw UI.
                 self._request_absolute_cursor_position()
                 self._redraw()
@@ -923,7 +921,7 @@ class Application(Generic[_AppResult]):
             thread, and that loop will also be closed when the background
             thread terminates. When this is used, it's especially important to
             make sure that all asyncio background tasks are managed through
-            `get_appp().create_background_task()`, so that unfinished tasks are
+            `get_app().create_background_task()`, so that unfinished tasks are
             properly cancelled before the event loop is closed. This is used
             for instance in ptpython.
         :param handle_sigint: Handle SIGINT signal. Call the key binding for
@@ -1058,7 +1056,10 @@ class Application(Generic[_AppResult]):
         import pdb
         from types import FrameType
 
-        TraceDispatch = Callable[[FrameType, str, Any], Any]
+        TraceDispatch = Callable[
+            [FrameType, Literal["call", "line", "return", "exception", "opcode"], Any],
+            Any,
+        ]
 
         @contextmanager
         def hide_app_from_eventloop_thread() -> Generator[None, None, None]:

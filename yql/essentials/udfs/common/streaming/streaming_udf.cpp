@@ -127,7 +127,6 @@ private:
         return (Buffer_.Data() + pos);
     }
 
-private:
     TBuffer Buffer_;
 
     bool Finished_;
@@ -144,7 +143,6 @@ public:
     const char* DefaultInputDelimiter = "\n";
     const char* DefaultOutputDelimiter = "\n";
 
-public:
     TUnboxedValue InputStreamObj;
     TString CommandLine;
     TUnboxedValue ArgumentsList;
@@ -312,7 +310,6 @@ private:
         return EFetchStatus::Ok;
     }
 
-private:
     enum class EReadMode {
         Start,
         String,
@@ -456,7 +453,6 @@ private:
         }
     }
 
-private:
     class MatcherCallback: public TKMPStreamMatcher<char>::ICallback {
     public:
         explicit MatcherCallback(bool& hasMatch)
@@ -475,7 +471,6 @@ private:
         bool& HasMatch_;
     };
 
-private:
     TString Delimiter_;
     TStringListBufferedInputStream& InputStream_;
     TThreadSyncData& SyncData_;
@@ -596,7 +591,6 @@ private:
         return !!ShellCommand_;
     }
 
-private:
     TStreamingParams StreamingParams_;
     const IValueBuilder* ValueBuilder_;
     TSourcePosition Pos_;
@@ -801,7 +795,7 @@ public:
             bool typesOnly = (flags & TFlags::TypesOnly);
 
             auto optionalStringType = builder.Optional()->Item<char*>().Build();
-            auto rowType = builder.Struct(1)->AddField("Data", TDataType<char*>::Id, nullptr).Build();
+            auto rowType = builder.Struct(1)->AddField("Data", TDataType<char*>::Id, /*index=*/nullptr).Build();
             auto rowsType = builder.Stream()->Item(rowType).Build();
             auto stringListType = builder.List()->Item(TDataType<char*>::Id).Build();
             auto optionalStringListType = builder.Optional()->Item(stringListType).Build();

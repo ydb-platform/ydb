@@ -181,6 +181,7 @@ public:
         bool AssumeYes = false;
         std::optional<std::string> StorageUrl = std::nullopt;
         bool EnableAiInteractive = false;
+        bool EnableInteractiveTransactions = false;
         TUsageInfoGetter UsageInfoGetter;
 
         // Filled by ValidateAndRun to point at the leaf command being executed

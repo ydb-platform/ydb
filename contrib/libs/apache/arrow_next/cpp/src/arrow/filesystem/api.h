@@ -27,7 +27,9 @@
 #ifdef ARROW_GCS
 #  error #include "arrow/filesystem/gcsfs.h"  // IWYU pragma: export
 #endif
+#if USE_HDFS
 #error #include "arrow/filesystem/hdfs.h"     // IWYU pragma: export
+#endif
 #include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/localfs.h"  // IWYU pragma: export
 #include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/mockfs.h"   // IWYU pragma: export
 #ifdef ARROW_S3

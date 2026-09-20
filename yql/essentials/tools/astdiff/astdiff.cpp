@@ -80,8 +80,8 @@ int Main(int argc, const char** argv)
     TExprNode::TPtr exprOne;
     TExprNode::TPtr exprTwo;
 
-    const bool okOne = CompileExpr(*progOne.Root, exprOne, ctxOne, nullptr, nullptr);
-    const bool okTwo = CompileExpr(*progTwo.Root, exprTwo, ctxTwo, nullptr, nullptr);
+    const bool okOne = CompileExpr(*progOne.Root, exprOne, ctxOne, /*resolver=*/nullptr, /*urlListerManager=*/nullptr);
+    const bool okTwo = CompileExpr(*progTwo.Root, exprTwo, ctxTwo, /*resolver=*/nullptr, /*urlListerManager=*/nullptr);
 
     if (!(okOne && okTwo)) {
         if (!okOne) {

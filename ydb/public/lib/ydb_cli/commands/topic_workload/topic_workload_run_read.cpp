@@ -63,7 +63,6 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config)
         .StoreMappedResult(&Scenario.ConsumerMaxMemoryUsageBytes, NYdb::SizeFromString);
     config.Opts->AddLongOption("partition-max-inflight-bytes", "Max inflight bytes per partition.")
         .DefaultValue(0)
-        .Hidden()
         .StoreResult(&Scenario.PartitionMaxInflightBytes);
     config.Opts->AddLongOption("direct-read", "Direct read mode.")
         .Hidden()

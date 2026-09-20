@@ -9,6 +9,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
+#include <ydb/core/persqueue/common/logging.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -17,18 +18,20 @@ struct TUserInfo;
 
 struct TReadAnswer {
     ui64 Size = 0;
+    ui64 ConsumedMessages = 0;
     THolder<IEventBase> Event;
     bool IsInternal = false;
     TActorId ReplyTo;
 };
 
-struct TReadInfo {
+struct TReadInfo : TLogPrefix {
     TString User;
     TString ClientDC;
     ui64 Offset;
     ui16 PartNo;
     ui32 Count;
     ui32 Size;
+    bool ReadToBlobEnd;
     ui64 Destination; // It is cookie!!!
     TInstant Timestamp;
     ui64 ReadTimestampMs;
@@ -61,6 +64,7 @@ struct TReadInfo {
         const ui16 partNo,
         const ui64 count,
         const ui32 size,
+        const bool readToBlobEnd,
         const ui64 dst,
         ui64 readTimestampMs,
         TDuration waitQuotaTime,
@@ -75,6 +79,7 @@ struct TReadInfo {
         , PartNo(partNo)
         , Count(count)
         , Size(size)
+        , ReadToBlobEnd(readToBlobEnd)
         , Destination(dst)
         , Timestamp(TAppData::TimeProvider->Now())
         , ReadTimestampMs(readTimestampMs)
@@ -90,6 +95,14 @@ struct TReadInfo {
 
     bool ReachedLastOffset() const {
         return LastOffset != 0 && Offset >= LastOffset;
+    }
+
+    TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"className", "TReadInfo"},
+            {"user", User},
+            {"offset", Offset},
+            {"destination", Destination});
     }
 
     TReadAnswer FormAnswer(

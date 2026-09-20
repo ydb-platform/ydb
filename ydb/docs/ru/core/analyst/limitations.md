@@ -240,12 +240,9 @@ WHERE e.user_id = p.user_id
 
 Список ограничений:
 
-- [ClickHouse](../concepts/query_execution/federated_query/clickhouse.md#limitations)
-- [Greenplum](../concepts/query_execution/federated_query/greenplum.md#limitations)
-- [Microsoft SQL Server](../concepts/query_execution/federated_query/ms_sql_server.md#limitations)
-- [MySQL](../concepts/query_execution/federated_query/mysql.md#limitations)
-- [PostgreSQL](../concepts/query_execution/federated_query/postgresql.md#limitations)
-- [YDB](../concepts/query_execution/federated_query/ydb.md#limitations)
+{% include [!](../concepts/query_execution/federated_query/_includes/experimental_connectors_warning.md) %}
+
+{% include [!](../concepts/query_execution/federated_query/_includes/experimental_eds.md) %}
 
 ```sql
 -- Параметры (для примера — как переменные)
@@ -299,7 +296,12 @@ FROM s3_my_columnstore_table_backup;
 - Начальное количество партиций: для базовой оценки числа партиций можно использовать формулу `(количество узлов * 4)`. Это позволит максимально утилизировать ресурсы кластера при выполнении параллельных запросов.
 - Выбирайте число партиций с учётом ожидаемого роста объёма данных и увеличения количества узлов в кластере.
 - Суммарное количество партиций во всех таблицах одной базы данных не должно превышать **2000**.
-- Если необходимо увеличить число партиций, можно создать новую таблицу и перенести в неё данные с помощью запроса `CREATE TABLE (PRIMARY KEY (a, b)) PARTITION BY HASH(a) WITH(STORE=COLUMN, PARTITION_COUNT=96) new_table AS SELECT * FROM old_table;`.
+- Если необходимо увеличить число партиций, можно создать новую таблицу и перенести в неё данные с помощью запроса:
+
+```yql
+CREATE TABLE (PRIMARY KEY (a, b)) PARTITION BY HASH(a)
+WITH(STORE=COLUMN, PARTITION_COUNT=96) new_table AS SELECT * FROM old_table;
+```
 
 ## Отсутствуют вторичные индексы и скип-индексы
 

@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     Yql::Date(AsAtom('1')),
     Yql::Datetime(AsAtom('2')),

@@ -1,5 +1,7 @@
 # Работа с базами данных PostgreSQL
 
+{% include [!](_includes/experimental_connectors_warning.md) %}
+
 В этом разделе описана основная информация про работу с внешней базой данных [PostgreSQL](http://postgresql.org).
 
 Для работы с внешней базой данных PostgreSQL необходимо выполнить следующие шаги:

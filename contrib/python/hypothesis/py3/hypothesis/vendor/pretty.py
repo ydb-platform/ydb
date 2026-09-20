@@ -964,10 +964,7 @@ def _tuple_pprinter(arg_labels: ArgLabelsT) -> PrettyPrintFunction:
     return inner
 
 
-def _fixeddict_pprinter(
-    arg_labels: ArgLabelsT,
-    mapping: dict[Any, Any],
-) -> PrettyPrintFunction:
+def _fixeddict_pprinter(arg_labels: ArgLabelsT) -> PrettyPrintFunction:
     """Pretty printer for fixed_dictionaries that shows sub-argument comments."""
 
     def inner(obj: dict, p: RepresentationPrinter, cycle: bool) -> None:
@@ -975,8 +972,8 @@ def _fixeddict_pprinter(
             return p.text("{...}")
 
         get = lambda k: _get_slice_comment(p, arg_labels, k)
-        # Preserve mapping key order, then any optional keys (deduped)
-        keys = list(dict.fromkeys(k for k in [*mapping, *obj] if k in obj))
+        # Print in the dict's actual (possibly permuted) iteration order.
+        keys = list(obj)
         has_comments = any(get(k) for k in keys)
 
         with p.group(indent=4, open="{", close=""):

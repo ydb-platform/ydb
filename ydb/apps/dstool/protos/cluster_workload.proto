@@ -1,0 +1,219 @@
+syntax = "proto3";
+
+package NDSTool;
+
+import "google/protobuf/duration.proto";
+
+// Mirrors NKikimrCms.EAvailabilityMode from ydb/core/protos/cms.proto.
+enum ECmsAvailabilityMode {
+    MODE_MAX_AVAILABILITY = 0;
+    MODE_KEEP_AVAILABLE = 1;
+    MODE_FORCE_RESTART = 2;
+    MODE_SMART_AVAILABILITY = 3;
+}
+
+message TCmsPermissionConfig {
+    // The application default is MODE_MAX_AVAILABILITY.
+    ECmsAvailabilityMode AvailabilityMode = 1;
+}
+
+// Common configuration for actions that manipulate a disk.
+message TDiskActionConfig {
+    // The application default is 1.0. Must be a positive value.
+    optional double Weight = 1;
+
+    // When absent, runs action without obtaining a CMS permission.
+    TCmsPermissionConfig AskCMS = 2;
+}
+
+message TReadOnlyActionConfig {
+    enum EComponent {
+        VDISK = 0;
+        PDISK = 1;
+    }
+
+    // The application default is 1.0. Must be a positive value.
+    optional double Weight = 1;
+
+    // When absent, runs action without obtaining a CMS permission.
+    TCmsPermissionConfig AskCMS = 2;
+
+    // Required.
+    optional EComponent Component = 3;
+
+    // Required. True sets the read-only flag; false clears it.
+    optional bool ReadOnly = 4;
+}
+
+message TNodeIdList {
+    repeated uint32 Ids = 1;
+}
+
+enum ENodeType {
+    STORAGE_NODE = 0;
+    DYNAMIC_NODE = 1;
+}
+
+message TNodeTypeList {
+    repeated ENodeType Types = 1;
+}
+
+message TTenantList {
+    repeated string Paths = 1;
+}
+
+message TNodeFilter {
+    // When absent, nodes are not filtered by ID.
+    oneof NodeIdFilter {
+        TNodeIdList ExcludeNodes = 1;
+        TNodeIdList OnlyNodes = 2;
+    }
+
+    // When absent, nodes are not filtered by type.
+    oneof NodeTypeFilter {
+        TNodeTypeList ExcludeTypes = 3;
+        TNodeTypeList OnlyTypes = 4;
+    }
+
+    // When absent, dynamic nodes are not filtered by tenant. Every dynamic node
+    // is matched against its single tenant path. Serverless databases are out of
+    // scope. This filter may be combined with an ID filter and a type filter.
+    oneof TenantFilter {
+        // Tenant filters only apply to dynamic nodes.
+        // When set action is only applied to dynamic nodes.
+        TTenantList ExcludeTenants = 5;
+        TTenantList OnlyTenants = 6;
+    }
+}
+
+message TRestartNodeActionConfig {
+    // The application default is 1.0. Must be a positive value.
+    optional double Weight = 1;
+
+    // When absent, runs action without obtaining a CMS permission.
+    TCmsPermissionConfig AskCMS = 2;
+
+    // Time between stopping the node and starting it again.
+    // An absent or zero duration means an immediate restart.
+    // Must be a positive value.
+    google.protobuf.Duration KeepDownFor = 3;
+
+    // The application default is "KILL".
+    optional string Signal = 4;
+
+    // When absent, all eligible nodes are considered.
+    TNodeFilter Filter = 5;
+}
+
+message TDisconnectSocketActionConfig {
+    // The application default is 1.0. Must be a positive value.
+    optional double Weight = 1;
+
+    // When absent, all eligible nodes are considered as sources.
+    TNodeFilter Source = 2;
+
+    // When absent, all eligible nodes are considered as targets.
+    TNodeFilter Target = 3;
+
+    // The application default is false. When true, either
+    // Source -> Target or Target -> Source may be disconnected
+    // on action run.
+    optional bool Symmetrical = 4;
+}
+
+message TSwitchPileActionConfig {
+    enum EMode {
+        SOFT = 0;
+        HARD = 1;
+    }
+
+    // The application default is 1.0. Must be a positive value.
+    optional double Weight = 1;
+
+    // The application default is "SOFT".
+    optional EMode Mode = 2;
+}
+
+message TDisconnectPileActionConfig {
+    enum EOperation {
+        DISCONNECT = 0;
+        RECONNECT = 1;
+    }
+
+    // The application default is 1.0. Must be a positive value.
+    optional double Weight = 1;
+
+    // Required.
+    optional EOperation Operation = 2;
+
+    // If absent, an eligible pile is selected randomly.
+    optional uint32 Pile = 3;
+}
+
+message TTabletIdList {
+    repeated uint64 Ids = 1;
+}
+
+enum ETabletType {
+    BLOB_DEPOT = 0;
+    DATA_SHARD = 1;
+}
+
+message TTabletTypeList {
+    repeated ETabletType Types = 1;
+}
+
+message TKillTabletActionConfig {
+    // The application default is 1.0. Must be a positive value.
+    optional double Weight = 1;
+
+    // When absent, tablets are not filtered by ID.
+    oneof TabletFilter {
+        TTabletIdList ExcludeTablets = 2;
+        TTabletIdList OnlyTablets = 3;
+    }
+
+    // When absent, tablets are not filtered by type.
+    oneof TabletTypeFilter {
+        TTabletTypeList ExcludeTabletTypes = 4;
+        TTabletTypeList OnlyTabletTypes = 5;
+    }
+}
+
+message TClusterWorkloadActions {
+    repeated TDiskActionConfig WipeVDisk = 1;
+    repeated TDiskActionConfig EvictVDisk = 2;
+    repeated TReadOnlyActionConfig SetReadOnly = 3;
+
+    repeated TRestartNodeActionConfig RestartNode = 4;
+
+    // Changing a PDisk key is independent of restarting a node, allowing
+    // several consecutive re-encryptions to be tested.
+    repeated TDiskActionConfig ChangePDiskKey = 5;
+
+    repeated TDiskActionConfig RestartPDisk = 6;
+    repeated TDiskActionConfig ObliteratePDisk = 7;
+
+    repeated TKillTabletActionConfig KillTablet = 8;
+
+    repeated TSwitchPileActionConfig SwitchPile = 9;
+    repeated TDisconnectPileActionConfig DisconnectPile = 10;
+    repeated TDisconnectSocketActionConfig DisconnectSocket = 11;
+}
+
+message TClusterWorkloadConfig {
+    // The application default is one second.
+    // Must be a positive value.
+    google.protobuf.Duration SleepBetweenRounds = 1;
+
+    // The application default is true.
+    optional bool CheckFailModel = 2;
+
+    optional uint64 RandomSeed = 3;
+
+    // Rolling aggregate limit across all RestartNode configurations.
+    // When absent, node restarts are not rate limited.
+    optional uint32 MaxNodeRestartsPerMinute = 4;
+
+    TClusterWorkloadActions Actions = 10;
+}

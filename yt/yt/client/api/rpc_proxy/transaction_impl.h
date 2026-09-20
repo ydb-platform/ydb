@@ -24,6 +24,7 @@ DEFINE_ENUM(ETransactionState,
     (Aborted)
     (AbortFailed)
     (Detached)
+    (Abandoned)
 );
 
 class TTransaction
@@ -47,7 +48,7 @@ public:
         std::optional<TDuration> pingPeriod,
         std::optional<TStickyTransactionParameters> stickyParameters,
         i64 sequenceNumberSourceId,
-        TStringBuf capitalizedCreationReason);
+        TStringBuf creationReason);
 
     void Initialize();
 
@@ -310,7 +311,7 @@ private:
     TPromise<void> AbortPromise_;
     std::vector<NApi::ITransactionPtr> AlienTransactions_;
 
-    THashSet<NObjectClient::TCellId> AdditionalParticipantCellIds_;
+    THashMap<NObjectClient::TCellId, NTransactionClient::TTransactionSignature> AdditionalParticipantCellIds_;
 
     TApiServiceProxy::TReqBatchModifyRowsPtr BatchModifyRowsRequest_;
     std::vector<TFuture<void>> BatchModifyRowsFutures_;
@@ -326,6 +327,8 @@ private:
     TFuture<void> DoAbort(
         TGuard<NThreading::TSpinLock>* guard,
         const TTransactionAbortOptions& options = {});
+
+    void Abandon(TGuard<NThreading::TSpinLock>* guard);
 
     void ValidateActive();
     void DoValidateActive();

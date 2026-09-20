@@ -7,7 +7,11 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/sys_view/common/path.h>
 
+#include <ydb/library/actors/core/log.h>
+
 #include <util/string/join.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -399,6 +403,23 @@ const TPath::TChecker& TPath::TChecker::NotBackupTable(EStatus status) const {
     }
 
     return Fail(status, TStringBuilder() << "path is a backup table"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
+const TPath::TChecker& TPath::TChecker::NotReadOnlyColumnTable(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.Base()->IsColumnTable()) {
+        return *this;
+    }
+
+    if (!Path.IsReadOnlyColumnTable()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is a read-only copy column table; only Copy and Drop are allowed"
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
@@ -1047,10 +1068,17 @@ const TPath::TChecker& TPath::TChecker::CanBackupTable(EStatus status) const {
     }
 
     for (const auto& child: Path.Base()->GetChildren()) {
-        auto name = child.first;
+        const TString& name = child.first;
 
         TPath childPath = Path.Child(name);
         if (childPath->IsTableIndex()) {
+            if (Path.SS->Indexes.contains(childPath.Base()->PathId)
+                && TTableIndexInfo::IsLocalIndex(Path.SS->Indexes.at(childPath.Base()->PathId)->Type))
+            {
+                // local indexes are scheme children and are included in the backup
+                // as part of the table schema, unlike global indexes.
+                continue;
+            }
             return Fail(status, TStringBuilder() << "path has indexes, request doesn't accept it");
         }
     }
@@ -1214,6 +1242,19 @@ const TPath::TChecker& TPath::TChecker::Or(TCheckerMethodPtr leftFunc, TCheckerM
     }
 
     return *this;
+}
+
+const TPath::TChecker& TPath::TChecker::IsTestShardSet(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsTestShardSet()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a test shard set"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
@@ -1480,13 +1521,13 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
                               pathParts.begin()))
         {
             // headOpPath is a prefix of the path
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "ResolveWithInactive: attach to the TargetPath of head operation"
-                         << " path: " << path
-                         << " opId: " << opId
-                         << " head opId: " << headOpId
-                         << " headOpPath: " << headOpPath.PathString()
-                         << " headOpPath id: " << headOpPath->PathId);
+            YDB_LOG_DEBUG("ResolveWithInactive: attach to the TargetPath of head operation",
+                {"path", path},
+                {"opId", opId},
+                {"headOpId", headOpId},
+                {"headOpPath", headOpPath.PathString()},
+                {"headOpPathId", headOpPath->PathId},
+            );
 
             return headOpPath.Child(pathParts.back());
         }
@@ -1494,10 +1535,10 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
         --headSubTxId;
     }
 
-    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "ResolveWithInactive: NO attach to the TargetPath of head operation"
-                 << " path: " << path
-                 << " opId: " << opId);
+    YDB_LOG_DEBUG("ResolveWithInactive: NO attach to the TargetPath of head operation",
+        {"path", path},
+        {"opId", opId},
+    );
 
     return Resolve(nullPrefix, std::move(pathParts));
 }
@@ -1813,6 +1854,17 @@ bool TPath::IsBackupTable() const {
     return tableInfo->IsBackup;
 }
 
+bool TPath::IsReadOnlyColumnTable() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    if (!Base()->IsColumnTable() || !SS->ColumnTables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    const auto tableInfo = SS->ColumnTables.GetVerified(Base()->PathId);
+    return tableInfo->IsReadOnly;
+}
+
 bool TPath::IsAsyncReplicaTable() const {
     Y_ABORT_UNLESS(IsResolved());
 
@@ -1847,6 +1899,12 @@ bool TPath::IsTransfer() const {
     Y_ABORT_UNLESS(IsResolved());
 
     return Base()->IsTransfer();
+}
+
+bool TPath::IsTestShardSet() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->IsTestShardSet();
 }
 
 bool TPath::IsSupportedInExports() const {
@@ -1982,14 +2040,17 @@ TString TPath::GetEffectiveACL() const {
         if (element->CachedEffectiveACLVersion != version || !element->CachedEffectiveACL) {  // path needs actualizing
             if (item == Elements.begin()) { // it is root
                 if (!SS->IsDomainSchemeShard) {
-                    element->CachedEffectiveACL.Update(SS->ParentDomainCachedEffectiveACL, element->ACL, element->IsContainer());
+                    element->CachedEffectiveACL.Update(SS->ParentDomainCachedEffectiveACL,
+                        element->ACL, element->IsContainer(), /*isTenantRoot*/ true);
                 } else {
                     element->CachedEffectiveACL.Init(element->ACL);
                 }
             } else { // path element in the middle
                 auto prevIt = std::prev(item);
                 const auto& prevElement = *prevIt;
-                element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL, element->ACL, element->IsContainer());
+                element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL,
+                    element->ACL, element->IsContainer(),
+                    /*isTenantRoot*/ element->IsPlainSubDomainRoot() || element->IsExternalSubDomainRoot());
             }
             element->CachedEffectiveACLVersion = version;
         }
@@ -2092,7 +2153,8 @@ EAttachChildResult TPath::MaterializeImpl(const TString& owner, const TPathId& n
 
     auto attachResult = SS->AttachChild(newPath);
 
-    Base()->DbRefCount++;
+    SS->IncrementPathDbRefCount(Base()->PathId, "child path row");
+    newPath->ParentRefHeld = true;
     Base()->AllChildrenCount++;
 
     Y_VERIFY_S(!SS->PathsById.contains(newPathId), "There's another path with PathId: " << newPathId);
@@ -2127,3 +2189,5 @@ TPathId TPath::GetPathIdSafe() const {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

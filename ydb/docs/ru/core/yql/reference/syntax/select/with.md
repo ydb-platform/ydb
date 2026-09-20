@@ -24,8 +24,11 @@
 * `projection.enabled` - флаг включения [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `true`, `false`.
 * `projection.<field_name>.type` - тип поля [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `integer`, `enum`, `date`.
 * `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md).
-
 {% endif %}
+
+При чтении из [топика](../../../../concepts/datamodel/topic.md) в [потоковых запросах](../../../../dev/streaming-query/index.md) можно указывать параметры watermarks:
+
+{% include notitle [x](../../../../_includes/watermark_parameters.md) %}
 
 При задании подсказок `SCHEMA` и `COLUMNS` в качестве значения типа type должен быть задан тип [структуры](../../types/containers.md).
 
@@ -59,4 +62,20 @@ SELECT key, value FROM my_table WITH COLUMNS Struct<value:Int32?>;
 
 ```yql
 SELECT key, value FROM EACH($my_tables) WITH SCHEMA Struct<key:String, value:List<Int32>>;
+```
+
+```yql
+SELECT
+    *
+FROM
+    my_topic
+WITH (
+    FORMAT = json_each_row,
+    SCHEMA = (
+        ts String
+    ),
+    WATERMARK = __ydb_write_time - Interval("PT5S"),
+    WATERMARK_GRANULARITY = "PT1S",
+    WATERMARK_IDLE_TIMEOUT = "PT5S"
+);
 ```

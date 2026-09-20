@@ -126,6 +126,9 @@
       - contrib/libs/llvm20/lib/Target/BPF/BPFPassRegistry.def
       - contrib/libs/llvm20/lib/Target/NVPTX/NVPTXPassRegistry.def
       - contrib/libs/llvm20/lib/Target/X86/X86PassRegistry.def
+      - contrib/libs/llvm22/lib/Target/BPF/BPFPassRegistry.def
+      - contrib/libs/llvm22/lib/Target/NVPTX/NVPTXPassRegistry.def
+      - contrib/libs/llvm22/lib/Target/X86/X86PassRegistry.def
 
 - source_filter: "^contrib/libs/pycxx"
   includes:
@@ -785,6 +788,11 @@
     - BOOST_PP_ITERATE():
       - contrib/restricted/boost/variant/include/boost/variant/detail/substitute.hpp
 
+- source_filter: "^contrib/restricted/boost/icl"
+  includes:
+    - ICL_IMPL_PATH(map): $U/map
+    - ICL_IMPL_PATH(set): $U/set
+
 - source_filter: "^contrib/libs/lzo2"
   includes:
     - LZO_CODE_MATCH_INCLUDE_FILE:
@@ -1225,6 +1233,10 @@
     - CUDA_STD_HEADER(tuple):         $U/cuda/std/tuple
     - CUDA_STD_HEADER(type_traits):   $U/cuda/std/type_traits
     - CUDA_STD_HEADER(utility):       $U/cuda/std/utility
+
+- source_filter: "^contrib/libs"
+  includes:
+    - HWY_TARGET_INCLUDE: contrib/libs/highway/hwy/foreach_target.h
 
 - source_filter: "^contrib/restricted/libgpg-error"
   includes:

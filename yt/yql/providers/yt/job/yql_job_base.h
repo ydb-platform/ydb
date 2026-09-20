@@ -5,6 +5,7 @@
 #include <yql/essentials/public/udf/udf_validate.h>
 #include <yql/essentials/public/udf/udf_counter.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/mkql_bridge_mode.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/interface/operation.h>
@@ -83,11 +84,18 @@ public:
         RuntimeSettings = runtimeSettings;
     }
 
+    void SetBridgeMode(NKikimr::NUdf::EBridgeMode mode) {
+        BridgeMode = mode;
+    }
+
     virtual void Save(IOutputStream& stream) const;
     virtual void Load(IInputStream& stream);
 
 protected:
     NKikimr::NMiniKQL::TCallableVisitFuncProvider MakeTransformProvider(THashMap<TString, NKikimr::NMiniKQL::TRuntimeNode>* extraArgs = nullptr) const;
+    virtual bool NeedWriteStats() {
+        return true;
+    }
 
     void Init();
 
@@ -103,6 +111,7 @@ protected:
     NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;
     TLangVersion LangVer = UnknownLangVersion;
     TRuntimeSettings::TConstPtr RuntimeSettings = MakeRuntimeSettings();
+    NKikimr::NUdf::EBridgeMode BridgeMode = NKikimr::NUdf::EBridgeMode::None;
     // End serializable part
 
     ui64 StartCycles = 0;

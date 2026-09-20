@@ -1,5 +1,7 @@
 import os
 
+from ymake import macro, Unit
+
 DEFAULT_CUDA_ARCHITECTURES="sm_50"
 
 
@@ -10,7 +12,8 @@ def arch2num(arch):
     return f"{arch}0"
 
 
-def oncuda_srcs(unit, *args):
+@macro
+def CUDA_SRCS(unit: Unit, *args: str):
     """
     @usage: CUDA_SRCS(File...)
 
@@ -23,9 +26,11 @@ def oncuda_srcs(unit, *args):
     - node compiling host .cpp with embedded FATBIN blob
 
     CUDA_ARCHITECTURES variable is used to determine the list of architectures to compile device code for.
+    Set CUDA_NO_EMBED_PTX to "yes" to embed only CUBIN images into the resulting FATBIN.
     """
     architecture_names = (unit.get("CUDA_ARCHITECTURES") or DEFAULT_CUDA_ARCHITECTURES).split(":")
     architectures = [name.split('_')[1] for name in architecture_names]
+    embed_ptx = not unit.enabled("CUDA_NO_EMBED_PTX")
 
     stub_arch = architectures[-1]
     arch_list = arch2num(stub_arch)
@@ -44,7 +49,8 @@ def oncuda_srcs(unit, *args):
         for arch in architectures:
             unit.on_cuda_compile_device([cu, arch, arch_list])
 
-            images.append(f"{name}.{arch}.ptx")
+            if embed_ptx:
+                images.append(f"{name}.{arch}.ptx")
             images.append(f"{name}.{arch}.cubin")
             images.append(f"{name}.{arch}.module_id")
 

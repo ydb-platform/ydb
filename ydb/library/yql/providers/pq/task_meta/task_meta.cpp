@@ -14,9 +14,9 @@ TMaybe<TTopicPartitionsSet> GetTopicPartitionsSet(const google::protobuf::Any& d
                 NYql::NPq::NProto::TDqReadTaskParams readTaskParams;
                 if (readTaskParams.ParseFromString(pqReaderParams->second)) {
                     return TTopicPartitionsSet{
-                        readTaskParams.GetPartitioningParams().GetEachTopicPartitionGroupId(),
-                        readTaskParams.GetPartitioningParams().GetDqPartitionsCount(),
-                        readTaskParams.GetPartitioningParams().GetTopicPartitionsCount()};
+                        readTaskParams.GetPartitioningParams(0).GetEachTopicPartitionGroupId(),
+                        readTaskParams.GetPartitioningParams(0).GetDqPartitionsCount(),
+                        readTaskParams.GetPartitioningParams(0).GetTopicPartitionsCount()};
                 }
             }
         }
@@ -37,12 +37,13 @@ std::vector<TTopicPartitionsSet> GetTopicPartitionsSets(const NDqProto::TDqTask&
             return {};
         }
 
-        const auto& params = readTaskParams.GetPartitioningParams();
-        result.push_back({
-            .EachTopicPartitionGroupId = params.GetEachTopicPartitionGroupId(),
-            .DqPartitionsCount = params.GetDqPartitionsCount(),
-            .TopicPartitionsCount = params.GetTopicPartitionsCount()
-        });
+        for (const auto& params : readTaskParams.GetPartitioningParams()) {
+            result.push_back({
+                .EachTopicPartitionGroupId = params.GetEachTopicPartitionGroupId(),
+                .DqPartitionsCount = params.GetDqPartitionsCount(),
+                .TopicPartitionsCount = params.GetTopicPartitionsCount()
+            });
+        }
     }
 
     return result;

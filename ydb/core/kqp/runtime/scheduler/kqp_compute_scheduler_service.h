@@ -10,8 +10,14 @@ namespace NKikimr::NKqp::NScheduler {
 
 class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler> {
 public:
-    TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TDelayParams& delayParams,
-        NHdrf::NSnapshot::ELeafFairShare fairShareMode = NHdrf::NSnapshot::ELeafFairShare::EQUAL_TO_PARENT);
+    TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TOptions& options);
+
+    void ToggleEnabled(bool enable) {
+        Enabled = enable;
+    }
+    bool IsEnabled() const {
+        return Enabled;
+    }
 
     void SetTotalCpuLimit(ui64 cpu);
     ui64 GetTotalCpuLimit() const;
@@ -26,8 +32,13 @@ public:
 
     void UpdateFairShare();
 
+    // Returns per-leaf-pool FairShare / TotalCpu, normalized to [0..1].
+    THashMap<NHdrf::TFullPoolId, double> GetLeafPoolFairShares() const;
+
 private:
     static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;
+
+    std::atomic<bool> Enabled;
 
     TRWMutex Mutex;
     NHdrf::NDynamic::TRootPtr Root;                                // protected by Mutex
@@ -35,7 +46,7 @@ private:
 
     // Special virtual queries per each pool to create SchedulableRead upon them, used for datashards and columnshards.
     // TODO: get rid of read queries - just pass somehow the real query to datashards.
-    THashMap<std::pair<NHdrf::TDatabaseId, NHdrf::TPoolId>, NHdrf::NDynamic::TQueryPtr> ReadQueries; // protected by Mutex
+    THashMap<NHdrf::TFullPoolId, NHdrf::NDynamic::TQueryPtr> ReadQueries; // protected by Mutex
 
     const TDelayParams DelayParams;
     const NHdrf::NSnapshot::ELeafFairShare FairShareMode;
@@ -48,11 +59,6 @@ private:
 
 using TComputeSchedulerPtr = std::shared_ptr<TComputeScheduler>;
 
-struct TOptions {
-    TDelayParams DelayParams;
-    TDuration UpdateFairSharePeriod;
-};
-
 struct TEvents {
     enum : ui32 {
         EvAddDatabase = EventSpaceBegin(TKikimrEvents::ES_KQP) + 400,
@@ -62,11 +68,6 @@ struct TEvents {
         EvAddQuery,
         EvRemoveQuery,
         EvQueryResponse,
-
-        // Because datashard may get EvRead from another node, it's hard to use EvAddQuery+EvQueryResponse.
-        // These messages return factory that can create schedulable objects on-the-fly.
-        EvGetReadFactory,
-        EvReadFactoryResponse,
     };
 };
 
@@ -111,16 +112,15 @@ struct TEvQueryResponse : public TEventLocal<TEvQueryResponse, TEvents::EvQueryR
     NHdrf::NDynamic::TQueryPtr Query;
 };
 
-struct TEvGetReadFactory : public TEventLocal<TEvGetReadFactory, TEvents::EvGetReadFactory> {
-    // TODO: datashard id?
-};
-
-struct TEvReadFactoryResponse : public TEventLocal<TEvReadFactoryResponse, TEvents::EvReadFactoryResponse> {
-    TSchedulableReadFactoryPtr Factory;
-};
-
 } // namespace NKikimr::NKqp::NScheduler
 
+namespace NKikimrConfig {
+    class TAppConfig;
+}
+
 namespace NKikimr::NKqp {
-    IActor* CreateKqpComputeSchedulerService(const NScheduler::TOptions& options);
+    NScheduler::TComputeSchedulerPtr CreateKqpComputeScheduler(
+        const NMonitoring::TDynamicCounterPtr& counters,
+        const NKikimrConfig::TAppConfig& appConfig);
+    IActor* CreateKqpComputeSchedulerService(const TDuration& updateFairSharePeriod);
 }

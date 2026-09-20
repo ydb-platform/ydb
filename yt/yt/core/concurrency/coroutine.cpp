@@ -8,12 +8,17 @@ namespace NYT::NConcurrency::NDetail {
 
 TCoroutineBase::~TCoroutineBase()
 {
+    Abandon();
+
+    std::destroy_at(std::launder(&CoroutineContext));
+}
+
+void TCoroutineBase::Abandon()
+{
     if (State_ == EState::Running) {
         State_ = EState::Abandoned;
         Resume();
     }
-
-    std::destroy_at(std::launder(&CoroutineContext));
 }
 
 void TCoroutineBase::Suspend()

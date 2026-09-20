@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -13,7 +15,8 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_LOAD_EVERYTHING; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_NOTICE("THive::TTxLoadEverything::Execute");
+        YDB_LOG_NOTICE("THive::TTxLoadEverything::Execute",
+            {"logPrefix", GetLogPrefix()});
 
         TAppData* appData = AppData();
         TDomainsInfo* domainsInfo = appData->DomainsInfo.Get();
@@ -36,6 +39,8 @@ public:
         Self->Domains.clear();
         Self->BlockedOwners.clear();
         Self->BridgePiles.clear();
+
+        Self->ResetTotalResourceValues();
 
         Self->Domains[Self->RootDomainKey].Path = Self->RootDomainName;
         Self->Domains[Self->RootDomainKey].HiveId = rootHiveId;
@@ -60,6 +65,7 @@ public:
             auto availabilityRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Select();
             auto operationsRowset = db.Table<Schema::OperationsLog>().Select();
             auto bridgePileRowset = db.Table<Schema::BridgePile>().Select();
+            auto groupRowset = db.Table<Schema::Group>().Select();
             if (!tabletRowset.IsReady()
                     || !tabletChannelRowset.IsReady()
                     || !tabletChannelGenRowset.IsReady()
@@ -77,7 +83,8 @@ public:
                     || !categoryRowset.IsReady()
                     || !availabilityRowset.IsReady()
                     || !operationsRowset.IsReady()
-                    || !bridgePileRowset.IsReady())
+                    || !bridgePileRowset.IsReady()
+                    || !groupRowset.IsReady())
                 return false;
         }
 
@@ -236,13 +243,19 @@ public:
 
             // remove after upgrade vvvv
             if (ownerId != TSequencer::NO_OWNER && Self->Keeper.GetOwner(seq.Begin) == TSequencer::NO_OWNER) {
-                BLOG_W("THive::TTxLoadEverything fixing TabletOwners for " << seq << " to " << ownerId);
+                YDB_LOG_WARN("THive::TTxLoadEverything fixing tablet owners for orphaned sequence",
+                    {"logPrefix", GetLogPrefix()},
+                    {"seq", seq},
+                    {"ownerId", ownerId});
                 Self->Keeper.AddOwnedSequence(ownerId, seq);
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(ownerId);
             }
 
             if (ownerId == TSequencer::NO_OWNER && !isRootHive && Self->Keeper.GetOwner(seq.Begin) == TSequencer::NO_OWNER) {
-                BLOG_W("THive::TTxLoadEverything fixing TabletOwners for " << seq << " to " << Self->TabletID());
+                YDB_LOG_WARN("THive::TTxLoadEverything fixing tablet owners for orphaned sequence",
+                    {"logPrefix", GetLogPrefix()},
+                    {"seq", seq},
+                    {"selfTabletId", Self->TabletID()});
                 Self->Keeper.AddOwnedSequence(Self->TabletID(), seq);
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(Self->TabletID());
             }
@@ -253,7 +266,9 @@ public:
             }
         }
 
-        BLOG_NOTICE("THive::TTxLoadEverything loaded " << numSequences << " sequences");
+        YDB_LOG_NOTICE("THive::TTxLoadEverything loaded sequences",
+            {"logPrefix", GetLogPrefix()},
+            {"numSequences", numSequences});
 
         auto tabletTypeAllowedMetrics = db.Table<Schema::TabletTypeMetrics>().Select();
         if (!tabletTypeAllowedMetrics.IsReady())
@@ -293,11 +308,14 @@ public:
                     domain.SetScaleRecommenderPolicies(domainRowset.GetValue<Schema::SubDomain::ScaleRecommenderPolicies>());
                 }
                 domain.Stopped = domainRowset.GetValueOrDefault<Schema::SubDomain::Stopped>();
+                domain.ParseShrinkingPools(domainRowset.GetValueOrDefault<Schema::SubDomain::ShrinkingStoragePools>());
 
                 if (!domainRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numSubDomains << " subdomains");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded subdomains",
+                {"logPrefix", GetLogPrefix()},
+                {"numSubDomains", numSubDomains});
         }
 
         {
@@ -311,7 +329,9 @@ public:
                 if (!blockedOwnerRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numBlockedOwners << " blocked owners");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded blocked owners",
+                {"logPrefix", GetLogPrefix()},
+                {"numBlockedOwners", numBlockedOwners});
         }
 
         {
@@ -331,7 +351,9 @@ public:
                     return false;
                 }
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numPiles << " bridge piles");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded bridge piles",
+                {"logPrefix", GetLogPrefix()},
+                {"numPiles", numPiles});
         }
 
         {
@@ -386,7 +408,9 @@ public:
                 if (!nodeRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numNodes << " nodes");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded nodes",
+                {"logPrefix", GetLogPrefix()},
+                {"numNodes", numNodes});
         }
 
         {
@@ -403,7 +427,9 @@ public:
                 if (!categoryRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletCategories << " tablet categories");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet categories",
+                {"logPrefix", GetLogPrefix()},
+                {"numTabletCategories", numTabletCategories});
         }
 
         if (auto systemCategoryId = Self->CurrentConfig.GetSystemTabletCategoryId(); systemCategoryId != 0 && Self->TabletCategories.empty()) {
@@ -439,15 +465,7 @@ public:
                 Self->ObjectToTabletMetrics[tablet.ObjectId].IncreaseCount();
                 Self->TabletTypeToTabletMetrics[tablet.Type].IncreaseCount();
                 tablet.NodeFilter.AllowedNodes = tabletRowset.GetValue<Schema::Tablet::AllowedNodes>();
-                if (tabletRowset.HaveValue<Schema::Tablet::AllowedDataCenters>()) {
-                    // this is priority format due to migration issues; when migration is complete, this code will
-                    // be removed
-                    for (const ui32 dcId : tabletRowset.GetValue<Schema::Tablet::AllowedDataCenters>()) {
-                        tablet.NodeFilter.AllowedDataCenters.push_back(DataCenterToString(dcId));
-                    }
-                } else {
-                    tablet.NodeFilter.AllowedDataCenters = tabletRowset.GetValueOrDefault<Schema::Tablet::AllowedDataCenterIds>();
-                }
+                tablet.NodeFilter.AllowedDataCenters = tabletRowset.GetValueOrDefault<Schema::Tablet::NewAllowedDataCenterIds>();
                 tablet.DataCentersPreference = tabletRowset.GetValueOrDefault<Schema::Tablet::DataCentersPreference>();
                 TVector<TSubDomainKey> allowedDomains = tabletRowset.GetValueOrDefault<Schema::Tablet::AllowedDomains>();
                 TSubDomainKey objectDomain = TSubDomainKey(tabletRowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
@@ -478,6 +496,11 @@ public:
                 tablet.LockedToActor = tabletRowset.GetValueOrDefault<Schema::Tablet::LockedToActor>();
                 tablet.LockedReconnectTimeout = TDuration::MilliSeconds(tabletRowset.GetValueOrDefault<Schema::Tablet::LockedReconnectTimeout>());
                 if (tablet.LockedToActor) {
+                    if (tablet.NodeId != 0) {
+                        // A lock suppresses local execution; discard stale placement from older versions.
+                        tablet.NodeId = 0;
+                        db.Table<Schema::Tablet>().Key(tabletId).Update<Schema::Tablet::LeaderNode>(0);
+                    }
                     TNodeId nodeId = tablet.LockedToActor.NodeId();
                     auto it = Self->Nodes.find(nodeId);
                     if (it == Self->Nodes.end()) {
@@ -487,7 +510,7 @@ public:
                     }
                     it->second.LockedTablets.insert(&tablet);
                     if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
-                        tablet.BecomeUnknown(tablet.Hive.FindNode(tablet.LockedToActor.NodeId()));
+                        tablet.BecomeUnknown(&it->second);
                     }
                 }
 
@@ -496,6 +519,7 @@ public:
                 tablet.ChannelProfileReassignReason = tabletRowset.GetValueOrDefault<Schema::Tablet::ReassignReason>();
                 tablet.Statistics = tabletRowset.GetValueOrDefault<Schema::Tablet::Statistics>();
                 tablet.StoppedByTenant = tabletRowset.GetValueOrDefault<Schema::Tablet::StoppedByTenant>();
+                tablet.IsBackup = tabletRowset.GetValueOrDefault<Schema::Tablet::IsBackup>();
 
                 TDomainInfo* domain = Self->FindDomain(objectDomain);
                 if (domain) {
@@ -507,7 +531,12 @@ public:
                 }
 
                 if (tablet.NodeId == 0) {
-                    tablet.BecomeStopped();
+                    if (tablet.IsDeleting()
+                            || !tablet.LockedToActor
+                            || !Self->CurrentConfig.GetLockedTabletsSendMetrics())
+                    {
+                        tablet.BecomeStopped();
+                    }
                 } else {
                     auto it = Self->Nodes.find(tablet.NodeId);
                     if (it != Self->Nodes.end() && it->second.IsUnknown()) {
@@ -521,12 +550,16 @@ public:
 
                 tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tabletId, tablet.Type));
                 tablet.TabletStorageInfo->Version = tabletRowset.GetValueOrDefault<Schema::Tablet::TabletStorageVersion>();
+                tablet.ConfirmedStorageVersion =
+                    tabletRowset.GetValueOrDefault<Schema::Tablet::ConfirmedStorageVersion>();
                 tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
 
                 if (!tabletRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTablets << " tablets");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablets",
+                {"logPrefix", GetLogPrefix()},
+                {"numTablets", numTablets});
         }
 
         {
@@ -565,8 +598,10 @@ public:
                 if (!tabletChannelRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletChannels << " tablet/channel pairs ("
-                    << numMissingTablets << " for missing tablets)");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet channel pairs",
+                {"logPrefix", GetLogPrefix()},
+                {"numTabletChannels", numTabletChannels},
+                {"numMissingTablets", numMissingTablets});
         }
 
         {
@@ -603,14 +638,18 @@ public:
                 if (!tabletChannelGenRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletChannelHistories << " tablet/channel history items ("
-                    << numMissingTablets << " for missing tablets)");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet channel history items",
+                {"logPrefix", GetLogPrefix()},
+                {"numTabletChannelHistories", numTabletChannelHistories},
+                {"numMissingTablets", numMissingTablets});
         }
 
         for (auto& [tabletId, tabletInfo] : Self->Tablets) {
             tabletInfo.AcquireAllocationUnits();
         }
-        BLOG_NOTICE("THive::TTxLoadEverything initialized allocation units for " << Self->Tablets.size() << " tablets");
+        YDB_LOG_NOTICE("THive::TTxLoadEverything initialized allocation units for tablets",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletsCount", Self->Tablets.size()});
 
         {
             size_t numTabletFollowerGroups = 0;
@@ -629,16 +668,7 @@ public:
                     followerGroup.AllowLeaderPromotion = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowLeaderPromotion>();
                     followerGroup.AllowClientRead = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowClientRead>();
                     followerGroup.NodeFilter.AllowedNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedNodes>();
-
-                    if (tabletFollowerGroupRowset.HaveValue<Schema::TabletFollowerGroup::AllowedDataCenters>()) {
-                        // this is priority format due to migration issues; when migration is complete, this code will
-                        // be removed
-                        for (const ui32 dcId : tabletFollowerGroupRowset.GetValue<Schema::TabletFollowerGroup::AllowedDataCenters>()) {
-                            followerGroup.NodeFilter.AllowedDataCenters.push_back(DataCenterToString(dcId));
-                        }
-                    } else {
-                        followerGroup.NodeFilter.AllowedDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedDataCenterIds>();
-                    }
+                    followerGroup.NodeFilter.AllowedDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::NewAllowedDataCenterIds>();
 
                     followerGroup.RequireAllDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>();
                     followerGroup.LocalNodeOnly = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>();
@@ -656,8 +686,10 @@ public:
                 if (!tabletFollowerGroupRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletFollowerGroups << " tablet follower groups ("
-                    << numMissingTablets << " for missing tablets)");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet follower groups",
+                {"logPrefix", GetLogPrefix()},
+                {"numTabletFollowerGroups", numTabletFollowerGroups},
+                {"numMissingTablets", numMissingTablets});
         }
 
         {
@@ -679,7 +711,8 @@ public:
                     follower.Statistics = tabletFollowerRowset.GetValueOrDefault<Schema::TabletFollowerTablet::Statistics>();
                     if (tabletFollowerRowset.HaveValue<Schema::TabletFollowerTablet::DataCenter>()) {
                         auto dc = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::DataCenter>();
-                        follower.NodeFilter.AllowedDataCenters = {dc};
+                        follower.NodeFilter.AllowedDataCenters.Clear();
+                        follower.NodeFilter.AllowedDataCenters.AddDataCenter(dc);
                         Self->DataCenters[dc].Followers[{tabletId, followerGroup.Id}].push_back(std::prev(tablet->Followers.end()));
                     }
                     if (nodeId == 0) {
@@ -699,8 +732,10 @@ public:
                 if (!tabletFollowerRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletFollowers << " tablet followers ("
-                    << numMissingTablets << " for missing tablets)");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet followers",
+                {"logPrefix", GetLogPrefix()},
+                {"numTabletFollowers", numTabletFollowers},
+                {"numMissingTablets", numMissingTablets});
         }
 
         // Compatability: some per-dc followers do not have their datacenter set - try to set it now
@@ -720,9 +755,9 @@ public:
                 auto groupFollowersIters = std::views::iota(tablet.Followers.begin(), tablet.Followers.end()) | std::views::filter(filterGroup);
                 std::vector<TDataCenterInfo::TFollowerIter> followersWithoutDc;
                 for (auto followerIt : groupFollowersIters) {
-                    auto& allowedDc = followerIt->NodeFilter.AllowedDataCenters;
+                    auto& allowedDc = *followerIt->NodeFilter.AllowedDataCenters.MutableDataCenter();
                     if (allowedDc.size() == 1) {
-                        --dataCentersToCover[allowedDc.front()];
+                        --dataCentersToCover[allowedDc[0]];
                         continue;
                     }
                     bool ok = false;
@@ -731,9 +766,10 @@ public:
                         auto& cnt = dataCentersToCover[dc];
                         if (cnt > 0) {
                             --cnt;
-                            allowedDc = {dc};
                             Self->DataCenters[dc].Followers[{tabletId, groupId}].push_back(followerIt);
                             Self->PendingFollowerUpdates.Update({tabletId, followerIt->Id}, dc);
+                            allowedDc.Clear();
+                            allowedDc.Add(std::move(dc));
                             ok = true;
                         }
                     }
@@ -749,7 +785,8 @@ public:
                     if (dcIt == dataCentersToCover.end()) {
                         break;
                     }
-                    follower->NodeFilter.AllowedDataCenters = {dcIt->first};
+                    follower->NodeFilter.AllowedDataCenters.Clear();
+                    follower->NodeFilter.AllowedDataCenters.AddDataCenter(dcIt->first);
                     Self->DataCenters[dcIt->first].Followers[{tabletId, groupId}].push_back(follower);
                     Self->PendingFollowerUpdates.Update(follower->GetFullTabletId(), dcIt->first);
                     --dcIt->second;
@@ -774,7 +811,7 @@ public:
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumCPU.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumCPU>());
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumMemory.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumMemory>());
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>());
-                        leaderOrFollower->UsageImpact = metricsRowset.GetValueOrDefault<Schema::Metrics::UsageImpact>();
+                        leaderOrFollower->SetUsageImpact(metricsRowset.GetValueOrDefault<Schema::Metrics::UsageImpact>());
                         // do not reorder
                         leaderOrFollower->UpdateResourceUsage(metricsRowset.GetValueOrDefault<Schema::Metrics::ProtoMetrics>());
                     }
@@ -784,8 +821,10 @@ public:
                 if (!metricsRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numMetrics << " metrics ("
-                    << numMissingTablets << " for missing tablets)");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet metrics",
+                {"logPrefix", GetLogPrefix()},
+                {"numMetrics", numMetrics},
+                {"numMissingTablets", numMissingTablets});
         }
 
         {
@@ -810,8 +849,10 @@ public:
                     return false;
                 }
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numRestrictions << " tablet availability restrictions ("
-                        << numMissingNodes << " for missing nodes)");
+            YDB_LOG_NOTICE("THive::TTxLoadEverything loaded tablet availability restrictions",
+                {"logPrefix", GetLogPrefix()},
+                {"numRestrictions", numRestrictions},
+                {"numMissingNodes", numMissingNodes});
         }
 
         {
@@ -855,7 +896,10 @@ public:
                 ++itNode;
             }
         }
-        BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes << (and " << numDeletedRestrictions << " restrictions for them)");
+        YDB_LOG_NOTICE("THive::TTxLoadEverything deleted unnecessary nodes and their restrictions",
+            {"logPrefix", GetLogPrefix()},
+            {"numDeletedNodes", numDeletedNodes},
+            {"numDeletedRestrictions", numDeletedRestrictions});
 
         TTabletId nextTabletId = Max(maxTabletId + 1, Self->NextTabletId);
 
@@ -870,7 +914,10 @@ public:
         if (isRootHive) {
             if (numSequences == 0) {
                 ui64 freeSequenceIdx = 0;
-                BLOG_D("THive::TTxLoadEverything Self->NextTabletId = " << Self->NextTabletId << " NextTabletId = " << nextTabletId);
+                YDB_LOG_DEBUG("THive::TTxLoadEverything initializing free tablet id sequences",
+                    {"logPrefix", GetLogPrefix()},
+                    {"storedNextTabletId", Self->NextTabletId},
+                    {"computedNextTabletId", nextTabletId});
                 if (nextTabletId < TABLET_ID_BLACKHOLE_BEGIN) {
                     TSequencer::TOwnerType owner(TSequencer::NO_OWNER, freeSequenceIdx++);
                     TSequencer::TSequence sequence({0x10000, std::max<TTabletId>(nextTabletId, 0x10000), TABLET_ID_BLACKHOLE_BEGIN});
@@ -892,19 +939,27 @@ public:
 
         if (numSequences != 0) {
             std::vector<TSequencer::TOwnerType> modified;
-            BLOG_D("THive::TTxLoadEverything NextElement = " << Self->Sequencer.GetNextElement() << " NextTabletId = " << nextTabletId);
+            YDB_LOG_DEBUG("THive::TTxLoadEverything equalizing next tablet id with sequencer",
+                {"logPrefix", GetLogPrefix()},
+                {"nextElement", Self->Sequencer.GetNextElement()},
+                {"nextTabletId", nextTabletId});
             while (Self->Sequencer.GetNextElement() < nextTabletId) {
                 TSequencer::TElementType element = Self->Sequencer.AllocateElement(modified);
                 SortUnique(modified);
                 if (element == TSequencer::NO_ELEMENT) {
-                    BLOG_ERROR("THive::TTxLoadEverything - unable to equalize NextTabletId " << nextTabletId << " - could not allocate free element");
+                    YDB_LOG_ERROR("THive::TTxLoadEverything unable to equalize next tablet id, could not allocate free element",
+                        {"logPrefix", GetLogPrefix()},
+                        {"nextTabletId", nextTabletId});
                     break;
                 }
             }
             if (!modified.empty()) {
                 for (auto owner : modified) {
                     auto sequence = Self->Sequencer.GetSequence(owner);
-                    BLOG_CRIT("THive::TTxLoadEverything - equalizing sequence " << owner << " to " << sequence);
+                    YDB_LOG_CRIT("THive::TTxLoadEverything equalizing sequencer state",
+                        {"logPrefix", GetLogPrefix()},
+                        {"ownerId", owner.first}, {"ownerIdx", owner.second},
+                        {"sequence", sequence});
                     db.Table<Schema::Sequences>()
                             .Key(owner)
                             .Update<Schema::Sequences::Begin, Schema::Sequences::Next, Schema::Sequences::End>(sequence.Begin, sequence.Next, sequence.End);
@@ -916,10 +971,16 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_NOTICE("THive::TTxLoadEverything::Complete " << Self->DatabaseConfig.ShortDebugString());
+        YDB_LOG_NOTICE("THive::TTxLoadEverything::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"databaseConfig", Self->DatabaseConfig.ShortDebugString()});
         ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;
+            if (it->second.ChannelProfileNewGroup.any()) {
+                it->second.IsMarkedForReassign = true;
+                Self->UpdateCounterTabletsReassigning(+1);
+            }
             for (const TTabletInfo& follower : it->second.Followers) {
                 ++tabletsTotal;
                 if (follower.IsLeader()) {
@@ -960,6 +1021,16 @@ public:
 
         for (auto it = Self->Nodes.begin(); it != Self->Nodes.end(); ++it) {
             Self->ScheduleUnlockTabletExecution(it->second, NKikimrHive::LOCK_LOST_REASON_HIVE_RESTART);
+        }
+
+        for (const auto& [_, domainInfo] : Self->Domains) {
+            for (const auto& pool : domainInfo.ShrinkingStoragePools) {
+                auto& poolInfo = Self->GetStoragePool(pool);
+                if (domainInfo.HiveId && Self->AreWeRootHive()) {
+                    poolInfo.NeedShrinkFromTenant = true;
+                }
+                Self->StartShrinkPool(poolInfo);
+            }
         }
     }
 };

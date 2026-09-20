@@ -20,10 +20,7 @@
 #include <boost/type_traits/is_convertible.hpp>
 #include <boost/type_traits/remove_pointer.hpp>
 #include <boost/type_traits/remove_cv.hpp>
-#include <boost/mpl/eval_if.hpp>
-#include <boost/mpl/identity.hpp>
-#include <boost/mpl/vector.hpp>
-#include <boost/mpl/fold.hpp>
+#include <boost/mpl/if.hpp>
 
 // Container traits implementation ---------------------------------------------------------
 

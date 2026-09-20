@@ -12,14 +12,17 @@ SRCS(
     kqp_limits_ut.cpp
     kqp_params_ut.cpp
     kqp_query_ut.cpp
+    kqp_query_event_log_ut.cpp
     kqp_stats_ut.cpp
     kqp_types_ut.cpp
+    kqp_write_affinity_ut.cpp
 )
 
 PEERDIR(
     ydb/core/statistics/ut_common
     ydb/library/yql/udfs/statistics_internal
     ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/operation
     ydb/core/kqp
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy

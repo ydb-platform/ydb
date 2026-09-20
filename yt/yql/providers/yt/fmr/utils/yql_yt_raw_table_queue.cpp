@@ -12,7 +12,7 @@ void TFmrRawTableQueue::AddRow(TBuffer&& rowContent) {
     YQL_ENSURE(rowContent.size() <= Settings_.MaxInflightBytes, "Row size is too large");
     with_lock(QueueMutex_) {
         QueueInflightBytesCondVar_.Wait(QueueMutex_, [&] {
-            return CurInflightBytes_ + rowContent.size() < Settings_.MaxInflightBytes || ExceptionMessage_;
+            return CurInflightBytes_ + rowContent.size() <= Settings_.MaxInflightBytes || ExceptionMessage_;
         });
 
         if (ExceptionMessage_) {

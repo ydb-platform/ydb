@@ -38,11 +38,16 @@
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 
-#include <ydb/library/actors/core/log.h>
+#include <ydb/services/sqs_topic/billing.h>
+
 #include <ydb/services/sqs_topic/statuses.h>
 
+#include <ydb/library/actors/core/log.h>
+
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/openssl/crypto/sha.h>
 #include <util/generic/guid.h>
+#include <util/string/hex.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -98,14 +103,16 @@ namespace NKikimr::NSqsTopic::V1 {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            NACLib::TUserToken token(this->Request_->GetSerializedToken());
-            ShouldBeCharged_ = FindPtr(AppData(ctx)->PQConfig.GetNonChargeableUser(), token.GetUserSID()) == nullptr;
+            PrepareWrite();
+            if (TBase::IsDead) {
+                return;
+            }
 
-            this->SendDescribeProposeRequest(ctx);
+            this->DescribeTopic(NACLib::UpdateRow);
             this->Become(&TSendMessageActorBase::StateWork);
         }
 
-        void DoWrite() {
+        void PrepareWrite() {
             const auto& request = Request();
             Items = ConvertRequestToWriteItems(request);
             for (ui32 i = 0; i < Items.size(); ++i) {
@@ -127,7 +134,10 @@ namespace NKikimr::NSqsTopic::V1 {
                         .Index = item.BatchIndex,
                         .MessageBody = std::move(item.MessageBody),
                         .MessageGroupId = toOptional(std::move(item.MessageGroupId)),
-                        .MessageDeduplicationId = toOptional(std::move(item.MessageDeduplicationId)),
+                        // MessageDeduplicationId is supported for FIFO queues only.
+                        .MessageDeduplicationId = QueueUrl_->Fifo
+                            ? toOptional(std::move(item.MessageDeduplicationId))
+                            : std::nullopt,
                         .Attributes = std::move(item.Attributes),
                         .Delay = TDuration::Seconds(item.DelaySeconds),
                     });
@@ -154,20 +164,25 @@ namespace NKikimr::NSqsTopic::V1 {
                         TDerived::Method)
                 });
 
-            NPQ::NMLP::TWriterSettings writerSettings{
+            // Accumulate the payload size (message bodies + user attributes) for RU-based charging.
+            PayloadSize_ = 0;
+            for (const auto& item : validItems) {
+                PayloadSize_ += item.MessageBody.size();
+            }
+
+            WriterSettings_ = NPQ::NMLP::TWriterSettings {
                 .DatabasePath = QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
                 .Messages = std::move(validItems),
-                .ShouldBeCharged = ShouldBeCharged_,
+                .ShouldBeCharged = false,
                 .UserToken = this->Request_->GetInternalToken(),
             };
-            WriterActor_ = this->RegisterWithSameMailbox(NPQ::NMLP::CreateWriter(this->SelfId(), std::move(writerSettings)));
         }
 
         void Handle(NPQ::NMLP::TEvWriteResponse::TPtr& ev) {
             WriterActor_ = {};
 
-            if (ev->Get()->DescribeStatus != NPQ::NDescriber::EStatus::SUCCESS) {
+            if (ev->Get()->DescribeStatus != NPQ::NDescriber::EStatus::Success) {
                 auto describerStatus = MapDescriberStatus(FullTopicPath_, ev->Get()->DescribeStatus);
                 this->ReplyWithError(*describerStatus.Error);
                 return;
@@ -212,7 +227,6 @@ namespace NKikimr::NSqsTopic::V1 {
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NPQ::NMLP::TEvWriteResponse, Handle);
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 default:
                     TBase::StateWork(ev);
             }
@@ -247,25 +261,62 @@ namespace NKikimr::NSqsTopic::V1 {
             return true;
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
-            const auto& response = result->ResultSet.front();
-            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, TStringBuilder() << "Writing to the Changefeed is not supported"));
-                }
-                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
-                }
-                // ok
-            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
-                return this->ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
-            } else {
-                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
+        void ApplyContentBasedDeduplication(bool enabled) {
+            if (!Fifo_ || !WriterSettings_) {
+                return;
             }
-            DoWrite();
+
+            TVector<NPQ::NMLP::TWriterSettings::TMessage> validMessages(Reserve(WriterSettings_->Messages.size()));
+            for (auto& message : WriterSettings_->Messages) {
+                if (!message.MessageDeduplicationId.has_value()) {
+                    if (enabled) {
+                        const auto digest = NOpenSsl::NSha256::Calc(message.MessageBody);
+                        message.MessageDeduplicationId = HexEncode(TStringBuf(
+                            reinterpret_cast<const char*>(digest.data()),
+                            digest.size()));
+                    } else {
+                        Items[message.Index].ValidationError = MakeError(
+                            NSQS::NErrors::MISSING_PARAMETER,
+                            "No MessageDeduplicationId parameter.");
+                        continue;
+                    }
+                }
+                validMessages.push_back(std::move(message));
+            }
+            WriterSettings_->Messages = std::move(validMessages);
+        }
+
+        void CreateWriterOrReply() {
+            if (!WriterSettings_ || WriterSettings_->Messages.empty()) {
+                static_cast<TDerived*>(this)->ReplyAndDie(TlsActivationContext->AsActorContext());
+                return;
+            }
+            CreateWriter();
+        }
+
+        TTopicDescribePolicy GetTopicDescribePolicy() const {
+            return ExistingQueuePolicy(TString("Writing to the Changefeed is not supported"));
+        }
+
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
+            AFL_ENSURE(topicInfo.Info)("path", FullTopicPath_);
+            Fifo_ = QueueUrl_->Fifo;
+            ApplyContentBasedDeduplication(
+                Fifo_ && topicInfo.Info->Description.GetPQTabletConfig().GetContentBasedDeduplication());
+
+            this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::CalcRu(
+                NBilling::PayloadBlocks(PayloadSize_, NBilling::WRITE_BLOCK_SIZE),
+                NBilling::WRITE_BASE_COST,
+                NBilling::WRITE_COST_PER_BLOCK,
+                Fifo_);
+        }
+
+        void OnRequestUnitsCharged(const NActors::TActorContext&) {
+            CreateWriterOrReply();
         }
 
         void Die(const TActorContext& ctx) override {
@@ -287,7 +338,7 @@ namespace NKikimr::NSqsTopic::V1 {
             if constexpr (!std::is_same_v<Ydb::Ymq::V1::SendMessageResult, std::remove_cvref_t<decltype(result)>>) {
                 result.set_id(item.BatchId);
             }
-            result.set_sequence_number("0");
+            result.set_sequence_number(ToString(item.MessageId->Offset));
 
             Y_ASSERT(result.IsInitialized());
         }
@@ -295,6 +346,10 @@ namespace NKikimr::NSqsTopic::V1 {
     private:
         TVector<TSendMessageItem> ConvertRequestToWriteItems(const TProtoRequest& request) {
             return static_cast<TDerived*>(this)->ConvertRequestToWriteItemsImpl(request);
+        }
+
+        void CreateWriter() {
+            WriterActor_ = this->RegisterWithSameMailbox(NPQ::NMLP::CreateWriter(this->SelfId(), std::move(*WriterSettings_)));
         }
 
         const TProtoRequest& Request() const {
@@ -306,8 +361,10 @@ namespace NKikimr::NSqsTopic::V1 {
 
     private:
         TActorId DescriptorActorId_;
-        bool ShouldBeCharged_{};
         TActorId WriterActor_;
+        ui64 PayloadSize_{};
+        bool Fifo_{};
+        TMaybe<NPQ::NMLP::TWriterSettings> WriterSettings_;
     };
 
     static TString GetBatchId(const Ydb::Ymq::V1::SendMessageBatchRequestEntry& batchEntry) {

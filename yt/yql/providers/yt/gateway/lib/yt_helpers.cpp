@@ -668,49 +668,50 @@ void FillResultFromErrorResponse(NCommon::TOperationResult& result, const NYT::T
     result.AddIssue(rootIssue);
 }
 
-void GetIntegerConstraints(EDataSlot dataSlot, bool& isSigned, ui64& minValueAbs, ui64& maxValueAbs) {
-    // looks like AllowIntegralConversion (may consider some refactoring)
-    if (dataSlot == EDataSlot::Uint8) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui8>();
-    }
-    else if (dataSlot == EDataSlot::Uint16) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui16>();
-    }
-    else if (dataSlot == EDataSlot::Uint32) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui32>();
-    }
-    else if (dataSlot == EDataSlot::Uint64) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui64>();
-    }
-    else if (dataSlot == EDataSlot::Int8) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i8>() + 1;
-        maxValueAbs = (ui64)Max<i8>();
-    }
-    else if (dataSlot == EDataSlot::Int16) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i16>() + 1;
-        maxValueAbs = (ui64)Max<i16>();
-    }
-    else if (dataSlot == EDataSlot::Int32) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i32>() + 1;
-        maxValueAbs = (ui64)Max<i32>();
-    }
-    else if (dataSlot == EDataSlot::Int64) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i64>() + 1;
-        maxValueAbs = (ui64)Max<i64>();
-    } else {
-        YQL_ENSURE(false, "unexpected integer node type");
+bool GetIntegerConstraints(const EDataSlot dataSlot, bool& isSigned, ui64& minValueAbs, ui64& maxValueAbs) {
+    switch (dataSlot) {
+        case EDataSlot::Uint8:
+            isSigned = false;
+            minValueAbs = 0;
+            maxValueAbs = Max<ui8>();
+            return true;
+        case EDataSlot::Uint16:
+            isSigned = false;
+            minValueAbs = 0;
+            maxValueAbs = Max<ui16>();
+            return true;
+        case EDataSlot::Uint32:
+            isSigned = false;
+            minValueAbs = 0;
+            maxValueAbs = Max<ui32>();
+            return true;
+        case EDataSlot::Uint64:
+            isSigned = false;
+            minValueAbs = 0;
+            maxValueAbs = Max<ui64>();
+            return true;
+        case EDataSlot::Int8:
+            isSigned = true;
+            minValueAbs = (ui64)Max<i8>() + 1;
+            maxValueAbs = (ui64)Max<i8>();
+            return true;
+        case EDataSlot::Int16:
+            isSigned = true;
+            minValueAbs = (ui64)Max<i16>() + 1;
+            maxValueAbs = (ui64)Max<i16>();
+            return true;
+        case EDataSlot::Int32:
+            isSigned = true;
+            minValueAbs = (ui64)Max<i32>() + 1;
+            maxValueAbs = (ui64)Max<i32>();
+            return true;
+        case EDataSlot::Int64:
+            isSigned = true;
+            minValueAbs = (ui64)Max<i64>() + 1;
+            maxValueAbs = (ui64)Max<i64>();
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -761,19 +762,22 @@ TMaybe<TString> ConvertValueForQL(const TExprNode::TPtr& node) {
             return {value.Quote()};
         }
     }
-    YQL_ENSURE(false, "YtQLFilter: unexpected type of const value " << node->Dump());
+    YQL_CLOG(ERROR, ProviderYt) << "YtQLFilter: unexpected type of const value " << node->Dump();
+    return {};
 }
 
 TMaybe<bool> OptimizePossibleOutOfBounds(const TStringBuf& opName, EDataSlot columnDataSlot, const TExprNode::TPtr& intValue) {
+    bool columnsIsSigned;
+    ui64 minValueAbs;
+    ui64 maxValueAbs;
+    if (!GetIntegerConstraints(columnDataSlot, columnsIsSigned, minValueAbs, maxValueAbs)) {
+        return {};
+    }
+
     const TMaybeNode<TCoIntegralCtor> maybeIntValue(intValue);
     if (!maybeIntValue) {
         return {};
     }
-
-    bool columnsIsSigned;
-    ui64 minValueAbs;
-    ui64 maxValueAbs;
-    GetIntegerConstraints(columnDataSlot, columnsIsSigned, minValueAbs, maxValueAbs);
 
     bool hasSign;
     bool isSigned;
@@ -799,7 +803,10 @@ TMaybe<bool> OptimizePossibleOutOfBounds(const TStringBuf& opName, EDataSlot col
     return {};
 }
 
-bool GenerateInputQueryComparison(const TStringBuf& opName, const TExprNode::TPtr& column, TExprNode::TPtr value, const TMaybe<bool>& nullValue, TStringBuilder& result) {
+// Returns the generated QL expression tree depth (references and literals have depth one),
+// or Nothing() if the expression cannot be generated.
+// Depth mirrors the QL parser's AST nesting; see yt/yt/library/query/base/parser.ypp.
+TMaybe<ui32> GenerateInputQueryComparison(const TStringBuf& opName, const TExprNode::TPtr& column, TExprNode::TPtr value, const TMaybe<bool>& nullValue, TStringBuilder& result) {
     for (auto maybeJust = TMaybeNode<TCoJust>(value); maybeJust;) {
         value = maybeJust.Cast().Input().Ptr();
         maybeJust = TMaybeNode<TCoJust>(value);
@@ -812,7 +819,7 @@ bool GenerateInputQueryComparison(const TStringBuf& opName, const TExprNode::TPt
         } else {
             result << "FALSE";
         }
-        return true;
+        return 1;
     }
 
     bool columnIsOptional = false;
@@ -830,16 +837,19 @@ bool GenerateInputQueryComparison(const TStringBuf& opName, const TExprNode::TPt
     const auto columnName = column->ChildPtr(1)->Content();
     if (!constantFilter.Defined()) {
         // Value is in the range, comparison is not constant.
+        bool addNullComparison = false;
         if (columnIsOptional) {
             const bool isLess = opName == "<" || opName == "<=";
             if (isLess && !nullValue.GetRef()) {
                 // QL will handle 'x [operation] NULL' as TRUE here, but we need FALSE.
                 QuoteColumnForQL(columnName, result);
                 result << " != NULL AND ";
+                addNullComparison = true;
             } else if (!isLess && nullValue.GetRef()) {
                 // QL will handle 'x [operation] NULL' as FALSE here, but we need TRUE.
                 QuoteColumnForQL(columnName, result);
                 result << " = NULL OR ";
+                addNullComparison = true;
             }
         }
         QuoteColumnForQL(columnName, result);
@@ -847,17 +857,25 @@ bool GenerateInputQueryComparison(const TStringBuf& opName, const TExprNode::TPt
         ConvertComparisonForQL(opName, result);
         const auto valueStr = ConvertValueForQL(value);
         if (!valueStr.Defined()) {
-            return false;
+            return {};
         }
         result << " " << valueStr.GetRef();
+
+        const ui32 valueDepth = valueStr->StartsWith('-') || valueStr->StartsWith('+') ? 2 : 1;
+        const ui32 comparisonDepth = 1 + Max(1U, valueDepth);
+        return addNullComparison
+            ? 1 + Max(2U, comparisonDepth)
+            : comparisonDepth;
     } else if (constantFilter.GetRef()) {
         // Value is out of the range, comparison is always TRUE.
         if (columnIsOptional && !nullValue.GetRef()) {
             // Handle comparison with NULL as FALSE.
             QuoteColumnForQL(columnName, result);
             result << " IS NOT NULL";
+            return 3;
         } else {
             result << "TRUE";
+            return 1;
         }
     } else {
         // Value is out of the range, comparison is always FALSE.
@@ -865,14 +883,15 @@ bool GenerateInputQueryComparison(const TStringBuf& opName, const TExprNode::TPt
             // Handle comparison with NULL as TRUE.
             QuoteColumnForQL(columnName, result);
             result << " IS NULL";
+            return 2;
         } else {
             result << "FALSE";
+            return 1;
         }
     }
-    return true;
 }
 
-bool GenerateInputQueryComparison(const TCoCompare& op, const TMaybe<bool>& nullValue, TStringBuilder& result) {
+TMaybe<ui32> GenerateInputQueryComparison(const TCoCompare& op, const TMaybe<bool>& nullValue, TStringBuilder& result) {
     YQL_ENSURE(op.Ref().IsCallable({"<", "<=", ">", ">=", "==", "!="}));
     const auto left = op.Left().Ptr();
     const auto right = op.Right().Ptr();
@@ -894,7 +913,7 @@ bool GenerateInputQueryComparison(const TCoCompare& op, const TMaybe<bool>& null
     }
 }
 
-bool GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuilder& result) {
+TMaybe<ui32> GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuilder& result) {
     if (const auto maybeCompare = TMaybeNode<TCoCompare>(node)) {
         return GenerateInputQueryComparison(maybeCompare.Cast(), {}, result);
     } else if (node->IsCallable("Not")) {
@@ -902,38 +921,48 @@ bool GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuild
         if (child->IsCallable("Exists")) {
             // Do not generate NOT (x IS NOT NULL).
             result << "(";
-            if (!GenerateInputQueryWhereExpression(child->ChildPtr(0), result)) {
-                return false;
+            const auto childDepth = GenerateInputQueryWhereExpression(child->ChildPtr(0), result);
+            if (!childDepth) {
+                return {};
             }
             result << ") IS NULL";
+            return *childDepth + 1;
         } else {
             result << "NOT (";
-            if (!GenerateInputQueryWhereExpression(child, result)) {
-                return false;
+            const auto childDepth = GenerateInputQueryWhereExpression(child, result);
+            if (!childDepth) {
+                return {};
             }
             result << ")";
+            return *childDepth + 1;
         }
     } else if (node->IsCallable("Exists")) {
         result << "(";
-        if (!GenerateInputQueryWhereExpression(node->ChildPtr(0), result)) {
-            return false;
+        const auto childDepth = GenerateInputQueryWhereExpression(node->ChildPtr(0), result);
+        if (!childDepth) {
+            return {};
         }
         result << ") IS NOT NULL";
+        return *childDepth + 2;
     } else if (node->IsCallable({"And", "Or"})) {
         const TStringBuf op = node->IsCallable("And") ? "AND" : "OR";
         result << "(";
-        if (!GenerateInputQueryWhereExpression(node->Child(0), result)) {
-            return false;
+        auto depth = GenerateInputQueryWhereExpression(node->Child(0), result);
+        if (!depth) {
+            return {};
         }
         result << ")";
         const auto size = node->ChildrenSize();
         for (TExprNode::TListType::size_type i = 1U; i < size; ++i) {
             result << " " << op << " (";
-            if (!GenerateInputQueryWhereExpression(node->Child(i), result)) {
-                return false;
+            const auto childDepth = GenerateInputQueryWhereExpression(node->Child(i), result);
+            if (!childDepth) {
+                return {};
             }
             result << ")";
+            depth = 1 + Max(*depth, *childDepth);
         };
+        return depth;
     } else if (node->IsCallable("Coalesce")) {
         YQL_ENSURE(node->ChildrenSize() == 2);
         const auto op = TMaybeNode<TCoCompare>(node->Child(0)).Cast();
@@ -942,13 +971,15 @@ bool GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuild
         return GenerateInputQueryComparison(op, nullValue, result);
     } else if (const auto maybeBool = TMaybeNode<TCoBool>(node)) {
         result << maybeBool.Cast().Literal().Value();
+        return 1;
     } else if (node->IsCallable("Member")) {
         const auto columnName = node->ChildPtr(1)->Content();
         QuoteColumnForQL(columnName, result);
+        return 1;
     } else {
         YQL_ENSURE(false, "unexpected node type");
     }
-    return true;
+    return {};
 }
 
 } // unnamed
@@ -988,13 +1019,18 @@ void EnsureSpecDoesntUseNativeYtTypes(const NYT::TNode& spec, TStringBuf tableNa
     }
 }
 
-TMaybe<TString> GenerateInputQuery(const TExprNode::TPtr& qlFilterNode) {
+TMaybe<TString> GenerateInputQuery(const TExprNode::TPtr& qlFilterNode, ui32 depthLimit) {
     YQL_ENSURE(qlFilterNode && qlFilterNode->IsCallable("YtQLFilter"));
     TStringBuilder result;
     result << "* WHERE ";
     const TYtQLFilter qlFilter(qlFilterNode);
-    if (!GenerateInputQueryWhereExpression(qlFilter.Predicate().Body().Ptr(), result)) {
+    const auto depth = GenerateInputQueryWhereExpression(qlFilter.Predicate().Body().Ptr(), result);
+    if (!depth) {
         YQL_CLOG(INFO, ProviderYt)  << __FUNCTION__ << ": Ignore YtQLFilter";
+        return {};
+    }
+    if (depthLimit != 0 && *depth > depthLimit) {
+        YQL_CLOG(INFO, ProviderYt) << __FUNCTION__ << ": Ignore YtQLFilter, expression is too deep (depth: " << *depth << ", limit: " << depthLimit << ")";
         return {};
     }
     YQL_CLOG(INFO, ProviderYt)  << __FUNCTION__ << ": Got input_query for YtQLFilter\n" << result;

@@ -35,7 +35,7 @@ public:
     void PassAway() override;
 
 protected:
-    TString BuildLogPrefix() const override;
+    TStructuredMessage BuildLogPrefix() const override;
 
 private:
     void Queue(TEvPQ::TEvMLPReadRequest::TPtr&);
@@ -67,9 +67,11 @@ private:
     void Handle(TEvPersQueue::TEvResponse::TPtr&);
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
+    void Handle(TEvPQ::TEvMLPErrorResponse::TPtr&);
+    void RetryChildPartitionSync(ui32 partitionId);
 
-    void HandleOnWork(TEvents::TEvWakeup::TPtr&);
     void Handle(TEvents::TEvWakeup::TPtr&);
+    bool InStateWork() const;
 
     void Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr&);
 
@@ -93,6 +95,7 @@ private:
     void InitializeDetailedMetrics();
 
     size_t RequiredToFetchMessageCount() const;
+    size_t FifoUnlockedGroupDeficit() const;
     void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 
     void UpdateMetrics();
@@ -132,13 +135,14 @@ private:
     std::deque<TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr> UpdateExternalLockedMessageGroupsIdRequestsQueue;
 
     std::deque<TReadResult> PendingReadQueue;
-    std::deque<TResult> PendingCommitQueue;
-    std::deque<TResult> PendingUnlockQueue;
-    std::deque<TResult> PendingChangeMessageDeadlineQueue;
+    std::deque<TCommitResult> PendingCommitQueue;
+    std::deque<TUnlockResult> PendingUnlockQueue;
+    std::deque<TChangeMessageDeadlineResult> PendingChangeMessageDeadlineQueue;
     std::deque<TResult> PendingPurgeQueue;
 
     bool ProcessingScheduled = false;
     TInstant NextProcessingTime;
+    TInstant NextForcedProcessingTime;
 
     ui64 LastWALIndex = 0;
     bool HasSnapshot = false;
@@ -166,6 +170,7 @@ public:
 private:
     NMonitoring::TDynamicCounters::TCounterPtr InflightCommittedCount;
     NMonitoring::TDynamicCounters::TCounterPtr InflightLockedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr InflightMessageGroupCount;
     NMonitoring::TDynamicCounters::TCounterPtr InflightDelayedCount;
     NMonitoring::TDynamicCounters::TCounterPtr InflightUnlockedCount;
     NMonitoring::TDynamicCounters::TCounterPtr InflightScheduledToDLQCount;

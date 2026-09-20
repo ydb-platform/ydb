@@ -329,7 +329,7 @@ A set of specifiers is implemented for the formatting string:
 * `%H`: 2-digit hour;
 * `%M`: 2-digit minutes;
 * `%S`: 2-digit seconds or `XX.XXXXXX` in the case of non-empty microseconds (only if `AlwaysWriteFractionalSeconds` is not set to `True`);
-* `%z`: +hhmm or -hhmm by default; +hh:mm or -hh:mm if `WriteOffsetWithColon` is set to `True`;
+* `%z`: +hhmm or -hhmm by default; +hh:mm or -hh:mm if `WriteOffsetWithColon` (added in the version [2025.05](../../changelog/2025.05.md#datetime-module)) is set to `True`;
 * `%Z`: IANA name of the timezone (GMT);
 * `%b`: A short three-letter English name of the month (Jan);
 * `%B`: A full English name of the month (January).

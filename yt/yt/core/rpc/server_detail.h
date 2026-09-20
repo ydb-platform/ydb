@@ -99,6 +99,7 @@ public:
 
     std::vector<TSharedRef>& RequestAttachments() override;
     NConcurrency::IAsyncZeroCopyInputStreamPtr GetRequestAttachmentsStream() override;
+    IDirectPlacementTransferPtr TryGetRequestAttachmentsTransfer() override;
 
     std::vector<TSharedRef>& ResponseAttachments() override;
     NConcurrency::IAsyncZeroCopyOutputStreamPtr GetResponseAttachmentsStream() override;
@@ -146,7 +147,14 @@ protected:
     TAuthenticationIdentity AuthenticationIdentity_;
 
     TSharedRef RequestBody_;
-    std::vector<TSharedRef> RequestAttachments_;
+    //! Holds the request attachments once they are available. Disengaged until
+    //! they are either lazily read from the request message (inline delivery) or
+    //! produced by running #RequestAttachmentsTransfer_ (direct placement transfer).
+    std::optional<std::vector<TSharedRef>> RequestAttachments_;
+    //! Non-null iff the request attachments are delivered via direct placement
+    //! transfer; the service must drive it to completion (see
+    //! #TryGetRequestAttachmentsTransfer) to make #RequestAttachments available.
+    IDirectPlacementTransferPtr RequestAttachmentsTransfer_;
 
     std::atomic<bool> Replied_ = false;
     TError Error_;
@@ -187,6 +195,11 @@ protected:
 
     virtual void LogRequest();
     virtual void LogResponse() = 0;
+
+    //! Installs the request attachments direct placement transfer (adapting the
+    //! bus-layer one). Until the service drives it to completion, #RequestAttachments
+    //! aborts.
+    void SetRequestAttachmentsTransfer(NYT::NBus::IDirectPlacementTransferPtr transfer);
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ResponseLock_);
@@ -266,6 +279,7 @@ public:
 
     std::vector<TSharedRef>& RequestAttachments() override;
     NConcurrency::IAsyncZeroCopyInputStreamPtr GetRequestAttachmentsStream() override;
+    IDirectPlacementTransferPtr TryGetRequestAttachmentsTransfer() override;
 
     std::vector<TSharedRef>& ResponseAttachments() override;
     NConcurrency::IAsyncZeroCopyOutputStreamPtr GetResponseAttachmentsStream() override;

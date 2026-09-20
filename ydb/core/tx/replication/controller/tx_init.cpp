@@ -2,6 +2,8 @@
 #include "target_table.h"
 #include "target_transfer.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxInit: public TTxBase {
@@ -88,6 +90,8 @@ class TController::TTxInit: public TTxBase {
             const auto dstPath = rowset.GetValue<Schema::Targets::DstPath>();
             const auto dstState = rowset.GetValue<Schema::Targets::DstState>();
             const auto issue = rowset.GetValue<Schema::Targets::Issue>();
+            const auto workerSetComplete =
+                rowset.GetValueOrDefault<Schema::Targets::WorkerSetComplete>(false);
             const auto dstPathId = TPathId(
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
@@ -115,6 +119,9 @@ class TController::TTxInit: public TTxBase {
             target->SetDstState(dstState);
             target->SetDstPathId(dstPathId);
             target->SetIssue(issue);
+            if (workerSetComplete) {
+                Self->CompleteWorkerSets.insert({rid, tid});
+            }
 
             if (!rowset.Next()) {
                 return false;
@@ -199,9 +206,13 @@ class TController::TTxInit: public TTxBase {
             );
 
             auto* worker = Self->GetOrCreateWorker(id);
-            worker->SetHeartbeat(version);
-            Self->WorkersWithHeartbeat.insert(id);
-            Self->WorkersByHeartbeat[version].insert(id);
+            // Zero denotes a registered worker that has not reported a
+            // heartbeat yet and must not join a recovered heartbeat quorum.
+            if (version != TRowVersion::Min()) {
+                worker->SetHeartbeat(version);
+                Self->WorkersWithHeartbeat.insert(id);
+                Self->WorkersByHeartbeat[version].insert(id);
+            }
 
             if (!rowset.Next()) {
                 return false;
@@ -237,12 +248,14 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute");
         return Load(txc.DB);
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Self->UnresolvedDatabaseReplications.empty()) {
             Self->SwitchToWork(ctx);

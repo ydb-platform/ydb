@@ -270,7 +270,7 @@ void TYqlJobBase::Init() {
         FunctionRegistry->SupportsSizedAllocators()));
     Env.Reset(new TTypeEnvironment(*Alloc));
     CodecCtx.Reset(new NCommon::TCodecContext(*Env, *FunctionRegistry));
-    if (!GetEnv(TString("YQL_SUPPRESS_JOB_STATISTIC"))) {
+    if (NeedWriteStats() && !GetEnv(TString("YQL_SUPPRESS_JOB_STATISTIC"))) {
         JobStats = CreateDefaultStatsRegistry();
     }
     SecureParamsProvider.Reset(new TEnvSecureParamsProvider("YT_SECURE_VAULT"));
@@ -295,7 +295,8 @@ void TYqlJobBase::Save(IOutputStream& s) const {
         TableNames,
         RuntimeLogLevel,
         LangVer,
-        NYql::SerializeRuntimeSettingsToString(*RuntimeSettings)
+        NYql::SerializeRuntimeSettingsToString(*RuntimeSettings),
+        BridgeMode
     );
 }
 
@@ -309,7 +310,8 @@ void TYqlJobBase::Load(IInputStream& s) {
         TableNames,
         RuntimeLogLevel,
         LangVer,
-        serializedRuntimeSettings
+        serializedRuntimeSettings,
+        BridgeMode
     );
     RuntimeSettings = NYql::CreateRuntimeSettingsFromString(serializedRuntimeSettings);
 }

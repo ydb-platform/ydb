@@ -15,6 +15,10 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+extern const THashSet<TErrorCode> TableMountCacheRetryableCodes;
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TTabletInfoOwnerCache
 {
 public:
@@ -58,7 +62,8 @@ public:
     void InvalidateTablet(TTabletId tabletId) override;
     TInvalidationResult InvalidateOnError(
         const TError& error,
-        bool forceRetry) override;
+        bool forceRetry,
+        TTabletId tabletIdHint = {}) override;
 
     void Clear() override;
 
@@ -77,7 +82,9 @@ private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
     TTableMountCacheConfigPtr Config_;
 
-    TTabletInfoPtr FindTabletInfo(TTabletId tabletId);
+    TTabletInfoPtr FindTabletInfo(
+        TTabletId tabletId,
+        std::optional<NHydra::TRevision> mountRevision = {});
 
     void SetTableInfos(std::vector<TTableMountInfoPtr> clonedTableInfos);
 
@@ -85,8 +92,7 @@ private:
         const TError& error);
 
     std::optional<TInvalidationResult> TryHandleServantNotActiveError(
-        const TSmoothMovementRedirectionHint& smoothMovementHint,
-        const TTabletInfoPtr& tabletInfo);
+        std::vector<std::pair<TSmoothMovementRedirectionHint, TTabletInfoPtr>> hints);
 
     std::optional<TInvalidationResult> TryHandleTabletReshardedError(
         const TReshardRedirectionHintPtr& reshardHint,

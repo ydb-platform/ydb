@@ -62,6 +62,20 @@ const TIncrementalBackupResponse::TMetadata& TIncrementalBackupResponse::Metadat
     return Metadata_;
 }
 
+TFullBackupResponse::TFullBackupResponse(TStatus&& status, Ydb::Operations::Operation&& operation)
+     : TOperation(std::move(status), std::move(operation))
+{
+    Ydb::Backup::BackupMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+
+    Metadata_.Progress = FromProto(metadata.progress());
+    Metadata_.ProgressPercent = metadata.progress_percent();
+}
+
+const TFullBackupResponse::TMetadata& TFullBackupResponse::Metadata() const {
+    return Metadata_;
+}
+
 TBackupCollectionRestoreResponse::TBackupCollectionRestoreResponse(TStatus&& status, Ydb::Operations::Operation&& operation)
      : TOperation(std::move(status), std::move(operation))
 {
@@ -90,6 +104,12 @@ template NThreading::TFuture<NBackup::TBackupCollectionRestoreResponse> TOperati
 template <>
 NThreading::TFuture<TOperationsList<NBackup::TBackupCollectionRestoreResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
     return List<NBackup::TBackupCollectionRestoreResponse>("restore", pageSize, pageToken);
+}
+
+template NThreading::TFuture<NBackup::TFullBackupResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+NThreading::TFuture<TOperationsList<NBackup::TFullBackupResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
+    return List<NBackup::TFullBackupResponse>("fullbackup", pageSize, pageToken);
 }
 
 }

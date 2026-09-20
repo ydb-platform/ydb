@@ -1,6 +1,7 @@
 #include "kmeans_clusters.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -49,6 +50,105 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(NKMeans) {
+
+    Y_UNIT_TEST_TWIN(HalfVectorSettings, BFloat16) {
+        using T = std::conditional_t<BFloat16, TBFloat16, TFloat16>;
+        const auto vectorType = BFloat16
+            ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16
+            : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16;
+        TString error;
+        Ydb::Table::KMeansTreeSettings settings;
+        UNIT_ASSERT(FillSetting(settings, "vector_type", BFloat16 ? "BFloat16" : "Float16", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_type(), vectorType);
+
+        const auto embedding = SerializeVector<T>({T(0.25f), T(-0.5f), T(1.5f)});
+        auto vectorSettings = MakeCosineSettings(vectorType, 3);
+        UNIT_ASSERT_C(ValidateSettings(vectorSettings, error), error);
+        auto clusters = CreateClusters(vectorSettings, 1, error);
+        UNIT_ASSERT_C(clusters, error);
+        UNIT_ASSERT(clusters->IsExpectedFormat(embedding));
+        UNIT_ASSERT_VALUES_EQUAL(clusters->GetEmptyRow().size(), 7);
+        UNIT_ASSERT(clusters->IsExpectedFormat(clusters->GetEmptyRow()));
+        UNIT_ASSERT(!clusters->IsExpectedFormat(SerializeVector<float>({0.25f, -0.5f, 1.5f})));
+        using TOtherHalf = std::conditional_t<BFloat16, TFloat16, TBFloat16>;
+        UNIT_ASSERT(!clusters->IsExpectedFormat(SerializeVector<TOtherHalf>({TOtherHalf(0.25f), TOtherHalf(-0.5f), TOtherHalf(1.5f)})));
+
+        vectorSettings.clear_vector_type();
+        vectorSettings.clear_vector_dimension();
+        UNIT_ASSERT(AutoSelectVectorSettings(vectorSettings, embedding));
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.vector_type(), vectorType);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.vector_dimension(), 3);
+        vectorSettings.clear_vector_dimension();
+        UNIT_ASSERT(AutoSelectVectorSettings(vectorSettings, embedding));
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.vector_dimension(), 3);
+
+        auto detected = CreateClustersAutoDetect(vectorSettings, embedding, 1, error);
+        UNIT_ASSERT_C(detected, error);
+        UNIT_ASSERT(detected->IsExpectedFormat(embedding));
+        for (const auto& invalid : {TString(1, Format<T>), TString(2, Format<T>), embedding.substr(1)}) {
+            UNIT_ASSERT(!clusters->IsExpectedFormat(invalid));
+            UNIT_ASSERT(!CreateClustersAutoDetect(vectorSettings, invalid, 1, error));
+            vectorSettings.clear_vector_dimension();
+            UNIT_ASSERT(!AutoSelectVectorSettings(vectorSettings, invalid));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(HalfVectorDistancesAndCentroids, BFloat16) {
+        using T = std::conditional_t<BFloat16, TBFloat16, TFloat16>;
+        using TSettings = Ydb::Table::VectorIndexSettings;
+        const auto vectorType = BFloat16 ? TSettings::VECTOR_TYPE_BFLOAT16 : TSettings::VECTOR_TYPE_FLOAT16;
+        const auto first = SerializeVector<T>({T(0.25f), T(-0.5f)});
+        const auto second = SerializeVector<T>({T(0.75f), T(0.5f)});
+        const auto firstFloat = SerializeVector<float>({0.25f, -0.5f});
+        const auto secondFloat = SerializeVector<float>({0.75f, 0.5f});
+        for (auto metric : {TSettings::SIMILARITY_INNER_PRODUCT, TSettings::DISTANCE_MANHATTAN,
+                TSettings::DISTANCE_EUCLIDEAN, TSettings::SIMILARITY_COSINE, TSettings::DISTANCE_COSINE}) {
+            TString error;
+            auto settings = MakeCosineSettings(vectorType, 2);
+            settings.set_metric(metric);
+            auto clusters = CreateClusters(settings, 1, error);
+            UNIT_ASSERT_C(clusters, error);
+            settings.set_vector_type(TSettings::VECTOR_TYPE_FLOAT);
+            auto reference = CreateClusters(settings, 1, error);
+            UNIT_ASSERT_C(reference, error);
+            UNIT_ASSERT_DOUBLES_EQUAL(clusters->CalcDistance(first, second), reference->CalcDistance(firstFloat, secondFloat), 1e-6);
+
+            UNIT_ASSERT(clusters->SetClusters({first, second}));
+            UNIT_ASSERT(reference->SetClusters({firstFloat, secondFloat}));
+            UNIT_ASSERT_VALUES_EQUAL(clusters->FindCluster(second), reference->FindCluster(secondFloat));
+            std::vector<std::pair<ui32, double>> nearest, expected;
+            clusters->FindClusters(second, nearest, 2, 0);
+            reference->FindClusters(secondFloat, expected, 2, 0);
+            UNIT_ASSERT_VALUES_EQUAL(nearest.size(), expected.size());
+            for (size_t i = 0; i < nearest.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(nearest[i].first, expected[i].first);
+                UNIT_ASSERT_DOUBLES_EQUAL(nearest[i].second, expected[i].second, 1e-6);
+            }
+
+            UNIT_ASSERT(clusters->SetClusters({clusters->GetEmptyRow()}));
+            UNIT_ASSERT(reference->SetClusters({reference->GetEmptyRow()}));
+            // Weighted sums exceed the half-precision range; the centroid remains fractional.
+            clusters->AggregateToCluster(0, first, 300000);
+            clusters->AggregateToCluster(0, second, 100000);
+            reference->AggregateToCluster(0, firstFloat, 300000);
+            reference->AggregateToCluster(0, secondFloat, 100000);
+            UNIT_ASSERT(clusters->NextRound());
+            UNIT_ASSERT(reference->NextRound());
+            UNIT_ASSERT_VALUES_EQUAL(clusters->GetClusterSizes().front(), 400000);
+            const auto centroid = DeserializeVector<T>(clusters->GetClusters().front());
+            const auto expectedCentroid = DeserializeVector<float>(reference->GetClusters().front());
+            UNIT_ASSERT_VALUES_EQUAL(centroid.size(), expectedCentroid.size());
+            for (size_t i = 0; i < centroid.size(); ++i) {
+                UNIT_ASSERT_DOUBLES_EQUAL(static_cast<float>(centroid[i]), static_cast<float>(T(expectedCentroid[i])), 1e-6);
+            }
+
+            const auto zero = SerializeVector<T>({T(0.0f), T(0.0f)});
+            UNIT_ASSERT(clusters->SetClusters({zero}));
+            clusters->AggregateToCluster(0, zero);
+            UNIT_ASSERT(clusters->NextRound());
+            UNIT_ASSERT_VALUES_EQUAL(clusters->GetClusters().front(), zero);
+        }
+    }
 
     Y_UNIT_TEST(ValidateSettings) {
         Ydb::Table::KMeansTreeSettings settings;
@@ -216,6 +316,73 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT(!centroid[4]);
     }
 
+    Y_UNIT_TEST(FindClustersPrefersLowerClusterNumberOnEqualDistance) {
+        TString error;
+        auto clusters = CreateClusters(
+            MakeCosineSettings(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2),
+            1,
+            error);
+
+        UNIT_ASSERT_C(clusters, error);
+        // 3 equal centroids and 1 different
+        UNIT_ASSERT(clusters->SetClusters(TVector<TString>{
+            SerializeVector<float>({1.0f, 0.0f}),
+            SerializeVector<float>({1.0f, 0.0f}),
+            SerializeVector<float>({1.0f, 0.0f}),
+            SerializeVector<float>({0.0f, 1.0f}),
+        }));
+
+        const auto embedding = SerializeVector<float>({2.0f, 0.0f});
+
+        // FindCluster() picks the first of the equally distant clusters,
+        // FindClusters() must pick the same one, otherwise rows are distributed
+        // between clusters differently during the K-means and the upload passes
+        // of the vector index build, which leaves clusters without any rows
+        auto single = clusters->FindCluster(embedding);
+        UNIT_ASSERT(single);
+        UNIT_ASSERT_VALUES_EQUAL(*single, 0u);
+
+        std::vector<std::pair<ui32, double>> found;
+        clusters->FindClusters(embedding, found, 1, 0);
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(found[0].first, 0u);
+
+        clusters->FindClusters(embedding, found, 2, 0);
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(found[0].first, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(found[1].first, 1u);
+
+        // The farthest cluster must still be the last one
+        clusters->FindClusters(embedding, found, 4, 0);
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(found[3].first, 3u);
+    }
+
+    Y_UNIT_TEST(FindClustersClearsResultForInvalidEmbedding) {
+        TString error;
+        auto clusters = CreateClusters(
+            MakeCosineSettings(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2),
+            1,
+            error);
+
+        UNIT_ASSERT_C(clusters, error);
+        UNIT_ASSERT(clusters->SetClusters(TVector<TString>{
+            SerializeVector<float>({1.0f, 0.0f}),
+            SerializeVector<float>({0.0f, 1.0f}),
+        }));
+
+        std::vector<std::pair<ui32, double>> found;
+        const auto embedding = SerializeVector<float>({1.0f, 0.0f});
+        clusters->FindClusters(embedding, found, 2, 0);
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 2u);
+
+        // A vector of a wrong dimension must not be assigned to the clusters
+        // found for the previously checked vector
+        const auto invalid = SerializeVector<float>({1.0f, 0.0f, 1.0f});
+        clusters->FindClusters(invalid, found, 2, 0);
+        UNIT_ASSERT_VALUES_EQUAL(found.size(), 0u);
+    }
+
     Y_UNIT_TEST(ComputeOptimalClustersBasic) {
         // L=1: C = sqrt(T * P * N) = sqrt(10 * 1 * 10000) = sqrt(100000) ≈ 316
         UNIT_ASSERT_VALUES_EQUAL(ComputeOptimalClusters(1, 10, 10000, 1.0), 316);
@@ -239,13 +406,13 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         // L=1, T=10, N=1, P=1: C = sqrt(10) ≈ 3.16 → 3
         UNIT_ASSERT_VALUES_EQUAL(ComputeOptimalClusters(1, 10, 1, 1.0), 3);
 
-        // L=5, T=10, N=1, P=1: very small, clamped to MinClusters(2)
+        // L=5, T=10, N=1, P=1: very small, clamped to 2u(2)
         UNIT_ASSERT_VALUES_EQUAL(ComputeOptimalClusters(5, 10, 1, 1.0), 2);
 
         // Clamped to MaxClusters(2048) when result > 2048
         UNIT_ASSERT_VALUES_EQUAL(ComputeOptimalClusters(1, 10, 1000000000, 1.0), 2048);
 
-        // rowCount = 0: division by zero gives 0 → clamped to MinClusters
+        // rowCount = 0: division by zero gives 0 → clamped to 2u
         UNIT_ASSERT_VALUES_EQUAL(ComputeOptimalClusters(1, 10, 0, 1.0), 2);
     }
 
@@ -277,7 +444,7 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
         settings.mutable_settings()->set_vector_dimension(4);
 
-        // rowCount < 100 → levels=1, clusters=MinClusters(2)
+        // rowCount < 100 → levels=1, clusters=2u(2)
         AutoSelectKMeansSettings(settings, 50);
         UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1);
         UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 2);
@@ -355,6 +522,96 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT(settings.levels() >= 1);
         UNIT_ASSERT(settings.clusters() >= 2);
         UNIT_ASSERT(ValidateSettings(settings, error));
+    }
+
+    Y_UNIT_TEST(AutoSelectOverlapEnabledForLargeDataset) {
+        // N=100000: without overlap T=10,P=1 → L=2, so overlap should be auto-enabled.
+        Ydb::Table::KMeansTreeSettings settings;
+        TString error;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+
+        AutoSelectKMeansSettings(settings, 100000);
+        UNIT_ASSERT(settings.has_overlap_clusters());
+        UNIT_ASSERT_VALUES_EQUAL(settings.overlap_clusters(), 3u);
+        UNIT_ASSERT(settings.has_overlap_ratio());
+        UNIT_ASSERT_DOUBLES_EQUAL(settings.overlap_ratio(), 1.2, 1e-9);
+        UNIT_ASSERT(settings.levels() >= 2);
+        UNIT_ASSERT(ValidateSettings(settings, error));
+    }
+
+    Y_UNIT_TEST(AutoSelectOverlapDisabledForSmallDataset) {
+        // N=10000: without overlap T=10,P=1 → L=1 (S < 1500), so overlap should NOT be auto-enabled.
+        // S(L=1) = 2*sqrt(10*10000) = 2*316 = 632 < 1500.
+        Ydb::Table::KMeansTreeSettings settings;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+
+        AutoSelectKMeansSettings(settings, 10000);
+        UNIT_ASSERT(!settings.has_overlap_clusters());
+        UNIT_ASSERT(!settings.has_overlap_ratio());
+        UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1u);
+    }
+
+    Y_UNIT_TEST(AutoSelectOverlapUserSpecifiedPreserved) {
+        // User sets overlap_clusters=2 → must not be overwritten; only overlap_ratio is auto-set.
+        Ydb::Table::KMeansTreeSettings settings;
+        TString error;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+        settings.set_overlap_clusters(2);
+
+        AutoSelectKMeansSettings(settings, 100000);
+        UNIT_ASSERT_VALUES_EQUAL(settings.overlap_clusters(), 2u);
+        UNIT_ASSERT(settings.has_overlap_ratio());
+        UNIT_ASSERT_DOUBLES_EQUAL(settings.overlap_ratio(), 1.2, 1e-9);
+        UNIT_ASSERT(ValidateSettings(settings, error));
+    }
+
+    Y_UNIT_TEST(AutoSelectOverlapUserRatioPreserved) {
+        // User sets both overlap_clusters=3 and overlap_ratio=1.5 → neither should be overwritten.
+        Ydb::Table::KMeansTreeSettings settings;
+        TString error;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+        settings.set_overlap_clusters(3);
+        settings.set_overlap_ratio(1.5);
+
+        AutoSelectKMeansSettings(settings, 100000);
+        UNIT_ASSERT_VALUES_EQUAL(settings.overlap_clusters(), 3u);
+        UNIT_ASSERT_DOUBLES_EQUAL(settings.overlap_ratio(), 1.5, 1e-9);
+        UNIT_ASSERT(ValidateSettings(settings, error));
+    }
+
+    Y_UNIT_TEST(AutoSelectOverlapRatioNotSetWhenOverlapDisabled) {
+        // overlap_clusters=1 → overlap is disabled, overlap_ratio must not be auto-set.
+        Ydb::Table::KMeansTreeSettings settings;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+        settings.set_overlap_clusters(1);
+
+        AutoSelectKMeansSettings(settings, 100000);
+        UNIT_ASSERT_VALUES_EQUAL(settings.overlap_clusters(), 1u);
+        UNIT_ASSERT(!settings.has_overlap_ratio());
+    }
+
+    Y_UNIT_TEST(AutoSelectOverlapPrefixedSmallEffectiveN) {
+        // isPrefixed=true, rowCount=1000000 → effectiveN = sqrt(1000000) = 1000.
+        // With effectiveN=1000: S(L=1) = 2*sqrt(10000) = 200 < 1500 → L=1 → no overlap.
+        Ydb::Table::KMeansTreeSettings settings;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+
+        AutoSelectKMeansSettings(settings, 1000000, true);
+        UNIT_ASSERT(!settings.has_overlap_clusters());
+        UNIT_ASSERT(!settings.has_overlap_ratio());
+        UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1u);
     }
 
     Y_UNIT_TEST(AutoSelectKMeansPrefixed) {
@@ -482,7 +739,7 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT(ValidateSettings(settings, error));
     }
 
-    Y_UNIT_TEST(AutoSelectKMeansClampNeverBelowMinClusters) {
+    Y_UNIT_TEST(AutoSelectKMeansClampNeverBelow2u) {
         Ydb::Table::KMeansTreeSettings settings;
         TString error;
         settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
@@ -490,7 +747,7 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         // Bit vector with dimension 1: extremely small per-dimension constraint
         settings.mutable_settings()->set_vector_dimension(1);
 
-        // Both missing → clamp should not dip below MinClusters
+        // Both missing → clamp should not dip below 2u
         AutoSelectKMeansSettings(settings, 100);
         UNIT_ASSERT(settings.clusters() >= 2);
         UNIT_ASSERT(ValidateSettings(settings, error));
@@ -510,6 +767,72 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 500);
         // But ValidateSettings will catch the violation
         UNIT_ASSERT(!ValidateSettings(settings, error));
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKSmallPrefix) {
+        // Small prefix (< 100 rows) should return 2u
+        UNIT_ASSERT_VALUES_EQUAL(ComputeAdaptiveK(10, 1, 1, 100), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(ComputeAdaptiveK(50, 2, 1, 500), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(ComputeAdaptiveK(99, 1, 1, 100), 2u);
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKModeratePrefix) {
+        // Moderate prefix should return K between 2u and maxK
+        ui32 k = ComputeAdaptiveK(10000, 1, 1, 500);
+        UNIT_ASSERT_GE(k, 2u);
+        UNIT_ASSERT_LE(k, 500u);
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKLargePrefix) {
+        // Large prefix should return larger K
+        ui32 kSmall = ComputeAdaptiveK(1000, 1, 1, 500);
+        ui32 kLarge = ComputeAdaptiveK(1000000, 1, 1, 500);
+        UNIT_ASSERT_GE(kLarge, kSmall);
+        UNIT_ASSERT_LE(kLarge, 500u);
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKRespectsMaxClusters) {
+        // Result should never exceed maxClusters
+        ui32 k = ComputeAdaptiveK(10000000, 1, 1, 10);
+        UNIT_ASSERT_LE(k, 10u);
+        UNIT_ASSERT_GE(k, 2u);
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKNeverBelow2u) {
+        // Result should never go below 2u (when maxK >= 2u)
+        ui32 k = ComputeAdaptiveK(100, 1, 1, 500);
+        UNIT_ASSERT_GE(k, 2u);
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKWithOverlap) {
+        // With overlap_clusters > 1, search width changes
+        ui32 kNoOverlap = ComputeAdaptiveK(100000, 2, 1, 500);
+        ui32 kOverlap = ComputeAdaptiveK(100000, 2, 4, 500);
+        // Both should be valid
+        UNIT_ASSERT_GE(kNoOverlap, 2u);
+        UNIT_ASSERT_GE(kOverlap, 2u);
+        UNIT_ASSERT_LE(kNoOverlap, 500u);
+        UNIT_ASSERT_LE(kOverlap, 500u);
+    }
+
+    Y_UNIT_TEST(FillSettingAdaptiveClusters) {
+        Ydb::Table::KMeansTreeSettings settings;
+        TString error;
+
+        UNIT_ASSERT(FillSetting(settings, "adaptive_clusters", "true", error));
+        UNIT_ASSERT(settings.adaptive_clusters());
+
+        settings.Clear();
+        UNIT_ASSERT(FillSetting(settings, "adaptive_clusters", "false", error));
+        UNIT_ASSERT(!settings.adaptive_clusters());
+
+        settings.Clear();
+        UNIT_ASSERT(FillSetting(settings, "adaptive_clusters", "1", error));
+        UNIT_ASSERT(settings.adaptive_clusters());
+
+        settings.Clear();
+        UNIT_ASSERT(!FillSetting(settings, "adaptive_clusters", "maybe", error));
+        UNIT_ASSERT(!error.empty());
     }
 }
 

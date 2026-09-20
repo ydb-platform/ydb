@@ -4,7 +4,7 @@ PEERDIR(
     ydb/core/control/lib/base
     ydb/core/control/lib/generated
     util
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     library/cpp/deprecated/atomic
     library/cpp/monlib/service/pages
     library/cpp/threading/hot_swap

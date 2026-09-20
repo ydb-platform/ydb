@@ -7,6 +7,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
+    ydb/core/tx/columnshard/tracing
+    library/cpp/lwtrace
 )
 
 END()

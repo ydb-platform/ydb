@@ -14,6 +14,8 @@
 #include <util/generic/size_literals.h>
 #include <util/random/random.h>
 
+#include <functional>
+
 namespace NYql {
 
 struct TDqSettings {
@@ -73,6 +75,7 @@ struct TDqSettings {
         static constexpr ui64 EnableSpillingNodes = 0;
         static constexpr bool EnableSpillingInChannels = false;
         static constexpr EValuePackerVersion ValuePackerVersion = EValuePackerVersion::V0;
+        static constexpr bool EnableSortConstraintProcessing = false;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -161,6 +164,9 @@ public:
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
     NCommon::TConfSetting<bool, Static> UseGraceJoinCoreForMap;
     NCommon::TConfSetting<TString, Static> Scheduler;
+    // Target DQ clique for remote graph execution (pragma dq.Clique).
+    NCommon::TConfSetting<TString, Static> Clique;
+    NCommon::TConfSetting<bool, Static> _EnableSortConstraintProcessing;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -281,11 +287,15 @@ public:
     }
 };
 
+using TDqCliqueValidator = std::function<void(const TString& cliqueValue)>;
+
 struct TDqConfiguration: public TDqSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TDqConfiguration>;
 
     TDqConfiguration();
     TDqConfiguration(const TDqConfiguration&) = delete;
+
+    TDqCliqueValidator CliqueValidator;
 
     template <class TProtoConfig, typename TFilter>
     void Init(const TProtoConfig& config, const TFilter& filter) {

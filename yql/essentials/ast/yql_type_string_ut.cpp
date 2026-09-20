@@ -187,6 +187,21 @@ Y_UNIT_TEST(ParseCallableWithNamedArgs) {
            ")");
 }
 
+// regression test for a use-after-free: parsing an escaped argument name must
+// keep its own copy, since parsing the (possibly nested-escaped-identifier)
+// argument type that follows reuses the same scratch buffer as the name
+Y_UNIT_TEST(ParseCallableWithEscapedNamedArgAndResourceType) {
+    TestOk("('aaa':Resource<'bbb'>)->String",
+           "(CallableType '() '((DataType 'String)) "
+           "'((ResourceType 'bbb) '\"aaa\")"
+           ")");
+    TestOk("('aaa':Resource<'bbb'>,'ccc':Resource<'ddd'>)->String",
+           "(CallableType '() '((DataType 'String)) "
+           "'((ResourceType 'bbb) '\"aaa\") "
+           "'((ResourceType 'ddd) '\"ccc\")"
+           ")");
+}
+
 Y_UNIT_TEST(ParseCallableWithArgFlags) {
     TestOk("(Int32{Flags:AutoMap})->Double",
            "(CallableType '() '((DataType 'Double)) "

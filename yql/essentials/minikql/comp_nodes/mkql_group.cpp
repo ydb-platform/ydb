@@ -8,15 +8,14 @@
 
 #include <util/generic/maybe.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool WithHandler>
 class TGroupingCoreWrapper: public TMutableComputationNode<TGroupingCoreWrapper<WithHandler>> {
     using TSelf = TGroupingCoreWrapper;
-    typedef TMutableComputationNode<TSelf> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TSelf>;
 
 public:
     class TSplitStreamValue: public TComputationValue<TSplitStreamValue> {
@@ -33,14 +32,14 @@ public:
 
         TSplitStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const TSelf* self, NUdf::TUnboxedValue&& stream)
             : TBase(memInfo)
-            , CompCtx(compCtx)
-            , Self(self)
-            , Stream(std::move(stream))
+            , CompCtx_(compCtx)
+            , Self_(self)
+            , Stream_(std::move(stream))
         {
         }
 
         NUdf::EFetchStatus NextKey(NUdf::TUnboxedValue& key) {
-            if (Fetching == State || AtGroupStart == State) {
+            if (Fetching == State_ || AtGroupStart == State_) {
                 NUdf::EFetchStatus status = NUdf::EFetchStatus::Ok;
                 for (NUdf::TUnboxedValue item; NUdf::EFetchStatus::Ok == status; status = Fetch(item)) {
                 }
@@ -49,70 +48,69 @@ public:
                 }
             }
 
-            if (Finished == State) {
+            if (Finished == State_) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            if (GroupFinished != State) {
-                auto status = Stream.Fetch(Value);
+            if (GroupFinished != State_) {
+                auto status = Stream_.Fetch(Value_);
                 if (NUdf::EFetchStatus::Finish == status) {
-                    State = Finished;
+                    State_ = Finished;
                 }
                 if (NUdf::EFetchStatus::Ok != status) {
                     return status;
                 }
             }
 
-            Self->KeyExtractorItemNode->SetValue(CompCtx, NUdf::TUnboxedValue(Value));
-            key = Self->KeyExtractorResultNode->GetValue(CompCtx);
-            Self->GroupSwitchKeyNode->SetValue(CompCtx, NUdf::TUnboxedValue(key));
-            Self->GroupSwitchItemNode->SetValue(CompCtx, NUdf::TUnboxedValue(Value));
-            State = AtGroupStart;
+            Self_->KeyExtractorItemNode_->SetValue(CompCtx_, NUdf::TUnboxedValue(Value_));
+            key = Self_->KeyExtractorResultNode_->GetValue(CompCtx_);
+            Self_->GroupSwitchKeyNode_->SetValue(CompCtx_, NUdf::TUnboxedValue(key));
+            Self_->GroupSwitchItemNode_->SetValue(CompCtx_, NUdf::TUnboxedValue(Value_));
+            State_ = AtGroupStart;
 
             return NUdf::EFetchStatus::Ok;
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (Finished == State) {
+            if (Finished == State_) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            if (AtGroupStart != State) {
-                auto status = Stream.Fetch(Value);
+            if (AtGroupStart != State_) {
+                auto status = Stream_.Fetch(Value_);
                 if (NUdf::EFetchStatus::Finish == status) {
-                    State = Finished;
+                    State_ = Finished;
                 }
                 if (NUdf::EFetchStatus::Ok != status) {
                     return status;
                 }
             }
 
-            if (Fetching == State) {
-                Self->GroupSwitchItemNode->SetValue(CompCtx, NUdf::TUnboxedValue(Value));
-                if (Self->GroupSwitchResultNode->GetValue(CompCtx).template Get<bool>()) {
-                    State = GroupFinished;
+            if (Fetching == State_) {
+                Self_->GroupSwitchItemNode_->SetValue(CompCtx_, NUdf::TUnboxedValue(Value_));
+                if (Self_->GroupSwitchResultNode_->GetValue(CompCtx_).template Get<bool>()) {
+                    State_ = GroupFinished;
                     return NUdf::EFetchStatus::Finish;
                 }
             } else {
-                State = Fetching;
+                State_ = Fetching;
             }
 
             if constexpr (WithHandler) {
-                Self->HandlerItemNode->SetValue(CompCtx, std::move(Value));
-                result = Self->HandlerResultNode->GetValue(CompCtx);
+                Self_->HandlerItemNode_->SetValue(CompCtx_, std::move(Value_));
+                result = Self_->HandlerResultNode_->GetValue(CompCtx_);
             } else {
-                result = std::move(Value);
+                result = std::move(Value_);
             }
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
-        TComputationContext& CompCtx;
-        const TSelf* const Self;
-        NUdf::TUnboxedValue Stream;
-        EState State = AtStart;
-        NUdf::TUnboxedValue Value;
+        TComputationContext& CompCtx_;
+        const TSelf* const Self_;
+        NUdf::TUnboxedValue Stream_;
+        EState State_ = AtStart;
+        NUdf::TUnboxedValue Value_;
     };
 
     class TGroupStreamValue: public TComputationValue<TGroupStreamValue> {
@@ -121,32 +119,31 @@ public:
 
         TGroupStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const TSelf* self, NUdf::TUnboxedValue&& stream)
             : TBase(memInfo)
-            , CompCtx(compCtx)
-            , SplitStream(CompCtx.HolderFactory.Create<TSplitStreamValue>(CompCtx, self, std::move(stream)))
-            , SplitStreamValue(static_cast<TSplitStreamValue*>(SplitStream.AsBoxed().Get()))
+            , CompCtx_(compCtx)
+            , SplitStream_(CompCtx_.HolderFactory.Create<TSplitStreamValue>(CompCtx_, self, std::move(stream)))
+            , SplitStreamValue_(static_cast<TSplitStreamValue*>(SplitStream_.AsBoxed().Get()))
         {
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
             NUdf::TUnboxedValue key;
-            auto status = SplitStreamValue->NextKey(key);
+            auto status = SplitStreamValue_->NextKey(key);
             if (status != NUdf::EFetchStatus::Ok) {
                 return status;
             }
 
             NKikimr::NUdf::TUnboxedValue* itemsPtr;
-            result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, itemsPtr);
+            result = CompCtx_.HolderFactory.CreateDirectArrayHolder(2, itemsPtr);
             itemsPtr[0] = std::move(key);
-            itemsPtr[1] = SplitStream;
+            itemsPtr[1] = SplitStream_;
 
             return status;
         }
 
-    private:
-        TComputationContext& CompCtx;
-        NUdf::TUnboxedValue SplitStream;
-        TSplitStreamValue* SplitStreamValue;
+        TComputationContext& CompCtx_;
+        NUdf::TUnboxedValue SplitStream_;
+        TSplitStreamValue* SplitStreamValue_;
     };
 
     TGroupingCoreWrapper(TComputationMutables& mutables,
@@ -159,45 +156,44 @@ public:
                          IComputationExternalNode* handlerItem,
                          IComputationNode* handlerResult)
         : TBaseComputation(mutables)
-        , Stream(stream)
-        , KeyExtractorItemNode(keyExtractorItem)
-        , KeyExtractorResultNode(keyExtractorResult)
-        , GroupSwitchKeyNode(groupSwitchKey)
-        , GroupSwitchItemNode(groupSwitchItem)
-        , GroupSwitchResultNode(groupSwitchResult)
-        , HandlerItemNode(handlerItem)
-        , HandlerResultNode(handlerResult)
+        , Stream_(stream)
+        , KeyExtractorItemNode_(keyExtractorItem)
+        , KeyExtractorResultNode_(keyExtractorResult)
+        , GroupSwitchKeyNode_(groupSwitchKey)
+        , GroupSwitchItemNode_(groupSwitchItem)
+        , GroupSwitchResultNode_(groupSwitchResult)
+        , HandlerItemNode_(handlerItem)
+        , HandlerResultNode_(handlerResult)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TGroupStreamValue>(ctx, this, Stream->GetValue(ctx));
+        return ctx.HolderFactory.Create<TGroupStreamValue>(ctx, this, Stream_->GetValue(ctx));
     }
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Stream);
-        this->DependsOn(KeyExtractorResultNode);
-        this->DependsOn(GroupSwitchResultNode);
-        this->DependsOn(HandlerResultNode);
-        this->Own(KeyExtractorItemNode);
-        this->Own(GroupSwitchKeyNode);
-        this->Own(GroupSwitchItemNode);
-        this->Own(HandlerItemNode);
+        this->DependsOn(Stream_);
+        this->DependsOn(KeyExtractorResultNode_);
+        this->DependsOn(GroupSwitchResultNode_);
+        this->DependsOn(HandlerResultNode_);
+        this->Own(KeyExtractorItemNode_);
+        this->Own(GroupSwitchKeyNode_);
+        this->Own(GroupSwitchItemNode_);
+        this->Own(HandlerItemNode_);
     }
 
-private:
-    IComputationNode* const Stream;
+    IComputationNode* const Stream_;
 
-    IComputationExternalNode* const KeyExtractorItemNode;
-    IComputationNode* const KeyExtractorResultNode;
+    IComputationExternalNode* const KeyExtractorItemNode_;
+    IComputationNode* const KeyExtractorResultNode_;
 
-    IComputationExternalNode* const GroupSwitchKeyNode;
-    IComputationExternalNode* const GroupSwitchItemNode;
-    IComputationNode* const GroupSwitchResultNode;
+    IComputationExternalNode* const GroupSwitchKeyNode_;
+    IComputationExternalNode* const GroupSwitchItemNode_;
+    IComputationNode* const GroupSwitchResultNode_;
 
-    IComputationExternalNode* const HandlerItemNode;
-    IComputationNode* const HandlerResultNode;
+    IComputationExternalNode* const HandlerItemNode_;
+    IComputationNode* const HandlerResultNode_;
 };
 
 } // namespace
@@ -235,9 +231,8 @@ IComputationNode* WrapGroupingCore(TCallable& callable, const TComputationNodeFa
         groupSwitchKey,
         groupSwitchItem,
         groupSwitchResult,
-        nullptr,
-        nullptr);
+        /*handlerItem=*/nullptr,
+        /*handlerResult=*/nullptr);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

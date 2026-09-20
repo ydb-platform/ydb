@@ -717,9 +717,21 @@ bool run_container_validate(const run_container_t *run, const char **reason) {
 
 int32_t run_container_write(const run_container_t *container, char *buf) {
     uint16_t cast_16 = container->n_runs;
-    memcpy(buf, &cast_16, sizeof(uint16_t));
+    uint16_t n_runs_le = croaring_htole16(cast_16);
+    memcpy(buf, &n_runs_le, sizeof(uint16_t));
+#if CROARING_IS_BIG_ENDIAN
+    char *out = buf + sizeof(uint16_t);
+    for (int32_t i = 0; i < container->n_runs; ++i) {
+        uint16_t v_le = croaring_htole16(container->runs[i].value);
+        uint16_t l_le = croaring_htole16(container->runs[i].length);
+        memcpy(out, &v_le, sizeof(uint16_t));
+        memcpy(out + sizeof(uint16_t), &l_le, sizeof(uint16_t));
+        out += sizeof(rle16_t);
+    }
+#else
     memcpy(buf + sizeof(uint16_t), container->runs,
            container->n_runs * sizeof(rle16_t));
+#endif
     return run_container_size_in_bytes(container);
 }
 
@@ -728,12 +740,24 @@ int32_t run_container_read(int32_t cardinality, run_container_t *container,
     (void)cardinality;
     uint16_t cast_16;
     memcpy(&cast_16, buf, sizeof(uint16_t));
-    container->n_runs = cast_16;
+    container->n_runs = croaring_letoh16(cast_16);
     if (container->n_runs > container->capacity)
         run_container_grow(container, container->n_runs, false);
     if (container->n_runs > 0) {
+#if CROARING_IS_BIG_ENDIAN
+        const char *in = buf + sizeof(uint16_t);
+        for (int32_t i = 0; i < container->n_runs; ++i) {
+            uint16_t v_le, l_le;
+            memcpy(&v_le, in, sizeof(uint16_t));
+            memcpy(&l_le, in + sizeof(uint16_t), sizeof(uint16_t));
+            container->runs[i].value = croaring_letoh16(v_le);
+            container->runs[i].length = croaring_letoh16(l_le);
+            in += sizeof(rle16_t);
+        }
+#else
         memcpy(container->runs, buf + sizeof(uint16_t),
                container->n_runs * sizeof(rle16_t));
+#endif
     }
     return run_container_size_in_bytes(container);
 }
@@ -928,9 +952,11 @@ int run_container_get_index(const run_container_t *container, uint16_t x) {
         return -1;
     }
 }
+#define CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY 0
 
 #if defined(CROARING_IS_X64) && CROARING_COMPILER_SUPPORTS_AVX512
 
+#if CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY
 CROARING_TARGET_AVX512
 CROARING_ALLOW_UNALIGNED
 /* Get the cardinality of `run'. Requires an actual computation. */
@@ -957,6 +983,7 @@ static inline int _avx512_run_container_cardinality(
 }
 
 CROARING_UNTARGET_AVX512
+#endif  // CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY
 
 CROARING_TARGET_AVX2
 CROARING_ALLOW_UNALIGNED
@@ -1049,7 +1076,6 @@ static inline int _scalar_run_container_cardinality(
 
 int run_container_cardinality(const run_container_t *run) {
     // Empirically AVX-512 is not always faster than AVX2
-#define CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY 0
 #if CROARING_COMPILER_SUPPORTS_AVX512 && \
     CROARING_ENABLE_AVX512_RUN_CONTAINER_CARDINALITY
     if (croaring_hardware_support() & ROARING_SUPPORTS_AVX512) {

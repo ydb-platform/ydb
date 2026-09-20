@@ -860,8 +860,8 @@ cdef object _rand_uint64(object low, object high, object size,
         if (np.prod(size) == 0):
             return np.empty(size, dtype=np.uint64)
 
-    low_arr = <np.ndarray>np.array(low, copy=False)
-    high_arr = <np.ndarray>np.array(high, copy=False)
+    low_arr = <np.ndarray>np.asarray(low)
+    high_arr = <np.ndarray>np.asarray(high)
     low_ndim = np.PyArray_NDIM(low_arr)
     high_ndim = np.PyArray_NDIM(high_arr)
     if low_ndim == 0 and high_ndim == 0:
@@ -951,8 +951,8 @@ cdef object _rand_uint32(object low, object high, object size,
         if (np.prod(size) == 0):
             return np.empty(size, dtype=np.uint32)
 
-    low_arr = <np.ndarray>np.array(low, copy=False)
-    high_arr = <np.ndarray>np.array(high, copy=False)
+    low_arr = <np.ndarray>np.asarray(low)
+    high_arr = <np.ndarray>np.asarray(high)
     low_ndim = np.PyArray_NDIM(low_arr)
     high_ndim = np.PyArray_NDIM(high_arr)
     if low_ndim == 0 and high_ndim == 0:
@@ -1042,8 +1042,8 @@ cdef object _rand_uint16(object low, object high, object size,
         if (np.prod(size) == 0):
             return np.empty(size, dtype=np.uint16)
 
-    low_arr = <np.ndarray>np.array(low, copy=False)
-    high_arr = <np.ndarray>np.array(high, copy=False)
+    low_arr = <np.ndarray>np.asarray(low)
+    high_arr = <np.ndarray>np.asarray(high)
     low_ndim = np.PyArray_NDIM(low_arr)
     high_ndim = np.PyArray_NDIM(high_arr)
     if low_ndim == 0 and high_ndim == 0:
@@ -1133,8 +1133,8 @@ cdef object _rand_uint8(object low, object high, object size,
         if (np.prod(size) == 0):
             return np.empty(size, dtype=np.uint8)
 
-    low_arr = <np.ndarray>np.array(low, copy=False)
-    high_arr = <np.ndarray>np.array(high, copy=False)
+    low_arr = <np.ndarray>np.asarray(low)
+    high_arr = <np.ndarray>np.asarray(high)
     low_ndim = np.PyArray_NDIM(low_arr)
     high_ndim = np.PyArray_NDIM(high_arr)
     if low_ndim == 0 and high_ndim == 0:
@@ -1224,8 +1224,8 @@ cdef object _rand_bool(object low, object high, object size,
         if (np.prod(size) == 0):
             return np.empty(size, dtype=np.bool_)
 
-    low_arr = <np.ndarray>np.array(low, copy=False)
-    high_arr = <np.ndarray>np.array(high, copy=False)
+    low_arr = <np.ndarray>np.asarray(low)
+    high_arr = <np.ndarray>np.asarray(high)
     low_ndim = np.PyArray_NDIM(low_arr)
     high_ndim = np.PyArray_NDIM(high_arr)
     if low_ndim == 0 and high_ndim == 0:
@@ -1315,8 +1315,8 @@ cdef object _rand_int64(object low, object high, object size,
         if (np.prod(size) == 0):
             return np.empty(size, dtype=np.int64)
 
-    low_arr = <np.ndarray>np.array(low, copy=False)
-    high_arr = <np.ndarray>np.array(high, copy=False)
+    low_arr = <np.ndarray>np.asarray(low)
+    high_arr = <np.ndarray>np.asarray(high)
     low_ndim = np.PyArray_NDIM(low_arr)
     high_ndim = np.PyArray_NDIM(high_arr)
     if low_ndim == 0 and high_ndim == 0:
@@ -1406,8 +1406,8 @@ cdef object _rand_int32(object low, object high, object size,
         if (np.prod(size) == 0):
             return np.empty(size, dtype=np.int32)
 
-    low_arr = <np.ndarray>np.array(low, copy=False)
-    high_arr = <np.ndarray>np.array(high, copy=False)
+    low_arr = <np.ndarray>np.asarray(low)
+    high_arr = <np.ndarray>np.asarray(high)
     low_ndim = np.PyArray_NDIM(low_arr)
     high_ndim = np.PyArray_NDIM(high_arr)
     if low_ndim == 0 and high_ndim == 0:
@@ -1497,8 +1497,8 @@ cdef object _rand_int16(object low, object high, object size,
         if (np.prod(size) == 0):
             return np.empty(size, dtype=np.int16)
 
-    low_arr = <np.ndarray>np.array(low, copy=False)
-    high_arr = <np.ndarray>np.array(high, copy=False)
+    low_arr = <np.ndarray>np.asarray(low)
+    high_arr = <np.ndarray>np.asarray(high)
     low_ndim = np.PyArray_NDIM(low_arr)
     high_ndim = np.PyArray_NDIM(high_arr)
     if low_ndim == 0 and high_ndim == 0:
@@ -1588,8 +1588,8 @@ cdef object _rand_int8(object low, object high, object size,
         if (np.prod(size) == 0):
             return np.empty(size, dtype=np.int8)
 
-    low_arr = <np.ndarray>np.array(low, copy=False)
-    high_arr = <np.ndarray>np.array(high, copy=False)
+    low_arr = <np.ndarray>np.asarray(low)
+    high_arr = <np.ndarray>np.asarray(high)
     low_ndim = np.PyArray_NDIM(low_arr)
     high_ndim = np.PyArray_NDIM(high_arr)
     if low_ndim == 0 and high_ndim == 0:

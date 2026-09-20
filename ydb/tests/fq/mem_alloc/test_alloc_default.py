@@ -371,7 +371,7 @@ class TestAlloc(TestYdsBase):
             issues = query.transient_issue
             if len(issues) >= 1:
                 assert issues[0].message.startswith(
-                    "Mkql memory limit exceeded, limit: 1048576"
+                    "Mkql memory limit exceeded"
                 ), "Incorrect message text"
                 assert issues[0].issue_code == 0, "Incorrect issue code" + issues[0].message
                 break
@@ -379,29 +379,3 @@ class TestAlloc(TestYdsBase):
             assert False, "Memory limit was not reached"
 
         assert kikimr.control_plane.get_mkql_allocated(1) == 0, "Incorrect Alloc"
-
-    @pytest.mark.parametrize("kikimr", [(350 * K, 100 * M, 1 * K, 400 * K)], indirect=["kikimr"])
-    def test_hard_limit(self, kikimr):
-        kikimr.control_plane.wait_bootstrap(1)
-        assert kikimr.control_plane.get_mkql_limit(1) == kikimr.mkql_total_memory_limit, "Incorrect Limit"
-        assert kikimr.control_plane.get_mkql_allocated() == 0, "Incorrect Alloc"
-
-        client = FederatedQueryClient("my_folder@my_cloud", streaming_over_kikimr=kikimr)
-        sql = R'''
-            SELECT ListLast(ListCollect(ListFromRange(0, {n} + 1)))
-            '''
-        n = 1
-        for i in range(0, 10):
-            query_id = client.create_query(
-                "simple", sql.format(n=n), type=fq.QueryContent.QueryType.STREAMING
-            ).result.query_id
-            status = client.wait_query_status(query_id, [fq.QueryMeta.COMPLETED, fq.QueryMeta.FAILED])
-            if status == fq.QueryMeta.FAILED:
-                assert i > 1, "First queries must be successfull"
-                query = client.describe_query(query_id).result.query
-                describe_str = str(query)
-                assert "LIMIT_EXCEEDED" in describe_str
-                break
-            n = n * 10
-        else:
-            assert False, "Limit was NOT exceeded"

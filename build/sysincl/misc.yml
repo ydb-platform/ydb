@@ -117,6 +117,10 @@
     - numpy/random.pxd
     - alloc.h: contrib/python/numpy/include/numpy/core/src/multiarray/alloc.h
 
+- source_filter: "^contrib/python/memray"
+  includes:
+    - alloc.h: contrib/python/memray/memray/_memray/alloc.h
+
 - source_filter: "^contrib/tools/python/src/Objects/exceptions.c"
   includes:
     - errmap.h:      contrib/tools/python/src/PC/errmap.h

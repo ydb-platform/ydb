@@ -1,4 +1,4 @@
-__all__ = ("commonmark", "default", "gfm_like", "js_default", "zero")
+__all__ = ("commonmark", "default", "gfm_like", "gfm_like2", "js_default", "zero")
 
 from ..utils import PresetType
 from . import commonmark, default, zero
@@ -25,4 +25,24 @@ class gfm_like:  # noqa: N801
         config["components"]["inline"]["rules2"].append("strikethrough")
         config["options"]["linkify"] = True
         config["options"]["html"] = True
+        return config
+
+
+class gfm_like2:  # noqa: N801
+    """GitHub Flavoured Markdown (GFM) like, extended.
+
+    Builds on ``gfm-like`` and additionally enables:
+
+    - Task lists (``- [x] done``)
+    - Alerts (``> [!NOTE]``)
+    - Single-tilde strikethrough (``~text~`` in addition to ``~~text~~``)
+    """
+
+    @staticmethod
+    def make() -> PresetType:
+        config = gfm_like.make()
+        config["options"]["tasklists"] = True
+        config["options"]["tasklists_editable"] = False
+        config["options"]["alerts"] = True
+        config["options"]["strikethrough_single_tilde"] = True
         return config

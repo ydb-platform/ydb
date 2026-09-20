@@ -1,0 +1,4 @@
+{"key_b"="foo";"key_a"=1;"kv_value"=10};
+{"key_b"="foo";"key_a"=2;"kv_value"=20};
+{"key_b"="bar";"key_a"=1;"kv_value"=30};
+{"key_b"="bar";"key_a"=3;"kv_value"=40};

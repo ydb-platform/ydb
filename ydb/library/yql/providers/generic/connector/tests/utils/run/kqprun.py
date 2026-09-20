@@ -313,8 +313,8 @@ class KqpRunner(Runner):
 
             LOGGER.debug('Schema: %s', schema)
 
-            artifacts.dump_json(data_out, test_name, "data_out.yson")
-            artifacts.dump_str(data_out_with_types, test_name, "data_out_with_types.yson")
+            artifacts.dump_json(data_out, test_name, "data_out.json")
+            artifacts.dump_str(data_out_with_types, test_name, "data_out_with_types.txt")
 
         finally:
             with open(artifacts.make_path(test_name, "kqprun.out"), "w") as f:

@@ -39,7 +39,8 @@ std::false_type is_key_value_iterable_impl(...);
 template <class T>
 struct is_key_value_iterable
 {
-  static const bool value = decltype(detail::is_key_value_iterable_impl(std::declval<T>()))::value;
+  static constexpr bool value =
+      decltype(detail::is_key_value_iterable_impl(std::declval<T>()))::value;
 };
 }  // namespace detail
 
@@ -122,7 +123,7 @@ MakeAttributes(
  * @return common::KeyValueIterable
  */
 inline static const common::KeyValueIterable &MakeAttributes(
-    const common::KeyValueIterable &attributes) noexcept
+    const common::KeyValueIterable &attributes OPENTELEMETRY_ATTRIBUTE_LIFETIME_BOUND) noexcept
 {
   return attributes;
 }

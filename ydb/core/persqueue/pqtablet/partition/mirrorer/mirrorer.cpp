@@ -5,8 +5,12 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
 
 #define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
 
@@ -23,6 +27,47 @@ constexpr NKikimrServices::TActivity::EType TMirrorer::ActorActivityType() {
 
 static constexpr TDuration DEFAULT_REWIND_COMMIT_OFFSET_DELAY = TDuration::Minutes(15);
 static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
+
+namespace {
+
+TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
+    TStringBuilder out;
+    NActors::NStructuredLog::TTextWriter writer;
+    writer.Write(out, prefix);
+    return out;
+}
+
+struct TBatchInfo {
+    ui32 LogicalMessageCount = 1;
+    std::optional<ui64> MaxSeqNo;
+};
+
+TBatchInfo GetBatchInfo(const TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message) {
+    if (message.GetCodec() != NYdb::NTopic::ECodec::KAFKA_BATCH) {
+        return {};
+    }
+
+    auto header = NKafka::ReadKafkaBatchHeader(message.GetData());
+    if (!header || header->RecordsCount <= 1) {
+        return {};
+    }
+
+    const ui32 logicalMessageCount = static_cast<ui32>(header->RecordsCount);
+    const auto [error, maxSeqNo] = NKafka::GetBatchMaxSeqNo(*header, message.GetSeqNo());
+    if (error != NKafka::EKafkaErrors::NONE_ERROR) {
+        return {};
+    }
+    return {
+        .LogicalMessageCount = logicalMessageCount,
+        .MaxSeqNo = maxSeqNo,
+    };
+}
+
+ui64 GetLogicalMessageCount(const TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message) {
+    return GetBatchInfo(message).LogicalMessageCount;
+}
+
+} // namespace
 
 TMirrorer::TMirrorer(
     ui64 tabletId,
@@ -85,7 +130,7 @@ void TMirrorer::StartInit(const TActorContext& ctx) {
 }
 
 void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-    LOG_N("killed");
+    LOG_N("Killed");
     if (ReadSession)
         ReadSession->Close(TDuration::Zero());
     ReadSession = nullptr;
@@ -94,10 +139,11 @@ void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) 
     Die(ctx);
 }
 
-bool TMirrorer::AddToWriteRequest(
+bool AppendToWriteRequest(
     NKikimrClient::TPersQueuePartitionRequest& request,
     TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message,
-    bool& incorrectRequest
+    bool& incorrectRequest,
+    ui64& nextOffset
 ) {
     if (!request.HasCmdWriteOffset()) {
         if (request.CmdWriteSize() > 0) {
@@ -105,8 +151,9 @@ bool TMirrorer::AddToWriteRequest(
             return false;
         }
         request.SetCmdWriteOffset(message.GetOffset());
+        nextOffset = message.GetOffset();
     }
-    if (request.GetCmdWriteOffset() + request.CmdWriteSize() != message.GetOffset()) {
+    if (nextOffset != message.GetOffset()) {
         return false;
     }
 
@@ -122,11 +169,20 @@ bool TMirrorer::AddToWriteRequest(
     write->SetSourceId(NSourceIdEncoding::EncodeSimple(producerId));
     write->SetSeqNo(message.GetSeqNo());
     write->SetCreateTimeMS(message.GetCreateTime().MilliSeconds());
-    if (Config.GetSyncWriteTime()) {
-        write->SetWriteTimeMS(message.GetWriteTime().MilliSeconds());
-    }
+    // SyncWriteTime removed; mirrored topics always preserve source write time
+    // (same as PQv1 remote_mirror_rule + client_write_disabled).
+    write->SetWriteTimeMS(message.GetWriteTime().MilliSeconds());
     write->SetDisableDeduplication(true);
     write->SetUncompressedSize(message.GetUncompressedSize());
+
+    const auto batchInfo = GetBatchInfo(message);
+    ui64 logicalMessageCount = 1;
+    if (batchInfo.LogicalMessageCount > 1) {
+        logicalMessageCount = batchInfo.LogicalMessageCount;
+        write->SetLogicalMessageCount(logicalMessageCount);
+        write->SetMaxSeqNo(*batchInfo.MaxSeqNo);
+    }
+    nextOffset += logicalMessageCount;
     return true;
 }
 
@@ -139,7 +195,7 @@ void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg) {
     auto& record = request->Record;
     record.SetTimestamp(ctx.Now().Seconds());
     record.SetService(NKikimrServices::PQ_MIRRORER);
-    record.SetMessage(TStringBuilder() << GetLogPrefix() << ": " << msg);
+    record.SetMessage(TStringBuilder() << StructuredLogPrefixText(GetLogPrefix()) << ": " << msg);
 
     Send(PartitionActor, request.Release());
 }
@@ -158,9 +214,13 @@ void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg, const
 void TMirrorer::AfterSuccesWrite(const TActorContext& ctx) {
     PQ_ENSURE(WriteInFlight.empty());
     PQ_ENSURE(WriteRequestInFlight);
-    LOG_I("written " <<  WriteRequestInFlight.value().CmdWriteSize()
-        << " messages with first offset=" << WriteRequestInFlight.value().GetCmdWriteOffset()
-        << ", current queue size: " << Queue.size() << "(" << BytesInFlight << "bytes)");
+    LOG_I(
+        "Written messages with current queue bytes",
+        {"writeRequestInFlightValueCmdWriteSize", WriteRequestInFlight.value().CmdWriteSize()},
+        {"firstOffset", WriteRequestInFlight.value().GetCmdWriteOffset()},
+        {"size", Queue.size()},
+        {"bytesInFlight", BytesInFlight}
+    );
 
     WriteRequestInFlight.reset();
     Send(SelfId(), new TEvents::TEvWakeup());
@@ -196,10 +256,11 @@ void TMirrorer::ProcessWriteResponse(
         ui64 offset = writtenMessageInfo.GetOffset();
         PQ_ENSURE((ui64)result.GetOffset() == offset);
         PQ_ENSURE(EndOffset <= offset)("EndOffset", EndOffset)("offset", offset);
-        EndOffset = offset + 1;
+        const ui64 logicalMessageCount = GetLogicalMessageCount(writtenMessageInfo);
+        EndOffset = offset + logicalMessageCount;
         BytesInFlight -= writtenMessageInfo.GetData().size();
 
-        deferredCommit.Add(writtenMessageInfo.GetPartitionSession(), offset);
+        deferredCommit.Add(writtenMessageInfo.GetPartitionSession(), offset, offset + logicalMessageCount);
         WriteInFlight.pop_front();
     }
 
@@ -225,7 +286,10 @@ void TMirrorer::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext&
                 return;
             }
             case EEventCookie::UPDATE_WRITE_TIMESTAMP: {
-                LOG_D("got response to update write timestamp request: " << partitionResponse);
+                LOG_D(
+                    "Got response to update write timestamp",
+                    {"request", partitionResponse}
+                );
                 return;
             }
             default: {
@@ -245,36 +309,66 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
 
     if (ctx.Now() - LastStateLogTimestamp > LOG_STATE_INTERVAL) {
         LastStateLogTimestamp = ctx.Now();
-        LOG_N("[STATE] current state=" << GetCurrentState()
-            << ", read session=" << bool(ReadSession) << ", credentials provider=" << bool(CredentialsProvider)
-            << ", credentials request inflight=" << CredentialsRequestInFlight);
+        LOG_N(
+            "[STATE] Current state, read session, credentials provider and credentials request inflight",
+            {"currentState", GetCurrentState()},
+            {"session", bool(ReadSession)},
+            {"provider", bool(CredentialsProvider)},
+            {"inflight", CredentialsRequestInFlight}
+        );
         if (ReadSession) {
-            LOG_N("[STATE] read session id " << ReadSession->GetSessionId());
+            LOG_N(
+                "[STATE] read session id",
+                {"readSessionSessionId", ReadSession->GetSessionId()}
+            );
         }
         if (PartitionStream) {
-            LOG_N("[STATE] has partition stream " << PartitionStream->GetTopicPath()
-                << ":" << PartitionStream->GetPartitionId()
-                << " with id " << PartitionStream->GetPartitionSessionId());
+            LOG_N(
+                "[STATE] has partition stream with id",
+                {"partitionStreamTopicPath", PartitionStream->GetTopicPath()},
+                            {"partitionStreamPartitionId",
+                PartitionStream->GetPartitionId()},
+                            {"partitionStreamPartitionSessionId", PartitionStream->GetPartitionSessionId()}
+            );
         } else {
             LOG_N("[STATE] hasn't partition stream");
         }
         if (StreamStatus) {
-            LOG_N("[STATE] last source partition status: " << StreamStatus->DebugString());
+            LOG_N(
+                "[STATE] last source partition",
+                {"status", StreamStatus->DebugString()}
+            );
         }
-        LOG_N("[STATE] next offset to read " << OffsetToRead << ", current end offset " << EndOffset);
-        LOG_N("[STATE] bytes in flight " << BytesInFlight
-            << ", messages in write request " << WriteInFlight.size()
-            << ", queue to write: " << Queue.size());
-        LOG_N("[STATE] wait new reader event=" << WaitNextReaderEventInFlight
-            << ", last received event time=" << LastReadEventTime
-            << ", read futures inflight  " << ReadFuturesInFlight << ", last id=" << ReadFeatureId);
+        LOG_N(
+            "[STATE] next offset to read current end offset",
+            {"offsetToRead", OffsetToRead},
+            {"endOffset", EndOffset}
+        );
+        LOG_N(
+            "[STATE] bytes in flight messages in write request queue",
+            {"bytesInFlight", BytesInFlight},
+            {"writeInFlightSize", WriteInFlight.size()},
+            {"toWrite", Queue.size()}
+        );
+        LOG_N(
+            "[STATE] wait new reader last received event read futures inflight",
+            {"event", WaitNextReaderEventInFlight},
+            {"time", LastReadEventTime},
+            {"readFuturesInFlight", ReadFuturesInFlight},
+            {"lastId", ReadFeatureId}
+        );
         if (!ReadFeatures.empty()) {
             const auto& oldest = *ReadFeatures.begin();
             const auto& info = oldest.second;
-            LOG_N("[STATE] The oldest read future id=" << oldest.first
-            << ", ts=" << info.first << " age=" << (ctx.Now() - info.first)
-            << ", future state: " << info.second.Initialized()
-            << "/" << info.second.HasValue() << "/" << info.second.HasException());
+            LOG_N(
+                "[STATE] The oldest read future future / ",
+                {"id", oldest.first},
+                {"ts", info.first},
+                {"age", (ctx.Now() - info.first)},
+                {"state", info.second.Initialized()},
+                {"hasValue", info.second.HasValue()},
+                {"hasException", info.second.HasException()}
+            );
         }
     }
     if (!ReadSession && LastInitStageTimestamp + INIT_TIMEOUT < ctx.Now()) {
@@ -293,8 +387,10 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         return;
     }
     if (WriteRequestInFlight && WriteRequestTimestamp + WRITE_TIMEOUT < ctx.Now()) {
-        LOG_E("write request was sent at "
-            << WriteRequestTimestamp.Seconds() << ", but no response has been received yet. Tablet will be killed.");
+        LOG_E(
+            "Write request was sent at but no response has been received yet. Tablet will be killed",
+            {"writeRequestTimestampSeconds", WriteRequestTimestamp.Seconds()}
+        );
         if (WriteTimeoutCounter) {
             WriteTimeoutCounter.Inc(1);
         }
@@ -310,10 +406,13 @@ void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, co
         Config,
         ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
     );
-    LOG_N("got new config, equal with previous: " << equalConfigs);
+    LOG_N(
+        "Got new config, equal with previous",
+        {"previous", equalConfigs}
+    );
     if (!equalConfigs) {
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
-        LOG_N("changing config");
+        LOG_N("Changing config");
 
         StartInit(ctx);
     }
@@ -332,14 +431,14 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
 
     THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();
-    //ToDo
     req->SetTopic(TopicConverter->GetClientsideName());
     req->SetPartition(Partition);
     req->SetMessageNo(0);
     req->SetCookie(WRITE_REQUEST_COOKIE);
 
     bool incorrectRequest = false;
-    while (!Queue.empty() && AddToWriteRequest(*req, Queue.front(), incorrectRequest)) {
+    ui64 nextOffset = 0;
+    while (!Queue.empty() && AppendToWriteRequest(*req, Queue.front(), incorrectRequest, nextOffset)) {
         WriteInFlight.emplace_back(std::move(Queue.front()));
         Queue.pop_front();
     }
@@ -364,28 +463,23 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
         return;
     }
     if (WriteRequestInFlight || !Queue.empty()) {
-        LOG_D("postpone split-merge event until all write operations completed");
+        LOG_D("Postpone split-merge event until all write operations completed");
         return;
     }
-    const bool isSplit = EndPartitionSessionEvent->GetAdjacentPartitionIds().empty();
-    if (!isSplit) {
-        LOG_W("topic merge not supported yet.");
+    if (!EndPartitionSessionEvent->GetAdjacentPartitionIds().empty()) {
+        LOG_W("Topic merge not supported yet");
         return;
     }
     if (EndPartitionSessionEvent->GetChildPartitionIds().empty()) {
-        LOG_W("split-merge operation has no child partitions");
+        LOG_W("Split-merge operation has no child partitions");
         return;
     }
-    const ::NKikimrPQ::EScaleStatus value = isSplit ? NKikimrPQ::EScaleStatus::NEED_SPLIT : NKikimrPQ::EScaleStatus::NEED_MERGE;
     THolder request = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>();
     request->Record.SetPartitionId(Partition);
-    request->Record.SetScaleStatus(value);
+    request->Record.SetScaleStatus(NKikimrPQ::EScaleStatus::NEED_SPLIT);
     auto* relation = request->Record.MutableParticipatingPartitions();
     for (const auto& p : EndPartitionSessionEvent->GetChildPartitionIds()) {
         relation->AddChildPartitionIds(p);
-    }
-    for (const auto& p : EndPartitionSessionEvent->GetAdjacentPartitionIds()) {
-        relation->AddAdjacentPartitionIds(p);
     }
     Send(PartitionActor, std::move(request));
     EndPartitionSessionEvent = std::nullopt;
@@ -393,7 +487,7 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
 
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
     if (CredentialsRequestInFlight) {
-        LOG_W("credentials request already inflight.");
+        LOG_W("Credentials request already inflight");
         return;
     }
     LastInitStageTimestamp = ctx.Now();
@@ -434,7 +528,10 @@ void TMirrorer::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev,
     }
 
     CredentialsProvider = ev->Get()->Credentials;
-    LOG_N("credentials provider created " << bool(CredentialsProvider));
+    LOG_N(
+        "Credentials provider created",
+        {"hasCredentialsProvider", bool(CredentialsProvider)}
+    );
     ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
     ScheduleConsumerCreation(ctx);
 }
@@ -464,12 +561,12 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     if (CredentialsRequestInFlight) {
         // защита от гонки между TEvInitCredentials, TEvCredentialsCreated и TEvCreateConsumer
         // когда придёт TEvCredentialsCreated актор ещё раз отправит себе TEvCreateConsumer
-        LOG_W("wait for credentials response.");
+        LOG_W("Wait for credentials response");
         return;
     }
 
     LastInitStageTimestamp = ctx.Now();
-    LOG_N("creating new read session");
+    LOG_N("Creating new read session");
 
     if (!Queue.empty()) {
         OffsetToRead = Queue.front().GetOffset();
@@ -494,15 +591,12 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
         NKikimrServices::PQ_MIRRORER
     ));
 
-    TString logPrefix = TStringBuilder() << GetLogPrefix() << "[reader " << ++ReaderGeneration << "] ";
+    TString logPrefix = TStringBuilder() << StructuredLogPrefixText(GetLogPrefix()) << "[reader " << ++ReaderGeneration << "] ";
     log.SetFormatter([logPrefix](ELogPriority, TStringBuf message) -> TString {
         return logPrefix + message;
     });
 
     try {
-        if (ReadSession) {
-            ReadSession->Close(TDuration::Zero());
-        }
         ReadSession = factory->GetReadSession(Config, Partition, CredentialsProvider, MAX_BYTES_IN_FLIGHT, log);
     } catch(...) {
         ProcessError(ctx, TStringBuilder() << "got an exception during the creation read session: " << CurrentExceptionMessage());
@@ -510,7 +604,10 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
         return;
     }
 
-    LOG_N("read session created: " << ReadSession->GetSessionId());
+    LOG_N(
+        "Read session",
+        {"created", ReadSession->GetSessionId()}
+    );
 
     Send(SelfId(), new TEvents::TEvWakeup());
     Become(&TThis::StateWork);
@@ -526,29 +623,72 @@ void TMirrorer::RequestSourcePartitionStatus() {
     }
 }
 
-void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
-    if (Config.GetSyncWriteTime() && !WriteRequestInFlight && StreamStatus && EndOffset == StreamStatus->GetEndOffset()) {
-        LOG_I("update write timestamp from original topic: " << StreamStatus->DebugString());
-        THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
-        auto req = request->Record.MutablePartitionRequest();
-        req->SetTopic(TopicConverter->GetClientsideName());
-        req->SetPartition(Partition);
-        req->SetCookie(UPDATE_WRITE_TIMESTAMP);
-        req->MutableCmdUpdateWriteTimestamp()->SetWriteTimeMS(StreamStatus->GetWriteTimeHighWatermark().MilliSeconds());
-        ctx.Send(TabletActorId, request.Release());
+static TDuration GetRewindCommitDelay(const TActorContext& ctx) {
+    const auto& mirrorConfig = AppData(ctx)->PQConfig.GetMirrorConfig();
+    if (!mirrorConfig.HasRewindCommitDelaySeconds()) {
+        return DEFAULT_REWIND_COMMIT_OFFSET_DELAY;
     }
+    return TDuration::Seconds(mirrorConfig.GetRewindCommitDelaySeconds());
+}
+
+enum class EStaleReadStatus {
+    Unknown,
+    ForceDelay,    // postpone decision
+    NonStale,      // the reading session has some data
+    HasUnreadData, // the reading session hasn't reached the end of the topic yet.
+    CommitLag,     // all data has been read, but the commit is missing
+    AllCommitted,  // all data has been read and commited offset points to the end of topic
+};
+
+static EStaleReadStatus ReadSessionStaleStatus(const TActorContext& ctx, bool hasLastReadOffset, TInstant init, const NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent* streamStatus) {
+    if (hasLastReadOffset) { /* seen some data in this read session */
+        return EStaleReadStatus::NonStale;
+    }
+    if (!streamStatus) {
+        return EStaleReadStatus::Unknown;
+    }
+    if (streamStatus->GetReadOffset() != streamStatus->GetEndOffset()) {
+        return EStaleReadStatus::HasUnreadData;
+    }
+    if (ctx.Now() - init <= GetRewindCommitDelay(ctx)) {
+        return EStaleReadStatus::ForceDelay;
+    }
+    if (streamStatus->GetCommittedOffset() < streamStatus->GetEndOffset()) {
+        return EStaleReadStatus::CommitLag;
+    }
+    return EStaleReadStatus::AllCommitted;
+}
+
+void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
+    // SyncWriteTime removed; mirrored topics always sync source write-time watermark.
+    if (WriteRequestInFlight || !StreamStatus) {
+        return;
+    }
+    const EStaleReadStatus staleStatus = ReadSessionStaleStatus(ctx, LastReadOffset.Defined(), LastInitStageTimestamp, StreamStatus.Get());
+    if (EndOffset != StreamStatus->GetEndOffset() && staleStatus != EStaleReadStatus::AllCommitted) {
+        return;
+    }
+    LOG_I("update write timestamp from original topic: " << StreamStatus->DebugString());
+    THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto req = request->Record.MutablePartitionRequest();
+    req->SetTopic(TopicConverter->GetClientsideName());
+    req->SetPartition(Partition);
+    req->SetCookie(UPDATE_WRITE_TIMESTAMP);
+    req->MutableCmdUpdateWriteTimestamp()->SetWriteTimeMS(StreamStatus->GetWriteTimeHighWatermark().MilliSeconds());
+    ctx.Send(TabletActorId, request.Release());
 }
 
 void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
         PQ_ENSURE(OffsetToRead <= offset);
+        LastReadOffset = offset;
         ui64 messageSize = msg.GetData().size();
 
         Counters.Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Increment(messageSize);
         BytesInFlight += messageSize;
 
-        OffsetToRead = offset + 1;
+        OffsetToRead = offset + GetLogicalMessageCount(msg);
         Queue.emplace_back(std::move(msg));
     }
 }
@@ -564,15 +704,18 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     ReadFeatures.clear();
     WaitNextReaderEventInFlight = false;
     LastReadEventTime = TInstant::Zero();
+    LastReadOffset = Nothing();
 
     Become(&TThis::StateInitConsumer);
 
-    LOG_N("schedule consumer creation");
+    LOG_N("Schedule consumer creation");
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
 }
 
-TString TMirrorer::BuildLogPrefix() const {
-    return TStringBuilder() << "[Mirrorer][" << TopicConverter->GetPrintableString() << ':' << Partition << "] ";
+TStructuredMessage TMirrorer::BuildLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"topic", TopicConverter->GetPrintableString()},
+        {"partition", Partition});
 }
 
 TString TMirrorer::GetCurrentState() const {
@@ -622,7 +765,10 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
         return;
     }
     std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
-    LOG_D("got next reader event: " << bool(event));
+    LOG_D(
+        "Got next reader",
+        {"event", bool(event)}
+    );
 
     if (wakeup && !event) {
         return;
@@ -638,8 +784,12 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     if (auto* dataEvent = std::get_if<TPersQueueReadEvent::TDataReceivedEvent>(&event.value())) {
         AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()));
     } else if (auto* createStream = std::get_if<TPersQueueReadEvent::TStartPartitionSessionEvent>(&event.value())) {
-        LOG_I("got create stream event for '" << createStream->DebugString()
-                << " and will set offset=" << OffsetToRead);
+        LOG_I(
+            "Got create stream event for and will set",
+            {"createStreamDebug", createStream->DebugString()},
+                    {"offset",
+            OffsetToRead}
+        );
         if (PartitionStream) {
             ProcessError(ctx, TStringBuilder() << " already has stream " << PartitionStream->GetPartitionSessionId()
                 << ", new stream " << createStream->GetPartitionSession()->GetPartitionSessionId());
@@ -661,19 +811,24 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
 
            OffsetToRead = createStream->GetCommittedOffset();
         }
-
+        LastReadOffset = Nothing();
         createStream->Confirm(OffsetToRead, createStream->GetCommittedOffset());
         RequestSourcePartitionStatus();
     } else if (auto* destroyStream = std::get_if<TPersQueueReadEvent::TStopPartitionSessionEvent>(&event.value())) {
         destroyStream->Confirm();
 
         PartitionStream.Reset();
-        LOG_I("got destroy stream event: " << destroyStream->DebugString());
+        LOG_I(
+            "Got destroy stream",
+            {"event", destroyStream->DebugString()}
+        );
    } else if (auto* streamClosed = std::get_if<TPersQueueReadEvent::TPartitionSessionClosedEvent>(&event.value())) {
         PartitionStream.Reset();
-        LOG_I("got stream closed event for partition stream id: "
-                << streamClosed->GetPartitionSession()->GetPartitionSessionId()
-                << " reason: " << streamClosed->GetReason());
+        LOG_I(
+            "Got stream closed event for partition stream",
+            {"id", streamClosed->GetPartitionSession()->GetPartitionSessionId()},
+                    {"reason", streamClosed->GetReason()}
+        );
 
         ProcessError(ctx, TStringBuilder() << " read session stream closed event");
         ScheduleConsumerCreation(ctx);
@@ -689,15 +844,21 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
             TryUpdateWriteTimetsamp(ctx);
         }
     } else if (auto* commitAck = std::get_if<TPersQueueReadEvent::TCommitOffsetAcknowledgementEvent>(&event.value())) {
-        LOG_I("got commit responce, commited offset: " << commitAck->GetCommittedOffset());
+        LOG_I(
+            "Got commit responce, commited",
+            {"offset", commitAck->GetCommittedOffset()}
+        );
     } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event.value())) {
         ProcessError(ctx, TStringBuilder() << " read session closed: " << closeSessionEvent->DebugString());
         ScheduleConsumerCreation(ctx);
         return;
     } else if (auto* endPartitionSessionEvent = std::get_if<TPersQueueReadEvent::TEndPartitionSessionEvent>(&event.value())) {
-        LOG_I("got end partion session event: " << endPartitionSessionEvent->DebugString());
+        LOG_I(
+            "Got end partion session",
+            {"event", endPartitionSessionEvent->DebugString()}
+        );
         if (EndPartitionSessionEvent.has_value()) {
-            LOG_W("already has end partition session event");
+            LOG_W("Already has end partition session event");
             EndPartitionSessionEvent.reset();
         }
         EndPartitionSessionEvent = *endPartitionSessionEvent;
@@ -711,36 +872,39 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
 }
 
-static TDuration GetRewindCommitDelay(const TActorContext& ctx) {
-    const auto& mirrorConfig = AppData(ctx)->PQConfig.GetMirrorConfig();
-    if (!mirrorConfig.HasRewindCommitDelaySeconds()) {
-        return DEFAULT_REWIND_COMMIT_OFFSET_DELAY;
-    }
-    return TDuration::Seconds(mirrorConfig.GetRewindCommitDelaySeconds());
-}
-
 bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
-    LOG_T("TryRewindCommittedOffset " << LabeledOutput(OffsetToRead, StreamStatus->GetCommittedOffset(),  StreamStatus->GetReadOffset(), StreamStatus->GetEndOffset(), (ctx.Now() - LastInitStageTimestamp).Seconds(), (ctx.Now() - LastRewindCommitTimestamp).Seconds()));
-    if (!(OffsetToRead == 0 /* never seen any data */
-        && StreamStatus->GetCommittedOffset() < StreamStatus->GetEndOffset()
-        && StreamStatus->GetCommittedOffset() == 0 /* new mirror rule */
-        && StreamStatus->GetReadOffset() == StreamStatus->GetEndOffset())) {
+    LOG_T(
+        "TryRewindCommittedOffset",
+        {"offsetToRead", OffsetToRead},
+        {"committedOffset", StreamStatus->GetCommittedOffset()},
+            {"readOffset",
+        StreamStatus->GetReadOffset()},
+            {"endOffset", StreamStatus->GetEndOffset()},
+            {"secondsSinceLastInitStage", (ctx.Now() - LastInitStageTimestamp).Seconds()},
+            {"secondsSinceLastRewindCommit", (ctx.Now() - LastRewindCommitTimestamp).Seconds()}
+    );
+
+    const EStaleReadStatus staleStatus = ReadSessionStaleStatus(ctx, LastReadOffset.Defined(), LastInitStageTimestamp, StreamStatus.Get());
+    if (staleStatus != EStaleReadStatus::CommitLag) {
         return false;
     }
     const auto now = ctx.Now();
-    if (now - LastInitStageTimestamp <= GetRewindCommitDelay(ctx)) {
-        return false;
-    }
     if (now - LastRewindCommitTimestamp <= REWIND_COMMIT_INTERVAL) {
         return false;
     }
     LastRewindCommitTimestamp = now;
-    LOG_I("topic contains only old messages. Rewinding committed offset forward" << " from " << StreamStatus->GetCommittedOffset() << " to " << StreamStatus->GetEndOffset());
+    const ui64 newEndOffset = StreamStatus->GetEndOffset();
+    LOG_I(
+        "Topic contains only old messages. Rewinding committed offset forward",
+        {"from", StreamStatus->GetCommittedOffset()},
+            {"to",
+        newEndOffset}
+    );
     auto* factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
-    auto future = factory->CommitOffset(Config, CredentialsProvider, Partition, StreamStatus->GetEndOffset());
+    auto future = factory->CommitOffset(Config, CredentialsProvider, Partition, newEndOffset);
     future.Subscribe(
-        [actorSystem = ctx.ActorSystem(), selfId = SelfId()](const NThreading::TFuture<NYdb::TStatus>& result) {
+        [actorSystem = ctx.ActorSystem(), selfId = SelfId(), newEndOffset](const NThreading::TFuture<NYdb::TStatus>& result) {
             NYdb::TStatus status{NYdb::EStatus::SUCCESS, {}};
             try {
                 status = result.GetValue();
@@ -748,18 +912,24 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
                 TString error = CurrentExceptionMessage();
                 status = NYdb::TStatus{NYdb::EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue(std::move(error)),})};
             }
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPQ::TEvRewindCommitResult(std::move(status))));
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPQ::TEvRewindCommitResult(std::move(status), newEndOffset)));
         }
     );
     return true;
 }
 
 void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const TActorContext& ctx) {
-    LOG_I("Rewind committed offset result: " << ev->Get()->Status);
+    LOG_I(
+        "Rewind committed",
+        {"status", ev->Get()->Status},
+            {"offset", ev->Get()->EndOffset},
+    );
+
     if (!ev->Get()->Status.IsSuccess()) {
-        ProcessError(ctx, TStringBuilder() << "failed to rewind committed offset: " << ev->Get()->Status);
+        ProcessError(ctx, TStringBuilder() << "failed to rewind committed offset: " << ev->Get()->Status << "; offset: " << ev->Get()->EndOffset);
         return;
     }
+    EndOffset = ev->Get()->EndOffset;
     ScheduleConsumerCreation(ctx);
 }
 

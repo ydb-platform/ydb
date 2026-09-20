@@ -1,5 +1,7 @@
 #pragma once
 
+#include "vhost/nbs2_rename.h"
+
 #include "virtio_fs_spec.h"
 
 #ifdef __cplusplus

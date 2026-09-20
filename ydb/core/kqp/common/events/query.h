@@ -18,8 +18,9 @@
 
 #include <memory>
 
-namespace NKikimr::NKqp {
-    struct IWmSessionUpdater;
+namespace NKikimr::NWorkloadManager {
+class ISessionUpdater;
+class IQueryClassifier;
 }
 
 namespace NKikimr::NKqp::NPrivateEvents {
@@ -132,6 +133,14 @@ public:
 
     bool HasKafkaApiOperations() const {
         return Record.GetRequest().HasKafkaApiOperations();
+    }
+
+    bool HasDeferredPublication() const {
+        return Record.GetRequest().HasDeferredPublication();
+    }
+
+    const ::NKikimrKqp::TTopicDeferredPublicationRequest& GetDeferredPublication() const {
+        return Record.GetRequest().GetDeferredPublication();
     }
 
     bool GetKeepSession() const {
@@ -266,6 +275,14 @@ public:
         return Record.GetRequest().GetClientAddress();
     }
 
+    TString GetApplicationName() const {
+        if (RequestCtx) {
+            return "";  // gRPC path carries app name via the session, not the query request
+        }
+
+        return Record.GetRequest().GetApplicationName();
+    }
+
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {
         if (YdbParameters) {
             return *YdbParameters;
@@ -324,6 +341,10 @@ public:
         return Record.GetRequest().GetCollectDiagnostics();
     }
 
+    bool GetCollectAffectedRows() const {
+        return Record.GetRequest().GetCollectAffectedRows();
+    }
+
     ui32 CalculateSerializedSize() const override {
         PrepareRemote();
         return Record.ByteSize();
@@ -351,12 +372,20 @@ public:
         return UserRequestContext;
     }
 
-    void SetWmSessionUpdater(const std::shared_ptr<IWmSessionUpdater>& wmSessionUpdater) {
+    void SetWmSessionUpdater(const std::shared_ptr<NWorkloadManager::ISessionUpdater>& wmSessionUpdater) {
         WmSessionUpdater = wmSessionUpdater;
     }
 
-    std::shared_ptr<IWmSessionUpdater> GetWmSessionUpdater() const {
+    std::shared_ptr<NWorkloadManager::ISessionUpdater> GetWmSessionUpdater() const {
         return WmSessionUpdater;
+    }
+
+    void SetWmQueryClassifier(std::shared_ptr<NWorkloadManager::IQueryClassifier> classifier) {
+        WmQueryClassifier = std::move(classifier);
+    }
+
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> GetWmQueryClassifier() const {
+        return WmQueryClassifier;
     }
 
     void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
@@ -444,14 +473,6 @@ public:
         QueryPhysicalGraph = std::make_shared<const NKikimrKqp::TQueryPhysicalGraph>(std::move(queryPhysicalGraph));
     }
 
-    void SetGeneration(i64 generation) {
-        Generation = generation;
-    }
-
-    i64 GetGeneration() const {
-        return Generation;
-    }
-
     void SetDisableDefaultTimeout(bool disableDefaultTimeout) {
         DisableDefaultTimeout = disableDefaultTimeout;
     }
@@ -494,9 +515,9 @@ private:
     std::optional<NFormats::TArrowFormatSettings> ArrowFormatSettings;
     bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
-    i64 Generation = 0;
     bool DisableDefaultTimeout = false;
-    std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
+    std::shared_ptr<NWorkloadManager::ISessionUpdater> WmSessionUpdater;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> WmQueryClassifier;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

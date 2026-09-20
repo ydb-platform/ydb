@@ -20,7 +20,6 @@ PEERDIR(
     contrib/restricted/boost/mpl
     contrib/restricted/boost/multi_index
     contrib/restricted/boost/preprocessor
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/throw_exception
     contrib/restricted/boost/type_traits
     contrib/restricted/boost/utility

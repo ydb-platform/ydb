@@ -1,5 +1,7 @@
 RECURSE_FOR_TESTS(
     ut
+    reader
+    storage
 )
 
 LIBRARY()
@@ -20,6 +22,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base
     ydb/core/formats
+    ydb/core/formats/arrow/filter
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tablet

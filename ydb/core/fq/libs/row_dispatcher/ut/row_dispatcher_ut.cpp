@@ -1,6 +1,7 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher.h>
+#include <ydb/core/fq/libs/row_dispatcher/probes.h>
 #include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -90,7 +91,7 @@ public:
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+        NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory = NYql::CreateStructuredTokenCredentialsFactory();
         Coordinator1 = Runtime.AllocateEdgeActor();
         Coordinator2 = Runtime.AllocateEdgeActor();
         EdgeActor = Runtime.AllocateEdgeActor();
@@ -102,7 +103,7 @@ public:
         NYql::TPqGatewayServices pqServices(
             yqSharedResources->UserSpaceYdbDriver,
             nullptr,
-            nullptr,
+            credentialsFactory,
             std::make_shared<NYql::TPqGatewayConfig>(),
             nullptr);
 
@@ -295,6 +296,55 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(RowDispatcherTests) {
+
+    Y_UNIT_TEST_F(ShutdownStopsOwnedActors, TFixture) {
+        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId1);
+        const auto firstSession = ExpectRegisterTopicSession();
+        const auto secondSession = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(firstSession);
+        ExpectStartSession(secondSession);
+
+        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor,
+            new TEvRowDispatcher::TEvCoordinatorChanged(Coordinator1, 1)));
+        Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(Coordinator1);
+
+        TSet<TActorId> children;
+        auto observer = Runtime.AddObserver<NActors::TEvents::TEvPoison>([&](auto& ev) {
+            if (ev->Sender == RowDispatcher) {
+                children.insert(ev->Recipient);
+            }
+        });
+        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, new NActors::TEvents::TEvPoison()));
+        ExpectPoisonPill(firstSession);
+        ExpectPoisonPill(secondSession);
+        Runtime.WaitFor("row dispatcher children stopped", [&] { return children.size() == 3; }, TDuration::Seconds(10));
+        UNIT_ASSERT(!children.contains(Coordinator1));
+
+        children.insert(RowDispatcher);
+        for (const auto& actorId : children) {
+            Runtime.Send(new IEventHandle(actorId, EdgeActor, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery));
+            auto ev = Runtime.GrabEdgeEvent<NActors::TEvents::TEvUndelivered>(EdgeActor);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Sender, actorId);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Reason, NActors::TEvents::TEvUndelivered::ReasonActorUnknown);
+        }
+    }
+
+    Y_UNIT_TEST_F(FirstCoordinatorChangeWithTracing, TFixture) {
+        NLWTrace::TProbeRegistry registry;
+        registry.AddProbesList(LWTRACE_GET_PROBES(FQ_ROW_DISPATCHER_PROVIDER));
+        NLWTrace::TManager manager(registry, true);
+        NLWTrace::TQuery query;
+        auto* block = query.AddBlocks();
+        block->MutableProbeDesc()->SetName("CoordinatorChanged");
+        block->MutableProbeDesc()->SetProvider("FQ_ROW_DISPATCHER_PROVIDER");
+        block->AddAction()->MutableLogAction();
+        manager.New("first_coordinator", query);
+        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor,
+            new TEvRowDispatcher::TEvCoordinatorChanged(Coordinator1, 0)));
+        Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(Coordinator1);
+    }
+
     Y_UNIT_TEST_F(OneClientOneSession, TFixture) {
         MockAddSession(Source1, {PartitionId0}, ReadActorId1);
         auto topicSessionId = ExpectRegisterTopicSession();
@@ -546,7 +596,32 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         MockHeartbeat(PartitionId0, ReadActorId1, generation);
         ExpectNoSession(ReadActorId1, generation);
     }
+
+    Y_UNIT_TEST_F(TwoSessionsFatalError, TFixture) {
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
+        auto session1 = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(session1);
+
+        MockAddSession(Source1, {PartitionId0}, ReadActorId2);
+        ExpectStartSessionAck(ReadActorId2);
+        ExpectStartSession(session1);   // ReadActorId2 goes to the existing session1
+
+        // 1 topic session / 2 consumers for one partition
+
+        MockSessionError(session1, ReadActorId1, PartitionId0, true);       // fatal error, consumer (ReadActorId1) deleted
+        ExpectSessionError(ReadActorId1);
+        ExpectPoisonPill(session1);
+
+        // ReadActorId1 restarts the session, TEvStartSession is forwarded to a new topic session
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
+        auto newSession1 = ExpectRegisterTopicSession();
+        ExpectStartSession(newSession1);
+
+        MockSessionError(session1, ReadActorId2, PartitionId0, true);       // fatal error, consumer (ReadActorId2) deleted
+        ExpectSessionError(ReadActorId2);
+        ExpectPoisonPill(session1);
+    }
 }
 
 }
-

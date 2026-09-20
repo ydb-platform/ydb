@@ -1,6 +1,19 @@
-/* Generated from basque.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from basque.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_ISO_8859_1_basque.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
+struct SN_local {
+    struct SN_env z;
+    int i_p2;
+    int i_p1;
+    int i_pV;
+};
+
+typedef struct SN_local SN_local;
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,25 +22,19 @@ extern int basque_ISO_8859_1_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
-static int r_R1(struct SN_env * z);
+
 static int r_R2(struct SN_env * z);
 static int r_RV(struct SN_env * z);
 static int r_mark_regions(struct SN_env * z);
 static int r_adjetiboak(struct SN_env * z);
 static int r_izenak(struct SN_env * z);
 static int r_aditzak(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+static const symbol s_0[] = { 'j', 'o', 'k' };
+static const symbol s_1[] = { 't', 'r', 'a' };
+static const symbol s_2[] = { 'm', 'i', 'n', 'u', 't', 'u' };
+static const symbol s_3[] = { 'z' };
 
-extern struct SN_env * basque_ISO_8859_1_create_env(void);
-extern void basque_ISO_8859_1_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_0[4] = { 'i', 'd', 'e', 'a' };
 static const symbol s_0_1[5] = { 'b', 'i', 'd', 'e', 'a' };
 static const symbol s_0_2[5] = { 'k', 'i', 'd', 'e', 'a' };
@@ -885,63 +892,54 @@ static const struct among a_2[19] = {
 
 static const unsigned char g_v[] = { 17, 65, 16 };
 
-static const symbol s_0[] = { 'j', 'o', 'k' };
-static const symbol s_1[] = { 't', 'r', 'a' };
-static const symbol s_2[] = { 'm', 'i', 'n', 'u', 't', 'u' };
-static const symbol s_3[] = { 'z' };
-
 static int r_mark_regions(struct SN_env * z) {
-    z->I[2] = z->l;
-    z->I[1] = z->l;
-    z->I[0] = z->l;
+    ((SN_local *)z)->i_pV = z->l;
+    ((SN_local *)z)->i_p1 = z->l;
+    ((SN_local *)z)->i_p2 = z->l;
     {
         int v_1 = z->c;
-        {
+        do {
             int v_2 = z->c;
-            if (in_grouping(z, g_v, 97, 117, 0)) goto lab2;
-            {
+            if (in_grouping(z, g_v, 97, 117, 0)) goto lab1;
+            do {
                 int v_3 = z->c;
-                if (out_grouping(z, g_v, 97, 117, 0)) goto lab4;
+                if (out_grouping(z, g_v, 97, 117, 0)) goto lab2;
                 {
                     int ret = out_grouping(z, g_v, 97, 117, 1);
-                    if (ret < 0) goto lab4;
-                    z->c += ret;
-                }
-                goto lab3;
-            lab4:
-                z->c = v_3;
-                if (in_grouping(z, g_v, 97, 117, 0)) goto lab2;
-                {
-                    int ret = in_grouping(z, g_v, 97, 117, 1);
                     if (ret < 0) goto lab2;
                     z->c += ret;
                 }
-            }
-        lab3:
-            goto lab1;
-        lab2:
-            z->c = v_2;
-            if (out_grouping(z, g_v, 97, 117, 0)) goto lab0;
-            {
-                int v_4 = z->c;
-                if (out_grouping(z, g_v, 97, 117, 0)) goto lab6;
+                break;
+            lab2:
+                z->c = v_3;
+                if (in_grouping(z, g_v, 97, 117, 0)) goto lab1;
                 {
-                    int ret = out_grouping(z, g_v, 97, 117, 1);
-                    if (ret < 0) goto lab6;
+                    int ret = in_grouping(z, g_v, 97, 117, 1);
+                    if (ret < 0) goto lab1;
                     z->c += ret;
                 }
-                goto lab5;
-            lab6:
+            } while (0);
+            break;
+        lab1:
+            z->c = v_2;
+            if (out_grouping(z, g_v, 97, 117, 0)) goto lab0;
+            do {
+                int v_4 = z->c;
+                if (out_grouping(z, g_v, 97, 117, 0)) goto lab3;
+                {
+                    int ret = out_grouping(z, g_v, 97, 117, 1);
+                    if (ret < 0) goto lab3;
+                    z->c += ret;
+                }
+                break;
+            lab3:
                 z->c = v_4;
                 if (in_grouping(z, g_v, 97, 117, 0)) goto lab0;
                 if (z->c >= z->l) goto lab0;
                 z->c++;
-            }
-        lab5:
-            ;
-        }
-    lab1:
-        z->I[2] = z->c;
+            } while (0);
+        } while (0);
+        ((SN_local *)z)->i_pV = z->c;
     lab0:
         z->c = v_1;
     }
@@ -949,49 +947,45 @@ static int r_mark_regions(struct SN_env * z) {
         int v_5 = z->c;
         {
             int ret = out_grouping(z, g_v, 97, 117, 1);
-            if (ret < 0) goto lab7;
+            if (ret < 0) goto lab4;
             z->c += ret;
         }
         {
             int ret = in_grouping(z, g_v, 97, 117, 1);
-            if (ret < 0) goto lab7;
+            if (ret < 0) goto lab4;
             z->c += ret;
         }
-        z->I[1] = z->c;
+        ((SN_local *)z)->i_p1 = z->c;
         {
             int ret = out_grouping(z, g_v, 97, 117, 1);
-            if (ret < 0) goto lab7;
+            if (ret < 0) goto lab4;
             z->c += ret;
         }
         {
             int ret = in_grouping(z, g_v, 97, 117, 1);
-            if (ret < 0) goto lab7;
+            if (ret < 0) goto lab4;
             z->c += ret;
         }
-        z->I[0] = z->c;
-    lab7:
+        ((SN_local *)z)->i_p2 = z->c;
+    lab4:
         z->c = v_5;
     }
     return 1;
 }
 
 static int r_RV(struct SN_env * z) {
-    return z->I[2] <= z->c;
+    return ((SN_local *)z)->i_pV <= z->c;
 }
 
 static int r_R2(struct SN_env * z) {
-    return z->I[0] <= z->c;
-}
-
-static int r_R1(struct SN_env * z) {
-    return z->I[1] <= z->c;
+    return ((SN_local *)z)->i_p2 <= z->c;
 }
 
 static int r_aditzak(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 1 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((70566434 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    among_var = find_among_b(z, a_0, 109);
+    among_var = find_among_b(z, a_0, 109, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -1023,7 +1017,7 @@ static int r_izenak(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((71162402 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    among_var = find_among_b(z, a_1, 295);
+    among_var = find_among_b(z, a_1, 295, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -1054,10 +1048,7 @@ static int r_izenak(struct SN_env * z) {
             }
             break;
         case 4:
-            {
-                int ret = r_R1(z);
-                if (ret <= 0) return ret;
-            }
+            if (((SN_local *)z)->i_p1 > z->c) return 0;
             {
                 int ret = slice_del(z);
                 if (ret < 0) return ret;
@@ -1083,7 +1074,7 @@ static int r_adjetiboak(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 1 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((35362 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    among_var = find_among_b(z, a_2, 19);
+    among_var = find_among_b(z, a_2, 19, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -1149,7 +1140,17 @@ extern int basque_ISO_8859_1_stem(struct SN_env * z) {
     return 1;
 }
 
-extern struct SN_env * basque_ISO_8859_1_create_env(void) { return SN_create_env(0, 3); }
+extern struct SN_env * basque_ISO_8859_1_create_env(void) {
+    struct SN_env * z = SN_new_env(sizeof(SN_local));
+    if (z) {
+        ((SN_local *)z)->i_p2 = 0;
+        ((SN_local *)z)->i_p1 = 0;
+        ((SN_local *)z)->i_pV = 0;
+    }
+    return z;
+}
 
-extern void basque_ISO_8859_1_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void basque_ISO_8859_1_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

@@ -32,6 +32,8 @@ TScanCounters::TScanCounters(const TString& module)
     , RecordsDeniedByHeader(TBase::GetDeriviative("Headers/Denied/Records"))
     , DictionaryOnlyOptimizationCount(TBase::GetDeriviative("Dictionary/OnlyOptimization/Count"))
     , DistinctLimitSyncPointInvocations(TBase::GetDeriviative("DistinctLimit/SyncPoint/Invocations"))
+    , PredicateFilterInvocations(TBase::GetDeriviative("PredicateFilter/Invocations"))
+    , EarlyInFlightReleaseCount(TBase::GetDeriviative("EarlyInFlightRelease/Count"))
     , HangingRequests(TBase::GetDeriviative("HangingRequests"))
 
     , HistogramReadMetadataDurationMs(TBase::GetHistogram("Portions/ReadMetadataDurationMs", NMonitoring::ExponentialHistogram(15, 2, 8)))
@@ -75,6 +77,8 @@ TScanCounters::TScanCounters(const TString& module)
     , ProcessedSourceRawBytes(TBase::GetDeriviative("ProcessedSource/RawBytes"))
     , ProcessedSourceRecords(TBase::GetDeriviative("ProcessedSource/Records"))
     , ProcessedSourceEmptyCount(TBase::GetDeriviative("ProcessedSource/Empty/Count"))
+    , StartedSourceConflictingCount(TBase::GetDeriviative("StartedSource/Conflicting/Count"))
+    , StartedSourceNonconflictingCount(TBase::GetDeriviative("StartedSource/Nonconflicting/Count"))
     , HistogramFilteredResultCount(TBase::GetHistogram("ProcessedSource/Filtered/Count", NMonitoring::ExponentialHistogram(20, 2)))
 {
     SubColumnCounters = std::make_shared<TSubColumnCounters>(CreateSubGroup("Speciality", "SubColumns"));
@@ -187,12 +191,12 @@ TString TConcreteScanCounters::StepsCountersDebugString() const {
 }
 
 TConcreteScanCounters::TPerStepAtomicCounters TConcreteScanCounters::CountersForStep(TStringBuf stepName) const {
-    auto* counterIfExists = [&] {
+    {
         auto lock = AtomicStepCounters.ReadGuard();
-        return lock.Value.FindPtr(stepName);
-    }();
-    if (counterIfExists) [[likely]] {
-        return *counterIfExists;
+        auto* counterIfExists = lock.Value.FindPtr(stepName);
+        if (counterIfExists) [[likely]] {
+            return *counterIfExists;   // Copy made while lock is held
+        }
     }
     auto lock = AtomicStepCounters.WriteGuard();
     auto [it, ok] = lock.Value.emplace(stepName, TPerStepAtomicCounters{});

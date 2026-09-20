@@ -79,11 +79,11 @@ public:
     TString GetProtoFromFile(const TString& path, IErrorCollector& errorCollector) const override {
         fs::path filePath(path.c_str());
         if (!fs::is_regular_file(filePath)) {
-            errorCollector.Fatal(Sprintf("File %s does not exist", path.c_str()), "YDB-CFG25");
+            errorCollector.Fatal(Sprintf("File %s does not exist", path.c_str()), "YDBE-10025");
             return {};
         }
         if (!IsFileReadable(filePath)) {
-            errorCollector.Fatal(Sprintf("File %s is not readable", path.c_str()), "YDB-CFG26");
+            errorCollector.Fatal(Sprintf("File %s is not readable", path.c_str()), "YDBE-10026");
             return {};
         }
         TAutoPtr<TMappedFileInput> fileInput(new TMappedFileInput(path));
@@ -796,7 +796,7 @@ void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErr
             if (parseError) {
                 message << ": " << parseError;
             }
-            errorCollector.Fatal(message, "YDB-CFG24");
+            errorCollector.Fatal(message, "YDBE-10024");
             return;
         }
         out.MergeFrom(parsedConfig);
@@ -843,7 +843,7 @@ void ApplyMainYamlConfig(
             target.emplace(std::move(key), std::move(value));
         }
     }
-    ParseJsonConfigOrThrow(main, yamlConfigs.MainSource, parsedConfig);
+    ParseJsonConfigOrThrow(main, yamlConfigs.MainSource, parsedConfig, yamlConfigs.AllowUnknownFields);
 
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
@@ -883,15 +883,18 @@ TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConf
     }
 
     if (appConfig.GetTenantPoolConfig().SlotsSize() == 1) {
-        auto &slot = appConfig.GetTenantPoolConfig().GetSlots(0);
+        const auto &slot = appConfig.GetTenantPoolConfig().GetSlots(0);
         if (slot.GetDomainName()) {
             return slot.GetDomainName();
         }
 
-        auto &tenantName = slot.GetTenantName();
-        if (IsStartWithSlash(tenantName)) {
-            return ToString(ExtractDomain(tenantName));
+        if (slot.GetTenantName()) {
+            return ToString(ExtractDomain(slot.GetTenantName()));
         }
+    }
+
+    if (cf.TenantName.GetOrElse("")) {
+        return ToString(ExtractDomain(*cf.TenantName));
     }
 
     return "";

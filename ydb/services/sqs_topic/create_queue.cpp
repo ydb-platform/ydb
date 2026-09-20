@@ -7,6 +7,7 @@
 #include "utils.h"
 
 #include <ydb/core/http_proxy/events.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -39,8 +40,9 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -81,7 +83,11 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!Request_->GetDatabaseName()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Request without database is forbidden"));
             }
-            if (auto check = ValidateQueueName(QueueName, false); !check.has_value()) {
+            if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
+                    "CreateQueue is not supported"));
+            }
+            if (auto check = ValidateQueueName(QueueName, true); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid queue name: {}", check.error())));
             }
             if (auto cc = ParseQueueAttributes(request.attributes(), QueueName, ConsumerName, this->Database, EConsumerAttributeUsageTarget::Create); !cc.has_value()) {
@@ -98,48 +104,25 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
-                hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
-                hFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
+                hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&) {
-            // TODO remove it
+        TTopicDescribePolicy GetTopicDescribePolicy() const {
+            return CreateQueueDescribePolicy();
         }
 
-        void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            Y_ABORT_UNLESS(result->Topics.size() == 1);
-            const auto& topicInfo = result->Topics.begin()->second;
-
-            switch(topicInfo.Status) {
-                case NDescriber::EStatus::SUCCESS: {
-                    if (topicInfo.CdcStream) {
-                        return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
-                            "Creating the changefeed is not supported"));
-                    }
-
-                    PQGroup = topicInfo.Info->Description;
-                    SelfInfo = topicInfo.Self->Info;
-
-                    return HandleExistingTopic(ActorContext());
-                }
-                case NDescriber::EStatus::NOT_TOPIC:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
-                        TStringBuilder() << "Queue name used by another scheme object"));
-                case NDescriber::EStatus::NOT_FOUND:
-                    return CreateTopic();
-                case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
-                    return ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED,
-                        "Access denied"));
-                case NDescriber::EStatus::UNAUTHORIZED:
-                case NDescriber::EStatus::UNKNOWN_ERROR:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                        NDescriber::Description(topicInfo.RealPath, topicInfo.Status)));
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
+            if (topicInfo.Status == NPQ::NDescriber::EStatus::NotFound) {
+                PendingAction_ = EPendingAction::CreateNewTopic;
+                this->ChargeRequestUnits(ActorContext());
+                return;
             }
+            PQGroup = topicInfo.Info->Description;
+            SelfInfo = topicInfo.Self->Info;
+            return HandleExistingTopic(ActorContext());
         }
 
         void CreateTopic() {
@@ -153,12 +136,22 @@ namespace NKikimr::NSqsTopic::V1 {
                 autoPartitioning->set_strategy(::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
                 partitioningSettings->set_min_active_partitions(DEFAULT_MIN_PARTITION_COUNT);
                 partitioningSettings->set_max_active_partitions(DEFAULT_MAX_PARTITION_COUNT);
+
+                auto* writeSpeed = autoPartitioning->mutable_partition_write_speed();
+                writeSpeed->set_up_utilization_percent(80);
+                writeSpeed->set_down_utilization_percent(20);
+                writeSpeed->mutable_stabilization_window()->set_seconds(30);
             }
 
             SetDuration(QueueAttributes.MessageRetentionPeriod.GetOrElse(DEFAULT_MESSAGE_RETENTION_PERIOD), *topicRequest.mutable_retention_period());
             topicRequest.set_partition_write_speed_bytes_per_second(1_MB);
             topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
+
             topicRequest.set_content_based_deduplication(QueueAttributes.ContentBasedDeduplication.GetOrElse(false));
+            if (QueueAttributes.FifoQueue) {
+                topicRequest.set_partition_write_speed_messages_per_second(NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+                topicRequest.set_partition_write_burst_messages(NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES);
+            }
 
             AddConsumerToRequest(topicRequest.add_consumers());
 
@@ -202,17 +195,11 @@ namespace NKikimr::NSqsTopic::V1 {
             if (QueueAttributes.DeadLetterQueue.Defined()) {
                 consumerType->mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(*QueueAttributes.DeadLetterQueue);
             }
+
+            (*consumer->mutable_attributes())["_sqs_read_request_attempt_id_period_ms"] = ToString(Cfg().GetGroupsReadAttemptIdsPeriodMs());
         }
 
-        void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            if (result->Status != Ydb::StatusIds::SUCCESS) {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
-            }
-            return ReplyAndDie(ActorContext());
-        }
-
-        void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
+        void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
             const auto* result = ev->Get();
             if (result->Status != Ydb::StatusIds::SUCCESS) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
@@ -224,7 +211,9 @@ namespace NKikimr::NSqsTopic::V1 {
             const auto& pqConfig = PQGroup.GetPQTabletConfig();
             const NKikimrPQ::TPQTabletConfig::TConsumer* foundConsumer = FindIfPtr(pqConfig.GetConsumers(), [this](const auto& c) { return c.GetName() == ConsumerName; });
             if (!foundConsumer) {
-                return AddConsumer();
+                PendingAction_ = EPendingAction::AddConsumer;
+                this->ChargeRequestUnits(ctx);
+                return;
             }
 
             if (foundConsumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
@@ -239,13 +228,13 @@ namespace NKikimr::NSqsTopic::V1 {
                                                 TStringBuilder() << "Queue attributes mismatch: " << comparison.error()));
             }
 
-            return ReplyAndDie(ctx);
+            PendingAction_ = EPendingAction::ReplyExisting;
+            this->ChargeRequestUnits(ctx);
         }
 
 
         void ReplyAndDie(const TActorContext& ctx) {
-            Ydb::Ymq::V1::CreateQueueResult result;
-
+            Result_.Clear();
             const TRichQueueUrl queueUrl{
                 .Database = this->Database,
                 .TopicPath = this->TopicPath,
@@ -253,11 +242,26 @@ namespace NKikimr::NSqsTopic::V1 {
                 .Fifo = QueueAttributes.FifoQueue,
             };
 
-            TString path = PackQueueUrlPath(queueUrl);
-            TString url = TStringBuilder() << GetEndpoint(Cfg()) << path;
-            result.set_queue_url(std::move(url));
+            TString url = MakeQueueUrl(queueUrl, Request_.get());
+            Result_.set_queue_url(std::move(url));
+            return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result_, ctx);
+        }
 
-            return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext& ctx) {
+            switch (PendingAction_) {
+                case EPendingAction::CreateNewTopic:
+                    return CreateTopic();
+                case EPendingAction::AddConsumer:
+                    return AddConsumer();
+                case EPendingAction::ReplyExisting:
+                    return ReplyAndDie(ctx);
+                case EPendingAction::None:
+                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Failed to charge request units"));
+            }
         }
 
     protected:
@@ -266,11 +270,20 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
     private:
+        enum class EPendingAction {
+            None,
+            CreateNewTopic,
+            AddConsumer,
+            ReplyExisting,
+        };
+
         TString QueueName;
         TString ConsumerName;
         TQueueAttributes QueueAttributes;
+        Ydb::Ymq::V1::CreateQueueResult Result_;
         NKikimrSchemeOp::TDirEntry SelfInfo;
         NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
+        EPendingAction PendingAction_ = EPendingAction::None;
     };
 
     std::unique_ptr<NActors::IActor> CreateCreateQueueActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

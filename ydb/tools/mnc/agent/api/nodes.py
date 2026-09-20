@@ -3,9 +3,11 @@ from dataclasses import asdict
 
 from aiohttp import web
 
-from ydb.tools.mnc.agent.schemas.node import InstallNodesRequest
+from ydb.tools.mnc.agent.schemas.node import InstallNodesRequest, NodeOperationRequest, UninstallNodesRequest
 from ydb.tools.mnc.agent.services.features import FeatureStatus, features_service
+from ydb.tools.mnc.agent.services.operations import NodeEnableTask, NodeInstallTask, NodeOperationTask, NodeUninstallTask
 from ydb.tools.mnc.agent.services.nodes import nodes_service
+from ydb.tools.mnc.agent.services.tasks import task_service
 
 
 features_service.set_feature_status("nodes", FeatureStatus.ENABLED)
@@ -16,6 +18,11 @@ logger = logging.getLogger(__name__)
 
 def _query_list(request, name: str):
     return request.query.getall(name, [])
+
+
+async def _add_task(task):
+    await task_service.add_task(task)
+    return web.json_response({"task_id": task.task_id, "status": task.status.value})
 
 
 @routes.get("/nodes")
@@ -41,60 +48,43 @@ async def get_batch_nodes_status(request):
     return web.json_response({"nodes": [asdict(status) for status in statuses]})
 
 
-@routes.get("/nodes/start")
+@routes.post("/nodes/start")
 async def start_batch_nodes(request):
-    nodes = _query_list(request, "node")
-    timeout = int(request.query.get("timeout", "30"))
-    wait = request.query.get("wait", "true").lower() != "false"
-    return web.json_response(asdict(await nodes_service.start_nodes(nodes, timeout=timeout, wait=wait)))
+    payload = await request.json()
+    return await _add_task(NodeOperationTask("start", NodeOperationRequest.from_dict(payload)))
 
 
-@routes.get("/nodes/stop")
+@routes.post("/nodes/stop")
 async def stop_batch_nodes(request):
-    nodes = _query_list(request, "node")
-    timeout = int(request.query.get("timeout", "30"))
-    wait = request.query.get("wait", "true").lower() != "false"
-    return web.json_response(asdict(await nodes_service.stop_nodes(nodes, timeout=timeout, wait=wait)))
+    payload = await request.json()
+    return await _add_task(NodeOperationTask("stop", NodeOperationRequest.from_dict(payload)))
 
 
-@routes.get("/nodes/restart")
+@routes.post("/nodes/restart")
 async def restart_batch_nodes(request):
-    nodes = _query_list(request, "node")
-    timeout = int(request.query.get("timeout", "30"))
-    wait = request.query.get("wait", "true").lower() != "false"
-    return web.json_response(asdict(await nodes_service.restart_nodes(nodes, timeout=timeout, wait=wait)))
+    payload = await request.json()
+    return await _add_task(NodeOperationTask("restart", NodeOperationRequest.from_dict(payload)))
 
 
-@routes.get("/nodes/enable")
+@routes.post("/nodes/enable")
 async def enable_batch_nodes(request):
-    results = []
-    for node_name in _query_list(request, "node"):
-        logger.info("Enable node %s", node_name)
-        results.append(await nodes_service.enable_node(node_name))
-    return web.json_response({"operations": [asdict(result) for result in results]})
+    payload = await request.json()
+    return await _add_task(NodeEnableTask(True, NodeOperationRequest.from_dict(payload)))
 
 
-@routes.get("/nodes/disable")
+@routes.post("/nodes/disable")
 async def disable_batch_nodes(request):
-    results = []
-    for node_name in _query_list(request, "node"):
-        logger.info("Disable node %s", node_name)
-        results.append(await nodes_service.disable_node(node_name))
-    return web.json_response({"operations": [asdict(result) for result in results]})
+    payload = await request.json()
+    return await _add_task(NodeEnableTask(False, NodeOperationRequest.from_dict(payload)))
 
 
-@routes.get("/nodes/uninstall")
+@routes.post("/nodes/uninstall")
 async def uninstall_batch_nodes(request):
-    nodes = _query_list(request, "node")
-    timeout = int(request.query.get("timeout", "10"))
-    do_not_stop = request.query.get("do_not_stop", "true").lower() != "false"
-    return web.json_response(
-        asdict(await nodes_service.uninstall_nodes(nodes, timeout=timeout, do_not_stop=do_not_stop))
-    )
+    payload = await request.json()
+    return await _add_task(NodeUninstallTask(UninstallNodesRequest.from_dict(payload)))
 
 
 @routes.post("/nodes/install")
 async def install_nodes(request):
     payload = await request.json()
-    response = await nodes_service.install_nodes(InstallNodesRequest.from_dict(payload))
-    return web.json_response(asdict(response))
+    return await _add_task(NodeInstallTask(InstallNodesRequest.from_dict(payload)))

@@ -169,17 +169,17 @@ protected:
     \
     void TSupports##method::method##Attribute(const NYPath::TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
     { \
-        ThrowMethodNotSupported(context->GetMethod(), TString("attribute")); \
+        ThrowMethodNotSupported(context->GetMethod(), std::string("attribute")); \
     } \
     \
     void TSupports##method::method##Self(TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
     { \
-        ThrowMethodNotSupported(context->GetMethod(), TString("self")); \
+        ThrowMethodNotSupported(context->GetMethod(), std::string("self")); \
     } \
     \
     void TSupports##method::method##Recursive(const NYPath::TYPath& /*path*/, TReq##method* /*request*/, TRsp##method* /*response*/, const TCtx##method##Ptr& context) \
     { \
-        ThrowMethodNotSupported(context->GetMethod(), TString("recursive")); \
+        ThrowMethodNotSupported(context->GetMethod(), std::string("recursive")); \
     }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -254,7 +254,7 @@ protected:
     private:
         TSupportsPermissions* const Owner_;
 
-        THashMap<TString, EPermissionSet> ValidatedPermissions_;
+        THashMap<std::string, EPermissionSet> ValidatedPermissions_;
     };
 };
 
@@ -397,13 +397,13 @@ private:
 class TSystemCustomAttributeKeysCache
 {
 public:
-    const THashSet<TString>& GetCustomAttributeKeys(ISystemAttributeProvider* provider);
+    const THashSet<std::string>& GetCustomAttributeKeys(ISystemAttributeProvider* provider);
 
 private:
     std::atomic<bool> Initialized_ = false;
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, InitializationLock_);
 
-    THashSet<TString> CustomKeys_;
+    THashSet<std::string> CustomKeys_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -411,13 +411,13 @@ private:
 class TOpaqueAttributeKeysCache
 {
 public:
-    const THashSet<TString>& GetOpaqueAttributeKeys(ISystemAttributeProvider* provider);
+    const THashSet<std::string>& GetOpaqueAttributeKeys(ISystemAttributeProvider* provider);
 
 private:
     std::atomic<bool> Initialized_ = false;
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, InitializationLock_);
 
-    THashSet<TString> OpaqueKeys_;
+    THashSet<std::string> OpaqueKeys_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

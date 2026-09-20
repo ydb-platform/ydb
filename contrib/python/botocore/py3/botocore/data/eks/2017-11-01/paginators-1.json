@@ -81,6 +81,18 @@
       "limit_key": "maxResults",
       "output_token": "nextToken",
       "result_key": "insights"
+    },
+    "DescribeClusterVersions": {
+      "input_token": "nextToken",
+      "limit_key": "maxResults",
+      "output_token": "nextToken",
+      "result_key": "clusterVersions"
+    },
+    "ListCapabilities": {
+      "input_token": "nextToken",
+      "limit_key": "maxResults",
+      "output_token": "nextToken",
+      "result_key": "capabilities"
     }
   }
 }

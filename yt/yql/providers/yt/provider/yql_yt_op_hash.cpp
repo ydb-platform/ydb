@@ -143,25 +143,18 @@ TString TYtNodeHashCalculator::MakeSalt(const TYtSettings::TConstPtr& config, co
 }
 
 TMaybe<TString> TYtNodeHashCalculator::GetParentOutputHash(const TExprNode& node) const {
-    if (!Configuration->QueryCacheCombineChunksReplace.Get().GetOrElse(false)) {
+    if (!CanReplaceParentOutputHash(node)) {
         return {};
     }
-    if (!node.IsCallable(TYtMerge::CallableName())) {
-        return {};
-    }
-    TYtMerge opMerge(&node);
-    if (!HasSetting(opMerge.Settings().Ref(), EYtSettingType::CombineChunks)) {
-        return {};
-    }
+
+    const TYtMerge opMerge(&node);
     const auto sections = opMerge.Input();
-    if (sections.Size() != 1) {
-        return {};
-    }
-    const auto paths = sections.Item(0).Paths();
-    if (paths.Size() != 1) {
-        return {};
-    }
-    const auto maybeOutput = paths.Item(0).Table().Maybe<TYtOutput>();
+    YQL_ENSURE(sections.Size() == 1);
+    const auto section = sections.Item(0);
+    const auto paths = section.Paths();
+    YQL_ENSURE(paths.Size() == 1);
+    const auto path = paths.Item(0);
+    const auto maybeOutput = path.Table().Maybe<TYtOutput>();
     if (!maybeOutput) {
         return {};
     }

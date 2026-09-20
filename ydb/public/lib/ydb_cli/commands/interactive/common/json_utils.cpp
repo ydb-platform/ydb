@@ -154,6 +154,10 @@ NJson::TJsonValue TJsonSchemaBuilder::Build() const {
         result["description"] = *DescriptionValue;
     }
 
+    if (!AllowedValues.empty()) {
+        result["enum"].SetType(NJson::JSON_ARRAY).GetArraySafe().assign(AllowedValues.begin(), AllowedValues.end());
+    }
+
     auto& type = result["type"];
     switch (TypeValue) {
         case EType::Undefined: {
@@ -212,6 +216,13 @@ TJsonSchemaBuilder& TJsonSchemaBuilder::Type(EType type) {
 TJsonSchemaBuilder& TJsonSchemaBuilder::Description(const TString& description) {
     Y_VALIDATE(!DescriptionValue, "Description should be defined only once");
     DescriptionValue = description;
+    return *this;
+}
+
+TJsonSchemaBuilder& TJsonSchemaBuilder::Enum(const std::vector<TString>& allowedValues) {
+    Y_VALIDATE(AllowedValues.empty(), "Enum should be defined only once");
+    Y_VALIDATE(!allowedValues.empty(), "Enum values should not be empty");
+    AllowedValues = allowedValues;
     return *this;
 }
 

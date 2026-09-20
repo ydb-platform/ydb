@@ -11,6 +11,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/signals/states.h>
 
 namespace NKikimr::NOlap::NDataFetcher {
@@ -141,8 +142,11 @@ public:
     }
 
     void OnError(const TString& errMessage) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "on_error")("consumer", Input.GetConsumer())(
-            "task_id", Input.GetExternalTaskId())("script", Script.GetScriptClassName());
+        YDB_LOG_CREATE_CONTEXT(
+            {"event", "on_error"},
+            {"consumer", Input.GetConsumer()},
+            {"taskId", Input.GetExternalTaskId()},
+            {"script", Script.GetScriptClassName()});
         AFL_VERIFY(!IsFinishedFlag);
         IsFinishedFlag = true;
         SetStage(EFetchingStage::Error);
@@ -150,8 +154,11 @@ public:
     }
 
     void OnFinished() {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "on_finished")("consumer", Input.GetConsumer())(
-            "task_id", Input.GetExternalTaskId())("script", Script.GetScriptClassName());
+        YDB_LOG_CREATE_CONTEXT(
+            {"event", "on_finished"},
+            {"consumer", Input.GetConsumer()},
+            {"taskId", Input.GetExternalTaskId()},
+            {"script", Script.GetScriptClassName()});
         AFL_VERIFY(!IsFinishedFlag);
         IsFinishedFlag = true;
         SetStage(EFetchingStage::Finished);

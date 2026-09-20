@@ -11,6 +11,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/datashard_active_transaction.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/ut/ut.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -504,20 +505,6 @@ struct TShardedTableOptions {
 #undef TABLE_OPTION_IMPL
 };
 
-#define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
-    template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
-    struct TTestRegistration##N {                                                                                                    \
-        TTestRegistration##N() {                                                                                                     \
-            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false>), false); \
-            TCurrentTest::AddTest(#N "+" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false>), false);  \
-            TCurrentTest::AddTest(#N "-" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true>), false);  \
-            TCurrentTest::AddTest(#N "+" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true>), false);   \
-        }                                                                                                                            \
-    };                                                                                                                               \
-    static TTestRegistration##N testRegistration##N;                                                                                 \
-    template<bool OPT1, bool OPT2>                                                                                                   \
-    void N(NUnitTest::TTestContext&)
-
 // Create table, returns shards & tableId
 std::tuple<TVector<ui64>, TTableId> CreateShardedTable(Tests::TServer::TPtr server,
                         TActorId sender,
@@ -634,6 +621,13 @@ ui64 AsyncSplitTable(
         TActorId sender,
         const TString& path,
         ui64 sourceTablet,
+        TVector<NKikimrMiniKQL::TValue>&& splitKey);
+
+ui64 AsyncSplitTable(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& path,
+        ui64 sourceTablet,
         ui32 splitKey);
 
 ui64 AsyncMergeTable(
@@ -656,6 +650,12 @@ ui64 AsyncAlterDropColumn(
         const TString& workingDir,
         const TString& name,
         const TString& colName);
+
+ui64 AsyncAlterSetMetricsLevel(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level);
 
 ui64 AsyncSetEnableFilterByKey(
         Tests::TServer::TPtr server,
@@ -1048,5 +1048,40 @@ ui64 AsyncTruncateTable(
     const TActorId& sender,
     const TString& workingDir,
     const TString& tableName);
+
+// A single upsert operation within an uncommitted write.
+struct TUncommittedWriteOp {
+    ui64 Key;
+    ui64 Value;
+    ui64 WriteSeqNum; // 0 = no WriteSeqNum
+};
+
+// Sends an uncommitted multi-operation upsert. Each element of `ops` becomes one
+// OPERATION_UPSERT with its own WriteSeqNum (0 means none).
+NKikimrDataEvents::TEvWriteResult UncommittedWrite(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
+        ui64 lockTxId, ui64 lockNodeId, ui64 writerIndex,
+        const TVector<TUncommittedWriteOp>& ops,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+
+// Convenience overload for a single-operation uncommitted upsert.
+NKikimrDataEvents::TEvWriteResult UncommittedWrite(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
+        ui64 lockTxId, ui64 lockNodeId, ui64 key, ui64 value,
+        ui64 writerIndex, ui64 writeSeqNum,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+
+// Asserts the lock reports exactly one write seq num and returns it
+const NKikimrDataEvents::TWriteSeqNum& WriteSeqNumOf(const NKikimrDataEvents::TLock& lock);
+
+NKikimrDataEvents::TEvWriteResult CommitLock(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const NKikimrDataEvents::TLock& lock,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
 
 } // namespace NKikimr

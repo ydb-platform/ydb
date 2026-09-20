@@ -975,7 +975,7 @@ void ProcessingTargetTableOtherType(const std::string& tableType) {
                     |>,
                     <|
                         __ydb_table: "%s_1",
-                        Key: $x._offset,
+                        Key: $x._offset + 1,
                         Message:CAST($x._data || "_1" AS Utf8)
                     |>,
                 ];

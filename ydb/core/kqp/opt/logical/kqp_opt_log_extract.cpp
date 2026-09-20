@@ -3,9 +3,10 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
 
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/opt/dq_opt_log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -15,12 +16,12 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 namespace {
+
 static constexpr size_t TKqlReadColumnsNodeIdx = 2;
 static_assert(TKqlReadTableBase::idx_Columns == TKqlReadColumnsNodeIdx);
 static_assert(TKqlLookupTableBase::idx_Columns == TKqlReadColumnsNodeIdx);
 static_assert(TKqlReadTableRangesBase::idx_Columns == TKqlReadColumnsNodeIdx);
 static_assert(TKqlReadTableFullTextIndex::idx_Columns == TKqlReadColumnsNodeIdx);
-
 
 TMaybeNode<TCoAtomList> GetUsedColumns(TExprBase read, TCoAtomList columns, const TParentsMap& parentsMap,
     bool allowMultiUsage, TExprContext& ctx)
@@ -61,7 +62,7 @@ TMaybeNode<TCoAtomList> GetUsedColumns(TExprBase read, TCoAtomList columns, cons
         .Done();
 }
 
-} // namespace
+} // anonymous namespace
 
 TExprBase KqpApplyExtractMembersToReadTable(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,
     bool allowMultiUsage)
@@ -149,4 +150,3 @@ TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ct
 }
 
 } // namespace NKikimr::NKqp::NOpt
-

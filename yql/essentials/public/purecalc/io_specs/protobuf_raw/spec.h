@@ -42,7 +42,6 @@ public:
         const TMaybe<TString>& timestampColumn = Nothing(),
         TProtoSchemaOptions options = {});
 
-public:
     const TVector<NYT::TNode>& GetSchemas() const override;
 
     /**
@@ -97,7 +96,6 @@ public:
         TProtoSchemaOptions options = {},
         google::protobuf::Arena* arena = nullptr);
 
-public:
     const NYT::TNode& GetSchema() const override;
 
     /**
@@ -158,7 +156,6 @@ public:
         TProtoSchemaOptions options = {},
         TMaybe<TVector<google::protobuf::Arena*>> arenas = {});
 
-public:
     const NYT::TNode& GetSchema() const override;
 
     /**

@@ -17,7 +17,7 @@ class TFairThrottlerIpcTest
 
 TEST_P(TFairThrottlerIpcTest, Test)
 {
-    auto path = TString(GetOutputPath() / ToString(TGuid::Create()));
+    std::string path = (GetOutputPath() / ToString(TGuid::Create())).GetPath();
 
     auto [useShmemA, useShmemB] = GetParam();
     auto a = CreateFairThrottlerFileIpc(path, useShmemA, Logger);

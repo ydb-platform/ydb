@@ -127,7 +127,6 @@ public:
     void OnEndTagged() override;
     void OnPg(TStringBuf name, TStringBuf category) override;
 
-public:
     virtual void Do() = 0;
 };
 
@@ -210,7 +209,6 @@ private:
     void Push();
     void Pop();
 
-private:
     NYT::TNode Root_;
     TVector<NYT::TNode*> Stack_;
 };

@@ -1,10 +1,17 @@
 #include "kqp_opt_join.h"
 
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join.h>
+
+#include <yql/essentials/core/yql_cost_function.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NYql::NDq;
+
+namespace {
 
 NYql::EJoinAlgoType JoinAlgoToYql(EJoinAlgoType kqpAlgo) {
     switch (kqpAlgo) {
@@ -19,8 +26,6 @@ NYql::EJoinAlgoType JoinAlgoToYql(EJoinAlgoType kqpAlgo) {
     }
     Y_ABORT("Unknown NKikimr::NKqp::EJoinAlgoType value: %d", static_cast<int>(kqpAlgo));
 }
-
-namespace {
 
 NYql::NDq::TEquiJoinCallbacks MakeCallbacks(TKqpStatsStore& kqpStats, const TOptimizerHints& kqpHints) {
     NYql::NDq::TEquiJoinCallbacks callbacks;
@@ -51,9 +56,9 @@ NYql::NDq::TEquiJoinCallbacks MakeCallbacks(TKqpStatsStore& kqpStats, const TOpt
     return callbacks;
 }
 
-} // namespace
+} // anonymous namespace
 
-NYql::NNodes::TExprBase KqpRewriteEquiJoin(
+TMaybeNode<TExprBase> KqpRewriteEquiJoin(
     const NYql::NNodes::TExprBase& node,
     EHashJoinMode mode,
     bool useCBO,
@@ -66,7 +71,7 @@ NYql::NNodes::TExprBase KqpRewriteEquiJoin(
     return KqpRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, kqpStats, dummyJoinCounter, kqpHints);
 }
 
-NYql::NNodes::TExprBase KqpRewriteEquiJoin(
+TMaybeNode<TExprBase> KqpRewriteEquiJoin(
     const NYql::NNodes::TExprBase& node,
     EHashJoinMode mode,
     bool useCBO,

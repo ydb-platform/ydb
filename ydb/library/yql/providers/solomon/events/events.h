@@ -1,6 +1,8 @@
 #pragma once
 
-#include <ydb/core/base/events.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/proto/metrics_queue.pb.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
@@ -9,10 +11,14 @@
 
 namespace NYql::NDq {
 
+enum EEventSpaceSolomonProvider {
+    ES_SOLOMON_PROVIDER = 4264 // must be in sync with ydb/core/base/events.h
+};
+
 struct TEvSolomonProvider {
 
     enum EEv : ui32 {
-        EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER),
+        EvBegin = EventSpaceBegin(EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER),
 
         // lister events
         EvUpdateConsumersCount = EvBegin,
@@ -29,7 +35,7 @@ struct TEvSolomonProvider {
 
         EvEnd
     };
-    static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER), "expect EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER)");
+    static_assert(EvEnd < EventSpaceEnd(EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER), "expect EvEnd < EventSpaceEnd(ES_SOLOMON_PROVIDER)");
 
     struct TEvUpdateConsumersCount :
         public NActors::TEventPB<TEvUpdateConsumersCount, NSo::MetricQueue::TEvUpdateConsumersCount, EvUpdateConsumersCount> {

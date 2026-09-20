@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <stddef.h>
+#include <cassert>
 #include <cstdint>
 #include <limits>
 #include <utility>
@@ -83,13 +84,17 @@ struct AdaptingIntegerArrayCopy
 
 void AdaptingIntegerArray::Increment(size_t index, uint64_t count)
 {
+  /* May or may not fit */
   const uint64_t result = nostd::visit(AdaptingIntegerArrayIncrement{index, count}, backing_);
   if OPENTELEMETRY_LIKELY_CONDITION (result == 0)
   {
     return;
   }
   EnlargeToFit(result);
-  Increment(index, count);
+  /* Must fit, buffer was enlarged for the value to store */
+  OPENTELEMETRY_MAYBE_UNUSED const uint64_t result2 =
+      nostd::visit(AdaptingIntegerArrayIncrement{index, count}, backing_);
+  assert(result2 == 0);
 }
 
 uint64_t AdaptingIntegerArray::Get(size_t index) const
@@ -123,8 +128,8 @@ void AdaptingIntegerArray::EnlargeToFit(uint64_t value)
   {
     backing = std::vector<uint64_t>(backing_size, 0);
   }
-  std::swap(backing_, backing);
-  nostd::visit(AdaptingIntegerArrayCopy{}, backing, backing_);
+  nostd::visit(AdaptingIntegerArrayCopy{}, backing_, backing);
+  backing_ = std::move(backing);
 }
 
 void AdaptingCircularBufferCounter::Clear()

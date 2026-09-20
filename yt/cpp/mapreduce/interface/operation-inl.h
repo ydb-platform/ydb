@@ -4,7 +4,6 @@
 #error "Direct inclusion of this file is not allowed, use operation.h"
 #include "operation.h"
 #endif
-#undef OPERATION_INL_H_
 
 #include "errors.h"
 

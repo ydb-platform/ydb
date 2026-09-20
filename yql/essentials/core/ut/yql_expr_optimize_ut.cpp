@@ -28,7 +28,7 @@ Y_UNIT_TEST(CombineAtoms) {
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
     UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
 
-    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     UNIT_ASSERT(strRes.find("(return '113337)") != TString::npos);
 }
@@ -52,7 +52,7 @@ Y_UNIT_TEST(RecursiveLambda) {
         UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
     }
 
-    const auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
+    const auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     const auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     UNIT_ASSERT_EQUAL(0x101, std::count(strRes.cbegin(), strRes.cend(), '+'));
 }
@@ -73,7 +73,7 @@ Y_UNIT_TEST(ApplyWideLambda) {
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
     UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
 
-    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     UNIT_ASSERT(strRes.find("(return '('1 (+ $1 $2) (* $1 $2) $1 $2 '9))") != TString::npos);
 }
@@ -94,7 +94,7 @@ Y_UNIT_TEST(ApplyThinLambda) {
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
     UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
 
-    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     UNIT_ASSERT(strRes.find("(return '('1 '9))") != TString::npos);
 }
@@ -448,7 +448,7 @@ Y_UNIT_TEST(ApplyDeepLambda) {
         }
     }
 
-    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     UNIT_ASSERT_EQUAL(strRes.find("lambda"), TString::npos);
 }
@@ -466,7 +466,7 @@ Y_UNIT_TEST(Nth) {
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
     UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
 
-    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     UNIT_ASSERT(strRes.find("(return '7)") != TString::npos);
 }
@@ -514,7 +514,7 @@ Y_UNIT_TEST(NthArg) {
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
     UNIT_ASSERT_EQUAL(IGraphTransformer::TStatus::Repeat, ExpandApply(exprRoot, exprRoot, exprCtx).Level);
 
-    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     auto strRes = ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     UNIT_ASSERT(strRes.find("(return '42)") != TString::npos);
 }

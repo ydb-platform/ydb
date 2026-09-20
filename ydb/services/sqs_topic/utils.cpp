@@ -1,9 +1,11 @@
 #include "utils.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/grpc_services/base/iface.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/http_config.pb.h>
+#include <ydb/services/sqs_topic/queue_url/utils.h>
 
 #include <library/cpp/digest/md5/md5.h>
 
@@ -14,6 +16,14 @@
 
 namespace NKikimr::NSqsTopic {
 
+    namespace {
+
+        TString ConvertOldConsumerName(const TString& consumer) {
+            return NPersQueue::ConvertOldConsumerName(consumer, AppData()->PQConfig);
+        }
+
+    } // namespace
+
     TQueueNameWithConsumer SplitExtendedQueueName(TStringBuf queueNameExt) {
         TQueueNameWithConsumer result;
         if (!queueNameExt.TryRSplit('@', result.QueueName, result.Consumer)) {
@@ -22,17 +32,24 @@ namespace NKikimr::NSqsTopic {
         return result;
     }
 
-    TString GetEndpoint(const NKikimrConfig::TSqsConfig& config) {
-        const TString& endpoint = config.GetEndpoint();
-        if (endpoint) {
-            return endpoint;
-        } else {
-            return TStringBuilder() << "http://" << FQDNHostName() << ":" << config.GetHttpServerConfig().GetPort();
-        }
-    }
-
     const NKikimrConfig::TSqsConfig& Cfg() {
         return AppData()->SqsConfig;
+    }
+
+    TString MakeQueueUrl(const TRichQueueUrl& queueUrl, const NGRpcService::IRequestCtxBaseMtSafe* request) {
+        TString requestEndpoint;
+        if (request) {
+            if (const auto value = request->GetPeerMetaValues(TString{REQUEST_ENDPOINT_METADATA_KEY})) {
+                requestEndpoint = *value;
+            }
+        }
+        const auto& httpProxyConfig = AppData()->HttpProxyConfig;
+        return MakeQueueUrl(
+            queueUrl,
+            requestEndpoint,
+            FQDNHostName(),
+            static_cast<ui16>(httpProxyConfig.GetPort()),
+            httpProxyConfig.GetSecure());
     }
 
     TString GenerateMessageId(const TString& database, const TString& topicPath, const NPQ::NMLP::TMessageId& pos) {
@@ -65,7 +82,10 @@ namespace NKikimr::NSqsTopic {
         const TString& topicPath,
         const TString& consumerName,
         const TString& method,
-        TVector<std::pair<TString, TString>>&& labels
+        TVector<std::pair<TString, TString>>&& labels,
+        const TString& databaseId,
+        const TString& cloudId,
+        const TString& folderId
     ) {
         TString fullDatabasePath = databasePath + "/";
         TString adjustedTopicPath;
@@ -77,10 +97,15 @@ namespace NKikimr::NSqsTopic {
 
         TVector<std::pair<TString, TString>> common{
             {"database", databasePath},
-            {"method", method},
-            {"topic", adjustedTopicPath},
-            {"consumer", consumerName},
+            {"database_id", databaseId},
         };
+        if (!cloudId.empty() || !folderId.empty()) {
+            common.emplace_back("cloud_id", cloudId);
+            common.emplace_back("folder_id", folderId);
+        }
+        common.emplace_back("method", method);
+        common.emplace_back("topic", adjustedTopicPath);
+        common.emplace_back("consumer", ConvertOldConsumerName(consumerName));
         std::move(labels.begin(), labels.end(), std::back_inserter(common));
         return common;
     }

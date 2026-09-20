@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 define subquery $sub1() as 
     select 1 as x;
 end define;

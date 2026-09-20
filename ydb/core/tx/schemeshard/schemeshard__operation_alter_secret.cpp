@@ -2,9 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -12,14 +10,10 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TPropose: public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterSecret TPropose"
-            << " operationId# " << OperationId;
-    }
 
 public:
     explicit TPropose(TOperationId id)
@@ -28,7 +22,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << " ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "Propose to coordinator");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -41,7 +35,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan" << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "Operation plan received",
+            {"step", step},
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -59,7 +55,7 @@ public:
         Y_ABORT_UNLESS(secretInfo->Description.GetVersion() + 1 == alterData->Description.GetVersion());
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->Secrets[secretPathId] = alterData;
+        context.SS->Secrets.Set(secretPathId, alterData);
         context.SS->PersistSecretAlterRemove(db, secretPathId);
         context.SS->PersistSecret(db, secretPathId, *alterData);
 
@@ -72,6 +68,8 @@ public:
 };
 
 class TAlterSecret: public TSubOperation {
+    virtual const char* Name() const override final { return "TAlterSecret"; }
+
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -107,9 +105,8 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& secretName = alterSecretProto.GetName();
 
-        LOG_N("TAlterSecret Propose"
-            << ", path: " << parentPathStr << "/" << secretName
-            << ", opId: " << OperationId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "Alter secret",
+            {"path", parentPathStr + "/" + secretName},
         );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -164,6 +161,12 @@ public:
             return result;
         }
 
+        if (alterSecretProto.HasValueParamName()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "Secret value must be set via Value, however ValueParamName was passed");
+            return result;
+        }
+
         context.MemChanges.GrabPath(context.SS, secretPath.Base()->PathId);
         context.MemChanges.GrabSecret(context.SS, secretPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
@@ -172,10 +175,22 @@ public:
         context.DbChanges.PersistAlterSecret(secretPath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        if (alterSecretProto.HasValueParamName()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                "Secret value must be set via Value, however ValueParamName was passed");
-            return result;
+        // InheritPermissions is set only by CREATE OR REPLACE SECRET over an existing secret:
+        // reapply the ACL so that the result matches a freshly created secret (DROP + CREATE).
+        // Keep the same precedence as TCreateSecret: an explicit ACL wins over InheritPermissions.
+        if (alterSecretProto.HasInheritPermissions()) {
+            const TString acl = Transaction.GetModifyACL().GetDiffACL();
+            if (!acl.empty()) {
+                secretPath.Base()->ApplyACL(acl);
+            } else {
+                if (alterSecretProto.GetInheritPermissions()) {
+                    // Inherit from the parent: no ACL of its own.
+                    secretPath.Base()->ACL.clear();
+                } else {
+                    secretPath.Base()->ACL = InterruptInheritanceExceptDescribe(parentPath.GetEffectiveACL());
+                }
+                ++secretPath.Base()->ACLVersion;
+            }
         }
 
         auto alterData = secretInfo->CreateNextVersion();
@@ -200,15 +215,14 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TAlterSecret AbortPropose"
-            << ", opId: " << OperationId
-        );
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TAlterSecret AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSecret AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->SelfTabletId()},
         );
 
         context.OnComplete.DoneOperation(OperationId);
@@ -229,3 +243,5 @@ ISubOperation::TPtr CreateAlterSecret(TOperationId id, TTxState::ETxState state)
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

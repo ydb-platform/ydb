@@ -35,7 +35,7 @@ class UninstallCommandTest(unittest.IsolatedAsyncioTestCase):
         with self.patch_get_machines(["host1"]), mock.patch.object(uninstall, "act", act):
             self.assertFalse(await uninstall.do(args))
 
-    async def test_act_returns_bool_from_progress_result(self):
+    async def test_act_returns_progress_result(self):
         console = Console()
         calls = []
 
@@ -51,7 +51,10 @@ class UninstallCommandTest(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(uninstall, "make_uninstall_steps", make_uninstall_steps), \
                 mock.patch.object(uninstall.progress, "MyProgress", MyProgress), \
                 mock.patch.object(uninstall.progress, "run_steps", run_steps):
-            self.assertFalse(await uninstall.act(["host1"], self.config(), ignore_failed_stop=True, console=console))
+            result = await uninstall.act(["host1"], self.config(), ignore_failed_stop=True, console=console)
+
+        self.assertFalse(result)
+        self.assertIsInstance(result, RunStepsResult)
 
         self.assertEqual(calls, [(["host1"], self.config(), True)])
         self.assertEqual(console.printed, ["panel"])

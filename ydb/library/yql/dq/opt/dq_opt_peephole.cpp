@@ -10,12 +10,33 @@
 
 #include <util/generic/size_literals.h>
 #include <util/generic/bitmap.h>
+#include <util/generic/hash_set.h>
 
 namespace NYql::NDq {
 
 using namespace NYql::NNodes;
 
 namespace {
+
+void AssignJoinKeyColumn(
+    TExprNode::TPtr& keyAtom,
+    TStringBuf keyName,
+    ui32 keyIndex,
+    const TTypeAnnotationNode* keyType,
+    const TTypeAnnotationNode* dryType,
+    ui32 inputWidth,
+    THashSet<ui32>& seenKeyIndexes,
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>>& convertedItems,
+    TExprContext& ctx)
+{
+    const bool duplicateKey = !seenKeyIndexes.insert(keyIndex).second;
+    if (keyType->Equals(*dryType) && !duplicateKey) {
+        keyAtom = ctx.NewAtom(keyAtom->Pos(), ctx.GetIndexAsString(keyIndex));
+    } else {
+        keyAtom = ctx.NewAtom(keyAtom->Pos(), ctx.GetIndexAsString(inputWidth + convertedItems.size()));
+        convertedItems.emplace_back(TString(keyName), dryType);
+    }
+}
 
 inline std::string_view GetTableLabel(const TExprBase& node) {
     static const std::string_view empty;
@@ -575,7 +596,7 @@ TExprNode::TPtr UnpackJoinedData(const TStructExprType* leftRowType, const TStru
 
 } //anonymous namespace end
 
-NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExprContext& ctx) {
+NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     if (!node.Maybe<TDqPhyJoinDict>()) {
         return node;
     }
@@ -612,7 +633,7 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
         } else if (rightKind){
             keyTypeItems.emplace_back(JoinDryKeyType(keyType2, keyType1, optKey, ctx));
         } else {
-            keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(keyType1, optKey, ctx), DryType(keyType2, optKey, ctx), ctx));
+            keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(keyType1, optKey, ctx), DryType(keyType2, optKey, ctx), ctx, typesCtx));
             optKey = optKey && !filter;
         }
         badKey = !keyTypeItems.back();
@@ -938,8 +959,10 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
 
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
+    THashSet<ui32> seenLeftKeyIndexes;
+    THashSet<ui32> seenRightKeyIndexes;
 
-    // Process key types and conversions (similar to GraceJoin logic)
+    // Process key types and conversions (similar to GraceJoin / New RBO logic).
     YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
     for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
 
@@ -956,18 +979,12 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         bool hasOptional = false;
         auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
 
-        if (keyTypeLeft->Equals(*dryType)) {
-            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
-        } else {
-            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
-            leftConvertedItems.emplace_back(leftName, dryType);
-        }
-        if (keyTypeRight->Equals(*dryType)) {
-            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
-        } else {
-            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
-            rightConvertedItems.emplace_back(rightName, dryType);
-        }
+        const TString leftMemberName(itemTypeLeft->GetItems()[*leftIndex]->GetName());
+        const TString rightMemberName(itemTypeRight->GetItems()[*rightIndex]->GetName());
+        AssignJoinKeyColumn(leftKeyColumnNodes[i], leftMemberName, *leftIndex, keyTypeLeft, dryType,
+                            itemTypeLeft->GetSize(), seenLeftKeyIndexes, leftConvertedItems, ctx);
+        AssignJoinKeyColumn(rightKeyColumnNodes[i], rightMemberName, *rightIndex, keyTypeRight, dryType,
+                            itemTypeRight->GetSize(), seenRightKeyIndexes, rightConvertedItems, ctx);
     }
 
     // Expand inputs to wide flows (using ExpandJoinInput like GraceJoin)

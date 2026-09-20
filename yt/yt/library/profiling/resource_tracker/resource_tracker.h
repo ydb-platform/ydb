@@ -2,9 +2,31 @@
 
 #include "public.h"
 
+#include <yt/yt/library/profiling/tag.h>
+
+#include <optional>
+
 namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+class TResourceTrackerTagsGuard
+    : private TMoveOnly
+{
+public:
+    explicit TResourceTrackerTagsGuard(std::optional<std::string> threadName);
+    TResourceTrackerTagsGuard(TResourceTrackerTagsGuard&& other) noexcept;
+    TResourceTrackerTagsGuard& operator=(TResourceTrackerTagsGuard&& other) noexcept;
+    ~TResourceTrackerTagsGuard();
+
+    explicit operator bool() const;
+
+    const std::optional<std::string>& GetThreadName() const;
+    void Release() noexcept;
+
+private:
+    std::optional<std::string> ThreadName_;
+};
 
 class TResourceTracker
 {
@@ -25,6 +47,10 @@ public:
     static void SetCpuToVCpuFactor(double factor);
 
     static void Configure(const TResourceTrackerConfigPtr& config);
+
+    [[nodiscard]] static TResourceTrackerTagsGuard RegisterPerThreadExtraTags(
+        const std::string& threadName,
+        const TTagSet& extraTags);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

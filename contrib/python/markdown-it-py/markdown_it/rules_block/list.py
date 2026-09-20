@@ -235,8 +235,20 @@ def list_block(state: StateBlock, startLine: int, endLine: int, silent: bool) ->
         if isOrdered:
             token.info = state.src[start : posAfterMarker - 1]
 
+        # Detect GFM task checkbox: `[ ] ` or `[x] `/`[X] ` at content start
+        checkboxLen = 0
+        if state.md.options.get("tasklists", False) and contentStart < maximum:
+            checked = _detect_task_checkbox(state.src, contentStart, maximum)
+            if checked is not None:
+                token.meta = {"checked": checked}
+                # Advance content past the checkbox: `[x]` (3 chars) + whitespace.
+                # `_detect_task_checkbox` already guarantees a whitespace char at
+                # pos+3, so we always consume 4 characters.
+                checkboxLen = 4
+
         # change current state, then restore it after parser subcall
         oldTight = state.tight
+        oldBMark = state.bMarks[startLine]
         oldTShift = state.tShift[startLine]
         oldSCount = state.sCount[startLine]
 
@@ -251,6 +263,12 @@ def list_block(state: StateBlock, startLine: int, endLine: int, silent: bool) ->
         state.tight = True
         state.tShift[startLine] = contentStart - state.bMarks[startLine]
         state.sCount[startLine] = offset
+
+        # If we detected a checkbox, advance bMarks past it so that
+        # getLines() doesn't include the checkbox text in the content.
+        if checkboxLen:
+            state.bMarks[startLine] = contentStart + checkboxLen
+            state.tShift[startLine] = 0
 
         if contentStart >= maximum and state.isEmpty(startLine + 1):
             # workaround for this case
@@ -277,6 +295,8 @@ def list_block(state: StateBlock, startLine: int, endLine: int, silent: bool) ->
 
         state.blkIndent = state.listIndent
         state.listIndent = oldListIndent
+        if checkboxLen:
+            state.bMarks[startLine] = oldBMark
         state.tShift[startLine] = oldTShift
         state.sCount[startLine] = oldSCount
         state.tight = oldTight
@@ -326,6 +346,24 @@ def list_block(state: StateBlock, startLine: int, endLine: int, silent: bool) ->
             break
 
     # Finalize list
+
+    # If any direct list item has a task checkbox, add class to the list
+    if state.md.options.get("tasklists", False):
+        containsTask = False
+        level = state.tokens[listTokIdx].level
+        for j in range(listTokIdx + 1, len(state.tokens)):
+            tok = state.tokens[j]
+            if (
+                tok.level == level + 1
+                and tok.type == "list_item_open"
+                and tok.meta
+                and "checked" in tok.meta
+            ):
+                tok.attrJoin("class", "task-list-item")
+                containsTask = True
+        if containsTask:
+            state.tokens[listTokIdx].attrJoin("class", "contains-task-list")
+
     if isOrdered:
         token = state.push("ordered_list_close", "ol", -1)
     else:
@@ -343,3 +381,28 @@ def list_block(state: StateBlock, startLine: int, endLine: int, silent: bool) ->
         markTightParagraphs(state, listTokIdx)
 
     return True
+
+
+def _detect_task_checkbox(src: str, pos: int, maximum: int) -> bool | None:
+    """Detect ``[ ]``, ``[x]``, or ``[X]`` at *pos*, followed by whitespace.
+
+    Returns ``True`` (checked), ``False`` (unchecked), or ``None`` (no match).
+    """
+    # Need at least 4 chars: `[`, char, `]`, whitespace
+    if pos + 4 > maximum:
+        return None
+    if src[pos] != "[":
+        return None
+    inner = src[pos + 1]
+    if src[pos + 2] != "]":
+        return None
+    if inner == " ":
+        checked = False
+    elif inner in ("x", "X"):
+        checked = True
+    else:
+        return None
+    # After `]`, must have whitespace
+    if src[pos + 3] not in (" ", "\t"):
+        return None
+    return checked

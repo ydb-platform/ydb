@@ -818,9 +818,9 @@ private:
                     hasData = true;
                     TUnboxedValueVector outputValues;
                     for (auto& datum : chunk) {
-                        outputValues.emplace_back(HolderFactory_.CreateArrowBlock(std::move(datum)));
+                        outputValues.emplace_back(HolderFactory_.CreateArrowBlock(std::move(datum), NYql::DefaultDatumValidationMode));
                     }
-                    outputValues.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen))));
+                    outputValues.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)), NYql::DefaultDatumValidationMode));
                     Outputs_[i]->WidePush(outputValues.data(), outputValues.size());
                 }
             }

@@ -11,15 +11,19 @@
 
 # Run specific test
 ./ya make --build relwithdebinfo -tA <folder> -F *test-filter*
+
+# Run tests repeatedly (e.g. to catch flakes)
+./ya make --build relwithdebinfo -tA <folder> -F *test-filter* --test-retries N
 ```
 
 - Tests include build
 - No `-j`
 - No force rebuild
+- Do not edit sources during compilation: this can cause `null character ignored` errors.
 - Use `2>&1 | tail` for test output
+
+- Test name formats for `-F`: ydb/agents/TESTS.md
 
 ## C++
 
 - Use C++20 or earlier
-
-

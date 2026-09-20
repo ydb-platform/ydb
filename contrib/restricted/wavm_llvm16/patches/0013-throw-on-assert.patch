@@ -1,0 +1,101 @@
+diff --git a/contrib/restricted/wavm_llvm16/Include/WAVM/Inline/Assert.h b/contrib/restricted/wavm_llvm16/Include/WAVM/Inline/Assert.h
+--- a/contrib/restricted/wavm_llvm16/Include/WAVM/Inline/Assert.h
++++ b/contrib/restricted/wavm_llvm16/Include/WAVM/Inline/Assert.h
+@@ -1,42 +1,35 @@
+ #pragma once
+ 
+ #include <cstdarg>
++#include <stdexcept>
+ #include "WAVM/Inline/Config.h"
+ #include "WAVM/Platform/Defines.h"
+ #include "WAVM/Platform/Error.h"
+ 
+-#define WAVM_ENABLE_ASSERTS (WAVM_DEBUG || WAVM_ENABLE_RELEASE_ASSERTS)
++#define WAVM_ENABLE_ASSERTS 1
+ 
+-#if WAVM_ENABLE_ASSERTS
+-#define WAVM_ASSERT(condition)                                                                     \
+-	if(!(condition))                                                                               \
+-	{                                                                                              \
+-		for(static const WAVM::Platform::AssertMetadata wavmAssertMetadata{                        \
+-				#condition, __FILE__, __LINE__};                                                   \
+-			;)                                                                                     \
+-		{                                                                                          \
+-			WAVM::Platform::handleAssertionFailure(wavmAssertMetadata);                            \
+-			WAVM_DEBUG_TRAP();                                                                     \
+-			break;                                                                                 \
+-		}                                                                                          \
+-	}
+-#else
+-#define WAVM_ASSERT(condition)                                                                     \
+-	if(false && !(condition)) {}
++#ifndef WAVM_STRINGIZE
++#define WAVM_STRINGIZE_DETAIL(x) #x
++#define WAVM_STRINGIZE(x) WAVM_STRINGIZE_DETAIL(x)
+ #endif
+ 
+-#define WAVM_ERROR_UNLESS(condition)                                                               \
+-	if(!(condition))                                                                               \
+-	{                                                                                              \
+-		for(static const WAVM::Platform::AssertMetadata wavmAssertMetadata{                        \
+-				#condition, __FILE__, __LINE__};                                                   \
+-			;)                                                                                     \
+-		{                                                                                          \
+-			WAVM::Platform::handleAssertionFailure(wavmAssertMetadata);                            \
+-			WAVM_UNREACHABLE();                                                                    \
+-			break;                                                                                 \
+-		}                                                                                          \
++#define WAVM_ASSERT(condition)                                                                                       \
++	if(!(condition))                                                                                                 \
++	{                                                                                                                \
++		const char* message = "WAVM assertion failed at " __FILE__ ":" WAVM_STRINGIZE(__LINE__) " (" #condition ")"; \
++		throw std::runtime_error(message);                                                                           \
+ 	}
+ 
+-#define WAVM_UNREACHABLE()                                                                         \
+-	while(true) { WAVM_DEBUG_TRAP(); };
++#define WAVM_ERROR_UNLESS(condition)                                                                                    \
++	if(!(condition))                                                                                                    \
++	{                                                                                                                   \
++		const char* message = "WAVM error unless failed at " __FILE__ ":" WAVM_STRINGIZE(__LINE__) " (" #condition ")"; \
++		throw std::runtime_error(message);                                                                              \
++	}
++
++#define WAVM_UNREACHABLE(condition)                                                                             \
++	while(true)                                                                                                 \
++	{                                                                                                           \
++		const char* message = "WAVM unreachable at " __FILE__ ":" WAVM_STRINGIZE(__LINE__) " (" #condition ")"; \
++		throw std::runtime_error(message);                                                                      \
++	}
+diff --git a/contrib/restricted/wavm_llvm16/Include/WAVM/RuntimeABI/RuntimeABI.h b/contrib/restricted/wavm_llvm16/Include/WAVM/RuntimeABI/RuntimeABI.h
+--- a/contrib/restricted/wavm_llvm16/Include/WAVM/RuntimeABI/RuntimeABI.h
++++ b/contrib/restricted/wavm_llvm16/Include/WAVM/RuntimeABI/RuntimeABI.h
+@@ -5,6 +5,7 @@
+ //
+ 
+ #include <atomic>
++#include <cassert>
+ #include <map>
+ #include "WAVM/IR/Types.h"
+ #include "WAVM/IR/Value.h"
+@@ -185,7 +186,7 @@ namespace WAVM { namespace Runtime {
+ 
+ 		~FunctionMutableData()
+ 		{
+-			WAVM_ASSERT(numRootReferences.load(std::memory_order_acquire) == 0);
++			assert(numRootReferences.load(std::memory_order_acquire) == 0);
+ 			if(finalizeUserData) { (*finalizeUserData)(userData); }
+ 		}
+ 	};
+diff --git a/contrib/restricted/wavm_llvm16/Lib/Runtime/Invoke.cpp b/contrib/restricted/wavm_llvm16/Lib/Runtime/Invoke.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/Runtime/Invoke.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/Runtime/Invoke.cpp
+@@ -39,7 +39,7 @@ void Runtime::invokeFunction(Context* context,
+ 
+ 	// Assert that the function, the context, and any reference arguments are all in the same
+ 	// compartment.
+-	if(WAVM_ENABLE_ASSERTS)
++	if(false)
+ 	{
+ 		WAVM_ASSERT(isInCompartment(asObject(function), context->compartment));
+ 		for(Uptr argumentIndex = 0; argumentIndex < invokeSig.params().size(); ++argumentIndex)

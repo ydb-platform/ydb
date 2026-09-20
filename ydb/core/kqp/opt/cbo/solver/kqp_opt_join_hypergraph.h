@@ -92,6 +92,15 @@ public:
     };
 
 public:
+    TVector<TString> getNodeNamesById() {
+        TVector<TString> relNameByNodeId(Nodes_.size());
+        for (const auto& [name, idx]: NodeIdByRelationName_) {
+            relNameByNodeId[idx] = name;
+        }
+
+        return relNameByNodeId;
+    }
+
     /* For debug purposes */
     TString String() {
         TString res;

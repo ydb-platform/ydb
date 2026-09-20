@@ -18,16 +18,13 @@ import bisect
 import sys
 import token
 from ast import Module
-from typing import Iterable, Iterator, List, Optional, Tuple, Any, cast, TYPE_CHECKING
+from typing import Iterable, Iterator, List, Optional, Tuple, Any, cast
 
 from .line_numbers import LineNumbers
 from .util import (
-  Token, match_token, is_non_coding_token, patched_generate_tokens, last_stmt,
+  AstNode, Token, TokenInfo, match_token, is_non_coding_token, patched_generate_tokens, last_stmt,
   annotate_fstring_nodes, generate_tokens, is_module, is_stmt
 )
-
-if TYPE_CHECKING:  # pragma: no cover
-  from .util import AstNode, TokenInfo
 
 
 class ASTTextBase(metaclass=abc.ABCMeta):
@@ -43,8 +40,9 @@ class ASTTextBase(metaclass=abc.ABCMeta):
     self._line_numbers = LineNumbers(source_text)
 
   @abc.abstractmethod
-  def get_text_positions(self, node, padded):
-    # type: (AstNode, bool) -> Tuple[Tuple[int, int], Tuple[int, int]]
+  def get_text_positions(
+    self, node: AstNode, padded: bool
+  ) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """
     Returns two ``(lineno, col_offset)`` tuples for the start and end of the given node.
     If the positions can't be determined, or the nodes don't correspond to any particular text,
@@ -56,8 +54,7 @@ class ASTTextBase(metaclass=abc.ABCMeta):
     """
     raise NotImplementedError  # pragma: no cover
 
-  def get_text_range(self, node, padded=True):
-    # type: (AstNode, bool) -> Tuple[int, int]
+  def get_text_range(self, node: AstNode, padded: bool = True) -> Tuple[int, int]:
     """
     Returns the (startpos, endpos) positions in source text corresponding to the given node.
     Returns (0, 0) for nodes (like `Load`) that don't correspond to any particular text.
@@ -70,8 +67,7 @@ class ASTTextBase(metaclass=abc.ABCMeta):
       self._line_numbers.line_to_offset(*end),
     )
 
-  def get_text(self, node, padded=True):
-    # type: (AstNode, bool) -> str
+  def get_text(self, node: AstNode, padded: bool = True) -> str:
     """
     Returns the text corresponding to the given node.
     Returns '' for nodes (like `Load`) that don't correspond to any particular text.
@@ -102,9 +98,15 @@ class ASTTokens(ASTTextBase):
   tree created separately.
   """
 
-  def __init__(self, source_text, parse=False, tree=None, filename='<unknown>', tokens=None):
-    # type: (Any, bool, Optional[Module], str, Optional[Iterable[TokenInfo]]) -> None
-    super(ASTTokens, self).__init__(source_text, filename)
+  def __init__(
+    self,
+    source_text: Any,
+    parse: bool = False,
+    tree: Optional[Module] = None,
+    filename: str = '<unknown>',
+    tokens: Optional[Iterable[TokenInfo]] = None
+  ) -> None:
+    super().__init__(source_text, filename)
 
     self._tree = ast.parse(source_text, filename) if parse else tree
 
@@ -119,8 +121,7 @@ class ASTTokens(ASTTextBase):
     if self._tree:
       self.mark_tokens(self._tree)
 
-  def mark_tokens(self, root_node):
-    # type: (Module) -> None
+  def mark_tokens(self, root_node: Module) -> None:
     """
     Given the root of the AST or Astroid tree produced from source_text, visits all nodes marking
     them with token and position information by adding ``.first_token`` and
@@ -131,8 +132,7 @@ class ASTTokens(ASTTextBase):
     from .mark_tokens import MarkTokens  # to avoid import loops
     MarkTokens(self).visit_tree(root_node)
 
-  def _translate_tokens(self, original_tokens):
-    # type: (Iterable[TokenInfo]) -> Iterator[Token]
+  def _translate_tokens(self, original_tokens: Iterable[TokenInfo]) -> Iterator[Token]:
     """
     Translates the given standard library tokens into our own representation.
     """
@@ -143,39 +143,33 @@ class ASTTokens(ASTTextBase):
                   self._line_numbers.line_to_offset(end[0], end[1]))
 
   @property
-  def text(self):
-    # type: () -> str
+  def text(self) -> str:
     """The source code passed into the constructor."""
     return self._text
 
   @property
-  def tokens(self):
-    # type: () -> List[Token]
+  def tokens(self) -> List[Token]:
     """The list of tokens corresponding to the source code from the constructor."""
     return self._tokens
 
   @property
-  def tree(self):
-    # type: () -> Optional[Module]
+  def tree(self) -> Optional[Module]:
     """The root of the AST tree passed into the constructor or parsed from the source code."""
     return self._tree
 
   @property
-  def filename(self):
-    # type: () -> str
+  def filename(self) -> str:
     """The filename that was parsed"""
     return self._filename
 
-  def get_token_from_offset(self, offset):
-    # type: (int) -> Token
+  def get_token_from_offset(self, offset: int) -> Token:
     """
     Returns the token containing the given character offset (0-based position in source text),
     or the preceeding token if the position is between tokens.
     """
     return self._tokens[bisect.bisect(self._token_offsets, offset) - 1]
 
-  def get_token(self, lineno, col_offset):
-    # type: (int, int) -> Token
+  def get_token(self, lineno: int, col_offset: int) -> Token:
     """
     Returns the token containing the given (lineno, col_offset) position, or the preceeding token
     if the position is between tokens.
@@ -185,15 +179,13 @@ class ASTTokens(ASTTextBase):
     # but isn't explicit.
     return self.get_token_from_offset(self._line_numbers.line_to_offset(lineno, col_offset))
 
-  def get_token_from_utf8(self, lineno, col_offset):
-    # type: (int, int) -> Token
+  def get_token_from_utf8(self, lineno: int, col_offset: int) -> Token:
     """
     Same as get_token(), but interprets col_offset as a UTF8 offset, which is what `ast` uses.
     """
     return self.get_token(lineno, self._line_numbers.from_utf8_col(lineno, col_offset))
 
-  def next_token(self, tok, include_extra=False):
-    # type: (Token, bool) -> Token
+  def next_token(self, tok: Token, include_extra: bool = False) -> Token:
     """
     Returns the next token after the given one. If include_extra is True, includes non-coding
     tokens from the tokenize module, such as NL and COMMENT.
@@ -204,8 +196,7 @@ class ASTTokens(ASTTextBase):
         i += 1
     return self._tokens[i]
 
-  def prev_token(self, tok, include_extra=False):
-    # type: (Token, bool) -> Token
+  def prev_token(self, tok: Token, include_extra: bool = False) -> Token:
     """
     Returns the previous token before the given one. If include_extra is True, includes non-coding
     tokens from the tokenize module, such as NL and COMMENT.
@@ -216,8 +207,9 @@ class ASTTokens(ASTTextBase):
         i -= 1
     return self._tokens[i]
 
-  def find_token(self, start_token, tok_type, tok_str=None, reverse=False):
-    # type: (Token, int, Optional[str], bool) -> Token
+  def find_token(
+    self, start_token: Token, tok_type: int, tok_str: Optional[str] = None, reverse: bool = False
+  ) -> Token:
     """
     Looks for the first token, starting at start_token, that matches tok_type and, if given, the
     token string. Searches backwards if reverse is True. Returns ENDMARKER token if not found (you
@@ -229,12 +221,12 @@ class ASTTokens(ASTTextBase):
       t = advance(t, include_extra=True)
     return t
 
-  def token_range(self,
-                  first_token,  # type: Token
-                  last_token,  # type: Token
-                  include_extra=False,  # type: bool
-                  ):
-    # type: (...) -> Iterator[Token]
+  def token_range(
+    self,
+    first_token: Token,
+    last_token: Token,
+    include_extra: bool = False,
+  ) -> Iterator[Token]:
     """
     Yields all tokens in order from first_token through and including last_token. If
     include_extra is True, includes non-coding tokens such as tokenize.NL and .COMMENT.
@@ -243,16 +235,14 @@ class ASTTokens(ASTTextBase):
       if include_extra or not is_non_coding_token(self._tokens[i].type):
         yield self._tokens[i]
 
-  def get_tokens(self, node, include_extra=False):
-    # type: (AstNode, bool) -> Iterator[Token]
+  def get_tokens(self, node: AstNode, include_extra: bool = False) -> Iterator[Token]:
     """
     Yields all tokens making up the given node. If include_extra is True, includes non-coding
     tokens such as tokenize.NL and .COMMENT.
     """
     return self.token_range(node.first_token, node.last_token, include_extra=include_extra)
 
-  def get_text_positions(self, node, padded):
-    # type: (AstNode, bool) -> Tuple[Tuple[int, int], Tuple[int, int]]
+  def get_text_positions(self, node: AstNode, padded: bool) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """
     Returns two ``(lineno, col_offset)`` tuples for the start and end of the given node.
     If the positions can't be determined, or the nodes don't correspond to any particular text,
@@ -287,27 +277,24 @@ class ASTText(ASTTextBase):
   which incurs the usual setup cost the first time.
   If you want to avoid this, check ``supports_tokenless(node)`` before calling ``get_text*`` methods.
   """
-  def __init__(self, source_text, tree=None, filename='<unknown>'):
-    # type: (Any, Optional[Module], str) -> None
-    super(ASTText, self).__init__(source_text, filename)
+  def __init__(self, source_text: Any, tree: Optional[Module] = None, filename: str = '<unknown>') -> None:
+    super().__init__(source_text, filename)
 
     self._tree = tree
     if self._tree is not None:
       annotate_fstring_nodes(self._tree)
 
-    self._asttokens = None  # type: Optional[ASTTokens]
+    self._asttokens: Optional[ASTTokens] = None
 
   @property
-  def tree(self):
-    # type: () -> Module
+  def tree(self) -> Module:
     if self._tree is None:
       self._tree = ast.parse(self._text, self._filename)
       annotate_fstring_nodes(self._tree)
     return self._tree
 
   @property
-  def asttokens(self):
-    # type: () -> ASTTokens
+  def asttokens(self) -> ASTTokens:
     if self._asttokens is None:
       self._asttokens = ASTTokens(
           self._text,
@@ -316,8 +303,9 @@ class ASTText(ASTTextBase):
       )
     return self._asttokens
 
-  def _get_text_positions_tokenless(self, node, padded):
-    # type: (AstNode, bool) -> Tuple[Tuple[int, int], Tuple[int, int]]
+  def _get_text_positions_tokenless(
+    self, node: AstNode, padded: bool
+  ) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """
     Version of ``get_text_positions()`` that doesn't use tokens.
     """
@@ -382,8 +370,7 @@ class ASTText(ASTTextBase):
 
     return start, end
 
-  def get_text_positions(self, node, padded):
-    # type: (AstNode, bool) -> Tuple[Tuple[int, int], Tuple[int, int]]
+  def get_text_positions(self, node: AstNode, padded: bool) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """
     Returns two ``(lineno, col_offset)`` tuples for the start and end of the given node.
     If the positions can't be determined, or the nodes don't correspond to any particular text,
@@ -405,7 +392,7 @@ class ASTText(ASTTextBase):
 
 # Node types that _get_text_positions_tokenless doesn't support.
 # These initial values are missing lineno.
-_unsupported_tokenless_types = ("arguments", "Arguments", "withitem")  # type: Tuple[str, ...]
+_unsupported_tokenless_types: Tuple[str, ...] = ("arguments", "Arguments", "withitem")
 if sys.version_info[:2] == (3, 8):
   # _get_text_positions_tokenless works incorrectly for these types due to bugs in Python 3.8.
   _unsupported_tokenless_types += ("arg", "Starred")
@@ -413,8 +400,7 @@ if sys.version_info[:2] == (3, 8):
   _unsupported_tokenless_types += ("Slice", "ExtSlice", "Index", "keyword")
 
 
-def supports_tokenless(node=None):
-  # type: (Any) -> bool
+def supports_tokenless(node: Any = None) -> bool:
   """
   Returns True if the Python version and the node (if given) are supported by
   the ``get_text*`` methods of ``ASTText`` without falling back to ``ASTTokens``.
@@ -440,10 +426,8 @@ def supports_tokenless(node=None):
       and not (
         # astroid nodes
         not isinstance(node, ast.AST) and node is not None and (
-          (
             type(node).__name__ == "AssignName"
             and type(node.parent).__name__ in ("Arguments", "ExceptHandler")
-          )
         )
       )
       and 'pypy' not in sys.version.lower()

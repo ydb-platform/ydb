@@ -1,15 +1,18 @@
 #include "read_balancer.h"
 #include "read_balancer__metrics.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/persqueue/common/percentiles.h>
+#include <ydb/core/persqueue/events/topic_sqs_action_metrics.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NPQ {
 
-
 namespace {
+
+constexpr TStringBuf SqsConsumerName = "ydb-sqs-consumer";
 
 struct TMetricCollector {
     TMetricCollector(TTabletLabeledCountersBase&& counters)
@@ -158,6 +161,7 @@ TCounters InitializeCounters(
     const auto* config = NAux::GetLabeledCounterOpts<SimpleDesc>();
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> result;
+    result.reserve(config->Size);
     for (size_t i = 0; i < config->Size; ++i) {
         TString name = config->GetSVNames()[i];
         if (skipPrefix) {
@@ -247,6 +251,7 @@ void TTopicMetricsHandler::Initialize(const NKikimrPQ::TPQTabletConfig& tabletCo
     PartitionExtendedLabeledCounters = InitializeCounters<EPartitionExtendedLabeledCounters_descriptor>(DynamicCounters, {}, true);
     InitializeKeyCompactionCounters(tabletConfig);
     InitializeConsumerCounters(tabletConfig, ctx);
+    InitializeSqsQueueMetrics(tabletConfig, ctx);
 }
 
 void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
@@ -304,6 +309,7 @@ void TTopicMetricsHandler::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tablet
 
     InitializeKeyCompactionCounters(tabletConfig);
     InitializeConsumerCounters(tabletConfig, ctx);
+    InitializeSqsQueueMetrics(tabletConfig, ctx);
 
     size_t inactiveCount = std::count_if(tabletConfig.GetAllPartitions().begin(), tabletConfig.GetAllPartitions().end(), [](auto& p) {
         return p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Inactive;
@@ -365,6 +371,40 @@ void TTopicMetricsHandler::UpdateMetrics() {
             consumerCounters.DeletedByDeadlinePolicyCounter->Set(consumerMetrics.DeletedByDeadlinePolicy);
             consumerCounters.DeletedByMovedToDLQCounter->Set(consumerMetrics.DeletedByMovedToDLQ);
         }
+    }
+
+    if (SqsMetricsHandler_) {
+        auto it = collector.Consumers.find(TString(SqsConsumerName));
+        if (it != collector.Consumers.end()) {
+            SqsMetricsHandler_->Update(
+                it->second.ClientLabeledCounters.Aggregator,
+                it->second.MLPConsumerLabeledCounters.Aggregator,
+                it->second.MLPMessageLockAttemptsCounter.Values,
+                it->second.MLPMessageLockingDurationCounter.Values,
+                it->second.MLPWaitingLockingDurationCounter.Values,
+                it->second.DeletedByMovedToDLQ
+            );
+        }
+    }
+}
+
+void TTopicMetricsHandler::InitializeSqsQueueMetrics(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
+    if (TTopicSqsMetricsHandler::IsApplicable(tabletConfig)) {
+        SqsMetricsHandler_ = std::make_unique<TTopicSqsMetricsHandler>(tabletConfig, ctx);
+    } else {
+        SqsMetricsHandler_.reset();
+    }
+}
+
+void TTopicMetricsHandler::AddSqsActionMetrics(const NKikimrPQ::TEvTopicSqsActionMetrics& metrics) {
+    if (!SqsMetricsHandler_) {
+        return;
+    }
+    if (HasTopicSqsProxyActionMetrics(metrics)) {
+        SqsMetricsHandler_->AddProxyActionMetrics(metrics);
+    }
+    if (HasTopicSqsMessageMetrics(metrics)) {
+        SqsMetricsHandler_->AddMessageMetrics(metrics);
     }
 }
 

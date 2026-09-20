@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 select EvaluateCode(FuncCode("Int32",AtomCode("1")));
 
 $inc = EvaluateCode(LambdaCode(($x)->{return 

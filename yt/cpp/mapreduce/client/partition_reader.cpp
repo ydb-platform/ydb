@@ -61,7 +61,6 @@ TRawTableReaderPtr CreateTablePartitionReader(
     const TFormat& format,
     const TTablePartitionReaderOptions& options)
 {
-
     auto stream = NDetail::RequestWithRetry<std::unique_ptr<IAbortableInputStream>>(
         retryPolicy,
         [&] (TMutationId /*mutationId*/) {

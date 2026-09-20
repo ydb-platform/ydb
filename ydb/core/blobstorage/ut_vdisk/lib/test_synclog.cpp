@@ -199,7 +199,8 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
                     Db->VCtx->VDiskCounters));
 
         // RecoveryLogCutter
-        TLogCutterCtx logCutterCtx = {VCtx, TestCtx->PDiskCtx, TestCtx->LsnMngr, VDiskConfig, TestCtx->LoggerId, false};
+        TLogCutterCtx logCutterCtx = {VCtx, TestCtx->PDiskCtx, TestCtx->LsnMngr, VDiskConfig,
+            TestCtx->LoggerId, false, {}};
         LogCutterId = ctx.Register(CreateRecoveryLogCutter(std::move(logCutterCtx)));
 
         // Repaired SyncLog State
@@ -232,7 +233,8 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
                 false,
                 TControlWrapper(0, 0, 1),
                 false,
-                TControlWrapper(20'000'000, 1, 100'000'000'000));
+                TControlWrapper(20'000'000, 1, 100'000'000'000),
+                TControlWrapper(1'000'000, 1, 10'000'000));
         TestCtx->SyncLogId = ctx.Register(CreateSyncLogActor(slCtx, Conf->GroupInfo, TestCtx->SelfVDiskId, std::move(repaired)));
         // Send Db birth lsn
         ui64 dbBirthLsn = 0;

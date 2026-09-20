@@ -47,7 +47,7 @@ TFsPath ToFilePath(const TString& path)
 {
     if (path.empty()) {
         std::array<char, MAX_PATH> tempDir;
-        if (MakeTempDir(tempDir.data(), nullptr) != 0) {
+        if (MakeTempDir(tempDir.data(), /*prefix=*/nullptr) != 0) {
             ythrow yexception() << "FileStorage: Can't create temporary directory " << tempDir.data();
         }
         return tempDir.data();
@@ -356,7 +356,7 @@ private:
 
         for (const TString& name : names) {
             TFsPath childPath(StorageDir_ / name);
-            TFileStat stat(childPath, true);
+            TFileStat stat(childPath, /*nofollow=*/true);
             if (stat.IsFile()) {
                 ++actualFiles;
                 actualSize += stat.Size;
@@ -417,7 +417,7 @@ private:
 
         for (const TString& name : names) {
             TFsPath childPath(StorageDir_ / name);
-            TFileStat stat(childPath, true);
+            TFileStat stat(childPath, /*nofollow=*/true);
             if (stat.IsFile()) {
                 files.push_back(TFileObject{.Name = name, .MTime = stat.MTime, .Size = stat.Size});
                 ++actualFiles;
@@ -465,7 +465,6 @@ private:
         Dirty_.store(true);
     }
 
-private:
     const TFsPath StorageDir_;
     const TFsPath ProcessTempDir_;
     const TFsPath FileLocksDir_;
@@ -487,9 +486,7 @@ TStorage::TStorage(size_t maxFiles, ui64 maxSize, const TString& storagePath)
 {
 }
 
-TStorage::~TStorage()
-{
-}
+TStorage::~TStorage() = default;
 
 TFsPath TStorage::GetRoot() const {
     return Impl_->GetRoot();
@@ -515,7 +512,7 @@ TFileLinkPtr TStorage::HardlinkFromStorage(const TString& existingStorageFileNam
 
 void TStorage::MoveToStorage(const TFsPath& src, const TString& dstStorageFileName)
 {
-    return Impl_->MoveToStorage(src, dstStorageFileName);
+    Impl_->MoveToStorage(src, dstStorageFileName);
 }
 
 bool TStorage::RemoveFromStorage(const TString& existingStorageFileName)

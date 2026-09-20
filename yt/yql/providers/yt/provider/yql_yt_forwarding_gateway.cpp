@@ -97,6 +97,10 @@ TString TYtForwardingGatewayBase::GetClusterServer(const TString& cluster) const
     return Slave_->GetClusterServer(cluster);
 }
 
+TString TYtForwardingGatewayBase::GetClusterYtName(const TString& cluster) const {
+    return Slave_->GetClusterYtName(cluster);
+}
+
 NYT::TRichYPath TYtForwardingGatewayBase::GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const {
     return Slave_->GetRealTable(sessionId, cluster, table, epoch, tmpFolder, temp, anonymous);
 }
@@ -155,6 +159,10 @@ NThreading::TFuture<IYtGateway::TDumpResult> TYtForwardingGatewayBase::Dump(TDum
 
 NThreading::TFuture<IYtGateway::TDownloadTableResult> TYtForwardingGatewayBase::DownloadTable(TDownloadTableOptions&& options) {
     return Slave_->DownloadTable(std::move(options));
+}
+
+NThreading::TFuture<IYtGateway::TUploadFilesToCacheResult> TYtForwardingGatewayBase::UploadFilesToCache(TUploadFilesToCacheOptions&& options) {
+    return Slave_->UploadFilesToCache(std::move(options));
 }
 
 IYtTokenResolver::TPtr TYtForwardingGatewayBase::GetYtTokenResolver() const {

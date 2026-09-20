@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_vector_index_levels_cache.h"
+
 #include <ydb/core/protos/kqp.pb.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -19,6 +21,7 @@ struct TLookupSettings {
 
     ui32 AllowNullKeysPrefixSize;
     bool KeepRowsOrder;
+    ui32 CookieFormatVersion = 0;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::unique_ptr<NKikimrKqp::TReadVectorTopK> VectorTopK;
 
@@ -109,6 +112,8 @@ public:
     virtual bool HasPendingResults() = 0;
     virtual void ResetRowsProcessing(ui64 readId) = 0;
 
+    virtual void ClearResults(NMiniKQL::TAllocState& /*allocState*/) {}
+
 protected:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
@@ -120,7 +125,7 @@ protected:
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
     ui64 taskId,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
-    const NYql::NDqProto::TTaskInput& inputDesc);
+    const NYql::NDqProto::TTaskInput& inputDesc, TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache);
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& settings,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory);

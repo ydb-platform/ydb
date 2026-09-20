@@ -8,7 +8,6 @@
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/ast/yql_expr_builder.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
-#include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_block_test_helper.h>
@@ -16,6 +15,8 @@
 #include <arrow/compute/exec_internal.h>
 
 namespace NKikimr::NMiniKQL {
+
+using namespace NTest;
 
 namespace {
 
@@ -82,7 +83,7 @@ namespace {
 
 template <typename T>
 arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, TVector<TMaybe<T>>& array, size_t offset) {
-    auto rightArrayBuilder = MakeArrayBuilder(typeInfoHelper, type, *NYql::NUdf::GetYqlMemoryPool(), array.size() + offset, nullptr);
+    auto rightArrayBuilder = MakeArrayBuilder(typeInfoHelper, type, *NYql::NUdf::GetYqlMemoryPool(), array.size() + offset, /*pgBuilder=*/nullptr);
     for (size_t i = 0; i < offset; i++) {
         if (array[0]) {
             rightArrayBuilder->Add(TBlockItem(array[0].GetRef()));
@@ -134,7 +135,7 @@ std::unique_ptr<IArrowKernelComputationNode> GetArrowKernel(IComputationGraph* g
         }
         allKernels.push_back(std::move(kernelNode));
     }
-    UNIT_ASSERT_EQUAL(allKernels.size(), 1u);
+    UNIT_ASSERT_EQUAL(allKernels.size(), 1U);
     return std::move(allKernels[0]);
 }
 
@@ -281,37 +282,37 @@ UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalValidScalar) {
 Y_UNIT_TEST(TestStringType) {
     // Test with mixed null/non-null left operands
     TestCoalesceKernel(
-        TVector<TMaybe<TString>>{Nothing(), TString("hello"), TString("world")},
+        TVector<TMaybe<TString>>{{}, "hello", "world"},
         TVector<TString>{"default1", "default2", "default3"},
         TVector<TString>{"default1", "hello", "world"});
 
     // Test with scalar right operand
     TestCoalesceKernel(
-        TVector<TMaybe<TString>>{Nothing(), TString("hello"), TString("world")},
+        TVector<TMaybe<TString>>{{}, "hello", "world"},
         TString("default"),
         TVector<TString>{"default", "hello", "world"});
 
     // Test with all non-null left operands
     TestCoalesceKernel(
-        TVector<TMaybe<TString>>{TString("a"), TString("b"), TString("c")},
+        TVector<TMaybe<TString>>{"a", "b", "c"},
         TVector<TString>{"default1", "default2", "default3"},
         TVector<TString>{"a", "b", "c"});
 
     // Test with all null left operands
     TestCoalesceKernel(
-        TVector<TMaybe<TString>>{Nothing(), Nothing(), Nothing()},
+        TVector<TMaybe<TString>>{{}, {}, {}},
         TVector<TString>{"default1", "default2", "default3"},
         TVector<TString>{"default1", "default2", "default3"});
 
     // Test with both operands optional
     TestCoalesceKernel(
-        TVector<TMaybe<TString>>{Nothing(), TString("hello"), Nothing()},
-        TVector<TMaybe<TString>>{TString("default1"), Nothing(), Nothing()},
-        TVector<TMaybe<TString>>{TString("default1"), TString("hello"), Nothing()});
+        TVector<TMaybe<TString>>{{}, "hello", {}},
+        TVector<TMaybe<TString>>{"default1", {}, {}},
+        TVector<TMaybe<TString>>{"default1", "hello", {}});
 
     // Test with scalar left operand and vector right operand
     TestCoalesceKernel(
-        TMaybe<TString>{TString("constant")},
+        TMaybe<TString>{"constant"},
         TVector<TString>{"a", "b", "c"},
         TVector<TString>{"constant", "constant", "constant"});
 }
@@ -327,7 +328,7 @@ Y_UNIT_TEST(TestBooleanType) {
     // Test with scalar right operand
     TestCoalesceKernel(
         TVector<TMaybe<bool>>{Nothing(), true, false},
-        true,
+        /*right=*/true,
         TVector<bool>{true, true, false});
 
     // Test with all non-null left operands

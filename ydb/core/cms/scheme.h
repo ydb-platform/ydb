@@ -141,6 +141,7 @@ struct Schema : NIceDb::Schema {
         struct HasSingleCompositeActionGroup : Column<4, NScheme::NTypeIds::Bool> {};
         struct CreateTime : Column<5, NScheme::NTypeIds::Uint64> {};
         struct LastRefreshTime : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct MaxInflightActions : Column<7, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<TaskID>;
         using TColumns = TableColumns<
@@ -149,13 +150,24 @@ struct Schema : NIceDb::Schema {
             Owner,
             HasSingleCompositeActionGroup,
             CreateTime,
-            LastRefreshTime
+            LastRefreshTime,
+            MaxInflightActions
         >;
+    };
+
+    struct DDiskInfo : Table<15> {
+        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Revision : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LastChangedAt : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct State : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TabletId>;
+        using TColumns = TableColumns<TabletId, Revision, LastChangedAt, State>;
     };
 
     using TTables = SchemaTables<Param, Permission, Request, WalleTask, Notification, NodeTenant,
         HostMarkers, NodeMarkers, PDiskMarkers, VDiskMarkers, LogRecords, NodeDowntimes, PDiskDowntimes,
-        MaintenanceTasks>;
+        MaintenanceTasks, DDiskInfo>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };

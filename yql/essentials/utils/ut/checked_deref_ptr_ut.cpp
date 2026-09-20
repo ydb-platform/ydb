@@ -8,7 +8,7 @@ namespace {
 struct TTestStruct {
     int Value = 42;
 
-    int GetValue() const {
+    [[nodiscard]] int GetValue() const {
         return Value;
     }
 
@@ -50,7 +50,7 @@ Y_UNIT_TEST(CopyConstructor) {
 Y_UNIT_TEST(MoveConstructor) {
     TTestStruct obj;
     TCheckedDerefPtr<TTestStruct> ptr1(&obj);
-    TCheckedDerefPtr<TTestStruct> ptr2(std::move(ptr1));
+    TCheckedDerefPtr<TTestStruct> ptr2(std::move(ptr1)); // NOLINT(performance-move-const-arg)
     UNIT_ASSERT_EQUAL(ptr2.Get(), &obj);
 }
 
@@ -83,7 +83,7 @@ Y_UNIT_TEST(MoveAssignment) {
     TTestStruct obj;
     TCheckedDerefPtr<TTestStruct> ptr1(&obj);
     TCheckedDerefPtr<TTestStruct> ptr2;
-    ptr2 = std::move(ptr1);
+    ptr2 = std::move(ptr1); // NOLINT(performance-move-const-arg)
     UNIT_ASSERT_EQUAL(ptr2.Get(), &obj);
 }
 

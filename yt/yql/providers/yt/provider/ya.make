@@ -85,10 +85,12 @@ PEERDIR(
     yt/cpp/mapreduce/interface
     yql/essentials/ast
     yql/essentials/core/extract_predicate
+    yql/essentials/core/langver
     yql/essentials/public/langver
     yql/essentials/public/udf
     yql/essentials/sql
-    yql/essentials/sql/v1
+    yql/essentials/sql/settings/flags
+    yql/essentials/sql/v1/translation
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
@@ -101,6 +103,7 @@ PEERDIR(
     yql/essentials/core/dqs_expr_nodes
     yql/essentials/core/expr_nodes
     yql/essentials/core/issue
+    yql/essentials/core/langver
     yql/essentials/public/issue/protos
     yql/essentials/core/peephole_opt
     yql/essentials/core/type_ann

@@ -280,7 +280,7 @@ struct TStringToStringMapper: public TOperationMixin<TStringToStringMapper<Funct
     static std::variant<TNoChangesTag, TString> Execute(TStringRef arg) {
         if (auto wide = UTF8ToWide(arg);
             static_cast<bool (*)(TUtf16String&, size_t pos, size_t count)>(Function)(wide, 0, TUtf16String::npos)) {
-            return WideToUTF8(std::move(wide));
+            return WideToUTF8(wide);
         } else {
             return TNoChangesTag{};
         }

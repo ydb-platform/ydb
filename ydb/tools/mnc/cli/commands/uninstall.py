@@ -111,7 +111,7 @@ async def act(hosts, config, ignore_failed_stop=False, console=None):
     with progress.MyProgress(console=console) as pgbar:
         result = await progress.run_steps([uninstall_steps], progress=pgbar, title="[bold]Uninstall[/]")
     console.print(result.to_rich_panel())
-    return bool(result)
+    return result
 
 
 def add_arguments(parser):

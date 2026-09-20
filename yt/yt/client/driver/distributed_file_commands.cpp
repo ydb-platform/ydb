@@ -1,4 +1,6 @@
 #include "distributed_file_commands.h"
+
+#include "config.h"
 #include "helpers.h"
 
 #include <yt/yt/client/api/distributed_file_session.h>
@@ -123,8 +125,8 @@ IFileFragmentWriterPtr TWriteFileFragmentCommand::CreateFileWriter(
 
         THROW_ERROR_EXCEPTION(
             "Signature validation failed for write file fragment")
-                << TErrorAttribute("session_id", concreteCookie.SessionId)
-                << TErrorAttribute("cookie_id", concreteCookie.CookieId);
+                .With("session_id", concreteCookie.SessionId)
+                .With("cookie_id", concreteCookie.CookieId);
     }
 
     return context
@@ -150,6 +152,8 @@ void TWriteFileFragmentCommand::DoExecute(ICommandContextPtr context)
 
     auto input = context->Request().InputStream;
 
+    i64 maxAttachmentSize = context->GetConfig()->MaxAttachmentSize;
+
     while (true) {
         auto data = WaitFor(input->Read())
             .ValueOrThrow();
@@ -158,8 +162,7 @@ void TWriteFileFragmentCommand::DoExecute(ICommandContextPtr context)
             break;
         }
 
-        WaitFor(fileWriter->Write(std::move(data)))
-            .ThrowOnError();
+        WriteInBatches(fileWriter, data, maxAttachmentSize);
     }
 
     WaitFor(fileWriter->Close())

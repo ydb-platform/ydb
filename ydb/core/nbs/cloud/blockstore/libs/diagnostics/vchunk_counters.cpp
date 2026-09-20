@@ -2,6 +2,32 @@
 
 namespace NYdb::NBS::NBlockStore {
 
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void PublishDerivative(
+    const NMonitoring::TDynamicCounters::TCounterPtr& counter,
+    ui64& last,
+    ui64 current)
+{
+    if (current >= last && counter) {
+        *counter += current - last;
+    }
+    last = current;
+}
+
+void PublishAbsolute(
+    const NMonitoring::TDynamicCounters::TCounterPtr& counter,
+    ui64 value)
+{
+    if (counter) {
+        *counter = value;
+    }
+}
+
+}   // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TVChunkRequestCounters::TVChunkRequestCounters(
@@ -12,27 +38,12 @@ TVChunkRequestCounters::TVChunkRequestCounters(
     , MinLsn(parent ? parent->GetCounter("MinLsn") : nullptr)
 {}
 
-void TVChunkRequestCounters::RequestFinished(bool ok)
+void TVChunkRequestCounters::Publish(const TVChunkOperationStats& stats)
 {
-    if (ok && ReplyOk) {
-        ++*ReplyOk;
-    } else if (!ok && ReplyErr) {
-        ++*ReplyErr;
-    }
-}
-
-void TVChunkRequestCounters::UpdatePending(ui64 count)
-{
-    if (Pending) {
-        *Pending = count;
-    }
-}
-
-void TVChunkRequestCounters::UpdateMinLsn(ui64 lsn)
-{
-    if (MinLsn) {
-        *MinLsn = lsn;
-    }
+    PublishDerivative(ReplyOk, LastPublished.ReplyOk, stats.ReplyOk);
+    PublishDerivative(ReplyErr, LastPublished.ReplyErr, stats.ReplyErr);
+    PublishAbsolute(Pending, stats.Pending);
+    PublishAbsolute(MinLsn, stats.MinLsn);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -42,21 +53,18 @@ TVChunkCounters::TVChunkCounters(NMonitoring::TDynamicCounterPtr parent)
     , Write(parent ? parent->GetSubgroup("operation", "Write") : nullptr)
     , Flush(parent ? parent->GetSubgroup("operation", "Flush") : nullptr)
     , Erase(parent ? parent->GetSubgroup("operation", "Erase") : nullptr)
+    , EraseBelated(
+          parent ? parent->GetSubgroup("operation", "EraseBelated") : nullptr)
 {}
 
-void TVChunkCounters::RequestFinished(EVChunkOperation operation, bool ok)
+void TVChunkCounters::Publish(const TVChunkStats& total)
 {
-    Get(operation).RequestFinished(ok);
-}
-
-void TVChunkCounters::UpdatePending(EVChunkOperation operation, ui64 count)
-{
-    Get(operation).UpdatePending(count);
-}
-
-void TVChunkCounters::UpdateMinLsn(EVChunkOperation operation, ui64 lsn)
-{
-    Get(operation).UpdateMinLsn(lsn);
+    Get(EVChunkOperation::Read).Publish(total.Get(EVChunkOperation::Read));
+    Get(EVChunkOperation::Write).Publish(total.Get(EVChunkOperation::Write));
+    Get(EVChunkOperation::Flush).Publish(total.Get(EVChunkOperation::Flush));
+    Get(EVChunkOperation::Erase).Publish(total.Get(EVChunkOperation::Erase));
+    Get(EVChunkOperation::EraseBelated)
+        .Publish(total.Get(EVChunkOperation::EraseBelated));
 }
 
 TVChunkRequestCounters& TVChunkCounters::Get(EVChunkOperation operation)
@@ -70,11 +78,12 @@ TVChunkRequestCounters& TVChunkCounters::Get(EVChunkOperation operation)
             return Flush;
         case EVChunkOperation::Erase:
             return Erase;
+        case EVChunkOperation::EraseBelated:
+            return EraseBelated;
 
         case EVChunkOperation::MAX:
             Y_ABORT("Invalid operation");
     }
-    return Read;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

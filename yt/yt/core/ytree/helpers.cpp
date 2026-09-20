@@ -143,7 +143,7 @@ public:
 
     bool Remove(TKeyView /*key*/) override
     {
-        YT_LOG_ALERT("Attempt to remove an item from an empty ephemeral attribute dictionary");
+        YT_TLOG_ALERT("Attempt to remove an item from an empty ephemeral attribute dictionary");
         return false;
     }
 
@@ -243,9 +243,18 @@ IAttributeDictionaryPtr FromProto(const NProto::TAttributeDictionary& protoAttri
 {
     auto attributes = CreateEphemeralAttributes();
     for (const auto& protoAttribute : protoAttributes.attributes()) {
-        auto key = FromProto<TString>(protoAttribute.key());
-        auto value = FromProto<TString>(protoAttribute.value());
-        attributes->SetYson(key, TYsonString(value));
+        attributes->SetYson(protoAttribute.key(), FromProto<TYsonString>(protoAttribute.value()));
+    }
+    return attributes;
+}
+
+IAttributeDictionaryPtr FromProto(NProto::TAttributeDictionary&& protoAttributes)
+{
+    auto attributes = CreateEphemeralAttributes();
+    for (auto& protoAttribute : *protoAttributes.mutable_attributes()) {
+        attributes->SetYson(
+            protoAttribute.key(),
+            FromProto<TYsonString>(std::move(*protoAttribute.mutable_value())));
     }
     return attributes;
 }
@@ -302,7 +311,7 @@ void TAttributeDictionarySerializer::LoadNonNull(TStreamLoadContext& context, co
     attributes->Clear();
     size_t size = TSizeSerializer::Load(context);
     for (size_t index = 0; index < size; ++index) {
-        auto key = Load<TString>(context);
+        auto key = Load<std::string>(context);
         auto value = Load<TYsonString>(context);
         attributes->SetYson(key, value);
     }
@@ -349,7 +358,7 @@ void ValidateYTreeChildCount(
         NYTree::EErrorCode::ResolveError,
         "Path %v exceeds resolve depth limit",
         path)
-        << TErrorAttribute("limit", MaxYPathResolveIterations);
+        .With("limit", MaxYPathResolveIterations);
 }
 
 void ValidateYPathResolutionDepth(TYPathBuf path, int depth)

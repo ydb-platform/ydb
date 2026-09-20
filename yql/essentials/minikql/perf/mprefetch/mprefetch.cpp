@@ -2,6 +2,8 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 
+#include <util/random/shuffle.h>
+
 #include <deque>
 
 int main(int argc, char** argv) {
@@ -26,7 +28,7 @@ int main(int argc, char** argv) {
         std::vector<ui32> data(nRows);
         std::iota(v.begin(), v.end(), 0);
         if (shuffle) {
-            std::random_shuffle(v.begin(), v.end());
+            Shuffle(v.begin(), v.end());
         }
 
         std::vector<ui32> prefetchQueue(nPrefetch);

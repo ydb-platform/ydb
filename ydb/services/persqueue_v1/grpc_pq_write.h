@@ -3,8 +3,9 @@
 #include "actors/write_session_actor.h"
 
 #include <ydb/core/client/server/grpc_base.h>
-#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
+#include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -19,7 +20,9 @@ namespace V1 {
 IActor* CreatePQWriteService(const NActors::TActorId& schemeCache,
                              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
 
-class TPQWriteService : public NActors::TActorBootstrapped<TPQWriteService> {
+class TPQWriteService : public NPQ::TBaseActor<TPQWriteService>
+                      , public NPQ::TConstantLogPrefix {
+    using TBase = NPQ::TBaseActor<TPQWriteService>;
 public:
     TPQWriteService(const NActors::TActorId& schemeCache,
                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
@@ -89,9 +92,9 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // template methods implementation
 
-template <bool UseMigrationProtocol>
+template <EProtocol Protocol>
 auto FillWriteResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
-    using ServerMessage = typename std::conditional<UseMigrationProtocol,
+    using ServerMessage = typename std::conditional<Protocol == EProtocol::PQv1,
                                                     PersQueue::V1::StreamingWriteServerMessage,
                                                     Topic::StreamWriteMessage::FromServer>::type;
     ServerMessage res;
@@ -102,15 +105,15 @@ auto FillWriteResponse(const TString& errorReason, const PersQueue::ErrorCode::E
 
 template <typename WriteRequest>
 void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const TActorContext& ctx) {
-    constexpr bool UseMigrationProtocol = std::is_same_v<WriteRequest, NGRpcService::TEvStreamPQWriteRequest>;
+    constexpr EProtocol Protocol = std::is_same_v<WriteRequest, NGRpcService::TEvStreamPQWriteRequest> ? EProtocol::PQv1 : EProtocol::Topic;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection");
+    LOG_D("New grpc connection");
 
     if (TooMuchSessions()) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - too much sessions");
+        LOG_I("New grpc connection failed - too much sessions");
         ev->Get()->Attach(ctx.SelfID);
         ev->Get()->WriteAndFinish(
-            FillWriteResponse<UseMigrationProtocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD),
+            FillWriteResponse<Protocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD),
             Ydb::StatusIds::OVERLOADED); // CANCELLED
         return;
     }
@@ -120,11 +123,11 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
     if (HaveClusters && localCluster.empty()) {
         ev->Get()->Attach(ctx.SelfID);
         if (LocalCluster) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - cluster disabled");
-            ev->Get()->WriteAndFinish(FillWriteResponse<UseMigrationProtocol>("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), Ydb::StatusIds::UNSUPPORTED); //CANCELLED
+            LOG_I("New grpc connection failed - cluster disabled");
+            ev->Get()->WriteAndFinish(FillWriteResponse<Protocol>("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), Ydb::StatusIds::UNSUPPORTED); //CANCELLED
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - initializing");
-            ev->Get()->WriteAndFinish(FillWriteResponse<UseMigrationProtocol>("initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
+            LOG_I("New grpc connection failed - initializing");
+            ev->Get()->WriteAndFinish(FillWriteResponse<Protocol>("initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
         }
         return;
     } else {
@@ -138,10 +141,11 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
         );
         const ui64 cookie = NextCookie();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new session created cookie " << cookie);
+        LOG_D("New session created cookie",
+            {"cookie", cookie});
 
         auto ip = ev->Get()->GetPeerName();
-        TActorId worker = ctx.Register(new TWriteSessionActor<UseMigrationProtocol>(
+        TActorId worker = ctx.Register(new TWriteSessionActor<Protocol>(
                 ev->Release().Release(), cookie, SchemeCache, Counters,
                 DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
                 *TopicsHandler

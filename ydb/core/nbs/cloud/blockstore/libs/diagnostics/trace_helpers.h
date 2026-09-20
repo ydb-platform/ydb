@@ -51,6 +51,11 @@ public:
         Promise.SetValue(std::move(value));
     }
 
+    [[nodiscard]] bool HasValue() const
+    {
+        return Promise.HasValue();
+    }
+
 private:
     std::shared_ptr<NWilson::TSpan> Span;
     NThreading::TPromise<T> Promise = NThreading::NewPromise<T>();

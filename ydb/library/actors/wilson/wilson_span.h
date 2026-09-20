@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actorsystem_fwd.h>
-#include <contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h>
+#include <contrib/proto/opentelemetry/opentelemetry/proto/trace/v1/trace.pb.h>
 #include <util/generic/flags.h>
 #include <util/generic/hash.h>
 #include <util/datetime/cputimer.h>
@@ -41,6 +41,7 @@ namespace NWilson {
     enum class EFlags : ui32 {
         NONE = 0,
         AUTO_END = 1,
+        ACTION_ON_END = 2,  // for retro-spans, to avoid unneeded virtual method calls
     };
 
     Y_DECLARE_FLAGS(TFlags, EFlags);

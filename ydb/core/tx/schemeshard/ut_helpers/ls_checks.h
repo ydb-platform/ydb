@@ -91,6 +91,7 @@ namespace NLs {
     TCheckFunc ExtractTenantSchemeshard(ui64* tenantSchemeShardId);
     TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVPId);
     TCheckFunc ExtractTenantStatisticsAggregator(ui64* tenantSAId);
+    TCheckFunc ExtractTenantWasmCompileController(ui64* tenantWCCId);
     TCheckFunc ExtractDomainHive(ui64* domainHiveId);
     TCheckFunc ExtractChildren(TVector<TString>* children);
 
@@ -123,6 +124,7 @@ namespace NLs {
     void IsDirectory(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsTestShardSet(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, const NKikimrSchemeOp::EPathType pathType);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
     TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
@@ -169,6 +171,7 @@ namespace NLs {
     TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui32 tabletCount, ui32 groupCount,
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
     TCheckFunc CheckPQAlterVersion (const TString& name, ui64 alterVersion);
+    TCheckFunc ColumnTableIndexesCount(ui32 count);
     TCheckFunc IndexesCount(ui32 count);
     TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
 
@@ -226,6 +229,9 @@ namespace NLs {
     TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
 
     TCheckFunc IncrementalBackup(bool flag);
+
+    TCheckFunc CheckMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
+    TCheckFunc CheckColumnTableMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
 
     struct TInverseTag {
         bool Value = false;

@@ -1,7 +1,7 @@
 #include "accessor.h"
 #include "constructor.h"
 
-#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
@@ -90,8 +90,8 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
     return true;
 }
 
-TBlobWithAdditionalAccessorData TConstructor::SerializeToBlobAndMeta(
-    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) {
+TBlobWithAdditionalAccessorData TConstructor::DoSerializeToBlobAndMeta(
+    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
     const TDictionaryArray* arr = static_cast<const TDictionaryArray*>(columnData.get());
     auto arrDictionary = arr->GetDictionary();
     std::shared_ptr<arrow::Array> arrPositions = arr->GetPositions();
@@ -114,10 +114,6 @@ TBlobWithAdditionalAccessorData TConstructor::SerializeToBlobAndMeta(
     blob.append(blobDictionary);
     blob.append(blobPositions);
     return {std::move(blob), std::move(meta)};
-}
-
-TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
-    return SerializeToBlobAndMeta(columnData, externalInfo).Blob;
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
@@ -226,15 +222,15 @@ TConclusion<std::shared_ptr<arrow::Array>> TConstructor::BuildDictionaryOnlyRead
     return rb->column(0);
 }
 
-std::shared_ptr<arrow::DataType> TConstructor::GetTypeByVariantsCount(const ui32 count) {
+std::shared_ptr<arrow::FixedWidthType> TConstructor::GetTypeByVariantsCount(const ui32 count) {
     if (count <= Max<ui8>()) {
-        return arrow::uint8();
+        return std::static_pointer_cast<arrow::FixedWidthType>(arrow::uint8());
     }
     if (count <= Max<ui16>()) {
-        return arrow::uint16();
+        return std::static_pointer_cast<arrow::FixedWidthType>(arrow::uint16());
     }
     if (count <= Max<ui32>()) {
-        return arrow::uint32();
+        return std::static_pointer_cast<arrow::FixedWidthType>(arrow::uint32());
     }
     AFL_VERIFY(false);
     return nullptr;

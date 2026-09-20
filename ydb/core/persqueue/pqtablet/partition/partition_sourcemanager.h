@@ -51,6 +51,7 @@ public:
 
         void Update(ui64 seqNo, ui64 offset, TInstant timestamp, TMaybe<i16> producerEpoch = Nothing());
         void Update(THeartbeat&& heartbeat);
+        void Update(TSchemaChangeInfo&& schemaChange);
 
     private:
         const TSourceIdMap& MemoryStorage() const;
@@ -76,6 +77,7 @@ public:
         ~TModificationBatch();
 
         TMaybe<THeartbeat> CanEmitHeartbeat() const;
+        TMaybe<TSchemaChangeInfo> CanEmitSchemaChange() const;
         TSourceManager GetSource(const TString& id);
 
         void Cancel();
@@ -97,6 +99,7 @@ public:
         const TPartitionNode* Node;
         TSourceIdWriter SourceIdWriter;
         THeartbeatEmitter HeartbeatEmitter;
+        TSchemaChangeEmitter SchemaChangeEmitter;
     };
 
     explicit TPartitionSourceManager(TPartition& partition);

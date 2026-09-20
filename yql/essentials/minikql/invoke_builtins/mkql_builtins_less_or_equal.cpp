@@ -5,8 +5,7 @@
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -252,42 +251,43 @@ struct TCustomLessOrEqual: public TAggrLessOrEqual {
 #endif
 };
 
+template <i8 ScaleFactor>
 struct TDecimalLessOrEqual {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsLessOrEqual(left.GetInt128(), right.GetInt128()));
+    static NUdf::TUnboxedValuePod Execute(
+        const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return NUdf::TUnboxedValuePod(
+            NYql::NDecimal::IsLessOrEqual(left.GetInt128(), right.GetInt128(), ScaleFactor));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(
+        Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         auto& context = ctx.Codegen.GetContext();
-        const auto l = GetterForInt128(left, block);
-        const auto r = GetterForInt128(right, block);
-        const auto lok = NDecimal::GenIsComparable(l, context, block);
-        const auto rok = NDecimal::GenIsComparable(r, context, block);
-        const auto both = BinaryOperator::CreateAnd(lok, rok, "both", block);
-        const auto le = GenLessOrEqualSigned(l, r, block);
-        const auto res = BinaryOperator::CreateAnd(both, le, "res", block);
-        return MakeBoolean(res, context, block);
+        const auto leftValue = GetterForInt128(left, block);
+        const auto rightValue = GetterForInt128(right, block);
+        const auto result = NDecimal::GenIsLessOrEqual(
+            leftValue, rightValue, ScaleFactor, /*aggregate=*/false, block);
+        return MakeBoolean(result, context, block);
     }
 #endif
 };
 
+template <i8 ScaleFactor>
 struct TDecimalAggrLessOrEqual: public TAggrLessOrEqual {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        return NUdf::TUnboxedValuePod(l <= r);
+    static NUdf::TUnboxedValuePod Execute(
+        const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return NUdf::TUnboxedValuePod(
+            NYql::NDecimal::IsLessOrEqual<true>(left.GetInt128(), right.GetInt128(), ScaleFactor));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(
+        Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         auto& context = ctx.Codegen.GetContext();
-        const auto l = GetterForInt128(left, block);
-        const auto r = GetterForInt128(right, block);
-        const auto le = GenLessOrEqualSigned(l, r, block);
-        return MakeBoolean(le, context, block);
+        const auto result = NDecimal::GenIsLessOrEqual(
+            GetterForInt128(left, block), GetterForInt128(right, block),
+            ScaleFactor, /*aggregate=*/true, block);
+        return MakeBoolean(result, context, block);
     }
 #endif
 };
@@ -302,8 +302,6 @@ void RegisterLessOrEqual(IBuiltinFunctionRegistry& registry) {
     RegisterCompareBigDatetime<TDiffDateLessOrEqual, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomLessOrEqual, TCompareArgsOpt>(registry, name);
-    RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>,
-                             TDecimalLessOrEqual, TCompareArgsOpt>(registry, name);
 
     const auto aggrName = "AggrLessOrEqual";
     RegisterAggrComparePrimitive<TLessOrEqual, TCompareArgsOpt>(registry, aggrName);
@@ -313,8 +311,7 @@ void RegisterLessOrEqual(IBuiltinFunctionRegistry& registry) {
     RegisterAggrCompareBigTzDatetime<TAggrTzDateLessOrEqual, TCompareArgsOpt>(registry, aggrName);
 
     RegisterAggrCompareStrings<TCustomLessOrEqual, TCompareArgsOpt>(registry, aggrName);
-    RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>,
-                                 TDecimalAggrLessOrEqual, TCompareArgsOpt>(registry, aggrName);
+    NDecimal::RegisterCompare<TDecimalLessOrEqual, TDecimalAggrLessOrEqual>(registry, name, aggrName);
 }
 
 void RegisterLessOrEqual(TKernelFamilyMap& kernelFamilyMap) {
@@ -328,5 +325,4 @@ void RegisterLessOrEqual(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["LessOrEqual"] = std::move(family);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

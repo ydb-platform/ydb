@@ -18,6 +18,7 @@ private:
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
     YDB_READONLY_DEF(std::optional<NArrow::NAccessor::TRequestedConstructorContainer>, AccessorConstructor);
     YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
+    YDB_READONLY_DEF(std::optional<bool>, NotNull);
 
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors);

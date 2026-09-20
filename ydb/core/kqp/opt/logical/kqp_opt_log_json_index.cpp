@@ -1,15 +1,18 @@
 #include "kqp_opt_log_json_index.h"
 
-#include <expected>
-#include <functional>
-
-#include <ydb/core/base/json_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/kqp/opt/logical/kqp_opt_log_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
+#include <ydb/library/json_index/json_index.h>
+
 #include <yql/essentials/core/sql_types/yql_atom_enums.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+
+#include <expected>
+#include <utility>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -18,6 +21,10 @@ using namespace NYql::NNodes;
 using namespace NJsonIndex;
 
 namespace {
+
+constexpr std::string_view kErrorMessage = "Failed to extract jsonpath tokens from the predicate: ";
+constexpr std::string_view kFullRangeSearchMessage =
+    "full-range search cannot be performed using full-text search";
 
 struct TPredicateCollectResult {
     TString ColumnName;
@@ -33,8 +40,7 @@ struct TJsonNodeParams {
 };
 
 TPredicateCollectResult MakeCollectError(TExprContext& ctx, TPositionHandle pos, TStringBuf message) {
-    return TPredicateCollectResult{"", TCollectResult(
-        TIssue(ctx.GetPosition(pos), TString{message}))};
+    return TPredicateCollectResult{ "", TCollectResult(TIssue(ctx.GetPosition(pos), TString{ message })) };
 }
 
 bool IsJsonValueReturningNonIndexable(std::optional<EDataSlot> slot) {
@@ -67,7 +73,14 @@ TExprBase UnwrapPredicate(TExprBase node) {
         if (const auto just = node.Maybe<TCoJust>()) {
             node = just.Cast().Input();
         } else if (const auto coalesce = node.Maybe<TCoCoalesce>()) {
-            node = coalesce.Cast().Predicate();
+            auto castNode = coalesce.Cast();
+            if (!castNode.Value().Maybe<TCoBool>()) {
+                break;
+            }
+            if (FromString<bool>(castNode.Value().Cast<TCoBool>().Literal().Value())) {
+                break;
+            }
+            node = castNode.Predicate();
         } else if (const auto optionalIf = node.Maybe<TCoOptionalIf>()) {
             node = optionalIf.Cast().Predicate();
         } else {
@@ -77,6 +90,47 @@ TExprBase UnwrapPredicate(TExprBase node) {
     return node;
 }
 
+// Returns true if a cast/convert from `from` to `to` is allowed for JSON index predicate extraction
+bool IsAllowedCastForJsonIndex(EDataSlot from, EDataSlot to) {
+    static const THashSet<EDataSlot> allowedStringTypes = { EDataSlot::String, EDataSlot::Utf8 };
+    if (allowedStringTypes.contains(from) && allowedStringTypes.contains(to)) {
+        return true;
+    }
+
+    if (IsDataTypeFloat(from) && IsDataTypeFloat(to)) {
+        return true;
+    }
+
+    if (IsDataTypeIntegral(from) && (IsDataTypeIntegral(to) || IsDataTypeFloat(to))) {
+        return true;
+    }
+
+    return false;
+}
+
+std::optional<EDataSlot> GetBaseDataSlot(const TExprBase& node) {
+    auto ann = node.Ref().GetTypeAnn();
+    if (!ann) {
+        return std::nullopt;
+    }
+
+    while (ann->GetKind() == ETypeAnnotationKind::Optional) {
+        ann = ann->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    if (ann->GetKind() != ETypeAnnotationKind::Data) {
+        return std::nullopt;
+    }
+
+    return ann->Cast<TDataExprType>()->GetSlot();
+}
+
+bool IsSupportedCast(const TExprBase& from, const TExprBase& to) {
+    const auto fromSlot = GetBaseDataSlot(from);
+    const auto toSlot = GetBaseDataSlot(to);
+    return fromSlot.has_value() && toSlot.has_value() && IsAllowedCastForJsonIndex(*fromSlot, *toSlot);
+}
+
 TExprBase UnwrapValue(TExprBase node) {
     while (true) {
         if (const auto just = node.Maybe<TCoJust>()) {
@@ -84,7 +138,23 @@ TExprBase UnwrapValue(TExprBase node) {
         } else if (const auto unwrap = node.Maybe<TCoUnwrap>()) {
             node = unwrap.Cast().Optional();
         } else if (const auto cast = node.Maybe<TCoSafeCast>()) {
-            node = cast.Cast().Value();
+            const auto castNode = cast.Cast();
+            if (!IsSupportedCast(castNode.Value(), castNode)) {
+                break;
+            }
+            node = castNode.Value();
+        } else if (const auto strictCast = node.Maybe<TCoStrictCast>()) {
+            const auto strictCastNode = strictCast.Cast();
+            if (!IsSupportedCast(strictCastNode.Value(), strictCastNode)) {
+                break;
+            }
+            node = strictCastNode.Value();
+        } else if (const auto convert = node.Maybe<TCoConvert>()) {
+            const auto convertNode = convert.Cast();
+            if (!IsSupportedCast(convertNode.Input(), convertNode)) {
+                break;
+            }
+            node = convertNode.Input();
         } else {
             break;
         }
@@ -106,9 +176,7 @@ std::optional<TString> EncodeValueToJsonPath(const TExprBase& node, bool negativ
 
     if (node.Maybe<TCoBool>()) {
         const auto boolValue = FromString<bool>(node.Cast<TCoBool>().Literal().Value());
-        AppendJsonIndexLiteral(value, boolValue
-            ? NBinaryJson::EEntryType::BoolTrue
-            : NBinaryJson::EEntryType::BoolFalse);
+        AppendJsonIndexLiteral(value, boolValue ? NBinaryJson::EEntryType::BoolTrue : NBinaryJson::EEntryType::BoolFalse);
         return value;
     }
 
@@ -126,35 +194,45 @@ std::optional<TString> EncodeValueToJsonPath(const TExprBase& node, bool negativ
 
     if (node.Maybe<TCoFloat>()) {
         double literalValue = static_cast<double>(FromString<float>(node.Cast<TCoFloat>().Literal().Value()));
-        if (negative) literalValue = -literalValue;
+        if (negative) {
+            literalValue = -literalValue;
+        }
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
 
     if (node.Maybe<TCoDouble>()) {
         double literalValue = FromString<double>(node.Cast<TCoDouble>().Literal().Value());
-        if (negative) literalValue = -literalValue;
+        if (negative) {
+            literalValue = -literalValue;
+        }
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
 
     if (node.Maybe<TCoInt8>()) {
         double literalValue = static_cast<double>(FromString<i8>(node.Cast<TCoInt8>().Literal().Value()));
-        if (negative) literalValue = -literalValue;
+        if (negative) {
+            literalValue = -literalValue;
+        }
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
 
     if (node.Maybe<TCoInt16>()) {
         double literalValue = static_cast<double>(FromString<i16>(node.Cast<TCoInt16>().Literal().Value()));
-        if (negative) literalValue = -literalValue;
+        if (negative) {
+            literalValue = -literalValue;
+        }
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
 
     if (node.Maybe<TCoInt32>()) {
         double literalValue = static_cast<double>(FromString<i32>(node.Cast<TCoInt32>().Literal().Value()));
-        if (negative) literalValue = -literalValue;
+        if (negative) {
+            literalValue = -literalValue;
+        }
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
@@ -165,28 +243,36 @@ std::optional<TString> EncodeValueToJsonPath(const TExprBase& node, bool negativ
             return std::nullopt;
         }
         double literalValue = static_cast<double>(intValue);
-        if (negative) literalValue = -literalValue;
+        if (negative) {
+            literalValue = -literalValue;
+        }
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
 
     if (node.Maybe<TCoUint8>()) {
         double literalValue = static_cast<double>(FromString<ui8>(node.Cast<TCoUint8>().Literal().Value()));
-        if (negative) literalValue = -literalValue;
+        if (negative) {
+            literalValue = -literalValue;
+        }
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
 
     if (node.Maybe<TCoUint16>()) {
         double literalValue = static_cast<double>(FromString<ui16>(node.Cast<TCoUint16>().Literal().Value()));
-        if (negative) literalValue = -literalValue;
+        if (negative) {
+            literalValue = -literalValue;
+        }
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
 
     if (node.Maybe<TCoUint32>()) {
         double literalValue = static_cast<double>(FromString<ui32>(node.Cast<TCoUint32>().Literal().Value()));
-        if (negative) literalValue = -literalValue;
+        if (negative) {
+            literalValue = -literalValue;
+        }
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
@@ -197,7 +283,9 @@ std::optional<TString> EncodeValueToJsonPath(const TExprBase& node, bool negativ
             return std::nullopt;
         }
         double literalValue = static_cast<double>(uintValue);
-        if (negative) literalValue = -literalValue;
+        if (negative) {
+            literalValue = -literalValue;
+        }
         AppendJsonIndexLiteral(value, NBinaryJson::EEntryType::Number, {}, &literalValue);
         return value;
     }
@@ -206,12 +294,11 @@ std::optional<TString> EncodeValueToJsonPath(const TExprBase& node, bool negativ
 }
 
 bool IsSupportedJsonParamType(const TTypeAnnotationNode* type) {
-    const auto* innerType = RemoveAllOptionals(type);
-    if (!innerType || innerType->GetKind() != ETypeAnnotationKind::Data) {
+    if (!type || type->GetKind() != ETypeAnnotationKind::Data) {
         return false;
     }
 
-    switch (innerType->Cast<TDataExprType>()->GetSlot()) {
+    switch (type->Cast<TDataExprType>()->GetSlot()) {
         case EDataSlot::String:
         case EDataSlot::Utf8:
         case EDataSlot::Bool:
@@ -231,9 +318,14 @@ bool IsSupportedJsonParamType(const TTypeAnnotationNode* type) {
     }
 }
 
-std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& jsonNode) {
+std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& jsonNode, const THashSet<TString>& indexedColumns) {
     if (!jsonNode.Json().Maybe<TCoMember>()) {
         return std::unexpected("JSON source must be a column reference");
+    }
+
+    auto columnName = TString(jsonNode.Json().Cast<TCoMember>().Name().StringValue());
+    if (!indexedColumns.contains(columnName)) {
+        return std::unexpected("JSON source column is not indexed");
     }
 
     if (!jsonNode.JsonPath().Maybe<TCoUtf8>()) {
@@ -260,13 +352,11 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
 
             const auto applyExpr = TExprBase(pair.ChildPtr(1));
             if (!applyExpr.Maybe<TCoApply>()) {
-                return std::unexpected(TStringBuilder() << "Variable '" << varName
-                    << "' is bound to unsupported expression");
+                return std::unexpected(TStringBuilder() << "Variable '" << varName << "' is bound to unsupported expression");
             }
 
             if (applyExpr.Ref().ChildrenSize() <= 1) {
-                return std::unexpected(TStringBuilder() << "Variable '" << varName
-                    << "' is bound to malformed expression");
+                return std::unexpected(TStringBuilder() << "Variable '" << varName << "' is bound to malformed expression");
             }
 
             const auto innerValue = UnwrapValue(TExprBase(applyExpr.Ref().ChildPtr(1)));
@@ -275,8 +365,7 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
                 const auto paramName = TString(innerValue.Cast<TCoParameter>().Name().Value());
                 const auto paramType = innerValue.Cast<TCoParameter>().Ref().GetTypeAnn();
                 if (!IsSupportedJsonParamType(paramType)) {
-                    return std::unexpected(TStringBuilder() << "Variable '" << varName
-                        << "' is bound to a parameter with unsupported type");
+                    return std::unexpected(TStringBuilder() << "Variable '" << varName << "' is bound to a parameter with unsupported type");
                 }
                 paramVariables.emplace(varName, paramName);
                 continue;
@@ -284,8 +373,7 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
 
             const auto encoded = EncodeValueToJsonPath(innerValue);
             if (!encoded) {
-                return std::unexpected(TStringBuilder() << "Variable '" << varName
-                    << "' is bound to unsupported expression");
+                return std::unexpected(TStringBuilder() << "Variable '" << varName << "' is bound to unsupported expression");
             }
 
             variables.emplace(varName, *encoded);
@@ -324,8 +412,7 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
             return std::unexpected("RETURNING clause is required for JSON_VALUE in JSON index predicates");
         }
 
-        const auto* returningTypeAnn = jsonValue.ReturningType().Ref()
-            .GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        const auto* returningTypeAnn = jsonValue.ReturningType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         returningType = returningTypeAnn->Cast<TDataExprType>()->GetSlot();
 
         if (IsJsonValueReturningNonIndexable(returningType)) {
@@ -333,19 +420,16 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
         }
     }
 
-    return TJsonNodeParams{
-        .ColumnName = jsonNode.Json().Cast<TCoMember>().Name().StringValue(),
+    return TJsonNodeParams{ .ColumnName = std::move(columnName),
         .JsonPath = jsonNode.JsonPath().Cast<TCoUtf8>().Literal().StringValue(),
         .ReturningType = returningType,
         .Variables = std::move(variables),
-        .ParamVariables = std::move(paramVariables)
-    };
+        .ParamVariables = std::move(paramVariables) };
 }
 
 std::optional<TPredicateCollectResult> MergePredicateResults(std::optional<TPredicateCollectResult> left,
-    std::optional<TPredicateCollectResult> right, TCollectResult::ETokensMode mode, TExprContext& ctx, TPositionHandle pos)
-{
-    const bool leftValid  = left.has_value()  && !left->Collect.IsError();
+    std::optional<TPredicateCollectResult> right, TCollectResult::ETokensMode mode, TExprContext& ctx, TPositionHandle pos) {
+    const bool leftValid = left.has_value() && !left->Collect.IsError();
     const bool rightValid = right.has_value() && !right->Collect.IsError();
 
     if (leftValid && rightValid) {
@@ -353,10 +437,9 @@ std::optional<TPredicateCollectResult> MergePredicateResults(std::optional<TPred
             return MakeCollectError(ctx, pos, "Cross-column predicates are not supported");
         }
 
-        const auto merged = (mode == TCollectResult::ETokensMode::And)
-            ? MergeAnd(std::move(left->Collect), std::move(right->Collect))
-            : MergeOr(std::move(left->Collect), std::move(right->Collect));
-        return TPredicateCollectResult{std::move(left->ColumnName), std::move(merged)};
+        auto merged = (mode == TCollectResult::ETokensMode::And) ? MergeAnd(std::move(left->Collect), std::move(right->Collect))
+                                                                 : MergeOr(std::move(left->Collect), std::move(right->Collect));
+        return TPredicateCollectResult{ .ColumnName = std::move(left->ColumnName), .Collect = std::move(merged) };
     }
 
     // AND semantics: one of the operands must be valid
@@ -393,12 +476,11 @@ std::optional<TPredicateCollectResult> MergePredicateResults(std::optional<TPred
         return std::nullopt;
     }
 
-    Y_UNREACHABLE();
+    YQL_ENSURE(false, "unreachable");
 }
 
-TPredicateCollectResult AppendComparisonValue(const TString& columnName, TCollectResult collectResult,
-    std::optional<TExprBase> comparisonValue)
-{
+TPredicateCollectResult AppendComparisonValue(
+    const TString& columnName, TCollectResult collectResult, std::optional<TExprBase> comparisonValue) {
     YQL_ENSURE(!collectResult.IsError(), "Expected valid collect result");
 
     auto& tokens = collectResult.GetTokens();
@@ -417,13 +499,11 @@ TPredicateCollectResult AppendComparisonValue(const TString& columnName, TCollec
         collectResult.StopCollecting();
     }
 
-    return TPredicateCollectResult{columnName, std::move(collectResult)};
+    return TPredicateCollectResult{ .ColumnName = columnName, .Collect = std::move(collectResult) };
 }
 
-TPredicateCollectResult ParseAndCollectJson(const TJsonNodeParams& params,
-    ECallableType callableType, std::optional<TExprBase> comparisonValue,
-    TExprContext& ctx, TPositionHandle pos)
-{
+TPredicateCollectResult ParseAndCollectJson(const TJsonNodeParams& params, ECallableType callableType, std::optional<TExprBase> comparisonValue,
+    TExprContext& ctx, TPositionHandle pos) {
     TIssues parseIssues;
     const auto path = NJsonPath::ParseJsonPath(params.JsonPath, parseIssues, 1);
     if (!parseIssues.Empty()) {
@@ -435,7 +515,7 @@ TPredicateCollectResult ParseAndCollectJson(const TJsonNodeParams& params,
         return MakeCollectError(ctx, pos, collectResult.GetError().GetMessage());
     }
 
-    return AppendComparisonValue(params.ColumnName, std::move(collectResult), comparisonValue);
+    return AppendComparisonValue(params.ColumnName, std::move(collectResult), std::move(comparisonValue));
 }
 
 std::expected<std::optional<TExprBase>, TString> TryExtractComparisonValue(const TExprBase& value) {
@@ -462,57 +542,63 @@ std::expected<std::optional<TExprBase>, TString> TryExtractComparisonValue(const
     return std::optional<TExprBase>(std::nullopt);
 }
 
-std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(const TExprBase& node, TExprBase left, TExprBase right, TExprContext& ctx) {
-    left = UnwrapValue(left);
-    right = UnwrapValue(right);
+std::optional<TPredicateCollectResult> VisitJsonBinaryOperator(
+    const TExprBase& node, const TExprBase& left, TExprBase right, TExprContext& ctx, const THashSet<TString>& indexedColumns) {
+    auto jsonSide = UnwrapValue(left);
+    auto otherSide = UnwrapValue(std::move(right));
 
-    if (!left.Maybe<TCoJsonValue>()) {
-        if (!right.Maybe<TCoJsonValue>()) {
-            return std::nullopt;
-        }
-        std::swap(left, right);
+    std::expected<TJsonNodeParams, TString> leftParams;
+    std::expected<TJsonNodeParams, TString> rightParams;
+
+    if (jsonSide.Maybe<TCoJsonValue>()) {
+        leftParams = VisitJsonNode(jsonSide.Cast<TCoJsonValue>(), indexedColumns);
+    } else {
+        leftParams = std::unexpected("Expected JSON_VALUE on the left side");
     }
 
-    const auto jsonSide = left;
-    const auto otherSide = right;
-
-    const auto leftParams = VisitJsonNode(jsonSide.Cast<TCoJsonValue>());
-    if (!leftParams.has_value()) {
-        return MakeCollectError(ctx, jsonSide.Pos(), leftParams.error());
+    if (otherSide.Maybe<TCoJsonValue>()) {
+        rightParams = VisitJsonNode(otherSide.Cast<TCoJsonValue>(), indexedColumns);
+    } else {
+        rightParams = std::unexpected("Expected JSON_VALUE on the right side");
     }
-    if (leftParams->ReturningType.has_value() && *leftParams->ReturningType == EDataSlot::Bool) {
+
+    if (!leftParams.has_value() && !rightParams.has_value()) {
+        return MakeCollectError(ctx, left.Pos(), leftParams.error());
+    }
+
+    if (!leftParams.has_value() && rightParams.has_value()) {
+        std::swap(jsonSide, otherSide);
+        std::swap(leftParams, rightParams);
+    }
+
+    if (leftParams.has_value() && leftParams->ReturningType.has_value() && *leftParams->ReturningType == EDataSlot::Bool) {
+        return MakeCollectError(ctx, jsonSide.Pos(), "Comparison JSON_VALUE with RETURNING Bool is not supported");
+    }
+
+    if (rightParams.has_value() && rightParams->ReturningType.has_value() && *rightParams->ReturningType == EDataSlot::Bool) {
         return MakeCollectError(ctx, jsonSide.Pos(), "Comparison JSON_VALUE with RETURNING Bool is not supported");
     }
 
     std::optional<TExprBase> comparisonValue;
-    if (node.Maybe<TCoCmpEqual>()) {
+    if (node.Maybe<TCoCmpEqual>() && !rightParams.has_value()) {
         auto extracted = TryExtractComparisonValue(otherSide);
         if (!extracted.has_value()) {
             return MakeCollectError(ctx, otherSide.Pos(), extracted.error());
         }
+
         comparisonValue = std::move(*extracted);
     }
 
-    const auto leftResult = ParseAndCollectJson(*leftParams, ECallableType::JsonValue, comparisonValue, ctx, left.Pos());
-
-    if (otherSide.Maybe<TCoJsonValue>()) {
-        const auto rightParams = VisitJsonNode(otherSide.Cast<TCoJsonValue>());
-        if (!rightParams.has_value()) {
-            return MakeCollectError(ctx, otherSide.Pos(), rightParams.error());
-        }
-        if (rightParams->ReturningType.has_value() && *rightParams->ReturningType == EDataSlot::Bool) {
-            return MakeCollectError(ctx, jsonSide.Pos(), "Comparison JSON_VALUE with RETURNING Bool is not supported");
-        }
-
-        const auto rightResult = ParseAndCollectJson(*rightParams, ECallableType::JsonValue, std::nullopt, ctx, otherSide.Pos());
-        return MergePredicateResults(std::move(leftResult), std::move(rightResult),
-            TCollectResult::ETokensMode::And, ctx, otherSide.Pos());
+    auto leftResult = ParseAndCollectJson(*leftParams, ECallableType::JsonValue, comparisonValue, ctx, left.Pos());
+    if (rightParams.has_value()) {
+        auto rightResult = ParseAndCollectJson(*rightParams, ECallableType::JsonValue, std::nullopt, ctx, otherSide.Pos());
+        return MergePredicateResults(std::move(leftResult), std::move(rightResult), TCollectResult::ETokensMode::And, ctx, otherSide.Pos());
     }
 
     return leftResult;
 }
 
-std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExprContext& ctx) {
+std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExprContext& ctx, const THashSet<TString>& indexedColumns) {
     auto lookup = UnwrapValue(node.Lookup());
     auto collection = UnwrapValue(node.Collection());
 
@@ -521,7 +607,7 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
     }
 
     const auto jsonLookup = lookup.Cast<TCoJsonValue>();
-    const auto jsonParams = VisitJsonNode(jsonLookup);
+    const auto jsonParams = VisitJsonNode(jsonLookup, indexedColumns);
     if (!jsonParams.has_value()) {
         return MakeCollectError(ctx, jsonLookup.Pos(), jsonParams.error());
     }
@@ -532,27 +618,43 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
 
     if (collection.Maybe<TCoParameter>()) {
         const auto& param = collection.Cast<TCoParameter>();
-        const auto* paramTypeAnn = RemoveAllOptionals(param.Ref().GetTypeAnn());
+        const TTypeAnnotationNode* paramTypeAnn = param.Ref().GetTypeAnn();
 
-        if (!paramTypeAnn || paramTypeAnn->GetKind() != ETypeAnnotationKind::List) {
+        if (!paramTypeAnn) {
             return MakeCollectError(ctx, param.Pos(), "Unsupported parameter type in SQL IN");
         }
 
-        const auto* listItemType = paramTypeAnn->Cast<TListExprType>()->GetItemType();
-        if (!IsSupportedJsonParamType(listItemType)) {
-            return MakeCollectError(ctx, param.Pos(), "List parameter item type is not supported for JSON index");
+        if (paramTypeAnn->GetKind() == ETypeAnnotationKind::List) {
+            const auto* listItemType = paramTypeAnn->Cast<TListExprType>()->GetItemType();
+            if (!IsSupportedJsonParamType(listItemType)) {
+                return MakeCollectError(ctx, param.Pos(), "List parameter item type is not supported for JSON index");
+            }
+        } else if (paramTypeAnn->GetKind() == ETypeAnnotationKind::Tuple) {
+            const auto& items = paramTypeAnn->Cast<TTupleExprType>()->GetItems();
+            for (const auto* itemType : items) {
+                if (!IsSupportedJsonParamType(itemType)) {
+                    return MakeCollectError(ctx, param.Pos(), "Tuple parameter item type is not supported for JSON index");
+                }
+            }
+        } else if (paramTypeAnn->GetKind() == ETypeAnnotationKind::Dict) {
+            const auto* keyType = paramTypeAnn->Cast<TDictExprType>()->GetKeyType();
+            if (!IsSupportedJsonParamType(keyType)) {
+                return MakeCollectError(ctx, param.Pos(), "Dict parameter key type is not supported for JSON index");
+            }
+        } else {
+            return MakeCollectError(ctx, param.Pos(), "Unsupported parameter type in SQL IN");
         }
 
-        auto baseResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue,
-            std::nullopt, ctx, jsonLookup.Pos());
+        auto baseResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue, std::nullopt, ctx, jsonLookup.Pos());
         if (baseResult.Collect.IsError()) {
             return baseResult;
         }
 
-        const auto paramName = TString(param.Name().Value());
         if (baseResult.Collect.CanCollect()) {
             auto& tokens = baseResult.Collect.GetTokens();
             YQL_ENSURE(tokens.size() == 1);
+
+            auto paramName = TString(param.Name().Value());
 
             auto nodeHandle = tokens.extract(tokens.begin());
             nodeHandle.value().ParamName = std::move(paramName);
@@ -565,8 +667,33 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
         return baseResult;
     }
 
-    if (!collection.Maybe<TExprList>()) {
-        return std::nullopt;
+    std::vector<TExprBase> items;
+
+    if (collection.Maybe<TCoAsList>()) {
+        auto asList = collection.Cast<TCoAsList>();
+        for (size_t i = 0; i < asList.ArgCount(); ++i) {
+            items.push_back(TExprBase(asList.Arg(i)));
+        }
+    } else if (collection.Maybe<TCoAsDict>()) {
+        auto asDict = collection.Cast<TCoAsDict>();
+        for (const auto& pair : asDict.Args()) {
+            const auto& pairRef = pair.Ref();
+            if (pairRef.ChildrenSize() != 2) {
+                return MakeCollectError(ctx, pair.Pos(), "Dict literal must have exactly two elements");
+            }
+            items.emplace_back(pairRef.ChildPtr(0));
+        }
+    } else if (collection.Ref().IsCallable({ "AsSet", "AsSetStrict", "AsSetMayWarn" })) {
+        for (ui32 i = 0; i < collection.Ref().ChildrenSize(); ++i) {
+            items.emplace_back(collection.Ref().ChildPtr(i));
+        }
+    } else if (collection.Maybe<TExprList>()) {
+        auto list = collection.Cast<TExprList>();
+        for (const auto& item : list) {
+            items.emplace_back(item);
+        }
+    } else {
+        return MakeCollectError(ctx, collection.Pos(), "Unsupported collection type in SQL IN");
     }
 
     auto baseResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue, std::nullopt, ctx, jsonLookup.Pos());
@@ -575,8 +702,8 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
     }
 
     std::optional<TPredicateCollectResult> acc;
-    for (const auto& item : collection.Cast<TExprList>()) {
-        const auto literal = UnwrapValue(TExprBase(item));
+    for (const auto& item : items) {
+        const auto literal = UnwrapValue(item);
         auto extracted = TryExtractComparisonValue(literal);
         if (!extracted.has_value()) {
             return MakeCollectError(ctx, literal.Pos(), extracted.error());
@@ -586,17 +713,16 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
         if (!acc.has_value()) {
             acc = std::move(itemResult);
         } else {
-            acc = MergePredicateResults(std::move(acc), std::move(itemResult),
-                TCollectResult::ETokensMode::Or, ctx, literal.Pos());
+            acc = MergePredicateResults(std::move(acc), std::move(itemResult), TCollectResult::ETokensMode::Or, ctx, literal.Pos());
         }
     }
 
     return acc;
 }
 
-std::optional<TPredicateCollectResult> VisitJsonExists(const TExprBase& node, TExprContext& ctx) {
+std::optional<TPredicateCollectResult> VisitJsonExists(const TExprBase& node, TExprContext& ctx, const THashSet<TString>& indexedColumns) {
     if (node.Maybe<TCoJsonExists>()) {
-        const auto params = VisitJsonNode(node.Cast<TCoJsonExists>());
+        const auto params = VisitJsonNode(node.Cast<TCoJsonExists>(), indexedColumns);
         if (!params) {
             return MakeCollectError(ctx, node.Pos(), params.error());
         }
@@ -607,18 +733,18 @@ std::optional<TPredicateCollectResult> VisitJsonExists(const TExprBase& node, TE
     return std::nullopt;
 }
 
-std::optional<TPredicateCollectResult> VisitJsonValue(const TExprBase& node, TExprContext& ctx) {
+std::optional<TPredicateCollectResult> VisitJsonValue(const TExprBase& node, TExprContext& ctx, const THashSet<TString>& indexedColumns) {
     if (const auto cmp = node.Maybe<TCoCompare>()) {
-        return VisitJsonBinaryOperator(node, cmp.Cast().Left(), cmp.Cast().Right(), ctx);
+        return VisitJsonBinaryOperator(node, cmp.Cast().Left(), cmp.Cast().Right(), ctx, indexedColumns);
     }
 
     if (const auto sqlIn = node.Maybe<TCoSqlIn>()) {
-        return VisitJsonSqlIn(sqlIn.Cast(), ctx);
+        return VisitJsonSqlIn(sqlIn.Cast(), ctx, indexedColumns);
     }
 
     if (node.Maybe<TCoJsonValue>()) {
         const auto jsonValue = node.Cast<TCoJsonValue>();
-        const auto params = VisitJsonNode(jsonValue);
+        const auto params = VisitJsonNode(jsonValue, indexedColumns);
         if (!params) {
             return MakeCollectError(ctx, node.Pos(), params.error());
         }
@@ -634,105 +760,101 @@ std::optional<TPredicateCollectResult> VisitJsonValue(const TExprBase& node, TEx
     return std::nullopt;
 }
 
-std::optional<TPredicateCollectResult> VisitJsonPredicate(const TExprBase& predicate, TExprContext& ctx) {
-    const auto node = UnwrapPredicate(predicate);
+std::optional<TPredicateCollectResult> VisitJsonPredicate(
+    const TExprBase& predicate, TExprContext& ctx, const THashSet<TString>& indexedColumns) {
+    auto node = UnwrapPredicate(predicate);
 
     if (const auto maybeAnd = node.Maybe<TCoAnd>()) {
-        const auto andNode = maybeAnd.Cast();
+        auto andNode = maybeAnd.Cast();
         if (andNode.ArgCount() == 0) {
             return std::nullopt;
         }
 
-        auto result = VisitJsonPredicate(andNode.Arg(0), ctx);
+        auto result = VisitJsonPredicate(andNode.Arg(0), ctx, indexedColumns);
         for (size_t i = 1; i < andNode.ArgCount(); ++i) {
-            const auto nextNode = andNode.Arg(i);
-            const auto nextResult = VisitJsonPredicate(nextNode, ctx);
-            result = MergePredicateResults(std::move(result), std::move(nextResult),
-                TCollectResult::ETokensMode::And, ctx, nextNode.Pos());
+            auto nextNode = andNode.Arg(i);
+            auto nextResult = VisitJsonPredicate(nextNode, ctx, indexedColumns);
+            result = MergePredicateResults(std::move(result), std::move(nextResult), TCollectResult::ETokensMode::And, ctx, nextNode.Pos());
         }
 
         return result;
     }
 
-    if (const auto maybeOr = node.Maybe<TCoOr>()) {
-        const auto orNode = maybeOr.Cast();
+    if (auto maybeOr = node.Maybe<TCoOr>()) {
+        auto orNode = maybeOr.Cast();
         if (orNode.ArgCount() == 0) {
             return std::nullopt;
         }
 
-        auto result = VisitJsonPredicate(orNode.Arg(0), ctx);
+        auto result = VisitJsonPredicate(orNode.Arg(0), ctx, indexedColumns);
         for (size_t i = 1; i < orNode.ArgCount(); ++i) {
-            const auto nextNode = orNode.Arg(i);
-            const auto nextResult = VisitJsonPredicate(nextNode, ctx);
-            result = MergePredicateResults(std::move(result), std::move(nextResult),
-                TCollectResult::ETokensMode::Or, ctx, nextNode.Pos());
+            auto nextNode = orNode.Arg(i);
+            auto nextResult = VisitJsonPredicate(nextNode, ctx, indexedColumns);
+            result = MergePredicateResults(std::move(result), std::move(nextResult), TCollectResult::ETokensMode::Or, ctx, nextNode.Pos());
         }
 
         return result;
     }
 
-    if (const auto jsonExists = VisitJsonExists(node, ctx)) {
+    if (auto jsonExists = VisitJsonExists(node, ctx, indexedColumns)) {
         return jsonExists;
     }
 
-    if (const auto jsonValue = VisitJsonValue(node, ctx)) {
+    if (auto jsonValue = VisitJsonValue(node, ctx, indexedColumns)) {
         return jsonValue;
     }
 
     return std::nullopt;
 }
 
-} // namespace
+}   // namespace
 
-std::optional<TJsonIndexSettings> CollectJsonIndexPredicate(const TExprBase& body, const TExprBase& node, TExprContext& ctx) {
-    bool hasJsonQuery = false;
-
-    std::function<void(const TExprNode::TPtr&)> countJsonNodes = [&](const TExprNode::TPtr& expr) {
-        if (TExprBase(expr).Maybe<TCoJsonQueryBase>()) {
-            hasJsonQuery |= static_cast<bool>(TExprBase(expr).Maybe<TCoJsonQuery>());
-            return;
-        }
-        for (const auto& child : expr->Children()) {
-            countJsonNodes(child);
-        }
-    };
-
-    countJsonNodes(body.Ptr());
-
-    if (hasJsonQuery) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: JSON_QUERY is not supported"));
-        return std::nullopt;
-    }
-
-    const auto result = VisitJsonPredicate(body, ctx);
+std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(
+    const TExprBase& body, const TExprBase& node, TExprContext& ctx, const THashSet<TString>& indexedColumns,
+    const TVector<TString>& prefixColumns, const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns,
+    EJsonIndexSelectionMode selectionMode, const TExprNode* expectedRow)
+{
+    auto result = VisitJsonPredicate(body, ctx, indexedColumns);
     if (!result.has_value()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: nothing to extract"));
-        return std::nullopt;
+        return std::unexpected(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << kErrorMessage << "nothing to extract"));
     }
 
     const auto& collectResult = result->Collect;
     if (collectResult.IsError()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: " << collectResult.GetError().GetMessage()));
-        return std::nullopt;
+        return std::unexpected(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << kErrorMessage << collectResult.GetError().GetMessage()));
     }
 
     if (collectResult.GetTokens().empty()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: Empty result"));
-        return std::nullopt;
+        return std::unexpected(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << kErrorMessage << "empty tokens set"));
+    }
+
+    for (const auto& token : collectResult.GetTokens()) {
+        if (!token.PathToken.empty() || !token.ParamName.empty()) {
+            continue;
+        }
+
+        const TString message = selectionMode == EJsonIndexSelectionMode::Automatic
+            ? TStringBuilder() << "JSON index was not auto-selected: " << kFullRangeSearchMessage
+            : TStringBuilder() << "JSON index cannot be used: " << kFullRangeSearchMessage;
+        TIssue issue(ctx.GetPosition(node.Pos()), message);
+
+        if (selectionMode == EJsonIndexSelectionMode::Automatic) {
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, issue);
+        }
+
+        return std::unexpected(std::move(issue));
     }
 
     TVector<TExprNode::TPtr> tokenNodes;
     tokenNodes.reserve(collectResult.GetTokens().size());
 
     for (const auto& tokenPair : collectResult.GetTokens()) {
+        // clang-format off
         auto pair = Build<TExprList>(ctx, node.Pos())
             .Add<TCoString>().Literal().Build(tokenPair.PathToken).Build()
             .Add<TCoString>().Literal().Build(tokenPair.ParamName).Build()
             .Done().Ptr();
+        // clang-format on
 
         tokenNodes.push_back(std::move(pair));
     }
@@ -744,7 +866,51 @@ std::optional<TJsonIndexSettings> CollectJsonIndexPredicate(const TExprBase& bod
     settings.SetMinimumShouldMatch(Build<TCoString>(ctx, node.Pos()).Literal().Build("").Done().Ptr());
     settings.SetTokens(ctx.NewList(node.Pos(), std::move(tokenNodes)));
 
-    return TJsonIndexSettings{std::move(result->ColumnName), std::move(settings)};
+    // Extract prefix column equality predicates from the predicate tree
+    if (!prefixColumns.empty()) {
+        TVector<std::pair<TString, TExprNode::TPtr>> capturedPrefixColumns = seedPrefixColumns;
+        const THashSet<TString> prefixColumnsSet{prefixColumns.begin(), prefixColumns.end()};
+        static const THashSet<TString> AllowedJsonExprs = {
+            "And", "OptionalIf", "Just", "AssumeStrict"
+        };
+        TExprVisitPtrFunc extract = [&](const TExprNode::TPtr& expr) {
+            TryExtractPrefixValues(expr, prefixColumnsSet, capturedPrefixColumns, expectedRow);
+            auto optionalIf = TExprBase(expr).Maybe<TCoOptionalIf>();
+            if (optionalIf) {
+                VisitExpr(optionalIf.Cast().Predicate().Ptr(), extract);
+                return false;
+            }
+            auto coalesce = TExprBase(expr).Maybe<TCoCoalesce>();
+            if (coalesce) {
+                auto boolOr = coalesce.Cast().Value().Maybe<TCoBool>();
+                if (!boolOr || boolOr.Cast().Literal().Value() != "false") {
+                    return false;
+                }
+                VisitExpr(coalesce.Cast().Predicate().Ptr(), extract);
+                return false;
+            }
+            return AllowedJsonExprs.contains(expr->Content());
+        };
+        VisitExpr(body.Ptr(), extract);
+
+        if (capturedPrefixColumns.size() < prefixColumns.size()) {
+            return std::unexpected(TIssue(ctx.GetPosition(node.Pos()),
+                "Prefixed JSON index requires an equality predicate (column = <value>) on every prefix column"));
+        }
+
+        THashMap<TString, TExprNode::TPtr> byName;
+        for (auto& [name, value] : capturedPrefixColumns) {
+            byName[name] = value;
+        }
+        for (const auto& col : prefixColumns) {
+            settings.PrefixColumns.emplace_back(col, byName.at(col));
+        }
+    }
+
+    return TJsonIndexSettings{
+        .ColumnName = std::move(result->ColumnName),
+        .Settings = std::move(settings),
+    };
 }
 
-} // namespace NKikimr::NKqp::NOpt
+}   // namespace NKikimr::NKqp::NOpt

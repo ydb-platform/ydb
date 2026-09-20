@@ -9,7 +9,7 @@
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -31,7 +31,7 @@ DEFINE_REFCOUNTED_TYPE(TMultiplexingBandConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTcpDispatcherConfig
+struct TDispatcherConfig
     : public NYTree::TYsonStruct
 {
     int ThreadPoolSize;
@@ -46,22 +46,22 @@ struct TTcpDispatcherConfig
     TEnumIndexedArray<EMultiplexingBand, TMultiplexingBandConfigPtr> MultiplexingBands;
 
     //! Used to store TLS/SSL certificate files.
-    std::optional<TString> BusCertsDirectoryPath;
+    std::optional<std::string> BusCertsDirectoryPath;
 
     bool EnableLocalBypass;
 
-    TTcpDispatcherConfigPtr ApplyDynamic(const TTcpDispatcherDynamicConfigPtr& dynamicConfig) const;
+    TDispatcherConfigPtr ApplyDynamic(const TDispatcherDynamicConfigPtr& dynamicConfig) const;
 
-    REGISTER_YSON_STRUCT(TTcpDispatcherConfig);
+    REGISTER_YSON_STRUCT(TDispatcherConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TTcpDispatcherConfig)
+DEFINE_REFCOUNTED_TYPE(TDispatcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTcpDispatcherDynamicConfig
+struct TDispatcherDynamicConfig
     : public NYTree::TYsonStruct
 {
     std::optional<int> ThreadPoolSize;
@@ -75,16 +75,16 @@ struct TTcpDispatcherDynamicConfig
     std::optional<TEnumIndexedArray<EMultiplexingBand, TMultiplexingBandConfigPtr>> MultiplexingBands;
 
     //! Used to store TLS/SSL certificate files.
-    std::optional<TString> BusCertsDirectoryPath;
+    std::optional<std::string> BusCertsDirectoryPath;
 
     std::optional<bool> EnableLocalBypass;
 
-    REGISTER_YSON_STRUCT(TTcpDispatcherDynamicConfig);
+    REGISTER_YSON_STRUCT(TDispatcherDynamicConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TTcpDispatcherDynamicConfig)
+DEFINE_REFCOUNTED_TYPE(TDispatcherDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -111,9 +111,9 @@ struct TBusConfig
     // Ssl options.
     EEncryptionMode EncryptionMode;
     EVerificationMode VerificationMode;
-    std::optional<TString> CipherList;
+    std::optional<std::string> CipherList;
     bool LoadCertsFromBusCertsDirectory;
-    std::optional<TString> PeerAlternativeHostName;
+    std::optional<std::string> PeerAlternativeHostName;
 
     REGISTER_YSON_STRUCT(TBusConfig);
 
@@ -200,5 +200,5 @@ DEFINE_REFCOUNTED_TYPE(TBusClientDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp
 

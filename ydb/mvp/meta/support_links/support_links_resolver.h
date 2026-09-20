@@ -9,20 +9,13 @@
 #include <util/generic/hash.h>
 #include <memory>
 
-namespace NMVP {
+namespace NMVP::NSupportLinks {
 
 class TSupportLinksResolver {
 public:
-    enum class EEntityType {
-        Cluster,
-        Database,
-    };
-
     struct TParams {
-        EEntityType EntityType = EEntityType::Cluster;
         const TMetaSettings* Settings = nullptr;
-        THashMap<TString, TString> ClusterInfo;
-        NHttp::TUrlParameters UrlParameters;
+        TRequestContext RequestContext;
         NActors::TActorId Owner;
         NActors::TActorId HttpProxyId;
         TLinkSourceFactory LinkSourceFactory = MakeLinkSource;
@@ -38,7 +31,7 @@ public:
 
 private:
     void ResetState();
-    ILinkSource::TLinkResolveInput MakeResolveInput() const;
+    ILinkSource::TLinkResolveInput MakeResolveInput(size_t place) const;
     ILinkSource::TResolveContext MakeResolveContext(size_t place) const;
     TResolveOutput ResolveSource(size_t place) const;
     void SaveSourceOutput(size_t place, TResolveOutput sourceOutput);
@@ -46,12 +39,13 @@ private:
     void HandleSourceTimeout(size_t place, NActors::TActorSystem* actorSystem);
 
     TVector<std::shared_ptr<ILinkSource>> Sources;
+    TVector<TEntityIdentity> SourceIdentities;
     TVector<TResolveOutput> SourceOutputs;
     TVector<TMaybe<NActors::TActorId>> SourceActors;
     THashMap<TString, TString> ClusterInfo;
-    NHttp::TUrlParameters UrlParameters;
+    TCgiParameters AdditionalRequestParams;
     NActors::TActorId Owner;
     NActors::TActorId HttpProxyId;
 };
 
-} // namespace NMVP
+} // namespace NMVP::NSupportLinks

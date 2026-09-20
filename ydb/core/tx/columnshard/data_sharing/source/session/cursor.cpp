@@ -6,6 +6,8 @@
 
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NDataSharing {
 
 void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index) {
@@ -169,7 +171,8 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
         SchemeHistory.emplace_back(i);
     }
     if (PathPortionHashes.empty()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty static cursor");
+        YDB_LOG_ERROR("",
+            {"problem", "empty static cursor"});
     } else {
         IsStaticSaved = true;
     }

@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     AsTuple(
         AsList(1, 2) < AsList(1u, 3u),

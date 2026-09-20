@@ -22,6 +22,8 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/string/join.h>
 
+#include <atomic>
+
 namespace NKikimr::NOlap {
 class IDataReader;
 }
@@ -40,10 +42,67 @@ private:
     std::optional<TMonotonic> CurrentNodeStart;
 
     std::optional<TFetchingScriptCursor> CursorStep;
-    YDB_ACCESSOR_DEF(TString, PrevCategoryName);
-    YDB_ACCESSOR_DEF(TString, PrevExecutionResult);
+
+private:
+    struct TPrevNodeState {
+        ui32 NodeId = 0;
+        NArrow::NSSA::IResourceProcessor::EExecutionResult Result = NArrow::NSSA::IResourceProcessor::EExecutionResult::Success;
+        bool Failed = false;
+        bool Defined = false;
+    };
+
+    static_assert(std::atomic<TPrevNodeState>::is_always_lock_free);
+
+    // Prev-node tracing state is written by every finished program-step frame; a continuation frame may
+    // still be unwinding concurrently (issue #49169), so mutable TStrings are not allowed here. The
+    // whole state fits into one lock-free atomic struct; the category name is resolved on read through
+    // the immutable compiled graph.
+    TString StartCategoryName;
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
+    std::atomic<TPrevNodeState> PrevNode = {};
+
+    TString RenderCategoryName(const TPrevNodeState& state) const {
+        if (!state.Defined) {
+            return StartCategoryName;
+        }
+        AFL_VERIFY(Program);
+        auto it = Program->GetNodes().find(state.NodeId);
+        AFL_VERIFY(it != Program->GetNodes().end())("node_id", state.NodeId);
+        return it->second->GetProcessor()->GetSignalCategoryName();
+    }
 
 public:
+    void SetStartCategoryName(TString&& name) {
+        StartCategoryName = std::move(name);
+    }
+
+    void SetPrevNodeTracing(const ui32 nodeId, const TConclusion<NArrow::NSSA::IResourceProcessor::EExecutionResult>& conclusion) {
+        PrevNode.store(TPrevNodeState{ .NodeId = nodeId,
+                           .Result = conclusion.IsFail() ? NArrow::NSSA::IResourceProcessor::EExecutionResult::Success : *conclusion,
+                           .Failed = conclusion.IsFail(),
+                           .Defined = true }, std::memory_order_release);
+    }
+
+    TString GetPrevCategoryName() const {
+        return RenderCategoryName(PrevNode.load(std::memory_order_acquire));
+    }
+
+    struct TPrevNodeTracing {
+        TString CategoryName;
+        TString ExecutionResult;
+    };
+
+    // CategoryName/ExecutionResult are coupled only in the program-step transition tracing; a single
+    // load keeps the pair consistent.
+    TPrevNodeTracing GetPrevNodeTracing() const {
+        const TPrevNodeState state = PrevNode.load(std::memory_order_acquire);
+        TString executionResult;
+        if (state.Defined) {
+            executionResult = state.Failed ? "Fail" : ::ToString(state.Result);
+        }
+        return TPrevNodeTracing{ .CategoryName = RenderCategoryName(state), .ExecutionResult = std::move(executionResult) };
+    }
+
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
 
     void OnFinishProgramStepExecution();
@@ -63,6 +122,14 @@ public:
 
     bool HasProgramIterator() const {
         return !!ProgramIterator;
+    }
+
+    bool HasExecutionVisitor() const {
+        return !!ExecutionVisitor;
+    }
+
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> GetExecutionVisitorOptional() const {
+        return ExecutionVisitor;
     }
 
     void SetProgramIterator(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& it,
@@ -90,8 +157,8 @@ public:
 private:
     TAtomic SyncSectionFlag = 1;
     YDB_READONLY(EType, Type, EType::Undefined);
-    YDB_READONLY(ui32, SourceIdx, 0);
-    YDB_READONLY_DEF(ui64, DeprecatedPortionId);
+    ui32 SourceIdx = 0;
+    YDB_READONLY_DEF(ui64, SourceId);
     static inline TAtomicCounter MemoryGroupCounter = 0;
     YDB_READONLY(ui64, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
@@ -100,21 +167,25 @@ private:
     std::optional<ui32> RecordsCountImpl;
     YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
     YDB_READONLY(bool, HasDeletions, false);
+    // A conflicting source is scanned only so TConflictDetector can detect a conflict and break the lock: it yields no
+    // rows and takes no part in the ordered stream
+    const bool ConflictingFlag;
     std::optional<ui64> MemoryGroupId;
     TExecutionContext ExecutionContext;
     virtual bool DoAddTxConflict() = 0;
 
-    virtual ui64 DoGetEntityId() const override {
+    virtual ui32 DoGetSourceIdx() const override {
         return SourceIdx;
     }
 
-    virtual ui64 DoGetDeprecatedPortionId() const override {
-        return DeprecatedPortionId;
+    virtual ui64 DoGetSourceId() const override {
+        return SourceId;
     }
 
-    virtual ui64 DoGetEntityRecordsCount() const override;
+    virtual ui64 DoGetSourceRecordsCount() const override;
 
     std::optional<bool> IsSourceInMemoryFlag;
+    bool InFlightReleasedFlag = false;
     TAtomic SourceFinishedSafeFlag = 0;
     TAtomic StageResultBuiltFlag = 0;
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
@@ -185,28 +256,34 @@ public:
                                 : GetStageResult().GetBatch()->num_rows();
     }
 
+    NO_SANITIZE_THREAD
     void AddExecutionDuration(const TDuration d) {
         TotalExecutionDuration += d;
     }
 
+    NO_SANITIZE_THREAD
     void AddBytesRead(const ui64 bytes) {
         TotalBytesRead += bytes;
     }
 
     void OnStartProcessing();
 
+    NO_SANITIZE_THREAD
     TDuration GetTotalDuration() const {
         return SourceCreatedTimestamp ? (TMonotonic::Now() - SourceCreatedTimestamp) : TDuration::Zero();
     }
 
+    NO_SANITIZE_THREAD
     TDuration GetTotalExecutionDuration() const {
         return TotalExecutionDuration;
     }
 
+    NO_SANITIZE_THREAD
     ui64 GetTotalBytesRead() const {
         return TotalBytesRead;
     }
 
+    NO_SANITIZE_THREAD
     ui64 ExtractTotalBytesRead() {
         const ui64 result = TotalBytesRead;
         TotalBytesRead = 0;
@@ -310,9 +387,9 @@ public:
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const;
 
-    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const TSnapshot& recordSnapshotMin,
-        const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount, const std::optional<ui64> shardingVersion,
-        const bool hasDeletions, const ui64 deprecatedPortionId);
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const bool isConflicting,
+        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
+        const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId);
 
     virtual ~IDataSource() = default;
 
@@ -323,6 +400,10 @@ public:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ExtractResourceGuards();
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
+
+    bool IsConflicting() const {
+        return ConflictingFlag;
+    }
 
     bool IsSourceInMemory() const;
 
@@ -351,6 +432,15 @@ public:
 
     bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
+    }
+
+    bool IsInFlightReleased() const {
+        return InFlightReleasedFlag;
+    }
+
+    void SetInFlightReleased() {
+        AFL_VERIFY(!InFlightReleasedFlag);
+        InFlightReleasedFlag = true;
     }
 
     void ResetSourceFinishedFlag();

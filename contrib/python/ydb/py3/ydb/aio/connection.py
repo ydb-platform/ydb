@@ -26,6 +26,8 @@ from ydb.connection import (
 from ydb.driver import DriverConfig
 from ydb.settings import BaseRequestSettings
 from ydb import issues
+from ydb.observability import sdk_build_info_tokens
+from ydb.observability.tracing import get_trace_metadata
 
 try:
     from ydb.public.api.grpc import ydb_topic_v1_pb2_grpc
@@ -69,7 +71,11 @@ async def _construct_metadata(
         if settings.request_type is not None:
             metadata.append((YDB_REQUEST_TYPE_HEADER, settings.request_type))
 
-    metadata.append(_utilities.x_ydb_sdk_build_info_header(getattr(driver_config, "_additional_sdk_headers", ())))
+    additional_sdk_headers = (*sdk_build_info_tokens(), *getattr(driver_config, "_additional_sdk_headers", ()))
+    metadata.append(_utilities.x_ydb_sdk_build_info_header(additional_sdk_headers))
+
+    metadata.extend(get_trace_metadata())
+
     return metadata
 
 
@@ -148,6 +154,9 @@ class Connection:
         "closing",
         "endpoint_key",
         "node_id",
+        "peer_address",
+        "peer_port",
+        "peer_location",
     )
 
     def __init__(
@@ -156,10 +165,12 @@ class Connection:
         driver_config: Optional[DriverConfig] = None,
         endpoint_options: Optional[EndpointOptions] = None,
     ) -> None:
-        global _stubs_list
         self.endpoint = endpoint
         self.endpoint_key = EndpointKey(self.endpoint, getattr(endpoint_options, "node_id", None))
         self.node_id = getattr(endpoint_options, "node_id", None)
+        self.peer_address = getattr(endpoint_options, "address", None)
+        self.peer_port = getattr(endpoint_options, "port", None)
+        self.peer_location = getattr(endpoint_options, "location", None)
         self._channel = channel_factory(self.endpoint, driver_config, grpc.aio, endpoint_options=endpoint_options)
         self._driver_config = driver_config
 
@@ -248,8 +259,12 @@ class Connection:
         :param grace:
         :return: None
         """
-        if hasattr(self, "_channel") and hasattr(self._channel, "close"):
-            await self._channel.close(grace)
+        channel = getattr(self, "_channel", None)
+        if channel is not None and hasattr(channel, "close"):
+            await channel.close(grace)
+
+        self._stub_instances.clear()
+        self._channel = None
 
     def add_cleanup_callback(self, callback: Callable[["Connection"], None]) -> None:
         self._cleanup_callbacks.append(callback)
@@ -266,7 +281,7 @@ class Connection:
         """
         Closes the underlying gRPC channel
         :param: grace: If a grace period is specified, this method wait until all active
-        RPCs are finshed, once the grace period is reached the ones that haven't
+        RPCs are finished, once the grace period is reached the ones that haven't
         been terminated are cancelled. If grace is None, this method will wait until all tasks are finished.
         :return: None
         """

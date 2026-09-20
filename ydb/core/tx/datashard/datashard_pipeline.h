@@ -181,7 +181,6 @@ public:
     bool HasAlterCdcStream() const { return SchemaTx && SchemaTx->IsAlterCdcStream(); }
     bool HasDropCdcStream() const { return SchemaTx && SchemaTx->IsDropCdcStream(); }
     bool HasRotateCdcStream() const { return SchemaTx && SchemaTx->IsRotateCdcStream(); }
-    bool HasCreateIncrementalRestoreSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalRestoreSrc(); }
     bool HasCreateIncrementalBackupSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalBackupSrc(); }
     bool HasTruncate() const { return SchemaTx && SchemaTx->IsTruncate(); }
 
@@ -391,11 +390,12 @@ public:
     size_t WaitingCoroutinesCount() const { return WaitingCoroutines.Size(); }
 
     /**
-     * Waits until the specified snapshot is potentially readable
-     *
-     * Returns true on success and false when there are too many waiting requests already.
+     * Waits until the specified snapshot is potentially readable. This means that a read
+     * operation at this snapshot will be allowed to enter the pipeline and that the dependency
+     * tracker has all the info about planned writes at or below the snapshot. Note that this
+     * does *not* mean that all relevant changes are already executed against the localdb.
      */
-    async<bool> WaitForSnapshot(const TRowVersion& snapshot);
+    async<void> WaitForSnapshot(const TRowVersion& snapshot);
 
     TRowVersion GetReadEdge() const;
     TRowVersion GetUnreadableEdge() const;

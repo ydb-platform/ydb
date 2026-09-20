@@ -34,7 +34,8 @@ void BrotliCompress(int level, TSource* source, TBlob* output)
             }
         }
     } catch (const std::exception& ex) {
-        YT_LOG_FATAL(ex, "Brotli compression failed");
+        YT_TLOG_FATAL("Brotli compression failed")
+            .With(ex);
     }
 }
 
@@ -58,7 +59,7 @@ void BrotliDecompress(TSource* source, TBlob* output)
 
     if (remainingSize != 0) {
         THROW_ERROR_EXCEPTION("Brotli decompression failed: input stream is not fully consumed")
-            << TErrorAttribute("remaining_size", remainingSize);
+            .With("remaining_size", remainingSize);
     }
 }
 

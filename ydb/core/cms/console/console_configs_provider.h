@@ -221,7 +221,7 @@ private:
 
     void HandlePoison(const TActorContext &ctx)
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider::HandlePoison");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider::HandlePoison");
 
         Die(ctx);
     }

@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -33,23 +35,13 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_STATUS; }
 
-    bool IsGoodStatusForPenalties() const {
-        switch (Status) {
-            case TEvLocal::TEvTabletStatus::StatusBootFailed:
-                switch (Reason) {
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootSSError:
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootBSError:
-                    case TEvTablet::TEvTabletDead::EReason::ReasonBootSSTimeout:
-                        return true;
-                    default:
-                        break;
-                }
-                break;
+    bool IsFailStatusForPostponeRestart() const {
+        return Status != TEvLocal::TEvTabletStatus::StatusOk && Status != TEvLocal::TEvTabletStatus::StatusSupersededByLeader;
+    }
 
-            default:
-                break;
-        }
-        return false;
+    bool IsFailStatusForNodePenalty() const {
+        // Hive can send Poison to tablets, it must not make penalty for the node
+        return IsFailStatusForPostponeRestart() && Reason != TEvTablet::TEvTabletDead::EReason::ReasonPill;
     }
 
     TString GetStatus() {
@@ -65,25 +57,23 @@ public:
         SideEffects.Reset(Self->SelfId());
         TTabletInfo* tablet = Self->FindTablet(TabletId, FollowerId);
         if (tablet != nullptr) {
-            BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet "
-                        << tablet->ToString()
-                        << " status "
-                        << GetStatus()
-                        << " generation "
-                        << Generation
-                        << " follower "
-                        << FollowerId
-                        << " from local "
-                        << Local);
+            YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute processing tablet status from node",
+                {"logPrefix", GetLogPrefix()},
+                {"tabletInfo", tablet->ToString()},
+                {"status", GetStatus()},
+                {"knownGeneration", Generation},
+                {"followerId", FollowerId},
+                {"nodeId", Local.NodeId()});
             NIceDb::TNiceDb db(txc.DB);
-            TInstant now = TActivationContext::Now();
+            const TInstant now = TActivationContext::Now();
             if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
-                tablet->Statistics.AddRestartTimestamp(now.MilliSeconds());
-                tablet->ActualizeTabletStatistics(now);
                 if (tablet->BootTime != TInstant()) {
                     TDuration startTime = now - tablet->BootTime;
                     if (startTime > TDuration::Seconds(30)) {
-                        BLOG_W("Tablet " << tablet->GetFullTabletId() << " was starting for " << startTime.Seconds() << " seconds");
+                        YDB_LOG_WARN("THive::TTxUpdateTabletStatus::Execute tablet start took too long",
+                            {"logPrefix", GetLogPrefix()},
+                            {"fullTabletId", tablet->GetFullTabletId()},
+                            {"startTimeSeconds", startTime.Seconds()});
                     }
                     Self->TabletCounters->Percentile()[NHive::COUNTER_TABLETS_START_TIME].IncrementFor(startTime.MilliSeconds());
                     Self->UpdateCounterTabletsStarting(-1);
@@ -95,6 +85,9 @@ public:
                     return true;
                 }
                 if (tablet->IsLeader() && Generation < tablet->GetLeader().KnownGeneration) {
+                    if (tablet->AsLeader().IsLockedToActor()) {
+                        tablet->SendStopTablet(Local, SideEffects);
+                    }
                     return true;
                 }
                 tablet->NotifyOnRestart("OK", SideEffects);
@@ -111,6 +104,9 @@ public:
                     // Tablet is locked and shouldn't be running, but we just found out it's running on this node
                     // Ask it to stop using InitiateStop (which uses data saved by BecomeRunning call above)
                     tablet->InitiateStop(SideEffects);
+                    if (tablet->IsLeader()) {
+                        tablet->AsLeader().RestoreLockedTabletMetrics();
+                    }
                 }
                 tablet->BootState = Self->BootStateRunning;
                 tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
@@ -150,11 +146,13 @@ public:
                     if (Generation < leader.KnownGeneration) {
                         return true;
                     }
-                    if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
-                        if (IsGoodStatusForPenalties()) {
+                    if (IsFailStatusForPostponeRestart()) {
+                        if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
                             leader.PostponeStart(now + Self->GetPostponeStartPeriod());
-                            BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()
-                                << " postponed start until " << leader.PostponedStart);
+                            YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute postponed tablet start",
+                                {"logPrefix", GetLogPrefix()},
+                                {"tabletInfo", tablet->ToString()},
+                                {"postponedStart", leader.PostponedStart});
                         }
                     }
                 }
@@ -173,7 +171,7 @@ public:
                         }
                         tablet->InitiateStop(SideEffects);
                     }
-                    if (IsGoodStatusForPenalties()) {
+                    if (IsFailStatusForNodePenalty()) {
                         tablet->FailedNodeId = Local.NodeId();
                     }
                 }
@@ -194,7 +192,9 @@ public:
 
                 case ETabletState::Stopped:
                     Self->ReportStoppedToWhiteboard(tablet->GetLeader());
-                    BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
+                    YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute reported tablet as stopped to whiteboard",
+                        {"logPrefix", GetLogPrefix()},
+                        {"tabletInfo", tablet->ToString()});
                     break;
                 case ETabletState::BlockStorage:
                     // do nothing - let the tablet die
@@ -210,8 +210,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUpdateTabletStatus::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
-        SideEffects.Complete(ctx);
+        YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"sideEffects", SideEffects});
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 

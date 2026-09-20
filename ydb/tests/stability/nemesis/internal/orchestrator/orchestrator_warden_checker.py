@@ -34,6 +34,8 @@ logger.setLevel(logging.DEBUG)
 _AGENT_SAFETY_WAIT_MAX_SECONDS = 900
 _AGENT_SAFETY_POLL_INTERVAL = 2.0
 
+_ORCHESTRATOR_LOCAL_SAFETY_TIMEOUT_S = 600.0
+
 
 class OrchestratorWardenChecker:
     """Orchestrator-side warden checker for liveness and safety checks."""
@@ -160,12 +162,14 @@ class OrchestratorWardenChecker:
 
             if cluster is not None:
                 loop = asyncio.get_running_loop()
+                _settings = get_orchestrator_settings()
                 liveness_results = await loop.run_in_executor(
                     None,
                     partial(
                         run_orchestrator_liveness_subprocess_sync,
                         self._nemesis_agent_binary(),
-                        get_orchestrator_settings().yaml_config_location,
+                        _settings.yaml_config_location,
+                        database_yaml_config=_settings.database_config_location or None,
                     ),
                 )
                 self._publish_running(liveness_results, safety_results)
@@ -174,15 +178,37 @@ class OrchestratorWardenChecker:
 
                 # Use unified SafetyCheckSpec pipeline for cluster safety
                 cluster_safety_specs = collect_orchestrator_cluster_safety_specs(cluster)
-                _slot_names, local_runs = build_safety_runs(cluster_safety_specs, log_prefix="")
+                slot_names, local_runs = build_safety_runs(cluster_safety_specs, log_prefix="")
 
-                async def _run_local_run(run: SafetyWardenRun) -> List[WardenCheckResult]:
-                    return await loop.run_in_executor(None, run)
+                async def _run_local_run(idx: int, run: SafetyWardenRun) -> List[WardenCheckResult]:
+                    try:
+                        return await asyncio.wait_for(
+                            loop.run_in_executor(None, run),
+                            timeout=_ORCHESTRATOR_LOCAL_SAFETY_TIMEOUT_S,
+                        )
+                    except asyncio.TimeoutError:
+                        slot = slot_names[idx] if idx < len(slot_names) else f"local_safety_{idx}"
+                        logger.error(
+                            "Orchestrator local safety check %s timed out after %.0fs",
+                            slot,
+                            _ORCHESTRATOR_LOCAL_SAFETY_TIMEOUT_S,
+                        )
+                        return [
+                            WardenCheckResult(
+                                name=slot,
+                                category="safety",
+                                violations=[],
+                                status="error",
+                                error_message=(
+                                    f"check timed out after {_ORCHESTRATOR_LOCAL_SAFETY_TIMEOUT_S:.0f}s"
+                                ),
+                            )
+                        ]
 
                 async def _all_local() -> List[List[WardenCheckResult]]:
                     if not local_runs:
                         return []
-                    return list(await asyncio.gather(*[_run_local_run(r) for r in local_runs]))
+                    return list(await asyncio.gather(*[_run_local_run(i, r) for i, r in enumerate(local_runs)]))
 
                 # Do not use asyncio.gather for (local, wait): PDisk can take sum(per-node timeouts)
                 # across the cluster while agent wait caps at _AGENT_SAFETY_WAIT_MAX_SECONDS. Until *both*
@@ -269,8 +295,17 @@ class OrchestratorWardenChecker:
 
     def _get_cluster(self):
         if self._cluster is None and self._hosts:
+            settings = get_orchestrator_settings()
+            cluster_yaml = None
+            template_yaml = settings.yaml_config_location
+            if settings.database_config_location:
+                template_yaml = settings.database_config_location
+                cluster_yaml = settings.yaml_config_location
             self._cluster = ExternalKiKiMRCluster(
-                get_orchestrator_settings().yaml_config_location, None, None
+                cluster_template=template_yaml,
+                kikimr_configure_binary_path=None,
+                kikimr_path=None,
+                yaml_config=cluster_yaml,
             )
         return self._cluster
 

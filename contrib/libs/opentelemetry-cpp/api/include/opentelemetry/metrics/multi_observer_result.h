@@ -17,7 +17,12 @@ class MultiObserverResult
 {
 
 public:
-  virtual ~MultiObserverResult() = default;
+  MultiObserverResult()                                           = default;
+  MultiObserverResult(const MultiObserverResult &)                = default;
+  MultiObserverResult(MultiObserverResult &&) noexcept            = default;
+  MultiObserverResult &operator=(const MultiObserverResult &)     = default;
+  MultiObserverResult &operator=(MultiObserverResult &&) noexcept = default;
+  virtual ~MultiObserverResult()                                  = default;
 
   /**
    * Obtain an ObserverResultT<T> for the given instrument, that can be used to record

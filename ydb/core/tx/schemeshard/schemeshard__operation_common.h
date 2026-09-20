@@ -55,6 +55,8 @@ TSet<ui32> AllIncomingEvents();
 void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete);
 void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath& path, TOperationContext& context);
 
+void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath);
+
 void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup = false);
 void IncAliveChildrenDirect(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup = false);
 void DecAliveChildrenDirect(const TOperationId& opId, TPathElement::TPtr parentPath, TOperationContext& context, bool isBackup = false);
@@ -62,8 +64,9 @@ void DecAliveChildrenDirect(const TOperationId& opId, TPathElement::TPtr parentP
 
 NKikimrSchemeOp::TModifyScheme MoveTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
 NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
+NKikimrSchemeOp::TModifyScheme MoveLocalIndexTask(const TString& tablePath, const TString& srcIndexPath, const TString& dstIndexName);
 
-THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context);
+THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss);
 
 void AbortUnsafeDropOperation(const TOperationId& operationId, const TTxId& txId, TOperationContext& context);
 
@@ -90,11 +93,7 @@ private:
     TOperationId OperationId;
     const TTxState::ETxState NextState;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NTableState::TProposedWaitParts"
-                << " operationId# " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TProposedWaitParts"; }
     template<typename TEvent>
     bool HandleReplyImpl(const TEvent& ev, TOperationContext& context);
 
@@ -111,10 +110,7 @@ public:
 class TCreateParts: public TSubOperationState {
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TCreateParts"
-            << " opId# " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TCreateParts"; }
 
     THolder<TEvHive::TEvAdoptTablet> AdoptRequest(TShardIdx shardIdx, TOperationContext& context);
 
@@ -131,10 +127,7 @@ protected:
     const TOperationId OperationId;
     const TTxState::ETxState NextState;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TDeleteParts"
-            << " opId# " << OperationId << " ";
-    }
+    virtual const char* Name() const override final { return "TDeleteParts"; }
 
     void DeleteShards(TOperationContext& context);
 
@@ -156,10 +149,7 @@ protected:
     const TOperationId OperationId;
     const TMaybe<TPathElement::EPathState> TargetState;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TDone"
-            << " opId# " << OperationId;
-    }
+    virtual const char* Name() const override { return "TDone"; }
 
     bool Process(TOperationContext& context);
 
@@ -179,11 +169,7 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NPQState::TConfigureParts"
-                << " operationId# " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TConfigureParts"; }
 
 public:
     TConfigureParts(TOperationId id);
@@ -197,11 +183,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NPQState::TPropose"
-                << " operationId# " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TPropose"; }
 
 public:
     TPropose(TOperationId id);
@@ -234,11 +216,7 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "NBSVState::TConfigureParts"
-            << " operationId: " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TConfigureParts"; }
 
 public:
     TConfigureParts(TOperationId id);
@@ -251,11 +229,7 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NBSVState::TPropose"
-                << " operationId# " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TPropose"; }
 
 public:
     TPropose(TOperationId id);
@@ -269,11 +243,7 @@ public:
 namespace NCdcStreamState {
 
 class TConfigurePartsAtTable: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "NCdcStreamState::TConfigurePartsAtTable"
-            << " operationId: " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TConfigurePartsAtTable"; }
 
 protected:
     virtual void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const = 0;
@@ -289,11 +259,7 @@ protected:
 }; // TConfigurePartsAtTable
 
 class TProposeAtTable: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "NCdcStreamState::TProposeAtTable"
-            << " operationId: " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TProposeAtTable"; }
 
 public:
     explicit TProposeAtTable(TOperationId id);
@@ -319,8 +285,12 @@ namespace NForceDrop {
 
 void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPathId>& paths, TOperationContext& context);
 void CollectShards(const THashSet<TPathId>& paths, TOperationId operationId, TTxState* txState, TOperationContext& context);
+void AbortRelatedOperations(TOperationId operationId, const THashSet<TTxId>& relatedTx, TOperationContext& context);
 
 } // namespace NForceDrop
+
+// Creates an ACL that interrupts inheritance from the parent, keeping only the DescribeSchema grant.
+TString InterruptInheritanceExceptDescribe(const TString& initialAcl);
 
 } // namespace NKikimr::NSchemeShard
 

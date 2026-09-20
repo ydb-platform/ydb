@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
@@ -11,26 +12,12 @@ namespace NKikimr::NOlap::NReader::NCommon {
 class TFetchingScript;
 class IDataSource;
 
-struct TPortionStateAtScanStart {
-    bool Committed;
-    /*
-    Conflicting portions are written portions (not compacted) which are:
-    - uncommitted portions of concurrent transactions (concurrent to the given scan)
-    - committed portions that have the commit snapshot greater than the request snapshot
-    */
-    bool Conflicting;
-    TSnapshot MaxRecordSnapshot;
-
-    bool IsMyUncommitted() const {
-        return !Committed && !Conflicting;
-    }
-};
-
 class TSpecialReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TReadContext>, CommonContext);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TProcessGuard>, ProcessMemoryGuard);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TScopeGuard>, ProcessScopeGuard);
+    const EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator;
 
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, SpecColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, MergeColumns);
@@ -69,8 +56,6 @@ public:
         return ReadMetadata;
     }
 
-    TPortionStateAtScanStart GetPortionStateAtScanStart(const TPortionInfo& portionInfo) const;
-
     template <class T>
     std::shared_ptr<T> GetReadMetadataVerifiedAs() const {
         auto result = std::dynamic_pointer_cast<T>(ReadMetadata);
@@ -81,6 +66,12 @@ public:
     ui64 GetProcessMemoryControlId() const {
         AFL_VERIFY(ProcessMemoryGuard);
         return ProcessMemoryGuard->GetProcessId();
+    }
+
+    bool SendToGroupedMemoryAllocation(const ui64 groupId, const std::vector<std::shared_ptr<NGroupedMemoryManager::IAllocation>>& tasks,
+        const std::optional<ui32>& stageIdx) const {
+        return SendScanToAllocation(
+            GroupedMemoryLimiterOperator, GetProcessMemoryControlId(), GetCommonContext()->GetScanId(), groupId, tasks, stageIdx);
     }
 
     bool IsActive() const {
@@ -96,7 +87,8 @@ public:
     }
 
     virtual ~TSpecialReadContext() {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("fetching", DebugString());
+        YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"fetching", DebugString()});
     }
 
     TString DebugString() const;

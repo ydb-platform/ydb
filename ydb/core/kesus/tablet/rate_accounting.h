@@ -80,14 +80,17 @@ public:
     // Check timings and send message to accounting actor if required
     // Should be called periodically to account tail if there is no reports any longer
     // Returns true iff there are unsent reports (retry on next tick is required)
-    bool RunAccounting();
+    // `accountedConsumed` is incremented by the consumption accounted in this call. It equals
+    // exactly what will be added to the public `consumed` counter, so it can be used to aggregate
+    // `consumed_total`
+    bool RunAccounting(double& accountedConsumed);
 
     void SetResourceCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& resourceCounters);
 
 private:
     void ConfigureImpl();
     void RemoveOldClients();
-    bool RunAccountingNoClean();
+    bool RunAccountingNoClean(double& accountedConsumed);
 
     TDuration CollectPeriod() const {
         return TDuration::Seconds(Props.GetAccountingConfig().GetCollectPeriodSec());

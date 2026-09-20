@@ -44,6 +44,7 @@ struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoLambda> Filter;
     NNodes::TMaybeNode<NNodes::TCoLambda> Update;
     NNodes::TMaybeNode<NNodes::TCoIndexList> Indexes;
+    NNodes::TMaybeNode<NNodes::TCoStatisticsList> Statistics;
     NNodes::TMaybeNode<NNodes::TCoChangefeedList> Changefeeds;
     NNodes::TCoNameValueTupleList Other;
     NNodes::TMaybeNode<NNodes::TExprList> ColumnFamilies;

@@ -40,9 +40,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry {
     struct TUdfLibrary: public TThrRefBase {
         ui32 AbiVersion = 0;
         TDynamicLibrary Lib;
-        TUdfLibrary()
-        {
-        }
+        TUdfLibrary() = default;
     };
     using TUdfLibraryPtr = TIntrusivePtr<TUdfLibrary>;
 
@@ -125,8 +123,7 @@ public:
     {
     }
 
-    ~TMutableFunctionRegistry() override {
-    }
+    ~TMutableFunctionRegistry() override = default;
 
     void AllowUdfPatch() override {
     }
@@ -225,7 +222,7 @@ public:
 
         TUdfModuleRemappings remappings;
         TUdfModuleLoader loader(
-            UdfModules_, nullptr, libraryPathStr,
+            UdfModules_, /*newModules=*/nullptr, libraryPathStr,
             remappings, NUdf::CurrentAbiVersion());
         loader.AddModule(moduleName, std::move(module));
 

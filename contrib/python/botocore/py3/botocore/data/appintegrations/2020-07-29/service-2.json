@@ -5,11 +5,13 @@
     "endpointPrefix":"app-integrations",
     "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceFullName":"Amazon AppIntegrations Service",
     "serviceId":"AppIntegrations",
     "signatureVersion":"v4",
     "signingName":"app-integrations",
-    "uid":"appintegrations-2020-07-29"
+    "uid":"appintegrations-2020-07-29",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "CreateApplication":{
@@ -29,7 +31,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"UnsupportedOperationException"}
       ],
-      "documentation":"<p>This API is in preview release and subject to change.</p> <p>Creates and persists an Application resource.</p>"
+      "documentation":"<p>Creates and persists an Application resource.</p>"
     },
     "CreateDataIntegration":{
       "name":"CreateDataIntegration",
@@ -48,6 +50,24 @@
         {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Creates and persists a DataIntegration resource.</p> <note> <p>You cannot create a DataIntegration association for a DataIntegration that has been previously associated. Use a different DataIntegration, or recreate the DataIntegration using the <code>CreateDataIntegration</code> API.</p> </note>"
+    },
+    "CreateDataIntegrationAssociation":{
+      "name":"CreateDataIntegrationAssociation",
+      "http":{
+        "method":"POST",
+        "requestUri":"/dataIntegrations/{Identifier}/associations"
+      },
+      "input":{"shape":"CreateDataIntegrationAssociationRequest"},
+      "output":{"shape":"CreateDataIntegrationAssociationResponse"},
+      "errors":[
+        {"shape":"InternalServiceError"},
+        {"shape":"ResourceQuotaExceededException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InvalidRequestException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Creates and persists a DataIntegrationAssociation resource.</p>"
     },
     "CreateEventIntegration":{
       "name":"CreateEventIntegration",
@@ -133,7 +153,7 @@
         {"shape":"InvalidRequestException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>This API is in preview release and subject to change.</p> <p>Get an Application resource.</p>"
+      "documentation":"<p>Get an Application resource.</p>"
     },
     "GetDataIntegration":{
       "name":"GetDataIntegration",
@@ -200,7 +220,7 @@
         {"shape":"InvalidRequestException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>This API is in preview release and subject to change.</p> <p>Lists applications in the account.</p>"
+      "documentation":"<p>Lists applications in the account.</p>"
     },
     "ListDataIntegrationAssociations":{
       "name":"ListDataIntegrationAssociations",
@@ -332,7 +352,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"UnsupportedOperationException"}
       ],
-      "documentation":"<p>This API is in preview release and subject to change.</p> <p>Updates and persists an Application resource.</p>"
+      "documentation":"<p>Updates and persists an Application resource.</p>"
     },
     "UpdateDataIntegration":{
       "name":"UpdateDataIntegration",
@@ -350,6 +370,23 @@
         {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Updates the description of a DataIntegration.</p> <note> <p>You cannot create a DataIntegration association for a DataIntegration that has been previously associated. Use a different DataIntegration, or recreate the DataIntegration using the <a href=\"https://docs.aws.amazon.com/appintegrations/latest/APIReference/API_CreateDataIntegration.html\">CreateDataIntegration</a> API.</p> </note>"
+    },
+    "UpdateDataIntegrationAssociation":{
+      "name":"UpdateDataIntegrationAssociation",
+      "http":{
+        "method":"PATCH",
+        "requestUri":"/dataIntegrations/{Identifier}/associations/{DataIntegrationAssociationIdentifier}"
+      },
+      "input":{"shape":"UpdateDataIntegrationAssociationRequest"},
+      "output":{"shape":"UpdateDataIntegrationAssociationResponse"},
+      "errors":[
+        {"shape":"InternalServiceError"},
+        {"shape":"ThrottlingException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InvalidRequestException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Updates and persists a DataIntegrationAssociation resource.</p> <note> <p> Updating a DataIntegrationAssociation with ExecutionConfiguration will rerun the on-demand job. </p> </note>"
     },
     "UpdateEventIntegration":{
       "name":"UpdateEventIntegration",
@@ -409,6 +446,16 @@
       "max":50,
       "min":1
     },
+    "ApplicationConfig":{
+      "type":"structure",
+      "members":{
+        "ContactHandling":{
+          "shape":"ContactHandling",
+          "documentation":"<p>The contact handling configuration for the application.</p>"
+        }
+      },
+      "documentation":"<p>The configuration settings for the application.</p>"
+    },
     "ApplicationName":{
       "type":"string",
       "max":255,
@@ -417,7 +464,7 @@
     },
     "ApplicationNamespace":{
       "type":"string",
-      "max":32,
+      "max":211,
       "min":1,
       "pattern":"^[a-zA-Z0-9\\/\\._\\-]+$"
     },
@@ -457,6 +504,17 @@
         "LastModifiedTime":{
           "shape":"Timestamp",
           "documentation":"<p>The time when the application was last modified.</p>"
+        },
+        "IsService":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the application is a service.</p>",
+          "deprecated":true,
+          "deprecatedMessage":"IsService has been deprecated in favor of ApplicationType",
+          "deprecatedSince":"2025-12-01"
+        },
+        "ApplicationType":{
+          "shape":"ApplicationType",
+          "documentation":"<p>The type of application.</p>"
         }
       },
       "documentation":"<p>Summary information about the Application.</p>"
@@ -466,6 +524,15 @@
       "max":128,
       "min":1,
       "pattern":"^\\w+\\:\\/\\/.*$"
+    },
+    "ApplicationType":{
+      "type":"string",
+      "documentation":"<value>The type of application</value>",
+      "enum":[
+        "STANDARD",
+        "SERVICE",
+        "MCP_SERVER"
+      ]
     },
     "ApplicationsList":{
       "type":"list",
@@ -485,6 +552,7 @@
       "min":1,
       "pattern":"^(arn:aws:[A-Za-z0-9][A-Za-z0-9_/.-]{0,62}:[A-Za-z0-9_/.-]{0,63}:[A-Za-z0-9_/.-]{0,63}:[A-Za-z0-9][A-Za-z0-9:_/+=,@.-]{0,1023}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})(:[\\w\\$]+)?$"
     },
+    "Boolean":{"type":"boolean"},
     "ClientAssociationMetadata":{
       "type":"map",
       "key":{"shape":"NonBlankString"},
@@ -495,6 +563,23 @@
       "max":255,
       "min":1,
       "pattern":".*"
+    },
+    "ContactHandling":{
+      "type":"structure",
+      "members":{
+        "Scope":{
+          "shape":"ContactHandlingScope",
+          "documentation":"<p>Indicates whether the application refreshes for each contact or refreshes only with each new browser session.</p>"
+        }
+      },
+      "documentation":"<p>The contact handling configuration for the application.</p>"
+    },
+    "ContactHandlingScope":{
+      "type":"string",
+      "enum":[
+        "CROSS_CONTACTS",
+        "PER_CONTACT"
+      ]
     },
     "CreateApplicationRequest":{
       "type":"structure",
@@ -544,6 +629,29 @@
         "Permissions":{
           "shape":"PermissionList",
           "documentation":"<p>The configuration of events or requests that the application has access to.</p>"
+        },
+        "IsService":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the application is a service.</p>",
+          "deprecated":true,
+          "deprecatedMessage":"IsService has been deprecated in favor of ApplicationType",
+          "deprecatedSince":"2025-12-01"
+        },
+        "InitializationTimeout":{
+          "shape":"InitializationTimeout",
+          "documentation":"<p>The maximum time in milliseconds allowed to establish a connection with the workspace.</p>"
+        },
+        "ApplicationConfig":{
+          "shape":"ApplicationConfig",
+          "documentation":"<p>The configuration settings for the application.</p>"
+        },
+        "IframeConfig":{
+          "shape":"IframeConfig",
+          "documentation":"<p>The iframe configuration for the application.</p>"
+        },
+        "ApplicationType":{
+          "shape":"ApplicationType",
+          "documentation":"<p>The type of application.</p>"
         }
       }
     },
@@ -560,12 +668,58 @@
         }
       }
     },
+    "CreateDataIntegrationAssociationRequest":{
+      "type":"structure",
+      "required":["DataIntegrationIdentifier"],
+      "members":{
+        "DataIntegrationIdentifier":{
+          "shape":"Identifier",
+          "documentation":"<p>A unique identifier for the DataIntegration.</p>",
+          "location":"uri",
+          "locationName":"Identifier"
+        },
+        "ClientId":{
+          "shape":"ClientId",
+          "documentation":"<p>The identifier for the client that is associated with the DataIntegration association.</p>"
+        },
+        "ObjectConfiguration":{"shape":"ObjectConfiguration"},
+        "DestinationURI":{
+          "shape":"DestinationURI",
+          "documentation":"<p>The URI of the data destination.</p>"
+        },
+        "ClientAssociationMetadata":{
+          "shape":"ClientAssociationMetadata",
+          "documentation":"<p>The mapping of metadata to be extracted from the data.</p>"
+        },
+        "ClientToken":{
+          "shape":"IdempotencyToken",
+          "documentation":"<p>A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If not provided, the Amazon Web Services SDK populates this field. For more information about idempotency, see <a href=\"https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/\">Making retries safe with idempotent APIs</a>.</p>",
+          "idempotencyToken":true
+        },
+        "ExecutionConfiguration":{
+          "shape":"ExecutionConfiguration",
+          "documentation":"<p>The configuration for how the files should be pulled from the source.</p>"
+        }
+      }
+    },
+    "CreateDataIntegrationAssociationResponse":{
+      "type":"structure",
+      "members":{
+        "DataIntegrationAssociationId":{
+          "shape":"UUID",
+          "documentation":"<p>A unique identifier. for the DataIntegrationAssociation.</p>"
+        },
+        "DataIntegrationArn":{
+          "shape":"Arn",
+          "documentation":"<p>The Amazon Resource Name (ARN) for the DataIntegration.</p>"
+        }
+      }
+    },
     "CreateDataIntegrationRequest":{
       "type":"structure",
       "required":[
         "Name",
-        "KmsKey",
-        "SourceURI"
+        "KmsKey"
       ],
       "members":{
         "Name":{
@@ -578,7 +732,7 @@
         },
         "KmsKey":{
           "shape":"NonBlankString",
-          "documentation":"<p>The KMS key for the DataIntegration.</p>"
+          "documentation":"<p>The KMS key ARN for the DataIntegration.</p>"
         },
         "SourceURI":{
           "shape":"SourceURI",
@@ -628,7 +782,7 @@
         },
         "KmsKey":{
           "shape":"NonBlankString",
-          "documentation":"<p>The KMS key for the DataIntegration.</p>"
+          "documentation":"<p>The KMS key ARN for the DataIntegration.</p>"
         },
         "SourceURI":{
           "shape":"SourceURI",
@@ -714,7 +868,16 @@
         "ClientId":{
           "shape":"ClientId",
           "documentation":"<p>The identifier for the client that is associated with the DataIntegration association.</p>"
-        }
+        },
+        "DestinationURI":{
+          "shape":"DestinationURI",
+          "documentation":"<p>The URI of the data destination.</p>"
+        },
+        "LastExecutionStatus":{
+          "shape":"LastExecutionStatus",
+          "documentation":"<p>The execution status of the last job.</p>"
+        },
+        "ExecutionConfiguration":{"shape":"ExecutionConfiguration"}
       },
       "documentation":"<p>Summary information about the DataIntegration association.</p>"
     },
@@ -762,8 +925,7 @@
     },
     "DeleteApplicationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteDataIntegrationRequest":{
       "type":"structure",
@@ -779,8 +941,7 @@
     },
     "DeleteDataIntegrationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteEventIntegrationRequest":{
       "type":"structure",
@@ -796,14 +957,19 @@
     },
     "DeleteEventIntegrationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "Description":{
       "type":"string",
       "max":1000,
       "min":0,
       "pattern":".*"
+    },
+    "DestinationURI":{
+      "type":"string",
+      "max":1000,
+      "min":1,
+      "pattern":"^(\\w+\\:\\/\\/[\\w.-]+[\\w/!@#+=.-]+$)|(\\w+\\:\\/\\/[\\w.-]+[\\w/!@#+=.-]+[\\w/!@#+=.-]+[\\w/!@#+=.,-]+$)"
     },
     "DuplicateResourceException":{
       "type":"structure",
@@ -920,6 +1086,34 @@
       "max":255,
       "min":1,
       "pattern":"^[a-zA-Z0-9\\/\\._\\-]+::[a-zA-Z0-9\\/\\._\\-]+(?:\\*)?$"
+    },
+    "ExecutionConfiguration":{
+      "type":"structure",
+      "required":["ExecutionMode"],
+      "members":{
+        "ExecutionMode":{
+          "shape":"ExecutionMode",
+          "documentation":"<p>The mode for data import/export execution.</p>"
+        },
+        "OnDemandConfiguration":{"shape":"OnDemandConfiguration"},
+        "ScheduleConfiguration":{"shape":"ScheduleConfiguration"}
+      },
+      "documentation":"<p>The configuration for how the files should be pulled from the source.</p>"
+    },
+    "ExecutionMode":{
+      "type":"string",
+      "enum":[
+        "ON_DEMAND",
+        "SCHEDULED"
+      ]
+    },
+    "ExecutionStatus":{
+      "type":"string",
+      "enum":[
+        "COMPLETED",
+        "IN_PROGRESS",
+        "FAILED"
+      ]
     },
     "ExternalUrlConfig":{
       "type":"structure",
@@ -1040,6 +1234,29 @@
         "Permissions":{
           "shape":"PermissionList",
           "documentation":"<p>The configuration of events or requests that the application has access to.</p>"
+        },
+        "IsService":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the application is a service.</p>",
+          "deprecated":true,
+          "deprecatedMessage":"IsService has been deprecated in favor of ApplicationType",
+          "deprecatedSince":"2025-12-01"
+        },
+        "InitializationTimeout":{
+          "shape":"InitializationTimeout",
+          "documentation":"<p>The maximum time in milliseconds allowed to establish a connection with the workspace.</p>"
+        },
+        "ApplicationConfig":{
+          "shape":"ApplicationConfig",
+          "documentation":"<p>The configuration settings for the application.</p>"
+        },
+        "IframeConfig":{
+          "shape":"IframeConfig",
+          "documentation":"<p>The iframe configuration for the application.</p>"
+        },
+        "ApplicationType":{
+          "shape":"ApplicationType",
+          "documentation":"<p>The type of application.</p>"
         }
       }
     },
@@ -1072,11 +1289,11 @@
         },
         "Description":{
           "shape":"Description",
-          "documentation":"<p>The KMS key for the DataIntegration.</p>"
+          "documentation":"<p>The KMS key ARN for the DataIntegration.</p>"
         },
         "KmsKey":{
           "shape":"NonBlankString",
-          "documentation":"<p>The KMS key for the DataIntegration.</p>"
+          "documentation":"<p>The KMS key ARN for the DataIntegration.</p>"
         },
         "SourceURI":{
           "shape":"SourceURI",
@@ -1153,6 +1370,39 @@
       "min":1,
       "pattern":".*\\S.*"
     },
+    "IframeConfig":{
+      "type":"structure",
+      "members":{
+        "Allow":{
+          "shape":"IframePermissionList",
+          "documentation":"<p>The list of features that are allowed in the iframe.</p>"
+        },
+        "Sandbox":{
+          "shape":"IframePermissionList",
+          "documentation":"<p>The list of sandbox attributes for the iframe.</p>"
+        }
+      },
+      "documentation":"<p>The iframe configuration for the application.</p>"
+    },
+    "IframePermission":{
+      "type":"string",
+      "documentation":"<p>A permission for the iframe.</p>",
+      "max":100,
+      "min":1,
+      "pattern":"^[a-z-]+$"
+    },
+    "IframePermissionList":{
+      "type":"list",
+      "member":{"shape":"IframePermission"},
+      "documentation":"<p>A list of permissions for the iframe.</p>",
+      "max":25,
+      "min":0
+    },
+    "InitializationTimeout":{
+      "type":"integer",
+      "max":600000,
+      "min":1
+    },
     "InternalServiceError":{
       "type":"structure",
       "members":{
@@ -1171,6 +1421,20 @@
       "documentation":"<p>The request is not valid. </p>",
       "error":{"httpStatusCode":400},
       "exception":true
+    },
+    "LastExecutionStatus":{
+      "type":"structure",
+      "members":{
+        "ExecutionStatus":{
+          "shape":"ExecutionStatus",
+          "documentation":"<p>The job status enum string.</p>"
+        },
+        "StatusMessage":{
+          "shape":"NonBlankString",
+          "documentation":"<p>The status message of a job.</p>"
+        }
+      },
+      "documentation":"<p>The execution status of the last job.</p>"
     },
     "ListApplicationAssociationsRequest":{
       "type":"structure",
@@ -1223,6 +1487,12 @@
           "documentation":"<p>The maximum number of results to return per page.</p>",
           "location":"querystring",
           "locationName":"maxResults"
+        },
+        "ApplicationType":{
+          "shape":"ApplicationType",
+          "documentation":"<p>The type of application.</p>",
+          "location":"querystring",
+          "locationName":"applicationType"
         }
       }
     },
@@ -1436,6 +1706,21 @@
       "value":{"shape":"FieldsMap"},
       "documentation":"<p>The configuration for what data should be pulled from the source.</p>"
     },
+    "OnDemandConfiguration":{
+      "type":"structure",
+      "required":["StartTime"],
+      "members":{
+        "StartTime":{
+          "shape":"NonBlankString",
+          "documentation":"<p>The start time for data pull from the source as an Unix/epoch string in milliseconds</p>"
+        },
+        "EndTime":{
+          "shape":"NonBlankString",
+          "documentation":"<p>The end time for data pull from the source as an Unix/epoch string in milliseconds</p>"
+        }
+      },
+      "documentation":"<p>The start and end time for data pull from the source.</p>"
+    },
     "Permission":{
       "type":"string",
       "documentation":"<p>The permission of an event or request that the application has access to.</p>",
@@ -1587,8 +1872,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -1646,8 +1930,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateApplicationRequest":{
       "type":"structure",
@@ -1686,13 +1969,66 @@
         "Permissions":{
           "shape":"PermissionList",
           "documentation":"<p>The configuration of events or requests that the application has access to.</p>"
+        },
+        "IsService":{
+          "shape":"Boolean",
+          "documentation":"<p>Indicates whether the application is a service.</p>",
+          "box":true,
+          "deprecated":true,
+          "deprecatedMessage":"IsService has been deprecated in favor of ApplicationType",
+          "deprecatedSince":"2025-12-01"
+        },
+        "InitializationTimeout":{
+          "shape":"InitializationTimeout",
+          "documentation":"<p>The maximum time in milliseconds allowed to establish a connection with the workspace.</p>"
+        },
+        "ApplicationConfig":{
+          "shape":"ApplicationConfig",
+          "documentation":"<p>The configuration settings for the application.</p>"
+        },
+        "IframeConfig":{
+          "shape":"IframeConfig",
+          "documentation":"<p>The iframe configuration for the application.</p>"
+        },
+        "ApplicationType":{
+          "shape":"ApplicationType",
+          "documentation":"<p>The type of application.</p>"
         }
       }
     },
     "UpdateApplicationResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "UpdateDataIntegrationAssociationRequest":{
+      "type":"structure",
+      "required":[
+        "DataIntegrationIdentifier",
+        "DataIntegrationAssociationIdentifier",
+        "ExecutionConfiguration"
+      ],
       "members":{
+        "DataIntegrationIdentifier":{
+          "shape":"Identifier",
+          "documentation":"<p>A unique identifier for the DataIntegration.</p>",
+          "location":"uri",
+          "locationName":"Identifier"
+        },
+        "DataIntegrationAssociationIdentifier":{
+          "shape":"Identifier",
+          "documentation":"<p>A unique identifier. of the DataIntegrationAssociation resource</p>",
+          "location":"uri",
+          "locationName":"DataIntegrationAssociationIdentifier"
+        },
+        "ExecutionConfiguration":{
+          "shape":"ExecutionConfiguration",
+          "documentation":"<p>The configuration for how the files should be pulled from the source.</p>"
+        }
       }
+    },
+    "UpdateDataIntegrationAssociationResponse":{
+      "type":"structure",
+      "members":{}
     },
     "UpdateDataIntegrationRequest":{
       "type":"structure",
@@ -1716,8 +2052,7 @@
     },
     "UpdateDataIntegrationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateEventIntegrationRequest":{
       "type":"structure",
@@ -1737,9 +2072,8 @@
     },
     "UpdateEventIntegrationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     }
   },
-  "documentation":"<p>The Amazon AppIntegrations service enables you to configure and reuse connections to external applications.</p> <p>For information about how you can use external applications with Amazon Connect, see <a href=\"https://docs.aws.amazon.com/connect/latest/adminguide/crm.html\">Set up pre-built integrations</a> and <a href=\"https://docs.aws.amazon.com/connect/latest/adminguide/amazon-connect-wisdom.html\">Deliver information to agents using Amazon Connect Wisdom</a> in the <i>Amazon Connect Administrator Guide</i>.</p>"
+  "documentation":"<ul> <li> <p> <a href=\"https://docs.aws.amazon.com/connect/latest/APIReference/API_Operations_Amazon_AppIntegrations_Service.html\">Amazon AppIntegrations actions</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/connect/latest/APIReference/API_Types_Amazon_AppIntegrations_Service.html\">Amazon AppIntegrations data types</a> </p> </li> </ul> <p>The Amazon AppIntegrations service enables you to configure and reuse connections to external applications.</p> <p>For information about how you can use external applications with Amazon Connect, see the following topics in the <i>Amazon Connect Administrator Guide</i>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/connect/latest/adminguide/3p-apps.html\">Third-party applications (3p apps) in the agent workspace</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/connect/latest/adminguide/amazon-q-connect.html\">Use Amazon Q in Connect for generative AI–powered agent assistance in real-time</a> </p> </li> </ul>"
 }

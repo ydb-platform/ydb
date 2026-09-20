@@ -14,8 +14,6 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-                
-                runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                     Name: "TestTable"
@@ -62,8 +60,6 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-
-                runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                     Name: "PartitionedTable"

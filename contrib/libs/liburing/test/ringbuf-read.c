@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
 	int ret, fd, i, do_unlink;
 
 	if (argc > 1) {
-		strcpy(fname, argv[1]);
+		snprintf(fname, sizeof(fname), "%s", argv[1]);
 		do_unlink = 0;
 	} else {
 		sprintf(fname, ".ringbuf-read.%d", getpid());

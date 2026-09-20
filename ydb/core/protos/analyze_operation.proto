@@ -1,0 +1,64 @@
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_table.proto";
+import "google/protobuf/timestamp.proto";
+
+package NKikimrAnalyzeOp;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TAnalyzeOperation {
+    optional bytes OperationId = 1;          // 16-byte binary ULID
+    optional google.protobuf.Timestamp CreateTime = 2;
+    optional google.protobuf.Timestamp EndTime = 3;
+    optional Ydb.Table.AnalyzeState.State State = 4;
+    optional float Progress = 5;
+    repeated string Paths = 6;
+    repeated string InProgressPaths = 7;
+    repeated string DonePaths = 8;
+    optional string DatabaseName = 9;
+    repeated Ydb.Issue.IssueMessage Issues = 10;
+}
+
+message TEvListRequest {
+    optional string DatabaseName = 1;
+    optional uint64 PageSize = 2;
+    optional string PageToken = 3;
+}
+
+message TEvListResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    repeated TAnalyzeOperation Entries = 3;
+    optional string NextPageToken = 4;
+}
+
+message TEvGetRequest {
+    optional string DatabaseName = 1;
+    optional bytes OperationId = 2;
+}
+
+message TEvGetResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional TAnalyzeOperation AnalyzeOperation = 3;
+}
+
+message TEvCancelRequest {
+    optional string DatabaseName = 1;
+    optional bytes OperationId = 2;
+}
+
+message TEvCancelResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+}
+
+message TEvForgetRequest {
+    optional string DatabaseName = 1;
+    optional bytes OperationId = 2;
+}
+
+message TEvForgetResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+}

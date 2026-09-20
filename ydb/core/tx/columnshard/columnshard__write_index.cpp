@@ -42,7 +42,9 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
     if (putStatus == NKikimrProto::UNKNOWN) {
         const auto change = ev->Get()->IndexChanges;
         if (IsAnyChannelYellowStop()) {
-            ACFL_ERROR("event", "TEvWriteIndex failed")("reason", "channel yellow stop");
+            YDB_LOG_ERROR_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+                {"event", "TEvWriteIndex failed"},
+                {"reason", "channel yellow stop"});
 
             Counters.GetTabletCounters()->IncCounter(COUNTER_DISK_GROUP_OUT_OF_SPACE);
             ev->Get()->SetPutStatus(NKikimrProto::TRYLATER);
@@ -50,22 +52,27 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             change->Abort(*this, context);
             ctx.Schedule(FailActivationDelay, new TEvPrivate::TEvPeriodicWakeup(true));
         } else {
-            ACFL_DEBUG("event", "TEvWriteIndex")("count", change->GetWritePortionsCount());
+            YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+                {"event", "TEvWriteIndex"},
+                {"count", change->GetWritePortionsCount()});
             AFL_VERIFY(change->GetWritePortionsCount());
             const bool needDiskLimiter = change->NeedDiskWriteLimiter();
             auto writeController = std::make_shared<NOlap::TCompactedWriteController>(ctx.SelfID, ev->Release());
             const TConclusion<bool> needDraftTransaction = writeController->GetBlobsAction().NeedDraftWritingTransaction();
             AFL_VERIFY(needDraftTransaction.IsSuccess())("error", needDraftTransaction.GetErrorMessage());
             if (*needDraftTransaction) {
-                ACFL_DEBUG("event", "TTxWriteDraft");
+                YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+                    {"event", "TTxWriteDraft"});
                 change->SetStage(NOlap::NChanges::EStage::WriteDraft);
                 Execute(new TTxWriteDraft(this, writeController));
             } else if (needDiskLimiter) {
-                ACFL_DEBUG("event", "Limiter");
+                YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+                    {"event", "Limiter"});
                 change->SetStage(NOlap::NChanges::EStage::AskDiskQuota);
                 NLimiter::TCompDiskOperator::AskResource(std::make_shared<TDiskResourcesRequest>(writeController, TabletID(), change));
             } else {
-                ACFL_DEBUG("event", "WriteActor");
+                YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+                    {"event", "WriteActor"});
                 change->SetStage(NOlap::NChanges::EStage::Writing);
                 Register(CreateWriteActor(TabletID(), writeController, TInstant::Max()));
             }

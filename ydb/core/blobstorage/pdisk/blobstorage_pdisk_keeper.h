@@ -54,6 +54,11 @@ public:
         TrimmedFreeChunks.Push(chunkIdx);
     }
 
+    void SetFreeChunksSortingEnabled(bool enabled) {
+        UntrimmedFreeChunks.SetSortingEnabled(enabled);
+        TrimmedFreeChunks.SetSortingEnabled(enabled);
+    }
+
     //
     // Add/remove owner
     //
@@ -105,6 +110,10 @@ public:
         return ChunkTracker.GetNumActiveSlots();
     }
 
+    i64 GetUserChunkPoolSize() const {
+      return ChunkTracker.GetTotalHardLimit();
+    }
+
     TChunkIdx PopOwnerFreeChunk(TOwner owner, TString &outErrorReason) {
         if (ChunkTracker.TryAllocate(owner, 1, outErrorReason)) {
             TChunkIdx idx = PopFree(outErrorReason);
@@ -146,8 +155,17 @@ public:
         return ChunkTracker.GetSpaceStatusFlags(owner, occupancy);
     }
 
+    TSpaceHeadroom GetSpaceHeadroom(TOwner owner) const {
+        return ChunkTracker.GetSpaceHeadroom(owner);
+    }
+
     NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize, double *occupancy) const {
         return ChunkTracker.EstimateSpaceColor(owner, allocationSize, occupancy);
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateAllocationColor(TOwner owner, i64 allocationSize,
+            bool housekeeping, double *occupancy) const {
+        return ChunkTracker.EstimateAllocationColor(owner, allocationSize, housekeeping, occupancy);
     }
 
     double GetPDiskUsage() const {
@@ -206,8 +224,20 @@ public:
         ChunkTracker.SetExpectedOwnerCount(newOwnerCount);
     }
 
+    void SetExpectedOwnerSize(i64 newOwnerSize) {
+        ChunkTracker.SetExpectedOwnerSize(newOwnerSize);
+    }
+
+    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize) {
+        ChunkTracker.SetExpectedOwnerSettings(newOwnerCount, newOwnerSize);
+    }
+
     void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
         ChunkTracker.SetColorBorder(colorBorder);
+    }
+
+    void SetStaticGroupChunkReservePerMille(ui32 perMille) {
+        ChunkTracker.SetStaticGroupChunkReservePerMille(perMille);
     }
 
     //

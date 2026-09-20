@@ -10,6 +10,7 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
+import multiprocessing
 import os
 import shutil
 import signal
@@ -80,7 +81,15 @@ class TestReadable(unittest.TestCase):
 class TestBaseManager(unittest.TestCase):
     def create_pid_manager(self):
         class PIDManager(BaseManager):
-            pass
+            def __init__(self):
+                # Python 3.14 changed the non-macOS POSIX default to forkserver
+                # but the code in this module does not work with it
+                # See https://github.com/python/cpython/issues/125714
+                if multiprocessing.get_start_method() == 'forkserver':
+                    ctx = multiprocessing.get_context(method='fork')
+                else:
+                    ctx = multiprocessing.get_context()
+                super().__init__(ctx=ctx)
 
         PIDManager.register('getpid', os.getpid)
         return PIDManager()

@@ -46,8 +46,9 @@ protected:
     }
 
     virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const override;
-    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(
-        TString&& data, const ui32 /*rawBytes*/, const TSimpleColumnInfo& /*columnInfo*/) const override;
+    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& data, const ui32 /*rawBytes*/,
+        const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& additionalData,
+        const TSimpleColumnInfo& /*columnInfo*/) const override;
     virtual void DoAddInplaceIntoPortion(TPortionAccessorConstructor& portionInfo) const override;
 
 public:

@@ -24,6 +24,7 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry);
         const std::string& owner,
         const std::vector<NScheme::TPermissions>& permissions,
         const std::vector<NScheme::TPermissions>& effectivePermissions,
+        bool interruptInheritance,
         IOutputStream& out = Cout
     );
 

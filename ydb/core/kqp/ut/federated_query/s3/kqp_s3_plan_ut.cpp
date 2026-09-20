@@ -312,6 +312,71 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Stats"]["Tasks"], 42);
     }
 
+    Y_UNIT_TEST(S3ReadWrite) {
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucketWithObject("test_read_write", "test/object_plan_s3_source", TEST_CONTENT);
+            UploadObject("test_read_write", "test/object_plan_s3_source_2", TEST_CONTENT);
+        }
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"sql(
+                CREATE EXTERNAL DATA SOURCE s3_source WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{insert_location}",
+                    AUTH_METHOD="NONE"
+                );
+                )sql",
+                "insert_location"_a = GetBucketLocation("test_read_write")
+            );
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString sql = R"sql(
+            PRAGMA s3.UseRuntimeListing = "true";
+            PRAGMA ydb.MaxTasksPerStage = "42";
+            PRAGMA ydb.OverridePlanner = @@ [
+                { "tx": 0, "stage": 0, "tasks": 42 }
+            ] @@;
+
+            INSERT INTO s3_source.`/test/` WITH (FORMAT = "parquet")
+            SELECT * FROM s3_source.`test/` WITH (
+                FORMAT = json_each_row,
+                SCHEMA = (
+                    key Utf8 NOT NULL,
+                    value Utf8 NOT NULL
+                )
+            )
+        )sql";
+
+        auto queryClient = kikimr->GetQueryClient();
+        TExecuteQueryResult queryResult = queryClient.ExecuteQuery(
+            sql,
+            TTxControl::NoTx(),
+            TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), NYdb::EStatus::SUCCESS, queryResult.GetIssues().ToString());
+        UNIT_ASSERT(queryResult.GetStats());
+        UNIT_ASSERT(queryResult.GetStats()->GetPlan());
+        Cerr << "Plan: " << *queryResult.GetStats()->GetPlan() << Endl;
+        NJson::TJsonValue plan;
+        UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
+
+        const auto& sinkPlan = plan["Plan"]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(sinkPlan["Node Type"].GetStringSafe(), "Sink");
+        UNIT_ASSERT(sinkPlan["Operators"].GetArraySafe().size() >= 1);
+        const auto& sinkOp = sinkPlan["Operators"].GetArraySafe()[0];
+        UNIT_ASSERT_VALUES_EQUAL(sinkOp["ExternalDataSource"].GetStringSafe(), "s3_source");
+        UNIT_ASSERT_VALUES_EQUAL(sinkOp["Extension"].GetStringSafe(), ".parquet");
+
+        const auto& readStagePlan = plan["Plan"]["Plans"][0]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Stats"]["Tasks"], 42);
+    }
+
     Y_UNIT_TEST(S3ExportBoolViaExternalDataSource) {
         {
             Aws::S3::S3Client s3Client = MakeS3Client();

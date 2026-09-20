@@ -582,4 +582,79 @@ DEFINE_REFCOUNTED_TYPE(TOverloadControllerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TProtocolMapConfigBase
+    : public NYTree::TYsonStruct
+{
+public:
+    //! Returns the protocols that are actually configured (i.e. present with a
+    //! non-null config), skipping registered-but-unconfigured ones.
+    std::vector<std::string> GetConfiguredProtocols() const;
+
+    //! Returns a pointer to the typed config for #protocol, creating an
+    //! empty (null) entry if needed.
+    template <class TConfig>
+    TIntrusivePtr<TConfig>* MutableTypedConfig(TStringBuf protocol);
+
+    //! Returns the type-erased config for #protocol; crashes if it is absent.
+    std::any GetUntypedConfig(TStringBuf protocol);
+
+    //! Like #GetUntypedConfig, but returns an empty std::any for an unconfigured protocol
+    //! (i.e. one that is absent or whose config is null).
+    std::any FindUntypedConfig(TStringBuf protocol);
+
+    //! Sets the typed config for #protocol.
+    template <class TConfig>
+    void SetTypedConfig(TStringBuf protocol, TIntrusivePtr<TConfig> config);
+
+    //! Returns the typed config for #protocol, or null if it is unconfigured
+    //! (i.e. absent or holding a null pointer).
+    template <class TConfig>
+    TIntrusivePtr<TConfig> FindTypedConfig(TStringBuf protocol);
+
+    //! Like #FindTypedConfig, but throws if #protocol is unconfigured.
+    template <class TConfig>
+    TIntrusivePtr<TConfig> GetTypedConfigOrThrow(TStringBuf protocol);
+
+private:
+    struct TProtocolEntry
+    {
+        std::any CurrentConfig;
+        //! Tells whether #CurrentConfig holds a null pointer, i.e. the protocol was not
+        //! actually configured (std::any cannot check this without knowing the type).
+        bool (*IsNull)(const std::any& config) = nullptr;
+    };
+
+    THashMap<std::string, TProtocolEntry> ProtocolToEntry_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TMultiProtocolClientConfig
+    : public TProtocolMapConfigBase
+{
+    REGISTER_YSON_STRUCT(TMultiProtocolClientConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TMultiProtocolClientConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TMultiProtocolServerConfig
+    : public TProtocolMapConfigBase
+{
+    REGISTER_YSON_STRUCT(TMultiProtocolServerConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TMultiProtocolServerConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NRpc
+
+#define CONFIG_INL_H_
+#include "config-inl.h"
+#undef CONFIG_INL_H_

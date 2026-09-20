@@ -1,6 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
-
 DECLARE $input_json as Json;
 DECLARE $int64_param as Int64;
 DECLARE $double_param as Double;

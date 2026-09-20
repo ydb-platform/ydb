@@ -27,13 +27,18 @@ void TScanDiagnosticsActor::Bootstrap() {
     if (mon) {
         mon->Register(
             new NMonitoring::TResourceMonPage("columnshard/viz-global.js", "viz-global.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
+        mon->Register(
+            new NMonitoring::TResourceMonPage("columnshard/scan-trace-viz.js", "scan-trace-viz.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
+        mon->Register(new NMonitoring::TResourceMonPage(
+            "columnshard/plotly-2.35.2.min.js", "plotly-2.35.2.min.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
     }
     Become(&TThis::StateMain);
 }
 
 void TScanDiagnosticsActor::Handle(const NMon::TEvRemoteHttpInfo::TPtr& ev) {
     TStringBuilder htmlResult;
-    htmlResult << R"(<script language="javascript" type="text/javascript" src="../columnshard/viz-global.js"></script>)";
+    htmlResult << "<script language=\"javascript\" type=\"text/javascript\" src=\"/node/" << SelfId().NodeId()
+               << "/columnshard/viz-global.js\"></script>";
     htmlResult << RenderScanDiagnostics(LastPublicScans, "public");
     htmlResult << RenderScanDiagnostics(LastInternalScans, "internal");
     Send(ev->Sender, std::make_unique<NMon::TEvRemoteHttpInfoRes>(htmlResult));

@@ -8,6 +8,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -19,6 +21,7 @@ public:
         : TBaseActor<TDropTopicOperationActor>(NKikimrServices::EServiceKikimr::PQ_SCHEMA)
         , ParentId(parentId)
         , Settings(std::move(settings))
+        , Database(CanonizePath(Settings.Database))
     {
     }
 
@@ -28,8 +31,9 @@ public:
         DoDescribe();
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << ParentId << "[" << Settings.Path << "] ";
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"path", Settings.Path});
     }
 
     void OnException(const std::exception& exc) override {
@@ -43,7 +47,7 @@ private:
 
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
             SelfId(),
-            Settings.Database,
+            Database,
             { Settings.Path },
             {
                 .UserToken = Settings.UserToken,
@@ -60,20 +64,23 @@ private:
 
         TopicInfo = std::move(topics.begin()->second);
         switch(TopicInfo.Status) {
-            case NDescriber::EStatus::SUCCESS: {
+            case NDescriber::EStatus::Success: {
                 if (TopicInfo.CdcStream) {
-                    return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Path, NDescriber::EStatus::NOT_FOUND));
+                    return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Path, NDescriber::EStatus::NotFound));
                 }
                 return DoDrop();
             }
-            case NDescriber::EStatus::NOT_FOUND: {
+            case NDescriber::EStatus::NotFound: {
                 if (Settings.IfExists) {
                     return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
                 }
-                return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Path, NDescriber::EStatus::NOT_FOUND));
+                return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Path, NDescriber::EStatus::NotFound));
             }
-            case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS: {
+            case NDescriber::EStatus::UnauthorizedWithDescribeAccess: {
                 return ReplyAndDie(Ydb::StatusIds::UNAUTHORIZED, NDescriber::Description(Settings.Path, TopicInfo.Status));
+            }
+            case NDescriber::EStatus::BadRequest: {
+                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, NDescriber::Description(Settings.Path, TopicInfo.Status));
             }
             default: {
                 return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Path, TopicInfo.Status));
@@ -96,7 +103,7 @@ private:
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
-        proposal->Record.SetDatabaseName(Settings.Database);
+        proposal->Record.SetDatabaseName(Database);
         proposal->Record.SetPeerName(Settings.PeerName);
         if (Settings.UserToken) {
             proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
@@ -139,13 +146,14 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        Send(ParentId, new TEvDropTopicResponse(errorCode, std::move(errorMessage)), 0, Settings.Cookie);
+        Send(ParentId, new TEvSchemaResponse(Settings.Path, errorCode, std::move(errorMessage)), 0, Settings.Cookie);
         PassAway();
     }
 
 private:
     const TActorId ParentId;
     const TDropTopicOperationSettings Settings;
+    const TString Database;
 
     NDescriber::TTopicInfo TopicInfo;
 };

@@ -3,4 +3,5 @@ RECURSE(
     cli
     lib
     scheme
+    viewer
 )

@@ -2,9 +2,9 @@
 #include "debug.h"
 #include "actorsystem.h"
 #include "cpu_manager.h"
+#include "events.h"
 #include "executor_thread.h"
 #include <ydb/library/actors/util/datetime.h>
-#include <util/datetime/cputimer.h>
 
 #define POOL_ID() \
     (!TlsThreadContext ? "OUTSIDE" : \
@@ -18,12 +18,6 @@
 
 
 namespace NActors {
-    namespace {
-        TInstant ConvertTsToInstant(NHPTimer::STime ts, TInstant now, NHPTimer::STime nowTs) {
-            return nowTs >= ts ? now - CyclesToDuration(nowTs - ts) : now;
-        }
-    }
-
     Y_POD_THREAD(TThreadContext*) TlsThreadContext(nullptr);
     thread_local TActivationContext *TActivationContextHolder::Value = nullptr;
     TActivationContextHolder TlsActivationContext;
@@ -90,6 +84,16 @@ namespace NActors {
 
     bool IActor::Send(TAutoPtr<IEventHandle> ev) const noexcept {
         return TActivationContext::Send(ev);
+    }
+
+    bool IActor::SendActorLivenessCheck(const TActorId& target, ui64 cookie) const noexcept {
+        return Send(new IEventHandle(
+            TEvents::TSystem::CheckActorLiveness,
+            TEvents::TEvCheckActorLiveness::RequestFlags,
+            target,
+            SelfId(),
+            nullptr,
+            cookie));
     }
 
     bool IActor::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const noexcept {
@@ -167,21 +171,9 @@ namespace NActors {
         return TlsThreadContext->EventEnqueuedTimestampTs();
     }
 
-    TInstant TActivationContext::GetCurrentEventEnqueuedTimestamp() {
-        TInstant now = TActivationContext::Now();
-        NHPTimer::STime nowTs = GetCycleCountFast();
-        return ConvertTsToInstant(GetCurrentEventEnqueuedTimestampTs(), now, nowTs);
-    }
-
     NHPTimer::STime TActivationContext::GetCurrentMailboxScheduledTimestampTs() {
         Y_ABORT_UNLESS(TlsThreadContext);
         return TlsThreadContext->MailboxScheduledTimestampTs();
-    }
-
-    TInstant TActivationContext::GetCurrentMailboxScheduledTimestamp() {
-        TInstant now = TActivationContext::Now();
-        NHPTimer::STime nowTs = GetCycleCountFast();
-        return ConvertTsToInstant(GetCurrentMailboxScheduledTimestampTs(), now, nowTs);
     }
 
     ui64 TActivationContext::GetCurrentEventDeliveryTimeUs() {
@@ -351,17 +343,25 @@ namespace NActors {
         return NHPTimer::GetSeconds(ElapsedTicks);
     }
 
-    bool IActor::HandleResumeRunnable(TAutoPtr<IEventHandle>& ev) {
-        if (ev->GetTypeRewrite() == TEvents::TSystem::ResumeRunnable) {
-            auto* msg = ev->Get<TEvents::TEvResumeRunnable>();
-            auto* item = msg->Item;
-            if (item != nullptr) {
-                msg->Item = nullptr;
-                item->Run(this);
-            }
-            return true;
+    void IActor::HandleCheckActorLiveness(TAutoPtr<IEventHandle>& ev) {
+        TActivationContext::Send(new IEventHandle(
+            TEvents::TSystem::ActorAlive,
+            0,
+            ev->Sender,
+            ev->Recipient,
+            nullptr,
+            ev->Cookie,
+            nullptr,
+            std::move(ev->TraceId)));
+    }
+
+    void IActor::HandleResumeRunnable(TAutoPtr<IEventHandle>& ev) {
+        auto* msg = ev->Get<TEvents::TEvResumeRunnable>();
+        auto* item = msg->Item;
+        if (item != nullptr) {
+            msg->Item = nullptr;
+            item->Run(this);
         }
-        return false;
     }
 
     bool IActor::HandleRegisteredEvent(TAutoPtr<IEventHandle>& ev) {
@@ -390,7 +390,26 @@ namespace NActors {
         TActorRunnableQueue queue(this);
 
         try {
-            if (!HandleResumeRunnable(ev) && !HandleRegisteredEvent(ev)) {
+            if (ev->Flags & IEventHandle::FlagSystemMessage) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvents::TSystem::ResumeRunnable:
+                        // ResumeRunnable is local-only and legitimate senders
+                        // always provide its in-process event object.
+                        if (ev->HasEvent()) {
+                            HandleResumeRunnable(ev);
+                        }
+                        break;
+                    case TEvents::TSystem::CheckActorLiveness:
+                        HandleCheckActorLiveness(ev);
+                        break;
+                    default:
+                        // System messages must never reach actor
+                        // awaiters or user state functions. Event flags are
+                        // controlled by senders, so unknown values are ignored
+                        // instead of terminating the actor system.
+                        break;
+                }
+            } else if (!HandleRegisteredEvent(ev)) {
                 (this->*StateFunc_)(ev);
             }
         } catch (...) {

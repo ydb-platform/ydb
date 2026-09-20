@@ -1,0 +1,52 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didOpen",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "languageId": "yql",
+        "version": 1,
+        "text": "SELECT\n    *\nFROM (\n    SELECT\n        1 AS a\n    FROM\n        plato.x\n    ORDER BY\n        a\n);\n"
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "textDocument/diagnostic",
+    "params": {
+      "identifier": "YQL",
+      "textDocument": {
+        "uri": "file:///tmp/a.yql"
+      },
+      "previousResultId": "0"
+    }
+  },
+  {
+    "id": 1,
+    "jsonrpc": "2.0",
+    "result": {
+      "items": [
+        {
+          "code": "YQL_ORDER_BY_WITHOUT_LIMIT_IN_SUBQUERY",
+          "message": "ORDER BY without LIMIT in subquery will be ignored",
+          "range": {
+            "end": {
+              "character": 5,
+              "line": 3
+            },
+            "start": {
+              "character": 4,
+              "line": 3
+            }
+          },
+          "severity": 2,
+          "source": "translator"
+        }
+      ],
+      "kind": "full",
+      "resultId": "1"
+    }
+  }
+]

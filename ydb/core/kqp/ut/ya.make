@@ -16,7 +16,6 @@ RECURSE_FOR_TESTS(
     olap
     opt
     perf
-    pg
     rbo
     query
     scan

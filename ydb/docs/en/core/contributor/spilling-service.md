@@ -9,7 +9,7 @@ The **Spilling Service** is an [actor service](../concepts/glossary.md#actor-ser
 ### Main Components
 
 - **Task queue**: The service maintains an internal queue of read and write operations. All spilling requests are placed in this queue and processed asynchronously.
-- **Thread pool**: A pool of worker threads is used to perform I/O operations. The number of threads is [configurable](../reference/configuration/table_service_config.md#workerscount) and affects service performance.
+- **Thread pool**: A pool of worker threads is used to perform I/O operations.
 - **File management**: The service automatically creates, deletes, and manages files on disk.
 - **Resource monitoring**: The service monitors disk space usage, the number of active operations, and other performance metrics.
 

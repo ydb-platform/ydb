@@ -1,4 +1,4 @@
-GTEST(unittester-library-decimal)
+GTEST(unittester-library-tz-types)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 

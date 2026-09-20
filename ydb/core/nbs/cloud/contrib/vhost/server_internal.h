@@ -1,5 +1,7 @@
 #pragma once
 
+#include "vhost/nbs2_rename.h"
+
 #include "vhost/server.h"
 
 struct vhd_io_handler;

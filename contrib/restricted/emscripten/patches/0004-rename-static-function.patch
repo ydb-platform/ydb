@@ -1,0 +1,16 @@
+Workaround for wasm-ld bug. It produced wrong code when two different
+translation units has static function with the same name.
+See DEVTOOLSSUPPORT-64512 for details
+
+--- a/system/lib/libc/musl/src/crypt/crypt_blowfish.c       (index)
++++ b/system/lib/libc/musl/src/crypt/crypt_blowfish.c       (working tree)
+@@ -50,6 +50,9 @@
+ #include <string.h>
+ #include <stdint.h>
+
++// See DEVTOOLSSUPPORT-64512 for details.
++#define BF_set_key BF_set_key_renamed
++
+ typedef uint32_t BF_word;
+ typedef int32_t BF_word_signed;
+

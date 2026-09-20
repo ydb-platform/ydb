@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+import "ydb/core/protos/blobstorage_ddisk.proto";
+
+package NYdb.NBS.NBlockStore.NStorage.NDbsController.NProto;
+option java_package = "ru.yandex.ydb.core.nbs.dbs_controller.proto";
+
+
+//
+// Структура с информацией о DirectBlockGroup-ах,
+// зависящих от DDisk
+//
+
+message TDDiskDirectBlockGroups {
+  message TPartitionDirectBlockGroups {
+    uint64 PartitionTabletId = 1;
+    repeated uint64 DirectBlockGroupIndex = 2;
+  }
+  repeated TPartitionDirectBlockGroups PartitionDirectBlockGroups = 1;
+}

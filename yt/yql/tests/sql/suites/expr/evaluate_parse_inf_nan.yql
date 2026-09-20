@@ -1,4 +1,3 @@
-/* syntax version 1 */
 use plato;
 
 $foo = process Input;

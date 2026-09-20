@@ -8,9 +8,9 @@
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -74,8 +74,8 @@ public:
     }
 
     bool HasSubColumn(const TString& subColumnName) const {
-        return ColumnsData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size())) ||
-               OthersData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));
+        return ColumnsData.GetStats().GetKeyOrPrefixIndexOptional(std::string_view(subColumnName.data(), subColumnName.size())) ||
+               OthersData.GetStats().GetKeyOrPrefixIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));
     }
 
     void StoreSourceString(const TString& sourceDeserializationString) {
@@ -113,11 +113,18 @@ public:
     }
 
     TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
-        auto accResult = ColumnsData.GetPathAccessor(svPath);
-        if (accResult.IsFail() || accResult.GetResult()->IsValid()) {
-            return accResult;
+        auto pathResult = NSubColumns::ResolveBestPath(ColumnsData.GetStats(), OthersData.GetStats(), svPath);
+        if (pathResult.IsFail()) {
+            return TConclusionStatus::Fail(pathResult.GetErrorMessage());
         }
-        return OthersData.GetPathAccessor(svPath, recordsCount);
+        auto path = pathResult.DetachResult();
+        if (path && path->IsColumn) {
+            return ColumnsData.GetPathAccessor(std::move(path->Path));
+        }
+        if (path) {
+            return OthersData.GetPathAccessor(std::move(path->Path), recordsCount);
+        }
+        return NSubColumns::TOthersData::BuildEmptyPathAccessor(recordsCount);
     }
 };
 

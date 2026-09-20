@@ -82,7 +82,7 @@ AWS_COMMON_API
 const char *aws_cbor_type_cstr(enum aws_cbor_type type);
 
 /**
- * @brief Create a new cbor encoder. Creating a encoder with a temporay buffer.
+ * @brief Create a new cbor encoder. Creating an encoder with a temporary buffer.
  * Every aws_cbor_encoder_write_* will encode directly into the buffer to follow the encoded data.
  *
  * @param allocator
@@ -285,12 +285,12 @@ void aws_cbor_encoder_write_indef_map_start(struct aws_cbor_encoder *encoder);
  * - If the next element type only accept what expected, `aws_cbor_decoder_pop_next_*`
  * - If the next element type accept different type, invoke `aws_cbor_decoder_peek_type` first, then based on the type
  * to invoke corresponding `aws_cbor_decoder_pop_next_*`
- * - If the next element type doesn't have corrsponding value, specifically: AWS_CBOR_TYPE_NULL,
+ * - If the next element type doesn't have corresponding value, specifically: AWS_CBOR_TYPE_NULL,
  * AWS_CBOR_TYPE_UNDEFINED, AWS_CBOR_TYPE_INF_*_START, AWS_CBOR_TYPE_BREAK, call
  * `aws_cbor_decoder_consume_next_single_element` to consume it and continues for further decoding.
  * - To ignore the next data item (the element and the content of it), `aws_cbor_decoder_consume_next_whole_data_item`
  *
- * Note: it's caller's responsibilty to keep the src outlive the decoder.
+ * Note: it's caller's responsibility to keep the src alive to outlive the decoder.
  *
  * @param allocator
  * @param src   The src data to decode from.
@@ -305,12 +305,25 @@ struct aws_cbor_decoder *aws_cbor_decoder_destroy(struct aws_cbor_decoder *decod
 /**
  * @brief  Get the length of the remaining bytes of the source. Once the source was decoded, it will be consumed,
  * and result in decrease of the remaining length of bytes.
+ * Note: aws_cbor_decoder_peek_type will also decrease the remaining length, as it decodes the next element
+ * internally.
  *
  * @param decoder
  * @return The length of bytes remaining of the decoder source.
  */
 AWS_COMMON_API
 size_t aws_cbor_decoder_get_remaining_length(const struct aws_cbor_decoder *decoder);
+
+/**
+ * @brief  Get the number of bytes that have not yet been consumed (popped) by the caller.
+ * Unlike aws_cbor_decoder_get_remaining_length, aws_cbor_decoder_peek_type does NOT affect this value.
+ * Only pop/consume operations reduce the unconsumed length.
+ *
+ * @param decoder
+ * @return The number of bytes not yet consumed from the decoder source.
+ */
+AWS_COMMON_API
+size_t aws_cbor_decoder_get_unconsumed_length(const struct aws_cbor_decoder *decoder);
 
 /**
  * @brief  Reset the decoder source to a new src.

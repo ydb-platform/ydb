@@ -1,3 +1,4 @@
+import "ydb/core/protos/data_format_settings.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 
@@ -41,6 +42,8 @@ message TS3Settings {
     optional TSecretableVariable SecretableAccessKey = 13;
     optional TSecretableVariable SecretableSecretKey = 14;
     optional bool UseVirtualAddressing = 15 [default = true];
+
+    optional TExportDataSettings ExportDataSettings = 18;
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB

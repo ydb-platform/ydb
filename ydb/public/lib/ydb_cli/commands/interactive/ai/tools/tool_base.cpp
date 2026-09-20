@@ -26,11 +26,13 @@ const TString& TToolBase::GetDescription() const {
 }
 
 TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
+    YDB_CLI_LOG(Debug, "Execution tool with params:\n" << FormatJsonValue(parameters));
+
     try {
         ParseParameters(parameters);
     } catch (const std::exception& e) {
-        YDB_CLI_LOG(Warning, "Failed to parse parameters of tool: " << e.what());
-        return TResponse::Error(TStringBuilder() << "Failed to parse parameters of tool: " << e.what() << "\n" << "Parameters schema: " << FormatJsonValue(ParametersSchema));
+        YDB_CLI_LOG(Warning, "Failed to parse parameters of tool: " << e.what() << "\nParameters:\n" << FormatJsonValue(parameters));
+        return TResponse::Error(TStringBuilder() << "Failed to parse parameters of tool: " << e.what());
     }
 
     if (AutoAction == TInteractiveConfigurationManager::EToolAutoAction::Reject) {

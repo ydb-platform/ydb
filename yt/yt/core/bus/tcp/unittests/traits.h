@@ -6,22 +6,23 @@
 
 #include <string>
 
-namespace NYT::NBus::NTests {
+namespace NYT::NBus::NTcp::NTests {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTcpBusTraits
+struct TBusTraits
 {
     NTesting::TPortHolder Port;
     std::string Address;
 
-    TTcpBusTraits();
+    TBusTraits();
 
     IBusServerPtr StartServer(IMessageHandlerPtr handler);
     IBusClientPtr CreateClient();
+    IBusClientPtr CreateClient(std::string address);
     IBusClientPtr CreateUnreachableClient();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus::NTests
+} // namespace NYT::NBus::NTcp::NTests

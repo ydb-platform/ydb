@@ -24,6 +24,12 @@
 * [INSERT](insert_into.md)
 * [SHOW CREATE](show_create.md)
 
+{% if backend_name == "YDB" %}
+
+* [ANALYZE](analyze.md)
+
+{% endif %}
+
 {% if feature_map_tables %}
 
 * [ALTER TABLE](alter_table/index.md)
@@ -69,11 +75,7 @@
 
 {% endif %}
 
-{% if backend_name != "YDB" %}
-
 * [DISCARD](discard.md)
-
-{% endif %}
 
 * [INTO RESULT](into_result.md)
 

@@ -1,5 +1,33 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.33.0 {#2-33-0}
+
+Дата выхода 23 июня 2026. Для обновления до версии **2.33.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* AI-ассистент в [интерактивном режиме](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}` теперь умеет искать информацию в документации {{ ydb-short-name }}, что делает ответы более точными.
+
+## Версия 2.32.0 {#2-32-0}
+
+Дата выхода 22 июня 2026. Для обновления до версии **2.32.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлен AI-режим в [интерактивный режим](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}`. Для переключения нажмите `Ctrl+T`.
+* Добавлена команда [`{{ ydb-cli }} workload fulltext`](./reference/ydb-cli/workload-fulltext.md) для нагрузочного тестирования и оценки качества полнотекстовых индексов.
+* Добавлена команда `SET resource_pool` в [интерактивный режим](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}`.
+* Добавлена опция `--resource-pool` в [команду](./reference/ydb-cli/sql.md) `{{ ydb-cli }} sql`.
+* Добавлена опция `--no-consumer` в [команду](./reference/ydb-cli/topic-read.md) `{{ ydb-cli }} topic read` для чтения из топика без читателя.
+* Добавлены опции `--partition-write-speed-mps` и `--partition-write-burst-messages` в [команду](./reference/ydb-cli/topic-create.md) `{{ ydb-cli }} topic create` и [команду](./reference/ydb-cli/topic-alter.md) `{{ ydb-cli }} topic alter`.
+* Добавлена опция `--partition-max-inflight-bytes` в [команду](./reference/ydb-cli/workload-topic.md) `{{ ydb-cli }} workload topic`.
+* Добавлены опции `--codec kafka-batch`, `--batch-inner-codec`, `--batch-flush-interval`, `--batch-flush-size` и `--batch-flush-message-count` в [команды](./reference/ydb-cli/workload-topic.md) `{{ ydb-cli }} workload topic run write|full`.
+* Добавлена статистика процессорного времени (CPU time) в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`.
+
+### Улучшения
+
+* [Команда](./reference/ydb-cli/commands/scheme-describe.md) `{{ ydb-cli }} scheme describe` теперь выводит понятное человеку описание внешних источников данных (тип источника, расположение, способ аутентификации, база данных, свойства и время создания) вместо пустого вывода.
+
 ## Версия 2.31.0 {#2-31-0}
 
 Дата выхода 20 апреля 2026. Для обновления до версии **2.31.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
@@ -432,7 +460,7 @@
 ### Исправления ошибок
 
 * Исправлена ошибка вывода таблиц в `pretty` формате с [Unicode](https://ru.wikipedia.org/wiki/Юникод) символами.
-* Исправлена ошибка подстановки неправильного первичного ключа в команде [ydb tools pg-convert](postgresql/import.md#pg-convert).
+* Исправлена ошибка подстановки неправильного первичного ключа в команде `ydb tools pg-convert`.
 
 ## Версия 2.7.0 {#2-7-0}
 
@@ -440,7 +468,7 @@
 
 ### Функциональность
 
-* Добавлена команда [ydb tools pg-convert](postgresql/import.md#pg-convert), выполняющая подготовку дампа, полученного утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), к загрузке в postgres-совместимую прослойку YDB.
+* Добавлена команда `ydb tools pg-convert`, выполняющая подготовку дампа, полученного утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), к загрузке в postgres-совместимую прослойку YDB.
 * Добавлена команда нагрузочного тестирования `{{ ydb-cli }} workload query`, которая нагружает базу [запросами выполнения скрипта](reference/ydb-cli/yql.md) в несколько потоков.
 * Добавлена команда для просмотра списка разрешений `{{ ydb-cli }} scheme permissions list`.
 * В командах [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) добавлена опция `--flame-graph`, задающая путь до файла, в котором необходимо сохранить визуализацию статистики выполнения запросов.

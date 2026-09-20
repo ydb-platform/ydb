@@ -5,7 +5,7 @@
 Вызов `CREATE EXTERNAL DATA SOURCE` создает [внешний источник данных](../../../concepts/datamodel/external_data_source.md).
 
 ```yql
-CREATE EXTERNAL DATA SOURCE external_data_source WITH (
+CREATE [OR REPLACE] EXTERNAL DATA SOURCE [IF NOT EXISTS] external_data_source WITH (
   SOURCE_TYPE="source_type",
   LOCATION="ip_address_or_fqdn:port",
   USE_TLS="use_tls",
@@ -17,6 +17,8 @@ CREATE EXTERNAL DATA SOURCE external_data_source WITH (
 
 Где:
 
+* `OR REPLACE` - если внешний источник данных с таким именем уже существует, он будет заменён новым определением; версия объекта при этом увеличивается.
+* `IF NOT EXISTS` - не выводить ошибку, если внешний источник данных с таким именем уже существует; существующий объект останется без изменений.
 * `external_data_source` - название внешнего источника данных.
 * `source_type` - тип внешнего источника данных. Возможные значения: [`ClickHouse`](#clickhouse), [`PostgreSQL`](#postgresql), [`ObjectStorage`](#object_storage).
 * `ip_address_or_fqdn:port` - полный сетевой адрес внешнего источника данных, включая порт. В качестве сетевого адреса можно указывать IP-адрес или FQDN.

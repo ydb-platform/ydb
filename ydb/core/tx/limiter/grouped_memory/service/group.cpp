@@ -3,6 +3,8 @@
 
 #include <ydb/core/tx/limiter/grouped_memory/tracing/probes.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GROUPED_MEMORY_LIMITER
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 LWTRACE_USING(YDB_GROUPED_MEMORY_PROVIDER);
@@ -43,9 +45,13 @@ TString TGrouppedAllocations::DebugString() const {
 }
 
 bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemoryScope& scope, const ui32 allocationsLimit) {
-    AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "try_allocation")("limit", allocationsLimit)(
-        "external_process_id", scope.ExternalProcessId)("external_scope_id", scope.ExternalScopeId)(
-        "forced_external_group_id", scope.GroupIds.GetMinExternalIdOptional())("is_priority_process", isPriorityProcess);
+    YDB_LOG_DEBUG("",
+        {"event", "try_allocation"},
+        {"limit", allocationsLimit},
+        {"externalProcessId", scope.ExternalProcessId},
+        {"externalScopeId", scope.ExternalScopeId},
+        {"forcedExternalGroupId", scope.GroupIds.GetMinExternalIdOptional()},
+        {"isPriorityProcess", isPriorityProcess});
     ui32 allocationsCount = 0;
     while (true) {
         std::vector<ui64> toRemove;
@@ -56,11 +62,16 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
             std::vector<std::shared_ptr<TAllocationInfo>> allocated;
             if (forced) {
                 allocated = groupedAllocations.ExtractAllocationsToVector();
-                AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "forced_group")("count", allocated.size())("external_group_id", externalGroupId);
+                YDB_LOG_DEBUG("",
+                    {"event", "forced_group"},
+                    {"count", allocated.size()},
+                    {"externalGroupId", externalGroupId});
             } else if (allocationsLimit) {
                 allocated = groupedAllocations.AllocatePossible(allocationsLimit - allocationsCount);
-                AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "common_forced_group")("count", allocated.size())(
-                    "external_group_id", externalGroupId);
+                YDB_LOG_DEBUG("",
+                    {"event", "common_forced_group"},
+                    {"count", allocated.size()},
+                    {"externalGroupId", externalGroupId});
             } else {
                 break;
             }

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "map.h"
 #endif
-#undef MAP_INL_H_
 
 namespace NYT::NConcurrency {
 

@@ -78,10 +78,10 @@ public:
           std::is_convertible<typename std::result_of<F &(Args...)>::type, R>::value,
 #endif
           int>::type = 0>
+  // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
   function_ref(F &&f)
   {
     // Binding by named variable here intentionally keeps function_ref non-owning.
-    // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
     BindTo(f);  // not forward
   }
 

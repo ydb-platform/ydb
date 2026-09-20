@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/concurrency/scheduler.h>
 
-#include <library/cpp/yt/misc/thread_name.h>
+#include <library/cpp/yt/system/thread_name.h>
 
 #include <util/system/thread.h>
 
@@ -30,7 +30,9 @@ TLoggingContext GetLoggingContext()
         .FiberId = NConcurrency::GetCurrentFiberId(),
         .TraceId = traceContext ? traceContext->GetTraceId() : TTraceId{},
         .RequestId = traceContext ? traceContext->GetRequestId() : NTracing::TRequestId(),
-        .TraceLoggingTag = traceContext ? traceContext->GetLoggingTag() : TStringBuf(),
+        .TraceLoggingTags = traceContext
+            ? NLogging::AsView(traceContext->GetLoggingTags().GetPayload())
+            : NLogging::TLoggingTagListPayloadView(),
     };
 }
 

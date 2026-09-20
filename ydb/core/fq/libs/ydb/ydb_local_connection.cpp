@@ -8,10 +8,10 @@ namespace {
 
 struct TLocalYdbConnection : public IYdbConnection {
 
-    TLocalYdbConnection(const TString& db, const TString& tablePathPrefix)
+    TLocalYdbConnection(const TString& db, const TString& tablePathPrefix, ui64 maxActiveSessions)
         : TablePathPrefix(tablePathPrefix)
         , Db(db)
-        , TableClient(CreateLocalTableClient()) {
+        , TableClient(CreateLocalTableClient(maxActiveSessions)) {
     }
 
     IYdbTableClient::TPtr GetTableClient() const override {
@@ -36,8 +36,8 @@ private:
 
 } // namespace
 
-IYdbConnection::TPtr CreateLocalYdbConnection(const TString& db, const TString& tablePathPrefix) {
-    return MakeIntrusive<TLocalYdbConnection>(db, tablePathPrefix);
+IYdbConnection::TPtr CreateLocalYdbConnection(const TString& db, const TString& tablePathPrefix, ui64 maxActiveSessions) {
+    return MakeIntrusive<TLocalYdbConnection>(db, tablePathPrefix, maxActiveSessions);
 }
 
 } // namespace NFq

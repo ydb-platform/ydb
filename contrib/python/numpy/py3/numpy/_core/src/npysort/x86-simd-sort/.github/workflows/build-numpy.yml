@@ -1,0 +1,149 @@
+name: NumPy
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+  - cron: '0 5 * * *'
+
+permissions: read-all
+
+jobs:
+  np-multiarray-tgl:
+
+    if: github.repository == 'intel/x86-simd-sort'
+    runs-on: intel-ubuntu-latest
+
+    steps:
+    - name: Checkout x86-simd-sort
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      with:
+        fetch-depth: 0
+        path: x86-simd-sort
+
+    - name: Specify branch name
+      working-directory: ${{ github.workspace }}/x86-simd-sort
+      run: git switch -c pr-branch
+
+    - name: Install build dependencies
+      run: |
+        sudo apt update
+        sudo apt -y install g++-12 gcc-12 git
+
+    - name: Checkout NumPy main
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      with:
+        repository: numpy/numpy
+        submodules: recursive
+        fetch-depth: 0
+        ref: main
+        path: numpy
+
+    - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
+      with:
+        python-version: '3.11'
+
+    - name: Install Intel SDE
+      run: |
+        curl -o /tmp/sde.tar.xz https://downloadmirror.intel.com/788820/sde-external-9.27.0-2023-09-13-lin.tar.xz
+        mkdir /tmp/sde && tar -xvf /tmp/sde.tar.xz -C /tmp/sde/
+        sudo mv /tmp/sde/* /opt/sde && sudo ln -s /opt/sde/sde64 /usr/bin/sde
+
+    - name: Install NumPy dependencies
+      working-directory: ${{ github.workspace }}/numpy
+      run: |
+        pip install -r requirements/build_requirements.txt
+        pip install -r requirements/test_requirements.txt
+
+    - name: Update x86-simd-sort
+      working-directory: ${{ github.workspace }}/numpy
+      run: |
+        cd numpy/_core/src/npysort/x86-simd-sort
+        git remote add temp ${{ github.workspace }}/x86-simd-sort
+        git fetch temp
+        git checkout temp/pr-branch
+
+    - name: Build and run NumPy tests
+      working-directory: ${{ github.workspace }}/numpy
+      env:
+        CXX: g++-12
+        CC: gcc-12
+      run: |
+        spin build -- -Dallow-noblas=true
+        export NUMPY_SITE=$(realpath build-install/usr/lib/python*/site-packages/)
+        export PYTHONPATH="$PYTHONPATH:$NUMPY_SITE"
+        cd build-install &&
+        sde -tgl -- python -m pytest $NUMPY_SITE/numpy/_core/tests/test_multiarray.py
+
+  np-multiarray-spr:
+
+    if: github.repository == 'intel/x86-simd-sort'
+    runs-on: intel-ubuntu-latest
+
+    steps:
+    - name: Checkout x86-simd-sort
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      with:
+        fetch-depth: 0
+        path: x86-simd-sort
+
+    - name: Specify branch name
+      working-directory: ${{ github.workspace }}/x86-simd-sort
+      run: git switch -c pr-branch
+
+    - name: Install build dependencies
+      run: |
+        sudo apt update
+        sudo apt -y install g++-12 gcc-12 git
+
+    - name: Install Intel SDE
+      run: |
+        curl -o /tmp/sde.tar.xz https://downloadmirror.intel.com/788820/sde-external-9.27.0-2023-09-13-lin.tar.xz
+        mkdir /tmp/sde && tar -xvf /tmp/sde.tar.xz -C /tmp/sde/
+        sudo mv /tmp/sde/* /opt/sde && sudo ln -s /opt/sde/sde64 /usr/bin/sde
+
+    - name: Checkout NumPy main
+      uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      with:
+        repository: numpy/numpy
+        submodules: recursive
+        fetch-depth: 0
+        ref: main
+        path: numpy
+
+    - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
+      with:
+        python-version: '3.11'
+
+    - name: Install NumPy dependencies
+      working-directory: ${{ github.workspace }}/numpy
+      run: |
+        pip install -r requirements/build_requirements.txt
+        pip install -r requirements/test_requirements.txt
+
+    - name: Update x86-simd-sort
+      working-directory: ${{ github.workspace }}/numpy
+      run: |
+        cd numpy/_core/src/npysort/x86-simd-sort
+        git remote add temp ${{ github.workspace }}/x86-simd-sort
+        git fetch temp
+        git checkout temp/pr-branch
+
+    - name: Build NumPy with cpu basline SPR
+      working-directory: ${{ github.workspace }}/numpy
+      env:
+        CXX: g++-12
+        CC: gcc-12
+      run: |
+        spin build -- -Dallow-noblas=true -Dcpu-baseline=avx512_spr
+
+    - name: Run tests on SPR
+      working-directory: ${{ github.workspace }}/numpy
+      run: |
+        export NUMPY_SITE=$(realpath build-install/usr/lib/python*/site-packages/)
+        export PYTHONPATH="$PYTHONPATH:$NUMPY_SITE"
+        cd build-install &&
+        sde -spr -- python -c "import numpy; numpy.show_config()" &&
+        sde -spr -- python -m pytest $NUMPY_SITE/numpy/_core/tests/test_multiarray.py

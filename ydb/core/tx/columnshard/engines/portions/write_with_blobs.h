@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/splitter/blob_info.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap {
 
@@ -34,22 +35,22 @@ public:
 
         class TBuilder {
         private:
-            TBlobInfo* OwnerBlob;
             TWritePortionInfoWithBlobsConstructor* OwnerPortion;
+            ui32 BlobIndex;
 
         public:
-            TBuilder(TBlobInfo& blob, TWritePortionInfoWithBlobsConstructor& portion)
-                : OwnerBlob(&blob)
-                , OwnerPortion(&portion)
+            TBuilder(TWritePortionInfoWithBlobsConstructor& portion, const ui32 blobIndex)
+                : OwnerPortion(&portion)
+                , BlobIndex(blobIndex)
             {
             }
 
             ui64 GetSize() const {
-                return OwnerBlob->GetSize();
+                return OwnerPortion->MutableBlobInfoVerified(BlobIndex).GetSize();
             }
 
             void AddChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
-                return OwnerBlob->AddChunk(*OwnerPortion, chunk);
+                return OwnerPortion->MutableBlobInfoVerified(BlobIndex).AddChunk(*OwnerPortion, chunk);
             }
         };
 
@@ -71,6 +72,7 @@ public:
                 result.append(i->GetData());
             }
             ChunksOrdered.clear();
+            AFL_VERIFY(result.size() == Size)("result", result.size())("expected", Size);
             return result;
         }
     };
@@ -85,10 +87,17 @@ private:
         AFL_VERIFY(!PortionConstructor->HaveBlobsData());
     }
 
-    TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {
-        Blobs.emplace_back(TBlobInfo(bOperator));
-        return TBlobInfo::TBuilder(Blobs.back(), *this);
+    TBlobInfo& MutableBlobInfoVerified(const ui32 blobIndex) {
+        AFL_VERIFY(blobIndex < Blobs.size())("index", blobIndex)("size", Blobs.size());
+        return Blobs[blobIndex];
     }
+
+    TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {
+        const ui32 blobIndex = Blobs.size();
+        Blobs.emplace_back(TBlobInfo(bOperator));
+        return TBlobInfo::TBuilder(*this, blobIndex);
+    }
+    friend class TBlobInfo::TBuilder;
     friend class TWritePortionInfoWithBlobsResult;
 
 public:
@@ -96,11 +105,11 @@ public:
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
         const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, const TInternalPathId granule, const ui64 schemaVersion,
-        const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators, const EPortionType type);
+        const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators, const EPortionType type, const TIndexInfo& indexInfo);
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
         const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionAccessorConstructor&& constructor,
-        const std::shared_ptr<IStoragesManager>& operators);
+        const std::shared_ptr<IStoragesManager>& operators, const TIndexInfo& indexInfo);
 
     std::vector<TBlobInfo>& GetBlobs() {
         return Blobs;
@@ -173,8 +182,8 @@ public:
     TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> RestoreBatch(
         const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns, const bool restoreAbsent) const {
         THashMap<TChunkAddress, TString> blobs;
-        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)(
-            "portion_id", GetPortionResult().GetPortionInfo().GetPortionId());
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"portionId", GetPortionResult().GetPortionInfo().GetPortionId()});
         for (auto&& i : GetPortionResult().GetRecordsVerified()) {
             blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
             Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);

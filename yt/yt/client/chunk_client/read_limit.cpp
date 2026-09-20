@@ -341,7 +341,7 @@ std::optional<T> FindReadLimitComponent(const IAttributeDictionaryPtr& attribute
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error parsing %Qv component of a read limit",
             key)
-            << ex;
+            .With(ex);
     }
 }
 
@@ -476,7 +476,7 @@ std::optional<T> FindReadRangeComponent(const IAttributeDictionaryPtr& attribute
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error parsing %Qv component of a read range",
             key)
-            << ex;
+            .With(ex);
     }
 }
 

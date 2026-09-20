@@ -1,5 +1,7 @@
 #include "mlp_purger.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NMLP {
 
 TPurgerActor::TPurgerActor(const TActorId& parentId, const TPurgerSettings& settings)
@@ -34,9 +36,13 @@ void TPurgerActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
 
     auto& topic = topics.begin()->second;
     switch(topic.Status) {
-        case NDescriber::EStatus::SUCCESS: {
+        case NDescriber::EStatus::Success: {
             TopicInfo = topic;
             return DoPurge();
+        }
+        case NDescriber::EStatus::BadRequest: {
+            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
+                NDescriber::Description(Settings.TopicName, topic.Status));
         }
         default: {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
@@ -69,7 +75,10 @@ void TPurgerActor::DoPurge() {
 
 void TPurgerActor::Handle(TEvPQ::TEvMLPPurgeResponse::TPtr& ev)
 {
-    LOG_D("Handle TEvPQ::TEvMLPPurgeResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Handle TEvPQ::TEvMLPPurgeResponse",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
 
     auto partitionId = ev->Get()->GetPartitionId();
     auto& partitionStatus = Partitions[partitionId];
@@ -100,7 +109,10 @@ void TPurgerActor::RetryIfPossible(ui32 partitionId, TPartitionStatus& partition
 
 void TPurgerActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev)
 {
-    LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Handle TEvPQ::TEvMLPErrorResponse",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
 
     auto partitionId = ev->Get()->GetPartitionId();
     auto& partitionStatus = Partitions[partitionId];
@@ -168,7 +180,11 @@ void TPurgerActor::RequestPartitionIfNeeded(ui32 partitionId,TPartitionStatus& s
 }
 
 void TPurgerActor::ReplyIfPossible() {
-    LOG_D("ReplyIfPossible: PendingPartitions " << PendingPartitions << " PendingRetries " << PendingRetries);
+    LOG_D(
+        "ReplyIfPossible: PendingPartitions PendingRetries",
+        {"pendingPartitions", PendingPartitions},
+        {"pendingRetries", PendingRetries}
+    );
     if (PendingPartitions > 0 || PendingRetries > 0) {
         return;
     }
@@ -190,7 +206,10 @@ void TPurgerActor::SendToTablet(ui64 tabletId, IEventBase *ev, ui64 cookie) {
 }
 
 void TPurgerActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    LOG_I("Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
+    LOG_I(
+        "Reply error",
+        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)}
+    );
     Send(ParentId, new TEvPurgeResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }

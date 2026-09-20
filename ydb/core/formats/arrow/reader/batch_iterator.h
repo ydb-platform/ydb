@@ -1,6 +1,6 @@
 #pragma once
 #include "position.h"
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 namespace NKikimr::NArrow::NMerger {
 

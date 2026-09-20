@@ -1,4 +1,3 @@
-/* syntax version 1 */
 select
   key,
   max(key) over (order by key) as running_max,

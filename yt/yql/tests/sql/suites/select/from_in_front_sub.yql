@@ -1,4 +1,3 @@
-/* postgres can not */
 from
     (select cast(subkey as Double) / cast(key as Double) as val, value from plato.Input2) as res
 select

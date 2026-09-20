@@ -137,7 +137,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteDictJoin(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteJoinDict(node, ctx);
+        TExprBase output = DqPeepholeRewriteJoinDict(node, ctx, *GetTypes());
         DumpAppliedRule("RewriteDictJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -301,6 +301,129 @@ private:
     const bool WithFinalStageRules;
 };
 
+struct TValidateStreamingConstraintsInfo {
+    const bool ValidateCheckpoints = true;
+    TNodeMap<bool> VisitedNodes;
+    bool HasErrors = false;
+    TExprContext& Ctx;
+
+    void ValidateCheckpointsUsage(const TExprNode::TPtr& node) {
+        if (!ValidateCheckpoints) {
+            return;
+        }
+
+        const auto& name = node->Content();
+        if (!node->GetConstraint<TStreamingConstraintNode>()) {
+            // Sanity check, that all checkpointed callables are used in streaming context
+            if (CheckpointCallables.contains(name)) {
+                HasErrors = true;
+                YQL_CLOG(WARN, ProviderKqp) << "Found checkpointed callable in non streaming context: " << KqpExprToPrettyString(*node, Ctx);
+                Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), TStringBuilder() << "Callable with checkpoints: '" << node->Content() << "' cannot be used outside streaming context"));
+            }
+            return;
+        }
+
+        if (!UnsupportedCheckpointsCallables.contains(name)) {
+            return;
+        }
+
+        HasErrors = true;
+        YQL_CLOG(WARN, ProviderKqp) << "Found streaming processing node incompatible with checkpoints: " << KqpExprToPrettyString(*node, Ctx);
+
+        if (name == "Take"sv || name == "Limit"sv) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), "Checkpoints are not supported for LIMIT operator, query may produce unstable results"));
+        } else if (name == "Skip"sv) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), "Checkpoints are not supported for OFFSET operator, query may produce unstable results"));
+        } else {
+            Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), TStringBuilder() << "Unsupported callable for streaming processing with checkpoints: '" << node->Content() << "'"));
+        }
+    }
+
+private:
+    // Callables which passes streaming constraints but incompatible with checkpoints
+    inline static const std::unordered_set<std::string_view> UnsupportedCheckpointsCallables = {
+        TCoSkip::CallableName(), TCoTake::CallableName(), TCoLimit::CallableName(),
+        "TakeWhile"sv, "SkipWhile"sv, "TakeWhileInclusive"sv, "SkipWhileInclusive"sv,
+        "WideTakeWhile"sv, "WideSkipWhile"sv, "WideTakeWhileInclusive"sv, "WideSkipWhileInclusive"sv,
+        TCoPruneAdjacentKeys::CallableName(), TCoPruneKeys::CallableName(),
+        TCoMapNext::CallableName(), TCoChain1Map::CallableName(), "WideChain1Map"sv
+    };
+
+    // Callables for which will be unconditionally allocated checkpoint storage slot
+    inline static const std::unordered_set<std::string_view> CheckpointCallables = {
+        TCoMultiHoppingCore::CallableName(), "TimeOrderRecover"sv, "MatchRecognizeCore"sv
+    };
+};
+
+// Validate that infinite sources handled only by supported functions
+bool ValidateStreamingConstraintsInternal(const TExprNode::TPtr& node, TValidateStreamingConstraintsInfo& info) {
+    auto& visitedNodes = info.VisitedNodes;
+    auto& hasErrors = info.HasErrors;
+    if (const auto [it, inserted] = visitedNodes.emplace(node.Get(), false); !inserted || hasErrors) {
+        return it->second;
+    }
+
+    bool isStreaming = node->GetConstraint<TStreamingConstraintNode>();
+
+    // Validate that all sub-nodes are not streaming
+    for (const auto& child : node->Children()) {
+        if (ValidateStreamingConstraintsInternal(child, info)) {
+            isStreaming = true;
+        }
+        if (hasErrors) {
+            break;
+        }
+    }
+
+    if (node->IsCallable() && !hasErrors) {
+        if (isStreaming && !node->GetConstraint<TStreamingConstraintNode>()) {
+            auto& ctx = info.Ctx;
+            hasErrors = true;
+            YQL_CLOG(WARN, ProviderKqp) << "Found invalid streaming processing node: " << KqpExprToPrettyString(*node, ctx);
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unsupported callable for streaming processing: '" << node->Content() << "'"));
+        } else {
+            info.ValidateCheckpointsUsage(node);
+        }
+    }
+
+    return visitedNodes[node.Get()] = isStreaming;
+}
+
+bool ValidateStreamingConstraints(ui64 txIdx, const TKqpPhysicalTx& tx, THashSet<std::pair<ui64, ui64>>& streamingTxResults, bool validateCheckpoints, TExprContext& ctx) {
+    TValidateStreamingConstraintsInfo info = {.ValidateCheckpoints = validateCheckpoints, .Ctx = ctx};
+    ValidateStreamingConstraintsInternal(tx.Stages().Ptr(), info);
+    ValidateStreamingConstraintsInternal(tx.Results().Ptr(), info);
+
+    if (info.HasErrors) {
+        return false;
+    }
+
+    const auto& visitedNodes = info.VisitedNodes;
+    for (size_t i = 0; i < tx.Results().Size(); ++i) {
+        const auto it = visitedNodes.find(tx.Results().Item(i).Raw());
+        YQL_ENSURE(it != visitedNodes.end(), "Result " << i << " of tx " << txIdx << " is not visited during streaming constraints validation");
+        if (it->second) {
+            YQL_ENSURE(streamingTxResults.emplace(txIdx, i).second);
+        }
+    }
+
+    // Validate that streaming result bindings are not materializing into tx precomputes
+    for (const auto& binding : tx.ParamBindings()) {
+        const auto maybeTxBinding = binding.Binding().Maybe<TKqpTxResultBinding>();
+        if (!maybeTxBinding) {
+            continue;
+        }
+
+        const auto txBinding = maybeTxBinding.Cast();
+        if (streamingTxResults.contains(std::make_pair(FromString<ui64>(txBinding.TxIndex().Value()), FromString<ui64>(txBinding.ResultIndex().Value())))) {
+            ctx.AddError(TIssue(ctx.GetPosition(binding.Pos()), TStringBuilder() << "Streaming result binding " << binding.Name().Value() << " is materializing into tx precompute for transaction " << txIdx));
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // Sort stages in topological order by their inputs, so that we optimize the ones without inputs first.
 TVector<TDqPhyStage> TopSortStages(const TDqPhyStageList& stages) {
     TVector<TDqPhyStage> topSortedStages;
@@ -391,7 +514,7 @@ bool CanPropagateWideBlockThroughChannel(
 }
 
 TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprContext& ctx,
-    IGraphTransformer& typeAnnTransformer, TTypeAnnotationContext& typesCtx, THashSet<ui64>& optimizedStages,
+    TTypeAnnotationContext& typesCtx, THashSet<ui64>& optimizedStages,
     TKikimrConfiguration::TPtr config, bool withFinalStageRules, TSet<TString> disabledOpts)
 {
     THashMap<ui64 /*stage uid*/, TKqpProgram> programs;
@@ -403,14 +526,13 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
         TCoLambda lambda = stage.Program();
         TVector<TCoArgument> newArgs;
+        TNodeOnNodeOwnedMap argsMap;
         newArgs.reserve(stage.Inputs().Size());
 
         // Propagate "WideFromBlock" through connections.
         // TODO(ilezhankin): this peephole optimization should be implemented instead as
         //       the original whole-graph transformer |CreateDqBuildWideBlockChannelsTransformer|.
         if (config->GetBlockChannelsMode() == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO) {
-            TNodeOnNodeOwnedMap argsMap;
-
             YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
 
             // Workaround to mitigate https://github.com/ydb-platform/ydb/issues/20440
@@ -462,11 +584,10 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
                         // Run the peephole optimization on new program again to update type annotations.
                         // TODO(ilezhankin): refactor to run only the update of type annotations - not the whole optimization.
-                        bool allowNonDeterministicFunctions = !newInputProgram.Lambda().Body().Maybe<TKqpEffects>();
                         TExprNode::TPtr newInputProgramNode;
 
-                        auto status = PeepHoleOptimize(newInputProgram, newInputProgramNode, ctx, typeAnnTransformer, typesCtx, config,
-                            allowNonDeterministicFunctions, withFinalStageRules, disabledOpts);
+                        auto status = PeepHoleOptimize(newInputProgram, newInputProgramNode, ctx, typesCtx, config,
+                            true, withFinalStageRules, disabledOpts);
                         if (status != TStatus::Ok) {
                             ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()), "Peephole optimization failed for KQP transaction"));
                             return {};
@@ -481,20 +602,21 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                     argsMap.emplace(oldArg.Raw(), newArg.Ptr());
                 }
             }
-
-            // Rebuild lambda with new arguments.
-            lambda = Build<TCoLambda>(ctx, lambda.Pos())
-                .Args(newArgs)
-                .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
-            .Done();
         } else {
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto oldArg = stage.Program().Args().Arg(i);
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
+                YQL_ENSURE(argsMap.emplace(oldArg.Raw(), newArg.Ptr()).second);
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
                 newArgs.emplace_back(newArg);
             }
         }
+
+        // Rebuild lambda with new arguments.
+        lambda = Build<TCoLambda>(ctx, lambda.Pos())
+            .Args(newArgs)
+            .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
+            .Done();
 
         TVector<const TTypeAnnotationNode*> argTypes;
         for (const auto& arg : newArgs) {
@@ -508,17 +630,15 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             .ArgsType(ExpandType(stage.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
             .Done();
 
-        const bool allowNonDeterministicFunctions = !program.Lambda().Body().Maybe<TKqpEffects>();
-
         TExprNode::TPtr newProgram;
-        auto status = PeepHoleOptimize(program, newProgram, ctx, typeAnnTransformer, typesCtx, config,
-            allowNonDeterministicFunctions, withFinalStageRules, disabledOpts);
+        auto status = PeepHoleOptimize(program, newProgram, ctx, typesCtx, config,
+            true, withFinalStageRules, disabledOpts);
         if (status != TStatus::Ok) {
             ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()), "Peephole optimization failed for KQP transaction"));
             return {};
         }
 
-        if (allowNonDeterministicFunctions) {
+        {
             status = ReplaceNonDetFunctionsWithParams(newProgram, ctx, &nonDetParamBindings);
 
             if (status != TStatus::Ok) {
@@ -566,14 +686,12 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 class TKqpTxPeepholeTransformer : public TSyncTransformerBase {
 public:
     TKqpTxPeepholeTransformer(
-        IGraphTransformer* typeAnnTransformer,
         TTypeAnnotationContext& typesCtx,
         TKikimrConfiguration::TPtr config,
         bool withFinalStageRules,
         TSet<TString> disabledOpts
     )
-        : TypeAnnTransformer(typeAnnTransformer)
-        , TypesCtx(typesCtx)
+        : TypesCtx(typesCtx)
         , Config(config)
         , WithFinalStageRules(withFinalStageRules)
         , DisabledOpts(disabledOpts)
@@ -594,7 +712,7 @@ public:
         auto tx = input.Cast<TKqpPhysicalTx>();
 
         THashSet<ui64> optimizedStages;
-        auto optimizedTx = PeepholeOptimize(tx, ctx, *TypeAnnTransformer, TypesCtx, optimizedStages, Config, WithFinalStageRules, DisabledOpts);
+        auto optimizedTx = PeepholeOptimize(tx, ctx, TypesCtx, optimizedStages, Config, WithFinalStageRules, DisabledOpts);
 
         if (!optimizedTx) {
             return TStatus::Error;
@@ -611,7 +729,6 @@ public:
     }
 
 private:
-    IGraphTransformer* TypeAnnTransformer;
     TTypeAnnotationContext& TypesCtx;
     TKikimrConfiguration::TPtr Config;
     bool Optimized = false;
@@ -621,21 +738,20 @@ private:
 
 class TKqpTxsPeepholeTransformer : public TSyncTransformerBase {
 public:
-    TKqpTxsPeepholeTransformer(TAutoPtr<NYql::IGraphTransformer> typeAnnTransformer,
-        TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config)
-        : TypeAnnTransformer(std::move(typeAnnTransformer))
+    TKqpTxsPeepholeTransformer(TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config)
+        : ValidateConstraints(config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false) && config->OptValidateStreamingConstraints.Get().GetOrElse(true))
+        , ValidateCheckpointsUsage(config->OptValidateStreamingCheckpoints.Get().GetOrElse(true) && !config->DisableCheckpoints.Get().GetOrElse(false))
     {
         TxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("TxsPeephole", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxsPeephole")
-            .Add(*TypeAnnTransformer, "TypeAnnotation")
+            .AddTypeAnnotationTransformer()
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config), "Peephole")
+            .Add(CreateKqpTxPeepholeTransformer(typesCtx, config), "Peephole")
             .Build(false);
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-
         if (!TKqpPhysicalQuery::Match(input.Get())) {
             return TStatus::Error;
         }
@@ -645,10 +761,14 @@ public:
         TKqpPhysicalQuery query(input);
 
         TVector<TKqpPhysicalTx> txs;
+        THashSet<std::pair<ui64, ui64>> streamingTxResults; // (tx idx, result index)
         txs.reserve(query.Transactions().Size());
-        for (const auto& tx : query.Transactions()) {
-            auto expr = TransformTx(tx, ctx);
-            txs.push_back(expr.Cast());
+        for (size_t txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
+            if (const auto expr = TransformTx(txIdx, query.Transactions().Item(txIdx), streamingTxResults, ctx)) {
+                txs.push_back(expr.Cast());
+            } else {
+                return TStatus::Error;
+            }
         }
 
         auto phyQuery = Build<TKqpPhysicalQuery>(ctx, query.Pos())
@@ -668,7 +788,7 @@ public:
     }
 
 private:
-    TMaybeNode<TKqpPhysicalTx> TransformTx(const TKqpPhysicalTx& tx, TExprContext& ctx) {
+    TMaybeNode<TKqpPhysicalTx> TransformTx(ui64 txIdx, const TKqpPhysicalTx& tx, THashSet<std::pair<ui64, ui64>>& streamingTxResults, TExprContext& ctx) {
         TxTransformer->Rewind();
 
         auto expr = tx.Ptr();
@@ -682,17 +802,24 @@ private:
                 break;
             }
         }
-        return TKqpPhysicalTx(expr);
+
+        TKqpPhysicalTx physicalTx(expr);
+        if (ValidateConstraints && !ValidateStreamingConstraints(txIdx, physicalTx, streamingTxResults, ValidateCheckpointsUsage, ctx)) {
+            return {};
+        }
+
+        return physicalTx;
     }
 
     TAutoPtr<IGraphTransformer> TxTransformer;
-    TAutoPtr<NYql::IGraphTransformer> TypeAnnTransformer;
+    const bool ValidateConstraints = false;
+    const bool ValidateCheckpointsUsage = false;
 };
 
 } // anonymous namespace
 
 TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, TExprContext& ctx,
-    IGraphTransformer& typeAnnTransformer, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config,
+    TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config,
     bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts)
 {
     TKqpPeepholePipelineConfigurator kqpPeephole(config, disabledOpts);
@@ -704,7 +831,7 @@ TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, 
     peepholeSettings.WithNonDeterministicRules = false;
 
     bool hasNonDeterministicFunctions;
-    auto status = PeepHoleOptimizeNode(program.Ptr(), newProgram, ctx, typesCtx, &typeAnnTransformer,
+    auto status = PeepHoleOptimizeNode(program.Ptr(), newProgram, ctx, typesCtx, nullptr,
         hasNonDeterministicFunctions, peepholeSettings);
     if (status == TStatus::Error) {
         return status;
@@ -719,23 +846,21 @@ TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, 
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpTxPeepholeTransformer(
-    NYql::IGraphTransformer* typeAnnTransformer,
     TTypeAnnotationContext& typesCtx,
     const TKikimrConfiguration::TPtr& config,
     bool withFinalStageRules,
     TSet<TString> disabledOpts
 )
 {
-    return new TKqpTxPeepholeTransformer(typeAnnTransformer, typesCtx, config, withFinalStageRules, disabledOpts);
+    return new TKqpTxPeepholeTransformer(typesCtx, config, withFinalStageRules, disabledOpts);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpTxsPeepholeTransformer(
-    TAutoPtr<NYql::IGraphTransformer> typeAnnTransformer,
     TTypeAnnotationContext& typesCtx,
     const TKikimrConfiguration::TPtr& config
 )
 {
-    return new TKqpTxsPeepholeTransformer(std::move(typeAnnTransformer), typesCtx, config);
+    return new TKqpTxsPeepholeTransformer(typesCtx, config);
 }
 
 } // namespace NKikimr::NKqp::NOpt

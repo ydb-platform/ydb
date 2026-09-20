@@ -46,6 +46,8 @@ public:
     TFuture<std::vector<TErrorOr<TValue>>> GetMany(const std::vector<TKey>& keys);
 
     std::optional<TErrorOr<TValue>> Find(const TKey& key);
+    template <class THeterogenousKey>
+    std::optional<TErrorOr<TValue>> Find(const THeterogenousKey& key);
     std::vector<std::optional<TErrorOr<TValue>>> FindMany(const std::vector<TKey>& keys);
 
     //! InvalidateActive removes key from the cache, if it's value is currently set.
@@ -99,6 +101,11 @@ protected:
     virtual void OnRemoved(const TKey& key) noexcept;
 
     virtual bool CanCacheError(const TError& error) noexcept;
+
+    //! If true, an error entry is periodically refreshed and expires as a successful one.
+    //! NB: Unlike #CanCacheError, this hook may be called under an internal shard lock
+    //! (see #RefreshAllItems), so it must be cheap and must not re-enter the cache.
+    virtual bool CanRefreshError(const TError& error) noexcept;
 
     //! Ping resets refresh timer period and behaves like successful entry update.
     void Ping(const TKey& key);
@@ -224,12 +231,14 @@ private:
         int RequestIndex;
     };
     std::vector<std::vector<TItem>> SortKeysByShards(const std::vector<TKey>& keys) const;
-    int GetShardIndex(const TKey& key) const;
+    template <class THeterogenousKey>
+    int GetShardIndex(const THeterogenousKey& key) const;
 
     NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock> MakeReaderGuardForKey(const TKey& key);
 
     std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const TEntryMap&> LockAndGetReadableShard(int shardIndex);
-    std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const TEntryMap&> LockAndGetReadableShardForKey(const TKey& key);
+    template <class THeterogenousKey>
+    std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const TEntryMap&> LockAndGetReadableShardForKey(const THeterogenousKey& key);
 
     std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, TEntryMap&> LockAndGetWritableShard(int shardIndex);
     std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, TEntryMap&> LockAndGetWritableShardForKey(const TKey& key);

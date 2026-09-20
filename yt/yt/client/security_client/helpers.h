@@ -14,6 +14,7 @@ namespace NYT::NSecurityClient {
 NYPath::TYPath GetUserPath(const std::string& name);
 NYPath::TYPath GetGroupPath(const std::string& name);
 NYPath::TYPath GetAccountPath(const std::string& name);
+NYPath::TYPath GetMediumPath(const std::string& name);
 
 ////////////////////////////////////////////////////////////////////////////////
 

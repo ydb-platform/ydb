@@ -1,0 +1,9 @@
+USE plato;
+PRAGMA yt.UseNativeDescSort;
+
+INSERT INTO Output WITH TRUNCATE
+SELECT
+    *
+FROM Input
+ORDER BY key DESC;
+

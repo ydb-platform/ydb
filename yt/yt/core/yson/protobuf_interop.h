@@ -4,7 +4,8 @@
 
 #include "protobuf_interop_options.h"
 
-#include <yt/yt/core/misc/mpl.h>
+#include <library/cpp/yt/mpl/concepts.h>
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <yt/yt/core/ypath/public.h>
 
@@ -241,6 +242,7 @@ void RegisterCustomProtobufConverter(
 struct TProtobufMessageBytesFieldConverter
 {
     std::function<void(IYsonConsumer* consumer, TStringBuf bytes)> Serializer;
+    // TODO(babenko): migrate to std::string
     std::function<void(TString* bytes, const NYTree::INodePtr& node)> Deserializer;
 };
 
@@ -293,12 +295,12 @@ void RegisterCustomProtobufUIntFieldConverter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString YsonStringToProto(
+std::string YsonStringToProto(
     const TYsonString& ysonString,
     const TProtobufMessageType* payloadType,
     EUnknownYsonFieldsMode unknownFieldsMode);
 
-TString YsonStringToProto(
+std::string YsonStringToProto(
     const TYsonString& ysonString,
     const TProtobufMessageType* payloadType,
     TProtobufWriterOptions options);
@@ -317,6 +319,20 @@ void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer, cons
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYson
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYT {
+
+// Generic formatter for protobuf enums. Formats strings for valid values and
+// raw numbers otherwise. Placed under NYT namespace to work with all enums under NYT with ADL.
+template <CArcadiaEnum TProtobufEnum>
+    requires google::protobuf::is_proto_enum<TProtobufEnum>::value
+void FormatValue(TStringBuilderBase* builder, TProtobufEnum enumValue, TStringBuf format);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT
 
 #define PROTOBUF_INTEROP_INL_H_
 #include "protobuf_interop-inl.h"

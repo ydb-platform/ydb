@@ -1,10 +1,13 @@
 #pragma once
 
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -44,13 +47,24 @@ class TEnv {
         Sender = Server.GetRuntime()->AllocateEdgeActor();
     }
 
-    void Login(ui64 schemeShardId, const TString& user, const TString& password) {
-        auto req = MakeHolder<NSchemeShard::TEvSchemeShard::TEvLogin>();
-        req->Record.SetUser(user);
-        req->Record.SetPassword(password);
-        auto resp = Send<NSchemeShard::TEvSchemeShard::TEvLoginResult>(schemeShardId, std::move(req));
-        UNIT_ASSERT(resp->Get()->Record.GetError().empty());
-        UNIT_ASSERT(!resp->Get()->Record.GetToken().empty());
+    void Login(const TString& database, const TString& user, const TString& password) {
+        Ydb::Auth::LoginRequest request;
+        request.set_user(user);
+        request.set_password(password);
+
+        using TEvLoginRequest = NGRpcService::TGRpcRequestWrapperNoAuth<
+            NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
+
+        auto result = NRpcService::DoLocalRpc<TEvLoginRequest>(
+            std::move(request), database, {}, Server.GetRuntime()->GetActorSystem(0)
+        ).ExtractValueSync();
+
+        const auto& operation = result.operation();
+        UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), Ydb::StatusIds::SUCCESS, operation.issues(0).message());
+
+        Ydb::Auth::LoginResult loginResult;
+        operation.result().UnpackTo(&loginResult);
+        UNIT_ASSERT(!loginResult.token().empty());
     }
 
 public:
@@ -105,14 +119,7 @@ public:
         }
         // init security state
         {
-            auto resp = Client.Ls(db);
-
-            const auto& desc = resp->Record;
-            UNIT_ASSERT(desc.HasPathDescription());
-            UNIT_ASSERT(desc.GetPathDescription().HasDomainDescription());
-            UNIT_ASSERT(desc.GetPathDescription().GetDomainDescription().HasDomainKey());
-
-            Login(desc.GetPathDescription().GetDomainDescription().GetDomainKey().GetSchemeShard(), user, password);
+            Login(db, user, password);
         }
         // update security state
         {

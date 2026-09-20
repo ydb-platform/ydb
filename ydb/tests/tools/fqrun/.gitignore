@@ -5,6 +5,7 @@ sync_dir
 *.conf
 *.parquet
 *.json
+*.jsonl
 *.svg
 *.txt
 *.yql

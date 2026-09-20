@@ -78,7 +78,7 @@ public:
 
 private:
     std::pair<TString, TString> GetPreparedUrlAndAlias(const TString& url) const {
-        TString urlWithoutParameters = SubstParameters(url, Parameters_, nullptr);
+        TString urlWithoutParameters = SubstParameters(url, Parameters_, /*usedNames=*/nullptr);
         TString preprocessedUrl = urlWithoutParameters;
 
         TString alias;

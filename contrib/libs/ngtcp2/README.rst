@@ -30,9 +30,11 @@ Requirements
 ------------
 
 The libngtcp2 C library itself does not depend on any external
-libraries.  The example client, and server are written in C++23, and
-should compile with the modern C++ compilers (e.g., clang >= 19, or
-gcc >= 15).
+libraries.  It requires a C11 compiler to build.  The modern compilers
+such as clang >= 19, gcc >= 15, and MSVC 2022 (1944) are known to
+work.  The example client, and server are written in C++23, and should
+compile with the modern C++ compilers (e.g., clang >= 19, or gcc >=
+15).
 
 The following packages are required to configure the build system:
 
@@ -62,9 +64,9 @@ directory require at least one of the following TLS backends:
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_
   (deprecated)
 - GnuTLS >= 3.7.5
-- BoringSSL (commit 664a985707470a62f436cca862ccec9524c561ca);
+- BoringSSL (commit 22a0079b189c391b95689813a41982ce11876f0a);
   or aws-lc >= 1.39.0
-- Picotls (commit b84869f41414b6d0148db7728f1cf12f5b544874)
+- Picotls (commit f07f1c8c68b237f1468bc1f1fe1b68aba3ff23b4)
 - wolfSSL >= 5.5.0
 - LibreSSL >= v3.9.2
 - OpenSSL >= 3.5.0 (experimental)
@@ -83,7 +85,7 @@ Build with wolfSSL
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v5.9.0-stable https://github.com/wolfSSL/wolfssl
+   $ git clone --depth 1 -b v5.9.2-stable https://github.com/wolfSSL/wolfssl
    $ cd wolfssl
    $ autoreconf -i
    $ # For wolfSSL < v5.6.6, append --enable-quic.
@@ -116,7 +118,7 @@ Build with BoringSSL
 
    $ git clone https://boringssl.googlesource.com/boringssl
    $ cd boringssl
-   $ git checkout 664a985707470a62f436cca862ccec9524c561ca
+   $ git checkout 22a0079b189c391b95689813a41982ce11876f0a
    $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
    $ make -j$(nproc) -C build
    $ cd ..
@@ -143,7 +145,7 @@ Build with aws-lc
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v1.71.0 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v5.4.0 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON
    $ make -j$(nproc) -C build
@@ -171,7 +173,7 @@ Build with libressl
 
 .. code-block:: shell
 
-   $ LIBRESSL_VERSION=v4.2.1
+   $ LIBRESSL_VERSION=v4.3.2
    $ git clone --depth 1 -b $LIBRESSL_VERSION https://github.com/libressl/portable.git libressl
    $ cd libressl
    $ # Workaround autogen.sh failure
@@ -224,15 +226,15 @@ The notable options are:
 
 - ``-V``, ``--validate-addr``: Enforce stateless address validation.
 
-H09wsslclient/H09wsslserver
----------------------------
+wsslhqclient/wsslhqserver
+-------------------------
 
-There are h09wsslclient and h09wsslserver which speak HTTP/0.9.  They
-are written just for `quic-interop-runner
+There are wsslhqclient and wsslhqserver which speak HQ protocol, which
+is specifically tailored for `quic-interop-runner
 <https://github.com/marten-seemann/quic-interop-runner>`_.  They share
 the basic functionalities with HTTP/3 client and server but have less
-functions (e.g., h09wsslclient does not have a capability to send
-request body, and h09wsslserver does not understand numeric request
+functions (e.g., wsslhqclient does not have a capability to send
+request body, and wsslhqserver does not understand numeric request
 path, like /1000).
 
 Resumption and 0-RTT

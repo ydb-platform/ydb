@@ -384,6 +384,8 @@ public:
                     .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                     .LangVer(State_->Types->LangVer)
                     .RuntimeSettings(State_->Types->RuntimeSettings)
+                    .BridgeMode(State_->Types->BridgeMode)
+                    .BridgeBinaryPath(State_->Types->UdfBridgeBinaryPath)
                     .Pos(x.second.first)
             );
             allFutures.push_back(result.IgnoreResult());
@@ -1258,8 +1260,9 @@ private:
                 YQL_ENSURE(!walkFoldersInstanceIt.IsEnd());
                 auto& walkFoldersImpl = walkFoldersInstanceIt->second;
 
-                Y_ENSURE(walkFoldersImpl.GetAnyOpFuture().HasValue(),
-                    "Called RewriteWalkFoldersOnAsyncChanges, but impl future is not ready");
+                if (!walkFoldersImpl.GetAnyOpFuture().IsReady()) {
+                    return readNode.Ptr();
+                }
 
                 auto nextState = parsedKey.GetWalkFolderImplArgs()->UserStateExpr;
                 walkFoldersStatus = walkFoldersImpl.GetNextStateExpr(ctx, std::move(parsedKey.GetWalkFolderImplArgs().GetRef()), nextState);

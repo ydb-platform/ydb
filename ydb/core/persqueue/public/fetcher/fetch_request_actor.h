@@ -33,6 +33,7 @@ struct TFetchRequestSettings {
     ui64 TotalMaxBytes = 0;
 
     bool RuPerRequest = false;
+    bool CanReadBatches = false;
     ui64 RequestId = 0;
 
     TRlContext RlCtx = {};

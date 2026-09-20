@@ -150,6 +150,19 @@
             ]
         },
         {
+            "Name": "TKqlReadTableVectorIndex",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqlReadTableVectorIndex"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Index", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "TopK", "Type": "TExprBase"},
+                {"Index": 4, "Name": "TargetVector", "Type": "TExprBase"},
+                {"Index": 5, "Name": "PrefixRows", "Type": "TExprBase", "Optional": true}
+            ]
+        },
+        {
             "Name": "TKqlReadTableRanges",
             "Base": "TKqlReadTableRangesBase",
             "Match": {"Type": "Callable", "Name": "KqlReadTableRanges"},
@@ -283,7 +296,8 @@
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Cluster", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "OriginalPath", "Type": "TCoAtom"}
+                {"Index": 3, "Name": "OriginalPath", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "CtasShardingColumns", "Type": "TCoAtomList", "Optional": true}
             ]
         },
         {
@@ -325,14 +339,6 @@
                 {"Index": 4, "Name": "GenerateColumnsIfInsert", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "IsBatch", "Type": "TCoAtom"},
                 {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
-            ]
-        },
-        {
-            "Name": "TKqpUpsertRows",
-            "Base": "TKqlUpsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqpUpsertRows"},
-            "Children": [
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -487,11 +493,6 @@
             "ListBase": "TKqlQuery"
         },
         {
-            "Name": "TKqpEffects",
-            "VarArgBase": "TExprBase",
-            "Match": {"Type": "Callable", "Name": "KqpEffects"}
-        },
-        {
             "Name": "TKqpConnection",
             "Base": "TDqConnection",
             "Match": {"Type": "CallableBase"},
@@ -520,6 +521,19 @@
                 {"Index": 2, "Name": "InputType", "Type": "TExprBase"},
                 {"Index": 3, "Name": "Index", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "WithData", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpCnVectorSearch",
+            "Base": "TKqpConnection",
+            "Match": {"Type": "Callable", "Name": "KqpCnVectorSearch"},
+            "Children": [
+                {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 2, "Name": "InputType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Index", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "TopK", "Type": "TExprBase"},
+                {"Index": 6, "Name": "HasPrefix", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {
@@ -590,11 +604,6 @@
                 {"Index": 3, "Name": "IsBatch", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
-        },
-        {
-            "Name": "TKqpDeleteRows",
-            "Base": "TKqlDeleteRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqpDeleteRows"}
         },
         {
             "Name": "TKqpLockAndCheck",
@@ -848,6 +857,14 @@
             ]
         },
         {
+            "Name": "TKqpStreamEnumerate",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpStreamEnumerate"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpOpRead",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpRead"},
@@ -887,7 +904,7 @@
             "Match": {"Type": "Callable", "Name": "KqpOpMapElementLambda"},
             "Children": [
                 {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"},
-                {"Index": 3, "Name": "ForceOptional", "Type": "TCoAtom", "Optional": "true"}
+                {"Index": 3, "Name": "ForceOptional", "Type": "TCoAtom"}
             ]
         },
         {
@@ -950,12 +967,13 @@
             ]
         },
         {
-            "Name": "TKqpOpUnionAll",
+            "Name": "TKqpOpSetOp",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqpOpUnionAll"},
+            "Match": {"Type": "Callable", "Name": "KqpOpSetOp"},
             "Children": [
                 {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
-                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"}
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+                {"Index": 2, "Name": "SetOp", "Type": "TCoAtom"}
             ]
         },
         {
@@ -993,13 +1011,30 @@
             ]
         },
         {
+            "Name": "TKqpOpReplaceAlias",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpReplaceAlias"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Alias", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpOpReplaceColumns",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpReplaceColumns"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
             "Name": "TKqpOpRoot",
             "Base": "TCallable",
             "Match" : {"Type": "Callable", "Name": "KqpOpRoot"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"},
-                {"Index": 2, "Name": "PgSyntax", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -1009,12 +1044,52 @@
             "Children": [
                 {"Index": 0, "Name": "OriginalColName", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "AggregationFunction", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Distinct", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {
             "Name": "TKqpOpAggregationTraitsList",
             "ListBase" : "TKqpOpAggregationTraits"
+        },
+        {
+            "Name": "TKqpOpWindowFunc",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Function", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Kind", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Arguments", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TKqpOpWindowFuncList",
+            "ListBase": "TKqpOpWindowFunc"
+        },
+        {
+            "Name": "TKqpOpWindowFrame",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "FrameType", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "BeginKind", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "BeginValue", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "EndKind", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "EndValue", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpOpWindow",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpWindow"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "WindowFuncs", "Type": "TKqpOpWindowFuncList"},
+                {"Index": 2, "Name": "PartitionKeys", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "SortExpressions", "Type": "TKqpOpSortList"},
+                {"Index": 4, "Name": "Frame", "Type": "TKqpOpWindowFrame"}
+            ]
         },
         {
             "Name": "TKqpOpAggregate",
@@ -1025,6 +1100,23 @@
                 {"Index": 1, "Name": "AggregationTraitsList", "Type": "TKqpOpAggregationTraitsList"},
                 {"Index": 2, "Name": "KeyColumns", "Type": "TCoAtomList"},
                 {"Index": 3, "Name": "DistinctAll", "Type" : "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpOpGroupingSet",
+            "ListBase": "TCoAtom"
+        },
+        {
+            "Name": "TKqpOpGroupingSetList",
+            "ListBase": "TKqpOpGroupingSet"
+        },
+        {
+            "Name": "TKqpOpGroupingSets",
+            "Base": "TCallable",
+            "Match" : {"Type": "Callable", "Name": "KqpOpGroupingSets"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TKqpOpAggregate"},
+                {"Index": 1, "Name": "GroupingSets", "Type": "TKqpOpGroupingSetList"}
             ]
         },
         {
@@ -1041,25 +1133,17 @@
             "Match" : {"Type": "Callable", "Name": "KqpExprSublink"}
         },
         {
-            "Name": "TKqpBooleanSublink",
-            "Base": "TKqpSublinkBase",
-            "Match" : {"Type": "CallableBase"},
-            "Children" : [
-                {"Index": 1, "Name": "ReturnPgBool", "Type": "TCoAtom"}
-            ]
-        },
-        {
             "Name": "TKqpExistsSublink",
-            "Base": "TKqpBooleanSublink",
+            "Base": "TKqpSublinkBase",
             "Match" : {"Type": "Callable", "Name": "KqpExistsSublink"}
         },
         {
             "Name": "TKqpInSublink",
-            "Base": "TKqpBooleanSublink",
+            "Base": "TKqpSublinkBase",
             "Match" : {"Type": "Callable", "Name": "KqpInSublink"},
             "Children" : [
-                {"Index": 2, "Name": "OuterType", "Type": "TExprBase"},
-                {"Index": 3, "Name": "InLambda", "Type": "TExprBase"}
+                {"Index": 1, "Name": "OuterType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "InLambda", "Type": "TExprBase"}
             ]
         },
         {
@@ -1070,6 +1154,23 @@
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 2, "Name": "Types", "Type": "TExprList"}
+            ]
+        },
+        {
+            "Name" : "TKqpOpTableEffect",
+            "Base" : "TCallable",
+            "Match" : {"Type": "Callable", "Name": "KqpOpTableEffect"},
+            "Children" : [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 2, "Name": "EffectType", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Columns", "Type": "TCoAtomList", "Optional": true},
+                {"Index": 4, "Name": "ReturningColumns", "Type": "TCoAtomList", "Optional": true},
+                {"Index": 5, "Name": "IsBatch", "Type": "TCoAtom", "Optional": true},
+                {"Index": 6, "Name": "DefaultColumns", "Type": "TCoAtomList", "Optional": true},
+                {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true},
+                {"Index": 8, "Name": "OnConflict", "Type": "TCoAtom", "Description": "'abort or 'revert", "Optional": true},
+                {"Index": 9, "Name": "GenerateColumnsIfInsert", "Type": "TCoAtomList", "Optional": true}
             ]
         }
     ]

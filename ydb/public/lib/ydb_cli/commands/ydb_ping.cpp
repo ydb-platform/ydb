@@ -105,7 +105,7 @@ int TCommandPing::Run(TConfig& config) {
 }
 
 int TCommandPing::RunCommand(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NQuery::TQueryClient queryClient(driver);
     NDebug::TDebugClient pingClient(driver);
     SetInterruptHandlers();

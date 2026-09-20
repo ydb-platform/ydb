@@ -75,3 +75,40 @@ def test_commandline_options(
     assert config.debug_instrumentation is True
     assert config.forward_ref_policy is ForwardRefPolicy.ERROR
     assert config.collection_check_strategy is CollectionCheckStrategy.ALL_ITEMS
+
+
+def test_config_options_with_ignore(pytester: Pytester) -> None:
+    pytester.makepyprojecttoml(
+        '''
+        [tool.pytest.ini_options]
+        typeguard-packages = """
+        ham
+        spam.eggs"""
+        typeguard-packages-ignore = """
+        ham.ignoreme
+        spam.eggs.ignoretoo"""
+        '''
+    )
+
+    pytester.plugins = ["typeguard"]
+    pytester.syspathinsert()
+    pytestconfig = pytester.parseconfigure()
+    assert pytestconfig.getini("typeguard-packages") == ["ham", "spam.eggs"]
+    assert pytestconfig.getini("typeguard-packages-ignore") == [
+        "ham.ignoreme",
+        "spam.eggs.ignoretoo",
+    ]
+
+
+def test_commandline_options_with_ignore(pytester: Pytester) -> None:
+    pytester.plugins = ["typeguard"]
+    pytester.syspathinsert()
+    pytestconfig = pytester.parseconfigure(
+        "--typeguard-packages=ham,spam.eggs",
+        "--typeguard-packages-ignore=ham.ignoreme,spam.eggs.ignoretoo",
+    )
+    assert pytestconfig.getoption("typeguard_packages") == "ham,spam.eggs"
+    assert (
+        pytestconfig.getoption("typeguard_packages_ignore")
+        == "ham.ignoreme,spam.eggs.ignoretoo"
+    )

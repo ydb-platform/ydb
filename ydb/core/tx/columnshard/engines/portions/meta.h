@@ -68,6 +68,7 @@ private:
     YDB_READONLY(ui32, IndexRawBytes, 0);
     YDB_READONLY(ui32, IndexBlobBytes, 0);
     YDB_READONLY(ui32, NumSlices, 1);
+    YDB_READONLY_DEF(std::optional<ui32>, BsIndexBlobBytes);
 
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;

@@ -17,6 +17,10 @@ private:
     std::shared_ptr<arrow::Array> ArrayPositions;
 
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
+        visitor(DoGetLocalData(std::nullopt, 0).GetArray());
+    }
+
+    virtual void DoVisitDistinctValues(const TValuesSimpleVisitor& visitor) const override {
         visitor(ArrayDictionary);
     }
 

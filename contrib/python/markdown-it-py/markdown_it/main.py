@@ -26,6 +26,7 @@ _PRESETS: dict[str, PresetType] = {
     "zero": presets.zero.make(),
     "commonmark": presets.commonmark.make(),
     "gfm-like": presets.gfm_like.make(),
+    "gfm-like2": presets.gfm_like2.make(),
 }
 
 
@@ -125,7 +126,7 @@ class MarkdownIt:
         if options_update:
             options = {**options, **options_update}  # type: ignore
 
-        self.set(options)  # type: ignore
+        self.set(options)
 
         if "components" in config:
             for name, component in config["components"].items():

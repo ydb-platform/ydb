@@ -111,10 +111,10 @@ public:
         result = Factory_.CreateDirectArrayHolder(nvalues + 1, datums);
         for (size_t i = 0; i < nvalues; i++) {
             const ui32 id = DatumToMemberIDMap_[i];
-            datums[id] = Factory_.CreateArrowBlock(std::move(batch->values[i]));
+            datums[id] = Factory_.CreateArrowBlock(std::move(batch->values[i]), NYql::DefaultDatumValidationMode);
         }
         arrow::Datum length(std::make_shared<arrow::UInt64Scalar>(batch->length));
-        datums[BatchLengthID_] = Factory_.CreateArrowBlock(std::move(length));
+        datums[BatchLengthID_] = Factory_.CreateArrowBlock(std::move(length), NYql::DefaultDatumValidationMode);
     }
 };
 

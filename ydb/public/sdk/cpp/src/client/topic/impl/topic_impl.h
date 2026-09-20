@@ -103,6 +103,12 @@ public:
         if (settings.SetPartitionWriteBurstBytes_) {
             request.set_set_partition_write_burst_bytes(*settings.SetPartitionWriteBurstBytes_);
         }
+        if (settings.SetPartitionWriteSpeedMessagesPerSecond_) {
+            request.set_set_partition_write_speed_messages_per_second(*settings.SetPartitionWriteSpeedMessagesPerSecond_);
+        }
+        if (settings.SetPartitionWriteBurstMessages_) {
+            request.set_set_partition_write_burst_messages(*settings.SetPartitionWriteBurstMessages_);
+        }
         if (settings.SetRetentionStorageMb_) {
             request.set_set_retention_storage_mb(*settings.SetRetentionStorageMb_);
         }

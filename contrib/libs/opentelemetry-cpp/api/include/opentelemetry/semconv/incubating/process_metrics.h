@@ -63,13 +63,13 @@ CreateAsyncDoubleMetricProcessContextSwitches(metrics::Meter *meter)
 }
 
 /**
-  Total CPU seconds broken down by different states.
+  Total CPU seconds broken down by different CPU modes.
   <p>
   counter
  */
 static constexpr const char *kMetricProcessCpuTime = "process.cpu.time";
 static constexpr const char *descrMetricProcessCpuTime =
-    "Total CPU seconds broken down by different states.";
+    "Total CPU seconds broken down by different CPU modes.";
 static constexpr const char *unitMetricProcessCpuTime = "s";
 
 static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricProcessCpuTime(
@@ -310,33 +310,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricProcessOpenFileD
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricProcessOpenFileDescriptorCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricProcessOpenFileDescriptorCount,
                                          descrMetricProcessOpenFileDescriptorCount,
                                          unitMetricProcessOpenFileDescriptorCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricProcessOpenFileDescriptorCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricProcessOpenFileDescriptorCount,
                                           descrMetricProcessOpenFileDescriptorCount,
                                           unitMetricProcessOpenFileDescriptorCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricProcessOpenFileDescriptorCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricProcessOpenFileDescriptorCount,
                                                    descrMetricProcessOpenFileDescriptorCount,
                                                    unitMetricProcessOpenFileDescriptorCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricProcessOpenFileDescriptorCount(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricProcessOpenFileDescriptorCount,
                                                     descrMetricProcessOpenFileDescriptorCount,
                                                     unitMetricProcessOpenFileDescriptorCount);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**

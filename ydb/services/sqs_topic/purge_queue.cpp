@@ -1,5 +1,6 @@
 #include "purge_queue.h"
 #include "actor.h"
+#include "config.h"
 #include "error.h"
 #include "request.h"
 #include "receipt.h"
@@ -30,7 +31,6 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -65,17 +65,16 @@ namespace NKikimr::NSqsTopic::V1 {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            TMaybe purgeSettings = MakePurgerSettings();
-            if (!purgeSettings.Defined()) {
+            PurgeSettings_ = MakePurgerSettings(ctx);
+            if (!PurgeSettings_.Defined()) {
                 return;
             }
 
-            std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreatePurger(this->SelfId(), std::move(*purgeSettings))};
-            ReaderActorId_ = ctx.RegisterWithSameMailbox(actorPtr.release());
+            this->DescribeTopic(NACLib::DescribeSchema);
             this->Become(&TPurgeQueueActor::StateWork);
         }
 
-        TMaybe<NKikimr::NPQ::NMLP::TPurgerSettings> MakePurgerSettings() {
+        TMaybe<NKikimr::NPQ::NMLP::TPurgerSettings> MakePurgerSettings(const NActors::TActorContext& ctx) {
             if (this->QueueUrl_->Consumer.empty()) {
                 ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Malformed QueueUrl")));
                 return Nothing();
@@ -84,7 +83,7 @@ namespace NKikimr::NSqsTopic::V1 {
             NKikimr::NPQ::NMLP::TPurgerSettings settings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
-                .Consumer = this->QueueUrl_->Consumer,
+                .Consumer = ResolveConsumerNameFromQueueUrl(this->QueueUrl_->Consumer, ctx),
                 .UserToken = this->Request_->GetInternalToken(),
             };
             return settings;
@@ -92,7 +91,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse); // override for testing
                 HFunc(NKikimr::NPQ::NMLP::TEvPurgeResponse, Handle);
                 default:
                     TBase::StateWork(ev);
@@ -120,15 +118,24 @@ namespace NKikimr::NSqsTopic::V1 {
             return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
         }
 
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo&) {
+            this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext& ctx) {
+            ReaderActorId_ = ctx.RegisterWithSameMailbox(
+                NKikimr::NPQ::NMLP::CreatePurger(this->SelfId(), std::move(*PurgeSettings_)));
+        }
+
         void Die(const TActorContext& ctx) override {
             if (ReaderActorId_) {
                 ctx.Send(ReaderActorId_, new TEvents::TEvPoison);
             }
             this->TBase::Die(ctx);
-        }
-
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            Y_UNUSED(ev);
         }
 
     private:
@@ -139,6 +146,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
     private:
         TActorId ReaderActorId_;
+        TMaybe<NKikimr::NPQ::NMLP::TPurgerSettings> PurgeSettings_;
     };
 
     std::unique_ptr<NActors::IActor> CreatePurgeQueueActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

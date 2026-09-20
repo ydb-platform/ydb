@@ -82,7 +82,6 @@ void TKqpCountersBase::Init() {
     ParametersBytes = KqpGroup->GetCounter("Requests/ParametersBytes", true);
     YdbParametersBytes = YdbGroup->GetNamedCounter("name", "table.query.request.parameters_bytes", true);
 
-    SqlV0Translations = KqpGroup->GetCounter("Requests/Sql/V0", true);
     SqlV1Translations = KqpGroup->GetCounter("Requests/Sql/V1", true);
     SqlUnknownTranslations = KqpGroup->GetCounter("Requests/Sql/Unknown", true);
 
@@ -249,8 +248,6 @@ void TKqpCountersBase::Init() {
     CompileQueryCacheMisses = YdbGroup->GetNamedCounter("name", "table.query.compilation.cache_misses", true);
 
     CompileTotal = YdbGroup->GetNamedCounter("name", "table.query.compilation.count", true);
-    CompileEnforceConfigSuccess = KqpGroup->GetCounter("Compilation/EnforceConfig/Success", true);
-    CompileEnforceConfigFailed = KqpGroup->GetCounter("Compilation/EnforceConfig/Failed", true);
     CompileNewRBOSuccess = KqpGroup->GetCounter("Compilation/NewRBO/Success", true);
     CompileNewRBOFailed = KqpGroup->GetCounter("Compilation/NewRBO/Failed", true);
     CompileErrors = YdbGroup->GetNamedCounter("name", "table.query.compilation.error_count", true);
@@ -446,9 +443,6 @@ void TKqpCountersBase::ReportTransaction(const TKqpTransactionInfo& txInfo) {
 
 void TKqpCountersBase::ReportSqlVersion(ui16 sqlVersion) {
     switch (sqlVersion) {
-        case 0:
-            SqlV0Translations->Inc();
-            break;
         case 1:
             SqlV1Translations->Inc();
             break;
@@ -600,14 +594,6 @@ void TKqpCountersBase::ReportCompileDurations(TDuration duration, TDuration cpuT
 
 void TKqpCountersBase::ReportRecompileRequestGet() {
     CompileRequestsRecompile->Inc();
-}
-
-void TKqpCountersBase::ReportCompileEnforceConfigSuccess() {
-    CompileEnforceConfigSuccess->Inc();
-}
-
-void TKqpCountersBase::ReportCompileEnforceConfigFailed() {
-    CompileEnforceConfigFailed->Inc();
 }
 
 void TKqpCountersBase::ReportCompileNewRBOSuccess() {
@@ -808,6 +794,13 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     WarmupQueriesTruncated = KqpGroup->GetCounter("Warmup/QueriesTruncated", false);
     WarmupQueriesEmptyQueryType = KqpGroup->GetCounter("Warmup/QueriesEmptyQueryType", false);
 
+    /* Compile cache view (federated .sys/compile_cache_queries) */
+    CompileCacheViewPeerScanWarnings = KqpGroup->GetCounter("CompileCacheView/PeerScanWarnings", true);
+
+    WarmupHitsInWindow = KqpGroup->GetCounter("Warmup/HitsInWindow", true);
+    WarmupMissesInWindow = KqpGroup->GetCounter("Warmup/MissesInWindow", true);
+    WarmupSavedCompileMs = KqpGroup->GetCounter("Warmup/SavedCompileMs", true);
+
     /* Resource Manager */
     RmComputeActors = KqpGroup->GetCounter("RM/ComputeActors", false);
     RmMemory = KqpGroup->GetCounter("RM/Memory", false);
@@ -860,6 +853,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     ModifiedRowsCount = KqpGroup->GetCounter("PessimisticLocks/ModifiedRowsCount", true);
     LockedRowsCount = KqpGroup->GetCounter("PessimisticLocks/LockedRowsCount", true);
     MaxInFlightLockTimeOnExit = KqpGroup->GetHistogram("PessimisticLocks/MaxInFlightLockTimeOnExitMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    StreamLookupLockTotalQuotaBytesInFlight = KqpGroup->GetCounter("PessimisticLocks/StreamLookupLockTotalQuotaBytesInFlight", false);
+    StreamLookupLockTotalQuotaBytesExceeded = KqpGroup->GetCounter("PessimisticLocks/StreamLookupLockTotalQuotaBytesExceeded", true);
 
     /* sink writes */
     WriteActorsShardResolve = KqpGroup->GetCounter("SinkWrites/WriteActorShardResolve", true);
@@ -873,6 +868,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
 
     WriteActorWriteOnlyOperations = KqpGroup->GetCounter("SinkWrites/WriteActorWriteOnlyOperations", true);
     WriteActorReadWriteOperations = KqpGroup->GetCounter("SinkWrites/WriteActorReadWriteOperations", true);
+
+    WriteActorLocalShardWrites = KqpGroup->GetCounter("SinkWrites/WriteActorLocalShardWrites", true);
+    WriteActorRemoteShardWrites = KqpGroup->GetCounter("SinkWrites/WriteActorRemoteShardWrites", true);
 
     BufferActorFlushes = KqpGroup->GetCounter("SinkWrites/BufferActorFlushes", true);
     BufferActorImmediateCommits = KqpGroup->GetCounter("SinkWrites/BufferActorImmediateCommits", true);
@@ -1353,20 +1351,6 @@ void TKqpCounters::ReportCompileRequestTimeout(TKqpDbCountersPtr dbCounters) {
     TKqpCountersBase::ReportCompileRequestTimeout();
     if (dbCounters) {
         dbCounters->ReportCompileRequestTimeout();
-    }
-}
-
-void TKqpCounters::ReportCompileEnforceConfigSuccess(TKqpDbCountersPtr dbCounters) {
-    TKqpCountersBase::ReportCompileEnforceConfigSuccess();
-    if (dbCounters) {
-        dbCounters->ReportCompileEnforceConfigSuccess();
-    }
-}
-
-void TKqpCounters::ReportCompileEnforceConfigFailed(TKqpDbCountersPtr dbCounters) {
-    TKqpCountersBase::ReportCompileEnforceConfigFailed();
-    if (dbCounters) {
-        dbCounters->ReportCompileEnforceConfigFailed();
     }
 }
 

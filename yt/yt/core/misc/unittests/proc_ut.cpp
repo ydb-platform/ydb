@@ -3,6 +3,10 @@
 
 #include <yt/yt/core/misc/proc.h>
 
+#include <library/cpp/yt/system/process_id.h>
+
+#include <sys/resource.h>
+
 namespace NYT {
 namespace {
 
@@ -10,7 +14,7 @@ namespace {
 
 TEST(TProcTest, TestParseMemoryMappings)
 {
-    const TString rawSMaps =
+    const std::string rawSMaps =
         "7fbb7b24d000-7fbb7b251000 rw-s 00000000 00:00 0 \n"
         "Size:                  1 kB\n"
         "KernelPageSize:        2 kB\n"
@@ -90,7 +94,7 @@ TEST(TProcTest, TestParseMemoryMappings)
 
 TEST(TProcTest, TestGetSelfMemoryMappings)
 {
-    auto pid = GetCurrentProcessId();
+    auto pid = GetProcessId();
     auto memoryMappings = GetProcessMemoryMappings(pid);
 
     TMemoryMappingStatistics statistics;
@@ -176,6 +180,17 @@ TEST(TProcTest, FileDescriptorCount)
 
     files.clear();
     EXPECT_EQ(GetFileDescriptorCount(), initialCount);
+}
+
+TEST(TProcTest, FileDescriptorLimit)
+{
+    struct rlimit limit;
+    ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &limit), 0);
+
+    auto expected = limit.rlim_cur == RLIM_INFINITY
+        ? std::nullopt
+        : std::optional(static_cast<i64>(limit.rlim_cur));
+    EXPECT_EQ(GetFileDescriptorLimit(), expected);
 }
 
 TEST(TProcTest, SelfIO)

@@ -243,4 +243,76 @@ Y_UNIT_TEST_SUITE(TRcBuf) {
         UNIT_ASSERT_VALUES_EQUAL(piece.size(), 108);
         UNIT_ASSERT_EQUAL(::memcmp(piece.data(), str.data() + 3, 8), 0);
     }
+
+    Y_UNIT_TEST(ExpandFrontReservesHeadroomInCookies) {
+        constexpr size_t headroom = 16;
+        const TString payloadStr(64, 'x');
+
+        // Payload-only buffer with reserved headroom (same layout as interconnect receive path).
+        TRcBuf payloadOnly = TRcBuf::Copy(payloadStr.data(), payloadStr.size(), headroom, 0);
+        const char* payloadPtr = payloadOnly.GetData();
+
+        // Sibling view sharing the backend (mirrors event Payload rope after ExpandFront).
+        TRcBuf payloadSibling(payloadOnly);
+
+        TRcBuf withHeader = payloadOnly.ExpandFront(headroom);
+        UNIT_ASSERT_VALUES_EQUAL(withHeader.GetSize(), headroom + payloadStr.size());
+        UNIT_ASSERT(withHeader.GetData() + headroom == payloadPtr);
+
+        // Regression guard: once ExpandFront claims the headroom (moves the cookie front edge), the
+        // sibling must no longer see it as growable, so it cannot claim the same header bytes.
+        UNIT_ASSERT_VALUES_EQUAL(payloadSibling.Headroom(), 0u);
+    }
+
+    Y_UNIT_TEST(ExpandFrontZeroPrivate) {
+        const TString payloadStr(64, 'x');
+        constexpr size_t headroom = 16;
+
+        TRcBuf buf = TRcBuf::Copy(payloadStr.data(), payloadStr.size(), headroom, 0);
+        const char* payloadPtr = buf.GetData();
+
+        // frontBytes == 0 must return a plain view over the same bytes without claiming headroom.
+        TRcBuf same = buf.ExpandFront(0);
+        UNIT_ASSERT_VALUES_EQUAL(same.GetSize(), payloadStr.size());
+        UNIT_ASSERT(same.GetData() == payloadPtr);
+
+        // The original keeps its headroom available (cookies untouched).
+        UNIT_ASSERT_VALUES_EQUAL(buf.Headroom(), headroom);
+    }
+
+    Y_UNIT_TEST(ExpandFrontZeroSharedNonFront) {
+        const TString payloadStr(64, 'x');
+        constexpr size_t headroom = 16;
+
+        TRcBuf payloadOnly = TRcBuf::Copy(payloadStr.data(), payloadStr.size(), headroom, 0);
+        const char* payloadPtr = payloadOnly.GetData();
+
+        // Sibling sharing the backend, so neither buffer is private.
+        TRcBuf payloadSibling(payloadOnly);
+
+        // One sibling claims the headroom, moving the cookie front edge away from payloadPtr.
+        TRcBuf withHeader = payloadOnly.ExpandFront(headroom);
+        UNIT_ASSERT(withHeader.GetData() + headroom == payloadPtr);
+        UNIT_ASSERT_VALUES_EQUAL(payloadSibling.Headroom(), 0u);
+
+        // ExpandFront(0) on the now non-front shared sibling must not abort; it returns a plain view.
+        TRcBuf same = payloadSibling.ExpandFront(0);
+        UNIT_ASSERT_VALUES_EQUAL(same.GetSize(), payloadStr.size());
+        UNIT_ASSERT(same.GetData() == payloadPtr);
+    }
+
+    Y_UNIT_TEST(UninitializedAlignedZeroSize) {
+        for (size_t alignment : {size_t(0), size_t(1), size_t(8), size_t(4096)}) {
+            TRcBuf buf = TRcBuf::UninitializedAligned(0, alignment);
+            UNIT_ASSERT_VALUES_EQUAL(buf.GetSize(), 0u);
+        }
+    }
+
+    Y_UNIT_TEST(UninitializedAlignedNonZero) {
+        for (size_t alignment : {size_t(8), size_t(64), size_t(4096)}) {
+            TRcBuf buf = TRcBuf::UninitializedAligned(100, alignment);
+            UNIT_ASSERT_VALUES_EQUAL(buf.GetSize(), 100u);
+            UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(buf.GetData()) % alignment, 0u);
+        }
+    }
 }

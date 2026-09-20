@@ -3,13 +3,14 @@ LIBRARY()
 SRCS(
     abstract.cpp
     constructors.cpp
-    not_sorted.cpp
-    full_scan_sorted.cpp
-    limit_sorted.cpp
+    unordered_result.cpp
+    ordered_result_no_limit.cpp
+    ordered_result_with_limit.cpp
 )
 
 PEERDIR(
     ydb/core/formats/arrow
+    ydb/core/tx/columnshard/engines/predicate
 )
 
 END()

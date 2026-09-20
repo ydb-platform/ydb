@@ -1,6 +1,6 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/set_column_constraint.pb.h>
 
 namespace NKikimr {
 
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         {
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvValidateRowConditionResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrIndexBuilder::EBuildStatus::DONE);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrSetColumnConstraint::EValidateStatus::DONE);
             UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetIsValid(), true);
         }
     }
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         {
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvValidateRowConditionResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrIndexBuilder::EBuildStatus::DONE);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrSetColumnConstraint::EValidateStatus::DONE);
             UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetIsValid(), false);
         }
     }
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         {
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvValidateRowConditionResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrIndexBuilder::EBuildStatus::DONE);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrSetColumnConstraint::EValidateStatus::DONE);
             UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetIsValid(), true);
         }
     }
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         {
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvValidateRowConditionResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL((ui32)reply->Record.GetStatus(), (ui32)NKikimrIndexBuilder::EBuildStatus::DONE);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrSetColumnConstraint::EValidateStatus::DONE);
             UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetIsValid(), false);
         }
     }

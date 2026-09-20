@@ -7,6 +7,7 @@
 #include <util/system/thread.h>
 #include <util/random/random.h>
 
+#include <limits>
 #include <unordered_set>
 
 using namespace NYdb;
@@ -142,6 +143,29 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 50);
         elector.SetNewState(std::vector<TEndpointRecord>{{"Two", 2}});
         UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 0);
+    }
+
+    Y_UNIT_TEST(PessimizeNode) {
+        TEndpointElectorSafe elector;
+        elector.SetNewState(std::vector<TEndpointRecord>{
+            {"host:2136", 1, "", 42},
+            {"ipv4:10.0.0.1:2136", 1, "", 42},
+            {"other:2136", 1, "", 99},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 0);
+
+        elector.PessimizeNode(42);
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 66);
+
+        const auto maxPriority = std::numeric_limits<std::int32_t>::max();
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("host:2136", 0), true).Priority, maxPriority);
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("ipv4:10.0.0.1:2136", 0), true).Priority, maxPriority);
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("", 42), true).Priority, maxPriority);
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("other:2136", 0), true).Priority, 1);
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("", 99), true).Priority, 1);
+
+        elector.PessimizeNode(42);
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetPessimizationRatio(), 66);
     }
 
     Y_UNIT_TEST(Election) {

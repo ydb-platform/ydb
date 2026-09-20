@@ -1,5 +1,6 @@
 #include "../mkql_multihopping.h"
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -12,8 +13,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 using TWatermarksPattern = std::vector<std::tuple<ui32, TInstant>>;
@@ -29,23 +31,23 @@ TComputationNodeFactory GetAuxCallableFactory(TWatermark& watermark) {
     };
 }
 struct TStreamWithYield: public NUdf::TBoxedValue {
-    TStreamWithYield(const TUnboxedValueVector& items, ui32 yieldPos, ui32 index, TWatermark& watermark, const TWatermarksPattern& watermarksPattern)
-        : Items(items)
-        , YieldPos(yieldPos)
-        , Index(index)
-        , Watermark(watermark)
-        , WatermarksPattern(watermarksPattern)
-        , WatermarkIndex(0)
+    TStreamWithYield(TUnboxedValueVector items, ui32 yieldPos, ui32 index, TWatermark& watermark, TWatermarksPattern watermarksPattern)
+        : Items_(std::move(items))
+        , YieldPos_(yieldPos)
+        , Index_(index)
+        , Watermark_(watermark)
+        , WatermarksPattern_(std::move(watermarksPattern))
+        , WatermarkIndex_(0)
     {
     }
 
 private:
-    TUnboxedValueVector Items;
-    ui32 YieldPos;
-    ui32 Index;
-    TWatermark& Watermark;
-    TWatermarksPattern WatermarksPattern;
-    ui32 WatermarkIndex;
+    TUnboxedValueVector Items_;
+    ui32 YieldPos_;
+    ui32 Index_;
+    TWatermark& Watermark_;
+    TWatermarksPattern WatermarksPattern_;
+    ui32 WatermarkIndex_;
 
     ui32 GetTraverseCount() const override {
         return 0;
@@ -61,20 +63,20 @@ private:
     }
 
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
-        if (Index >= Items.size()) {
+        if (Index_ >= Items_.size()) {
             return NUdf::EFetchStatus::Finish;
         }
-        if (Index == YieldPos) {
+        if (Index_ == YieldPos_) {
             return NUdf::EFetchStatus::Yield;
         }
-        if (WatermarkIndex < WatermarksPattern.size()) {
-            auto [patternIndex, patternValue] = WatermarksPattern[WatermarkIndex];
-            if (Index >= patternIndex) {
-                Watermark.WatermarkIn = patternValue;
+        if (WatermarkIndex_ < WatermarksPattern_.size()) {
+            auto [patternIndex, patternValue] = WatermarksPattern_[WatermarkIndex_];
+            if (Index_ >= patternIndex) {
+                Watermark_.WatermarkIn = patternValue;
                 return NUdf::EFetchStatus::Yield;
             }
         }
-        result = Items[Index++];
+        result = Items_[Index_++];
         return NUdf::EFetchStatus::Ok;
     }
 };
@@ -101,10 +103,12 @@ THolder<IComputationGraph> BuildGraph(TSetup<false>& setup, const std::vector<st
     TCallableBuilder inStream(pgmBuilder.GetTypeEnvironment(), "OneYieldStream", inStreamType);
     auto streamNode = inStream.Build();
 
-    ui64 hop = 10, interval = 30, delay = 20;
+    ui64 hop = 10;
+    ui64 interval = 30;
+    ui64 delay = 20;
 
     auto pgmReturn = pgmBuilder.MultiHoppingCore(
-        TRuntimeNode(streamNode, false),
+        TRuntimeNode(streamNode, /*isImmediate=*/false),
         [&](TRuntimeNode item) { // keyExtractor
             return pgmBuilder.Member(item, "key");
         },
@@ -150,8 +154,8 @@ THolder<IComputationGraph> BuildGraph(TSetup<false>& setup, const std::vector<st
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&hop, sizeof(hop))),           // hop
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&interval, sizeof(interval))), // interval
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&delay, sizeof(delay))),       // delay
-        pgmBuilder.NewDataLiteral<bool>(dataWatermarks),
-        pgmBuilder.NewDataLiteral<bool>(withWatermarks),
+        NTest::ConvertValueToLiteralNode(pgmBuilder, dataWatermarks),
+        NTest::ConvertValueToLiteralNode(pgmBuilder, withWatermarks),
         {}, // SizeLimit
         {}, // TimeLimit
         {}, // EarlyPolicy
@@ -161,17 +165,17 @@ THolder<IComputationGraph> BuildGraph(TSetup<false>& setup, const std::vector<st
     auto graph = setup.BuildGraph(pgmReturn, {streamNode});
 
     TUnboxedValueVector streamItems;
-    for (size_t i = 0; i < items.size(); ++i) {
+    for (const auto& item : items) {
         NUdf::TUnboxedValue* itemsPtr;
         auto structValues = graph->GetHolderFactory().CreateDirectArrayHolder(3, itemsPtr);
-        itemsPtr[keyIndex] = NUdf::TUnboxedValuePod(std::get<0>(items[i]));
-        itemsPtr[timeIndex] = NUdf::TUnboxedValuePod(std::get<1>(items[i]));
-        itemsPtr[sumIndex] = NUdf::TUnboxedValuePod(std::get<2>(items[i]));
-        streamItems.push_back(std::move(structValues));
+        itemsPtr[keyIndex] = NUdf::TUnboxedValuePod(std::get<0>(item));
+        itemsPtr[timeIndex] = NUdf::TUnboxedValuePod(std::get<1>(item));
+        itemsPtr[sumIndex] = NUdf::TUnboxedValuePod(std::get<2>(item));
+        streamItems.emplace_back(std::move(structValues));
     }
 
     auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex, watermark, watermarksPattern));
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
+    graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), std::move(streamValue));
     return graph;
 }
 } // namespace
@@ -287,20 +291,19 @@ const std::vector<std::tuple<ui32, ui32, ui64>> expected = {
 };
 
 Y_UNIT_TEST(Test1) {
-    TestWithSaveLoadImpl(input1, expected, true, false);
+    TestWithSaveLoadImpl(input1, expected, /*withTraverse=*/true, /*dataWatermarks=*/false);
 }
 
 Y_UNIT_TEST(Test2) {
-    TestWithSaveLoadImpl(input1, expected, false, false);
+    TestWithSaveLoadImpl(input1, expected, /*withTraverse=*/false, /*dataWatermarks=*/false);
 }
 Y_UNIT_TEST(TestWatermark1) {
-    TestWithSaveLoadImpl(input1, expected, true, false, true);
+    TestWithSaveLoadImpl(input1, expected, /*withTraverse=*/true, /*dataWatermarks=*/false, /*withWatermarks=*/true);
 }
 
 Y_UNIT_TEST(TestWatermark2) {
-    TestWithSaveLoadImpl(input1, expected, false, false, true);
+    TestWithSaveLoadImpl(input1, expected, /*withTraverse=*/false, /*dataWatermarks=*/false, /*withWatermarks=*/true);
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingSaveLoadTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

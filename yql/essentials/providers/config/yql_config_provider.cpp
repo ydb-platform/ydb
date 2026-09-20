@@ -1,5 +1,6 @@
 #include "yql_config_provider.h"
 
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/config/yql_config_qplayer.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
@@ -32,6 +33,9 @@ const TString YqlCoreActivationLabel = "YqlCore";
 
 namespace {
 using namespace NNodes;
+
+constexpr TStringBuf RuntimeSettingsActivationLabel = "RuntimeSetting/";
+constexpr TStringBuf CoreActivationLabel = "";
 
 class TConfigCallableExecutionTransformer: public TSyncTransformerBase {
 public:
@@ -135,13 +139,17 @@ public:
     };
 
     TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, TString username,
-                    TAllowSettingPolicy policy, bool forPartialTypeCheck)
+                    TAllowSettingPolicy policy, bool forPartialTypeCheck, const TVector<TString>& activatedGroups)
         : Types_(types)
         , ForPartialTypeCheck_(forPartialTypeCheck)
         , CoreConfig_(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
+        , RuntimeSettingsConfig_(config && config->HasRuntimeSettings() ? &config->GetRuntimeSettings() : nullptr)
         , Username_(std::move(username))
         , Policy_(std::move(policy))
     {
+        for (const auto& activationGroup : activatedGroups) {
+            RecordActivation(CoreActivationLabel, activationGroup);
+        }
     }
 
     TStringBuf GetName() const override {
@@ -160,20 +168,15 @@ public:
                 return true;
             }
             if (NConfig::Allow(attr.GetActivation(), Username_, isRobot, groups)) {
-                Statistics_.Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
+                RecordActivation(CoreActivationLabel, attr.GetName());
                 return true;
             }
             return false;
         };
         if (CoreConfig_) {
             TPosition pos;
-            TVector<TCoreAttr> flags;
-            if (auto loadedFlags = NCommon::LoadActivatedFlagsFromQContext<TCoreAttr>(YqlCoreActivationLabel, Types_.QContext)) {
-                flags = std::move(*loadedFlags);
-            } else {
-                const auto& configFlags = CoreConfig_->GetFlags();
-                CopyIf(configFlags.begin(), configFlags.end(), std::back_inserter(flags), filter);
-            }
+            const auto flags = NCommon::SelectAndSaveActivatedFlags<TCoreAttr>(
+                YqlCoreActivationLabel, Types_.QContext, CoreConfig_->GetFlags(), filter, /*hasProviderName=*/true);
             for (const auto& flag : flags) {
                 const auto& flagArgs = flag.GetArgs();
                 TVector<TStringBuf> args(flagArgs.begin(), flagArgs.end());
@@ -181,7 +184,13 @@ public:
                     return false;
                 }
             }
-            NCommon::SaveActivatedFlagsToQContext<TCoreAttr>(flags, YqlCoreActivationLabel, Types_.QContext);
+        }
+        if (RuntimeSettingsConfig_) {
+            Types_.RuntimeSettings = CreateRuntimeSettingsFromProto(
+                *RuntimeSettingsConfig_, Username_, Types_.Credentials, Types_.QContext,
+                [this](const TString& name) {
+                    RecordActivation(RuntimeSettingsActivationLabel, name);
+                });
         }
         return true;
     }
@@ -511,6 +520,22 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << err.AsStrBuf() << ", available modes: " << NKikimr::NUdf::ValidateModeAvailables()));
                 return false;
             }
+        } else if (name == "UdfBridge") {
+            if (!args.empty()) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+
+            if (ForPartialTypeCheck_) {
+                return true;
+            }
+
+            if (Types_.UdfBridgeBinaryPath.empty()) {
+                ctx.AddError(TIssue(pos, "udf_bridge is not available"));
+                return false;
+            }
+
+            Types_.BridgeMode = NKikimr::NUdf::EBridgeMode::OutProcess;
         } else if (name == "LLVM_OFF") {
             if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -776,6 +801,10 @@ private:
                 return false;
             }
 
+            if (ForPartialTypeCheck_) {
+                return true;
+            }
+
             if (!Types_.UdfIndex) {
                 ctx.AddError(TIssue(pos, "UdfIndex is not available"));
                 return false;
@@ -1016,6 +1045,19 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));
                 return false;
             }
+        } else if (name == "DecimalCommonTypeConversionMode") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                return false;
+            }
+
+            auto arg = TString{args[0]};
+            EDecimalConversionMode decimalConversionMode;
+            if (!TryFromString(arg, decimalConversionMode)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `without_common_type_fixup|with_common_type_fixup', but got: " << args[0]));
+                return false;
+            }
+            Types_.UpdateDecimalConversionMode(decimalConversionMode);
         } else if (name == "OptimizerFlags") {
             for (auto& arg : args) {
                 if (arg.empty()) {
@@ -1147,6 +1189,12 @@ private:
                 return false;
             }
             Types_.LineageSettings.EnableStandaloneLineage = ("EnableStandaloneLineage" == name);
+        } else if (name == "EnableEvaluateExprCache") {
+            if (!args.empty()) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.EnableEvaluateExprCache = true;
         } else if (name == "LineageOutputLimit") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
@@ -1481,13 +1529,17 @@ private:
         return parseResult == TWarningRule::EParseResult::PARSE_OK;
     }
 
-private:
+    void RecordActivation(TStringBuf activationLabel, TStringBuf feature) {
+        Statistics_.Entries.emplace_back(TStringBuilder() << "Activation:" << activationLabel << feature, 0, 0, 0, 0, 1);
+    }
+
     TTypeAnnotationContext& Types_;
     const bool ForPartialTypeCheck_;
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer_;
     TAutoPtr<IGraphTransformer> ConfigurationTransformer_;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer_;
     const TYqlCoreConfig* CoreConfig_;
+    const NProto::TRuntimeSettings* RuntimeSettingsConfig_;
     TString Username_;
     const TAllowSettingPolicy Policy_;
     TOperationStatistics Statistics_;
@@ -1495,9 +1547,10 @@ private:
 } // namespace
 
 TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
-                                                  const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
+                                                  const TAllowSettingPolicy& policy, bool forPartialTypeCheck,
+                                                  const TVector<TString>& activatedGroups)
 {
-    return new TConfigProvider(types, config, username, policy, forPartialTypeCheck);
+    return new TConfigProvider(types, config, username, policy, forPartialTypeCheck, activatedGroups);
 }
 
 const THashSet<TStringBuf>& ConfigProviderFunctions() {

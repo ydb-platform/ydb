@@ -144,8 +144,13 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
     featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
     featureFlags.SetEnableFulltextIndex(settings.EnableFulltextIndex);
+    featureFlags.SetEnableSuperLemmer(settings.EnableSuperLemmer);
     featureFlags.SetEnableCsDictionaryEncoding(settings.EnableCsDictionaryEncoding);
+    featureFlags.SetEnableLocalBloomFilterIndex(settings.EnableLocalBloomFilterIndex);
+    featureFlags.SetEnableLocalBloomNgramFilterIndex(settings.EnableLocalBloomNgramFilterIndex);
+    featureFlags.SetEnableLocalIndexAsSchemeObject(settings.EnableLocalIndexAsSchemeObject);
     featureFlags.SetEnableLocalMinMaxIndex(settings.EnableLocalMinMaxIndex);
+    featureFlags.SetEnableColumnStatistics(true);
 
     Settings->SetFeatureFlags(featureFlags);
 
@@ -153,7 +158,6 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     Settings->SetEnableDbCounters(settings.EnableSVP);
     Settings->SetEnableForceFollowers(settings.EnableForceFollowers);
     Settings->SetEnableTablePgTypes(true);
-    Settings->SetEnableShowCreate(true);
 
     NKikimrConfig::TAppConfig appConfig;
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;

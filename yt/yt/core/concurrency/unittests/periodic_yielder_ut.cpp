@@ -211,7 +211,7 @@ TEST_W(TPeriodicYielderTest, ConsistentNeedYieldResults)
 
 TEST_W(TPeriodicYielderTest, MultipleYieldCycles)
 {
-    auto yielder = CreatePeriodicYielder(TDuration::MicroSeconds(10));
+    auto yielder = CreatePeriodicYielder(TDuration::MicroSeconds(100));
 
     for (int cycle = 0; cycle < 5; ++cycle) {
         // Do work to exceed period.

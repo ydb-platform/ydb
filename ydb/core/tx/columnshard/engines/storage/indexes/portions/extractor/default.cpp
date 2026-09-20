@@ -12,7 +12,8 @@ void TDefaultDataExtractor::VisitSimple(
     const auto visitorLocal = [&](const std::shared_ptr<arrow::Array>& arr) {
         visitor(arr, hashBase);
     };
-    dataArray->VisitValues(visitorLocal);
+    // Set-membership indexes (bloom/ngram) only need the value set.
+    dataArray->VisitDistinctValues(visitorLocal);
 }
 
 void TDefaultDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray, const TChunkVisitor& chunkVisitor,

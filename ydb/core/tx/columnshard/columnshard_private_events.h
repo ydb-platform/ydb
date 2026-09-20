@@ -48,7 +48,6 @@ struct TEvPrivate {
         EvForget,
         EvGetExported,
         EvWriteBlobsResult,
-        EvStartReadTask,
         EvWriteDraft,
         EvGarbageCollectionFinished,
         EvTieringModified,
@@ -92,6 +91,8 @@ struct TEvPrivate {
 
         EvBackupImportRecordBatch,
         EvBackupImportRecordBatchResult,
+
+        EvRetryConfigSubscription,
 
         EvEnd
     };
@@ -367,7 +368,8 @@ struct TEvPrivate {
         enum EErrorClass {
             Internal,
             Request,
-            ConstraintViolation
+            ConstraintViolation,
+            LocksBroken
         };
 
     private:
@@ -385,6 +387,8 @@ struct TEvPrivate {
                     return NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
                 case EErrorClass::ConstraintViolation:
                     return NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION;
+                case EErrorClass::LocksBroken:
+                    return NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN;
             }
         }
 
@@ -512,6 +516,8 @@ struct TEvPrivate {
     struct TEvBackupImportRecordBatchResult: public TEventLocal<TEvBackupImportRecordBatchResult, EvBackupImportRecordBatchResult> {
         explicit TEvBackupImportRecordBatchResult() = default;
     };
+
+    struct TEvRetryConfigSubscription: public TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
 };
 
 }   // namespace NKikimr::NColumnShard

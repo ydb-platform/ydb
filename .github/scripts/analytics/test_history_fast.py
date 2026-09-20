@@ -13,6 +13,9 @@ if TESTS_DIR not in sys.path:
 from error_type_utils import (  # noqa: E402
     DEFAULT_PREFETCH_MAX_WORKERS,
     DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH,
+    BACKFILL_FETCH_TIMEOUT_SEC,
+    BACKFILL_FETCH_MAX_ATTEMPTS,
+    BACKFILL_PREFETCH_RETRY_PASSES,
     build_error_type_csv_for_storage,
     failure_row_from_ydb,
     get_debug_texts_from_cache,
@@ -127,6 +130,9 @@ def get_missed_data_for_upload(
     fetch_cache = prefetch_text_cache_for_failure_rows(
         [fr for _, fr in row_pairs],
         max_workers=prefetch_max_workers,
+        fetch_timeout=BACKFILL_FETCH_TIMEOUT_SEC,
+        fetch_attempts=BACKFILL_FETCH_MAX_ATTEMPTS,
+        retry_passes=BACKFILL_PREFETCH_RETRY_PASSES,
     )
 
     # Classify failure rows and write error_type back into the row dict in-place
@@ -135,6 +141,7 @@ def get_missed_data_for_upload(
     print(f"[classify] {total} failure rows...", flush=True)
     verify_count = 0
     sanitizer_count = 0
+    possible_oom_count = 0
     t_classify = time.time()
     progress_step = max(200, total // 10) if total > 200 else 0
 
@@ -152,11 +159,13 @@ def get_missed_data_for_upload(
             verify_count += 1
         if source_has_tag(row["error_type"], "SANITIZER"):
             sanitizer_count += 1
+        if source_has_tag(row["error_type"], "POSSIBLE_OOM"):
+            possible_oom_count += 1
         if progress_step and i % progress_step == 0 and i < total:
             print(f"[classify] {i}/{total} ({time.time() - t_classify:.1f}s)", flush=True)
     print(
         f"[classify] done {total} rows in {time.time() - t_classify:.1f}s, "
-        f"verify={verify_count}, sanitizer={sanitizer_count}",
+        f"verify={verify_count}, sanitizer={sanitizer_count}, possible_oom={possible_oom_count}",
         flush=True,
     )
     return results

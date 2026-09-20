@@ -72,7 +72,7 @@ TStatistics CreateStatistics(std::initializer_list<std::pair<TStatisticPath, i64
 
 TEST(TStatisticsTest, AddSample)
 {
-    std::map<TString, int> origin = {{"x", 5}, {"y", 7}};
+    std::map<std::string, int> origin = {{"x", 5}, {"y", 7}};
 
     TStatistics statistics;
     statistics.AddSample(
@@ -200,7 +200,7 @@ TEST(TStatisticsTest, GetRangeByPrefix) {
         {"a"_L, 1},
         {"b"_L / "a"_L, 1},
         {"b"_L / "aa"_L / "a"_L, 1},
-        {"b"_L / TStatisticPathLiteral(TString(std::numeric_limits<char>::max())), 1},
+        {"b"_L / TStatisticPathLiteral(std::string(1, std::numeric_limits<char>::max())), 1},
         {"c"_L, 1},
     });
 
@@ -214,7 +214,7 @@ TEST(TStatisticsTest, GetRangeByPrefix) {
         TStatistics expectedRange = CreateStatistics({
             {"b"_L / "a"_L, 1},
             {"b"_L / "aa"_L / "a"_L, 1},
-            {"b"_L / TStatisticPathLiteral(TString(std::numeric_limits<char>::max())), 1},
+            {"b"_L / TStatisticPathLiteral(std::string(1, std::numeric_limits<char>::max())), 1},
         });
 
         EXPECT_EQ(std::map(actualRange.begin(), actualRange.end()), expectedRange.Data());

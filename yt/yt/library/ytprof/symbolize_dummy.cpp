@@ -5,17 +5,15 @@ namespace NYT::NYTProf {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void Symbolize(NProto::Profile* profile, const TSymbolizeOptions& options)
-{
-    Y_UNUSED(profile, options);
-}
+void Symbolize(NProto::Profile* /*profile*/, const TSymbolizeOptions& /*options*/)
+{ }
 
 std::pair<void*, void*> GetVdsoRange()
 {
     return {nullptr, nullptr};
 }
 
-TString GetVersion()
+std::string GetVersion()
 {
     return "0.2";
 }
@@ -25,7 +23,7 @@ void AddBuildInfo(NProto::Profile* profile, const TBuildInfo& buildInfo)
     Y_UNUSED(profile, buildInfo);
 }
 
-std::optional<TString> GetBuildId()
+std::optional<std::string> GetBuildId()
 {
     return {};
 }

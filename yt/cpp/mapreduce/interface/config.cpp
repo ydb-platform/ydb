@@ -243,6 +243,8 @@ void TConfig::Reset()
     ForceIpV4 = GetBool("YT_FORCE_IPV4");
     ForceIpV6 = GetBool("YT_FORCE_IPV6");
     UseHosts = GetBool("YT_USE_HOSTS", true);
+    UseTLS = false;
+    PreferHttps = GetBool("YT_PREFER_HTTPS");
 
     LoadToken();
     LoadSpec();
@@ -251,10 +253,12 @@ void TConfig::Reset()
 
     CacheUploadDeduplicationMode = GetUploadingDeduplicationMode("YT_UPLOAD_DEDUPLICATION", EUploadDeduplicationMode::Host);
     CacheUploadDeduplicationThreshold = 10_MB;
+    LockFileStorage = false;
 
     RetryCount = Max(GetInt("YT_RETRY_COUNT", 10), 1);
     ReadRetryCount = Max(GetInt("YT_READ_RETRY_COUNT", 30), 1);
     StartOperationRetryCount = Max(GetInt("YT_START_OPERATION_RETRY_COUNT", 30), 1);
+    CheckLivenessRetryCount = Max(GetInt("YT_CHECK_LIVENESS_RETRY_COUNT", 3), 1);
 
     RemoteTempFilesDirectory = GetEnv("YT_FILE_STORAGE", DefaultRemoteTempFilesDirectory);
     RemoteTempTablesDirectory = GetEnv("YT_TEMP_TABLES_STORAGE", DefaultRemoteTempTablesDirectory);
@@ -420,6 +424,8 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("global_tx_id").Value(config.GlobalTxId)
         .Item("force_ipv4").Value(config.ForceIpV4)
         .Item("force_ipv6").Value(config.ForceIpV6)
+        .Item("use_tls").Value(config.UseTLS)
+        .Item("prefer_https").Value(config.PreferHttps)
         .Item("use_hosts").Value(config.UseHosts)
         .Item("host_list_update_interval").Value(config.HostListUpdateInterval.ToString())
         .Item("spec").Value(config.Spec)
@@ -440,6 +446,7 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("retry_count").Value(config.RetryCount)
         .Item("read_retry_count").Value(config.ReadRetryCount)
         .Item("start_operation_retry_count").Value(config.StartOperationRetryCount)
+        .Item("check_liveness_retry_count").Value(config.CheckLivenessRetryCount)
         .Item("operation_tracker_poll_period").Value(config.OperationTrackerPollPeriod.ToString())
         .Item("remote_temp_files_directory").Value(config.RemoteTempFilesDirectory)
         .Item("remote_temp_tables_directory").Value(config.RemoteTempTablesDirectory)
@@ -453,6 +460,7 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("cache_upload_deduplication_mode")
             .Value(TEnumTraits<EUploadDeduplicationMode>::ToString(config.CacheUploadDeduplicationMode))
         .Item("cache_upload_deduplication_threshold").Value(config.CacheUploadDeduplicationThreshold)
+        .Item("lock_file_storage").Value(config.LockFileStorage)
         .Item("mount_sandbox_in_tmpfs").Value(config.MountSandboxInTmpfs)
         .Item("api_file_path_options").Value(config.ApiFilePathOptions)
         .Item("use_abortable_response").Value(config.UseAbortableResponse)
@@ -477,6 +485,7 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("enable_debug_command_line_arguments").Value(config.EnableDebugCommandLineArguments)
         .Item("config_remote_patch_path").Value(config.ConfigRemotePatchPath)
         .Item("enable_client_tracing").Value(config.EnableClientTracing)
+        .Item("enable_multiplexing_band").Value(config.EnableControlMultiplexingBand)
     .EndMap();
 }
 
@@ -500,6 +509,8 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("global_tx_id", config.GlobalTxId);
     DESERIALIZE_ITEM("force_ipv4", config.ForceIpV4);
     DESERIALIZE_ITEM("force_ipv6", config.ForceIpV6);
+    DESERIALIZE_ITEM("use_tls", config.UseTLS);
+    DESERIALIZE_ITEM("prefer_https", config.PreferHttps);
     DESERIALIZE_ITEM("use_hosts", config.UseHosts);
     DESERIALIZE_ITEM("host_list_update_interval", config.HostListUpdateInterval);
     DESERIALIZE_ITEM("spec", config.Spec);
@@ -520,6 +531,7 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("retry_count", config.RetryCount);
     DESERIALIZE_ITEM("read_retry_count", config.ReadRetryCount);
     DESERIALIZE_ITEM("start_operation_retry_count", config.StartOperationRetryCount);
+    DESERIALIZE_ITEM("check_liveness_retry_count", config.CheckLivenessRetryCount);
     DESERIALIZE_ITEM("operation_tracker_poll_period", config.OperationTrackerPollPeriod);
     DESERIALIZE_ITEM("remote_temp_files_directory", config.RemoteTempFilesDirectory);
     DESERIALIZE_ITEM("remote_temp_tables_directory", config.RemoteTempTablesDirectory);
@@ -532,6 +544,7 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("cache_lock_timeout_per_gb", config.CacheLockTimeoutPerGb);
     DESERIALIZE_ITEM("cache_upload_deduplication_mode", config.CacheUploadDeduplicationMode);
     DESERIALIZE_ITEM("cache_upload_deduplication_threshold", config.CacheUploadDeduplicationThreshold);
+    DESERIALIZE_ITEM("lock_file_storage", config.LockFileStorage);
     DESERIALIZE_ITEM("mount_sandbox_in_tmpfs", config.MountSandboxInTmpfs);
     DESERIALIZE_ITEM("api_file_path_options", config.ApiFilePathOptions);
     DESERIALIZE_ITEM("use_abortable_response", config.UseAbortableResponse);
@@ -549,6 +562,7 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("enable_debug_command_line_arguments", config.EnableDebugCommandLineArguments);
     DESERIALIZE_ITEM("config_remote_patch_path", config.ConfigRemotePatchPath);
     DESERIALIZE_ITEM("enable_client_tracing", config.EnableClientTracing);
+    DESERIALIZE_ITEM("enable_multiplexing_band", config.EnableControlMultiplexingBand);
 }
 
 #undef DESERIALIZE_ITEM

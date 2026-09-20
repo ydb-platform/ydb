@@ -6,6 +6,7 @@ RECURSE(
     arrow_clickhouse
     arrow_kernels
     arrow_parquet
+    aws_init
     backup
     benchmarks
     breakpad
@@ -16,8 +17,10 @@ RECURSE(
     fyamlcpp
     global_plugins
     grpc
+    http
     http_proxy
     intersection_tree
+    json_index
     keys
     kll_median
     lockfree_bucket
@@ -26,8 +29,11 @@ RECURSE(
     mkql_proto
     naming_conventions
     ncloud
+    net
+    nmslib
     pdisk_io
     persqueue
+    plan2svg
     planner
     pretty_types_print
     protobuf_printer
@@ -43,7 +49,9 @@ RECURSE(
     testlib
     time_series_vec
     union_copy_set
+    vector_distance
     wilson_ids
+    wasm
     workload
     workload
     yaml_config

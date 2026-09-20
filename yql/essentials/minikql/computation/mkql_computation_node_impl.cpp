@@ -121,9 +121,7 @@ Y_NO_INLINE TStatefulComputationNodeBase::TStatefulComputationNodeBase(ui32 valu
 {
 }
 
-Y_NO_INLINE TStatefulComputationNodeBase::~TStatefulComputationNodeBase()
-{
-}
+Y_NO_INLINE TStatefulComputationNodeBase::~TStatefulComputationNodeBase() = default;
 
 Y_NO_INLINE void TStatefulComputationNodeBase::AddDependentImpl(const IComputationNode* node) {
     Dependents_.emplace_back(node);
@@ -168,19 +166,15 @@ Y_NO_INLINE void TStatefulComputationNodeBase::CollectUpvaluesImpl(TComputationE
     this->UpvaluesCollected_ = true;
 }
 
-Y_NO_INLINE TStatefulSourceComputationNodeBase::TStatefulSourceComputationNodeBase()
-{
-}
+Y_NO_INLINE TStatefulSourceComputationNodeBase::TStatefulSourceComputationNodeBase() = default;
 
-Y_NO_INLINE TStatefulSourceComputationNodeBase::~TStatefulSourceComputationNodeBase()
-{
-}
+Y_NO_INLINE TStatefulSourceComputationNodeBase::~TStatefulSourceComputationNodeBase() = default;
 
 Y_NO_INLINE void TStatefulSourceComputationNodeBase::PrepareStageOneImpl(const TConstComputationNodePtrVector& dependents) {
     if (!Stateless_) {
         Stateless_ = std::accumulate(
                          dependents.cbegin(), dependents.cend(), 0,
-                         std::bind(std::plus<i32>(), std::placeholders::_1,
+                         std::bind(std::plus<>(), std::placeholders::_1,
                                    std::bind(&IComputationNode::GetDependentWeight, std::placeholders::_2))) <= 1;
     }
 }

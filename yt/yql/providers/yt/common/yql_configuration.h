@@ -61,6 +61,12 @@ constexpr ui32 DEFAULT_MAX_OPERATION_FILES = 1000;
 
 constexpr bool DEFAULT_JOIN_COMMON_USE_MULTI_OUT = false;
 
+constexpr bool DEFAULT_JOIN_COMMON_USE_FLAT_PAYLOAD = false;
+
+// Above this column count the common-join intermediate falls back to the Variant payload.
+// Set below the YT limit because too many columns can actually hurt overall performance.
+constexpr ui64 DEFAULT_JOIN_COMMON_FLAT_PAYLOAD_COLUMN_LIMIT = 1024;
+
 constexpr bool DEFAULT_USE_RPC_READER_IN_DQ = false;
 constexpr size_t DEFAULT_RPC_READER_INFLIGHT = 1;
 constexpr TDuration DEFAULT_RPC_READER_TIMEOUT = TDuration::Seconds(120);
@@ -125,6 +131,8 @@ constexpr EFuseMapToMapReduceMode DEFAULT_FUSE_MAP_TO_MAPREDUCE = EFuseMapToMapR
 constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 
 constexpr bool DEFAULT_USE_QL_FILTER = false;
+// Leave room below YT's MaxExpressionDepth because YQL and YT have independent release cycles.
+constexpr ui32 DEFAULT_QL_FILTER_DEPTH_LIMIT = 45;
 
 constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
 
@@ -162,5 +170,19 @@ constexpr bool DEFAULT_ENABLE_RLS_TABLES_SUPPORT = false;
 constexpr ETmpSecurityMode DEFAULT_TMP_FOLDER_SECURITY = ETmpSecurityMode::Disable;
 
 constexpr bool DEFAULT_ENABLE_QL_FILTER = false;
+
+const ui64 DEFAULT_MIN_JOB_STATE_SIZE_TO_PASS_VIA_FILE = 32_KB;
+
+constexpr bool DEFAULT_QUERY_CACHE_COMBINE_CHUNKS_REPLACE = true;
+
+constexpr bool DEFAULT_PARSE_EXPRESSION_COLUMNS = false;
+
+constexpr TDuration DEFAULT_SECURE_TMP_TOKEN_USERS_ACCESS_PERIOD = TDuration::Days(10);
+
+constexpr bool DEFAULT_JOIN_COMMON_ANY_SIDE_FIRST = false;
+
+constexpr bool DEFAULT_FIX_ENDLESS_LOOP_IN_DROP_IF_EXISTS = false;
+
+constexpr bool DEFAULT_APPLY_MAX_JOB_COUNT_TO_ALL = false;
 
 } // NYql

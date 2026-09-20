@@ -85,7 +85,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString Path;
+    std::string Path;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -220,7 +220,7 @@ struct TExecuteBatchOptions
 struct TExecuteBatchCommandRequest
     : public NYTree::TYsonStruct
 {
-    TString Command;
+    std::string Command;
     NYTree::IMapNodePtr Parameters;
     NYTree::INodePtr Input;
 
@@ -284,6 +284,23 @@ public:
 private:
     std::string TabletCellBundle;
     std::vector<NYPath::TYPath> MovableTables;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TCheckClusterLivenessCommand
+    : public TTypedCommand<NApi::TCheckClusterLivenessOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TCheckClusterLivenessCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    bool CheckCypressRoot;
+    bool CheckSecondaryMasterCells;
 
     void DoExecute(ICommandContextPtr context) override;
 };

@@ -14,7 +14,8 @@ public:
     using TConstPtr = TSharedPtr<const TRuntimeSettingsConfiguration, TAtomicCounter>;
 
     TRuntimeSettingsConfiguration();
-    explicit TRuntimeSettingsConfiguration(const TRuntimeSettings& settings);
+    explicit TRuntimeSettingsConfiguration(const TQContext& QContext);
+    explicit TRuntimeSettingsConfiguration(const TRuntimeSettings& settings, const TQContext& QContext = {});
 };
 
 TRuntimeSettingsConfiguration::TConstPtr MakeRuntimeSettingsConfiguration(auto&&... args) {

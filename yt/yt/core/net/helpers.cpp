@@ -31,22 +31,29 @@ std::vector<int> AllocateFreePorts(
             socket = CreateTcpServerSocket();
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error while creating a socket for preliminary port bind")
-                << ex;
+                .With(ex);
         }
 
         YT_VERIFY(socket != INVALID_SOCKET);
 
         try {
-            YT_LOG_DEBUG("Making a preliminary port bind (Port: %v, Socket: %v)", port, socket);
+            YT_TLOG_DEBUG("Making a preliminary port bind")
+                .With("Port", port)
+                .With("Socket", socket);
             BindSocket(socket, TNetworkAddress::CreateIPv6Any(port));
         } catch (const std::exception& ex) {
             SafeClose(socket, false /*ignoreBadFD*/);
-            YT_LOG_DEBUG(ex, "Error while trying making a preliminary port bind, skipping it (Port: %v, Socket: %v)", port, socket);
+            YT_TLOG_DEBUG("Error while trying making a preliminary port bind, skipping it")
+                .With("Port", port)
+                .With("Socket", socket)
+                .With(ex);
             continue;
         }
 
         SafeClose(socket, false /*ignoreBadFD*/);
-        YT_LOG_DEBUG("Socket used in preliminary bind is closed (Port: %v, Socket: %v)", port, socket);
+        YT_TLOG_DEBUG("Socket used in preliminary bind is closed")
+            .With("Port", port)
+            .With("Socket", socket);
 
         allocatedPorts.push_back(port);
 

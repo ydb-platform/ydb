@@ -4,6 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats_simple.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/vhost.h>
@@ -18,13 +19,14 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr ui32 DefaultLogLevel = 5;
-
 TNbsServicePtr NbsService;
 
-NVhost::TServerConfig CreateDefaultVhostServerConfig()
+NVhost::TServerConfig CreateVhostServerConfig(
+    const TStorageConfig& storageConfig)
 {
     NVhost::TServerConfig result;
+    const auto threadsCount = storageConfig.GetVhostThreadsCount();
+    result.ThreadsCount = threadsCount > 0 ? threadsCount : 1;
     return result;
 }
 
@@ -41,7 +43,8 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
     , Scheduler(CreateScheduler(Timer))
 {
     TLogSettings logSettings;
-    logSettings.FiltrationLevel = static_cast<ELogPriority>(DefaultLogLevel);
+    logSettings.FiltrationLevel =
+        static_cast<ELogPriority>(Config.GetConsoleLogLevel());
     Logging = CreateLoggingService("console", logSettings);
     Log = Logging->CreateLog("NBS2_SERVICE");
 
@@ -51,25 +54,43 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
     VhostQueueFactory = NVhost::CreateVhostQueueFactory();
     VHostStats = std::make_shared<TVHostStatsSimple>();
 
+    auto vhostServerConfig = CreateVhostServerConfig(*StorageConfig);
+    STORAGE_INFO("Vhost threads count: " << vhostServerConfig.ThreadsCount);
+
     VhostServer = NVhost::CreateServer(
         Logging,
+        Timer,
+        Scheduler,
         VHostStats,
         NVhost::CreateVhostQueueFactory(),
         CreateDefaultDeviceHandlerFactory(),
-        CreateDefaultVhostServerConfig(),
+        std::move(vhostServerConfig),
         VhostCallbacks);
+
+    if (Config.GetNbsFrontendConfig().GetEnabled()) {
+        Frontend = std::make_unique<TNbsFrontendRuntime>(
+            Logging->CreateLog("NBS2_FRONTEND"));
+    }
 }
+
+TNbsService::~TNbsService() = default;
 
 void TNbsService::Start()
 {
     STORAGE_INFO("TNbsService start");
     Scheduler->Start();
     VhostServer->Start();
+    if (Frontend) {
+        Frontend->Start();
+    }
 }
 
 void TNbsService::Stop()
 {
     STORAGE_INFO("TNbsService stop");
+    if (Frontend) {
+        Frontend->Stop();
+    }
     VhostServer->Stop();
     Scheduler->Stop();
 }
@@ -83,6 +104,9 @@ const NKikimrConfig::TNbsConfig& TNbsService::GetConfig() const
 
 void CreateNbsService(const NKikimrConfig::TNbsConfig& config)
 {
+    // Ensure existing NbsService (if any) is destroyed BEFORE a new one
+    // is constructed to prevent global vhost queue contention.
+    NbsService = nullptr;
     NbsService = std::make_shared<TNbsService>(config);
 }
 
@@ -98,6 +122,15 @@ void StopNbsService()
     if (NbsService) {
         NbsService->Stop();
     }
+}
+
+NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
+GetNbsFrontendBlockStore()
+{
+    if (!NbsService || !NbsService->Frontend) {
+        return {};
+    }
+    return NbsService->Frontend->GetBlockStore();
 }
 
 TNbsServicePtr GetNbsService()

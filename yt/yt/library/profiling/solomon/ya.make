@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
     config.cpp
+    GLOBAL configure_solomon_registry.cpp
     cube.cpp
     encoder.cpp
     exporter.cpp
@@ -14,7 +15,6 @@ SRCS(
     remote.cpp
     sensor_service.cpp
     sensor_set.cpp
-    sensor.cpp
     tag_registry.cpp
 
     sensor_dump.proto

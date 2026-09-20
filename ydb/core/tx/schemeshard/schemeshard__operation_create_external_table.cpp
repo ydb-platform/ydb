@@ -6,20 +6,20 @@
 
 #include <utility>
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TPropose: public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     const TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateExternalTable TPropose"
-            << ", operationId: " << OperationId;
-    }
 
     void IncrementExternalTableCounter(const TOperationContext& context) const {
         context.SS->TabletCounters->Simple()[COUNTER_EXTERNAL_TABLE_COUNT].Add(1);
@@ -55,8 +55,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << " HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -85,7 +86,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << " ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -98,6 +99,8 @@ public:
 
 
 class TCreateExternalTable: public TSubOperation {
+    virtual const char* Name() const override final { return "TCreateExternalTable"; }
+
 private:
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
@@ -214,47 +217,6 @@ private:
         return true;
     }
 
-    static void AddPathInSchemeShard(const THolder<TProposeResponse> &result,
-                                     TPath &dstPath, const TString &owner) {
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-    }
-
-    TPathElement::TPtr CreateExternalTablePathElement(const TPath& dstPath) const {
-        TPathElement::TPtr externalTable = dstPath.Base();
-        externalTable->CreateTxId        = OperationId.GetTxId();
-        externalTable->PathType  = TPathElement::EPathType::EPathTypeExternalTable;
-        externalTable->PathState = TPathElement::EPathState::EPathStateCreate;
-        externalTable->LastTxId  = OperationId.GetTxId();
-
-        return externalTable;
-    }
-
-    void CreateTransaction(const TOperationContext &context,
-                           const TPathId &externalTablePathId,
-                           const TPathId &externalDataSourcePathId) const {
-      TTxState &txState =
-          context.SS->CreateTx(OperationId, TTxState::TxCreateExternalTable,
-                               externalTablePathId, externalDataSourcePathId);
-      txState.Shards.clear();
-    }
-
-    void RegisterParentPathDependencies(const TOperationContext& context,
-                                        const TPath& parentPath) const {
-        if (parentPath.Base()->HasActiveChanges()) {
-            const auto parentTxId = parentPath.Base()->PlannedToCreate()
-                                   ? parentPath.Base()->CreateTxId
-                                   : parentPath.Base()->LastTxId;
-            context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
-        }
-    }
-
-    void AdvanceTransactionStateToPropose(const TOperationContext& context,
-                                          NIceDb::TNiceDb& db) const {
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        context.OnComplete.ActivateTx(OperationId);
-    }
-
     static void LinkExternalDataSourceWithExternalTable(
         const TExternalDataSourceInfo::TPtr& externalDataSource,
         const TPathElement::TPtr& externalTable,
@@ -262,28 +224,6 @@ private:
         auto& reference = *externalDataSource->ExternalTableReferences.AddReferences();
         reference.SetPath(dstPath.PathString());
         externalTable->PathId.ToProto(reference.MutablePathId());
-    }
-
-    void PersistExternalTable(
-        const TOperationContext& context,
-        NIceDb::TNiceDb& db,
-        const TPathElement::TPtr& externalTable,
-        const TExternalTableInfo::TPtr& externalTableInfo,
-        const TPathId& externalDataSourcePathId,
-        const TExternalDataSourceInfo::TPtr& externalDataSource,
-        const TString& acl) const {
-        context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
-        context.SS->IncrementPathDbRefCount(externalTable->PathId);
-
-
-        if (!acl.empty()) {
-            externalTable->ApplyACL(acl);
-        }
-        context.SS->PersistPath(db, externalTable->PathId);
-
-        context.SS->PersistExternalDataSource(db, externalDataSourcePathId, externalDataSource);
-        context.SS->PersistExternalTable(db, externalTable->PathId, externalTableInfo);
-        context.SS->PersistTxState(db, OperationId);
     }
 
 public:
@@ -297,8 +237,9 @@ public:
         const auto& externalTableDescription = Transaction.GetCreateExternalTable();
         const TString& name = externalTableDescription.GetName();
 
-        LOG_N("TCreateExternalTable Propose"
-              << ": opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", parentPathStr + "/" + name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -344,27 +285,48 @@ public:
         }
         Y_ABORT_UNLESS(externalTableInfo);
 
-        AddPathInSchemeShard(result, dstPath, owner);
+        const auto newPathId = context.SS->AllocatePathId();
 
-        const auto externalTable = CreateExternalTablePathElement(dstPath);
-        CreateTransaction(context, externalTable->PathId, dataSourcePath->PathId);
+        auto guard = context.DbGuard();
 
-        NIceDb::TNiceDb db(context.GetDB());
+        context.MemChanges.GrabNewPath(context.SS, newPathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabPath(context.SS, dataSourcePath.Base()->PathId);
+        context.MemChanges.GrabNewExternalTable(context.SS, newPathId);
+        context.MemChanges.GrabExternalDataSource(context.SS, dataSourcePath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
-        RegisterParentPathDependencies(context, parentPath);
-        AdvanceTransactionStateToPropose(context, db);
+        context.DbChanges.PersistPath(newPathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistExternalDataSource(dataSourcePath.Base()->PathId);
+        context.DbChanges.PersistExternalTable(newPathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        dstPath.MaterializeLeaf(owner, newPathId);
+        result->SetPathId(newPathId.LocalPathId);
+
+        TPathElement::TPtr externalTable = dstPath.Base();
+        externalTable->CreateTxId = OperationId.GetTxId();
+        externalTable->PathType  = TPathElement::EPathType::EPathTypeExternalTable;
+        externalTable->PathState = TPathElement::EPathState::EPathStateCreate;
+        externalTable->LastTxId  = OperationId.GetTxId();
 
         LinkExternalDataSourceWithExternalTable(externalDataSource,
                                                 externalTable,
                                                 dstPath);
 
-        PersistExternalTable(context,
-                             db,
-                             externalTable,
-                             externalTableInfo,
-                             dataSourcePath->PathId,
-                             externalDataSource,
-                             acl);
+        context.SS->ExternalTables.Set(newPathId, externalTableInfo);
+        if (!acl.empty()) {
+            externalTable->ApplyACL(acl);
+        }
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateExternalTable,
+                                                  newPathId, dataSourcePath.Base()->PathId);
+        txState.Shards.clear();
+        txState.State = TTxState::Propose;
+        context.OnComplete.ActivateTx(OperationId);
+
+        RegisterParentPathDependencies(OperationId, context, parentPath);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
                                                           dstPath,
@@ -372,22 +334,22 @@ public:
                                                           context.OnComplete);
 
         dstPath.DomainInfo()->IncPathsInside(context.SS);
-        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateExternalTable AbortPropose"
-            << ": opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TCreateExternalTable");
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateExternalTable AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateExternalTable AbortUnsafe",
+            {"operationId", OperationId},
+            {"txId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -423,16 +385,19 @@ bool SetName<TTag>(
 TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExternalTable);
 
-    LOG_I("CreateNewExternalTable, opId " << id << ", feature flag EnableReplaceIfExistsForExternalEntities "
-                                               << context.SS->EnableReplaceIfExistsForExternalEntities << ", tx "
-                                               << tx.ShortDebugString());
+    YDB_LOG_INFO_CTX(context.Ctx, "CreateNewExternalTable",
+        {"operationId", id},
+        {"enableReplaceIfExistsForExternalEntities", context.SS->EnableReplaceIfExistsForExternalEntities},
+        {"tx", tx.ShortDebugString()},
+        {"schemeshard", context.SS->TabletID()},
+    );
 
     auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
         return {CreateReject(id, status, TStringBuilder() << "Invalid TCreateExternalTable request: " << msg)};
     };
 
     const auto &operation = tx.GetCreateExternalTable();
-    const auto replaceIfExists = operation.GetReplaceIfExists();
+    const auto replaceIfExists = tx.GetReplaceIfExists();
     const TString &name = operation.GetName();
 
     if (replaceIfExists && !context.SS->EnableReplaceIfExistsForExternalEntities) {
@@ -469,3 +434,5 @@ ISubOperation::TPtr CreateNewExternalTable(TOperationId id, TTxState::ETxState s
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

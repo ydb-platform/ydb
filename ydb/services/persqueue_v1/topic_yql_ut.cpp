@@ -5,6 +5,12 @@ namespace NKikimr::NPersQueueTests {
 
 namespace {
     const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1";
+    const static TString DLQ_TOPIC_PATH = "/Root/PQ/rt3.dc1--dead_letter_queue_97";
+
+    void CreateDlqTopic(NPersQueue::TTestServer& server) {
+        server.AnnoyingClient->RunYqlSchemeQuery(TStringBuilder()
+            << "CREATE TOPIC `" << DLQ_TOPIC_PATH << "`;");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TTopicYqlTest) {
@@ -170,7 +176,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         {
             const auto& describe = pqGroup2.GetPQTabletConfig();
             Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup2.DebugString();
-            UNIT_ASSERT_VALUES_EQUAL(pqGroup2.GetTotalGroupCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(pqGroup2.GetTotalGroupCount(), 4);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetLifetimeSeconds(), 7200);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetBurstSize(), 100501);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), 9001);
@@ -252,6 +258,8 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
         NPersQueue::TTestServer server(settings);
 
+        CreateDlqTopic(server);
+
         {
             const char *query = R"(
                 CREATE TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
@@ -259,9 +267,11 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                           type = 'shared'
                         , keep_messages_order = true
                         , default_processing_timeout = Interval('PT31S')
+                        , receive_message_wait_time = Interval('PT5S')
+                        , receive_message_delay = Interval('PT7S')
                         , max_processing_attempts = 67
                         , dead_letter_policy = 'move'
-                        , dead_letter_queue = 'dead_letter_queue_97'
+                        , dead_letter_queue = '/Root/PQ/rt3.dc1--dead_letter_queue_97'
                     ))
             )";
 
@@ -280,10 +290,12 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                 ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
             UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), true);
             UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 31);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultReceiveMessageWaitTimeMs(), 5000);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultDelayMessageTimeMs(), 7000);
             UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 67);
             UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
                 ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
-            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "dead_letter_queue_97");
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), DLQ_TOPIC_PATH);
         }
     }
 
@@ -318,20 +330,26 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                 ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
             UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), false);
             UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 30);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultReceiveMessageWaitTimeMs(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultDelayMessageTimeMs(), 0);
             UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 1000);
             UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
                 ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED));
             UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "");
         }
 
+        CreateDlqTopic(server);
+
         {
             const char *query = R"(
                 ALTER TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
                     ALTER CONSUMER c1 SET (
                           default_processing_timeout = Interval('PT31S')
+                        , receive_message_wait_time = Interval('PT5S')
+                        , receive_message_delay = Interval('PT7S')
                         , max_processing_attempts = 67
                         , dead_letter_policy = 'move'
-                        , dead_letter_queue = 'dead_letter_queue_97'
+                        , dead_letter_queue = '/Root/PQ/rt3.dc1--dead_letter_queue_97'
                     )
             )";
 
@@ -350,10 +368,12 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                 ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
             UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), false);
             UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 31);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultReceiveMessageWaitTimeMs(), 5000);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultDelayMessageTimeMs(), 7000);
             UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 67);
             UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
                 ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
-            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "dead_letter_queue_97");
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), DLQ_TOPIC_PATH);
         }
     }
 

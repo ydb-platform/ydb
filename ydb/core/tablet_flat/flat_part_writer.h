@@ -22,7 +22,7 @@
 namespace NKikimr {
 namespace NTable {
 
-    class TPartWriter final : protected ISaver {
+    class TPartWriter final : public TAtomicRefCount<TPartWriter>, protected ISaver {
         using ECodec = NPage::ECodec;
         using ICodec = NBlockCodecs::ICodec;
 

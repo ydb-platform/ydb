@@ -1,4 +1,7 @@
-#include "kqp_rules_include.h"
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
+namespace NKikimr::NKqp {
 
 namespace {
 
@@ -44,19 +47,14 @@ void PropagateHashFuncs(TStageGraph& stageGraph, const TKikimrConfiguration::TPt
     }
 }
 
-} // namespace
-
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 TPropagateHashFuncStage::TPropagateHashFuncStage()
     : IRBOStage("Hash function propagation")
-{
-}
+{}
 
 void TPropagateHashFuncStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     PropagateHashFuncs(root.PlanProps.StageGraph, ctx.KqpCtx.Config);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

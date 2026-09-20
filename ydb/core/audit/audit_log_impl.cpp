@@ -1,8 +1,7 @@
 #include <util/charset/utf8.h>
 #include <util/string/hex.h>
 
-#include <library/cpp/json/json_value.h>
-#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/writer/json.h>
 #include <library/cpp/logger/record.h>
 #include <library/cpp/logger/backend.h>
 
@@ -85,11 +84,14 @@ void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBacken
 TString GetJsonLog(TInstant time, const TAuditLogParts& parts) {
     TStringStream ss;
     ss << time << ": ";
-    NJson::TJsonMap m;
-    for (auto& [k, v] : parts) {
-        m[k] = v;
+    NJsonWriter::TBuf json(NJsonWriter::HEM_UNSAFE, &ss);
+    {
+        auto obj = json.BeginObject();
+        for (auto& [k, v] : parts) {
+            obj.WriteKey(k).WriteString(v);
+        }
+        json.EndObject();
     }
-    NJson::WriteJson(&ss, &m, false, false);
     ss << Endl;
     return ss.Str();
 }
@@ -147,6 +149,34 @@ class TAuditLogActor final : public TActor<TAuditLogActor> {
 private:
     const TAuditLogBackends LogBackends;
 
+    static inline const std::unordered_map<TString, ui32> FieldsOrder =
+    {
+        // operation's kind
+        {"component", 0},
+
+        // subject
+        {"subject", 1},
+        {"remote_address", 2},
+        {"sanitized_token", 3},
+        {"masked_token", 4},
+
+        // verb
+        {"operation", 5},
+        {"status", 6},
+        {"detailed_status", 7},
+        {"reason", 8},
+
+        // object
+        // (these fields are not required for all audit logs)
+        {"cloud_id", 9},
+        {"folder_id", 10},
+        {"resource_id", 11},
+        {"database", 12}
+
+        // specific fields
+        // ...
+    };
+
 public:
     TAuditLogActor(TAuditLogBackends&& logBackends)
         : TActor(&TThis::StateWork)
@@ -180,12 +210,31 @@ private:
 
     void HandleWriteAuditLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
         EscapeNonUtf8LogParts(ev);
+        auto sortedParts = ev->Get()->Parts;
+
+        auto cmpToSort = [](const std::pair<TString, TString>& lhs, const std::pair<TString, TString>& rhs) {
+            ui32 lhsOrder, rhsOrder;
+
+            {
+                auto it = FieldsOrder.find(lhs.first);
+                lhsOrder = (it == FieldsOrder.end() ? FieldsOrder.size() : it->second);
+            }
+
+            {
+                auto it = FieldsOrder.find(rhs.first);
+                rhsOrder = (it == FieldsOrder.end() ? FieldsOrder.size() : it->second);
+            }
+
+            return std::make_pair(lhsOrder, lhs.first) < std::make_pair(rhsOrder, rhs.first);
+        };
+
+        std::sort(sortedParts.begin(), sortedParts.end(), cmpToSort);
+
         for (auto& logBackends : LogBackends) {
             const auto builderIndex = static_cast<size_t>(logBackends.first);
             const auto builder = builderIndex < AuditLogItemBuilders.size() && AuditLogItemBuilders[builderIndex] != nullptr
                 ? AuditLogItemBuilders[builderIndex] : AuditLogItemBuilders[DefaultAuditLogItemBuilder];
-            const auto msg = ev->Get();
-            const auto auditLogItem = builder(msg->Time, msg->Parts);
+            const auto auditLogItem = builder(ev->Get()->Time, sortedParts);
             if (!auditLogItem.empty()) {
                 WriteLog(auditLogItem, logBackends.second);
             }

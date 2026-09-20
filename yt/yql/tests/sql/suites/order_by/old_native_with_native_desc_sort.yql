@@ -1,0 +1,7 @@
+USE plato;
+
+PRAGMA yt.UseNativeDescSort;
+
+$union = SELECT * FROM EACH(["Input1", "Input2"]);
+
+PROCESS $union;

@@ -8,6 +8,7 @@
 #include <yt/yql/providers/yt/lib/schema/schema.h>
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 
 namespace NYql {
 
@@ -45,6 +46,7 @@ TExecContextBaseSimple::TExecContextBaseSimple(
     : Gateway(gateway)
     , FunctionRegistry_(services->FunctionRegistry)
     , Config_(services->Config)
+    , StaticConfig_(services->StaticConfig)
     , Clusters_(clusters)
     , MkqlCompiler_(mkqlCompiler)
     , UrlMapper_(urlMapper)
@@ -65,7 +67,7 @@ void TExecContextBaseSimple::MakeUserFiles(const TUserDataTable& userDataBlocks)
     UserFiles_ = MakeIntrusive<TUserFiles>(*UrlMapper_, activeYtCluster);
     for (const auto& file: userDataBlocks) {
         auto block = file.second;
-        if (!Config_->GetMrJobUdfsDir().empty() && block.Usage.Test(EUserDataBlockUsage::Udf) && block.Type == EUserDataType::PATH) {
+        if (!StaticConfig_->GetMrJobUdfsDir().empty() && block.Usage.Test(EUserDataBlockUsage::Udf) && block.Type == EUserDataType::PATH) {
             TFsPath path = block.Data;
             TString fileName = path.Basename();
 #ifdef _win_
@@ -73,7 +75,7 @@ void TExecContextBaseSimple::MakeUserFiles(const TUserDataTable& userDataBlocks)
             changedName.ChopSuffix(".dll");
             fileName = TString("lib") + changedName + ".so";
 #endif
-            block.Data = TFsPath(Config_->GetMrJobUdfsDir()) / fileName;
+            block.Data = TFsPath(StaticConfig_->GetMrJobUdfsDir()) / fileName;
             TString md5;
             if (block.FrozenFile) {
                 md5 = block.FrozenFile->GetMd5();
@@ -153,7 +155,7 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
             }
 
             const bool enableQLFilter = settings->_EnableQLFilter.Get(Cluster_).GetOrElse(DEFAULT_ENABLE_QL_FILTER);
-            const bool useQLFilter = enableQLFilter && NYql::HasSetting(section.Settings().Ref(), EYtSettingType::QLFilter);
+            const ui32 qlFilterDepthLimit = settings->QLFilterDepthLimit.Get(Cluster_).GetOrElse(DEFAULT_QL_FILTER_DEPTH_LIMIT);
             TNodeMap<TMaybe<TString>> inputQueries;
 
             for (auto path: section.Paths()) {
@@ -184,10 +186,10 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
                     spec[YqlSysColumnPrefix] = sysColumns;
                 }
 
-                if (useQLFilter && pathInfo.QLFilter) {
+                if (enableQLFilter && pathInfo.QLFilter) {
                     auto queryIter = inputQueries.find(pathInfo.QLFilter.Get());
                     if (queryIter == inputQueries.end()) {
-                        queryIter = inputQueries.insert({pathInfo.QLFilter.Get(), GenerateInputQuery(pathInfo.QLFilter)}).first;
+                        queryIter = inputQueries.emplace(pathInfo.QLFilter.Get(), GenerateInputQuery(pathInfo.QLFilter, qlFilterDepthLimit)).first;
                     }
                     if (queryIter->second) {
                         richYPath.InputQuery(*queryIter->second);
@@ -234,7 +236,6 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
 
 void TExecContextBaseSimple::SetOutput(TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& outputHash) {
     const TString tmpFolder = GetTablesTmpFolder(*settings, Cluster_, BaseSession_->UseSecureTmp_, BaseSession_->OperationOptions_);
-    const auto nativeYtTypeCompatibility = settings->NativeYtTypeCompatibility.Get(Cluster_).GetOrElse(NTCF_LEGACY);
     const bool rowSpecCompactForm = settings->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
     const bool optimizeForScan = settings->OptimizeFor.Get(Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
     size_t loggedTable = 0;
@@ -248,7 +249,7 @@ void TExecContextBaseSimple::SetOutput(TYtOutSection output, const TYtSettings::
             outTableName = TStringBuilder() << "tmp/" << GetGuidAsString(BaseSession_->RandomProvider_->GenGuid());
         }
         TString outTablePath = GetTransformedPath(outTableName, Cluster_, true, settings);
-        auto attrSpec = tableInfo.GetAttrSpecNode(nativeYtTypeCompatibility, rowSpecCompactForm);
+        auto attrSpec = tableInfo.GetAttrSpecNode(rowSpecCompactForm);
         OutTables_.emplace_back(
             outTableName,
             outTablePath,
@@ -281,7 +282,6 @@ void TExecContextBaseSimple::SetSingleOutput(const TYtOutTableInfo& outTable, co
     TString outTableName = TStringBuilder() << "tmp/" << GetGuidAsString(BaseSession_->RandomProvider_->GenGuid());
     TString outTablePath = GetTransformedPath(outTableName, Cluster_, true, settings);
 
-    const auto nativeYtTypeCompatibility = settings->NativeYtTypeCompatibility.Get(Cluster_).GetOrElse(NTCF_LEGACY);
     const bool rowSpecCompactForm = settings->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
     const bool optimizeForScan = settings->OptimizeFor.Get(Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
 
@@ -289,7 +289,7 @@ void TExecContextBaseSimple::SetSingleOutput(const TYtOutTableInfo& outTable, co
         outTableName,
         outTablePath,
         outTable.GetCodecSpecNode(),
-        outTable.GetAttrSpecNode(nativeYtTypeCompatibility, rowSpecCompactForm),
+        outTable.GetAttrSpecNode(rowSpecCompactForm),
         ToYTSortColumns(outTable.RowSpec->GetForeignSort()),
         optimizeForScan ? outTable.GetColumnGroups() : NYT::TNode{}
     );
@@ -297,20 +297,20 @@ void TExecContextBaseSimple::SetSingleOutput(const TYtOutTableInfo& outTable, co
     YQL_CLOG(INFO, ProviderYt) << "Output: " << Cluster_ << '.' << outTableName;
 }
 
-TString TExecContextBaseSimple::GetInputSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput) const {
-    return GetSpecImpl(InputTables_, 0, InputTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, intermediateInput);
+TString TExecContextBaseSimple::GetInputSpec(bool ensureOldTypesOnly, bool intermediateInput) const {
+    return GetSpecImpl(InputTables_, 0, InputTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, intermediateInput);
 }
 
-TString TExecContextBaseSimple::GetOutSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const {
-    return GetSpecImpl(OutTables_, 0, OutTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, false);
+TString TExecContextBaseSimple::GetOutSpec(bool ensureOldTypesOnly) const {
+    return GetSpecImpl(OutTables_, 0, OutTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, false);
 }
 
-TString TExecContextBaseSimple::GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const {
-    return GetSpecImpl(OutTables_, beginIdx, endIdx, initialOutSpec, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, false);
+TString TExecContextBaseSimple::GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly) const {
+    return GetSpecImpl(OutTables_, beginIdx, endIdx, initialOutSpec, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, false);
 }
 
 template <class TTableType>
-TString TExecContextBaseSimple::GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput) {
+TString TExecContextBaseSimple::GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialSpec, bool ensureOldTypesOnly, bool intermediateInput) {
     YQL_ENSURE(beginIdx <= endIdx);
     YQL_ENSURE(endIdx <= tables.size());
     NYT::TNode specNode = initialSpec;
@@ -318,23 +318,6 @@ TString TExecContextBaseSimple::GetSpecImpl(const TVector<TTableType>& tables, s
         specNode = NYT::TNode::CreateMap();
     }
     NYT::TNode& tablesNode = specNode[YqlIOSpecTables];
-
-    auto updateFlags = [nativeTypeCompatibilityFlags](NYT::TNode& spec) {
-        if (spec.HasKey(YqlRowSpecAttribute)) {
-            auto& rowSpec = spec[YqlRowSpecAttribute];
-            ui64 nativeYtTypeFlags = 0;
-            if (rowSpec.HasKey(RowSpecAttrNativeYtTypeFlags)) {
-                nativeYtTypeFlags = rowSpec[RowSpecAttrNativeYtTypeFlags].AsUint64();
-            } else {
-                if (rowSpec.HasKey(RowSpecAttrUseNativeYtTypes)) {
-                    nativeYtTypeFlags = rowSpec[RowSpecAttrUseNativeYtTypes].AsBool() ? NTCF_LEGACY : NTCF_NONE;
-                } else if (rowSpec.HasKey(RowSpecAttrUseTypeV2)) {
-                    nativeYtTypeFlags = rowSpec[RowSpecAttrUseTypeV2].AsBool() ? NTCF_LEGACY : NTCF_NONE;
-                }
-            }
-            rowSpec[RowSpecAttrNativeYtTypeFlags] = (nativeYtTypeFlags & nativeTypeCompatibilityFlags);
-        }
-    };
 
     if (!intermediateInput && (endIdx - beginIdx) > 1) {
         NYT::TNode& registryNode = specNode[YqlIOSpecRegistry];
@@ -345,8 +328,6 @@ TString TExecContextBaseSimple::GetSpecImpl(const TVector<TTableType>& tables, s
             auto spec = table.Spec;
             if (ensureOldTypesOnly) {
                 EnsureSpecDoesntUseNativeYtTypes(spec, table.Name, std::is_same<TTableType, TInputInfo>::value);
-            } else {
-                updateFlags(spec);
             }
             auto res = uniqSpecs.emplace(NYT::NodeToCanonicalYsonString(spec), refName);
             if (res.second) {
@@ -363,8 +344,6 @@ TString TExecContextBaseSimple::GetSpecImpl(const TVector<TTableType>& tables, s
         auto spec = table.Spec;
         if (ensureOldTypesOnly) {
             EnsureSpecDoesntUseNativeYtTypes(spec, table.Name, std::is_same<TTableType, TInputInfo>::value);
-        } else {
-            updateFlags(spec);
         }
 
         tablesNode.Add(std::move(spec));
@@ -396,7 +375,11 @@ TString TExecContextBaseSimple::GetAuth(const TYtSettings::TConstPtr& config) co
 
     if (!auth || auth->empty()) {
         if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
-            auth = ytTokenResolver->ResolveClusterToken(Cluster_);
+            auto ytName = Clusters_->TryGetYtName(Cluster_);
+            if (!ytName) {
+                ythrow yexception() << "Unknown cluster name: " << Cluster_;
+            }
+            auth = ytTokenResolver->ResolveClusterToken(ytName, *BaseSession_->Credentials_);
         }
     }
 

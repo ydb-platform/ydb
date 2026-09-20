@@ -8,6 +8,25 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+char PrintBrief(EHostRole role)
+{
+    switch (role) {
+        case EHostRole::Primary:
+            return 'P';
+        case EHostRole::HandOff:
+            return 'H';
+        case EHostRole::None:
+            return 'N';
+    }
+    Y_ABORT_UNLESS(false);
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 THostRoles::THostRoles(size_t hostCount)
     : Count(hostCount)
 {
@@ -20,14 +39,15 @@ THostRoles::THostRoles(size_t hostCount)
 THostRoles THostRoles::MakeRotating(
     size_t hostCount,
     ui32 vChunkIndex,
-    size_t primaryCount)
+    size_t primaryCount,
+    EHostRole secondaryRole)
 {
     Y_ABORT_UNLESS(hostCount <= MaxHostCount);
     Y_ABORT_UNLESS(primaryCount <= hostCount);
 
     THostRoles result(hostCount);
     for (size_t i = 0; i < hostCount; ++i) {
-        result.Assignments[i] = EHostRole::HandOff;
+        result.Assignments[i] = secondaryRole;
     }
     for (size_t i = 0; i < primaryCount; ++i) {
         const size_t idx = (i + vChunkIndex) % hostCount;
@@ -53,6 +73,13 @@ void THostRoles::SetRole(THostIndex host, EHostRole assignment)
     Y_ABORT_UNLESS(host < Count);
 
     Assignments[host] = assignment;
+}
+
+void THostRoles::AppendRole(EHostRole assignment)
+{
+    Y_ABORT_UNLESS(Count < MaxHostCount);
+
+    Assignments[Count++] = assignment;
 }
 
 THostMask THostRoles::GetPrimary() const
@@ -82,8 +109,16 @@ THostMask THostRoles::GetActive() const
     return GetPrimary().Include(GetHandOff());
 }
 
-TString THostRoles::DebugPrint() const
+TString THostRoles::DebugPrint(bool brief) const
 {
+    if (brief) {
+        TString result(Count, ' ');
+        for (size_t i = 0; i < Count; ++i) {
+            result[i] = PrintBrief(Assignments[i]);
+        }
+        return result;
+    }
+
     TStringBuilder result;
     for (size_t i = 0; i < Count; ++i) {
         if (i) {

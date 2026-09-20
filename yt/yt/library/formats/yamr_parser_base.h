@@ -79,7 +79,7 @@ private:
     void OnRangeConsumed(const char* begin, const char* end);
     void AppendToContextBuffer(char symbol);
 
-    TString GetContext() const;
+    std::string GetContext() const;
     NYTree::IAttributeDictionaryPtr GetDebugInfo() const;
 
     IYamrConsumerPtr Consumer;
@@ -90,7 +90,7 @@ private:
 
     bool ExpectingEscapedChar;
 
-    TString CurrentToken;
+    std::string CurrentToken;
 
     // Diagnostic Info
     i64 Offset;
@@ -138,7 +138,7 @@ private:
 
     bool EnableSubkey;
 
-    TString CurrentToken;
+    std::string CurrentToken;
 
     union {
         ui64 Value;

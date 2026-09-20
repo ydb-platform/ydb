@@ -117,6 +117,217 @@ public:
         return otherLocksBroken.size();
     }
 
+    // Status, Issues, TxStats — replayed on a duplicate delivery.
+    static TString SerializeWriteSeqNumResult(const NKikimrDataEvents::TEvWriteResult& record) {
+        NKikimrDataEvents::TEvWriteResult stored;
+        stored.SetStatus(record.GetStatus());
+        *stored.MutableIssues() = record.GetIssues();
+        if (record.HasTxStats()) {
+            *stored.MutableTxStats() = record.GetTxStats();
+        }
+        TString serialized;
+        Y_ENSURE(stored.SerializeToString(&serialized));
+        return serialized;
+    }
+
+    // Replay the stored result; STATUS_COMPLETED if missing or corrupt.
+    static void FillDuplicateWriteResult(const TWriteSeqNumState& state, NKikimrDataEvents::TEvWriteResult& record) {
+        NKikimrDataEvents::TEvWriteResult stored;
+        if (state.SerializedResult.empty()) {
+            record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        } else if (stored.ParseFromString(state.SerializedResult)) {
+            record.SetStatus(stored.GetStatus());
+            record.MutableIssues()->Swap(stored.MutableIssues());
+            if (stored.HasTxStats()) {
+                record.MutableTxStats()->Swap(stored.MutableTxStats());
+            }
+        } else {
+            // Only possible via a buggy migration peer; degrade to a bare success.
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Failed to parse stored write result for writer " << state.WriterIndex
+                << " seq num " << state.WriteSeqNum);
+            record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+    }
+
+    // Validates this write's position in its writer's chain; on success records the new
+    // position for ApplyLocks to persist. Returns a status when the operation must stop here.
+    std::optional<EExecutionStatus> CheckWriteSeqNum(
+            TWriteOperation* writeOp, TSetupSysLocks& guardLocks) {
+        const auto& operations = writeOp->GetWriteTx()->GetOperations();
+
+        // Determine the writer index from the first operation that has a WriteSeqNum.
+        ui64 writerIndex = 0;
+        bool hasWriteSeqNum = false;
+        for (const auto& op : operations) {
+            if (op.GetWriteSeqNum().WriteSeqNum) {
+                writerIndex = op.GetWriteSeqNum().WriterIndex;
+                hasWriteSeqNum = true;
+                break;
+            }
+        }
+        if (!hasWriteSeqNum) {
+            return std::nullopt;
+        }
+        auto& seqNumUpdate = guardLocks.WriteSeqNumUpdate.Emplace(writerIndex);
+
+        const ui64 tabletId = DataShard.TabletID();
+        auto lock = guardLocks.Lock;
+        Y_ENSURE(lock);
+
+        if (auto other = lock->FindOtherWriter(writerIndex)) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                << "Multiple writers per lock are not supported: lock already has writer "
+                << *other << ", got " << writerIndex);
+            return EExecutionStatus::Executed;
+        }
+
+        // Group operations by DataShard: per-group min/max requested seqnum.
+        // A DataShard of 0 in the operation means the current shard; treat non-zero as ancestor.
+        // We normalize: treat 0 and tabletId as the same (current shard).
+        struct TShardSeqNums {
+            ui64 MinRequested = 0;
+            ui64 MaxRequested = 0;
+            bool isDuplicate = false;
+        };
+        THashMap<ui64, TShardSeqNums> shard2seqnums;
+        for (const auto& op : operations) {
+            const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
+            if (!requested) {
+                continue;
+            }
+            const ui64 shardId = op.GetOriginalShard();
+            const ui64 shardKey = (shardId == 0 || shardId == tabletId) ? 0 : shardId;
+
+            auto& seqnums = shard2seqnums[shardKey];
+            if (!seqnums.MinRequested) {
+                seqnums.MinRequested = requested;
+            }
+            if (seqnums.MaxRequested && requested != seqnums.MaxRequested + 1) {
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                    << "Uncommitted write seq nums must be ascending and contiguous within one request, got "
+                    << writerIndex << ":" << seqnums.MaxRequested << " followed by "
+                    << writerIndex << ":" << requested
+                    << " for DataShard " << shardKey);
+                return EExecutionStatus::Executed;
+            }
+            seqnums.MaxRequested = requested;
+        }
+
+        // For each shard, determine current seqnum and classify as duplicate/stale/continuation.
+        TMaybe<ui64> duplicateDataShard; // the group to use for the duplicate response (current shard preferred)
+
+        for (auto& [shardKey, seqnums] : shard2seqnums) {
+            ui64 current = 0;
+            if (shardKey == 0) {
+                // Current shard
+                current = lock->GetWriteSeqNum(writerIndex);
+            } else {
+                // Ancestor shard
+                if (lock->GetWriteSeqNum(writerIndex) != 0) {
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                        TStringBuilder() << "Ancestor shard " << shardKey
+                        << " write " << writerIndex << ":" << seqnums.MaxRequested
+                        << " not allowed after current shard writes");
+                    return EExecutionStatus::Executed;
+                }
+                auto ancestorIt = lock->GetAncestorLocks().find(shardKey);
+                if (ancestorIt == lock->GetAncestorLocks().end()) {
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                        << "Ancestor shard " << shardKey << " not found in lock " << guardLocks.LockTxId);
+                    return EExecutionStatus::Executed;
+                }
+                for (const auto& [idx, state] : ancestorIt->second.WriteSeqNumStates) {
+                    if (idx == writerIndex) {
+                        current = state.WriteSeqNum;
+                    } else {
+                        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                            TStringBuilder() << "Ancestor shard " << shardKey
+                            << " has another writer: " << idx
+                            << " for lock id: " << guardLocks.LockTxId
+                            << " (requested write: " << writerIndex << ":" << seqnums.MaxRequested << ")");
+                        return EExecutionStatus::Executed;
+                    }
+                }
+            }
+
+            if (seqnums.MaxRequested == current) {
+                // Duplicate
+                seqnums.isDuplicate = true;
+                if (shardKey == 0) {
+                    duplicateDataShard = 0; // prefer current shard
+                } else if (!duplicateDataShard) {
+                    duplicateDataShard = shardKey;
+                }
+            } else if (seqnums.MaxRequested < current) {
+                // Stale
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                    TStringBuilder() << "Uncommitted write " << writerIndex << ":" << seqnums.MaxRequested
+                    << " for DataShard " << shardKey << " is already applied, writer is at " << current);
+                return EExecutionStatus::Executed;
+            } else {
+                // Continuation: verify no gap
+                if (seqnums.MinRequested != current + 1) {
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                        TStringBuilder() << "Uncommitted write " << writerIndex << ":" << seqnums.MinRequested
+                        << " for DataShard " << shardKey
+                        << " must continue the writer chain at " << (current + 1)
+                        << ", writer is at " << current);
+                    return EExecutionStatus::Executed;
+                }
+            }
+        }
+
+        if (duplicateDataShard) {
+            // TODO: merge results from different shards with duplicate ops.
+            auto res = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
+            res->Record.SetOrigin(tabletId);
+            res->Record.SetTxId(writeOp->GetTxId());
+            res->Record.SetIsDuplicate(true);
+
+            const TWriteSeqNumState* stored = nullptr;
+            if (*duplicateDataShard == 0) {
+                stored = lock->FindWriteSeqNumState(writerIndex);
+            } else {
+                stored = lock->FindAncestorWriteSeqNumState(*duplicateDataShard, writerIndex);
+            }
+            Y_ENSURE(stored);
+            FillDuplicateWriteResult(*stored, res->Record);
+            writeOp->DuplicateOpsResult = std::move(res);
+
+            // mark duplicate operations as such
+            for (size_t iOp = 0; iOp < operations.size(); ++iOp) {
+                const auto& op = operations[iOp];
+                if (!op.GetWriteSeqNum().WriteSeqNum) {
+                    continue;
+                }
+                const ui64 shardId = op.GetOriginalShard();
+                const ui64 shardKey = (shardId == 0 || shardId == tabletId) ? 0 : shardId;
+                if (shard2seqnums.at(shardKey).isDuplicate) {
+                    writeOp->DuplicateWriteOpIdxs.insert(iOp);
+                }
+            }
+        }
+
+        // All continuations: track max per group for ApplyLocks to persist.
+        for (const auto& [shardId, seqnums] : shard2seqnums) {
+            if (!seqnums.isDuplicate) {
+                if (shardId == 0) {
+                    seqNumUpdate.SetWriteSeqNum = seqnums.MaxRequested;
+                } else {
+                    seqNumUpdate.SetAncestorWriteSeqNums.emplace(shardId, seqnums.MaxRequested);
+                }
+            } else {
+                if (shardId == 0) {
+                    seqNumUpdate.ThisShardDuplicateWrite = true;
+                } else {
+                    seqNumUpdate.AncestorShardsWithDuplicateWrites.insert(shardId);
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
     void AddLocksToResult(TWriteOperation* writeOp, ui64 querySpanId, const TActorContext& ctx,
         const NKikimrDataEvents::TKqpLocks* kqpLocks = nullptr)
     {
@@ -126,17 +337,80 @@ public:
         HandleBreakerLocks(locksBrokenByTx, writeOp->GetTxId(), querySpanId,
             DataShard.SysLocksTable(), writeResult.Record, ctx,
             "Write transaction broke other locks", kqpLocks);
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
+        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Add locks",
+            {"result", locks.size()});
         for (const auto& lock : locks) {
             if (lock.IsError()) {
-                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Lock is not set for " << *writeOp << " at " << DataShard.TabletID() << " lock " << lock);
+                YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::AddLocksToResult: lock is not set",
+                    {"operation", *writeOp},
+                    {"tabletId", DataShard.TabletID()},
+                    {"lock", lock});
             }
 
-            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites);
+            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites,
+                lock.WriterIndex, lock.WriteSeqNum);
 
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add lock to result: " << writeResult.Record.GetTxLocks().rbegin()->ShortDebugString());
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Add lock",
+                {"result", writeResult.Record.GetTxLocks().rbegin()->ShortDebugString()});
         }
         DataShard.SubscribeNewLocks(ctx);
+
+        // If all seqnums target the current shard (DataShard == 0), validate the lock's seqnum.
+        // For ancestor-shard-only batches, the current-shard seqnum on the lock is 0 (not set).
+        ui64 maxCurrentShardRequested = 0;
+        ui64 writerIndex = 0;
+        bool hasCurrentShardSeqNum = false;
+        bool hasAncestorShardSeqNum = false;
+        const ui64 tabletId = DataShard.TabletID();
+        for (const auto& op : writeOp->GetWriteTx()->GetOperations()) {
+            const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
+            if (requested) {
+                writerIndex = op.GetWriteSeqNum().WriterIndex;
+                const ui64 ds = op.GetOriginalShard();
+                if (ds == 0 || ds == tabletId) {
+                    hasCurrentShardSeqNum = true;
+                    if (requested > maxCurrentShardRequested) {
+                        maxCurrentShardRequested = requested;
+                    }
+                } else {
+                    hasAncestorShardSeqNum = true;
+                }
+            }
+        }
+        if (hasCurrentShardSeqNum && !hasAncestorShardSeqNum) {
+            for (const auto& lock : locks) {
+                Y_ENSURE(lock.IsError()
+                             || (lock.WriterIndex == writerIndex && lock.WriteSeqNum == maxCurrentShardRequested),
+                         "Uncommitted write " << writerIndex << ":" << maxCurrentShardRequested
+                         << " reported lock with " << lock.WriterIndex << ":" << lock.WriteSeqNum);
+            }
+        }
+    }
+
+    void StoreWriteSeqNumResult(TWriteOperation* writeOp, TSetupSysLocks& guardLocks, ILocksDb* db) {
+        if (!guardLocks.WriteSeqNumUpdate) {
+            return;
+        }
+        auto& update = *guardLocks.WriteSeqNumUpdate;
+
+        auto lock = guardLocks.Lock;
+        if (!lock) {
+            return;
+        }
+
+        auto serialized = SerializeWriteSeqNumResult(writeOp->GetWriteResult()->Record);
+        if (update.SetWriteSeqNum) {
+            const auto& seqNum = *update.SetWriteSeqNum;
+            if (lock->GetWriteSeqNum(update.WriterIndex) == seqNum) {
+                lock->SetWriteSeqNumResult(update.WriterIndex, serialized, db);
+            }
+        }
+        for (const auto& [shardId, seqNum] : update.SetAncestorWriteSeqNums) {
+            auto* state = lock->FindAncestorWriteSeqNumState(shardId, update.WriterIndex);
+            if (state && state->WriteSeqNum == seqNum) {
+                lock->SetAncestorWriteSeqNumResult(shardId, update.WriterIndex, serialized, db);
+            }
+        }
     }
 
     void ResetChanges(TDataShardUserDb& userDb, TTransactionContext& txc) {
@@ -149,7 +423,9 @@ public:
 
     bool CheckForVolatileReadDependencies(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
         if (!userDb.GetVolatileReadDependencies().empty()) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because volatile read dependencies");
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::CheckForVolatileReadDependencies: aborting because volatile read dependencies",
+                {"writeOp", writeOp},
+                {"tabletId", DataShard.TabletID()});
 
             for (ui64 txId : userDb.GetVolatileReadDependencies()) {
                 writeOp.AddVolatileDependency(txId);
@@ -201,7 +477,9 @@ public:
     };
 
     EExecutionStatus OnTabletNotReadyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, size_t operationIndexToPrecharge, TTransactionContext& txc, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
+        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::OnTabletNotReadyException: tablet is not ready for execution",
+            {"tabletId", DataShard.TabletID()},
+            {"writeOp", writeOp});
 
         // Precharge
         if (operationIndexToPrecharge != SIZE_MAX) {
@@ -222,6 +500,10 @@ public:
 
                 if (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE ||
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT ||
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT ||
+                    (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
+                        && userDb.GetCollectAffectedRows()) ||
                     userDb.NeedToReadBeforeWrite(fullTableId))
                 {
                     for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
@@ -245,7 +527,9 @@ public:
         }
 
         if (userDb.GetSnapshotReadConflict()) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::OnUniqueConstrainException: aborting, conflict with another transaction",
+                {"writeOp", writeOp},
+                {"tabletId", DataShard.TabletID()});
             writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Read conflict with concurrent transaction.");
             writeOp.GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
             NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
@@ -255,7 +539,9 @@ public:
                 FillDeferredBreakerInfo(lockTxId, writeOp.GetWriteResult()->Record.MutableTxStats());
             }
         } else {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with existing key.");
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::OnUniqueConstrainException: aborting, conflict with existing key",
+                {"writeOp", writeOp},
+                {"tabletId", DataShard.TabletID()});
             writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Conflict with existing key.");
         }
 
@@ -284,6 +570,7 @@ public:
 
         // Main update cycle
 
+        bool notReady = false;
         for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
         {
             FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
@@ -328,6 +615,9 @@ public:
                     Y_ENSURE(false, operationType << " operation is not supported now");
             }
         }
+        if (notReady) {
+            throw TNotReadyTabletException();
+        }
 
         // Counters
 
@@ -356,7 +646,12 @@ public:
         TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
         const ui64 tabletId = DataShard.TabletID();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for " << *op << " at " << tabletId);
+        const bool allowAncestorLocks =
+            AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: executing write operation",
+            {"operation", *op},
+            {"tabletId", tabletId});
 
         if (writeOp->GetWriteResult() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
             return EExecutionStatus::Executed;
@@ -424,6 +719,7 @@ public:
         userDb.SetLockTxId(writeTx->GetLockTxId());
         userDb.SetLockNodeId(writeTx->GetLockNodeId());
         userDb.SetLockMode(writeTx->GetLockMode());
+        userDb.SetCollectAffectedRows(writeTx->GetCollectAffectedRows());
 
         if (op->HasVolatilePrepareFlag() || op->GetRemainReadSets()) {
             userDb.SetVolatileTxId(txId);
@@ -467,7 +763,10 @@ public:
 
             ui64 consumedMemory = writeTx->GetTxSize();
             if (MaybeRequestMoreTxMemory(consumedMemory, txc)) {
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " requested " << txc.GetRequestedMemory() << " more memory");
+                YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: requested more memory",
+                    {"operation", *op},
+                    {"tabletId", tabletId},
+                    {"requestedMemory", txc.GetRequestedMemory()});
 
                 DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
                 return EExecutionStatus::Restart;
@@ -475,7 +774,9 @@ public:
 
             if (guardLocks.LockTxId) {
                 auto abortLock = [&]() {
-                    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because it cannot acquire locks");
+                    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: aborting because it cannot acquire locks",
+                        {"operation", *op},
+                        {"tabletId", tabletId});
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because it cannot acquire locks");
                     writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
                     NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
@@ -514,6 +815,10 @@ public:
                     case EEnsureCurrentLock::Missing:
                         Y_ENSURE(false, "unreachable");
                 }
+
+                if (auto status = CheckWriteSeqNum(writeOp, guardLocks)) {
+                    return *status;
+                }
             }
 
             Y_DEFER {
@@ -526,11 +831,13 @@ public:
             };
 
             auto [validated, brokenLocks] = op->HasVolatilePrepareFlag()
-                                                ? KqpValidateVolatileTx(tabletId, sysLocks, kqpLocks, useGenericReadSets, txId, op->DelayedInReadSets(), awaitingDecisions, outReadSets)
-                                                : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
+                                                ? KqpValidateVolatileTx(sysLocks, kqpLocks, useGenericReadSets, txId, op->DelayedInReadSets(), awaitingDecisions, outReadSets, allowAncestorLocks)
+                                                : KqpValidateLocks(sysLocks, kqpLocks, useGenericReadSets, inReadSets, allowAncestorLocks);
 
             if (!validated) {
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because locks are not valid");
+                YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: aborting because locks are not valid",
+                    {"operation", *op},
+                    {"tabletId", tabletId});
                 writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because locks are not valid");
                 writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(brokenLocks.size());
 
@@ -552,7 +859,7 @@ public:
                     writeOp->GetWriteResult()->Record.MutableTxLocks()->Add()->Swap(&brokenLock);
                 }
 
-                KqpEraseLocks(tabletId, kqpLocks, sysLocks);
+                KqpEraseLocks(kqpLocks, sysLocks, allowAncestorLocks);
                 auto [_, locksBrokenByTxCleanup] = sysLocks.ApplyLocks();
                 HandleBreakerLocks(locksBrokenByTxCleanup, writeOp->GetTxId(), guardLocks.QuerySpanId,
                     sysLocks, writeOp->GetWriteResult()->Record, ctx,
@@ -572,10 +879,13 @@ public:
 
             const bool isArbiter = op->HasVolatilePrepareFlag() && KqpLocksIsArbiter(tabletId, kqpLocks);
 
-            KqpCommitLocks(tabletId, kqpLocks, sysLocks, userDb);
+            KqpCommitLocks(kqpLocks, sysLocks, userDb, allowAncestorLocks);
 
             if (writeTx->HasOperations()) {
                 for (validatedOperationIndex = 0; validatedOperationIndex < writeTx->GetOperations().size(); ++validatedOperationIndex) {
+                    if (writeOp->DuplicateWriteOpIdxs.contains(validatedOperationIndex)) {
+                        continue;
+                    }
                     const TValidatedWriteTxOperation& validatedOperation = writeTx->GetOperations()[validatedOperationIndex];
                     if (writeOp->WriteRequest) {
                         const auto& protoOperations = writeOp->WriteRequest->Record.GetOperations();
@@ -587,12 +897,17 @@ public:
                         }
                     }
                     DoUpdateToUserDb(userDb, validatedOperation, txc);
-                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << validatedOperation.GetMatrix().GetRowCount());
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: executed write operation for row",
+                        {"operation", *writeOp},
+                        {"tabletId", DataShard.TabletID()},
+                        {"count", validatedOperation.GetMatrix().GetRowCount()});
                 }
                 validatedOperationIndex = SIZE_MAX;
                 DataShard.AddRecentWriteForTli(mvccVersion, guardLocks.QuerySpanId, writeOp->GetTarget().NodeId());
             } else {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Skip empty write operation for " << *writeOp << " at " << DataShard.TabletID());
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: skip empty write operation",
+                    {"operation", *writeOp},
+                    {"tabletId", DataShard.TabletID()});
             }
 
             if (CheckForVolatileReadDependencies(userDb, *writeOp, txc, ctx))
@@ -679,7 +994,16 @@ public:
 
             const auto& counters = userDb.GetCounters();
             KqpUpdateDataShardStatCounters(DataShard, counters);
-            KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
+            if (!writeOp->DuplicateOpsResult) {
+                KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
+            } else {
+                writeResult->Record.SetIsDuplicate(true);
+                // TODO: merge stats from duplicate and non-duplicate ops.
+                writeResult->Record.MutableTxStats()->CopyFrom(
+                    writeOp->DuplicateOpsResult->Record.GetTxStats());
+            }
+
+            StoreWriteSeqNumResult(writeOp, guardLocks, &locksDb);
 
         } catch (const TNeedGlobalTxId&) {
             Y_ENSURE(op->GetGlobalTxId() == 0,
@@ -710,6 +1034,8 @@ public:
                 txc.DB.RollbackChanges();
             }
 
+            guardLocks.WriteSeqNumUpdate.Clear();
+
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
             }
@@ -726,6 +1052,8 @@ public:
             KqpUpdateDataShardStatCounters(DataShard, counters);
             KqpFillTxStats(DataShard, counters, *writeOp->GetWriteResult()->Record.MutableTxStats());
 
+            guardLocks.WriteSeqNumUpdate.Clear();
+
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
             }
@@ -737,7 +1065,9 @@ public:
                 return EExecutionStatus::Continue;
             }
 
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: aborting, write conflict with concurrent transaction",
+                {"operation", *writeOp},
+                {"tabletId", DataShard.TabletID()});
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Write conflict with concurrent transaction.");
             writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
             NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
@@ -748,6 +1078,7 @@ public:
             }
 
             ResetChanges(userDb, txc);
+            guardLocks.WriteSeqNumUpdate.Clear();
 
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
@@ -757,7 +1088,11 @@ public:
         } catch (const TKeySizeConstraintException&) {
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, TStringBuilder() << "Size of key in secondary index is more than " << NLimits::MaxWriteKeySize);
             txc.DB.RollbackChanges();
-            LOG_ERROR_S(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation " << *writeOp << " at " << DataShard.TabletID() << " aborting. Size of key of secondary index is too big.");
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "TExecuteWriteUnit::Execute: aborting, secondary index key is too big",
+                {"operation", *writeOp},
+                {"tabletId", DataShard.TabletID()});
+
+            guardLocks.WriteSeqNumUpdate.Clear();
 
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;

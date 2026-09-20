@@ -10,10 +10,14 @@ namespace NKqp {
 using namespace NOpt;
 
 enum ERuleProperties: ui32 {
-    RequireParents = 0x01,
-    RequireTypes = 0x02,
-    RequireMetadata = 0x04,
-    RequireStatistics = 0x08
+    RequireParents         = 0x01,
+    RequireOutputIUs       = 0x02,
+    RequireTypes           = 0x04 | RequireOutputIUs,
+    RequireMetadata        = 0x08 | RequireOutputIUs,
+    RequireStatistics      = 0x10 | RequireTypes | RequireMetadata,
+    RequireLiveness        = 0x20 | RequireOutputIUs,
+    RequireNameConstraints = 0x40 | RequireOutputIUs,
+    RequireAliases         = 0x80 | RequireOutputIUs
   };
 
 /**
@@ -27,8 +31,14 @@ enum ERuleProperties: ui32 {
 class IRule {
   public:
     IRule(TString name) : RuleName(name) {}
-    IRule(TString name, ui32 props, bool logRule = false) : RuleName(name), Props(props), LogRule(logRule) {}
+    IRule(TString name, ui32 props, bool logRule = true) : RuleName(name), Props(props), LogRule(logRule) {}
 
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>&) const {
+        return true;
+    }
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps&) const {
+        return QuickMatch(input);
+    }
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;
@@ -45,7 +55,7 @@ class IRule {
 class ISimplifiedRule : public IRule {
   public:
     ISimplifiedRule(TString name) : IRule(name) {}
-    ISimplifiedRule(TString name, ui32 props, bool logRule = false) : IRule(name, props, logRule) {}
+    ISimplifiedRule(TString name, ui32 props, bool logRule = true) : IRule(name, props, logRule) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
@@ -61,8 +71,19 @@ class ISimplifiedRule : public IRule {
 class IRBOStage : public NNonCopyable::TNonCopyable {
   public:
     IRBOStage(TString&& stageName) : StageName(std::move(stageName)) {}
-    
+
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) = 0;
+
+    // If you return true here, then runtime will make sure that all the properties
+    // you set in "Props" are up to date when your stage runs.
+
+    // Some stages might want to control this manually instead. For example,
+    // TRuleBasedStage recomputes properties lazily, only when a particular rule
+    // actually expects them, so it opts out of this system and handles it internally.
+    virtual bool NeedsInitialProps() const {
+        return true;
+    }
+
     virtual ~IRBOStage() = default;
     ui32 Props = 0x00;
 
@@ -76,6 +97,9 @@ class TRuleBasedStage : public IRBOStage {
   public:
     TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IRule>>&& rules);
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
+    virtual bool NeedsInitialProps() const override {
+        return false;
+    }
 
     TVector<std::unique_ptr<IRule>> Rules;
 };
@@ -90,7 +114,7 @@ public:
 
     // This function applies RBO optimizations, translates given `root` to physical yql `callables`, applies lightweight (stage based) physical optimizations
     // and returns a root of the physical program.
-    TExprNode::TPtr Optimize(TOpRoot& root, TRBOContext& rboCtx);
+    TExprNode::TPtr Optimize(TVector<TIntrusivePtr<TOpRoot>> roots, TRBOContext& rboCtx);
 
     // Adds a RBO stage to the RBO pipeline.
     void AddStage(std::unique_ptr<IRBOStage>&& stage) {
@@ -104,7 +128,13 @@ public:
  * After the rule-based optimizer generates a final plan (logical plan with detailed physical properties)
  * we convert it into a final physical representation that directly correpsonds to the execution plan.
  */
-TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
+TExprNode::TPtr ConvertToPhysical(TVector<TIntrusivePtr<TOpRoot>> roots, TRBOContext& ctx);
+void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
+void ComputePlanLiveness(TOpRoot& root);
+const TInfoUnitSet& GetLiveIn(IOperator* op, ui32 childIndex);
+const TInfoUnitSet& GetLiveOut(IOperator* op);
+void ComputePlanAliases(TOpRoot& root);
+const TPlanAliases::TCandidates* GetAliases(IOperator* op, const TInfoUnit& iu);
 
 TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan);
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "");

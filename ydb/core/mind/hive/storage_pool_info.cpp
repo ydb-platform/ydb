@@ -30,12 +30,19 @@ bool TStoragePoolInfo::ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui
     return GetStorageGroup(groupId).ReleaseAllocationUnit(tablet->GetChannel(channel));
 }
 
-void TStoragePoolInfo::UpdateStorageGroup(TStorageGroupId groupId, const TEvControllerSelectGroupsResult::TGroupParameters& groupParameters) {
+void TStoragePoolInfo::UpdateStorageGroup(TStorageGroupId groupId, const TGroupMetrics::TGroupParameters& groupParameters) {
     GetStorageGroup(groupId).UpdateStorageGroup(groupParameters);
 }
 
 void TStoragePoolInfo::DeleteStorageGroup(TStorageGroupId groupId) {
-    Groups.erase(groupId);
+    auto it = Groups.find(groupId);
+    if (it != Groups.end()) {
+        if (!it->second.IsActive()) {
+            auto inactiveIt = std::remove(InactiveGroups.begin(), InactiveGroups.end(), groupId);
+            InactiveGroups.erase(inactiveIt, InactiveGroups.end());
+        }
+        Groups.erase(it);
+    }
 }
 
 template <>
@@ -101,7 +108,7 @@ size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SE
     return *itGroup;
 }
 
-const TEvControllerSelectGroupsResult::TGroupParameters* TStoragePoolInfo::FindFreeAllocationUnit(std::function<bool(const TStorageGroupInfo&)> filter,
+const TGroupMetrics::TGroupParameters* TStoragePoolInfo::FindFreeAllocationUnit(std::function<bool(const TStorageGroupInfo&)> filter,
                                                                                                   std::function<double(const TStorageGroupInfo*)> calculateUsage) {
     if (Groups.empty()) {
         return nullptr;
@@ -174,8 +181,14 @@ THolder<TEvControllerSelectGroups::TGroupParameters> TStoragePoolInfo::BuildRefr
 }
 
 bool TStoragePoolInfo::AddTabletToWait(TTabletId tabletId) {
-    bool result = TabletsWaiting.empty();
+    bool result = TabletsWaiting.empty() && !(ShrinkRequest);
     TabletsWaiting.emplace_back(tabletId);
+    return result;
+}
+
+bool TStoragePoolInfo::SetShrinkRequest(TEvHive::TEvShrinkStoragePool::TPtr ev) {
+    bool result = TabletsWaiting.empty() && !(ShrinkRequest);
+    ShrinkRequest = std::move(ev);
     return result;
 }
 

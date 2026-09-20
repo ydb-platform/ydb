@@ -187,6 +187,9 @@ message TDqTableStats {
 
     uint32 AffectedPartitions = 8; // TODO: move it to the Extra
 
+    // Set only when collect_affected_rows is enabled. Affected row count (logical base-table rows only).
+    optional uint64 AffectedRows = 9;
+
     google.protobuf.Any Extra = 100;
 }
 
@@ -375,6 +378,7 @@ message TDqTableAggrStats {
     TDqStatsAggr EraseBytes = 7;
 
     uint32 AffectedPartitions = 8;
+    uint64 AffectedRows = 9;
 
     google.protobuf.Any Extra = 100;
 }

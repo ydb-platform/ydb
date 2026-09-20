@@ -64,11 +64,14 @@ def run_orchestrator_liveness_subprocess_sync(
     nemesis_binary: str,
     yaml_config: str,
     *,
+    database_yaml_config: str | None = None,
     timeout_seconds: int = 60,
 ) -> List[WardenCheckResult]:
     logger.info("Running liveness checks via subprocess with %ds timeout", timeout_seconds)
 
     cmd = [nemesis_binary, "liveness", "--yaml-config-location", yaml_config]
+    if database_yaml_config:
+        cmd.extend(["--database-config-location", database_yaml_config])
 
     try:
         start_time = time.time()

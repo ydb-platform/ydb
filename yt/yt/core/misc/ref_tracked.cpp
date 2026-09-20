@@ -17,32 +17,38 @@ TRefCountedTypeCookie TRefCountedTrackerFacade::GetCookie(
         location);
 }
 
-void TRefCountedTrackerFacade::AllocateInstance(TRefCountedTypeCookie cookie)
+// This facade is the single cross-library entry point TRefTracked<T> links against
+// and the only friended caller of the private TRefCountedTracker counter functions,
+// which inline into it. YT_PREVENT_TLS_CACHING pins each one out-of-line so the
+// inlined local-exec TLS read re-reads the thread pointer on every call and never
+// caches it across a fiber migration.
+
+YT_PREVENT_TLS_CACHING void TRefCountedTrackerFacade::AllocateInstance(TRefCountedTypeCookie cookie)
 {
     TRefCountedTracker::AllocateInstance(cookie);
 }
 
-void TRefCountedTrackerFacade::FreeInstance(TRefCountedTypeCookie cookie)
+YT_PREVENT_TLS_CACHING void TRefCountedTrackerFacade::FreeInstance(TRefCountedTypeCookie cookie)
 {
     TRefCountedTracker::FreeInstance(cookie);
 }
 
-void TRefCountedTrackerFacade::AllocateTagInstance(TRefCountedTypeCookie cookie)
+YT_PREVENT_TLS_CACHING void TRefCountedTrackerFacade::AllocateTagInstance(TRefCountedTypeCookie cookie)
 {
     TRefCountedTracker::AllocateTagInstance(cookie);
 }
 
-void TRefCountedTrackerFacade::FreeTagInstance(TRefCountedTypeCookie cookie)
+YT_PREVENT_TLS_CACHING void TRefCountedTrackerFacade::FreeTagInstance(TRefCountedTypeCookie cookie)
 {
     TRefCountedTracker::FreeTagInstance(cookie);
 }
 
-void TRefCountedTrackerFacade::AllocateSpace(TRefCountedTypeCookie cookie, size_t size)
+YT_PREVENT_TLS_CACHING void TRefCountedTrackerFacade::AllocateSpace(TRefCountedTypeCookie cookie, size_t size)
 {
     TRefCountedTracker::AllocateSpace(cookie, size);
 }
 
-void TRefCountedTrackerFacade::FreeSpace(TRefCountedTypeCookie cookie, size_t size)
+YT_PREVENT_TLS_CACHING void TRefCountedTrackerFacade::FreeSpace(TRefCountedTypeCookie cookie, size_t size)
 {
     TRefCountedTracker::FreeSpace(cookie, size);
 }

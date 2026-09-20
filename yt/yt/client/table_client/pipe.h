@@ -10,6 +10,10 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+constexpr i64 FlushDataWeight = 8_MB;
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! A pipe connecting a schemaful writer to a schemaful reader.
 /*!
  *  \note Thread affinity: any
@@ -34,7 +38,9 @@ DEFINE_REFCOUNTED_TYPE(ISchemafulPipe);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ISchemafulPipePtr CreateSchemafulPipe(IMemoryChunkProviderPtr chunkProvider);
+ISchemafulPipePtr CreateSchemafulPipe(
+    IMemoryChunkProviderPtr chunkProvider,
+    std::optional<int> maxFlushBatchCount = std::nullopt);
 
 ////////////////////////////////////////////////////////////////////////////////
 

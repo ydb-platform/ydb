@@ -8,6 +8,7 @@
 #include <contrib/libs/grpc/src/core/lib/iomgr/executor.h>
 
 #include <util/charset/utf8.h>
+#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/system/env.h>
 
@@ -433,7 +434,8 @@ namespace NUnifiedAgent::NPrivate {
                     return;
                 }
                 MakeGrpcCall();
-            }, &AsyncJoiner));
+            }, &AsyncJoiner),
+            AsyncJoiner);
         ForceCloseTimer = MakeHolder<TGrpcTimer>(Client->GetCompletionQueue(),
             MakeIOCallback([this](EIOStatus status) {
                 if (status == EIOStatus::Error) {
@@ -441,21 +443,24 @@ namespace NUnifiedAgent::NPrivate {
                 }
                 YLOG_INFO("ForceCloseTimer");
                 BeginClose(TInstant::Zero());
-            }, &AsyncJoiner));
+            }, &AsyncJoiner),
+            AsyncJoiner);
         PollTimer = MakeHolder<TGrpcTimer>(Client->GetCompletionQueue(),
             MakeIOCallback([this](EIOStatus status) {
                 if (status == EIOStatus::Error) {
                     return;
                 }
                 Poll();
-            }, &AsyncJoiner));
+            }, &AsyncJoiner),
+            AsyncJoiner);
         GrpcCallWatchdogTimer = MakeHolder<TGrpcTimer>(Client->GetCompletionQueue(),
             MakeIOCallback([this](EIOStatus status) {
                 if (status == EIOStatus::Error) {
                     return;
                 }
                 CheckGrpcCallInactivity();
-            }, &AsyncJoiner));
+            }, &AsyncJoiner),
+            AsyncJoiner);
         EventNotification = MakeHolder<TGrpcNotification>(Client->GetCompletionQueue(),
             MakeIOCallback([this](EIOStatus status) {
                 Y_ABORT_UNLESS(status == EIOStatus::Ok);
@@ -509,14 +514,22 @@ namespace NUnifiedAgent::NPrivate {
     }
 
     void TClientSession::CheckGrpcCallInactivity() {
-        with_lock(Lock) {
-            if (Closed || !Started) {
-                return;
+        if (!Lock.TryAcquire()) {
+            TSpinWait sw;
+
+            while (Lock.IsLocked() || !Lock.TryAcquire()) {
+                if (ForkInProgress.load()) {
+                    return;
+                }
+                sw.Sleep();
             }
-            const auto timeout = Client->GetParameters().GrpcCallInactivityTimeout;
-            if (timeout == TDuration::Zero()) {
-                return;
-            }
+        }
+        Y_DEFER {
+            Lock.Release();
+        };
+
+        const auto timeout = Client->GetParameters().GrpcCallInactivityTimeout;
+        if (!Closed && Started && timeout != TDuration::Zero()) {
             if (NegotiatedProtocol.Defined() && *NegotiatedProtocol > 0 &&
                 ActiveGrpcCall &&
                 !CloseStarted &&

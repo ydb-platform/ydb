@@ -1,7 +1,7 @@
 #include "write.h"
 
 #include <contrib/libs/simdjson/include/simdjson.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/map.h>

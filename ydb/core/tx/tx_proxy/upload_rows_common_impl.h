@@ -9,6 +9,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_info.h>
@@ -99,12 +100,13 @@ private:
 
 namespace NTxProxy {
 
-TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
+void DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues,
-    TIntrusivePtr<NACLib::TUserContext> userCtx);
+    TIntrusivePtr<NACLib::TUserContext> userCtx, bool forceNoFlowControl = false,
+    TInstant deadline = TInstant::Max(), TDuration operationTimeout = TDuration::Seconds(5 * 60));
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -168,6 +170,7 @@ public:
         NScheme::TTypeInfo Type;
         i32 Typmod;
         bool NotNull = false;
+        bool SetNotNullInProgress = false;
     };
 protected:
     TVector<TString> KeyColumnNames;
@@ -179,6 +182,7 @@ protected:
     TVector<std::pair<TString, NScheme::TTypeInfo>> SrcColumns; // source columns in CSV could have any order
     TVector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
     std::set<std::string> NotNullColumns;
+    std::set<std::string> SetNotNullInProgressColumns;
     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvert;
     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvertInplace;
@@ -270,6 +274,13 @@ protected:
             case NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy_CAST_TO_INFINITY:
                 return true;
         }
+    }
+
+    bool IsBulkUpsertValidationEnabled() const {
+        if (!HasAppData()) {
+            return true;
+        }
+        return AppDataVerified().ColumnShardConfig.GetEnableBulkUpsertValidation();
     }
 
 private:
@@ -386,17 +397,28 @@ private:
         THashMap<TString, ui32> columnByName;
         THashSet<TString> keyColumnsLeft;
         THashSet<TString> notNullColumnsLeft = entry.NotNullColumns;
+        THashSet<TString> setNotNullInProgressColumnsLeft = entry.SetNotNullInProgressColumns;
         THashSet<TString> defaultColumnsLeft;
+        THashSet<TString> virtualGeneratedColumns;
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
 
-        bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
+        const bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
+        const bool isPublicBulkUpsert = !AllowWriteToPrivateTable && !AllowWriteToIndexImplTable;
 
         for (const auto& [_, colInfo] : entry.Columns) {
             ui32 id = colInfo.Id;
             auto& name = colInfo.Name;
             auto& type = colInfo.PType;
-            SrcColumns.emplace_back(name, type); // TODO: is it in correct order ?
+            const bool isVirtualGenerated = colInfo.IsDefaultFromExpression() && !colInfo.DefaultExpression->Stored;
+
+            if (isVirtualGenerated) {
+                virtualGeneratedColumns.insert(name);
+                notNullColumnsLeft.erase(name);
+                setNotNullInProgressColumnsLeft.erase(name);
+            } else {
+                SrcColumns.emplace_back(name, type); // TODO: is it in correct order ?
+            }
 
             columnByName[name] = id;
             i32 keyOrder = colInfo.KeyOrder;
@@ -411,6 +433,12 @@ private:
 
             if (colInfo.IsDefaultFromLiteral()) {
                 defaultColumnsLeft.insert(name);
+            }
+
+            if (colInfo.IsDefaultFromExpression() && colInfo.DefaultExpression->Stored && isPublicBulkUpsert) {
+                return TConclusionStatus::Fail(TStringBuilder()
+                    << "Bulk upsert is not supported for tables with STORED generated columns: column "
+                    << name);
             }
         }
 
@@ -457,6 +485,11 @@ private:
                 return TConclusionStatus::Fail(Sprintf("Column %s is under build operation", name.c_str()));
             }
 
+            if (virtualGeneratedColumns.contains(name)) {
+                return TConclusionStatus::Fail(TStringBuilder()
+                    << "Column " << name << " is a virtual generated column and its value cannot be set explicitly");
+            }
+
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
@@ -480,6 +513,10 @@ private:
                         inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
                 }
                 if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
+                    ColumnsToConvertInplace[name] = ci.PType;
+                }
+
+                if (ci.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
                     ColumnsToConvertInplace[name] = ci.PType;
                 }
             } else if (typeInProto.has_decimal_type()) {
@@ -514,16 +551,21 @@ private:
                 NotNullColumns.emplace(ci.Name);
             }
 
+            if (ci.SetNotNullInProgress) {
+                setNotNullInProgressColumnsLeft.erase(ci.Name);
+                SetNotNullInProgressColumns.emplace(ci.Name);
+            }
+
             if (defaultColumnsLeft.contains(ci.Name)) {
                 defaultColumnsLeft.erase(ci.Name);
             }
 
             if (ci.KeyOrder != -1) {
-                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull};
+                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull, ci.SetNotNullInProgress};
                 keyColumnsLeft.erase(ci.Name);
                 KeyColumnNames[ci.KeyOrder] = ci.Name;
             } else {
-                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull});
+                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull, ci.SetNotNullInProgress});
                 ValueColumnNames.emplace_back(ci.Name);
                 ValueColumnTypes.emplace_back(ci.PType);
             }
@@ -537,7 +579,24 @@ private:
         }
 
         for (const auto& index : entry.Indexes) {
-            if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync &&
+            const auto indexType = index.GetType();
+            if ((indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance)
+                && index.GetFulltextIndexDescription().GetUseRowIdAsDocId())
+            {
+                for (const auto& reqCol : *reqColumns) {
+                    if (reqCol.first == NTableIndex::NFulltext::RowIdColumn) {
+                        return TConclusionStatus::Fail(TStringBuilder()
+                            << "Column " << NTableIndex::NFulltext::RowIdColumn
+                            << " is generated server-side for tables with fulltext indexes"
+                            << " and cannot be set explicitly via BulkUpsert");
+                    }
+                }
+            }
+
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync &&
                 AppData(ctx)->FeatureFlags.GetEnableBulkUpsertToAsyncIndexedTables()) {
                 continue;
             }
@@ -602,6 +661,14 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
         }
 
+        if (!setNotNullInProgressColumnsLeft.empty() && UpsertIfExists) {
+            setNotNullInProgressColumnsLeft.clear();
+        }
+
+        if (!setNotNullInProgressColumnsLeft.empty()) {
+            return TConclusionStatus::Fail(Sprintf("Missing columns under `SET NOT NULL` operation: %s. It is forbidden to insert NULL values.", JoinSeq(", ", setNotNullInProgressColumnsLeft).c_str()));
+        }
+
         if (!defaultColumnsLeft.empty() && UpsertIfExists) {
             // some default columns are not specified in the request, but upsert will only update existing rows
             // and only the columns specified in the request will be updated; unspecified default columns will not be changed.
@@ -609,13 +676,7 @@ private:
         }
 
         if (!defaultColumnsLeft.empty()) {
-            if (AppData(ctx)->FeatureFlags.GetDisableMissingDefaultColumnsInBulkUpsert()) {
-                return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
-            }
-
-            // TODO: Unreachable, delete "MissingDefaultColumns/Count" counter
-            UploadCounters.OnMissingDefaultColumns();
-            LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Missing default columns: " << JoinSeq(", ", defaultColumnsLeft).c_str());
+            return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
         }
 
         TConclusionStatus res = TConclusionStatus::Success();
@@ -745,6 +806,16 @@ private:
                     if (!ExtractBatch(errorMessage)) {
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                     }
+
+                    if (!ColumnsToConvertInplace.empty()) {
+                        auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        if (!convertResult.ok()) {
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                                TStringBuilder() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
+                        }
+
+                        Batch = *convertResult;
+                    }
                 }
                 break;
             }
@@ -830,7 +901,7 @@ private:
                 ctx);
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "starting LongTx");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Starting LongTx");
 
         // Begin Long Tx for writing a batch into OLAP table
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
@@ -861,7 +932,8 @@ private:
 
         LongTxId = msg->GetLongTxId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, TStringBuilder() << "started LongTx '" << LongTxId.ToString() << "'");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Started LongTx",
+            {"txId", LongTxId});
 
         auto outputColumns = GetOutputColumns(ctx);
         if (!outputColumns.empty()) {
@@ -947,11 +1019,13 @@ private:
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
         DoLongTxWriteSameMailbox(
-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, UserCtx);
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, UserCtx, false,
+            Deadline(), Timeout);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, TStringBuilder() << "rolling back LongTx '" << LongTxId.ToString() << "'");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Rolling back LongTx",
+            {"txId", LongTxId});
 
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
         ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvRollbackTx(LongTxId), 0, 0, Span.GetTraceId());
@@ -1113,8 +1187,8 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Range shards: "
-            << getShardsString(GetKeyRange()->GetPartitions()));
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Range shards",
+            {"shards", getShardsString(GetKeyRange()->GetPartitions())});
 
         MakeShardRequests(ctx);
     }
@@ -1223,7 +1297,8 @@ private:
 
             TTabletId shardId = keyRange->GetPartitions()[idx].ShardId;
 
-            LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards " << shardId);
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards",
+                {"shardId", shardId});
 
             // Mark our request as supporting overload subscriptions
             ui64 seqNo = ++uploadRetryStates[idx]->LastOverloadSeqNo;
@@ -1234,15 +1309,18 @@ private:
 
             auto res = ShardRepliesLeft.insert(shardId);
             if (!res.second) {
-                LOG_CRIT_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: shard " << shardId << "has already been added!");
+                YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: shard has already been added!",
+                    {"shardId", shardId});
             }
         }
 
         TBase::Become(&TThis::StateWaitResults);
         Span && Span.Event("WaitResults", {{"shardRequests", long(shardRequests.size())}});
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " uploading " << Rows->size() << " rows / "
-            << shardRequestCount << " shards");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Uploading status",
+            {"selfId", ctx.SelfID},
+            {"rows", Rows->size()},
+            {"shards", shardRequestCount});
 
         // Sanity check: don't break when we don't have any shards for some reason
         return ReplyIfDone(ctx);
@@ -1256,8 +1334,9 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST,
-            ctx.SelfID << " Failed to connect to shard " <<  ev->Get()->TabletId);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Failed to connect to shard",
+            {"selfId", ctx.SelfID},
+            {"tabletId", ev->Get()->TabletId});
 
         if (!Backoff.HasMore()) {
             return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
@@ -1290,10 +1369,10 @@ private:
 
         Span && Span.Event("TEvUploadRowsResponse", {{"shardId", long(shardId)}});
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: got "
-                    << NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())
-                    << " from shard " << shardResponse.GetTabletID()
-                    << " description: " << shardResponse.GetErrorDescription());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Got TEvUploadRowsResponse",
+            {"status", NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())},
+            {"tabletId", shardResponse.GetTabletID()},
+            {"error", shardResponse.GetErrorDescription()});
 
         if (shardResponse.GetStatus() == NKikimrTxDataShard::TError::OK) {
             ShardUploadRetryStates.erase(shardId);
@@ -1304,7 +1383,8 @@ private:
                     state->SentOverloadSeqNo = 0;
                 } else if (shardResponse.GetOverloadSubscribed() == state->SentOverloadSeqNo) {
                     // Wait until shard notifies us it is possible to write again
-                    LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: subscribed to overload change at shard " << shardId);
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: subscribed to overload change at shard",
+                        {"shardId", shardId});
                     return;
                 }
             }
@@ -1365,8 +1445,11 @@ private:
             count += v.Rows.size();
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, ctx.SelfID << " retry iteration " << Backoff.GetIteration()
-            << " for " << count << " rows / " << ShardUploadRetryStates.size() << " shards");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Retry",
+            {"selfId", ctx.SelfID},
+            {"iteration", Backoff.GetIteration()},
+            {"rows", count},
+            {"shards", ShardUploadRetryStates.size()});
 
         auto rows = std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>();
         rows->reserve(count);
@@ -1393,7 +1476,8 @@ private:
 
     void ReplyIfDone(const NActors::TActorContext& ctx) {
         if (!ShardRepliesLeft.empty()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for " << ShardRepliesLeft.size() << " shards replies");
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for shards replies",
+                {"shardRepliesLeft", ShardRepliesLeft.size()});
             return;
         }
 
@@ -1414,7 +1498,9 @@ private:
 
     void ReplyWithError(const TUploadStatus& status, const TActorContext& ctx) {
         AFL_VERIFY(status.GetCode() != Ydb::StatusIds::SUCCESS);
-        LOG_NOTICE_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << status.GetErrorMessage());
+        YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Error",
+            {"logPrefix", LogPrefix()},
+            {"error", status.GetErrorMessage()});
         RaiseIssue(NYql::TIssue(LogPrefix() << status.GetErrorMessage()));
         ReplyWithResult(status, ctx);
     }
@@ -1423,7 +1509,8 @@ private:
         UploadCountersGuard.OnReply(status, WrittenBytes);
         SendResult(ctx, status.GetCode());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, TStringBuilder() << "completed with status " << status.GetCode());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Completed",
+            {"status", status.GetCode()});
 
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit
@@ -1455,8 +1542,13 @@ inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescri
             return false;
         }
 
-        if (fd.NotNull && cells.back().IsNull()) {
-            err = TStringBuilder() << "Received NULL value for not null column: " << fd.ColName;
+        if ((fd.NotNull || fd.SetNotNullInProgress) && cells.back().IsNull()) {
+            if (fd.SetNotNullInProgress) {
+                err = TStringBuilder() << "Received NULL value for column " << fd.ColName
+                    << ": `SET NOT NULL` operation is currently in progress for this column";
+            } else {
+                err = TStringBuilder() << "Received NULL value for not null column: " << fd.ColName;
+            }
             return false;
         }
     }

@@ -1,6 +1,5 @@
 #include "constructors.h"
 
-#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -12,12 +11,6 @@ void TPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) 
             TBase::DropNextConstructor();
             continue;
         }
-        {
-            const auto& cursorLocal = std::dynamic_pointer_cast<ISimpleScanCursor>(cursor);
-            if (cursorLocal) {
-                TBase::MutableNextConstructor().ValidateCursor(*cursorLocal);
-            }
-        }
         if (usage) {
             TBase::MutableNextConstructor().SetIsStartedByCursor();
         } else {
@@ -27,21 +20,17 @@ void TPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) 
     }
 }
 
-std::vector<TInsertWriteId> TPortionsSources::GetUncommittedWriteIds() const {
-    std::vector<TInsertWriteId> result;
-    for (auto&& i : TBase::GetConstructors()) {
-        if (!i.GetPortion()->IsCommitted()) {
-            AFL_VERIFY(i.GetPortion()->GetPortionType() == EPortionType::Written);
-            auto* written = static_cast<const TWrittenPortionInfo*>(i.GetPortion().get());
-            result.emplace_back(written->GetInsertWriteId());
-        }
+std::vector<TPortionInfo::TConstPtr> TPortionsSources::GetConflictingPortions() const {
+    std::vector<TPortionInfo::TConstPtr> result;
+    for (auto&& i : TBase::GetConflictingConstructors()) {
+        result.emplace_back(i.GetPortion());
     }
     return result;
 }
 
 std::shared_ptr<TPortionDataSource> TSourceConstructor::Construct(
     const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const {
-    auto result = std::make_shared<TPortionDataSource>(GetSourceIdx(), Portion, context);
+    auto result = std::make_shared<TPortionDataSource>(GetSourceIdx(), Portion, context, IsConflicting());
     result->SetPortionAccessor(std::move(accessor));
     if (IsStartedByCursorFlag) {
         result->SetIsStartedByCursor();

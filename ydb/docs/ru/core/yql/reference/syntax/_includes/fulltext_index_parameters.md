@@ -9,4 +9,4 @@
     * `use_filter_ngram` - фильтр [N-грамм](https://en.wikipedia.org/wiki/N-gram) (`true` или `false`)
     * `use_filter_edge_ngram` - фильтр краевых [N-грамм](https://en.wikipedia.org/wiki/N-gram) (`true` или `false`)
     * `filter_ngram_min_length` - минимальная длина N-граммы (положительное целое)
-    * `filter_ngram_max_length` - максимальная длина N-граммы (положительное целое, \(\ge\) `filter_ngram_min_length`)
+    * `filter_ngram_max_length` - максимальная длина N-граммы (положительное целое)

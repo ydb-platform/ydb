@@ -1,9 +1,9 @@
 #include "rate_accounting.h"
 
 #include "probes.h"
+#include "public_counters.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/counters.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/util/token_bucket.h>
 #include <ydb/core/metering/time_grid.h>
@@ -14,8 +14,6 @@
 
 #include <util/string/builder.h>
 #include <util/generic/deque.h>
-
-#include <optional>
 
 LWTRACE_USING(KESUS_QUOTER_PROVIDER);
 
@@ -204,39 +202,19 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 class TPublicCounters {
-    static std::optional<TString> GetCategory(const NKikimrKesus::TAccountingConfig::TMetric& cfg) {
-        for (const auto& [label, value] : cfg.GetLabels()) {
-            if (to_lower(label) == "category") {
-                return value;
-            }
-        }
-
-        return std::nullopt;
-    }
-
 public:
     void Configure(const NKikimrKesus::TAccountingConfig::TMetric& cfg, double limit, ::NMonitoring::TDynamicCounterPtr counters) {
-        std::optional<TString> category;
-        if (!cfg.GetEnabled()
-            || !cfg.GetCloudId()
-            || !cfg.GetFolderId()
-            || !cfg.GetResourceId()
-            || !(category = GetCategory(cfg))
-        ) {
+        if (!IsPublicMetric(cfg)) {
             Limit.Reset();
             Consumed.Reset();
             Counters.Reset();
             return;
         }
 
+        auto category = GetMetricCategory(cfg);
         Y_ABORT_UNLESS(category.has_value());
-        Counters = GetServiceCounters(counters, "ydb_serverless", false)
-            ->GetSubgroup("host", "")
-            ->GetSubgroup("cloud_id", cfg.GetCloudId())
-            ->GetSubgroup("folder_id", cfg.GetFolderId())
-            ->GetSubgroup("database_id", cfg.GetResourceId())
-            ->GetSubgroup("database", cfg.GetDatabase())
-            ->GetSubgroup("category", *category);
+        Counters = GetPublicCounters(cfg, counters)->GetSubgroup("category", *category);
+
         Limit = Counters->GetExpiringNamedCounter("name", "resources.request_units.limit", false);
         Consumed = Counters->GetExpiringNamedCounter("name", "resources.request_units.consumed", true);
 
@@ -509,8 +487,8 @@ void TRateAccounting::RemoveOldClients() {
     }
 }
 
-bool TRateAccounting::RunAccounting() {
-    bool accountingRequired = RunAccountingNoClean();
+bool TRateAccounting::RunAccounting(double& accountedConsumed) {
+    bool accountingRequired = RunAccountingNoClean(accountedConsumed);
     RemoveOldClients();
     bool cleaningRequried = !SortedClients.empty();
     return accountingRequired || cleaningRequried;
@@ -522,7 +500,7 @@ void TRateAccounting::SetResourceCounters(const TIntrusivePtr<::NMonitoring::TDy
         new TEvPrivate::TEvCounters(Counters)));
 }
 
-bool TRateAccounting::RunAccountingNoClean() {
+bool TRateAccounting::RunAccountingNoClean(double& accountedConsumed) {
     // Check if we have enough values for at least one account period
     TInstant accountTill = History.Align(TActivationContext::Now() - CollectPeriod());
     if (accountTill - Accounted < AccountPeriod()) {
@@ -536,11 +514,16 @@ bool TRateAccounting::RunAccountingNoClean() {
         return false;
     }
 
+    TConsumptionHistory accountedHistory(History, Accounted, accountTill);
+    for (TInstant t = accountedHistory.Begin(); t != accountedHistory.End(); t = accountedHistory.Next(t)) {
+        accountedConsumed += accountedHistory.Get(t);
+    }
+
     // Offload hard work into accounting actor
     TActivationContext::Send(new NActors::IEventHandle(AccountingActor, Kesus,
         new TEvPrivate::TEvRunAccounting(
             accountTill - History.Interval(),
-            TConsumptionHistory(History, Accounted, accountTill))));
+            std::move(accountedHistory))));
     LWPROBE(ResourceAccountingSend, QuoterPath, Props.GetResourcePath(), accountTill, Accounted);
     Accounted = accountTill;
     return true;

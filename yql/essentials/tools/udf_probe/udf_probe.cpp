@@ -9,7 +9,7 @@ using namespace NKikimr::NMiniKQL;
 void ListModules(const TString& dir) {
     TVector<TString> udfPaths;
     NMiniKQL::FindUdfsInDir(dir, &udfPaths);
-    auto funcRegistry = CreateFunctionRegistry(nullptr, IBuiltinFunctionRegistry::TPtr(), false, udfPaths,
+    auto funcRegistry = CreateFunctionRegistry(/*backtraceCallback=*/nullptr, IBuiltinFunctionRegistry::TPtr(), /*allowUdfPatch=*/false, udfPaths,
                                                NUdf::IRegistrator::TFlags::TypesOnly);
 
     for (auto& m : funcRegistry->GetAllModuleNames()) {

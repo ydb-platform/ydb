@@ -172,16 +172,17 @@ class TSessionContext : public TThrRefBase {
     using TResponse = Ydb::Coordination::SessionResponse;
     using TGrpcStatus = NYdbGrpc::TGrpcStatus;
     using IProcessor = NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>;
+    using TSessionLostCallback = std::function<void()>;
 
     friend class TSession::TImpl;
 
 public:
     TSessionContext(
-            TGRpcConnectionsImpl* connections,
+            std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbState,
             const std::string& path,
             const TSessionSettings& settings)
-        : Connections_(connections)
+        : Connections_(std::move(connections))
         , DbDriverState_(dbState)
         , Path_(path)
         , Settings_(settings)
@@ -197,8 +198,8 @@ public:
         return result;
     }
 
-    void Start(IQueueClientContextProvider* provider) {
-        auto context = provider->CreateContext();
+    void Start() {
+        auto context = Connections_->CreateContext();
         if (!context) {
             auto status = MakeStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
             auto promise = std::move(SessionPromise);
@@ -333,11 +334,16 @@ private:
     struct TDescribeSemaphoreOp : public TSimpleOp {
         const std::string Name;
         TDescribeSemaphoreSettings Settings;
+        NYdbGrpc::TQueueClientCallbackGuardFactory CallbackGuardFactory;
         TPromise<TDescribeSemaphoreResult> Promise = NewPromise<TDescribeSemaphoreResult>();
 
-        TDescribeSemaphoreOp(const std::string& name, const TDescribeSemaphoreSettings& settings)
+        TDescribeSemaphoreOp(
+                const std::string& name,
+                const TDescribeSemaphoreSettings& settings,
+                NYdbGrpc::TQueueClientCallbackGuardFactory callbackGuardFactory)
             : Name(name)
             , Settings(settings)
+            , CallbackGuardFactory(std::move(callbackGuardFactory))
         {}
 
         void FillRequest(TRequest& req, uint64_t reqId) const override {
@@ -356,7 +362,9 @@ private:
             } else if (Settings.OnChanged_) {
                 std::function<void(bool)> callback;
                 callback.swap(Settings.OnChanged_);
-                callback(false);
+                NYdbGrpc::RunQueueClientCallback(CallbackGuardFactory, [&] {
+                    callback(false);
+                });
             }
         }
     };
@@ -527,7 +535,10 @@ private:
         if (IsClosed()) {
             return MakeClosedResult<TSemaphoreDescription>();
         }
-        auto op = std::make_unique<TDescribeSemaphoreOp>(name, settings);
+        auto op = std::make_unique<TDescribeSemaphoreOp>(
+            name,
+            settings,
+            Connections_->GetCallbackGuardFactory());
         auto future = op->Promise.GetFuture();
         if (IsWriteAllowed()) {
             DoSendSimpleOp(std::move(op));
@@ -580,6 +591,32 @@ private:
             PendingRequests.emplace_back(std::move(op));
         }
         return future;
+    }
+
+    std::shared_ptr<void> DoSubscribeSessionLost(TSessionLostCallback callback) {
+        TSessionLostCallback callbackToCall;
+        uint64_t callbackId = 0;
+        {
+            std::lock_guard guard(Lock);
+            if (SessionLossNotified || IsClosed() || SessionState == ESessionState::EXPIRED || ConnectionState == EConnectionState::STOPPED) {
+                callbackToCall = std::move(callback);
+            } else {
+                callbackId = NextSessionLostCallbackId++;
+                SessionLostCallbacks.emplace(callbackId, std::move(callback));
+            }
+        }
+
+        if (callbackToCall) {
+            callbackToCall();
+            return {};
+        }
+
+        return std::shared_ptr<void>(
+            new uint64_t(callbackId),
+            [self = TPtr(this), callbackId](void* ptr) {
+                delete static_cast<uint64_t*>(ptr);
+                self->DoUnsubscribeSessionLost(callbackId);
+            });
     }
 
     TDuration GetConnectTimeout() {
@@ -855,7 +892,34 @@ private:
         return dynamic_cast<TOperation*>(it->second.get());
     }
 
+    void DoUnsubscribeSessionLost(uint64_t callbackId) {
+        std::lock_guard guard(Lock);
+        SessionLostCallbacks.erase(callbackId);
+    }
+
+    std::vector<TSessionLostCallback> TakeSessionLostCallbacksLocked() {
+        std::vector<TSessionLostCallback> callbacks;
+        if (SessionLossNotified) {
+            return callbacks;
+        }
+
+        SessionLossNotified = true;
+        callbacks.reserve(SessionLostCallbacks.size());
+        for (auto& [_, callback] : SessionLostCallbacks) {
+            callbacks.emplace_back(std::move(callback));
+        }
+        SessionLostCallbacks.clear();
+        return callbacks;
+    }
+
 private:
+    template<class TCallback>
+    void RunUserCallback(TCallback&& callback) {
+        NYdbGrpc::RunQueueClientCallback(
+            Connections_->GetCallbackGuardFactory(),
+            std::forward<TCallback>(callback));
+    }
+
     void OnProcessorStatus(TStatus status) {
         std::shared_ptr<IQueueClientContext> context;
         TDbDriverStatePtr dbDriverState;
@@ -869,6 +933,7 @@ private:
         std::deque<TResultPromise<bool>> failedSemaphoreOps;
         std::deque<std::unique_ptr<TSimpleOp>> failedSimpleOps;
         TResultPromise<void> closePromise;
+        std::vector<TSessionLostCallback> sessionLostCallbacks;
 
         {
             std::lock_guard guard(Lock);
@@ -925,6 +990,7 @@ private:
                     SessionState = ESessionState::EXPIRED;
                     notifyExpired = true;
                 }
+                sessionLostCallbacks = TakeSessionLostCallbacksLocked();
             } else {
                 context = LocalContext;
                 ConnectionState = EConnectionState::DISCONNECTED;
@@ -1017,16 +1083,24 @@ private:
             op->SetFailure(status);
         }
 
+        for (auto& callback : sessionLostCallbacks) {
+            callback();
+        }
+
         if (closePromise.Initialized()) {
             closePromise.SetValue(TResult<void>(expired ? MakeStatus() : status));
         }
 
         if (stopped) {
             if (notifyExpired && Settings_.OnStateChanged_) {
-                Settings_.OnStateChanged_(ESessionState::EXPIRED);
+                RunUserCallback([this] {
+                    Settings_.OnStateChanged_(ESessionState::EXPIRED);
+                });
             }
             if (Settings_.OnStopped_) {
-                Settings_.OnStopped_();
+                RunUserCallback([this] {
+                    Settings_.OnStopped_();
+                });
             }
             return;
         }
@@ -1228,7 +1302,9 @@ private:
         }
 
         if (detached && Settings_.OnStateChanged_) {
-            Settings_.OnStateChanged_(ESessionState::DETACHED);
+            RunUserCallback([this] {
+                Settings_.OnStateChanged_(ESessionState::DETACHED);
+            });
         }
 
         if (sessionStartTimeoutContext) {
@@ -1442,9 +1518,13 @@ private:
                     }
                 }
                 if (expired && Settings_.OnStateChanged_) {
-                    Settings_.OnStateChanged_(ESessionState::EXPIRED);
+                    RunUserCallback([this] {
+                        Settings_.OnStateChanged_(ESessionState::EXPIRED);
+                    });
                 } else if (detached && Settings_.OnStateChanged_) {
-                    Settings_.OnStateChanged_(ESessionState::DETACHED);
+                    RunUserCallback([this] {
+                        Settings_.OnStateChanged_(ESessionState::DETACHED);
+                    });
                 }
                 return false;
             }
@@ -1475,7 +1555,9 @@ private:
                     }
                 }
                 if (Settings_.OnStateChanged_) {
-                    Settings_.OnStateChanged_(ESessionState::ATTACHED);
+                    RunUserCallback([this] {
+                        Settings_.OnStateChanged_(ESessionState::ATTACHED);
+                    });
                 }
                 if (replyPromise.Initialized()) {
                     // If there are no listeners session destructor will be immediately called outside of the lock
@@ -1518,7 +1600,9 @@ private:
                     Y_ABORT_UNLESS(SessionState != ESessionState::ATTACHED);
                 }
                 if (expired && Settings_.OnStateChanged_) {
-                    Settings_.OnStateChanged_(ESessionState::EXPIRED);
+                    RunUserCallback([this] {
+                        Settings_.OnStateChanged_(ESessionState::EXPIRED);
+                    });
                 }
                 return false;
             }
@@ -1555,7 +1639,9 @@ private:
                     supersededPromise.SetValue(TResult<bool>(std::move(status), false));
                 }
                 if (acceptedCallback) {
-                    acceptedCallback();
+                    RunUserCallback([callback = std::move(acceptedCallback)] {
+                        callback();
+                    });
                 }
                 return true;
             }
@@ -1636,7 +1722,9 @@ private:
                     }
                 }
                 if (callback) {
-                    callback(triggered);
+                    RunUserCallback([callback = std::move(callback), triggered] {
+                        callback(triggered);
+                    });
                 }
                 return true;
             }
@@ -1730,7 +1818,7 @@ private:
     }
 
 private:
-    TGRpcConnectionsImpl* const Connections_;
+    std::shared_ptr<TGRpcConnectionsImpl> Connections_;
     TDbDriverStatePtr DbDriverState_;
     const std::string Path_;
     const TSessionSettings Settings_;
@@ -1760,6 +1848,9 @@ private:
     std::deque<std::unique_ptr<TSimpleOp>> PendingRequests;
     std::unordered_map<uint64_t, std::unique_ptr<TSimpleOp>> SentRequests;
     TResultPromise<void> ReconnectPromise;
+    std::unordered_map<uint64_t, TSessionLostCallback> SessionLostCallbacks;
+    uint64_t NextSessionLostCallbackId = 1;
+    bool SessionLossNotified = false;
 
     // These are used to manage session timeout
     IQueueClientContextPtr SessionStartTimeoutContext;
@@ -1850,14 +1941,14 @@ public:
         const TSessionSettings& settings)
     {
         auto session = MakeIntrusive<TSessionContext>(
-            Connections_.get(),
+            Connections_,
             DbDriverState_,
             path,
             settings);
 
         auto result = session->TakeStartResult();
 
-        session->Start(Connections_.get());
+        session->Start();
 
         return result;
     }
@@ -2049,6 +2140,10 @@ public:
         return Context->DoDeleteSemaphore(name, force);
     }
 
+    std::shared_ptr<void> SubscribeSessionLost(std::function<void()> callback) {
+        return Context->DoSubscribeSessionLost(std::move(callback));
+    }
+
 private:
     const TIntrusivePtr<TSessionContext> Context;
 };
@@ -2121,6 +2216,10 @@ TAsyncResult<void> TSession::DeleteSemaphore(
     bool force)
 {
     return Impl_->DeleteSemaphore(name, force);
+}
+
+std::shared_ptr<void> TSession::SubscribeSessionLost(std::function<void()> callback) {
+    return Impl_->SubscribeSessionLost(std::move(callback));
 }
 
 }

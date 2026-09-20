@@ -120,5 +120,9 @@ namespace NTabletFlatExecutor {
     using TTxStamp = NTable::TTxStamp;
     using TRawVals = NTable::TRawVals;
     using NTable::MaxDecompressedBlobSize;
+
+    struct TNoTag {};
+    using TVacuumGeneration = ui64;
+    using TVacuumTag = std::variant<TNoTag, TVacuumGeneration>;
 }
 }

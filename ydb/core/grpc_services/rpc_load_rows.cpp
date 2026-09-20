@@ -1,6 +1,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_common/rpc_common.h"
+#include "rpc_load_rows.h"
 #include "service_table.h"
 #include "audit_dml_operations.h"
 
@@ -157,6 +158,65 @@ bool CheckAccess(const TString& table, const TString& token, const NSchemeCache:
 
 }
 
+std::shared_ptr<arrow::RecordBatch> RowsToBatch(
+    const TVector<std::pair<TSerializedCellVec, TString>>& rows,
+    const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
+    const std::set<std::string>& notNullColumns,
+    bool enableValidation,
+    TString& errorMessage)
+{
+    NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, notNullColumns);
+    batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
+    const auto startStatus = batchBuilder.Start(ydbSchema);
+    if (!startStatus.ok()) {
+        errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
+        return {};
+    }
+
+    for (size_t rowIdx = 0; rowIdx < rows.size(); ++rowIdx) {
+        const auto& key = rows[rowIdx].first;
+        const auto& valueSerialized = rows[rowIdx].second;
+
+        TSerializedCellVec value;
+        if (!TSerializedCellVec::TryParse(valueSerialized, value)) {
+            errorMessage = "Cannot parse serialized cell vec for value";
+            return {};
+        }
+
+        const auto keyCells = key.GetCells();
+        const auto valueCells = value.GetCells();
+
+        if (enableValidation) {
+            if (keyCells.size() + valueCells.size() != ydbSchema.size()) {
+                errorMessage = TStringBuilder()
+                    << "Row " << rowIdx << " has unexpected cells count " << (keyCells.size() + valueCells.size())
+                    << " (expected " << ydbSchema.size() << ")";
+                return {};
+            }
+
+            for (size_t i = 0; i < keyCells.size(); ++i) {
+                const TString sizeErr = NScheme::HasUnexpectedValueSize(keyCells[i], ydbSchema[i].second);
+                if (!sizeErr.empty()) {
+                    errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[i].first << "': " << sizeErr;
+                    return {};
+                }
+            }
+            for (size_t i = 0; i < valueCells.size(); ++i) {
+                const size_t col = keyCells.size() + i;
+                const TString sizeErr = NScheme::HasUnexpectedValueSize(valueCells[i], ydbSchema[col].second);
+                if (!sizeErr.empty()) {
+                    errorMessage = TStringBuilder() << "Row " << rowIdx << ", column '" << ydbSchema[col].first << "': " << sizeErr;
+                    return {};
+                }
+            }
+        }
+
+        batchBuilder.AddRow(keyCells, valueCells);
+    }
+
+    return batchBuilder.FlushBatch(false);
+}
+
 using TEvBulkUpsertRequest = TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest,
     Ydb::Table::BulkUpsertResponse>;
 
@@ -303,29 +363,8 @@ private:
     }
 
     bool ExtractBatch(TString& errorMessage) override {
-        Batch = RowsToBatch(*Rows, errorMessage);
+        Batch = NGRpcService::RowsToBatch(*Rows, YdbSchema, NotNullColumns, IsBulkUpsertValidationEnabled(), errorMessage);
         return Batch.get();
-    }
-
-    std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
-                                                    TString& errorMessage)
-    {
-        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
-        batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
-        const auto startStatus = batchBuilder.Start(YdbSchema);
-        if (!startStatus.ok()) {
-            errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
-            return {};
-        }
-
-        for (const auto& kv : rows) {
-            const TSerializedCellVec& key = kv.first;
-            const TSerializedCellVec value(kv.second);
-
-            batchBuilder.AddRow(key.GetCells(), value.GetCells());
-        }
-
-        return batchBuilder.FlushBatch(false);
     }
 
 private:

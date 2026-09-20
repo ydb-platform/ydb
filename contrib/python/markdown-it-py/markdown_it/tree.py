@@ -274,7 +274,7 @@ class SyntaxTreeNode:
 
     @property
     def tag(self) -> str:
-        """html tag name, e.g. \"p\" """
+        """html tag name, e.g. \"p\""""
         return self._attribute_token().tag
 
     @property

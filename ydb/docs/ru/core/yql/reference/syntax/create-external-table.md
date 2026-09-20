@@ -3,7 +3,7 @@
 Вызов `CREATE EXTERNAL TABLE` создает [внешнюю таблицу](../../../concepts/datamodel/external_table.md) с указанной схемой данных.
 
 ```yql
-CREATE EXTERNAL TABLE table_name (
+CREATE [OR REPLACE] EXTERNAL TABLE [IF NOT EXISTS] table_name (
   column1 type1,
   column2 type2 NOT NULL,
   ...
@@ -18,6 +18,8 @@ CREATE EXTERNAL TABLE table_name (
 
 Где:
 
+* `OR REPLACE` - если внешняя таблица с таким именем уже существует, она будет заменена новым определением; версия объекта при этом увеличивается.
+* `IF NOT EXISTS` - не выводить ошибку, если внешняя таблица с таким именем уже существует; существующая таблица останется без изменений.
 * `column1 type1`, `columnN typeN NULL` - колонка данных и ее тип;
 * `data_source_name` - имя [подключения](../../../concepts/datamodel/external_data_source.md) к S3 ({{ objstorage-name }}).
 * `path` - путь внутри бакета с данными. Путь должен вести на существующий каталог внутри бакета.

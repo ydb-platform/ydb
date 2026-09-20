@@ -22,7 +22,7 @@
 
 namespace NMonitoring {
     namespace {
-        constexpr ui32 MAX_LABEL_VALUE_LEN = 256;
+        constexpr ui32 MAX_LABEL_VALUE_LEN = 1024;
 
         using TLabelsMap = THashMap<TString, TString>;
 
@@ -585,11 +585,11 @@ namespace NMonitoring {
             }
 
             double ParseGoDouble(TStringBuf str) {
-                if (str == TStringBuf("+Inf")) {
+                if (AsciiEqualsIgnoreCase(str, "+Inf") || AsciiEqualsIgnoreCase(str, "Inf")) {
                     return std::numeric_limits<double>::infinity();
-                } else if (str == TStringBuf("-Inf")) {
+                } else if (AsciiEqualsIgnoreCase(str, "-Inf")) {
                     return -std::numeric_limits<double>::infinity();
-                } else if (str == TStringBuf("NaN") || str == TStringBuf("Nan")) {
+                } else if (AsciiEqualsIgnoreCase(str, "NaN")) {
                     return NAN;
                 }
 

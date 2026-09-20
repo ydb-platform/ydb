@@ -118,7 +118,7 @@ def get_mnc_config():
 def get_config_by_args(config_scheme, args):
     mnc_config = get_mnc_config()
     if args.config_path is None and args.config_name is None:
-        raise CliError('Config must be specified by --config_path or --config')
+        raise CliError('Config must be specified by --config-path or --config')
     if args.config_path is not None:
         return read_config(config_scheme, 'config_from_cli', args.config_path)
     paths = [

@@ -46,8 +46,11 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 40000000000
+    State: OK
+    Replicated: true
   }
   Status: "READY"
+  Ready: true
 }
 Group {
   GroupId: 2147483649

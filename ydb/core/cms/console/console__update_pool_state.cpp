@@ -1,5 +1,7 @@
 #include "console_tenants_manager.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
+
 namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxUpdatePoolState : public TTransactionBase<TTenantsManager> {
@@ -23,26 +25,27 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxUpdatePoolState for pool " << Pool->Config.GetName() << " of " << Tenant->Path
-                    << " state=" << State);
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolState execute",
+            {"poolName", Pool->Config.GetName()},
+            {"tenantPath", Tenant->Path},
+            {"state", State});
 
         if (Tenant != Self->GetTenant(Tenant->Path)) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                        "TTxUpdatePoolState tenant " << Tenant->Path << " mismatch");
+            YDB_LOG_ERROR_CTX(ctx, "TTxUpdatePoolState tenant mismatch",
+                {"tenantPath", Tenant->Path});
             return true;
         }
 
         if (!Tenant->StoragePools.contains(Pool->Kind)
             || Pool != Tenant->StoragePools.at(Pool->Kind)) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                        "TTxUpdatePoolState pool " << Pool->Config.GetName() << " mismatch");
+            YDB_LOG_ERROR_CTX(ctx, "TTxUpdatePoolState pool mismatch",
+                {"poolName", Pool->Config.GetName()});
             return true;
         }
 
         if (Pool->Worker != Worker) {
-            LOG_NOTICE_S(ctx, NKikimrServices::CMS_TENANTS,
-                         "TTxUpdatePoolState pool " << Pool->Config.GetName() << " worker mismatch");
+            YDB_LOG_NOTICE_CTX(ctx, "TTxUpdatePoolState pool worker mismatch",
+                {"poolName", Pool->Config.GetName()});
             return true;
         }
 
@@ -69,8 +72,9 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxUpdatePoolState complete for " << Pool->Config.GetName());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolState complete",
+            {"poolName", Pool->Config.GetName()},
+            {"state", Tenant->State});
 
         if (Update) {
             Self->Counters.Inc(Pool->Kind, COUNTER_ALLOCATED_STORAGE_UNITS,
@@ -85,7 +89,13 @@ public:
                 Self->TxProcessor->ProcessTx(Self->CreateTxUpdateTenantState(Tenant->Path, TTenant::CREATING_SUBDOMAIN), ctx);
             else if (Tenant->State == TTenant::REMOVING_POOLS && !Tenant->HasPoolsToDelete())
                 Self->TxProcessor->ProcessTx(Self->CreateTxRemoveTenantDone(Tenant), ctx);
-            else if (Tenant->State == TTenant::RUNNING)
+            else if (Tenant->State == TTenant::REMOVING_GROUPS) {
+                if (!Pool->GroupsToDecommit.empty()) {
+                    Self->ProcessTenantActions(Tenant, ctx);
+                } else if (!Tenant->HasPoolsToCreate()) {
+                    Self->TxProcessor->ProcessTx(Self->CreateTxUpdateTenantState(Tenant->Path, TTenant::RUNNING), ctx);
+                }
+            } else if (Tenant->State == TTenant::RUNNING)
                 Self->ProcessTenantActions(Tenant, ctx);
         }
 

@@ -1,6 +1,27 @@
+
+* Added support for column-oriented (OLAP) tables to the `ydb tools dump` and `ydb tools restore` commands. `--import-data` is not supported for column tables and automatically falls back to `--bulk-upsert`.
+* Fixed `ydb tools restore` failing on `Float` and `Double` NaN/infinity values in local backups, and added file, line, column, and value context to parsing errors.
+* Added support for `--format svg` plan format to `ydb sql` command when used with `--explain` or `--explain-analyze` options
+* Added `--content-based-deduplication` option to `ydb topic create` and `ydb topic alter` commands.
+* Added `--aws-sdk-log` option to `ydb workload sqs run read|write` commands.
+* Added support for the new `setnotnull` operation in the `ydb operation` subcommands.
+
+## 2.33.0 ##
+
+* The `ydb` interactive AI mode can now search the YDB documentation.
+
+## 2.32.0 ##
+
+* Added `--no-consumer` option to `ydb topic read` command.
+* Added an AI mode to the `ydb` interactive mode. Press Ctrl+T to switch to it.
+* Added `--codec kafka-batch`, `--batch-inner-codec`, `--batch-flush-interval`, `--batch-flush-size`, and `--batch-flush-message-count` options to `ydb workload topic run write|full` commands.
+* `ydb scheme describe` now prints a human-readable description for external data sources (source type, location, auth method, database, properties and creation time) instead of empty output.
+* Added `--partition-max-inflight-bytes` option to `ydb topic workload`
+* Added `--partition-write-speed-mps` and `--partition-write-burst-messages` options to `ydb topic create` and `ydb topic alter` commands.
 * Added CPU Time statistics to benchmarks run commands.
 * `ydb sql`: add `--resource-pool` option
 * `ydb` interactive mode add `SET resource_pool` command
+* Added `ydb workload fulltext` command to make load testing and measure quality of fulltext indexes.
 
 ## 2.31.0 ##
 

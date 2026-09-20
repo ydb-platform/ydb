@@ -18,7 +18,7 @@ IGraphTransformer::TStatus TExprOutputTransformer::operator()(
         return IGraphTransformer::TStatus::Ok;
     }
 
-    auto ast = ConvertToAst(*ExprRoot_, ctx, WithTypes_ ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(*ExprRoot_, ctx, WithTypes_ ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, /*refAtoms=*/true);
     ui32 prettyFlags = TAstPrintFlags::ShortQuote;
     if (!WithTypes_) {
         prettyFlags |= TAstPrintFlags::PerLine;

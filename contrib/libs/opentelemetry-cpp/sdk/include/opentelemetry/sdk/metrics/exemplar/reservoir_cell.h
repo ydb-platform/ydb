@@ -71,10 +71,10 @@ public:
     auto attributes = attributes_;
     PointDataAttributes point_data_attributes;
     point_data_attributes.attributes = filtered(attributes, point_attributes);
-    if (nostd::holds_alternative<int64_t>(value_))
+
+    if (const int64_t *value = nostd::get_if<int64_t>(&value_))
     {
-      point_data_attributes.point_data =
-          ExemplarData::CreateSumPointData(nostd::get<int64_t>(value_));
+      point_data_attributes.point_data = ExemplarData::CreateSumPointData(*value);
     }
     std::shared_ptr<ExemplarData> result{
         new ExemplarData{ExemplarData::Create(context_, record_time_, point_data_attributes)}};
@@ -96,10 +96,9 @@ public:
     auto attributes = attributes_;
     PointDataAttributes point_data_attributes;
     point_data_attributes.attributes = filtered(attributes, point_attributes);
-    if (nostd::holds_alternative<double>(value_))
+    if (const double *value = nostd::get_if<double>(&value_))
     {
-      point_data_attributes.point_data =
-          ExemplarData::CreateSumPointData(nostd::get<double>(value_));
+      point_data_attributes.point_data = ExemplarData::CreateSumPointData(*value);
     }
     std::shared_ptr<ExemplarData> result{
         new ExemplarData{ExemplarData::Create(context_, record_time_, point_data_attributes)}};

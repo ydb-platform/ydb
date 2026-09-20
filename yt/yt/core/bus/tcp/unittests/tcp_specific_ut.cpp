@@ -17,21 +17,23 @@
 
 #include <library/cpp/testing/common/network.h>
 
-namespace NYT::NBus::NTests {
+namespace NYT::NBus::NTcp::NTests {
 namespace {
 
+
 using namespace NConcurrency;
+using namespace NYT::NBus::NTests;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTcpBusTest
+class TBusTest
     : public ::testing::Test
 {
 protected:
     NTesting::TPortHolder Port_;
     std::string Address_;
 
-    TTcpBusTest()
+    TBusTest()
         : Port_(NTesting::GetFreePort())
         , Address_(Format("localhost:%v", Port_))
     { }
@@ -39,34 +41,34 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TTcpBusTest, ClientConfigDefaultConstructor)
+TEST_F(TBusTest, ClientConfigDefaultConstructor)
 {
     auto config = New<TBusClientConfig>();
     EXPECT_FALSE(config->Address);
     EXPECT_FALSE(config->UnixDomainSocketPath);
 }
 
-TEST_F(TTcpBusTest, ServerConfigDefaultConstructor)
+TEST_F(TBusTest, ServerConfigDefaultConstructor)
 {
     auto config = New<TBusServerConfig>();
     EXPECT_FALSE(config->Port);
     EXPECT_FALSE(config->UnixDomainSocketPath);
 }
 
-TEST_F(TTcpBusTest, CreateBusClientConfig)
+TEST_F(TBusTest, CreateBusClientConfig)
 {
     auto config = TBusClientConfig::CreateTcp(Address_);
     EXPECT_EQ(Address_, *config->Address);
     EXPECT_FALSE(config->UnixDomainSocketPath);
 }
 
-TEST_F(TTcpBusTest, CreateUdsBusClientConfig)
+TEST_F(TBusTest, CreateUdsBusClientConfig)
 {
     auto config = TBusClientConfig::CreateUds("unix-socket");
     EXPECT_EQ("unix-socket", *config->UnixDomainSocketPath);
 }
 
-TEST_F(TTcpBusTest, TerminateBeforeAccept)
+TEST_F(TBusTest, TerminateBeforeAccept)
 {
     auto serverSocket = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
     EXPECT_NE(serverSocket, INVALID_SOCKET);
@@ -89,13 +91,13 @@ TEST_F(TTcpBusTest, TerminateBeforeAccept)
     auto clientSocket = NNet::AcceptSocket(serverSocket, &clientAddress);
     EXPECT_NE(clientSocket, INVALID_SOCKET);
 
-    EXPECT_EQ(WaitForFast(terminated.ToFuture()).GetCode(), error.GetCode());
+    EXPECT_EQ(WaitFor(terminated.ToFuture()).GetCode(), error.GetCode());
 
     NNet::CloseSocket(clientSocket);
     NNet::CloseSocket(serverSocket);
 }
 
-TEST_F(TTcpBusTest, BlackHole)
+TEST_F(TBusTest, BlackHole)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port_);
     auto server = CreateBusServer(serverConfig);
@@ -109,19 +111,57 @@ TEST_F(TTcpBusTest, BlackHole)
     auto message = CreateMessage(1);
     auto options = TSendOptions{.TrackingLevel = EDeliveryTrackingLevel::Full};
 
-    WaitForFast(bus->Send(message, options))
+    WaitFor(bus->Send(message, options))
         .ThrowOnError();
 
     bus->SetTosLevel(BlackHoleTosLevel);
 
-    auto result = WaitForFast(bus->Send(message, options));
+    auto result = WaitFor(bus->Send(message, options));
     EXPECT_FALSE(result.IsOK());
 
-    WaitForFast(server->Stop())
+    WaitFor(server->Stop())
+        .ThrowOnError();
+}
+
+TEST_F(TBusTest, DirectPlacementDelivery)
+{
+    auto serverConfig = TBusServerConfig::CreateTcp(Port_);
+    auto server = CreateBusServer(serverConfig);
+    auto handler = New<TDirectPlacementBusHandler>();
+    server->Start(handler);
+
+    auto client = CreateBusClient(TBusClientConfig::CreateTcp(Address_));
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+
+    constexpr int PartCount = 4;
+    constexpr int DirectPlacementTransferPartCount = 2;
+    auto message = CreateMessage(PartCount, 64_KB);
+
+    auto options = TSendOptions{
+        .TrackingLevel = EDeliveryTrackingLevel::Full,
+        .DirectPlacementTransferPartCount = DirectPlacementTransferPartCount,
+    };
+    WaitFor(bus->Send(message, options))
+        .ThrowOnError();
+
+    auto receivedPartSizes = handler->WaitForReceivedPartSizes();
+
+    // TCP does not support direct placement transfer: the option is honored in
+    // compat mode, i.e. the whole message is delivered inline (no transfer) and
+    // must still be reassembled identically.
+    EXPECT_FALSE(handler->SawDirectPlacementTransfer());
+
+    std::vector<i64> expectedPartSizes;
+    for (const auto& part : message) {
+        expectedPartSizes.push_back(std::ssize(part));
+    }
+    EXPECT_EQ(expectedPartSizes, receivedPartSizes);
+
+    WaitFor(server->Stop())
         .ThrowOnError();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NBus::NTests
+} // namespace NYT::NBus::NTcp::NTests

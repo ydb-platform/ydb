@@ -1,0 +1,47 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didOpen",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "languageId": "yql",
+        "version": 1,
+        "text": "FROM (SELECT 1 AS a) AS x SELECT x.\n"
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "textDocument/completion",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql"
+      },
+      "position": {
+        "line": 0,
+        "character": 35
+      },
+      "context": {
+        "triggerKind": 1
+      }
+    }
+  },
+  {
+    "id": 4,
+    "jsonrpc": "2.0",
+    "result": {
+      "isIncomplete": false,
+      "items": [
+        {
+          "filterText": "a",
+          "insertTextFormat": 1,
+          "kind": 5,
+          "label": "a",
+          "sortText": "0"
+        }
+      ]
+    }
+  }
+]

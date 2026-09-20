@@ -2,8 +2,9 @@
 
 #include <yql/essentials/minikql/arrow/mkql_bit_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -32,27 +33,27 @@ Y_UNIT_TEST(TestCompressByte) {
 }
 
 Y_UNIT_TEST(TestLoad) {
-    const ui8 src[] = {0b01110100, 0b11011101, 0b01101011};
-    UNIT_ASSERT_EQUAL(LoadByteUnaligned(src, 10), 0b11110111);
-    UNIT_ASSERT_EQUAL(LoadByteUnaligned(src, 16), 0b01101011);
+    const std::array<ui8, 3> src = {0b01110100, 0b11011101, 0b01101011};
+    UNIT_ASSERT_EQUAL(LoadByteUnaligned(src.data(), 10), 0b11110111);
+    UNIT_ASSERT_EQUAL(LoadByteUnaligned(src.data(), 16), 0b01101011);
 }
 
 Y_UNIT_TEST(CompressAligned) {
-    const ui8 data[] = {0b01110100, 0b11011101, 0b01101011};
-    const ui8 mask[] = {0b11101100, 0b10111010, 0b10001111};
-    ui8 result[100];
-    auto res = CompressBitmap(data, 0, mask, 0, result, 0, 24);
+    const std::array<ui8, 3> data = {0b01110100, 0b11011101, 0b01101011};
+    const std::array<ui8, 3> mask = {0b11101100, 0b10111010, 0b10001111};
+    std::array<ui8, 100> result;
+    auto res = CompressBitmap(data.data(), 0, mask.data(), 0, result.data(), 0, 24);
     UNIT_ASSERT_EQUAL(res, 15);
     UNIT_ASSERT_EQUAL(result[0], 0b11001101);
-    UNIT_ASSERT_EQUAL(result[1] & 0x7fu, 0b00101110);
+    UNIT_ASSERT_EQUAL(result[1] & 0x7fU, 0b00101110);
 }
 
 Y_UNIT_TEST(CompressUnalignedOutput) {
-    const ui8 data[] = {0b01110100, 0b11011101, 0b01101011};
-    const ui8 mask[] = {0b11101100, 0b10111010, 0b10001111};
-    ui8 result[100];
+    const std::array<ui8, 3> data = {0b01110100, 0b11011101, 0b01101011};
+    const std::array<ui8, 3> mask = {0b11101100, 0b10111010, 0b10001111};
+    std::array<ui8, 100> result;
     result[0] = 0b101;
-    auto res = CompressBitmap(data, 0, mask, 0, result, 3, 24);
+    auto res = CompressBitmap(data.data(), 0, mask.data(), 0, result.data(), 3, 24);
     UNIT_ASSERT_EQUAL(res, 18);
     UNIT_ASSERT_EQUAL(result[0], 0b01101101);
     UNIT_ASSERT_EQUAL(result[1], 0b01110110);
@@ -61,5 +62,4 @@ Y_UNIT_TEST(CompressUnalignedOutput) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBitUtilsTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

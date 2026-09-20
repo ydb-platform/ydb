@@ -9,9 +9,11 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 import math
+import unicodedata
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -28,6 +30,7 @@ from hypothesis.internal.conjecture.choice import (
     choice_key,
     choice_permitted,
     choice_to_index,
+    choices_key,
 )
 from hypothesis.internal.conjecture.data import (
     ConjectureData,
@@ -87,6 +90,34 @@ def sort_key(nodes: Sequence[ChoiceNode]) -> tuple[int, tuple[int, ...]]:
         len(nodes),
         tuple(choice_to_index(node.value, node.constraints) for node in nodes),
     )
+
+
+@lru_cache(maxsize=4096)
+def _natural_simpler_chars(c, intervals):
+    """Return single-char replacements for ``c`` derived from natural text
+    transformations - case mapping (upper, lower, casefold) and unicode
+    decomposition (NFD, NFKD). We take each individual character of the
+    transformed form so that e.g. ``ß`` can shrink to ``s`` via casefold
+    even though the full case-folded form is two characters.
+
+    Only candidates which are in ``intervals`` and which have a strictly
+    smaller index in shrink order than ``c`` are returned, sorted by that
+    shrink-order index. Callers must pass a single character that is itself
+    in ``intervals``.
+    """
+    candidates: set[str] = set()
+    for form in ("NFKD", "NFD"):
+        candidates.update(unicodedata.normalize(form, c))
+    for transformed in (c.upper(), c.lower(), c.casefold()):
+        candidates.update(transformed)
+    candidates.discard(c)
+    original_idx = intervals.index_from_char_in_shrink_order(c)
+    result = sorted(
+        (intervals.index_from_char_in_shrink_order(cand), cand)
+        for cand in candidates
+        if cand in intervals
+    )
+    return [cand for idx, cand in result if idx < original_idx]
 
 
 @dataclass(slots=True, frozen=False)
@@ -321,6 +352,7 @@ class Shrinker:
             ShrinkPass(self.redistribute_numeric_pairs),
             ShrinkPass(self.lower_integers_together),
             ShrinkPass(self.lower_duplicated_characters),
+            ShrinkPass(self.normalize_unicode_chars),
         ]
 
         # Because the shrinker is also used to `pareto_optimise` in the target phase,
@@ -459,10 +491,12 @@ class Shrinker:
         self.explain()
 
     def explain(self) -> None:
-
         if not self.should_explain or not self.shrink_target.arg_slices:
             return
+        with self.engine._log_phase_statistics("explain"):
+            self._explain()
 
+    def _explain(self) -> None:
         self.max_stall = 2**100
         shrink_target = self.shrink_target
         nodes = self.nodes
@@ -501,27 +535,36 @@ class Shrinker:
             ):
                 continue
 
+            # Try a few targeted candidates before falling back to random sampling,
+            # so that simple cases like ``assert n1 == n2`` -- where the only
+            # passing value of ``n1`` is exactly ``n2``'s value -- aren't reported
+            # as freely-variable just because random sampling missed it.
+            candidates = list(self._explain_candidates(start, end))
+
             # Run our experiments
             n_same_failures = 0
             note = "or any other generated value"
             # TODO: is 100 same-failures out of 500 attempts a good heuristic?
-            for n_attempt in range(500):  # pragma: no branch
+            for n_attempt in range(500 + len(candidates)):  # pragma: no branch
                 # no-branch here because we don't coverage-test the abort-at-500 logic.
 
-                if n_attempt - 10 > n_same_failures * 5:
+                if n_attempt - 10 - len(candidates) > n_same_failures * 5:
                     # stop early if we're seeing mostly invalid examples
                     break  # pragma: no cover
 
-                # replace start:end with random values
-                replacement = []
-                for i in range(start, end):
-                    node = nodes[i]
-                    if not node.was_forced:
-                        value = draw_choice(
-                            node.type, node.constraints, random=self.random
-                        )
-                        node = node.copy(with_value=value)
-                    replacement.append(node.value)
+                if n_attempt < len(candidates):
+                    replacement = list(candidates[n_attempt])
+                else:
+                    # replace start:end with random values
+                    replacement = []
+                    for i in range(start, end):
+                        node = nodes[i]
+                        if not node.was_forced:
+                            value = draw_choice(
+                                node.type, node.constraints, random=self.random
+                            )
+                            node = node.copy(with_value=value)
+                        replacement.append(node.value)
 
                 attempt = choices[:start] + tuple(replacement) + choices[end:]
                 result = self.engine.cached_test_function(attempt, extend="full")
@@ -609,6 +652,36 @@ class Shrinker:
                         "The test always failed when commented parts were varied together."
                     )
                     break
+
+    def _explain_candidates(
+        self, start: int, end: int
+    ) -> "Iterator[tuple[ChoiceT, ...]]":
+        """Yield deterministic candidate replacements for ``nodes[start:end]``.
+
+        Random sampling alone misses cases like ``assert n1 == n2``, where the
+        only passing value of ``n1`` is exactly ``n2``'s value. We try
+        substituting values from each other arg slice with matching length and
+        types, which catches such comparisons. Invalid borrowed values just
+        produce an irrelevant test result the outer loop discards.
+        """
+        nodes = self.nodes
+        target_types = tuple(nodes[i].type for i in range(start, end))
+        current_key = choices_key(tuple(nodes[i].value for i in range(start, end)))
+        seen: set[tuple[Any, ...]] = {current_key}
+        for start2, end2 in sorted(self.shrink_target.arg_slices):
+            if (start2, end2) == (start, end) or (end2 - start2) != (end - start):
+                continue
+            if (
+                tuple(nodes[start2 + j].type for j in range(end - start))
+                != target_types
+            ):
+                continue
+            borrowed = tuple(nodes[start2 + j].value for j in range(end - start))
+            key = choices_key(borrowed)
+            if key in seen:
+                continue
+            seen.add(key)
+            yield borrowed
 
     def greedy_shrink(self) -> None:
         """Run a full set of greedy shrinks (that is, ones that will only ever
@@ -1113,66 +1186,59 @@ class Shrinker:
         # If this produced something completely invalid we ditch it
         # here rather than trying to persevere.
         if attempt.status is Status.OVERRUN:
-            return False
+            # Lowering a size-controlling choice can make the realigned (and
+            # now boring) collection stop triggering the failure, so the test
+            # draws further and overruns before we see the realignment -- this
+            # is common in stateful tests, where a non-failing step is followed
+            # by more steps. Re-run without the length limit to recover the
+            # realigned tree, which the repair logic below can then act on.
+            attempt = self.engine.cached_test_function(
+                [n.value for n in initial_attempt], extend="full"
+            )
+            if attempt.status is Status.OVERRUN:
+                return False
 
         if attempt.status is Status.INVALID:
             return False
 
-        if attempt.misaligned_at is not None:
-            # we're invalid due to a misalignment in the tree. We'll try to fix
-            # a very specific type of misalignment here: where we have a node of
-            # {"size": n} and tried to draw the same node, but with {"size": m < n}.
-            # This can occur with eg
-            #
-            #   n = data.draw_integer()
-            #   s = data.draw_string(min_size=n)
-            #
-            # where we try lowering n, resulting in the test_function drawing a lower
-            # min_size than our attempt had for the draw_string node.
-            #
-            # We'll now try realigning this tree by:
-            # * replacing the constraints in our attempt with what test_function tried
-            #   to draw in practice
-            # * truncating the value of that node to match min_size
-            #
-            # This helps in the specific case of drawing a value and then drawing
-            # a collection of that size...and not much else. In practice this
-            # helps because this antipattern is fairly common.
-
-            # TODO we'll probably want to apply the same trick as in the valid
-            # case of this function of preserving from the right instead of
-            # preserving from the left. see test_can_shrink_variable_string_draws.
-
-            index, attempt_choice_type, attempt_constraints, _attempt_forced = (
-                attempt.misaligned_at
-            )
-            node = self.nodes[index]
-            if node.type != attempt_choice_type:
-                return False  # pragma: no cover
-            if node.was_forced:
-                return False  # pragma: no cover
-
-            if node.type in {"string", "bytes"}:
-                # if the size *increased*, we would have to guess what to pad with
-                # in order to try fixing up this attempt. Just give up.
-                if node.constraints["min_size"] <= attempt_constraints["min_size"]:
-                    # attempts which increase min_size tend to overrun rather than
-                    # be misaligned, making a covering case difficult.
-                    return False  # pragma: no cover
-                # the size decreased in our attempt. Try again, but truncate the value
-                # to that size by removing any elements past min_size.
-                return self.consider_new_nodes(
-                    initial_attempt[: node.index]
-                    + [
-                        initial_attempt[node.index].copy(
-                            with_constraints=attempt_constraints,
-                            with_value=initial_attempt[node.index].value[
-                                : attempt_constraints["min_size"]
-                            ],
-                        )
-                    ]
-                    + initial_attempt[node.index :]
-                )
+        # When we lower a choice that controls the size of a later collection,
+        # eg
+        #
+        #   n = data.draw_integer()
+        #   s = data.draw_string(min_size=n, max_size=n)
+        #
+        # the recorded value for that collection no longer fits the constraints
+        # the test function actually used, so the engine realigns the tree by
+        # substituting a freshly-generated (simplest) value -- discarding
+        # whatever made the collection interesting. (We can't rely on
+        # ``attempt.misaligned_at`` to detect this, because the realigned choice
+        # sequence is often independently cached as an ordinary, non-misaligned
+        # result.) We detect a string/bytes node whose recorded value is now too
+        # long, and retry with it truncated to fit. We try preserving content
+        # from either end, since the interesting part may be at the start or the
+        # end (see test_can_shrink_variable_string_draws).
+        for i in range(min(len(initial_attempt), len(attempt.nodes))):
+            node = initial_attempt[i]
+            attempt_node = attempt.nodes[i]
+            if (
+                node.type == attempt_node.type
+                and node.type in {"string", "bytes"}
+                and not node.was_forced
+                and len(node.value) > attempt_node.constraints["max_size"]
+            ):
+                max_size = attempt_node.constraints["max_size"]
+                for truncated in (node.value[:max_size], node.value[-max_size:]):
+                    if self.consider_new_nodes(
+                        initial_attempt[:i]
+                        + [
+                            node.copy(
+                                with_constraints=attempt_node.constraints,
+                                with_value=truncated,
+                            )
+                        ]
+                        + initial_attempt[i + 1 :]
+                    ):
+                        return True
 
         lost_nodes = len(self.nodes) - len(attempt.nodes)
         if lost_nodes <= 0:
@@ -1221,17 +1287,18 @@ class Shrinker:
         return False
 
     def remove_discarded(self):
-        """Try removing all bytes marked as discarded.
+        """Try removing all nodes marked as discarded.
 
         This is primarily to deal with data that has been ignored while
         doing rejection sampling - e.g. as a result of an integer range, or a
         filtered strategy.
 
-        Such data will also be handled by the adaptive_example_deletion pass,
-        but that pass is necessarily more conservative and will try deleting
-        each interval individually. The common case is that all data drawn and
-        rejected can just be thrown away immediately in one block, so this pass
-        will be much faster than trying each one individually when it works.
+        Such data will also be handled by the ``node_program("X")`` deletion
+        passes, but those are necessarily more conservative and will try
+        deleting each contiguous run of nodes individually. The common case is
+        that all data drawn and rejected can just be thrown away immediately in
+        one block, so this pass will be much faster than trying each one
+        individually when it works.
 
         returns False if there is discarded data and removing it does not work,
         otherwise returns True.
@@ -1364,13 +1431,15 @@ class Shrinker:
         )
         node2 = chooser.choose(
             self.nodes,
-            lambda node: can_choose_node(node)
-            # Note that it's fine for node2 to be trivial, because we're going to
-            # explicitly make it *not* trivial by adding to its value.
-            and not node.was_forced
-            # to avoid quadratic behavior, scan ahead only a small amount for
-            # the related node.
-            and node1.index < node.index <= node1.index + 4,
+            lambda node: (
+                can_choose_node(node)
+                # Note that it's fine for node2 to be trivial, because we're going to
+                # explicitly make it *not* trivial by adding to its value.
+                and not node.was_forced
+                # to avoid quadratic behavior, scan ahead only a small amount for
+                # the related node.
+                and node1.index < node.index <= node1.index + 4
+            ),
         )
 
         m: int | float = node1.value
@@ -1422,8 +1491,9 @@ class Shrinker:
         node2 = self.nodes[
             chooser.choose(
                 range(node1.index + 1, min(len(self.nodes), node1.index + 3 + 1)),
-                lambda i: self.nodes[i].type == "integer"
-                and not self.nodes[i].was_forced,
+                lambda i: (
+                    self.nodes[i].type == "integer" and not self.nodes[i].was_forced
+                ),
             )
         ]
 
@@ -1476,9 +1546,12 @@ class Shrinker:
         node2 = self.nodes[
             chooser.choose(
                 range(node1.index + 1, min(len(self.nodes), node1.index + 1 + 4)),
-                lambda i: self.nodes[i].type == "string" and not self.nodes[i].trivial
-                # select nodes which have at least one of the same character present
-                and set(node1.value) & set(self.nodes[i].value),
+                lambda i: (
+                    self.nodes[i].type == "string"
+                    and not self.nodes[i].trivial
+                    # select nodes which have at least one of the same character present
+                    and set(node1.value) & set(self.nodes[i].value)
+                ),
             )
         ]
 
@@ -1506,6 +1579,42 @@ class Shrinker:
                 + self.nodes[node2.index + 1 :]
             ),
         )
+
+    def normalize_unicode_chars(self, chooser):
+        """For string nodes, try replacing characters with simpler equivalents
+        from natural text transformations: unicode decomposition (NFD, NFKD)
+        and case mapping. For example, an accented latin letter is reduced
+        to its base form, a ligature is reduced to its first base character,
+        a mathematical alphanumeric symbol is reduced to its plain ascii
+        counterpart, and a lowercase letter is replaced with its uppercase
+        form (which has a smaller shrink-order index in the default
+        alphabet).
+
+        The codepoint shrinker is binary-search based, so it can get stuck on
+        a high codepoint whose simpler equivalents aren't reached by halving
+        / shifting / masking. This pass directly tries the natural simpler
+        forms one character at a time.
+        """
+        node = chooser.choose(
+            self.nodes,
+            lambda n: n.type == "string"
+            and any(
+                _natural_simpler_chars(c, n.constraints["intervals"]) for c in n.value
+            ),
+        )
+        intervals = node.constraints["intervals"]
+        i = chooser.choose(
+            range(len(node.value)),
+            lambda j: bool(_natural_simpler_chars(node.value[j], intervals)),
+        )
+        for replacement in _natural_simpler_chars(node.value[i], intervals):
+            new_value = node.value[:i] + replacement + node.value[i + 1 :]
+            if self.consider_new_nodes(
+                self.nodes[: node.index]
+                + (node.copy(with_value=new_value),)
+                + self.nodes[node.index + 1 :]
+            ):
+                return
 
     def minimize_nodes(self, nodes):
         choice_type = nodes[0].type

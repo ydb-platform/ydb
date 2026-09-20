@@ -154,7 +154,9 @@ void TGRpcServer::Start() {
         sslOps.pem_root_certs = std::move(Options_.SslData->Root);
         sslOps.pem_key_cert_pairs.push_back(keycert);
 
-        if (Options_.SslData->DoRequestClientCertificate) {
+        if (Options_.SslData->ClientCertificateRequired) {
+            sslOps.client_certificate_request = GRPC_SSL_REQUEST_AND_REQUIRE_CLIENT_CERTIFICATE_AND_VERIFY;
+        } else if (Options_.SslData->DoRequestClientCertificate) {
             sslOps.client_certificate_request = GRPC_SSL_REQUEST_CLIENT_CERTIFICATE_AND_VERIFY;
         }
 

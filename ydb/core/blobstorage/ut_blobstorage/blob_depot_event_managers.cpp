@@ -478,8 +478,9 @@ void SendTEvCollectGarbage(TEnvironmentSetup& env, TActorId sender, ui32 groupId
     ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep,
     bool isMultiCollectAllowed, bool hard, ui64 cookie)
 {
-    auto ev = new TEvBlobStorage::TEvCollectGarbage(tabletId, recordGeneration, perGenerationCounter, channel, collect, collectGeneration, collectStep,
-                keep, doNotKeep, TInstant::Max(), isMultiCollectAllowed, hard);
+    auto ev = new TEvBlobStorage::TEvCollectGarbage(tabletId, recordGeneration, perGenerationCounter, channel,
+                collect, collectGeneration, collectStep, keep, doNotKeep, TInstant::Max(), isMultiCollectAllowed,
+                TWriteSource::Unknown, hard);
 
 #ifdef LOG_COLLECT_GARBAGE
     Cerr << "Request# " << ev->Print(false) << Endl;

@@ -93,7 +93,7 @@ TString GetBasicLoggingFormatFromRecord(const TLogRecord& rec) {
 class TFormattingLogBackend final: public TForwardingLogBackend {
 public:
     explicit TFormattingLogBackend(TFormatter formatter, bool isStrict, TAutoPtr<TLogBackend> child)
-        : TForwardingLogBackend(std::move(child))
+        : TForwardingLogBackend(child)
         , Formatter_(std::move(formatter))
         , IsStrict_(isStrict)
     {
@@ -102,7 +102,8 @@ public:
     void WriteData(const TLogRecord& rec) final {
         if (rec.MetaFlags.empty()) {
             // NB. For signal handler.
-            return TForwardingLogBackend::WriteData(rec);
+            TForwardingLogBackend::WriteData(rec);
+            return;
         }
 
         TString message;
@@ -112,14 +113,14 @@ public:
             TStringBuilder message;
             message << "LogRecord is not supported: ";
             PrintBody(message, rec, /* flagBegin = */ 0);
-            ythrow yexception() << std::move(message);
+            ythrow yexception() << message;
         } else {
             message = FallbackFormat(rec);
         }
         message.append('\n');
 
         const TLogRecord formatted(rec.Priority, message.data(), message.size());
-        return TForwardingLogBackend::WriteData(formatted);
+        TForwardingLogBackend::WriteData(formatted);
     }
 
 protected:
@@ -190,7 +191,7 @@ TString JsonFormat(const TLogRecord& rec) {
 }
 
 TAutoPtr<TLogBackend> MakeFormattingLogBackend(TFormatter formatter, bool isStrict, TAutoPtr<TLogBackend> child) {
-    return new TFormattingLogBackend(std::move(formatter), isStrict, std::move(child));
+    return new TFormattingLogBackend(std::move(formatter), isStrict, child);
 }
 
 } // namespace NYql::NLog

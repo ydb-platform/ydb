@@ -17,8 +17,31 @@
         null,
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.0"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.1"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.2"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.3"
         }
     ],
+    "test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units/results.txt.0"
+        }
+    ],
+    "test_canonical_requests.Test.test_cluster_balance_skips_not_bsc_ready": {
+        "uri": "file://test_canonical_requests.Test.test_cluster_balance_skips_not_bsc_ready/results.txt"
+    },
     "test_canonical_requests.Test.test_cluster_get_set": [
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt"
@@ -95,6 +118,26 @@
             "uri": "file://test_canonical_requests.Test.test_essential/results.txt.8"
         }
     ],
+    "test_canonical_requests.Test.test_group_add": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt.1"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt.2"
+        }
+    ],
+    "test_canonical_requests.Test.test_group_list_fallback_to_legacy_api": {
+        "uri": "file://test_canonical_requests.Test.test_group_list_fallback_to_legacy_api/results.txt"
+    },
+    "test_canonical_requests.Test.test_group_list_legacy_api": {
+        "uri": "file://test_canonical_requests.Test.test_group_list_legacy_api/results.txt"
+    },
     "test_canonical_requests.Test.test_group_resize": [
         {
             "uri": "file://test_canonical_requests.Test.test_group_resize/results.txt"
@@ -136,8 +179,34 @@
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt.0"
         },
+        null,
+        null,
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt.1"
+        }
+    ],
+    "test_canonical_requests.Test.test_pdisk_check_leaked_slots_legacy_api": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots_legacy_api/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots_legacy_api/results.txt.0"
+        },
+        null,
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots_legacy_api/results.txt.1"
+        }
+    ],
+    "test_canonical_requests.Test.test_pdisk_populate": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/pdisk-populate-snapshot.json"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt.0"
         }
     ],
     "test_canonical_requests.Test.test_pdisk_set_status_inactive": [
@@ -164,5 +233,8 @@
         {
             "uri": "file://test_canonical_requests.Test.test_pool_estimated_usage/results.txt.1"
         }
-    ]
+    ],
+    "test_canonical_requests.Test.test_vdisk_evict_fallback_to_legacy_api": {
+        "uri": "file://test_canonical_requests.Test.test_vdisk_evict_fallback_to_legacy_api/results.txt"
+    }
 }

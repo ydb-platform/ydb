@@ -97,7 +97,10 @@ Y_UNIT_TEST_SUITE_F(YdbWorkloadTopic, TFixture) {
 
 Y_UNIT_TEST(Default_RunFull) {
     ExecYdb({"init"});
-    auto output = ExecYdb({"run", "full", "-s", "10"});
+    // This test only checks that the reported "Full time" is a sane value, which a
+    // short run exercises just as well as the default 60s (and the workload reader
+    // keeps running for --seconds + 3, so every second here costs a second of test).
+    auto output = ExecYdb({"run", "full", "-s", "3", "--warmup", "1"});
 
     ui64 fullTime = GetFullTimeValue(output);
     UNIT_ASSERT_GE(fullTime, 0);
@@ -192,21 +195,26 @@ Y_UNIT_TEST(Full_Statistics_UseTx)
 
 Y_UNIT_TEST(WriteInTx)
 {
-    // In the test, 6 writers write messages within 10 seconds.
-    // Then the number of recorded messages is checked. Commit transactions every second.
-    // It is expected that at least 60 messages will be written.
+    // In the test, 6 writers write messages. Then the number of recorded messages is
+    // checked. Commit transactions every second. It is expected that at least 60
+    // messages will be written.
+    //
+    // The workload writer keeps running for --seconds + 3, so the expected number of
+    // messages is roughly byte-rate/message-size * (seconds + 3). We use a shorter run
+    // with a proportionally higher rate to keep the same message volume while spending
+    // less wall-clock time.
 
     ExecYdb({"init",
             "--partitions", "3"});
 
     auto output = ExecYdb({"run", "write",
                           "--threads", "6",
-                          "--byte-rate", "102400",
+                          "--byte-rate", "204800",
                           "--message-size", "10240",
                           "--use-tx",
                           "--commit-messages", "10",
-                          "--warmup", "2",
-                          "--seconds", "10"});
+                          "--warmup", "1",
+                          "--seconds", "5"});
     ui64 commitTimeValue = GetCommitTimeValue(output);
 
     output = RunYdb({},

@@ -1,5 +1,7 @@
 #include "worker.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_CONVEYOR
+
 namespace NKikimr::NConveyor {
 
 TDuration TWorker::GetWakeupDuration() const {
@@ -20,14 +22,21 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
         processes.emplace_back(t.GetProcessId());
     }
     if (CPUSoftLimit < 1) {
-        AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "to_wait_result")("id", SelfId())("count", workerTasks.size());
+        YDB_LOG_DEBUG("",
+            {"action", "to_wait_result"},
+            {"id", SelfId()},
+            {"count", workerTasks.size()});
         ProcessIds = std::move(processes);
         Instants = std::move(instants);
         Schedule(GetWakeupDuration(), new NActors::TEvents::TEvWakeup(CPULimitGeneration));
         WaitWakeUp = true;
     } else {
         AFL_VERIFY(!!ForwardDuration);
-        AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "to_result")("id", SelfId())("count", workerTasks.size())("d", TMonotonic::Now() - instants.front());
+        YDB_LOG_DEBUG("",
+            {"action", "to_result"},
+            {"id", SelfId()},
+            {"count", workerTasks.size()},
+            {"d", TMonotonic::Now() - instants.front()});
         TBase::Sender<TEvInternal::TEvTaskProcessedResult>(std::move(instants), std::move(processes), *ForwardDuration, WorkerIdx).SendTo(DistributorId);
         ForwardDuration.reset();
     }
@@ -42,7 +51,10 @@ void TWorker::HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev) {
 }
 
 void TWorker::OnWakeup() {
-    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "wake_up")("id", SelfId())("count", ProcessIds.size());
+    YDB_LOG_DEBUG("",
+        {"action", "wake_up"},
+        {"id", SelfId()},
+        {"count", ProcessIds.size()});
     AFL_VERIFY(ProcessIds.size());
     AFL_VERIFY(!!ForwardDuration);
     TBase::Sender<TEvInternal::TEvTaskProcessedResult>(std::move(Instants), std::move(ProcessIds), *ForwardDuration, WorkerIdx).SendTo(DistributorId);

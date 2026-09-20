@@ -26,7 +26,7 @@ std::optional<TYPath> TryComputeYPathSuffix(const TYPath& path, const TYPath& pr
     return path.substr(prefix.length());
 }
 
-std::pair<TYPath, TString> DirNameAndBaseName(const TYPath& path)
+std::pair<TYPath, std::string> DirNameAndBaseName(const TYPath& path)
 {
     if (path.empty()) {
         return {};
@@ -42,7 +42,7 @@ std::pair<TYPath, TString> DirNameAndBaseName(const TYPath& path)
                 dirName = prefix;
             }
             const auto& token = tokenizer.GetToken();
-            return {dirName, TString(token)};
+            return {dirName, std::string(token)};
         }
     }
     Y_UNREACHABLE();

@@ -5,12 +5,14 @@
 #include "kqp_scan_fetcher_actor.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/federated_query/actors/lookup_actor/kikimr_lookup_factories.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/kqp/runtime/kqp_sequencer_factory.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
 #include <ydb/core/kqp/runtime/kqp_vector_actor.h>
+#include <ydb/core/kqp/runtime/kqp_vector_search_actor.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor.h>
 #include <ydb/core/kqp/runtime/kqp_full_text_source.h>
 #include <ydb/core/kqp/runtime/kqp_sys_view_source.h>
@@ -25,6 +27,7 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
+#include <ydb/library/yql/providers/solomon/events/events.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -84,6 +87,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
 
             if (name == "FulltextAnalyze"sv) {
                 return WrapFulltextAnalyze(callable, ctx);
+            }
+
+            if (name == "KqpStreamEnumerate"sv) {
+                return WrapKqpStreamEnumerate(callable, ctx);
             }
 
             return nullptr;
@@ -165,20 +172,25 @@ IDqOutputConsumer::TPtr TKqpTaskRunnerExecutionContext::CreateOutputConsumer(con
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     TIntrusivePtr<TKqpCounters> counters,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache
     ) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    RegisterStreamLookupActorFactory(*factory, counters);
+    RegisterStreamLookupActorFactory(*factory, counters, vectorIndexLevelsCache);
     RegisterKqpReadActor(*factory, counters);
     RegisterKqpWriteActor(*factory, counters);
     RegisterSequencerActorFactory(*factory, counters);
     RegisterKqpVectorResolveActor(*factory, counters);
+    RegisterKqpVectorSearchActor(*factory, counters, std::move(vectorIndexLevelsCache));
     RegisterKqpFullTextSource(*factory, counters);
     RegisterKqpSysViewSource(*factory, counters);
-    NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory);
+    bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
+    NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory, enableStreamingQueriesCounters ? counters->GetKqpCounters() : nullptr);
+
+    RegisterDqSourceKikimrLookupProviderFactories(*factory);
 
     if (federatedQuerySetup) {
-        auto s3HttpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
+        auto s3HttpRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         s3ActorsFactory->RegisterS3ReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy, federatedQuerySetup->S3ReadActorFactoryConfig, nullptr, federatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles());
         s3ActorsFactory->RegisterS3WriteActorFactory(*factory,  federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy);
 
@@ -186,8 +198,10 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
             RegisterGenericProviderFactories(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->ConnectorClient);
         }
 
+        static_assert(
+            static_cast<ui32>(NYql::NDq::EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER) == static_cast<ui32>(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER),
+            "ES_SOLOMON_PROVIDER is out of sync with ydb/core/base/events.h");
         NYql::NDq::RegisterDQSolomonReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
-        bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
         NYql::NDq::RegisterDQSolomonWriteActorFactory(*factory, federatedQuerySetup->CredentialsFactory, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters);
 
         const auto& pqGatewayFactory = federatedQuerySetup->PqGatewayFactory;
@@ -262,7 +276,7 @@ using namespace NYql::NDqProto;
 IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
     TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NYql::NDq::TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
-    TIntrusivePtr<NActors::TProtoArenaHolder> arena, NScheduler::TSchedulableActorOptions schedulableOptions,
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena, NScheduler::TSchedulableOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode)
 {
     return new NScanPrivate::TKqpScanComputeActor(std::move(schedulableOptions), executerId, txId, task, std::move(asyncIoFactory),
@@ -273,9 +287,10 @@ IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vect
     const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,
     const TString& database, const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
     TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
-    TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits) {
+    TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits,
+    bool useBatchPool) {
     return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode,
-        database, meta, shardsScanningPolicy, counters, std::move(traceId), cpuLimits);
+        database, meta, shardsScanningPolicy, counters, std::move(traceId), cpuLimits, useBatchPool);
 }
 
 } // namespace NKikimr::NKqp

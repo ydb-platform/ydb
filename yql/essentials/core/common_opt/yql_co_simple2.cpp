@@ -133,6 +133,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
         }
     }
 
+    // clang-format off
     auto dedupedAggregate = Build<TCoAggregate>(ctx, self.Pos())
         .Input(self.Input())
         .Keys(self.Keys())
@@ -140,17 +141,21 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
         .Settings(self.Settings())
         .Build()
         .Value();
+    // clang-format on
 
+    // clang-format off
     return ctx.Builder(self.Pos())
         .Callable("Map")
             .Add(0, dedupedAggregate.Ptr())
             .Lambda(1)
                 .Param("row")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    // clang-format on
                     auto structObj = parent.Callable("AsStruct");
                     ui32 targetIndex = 0;
                     for (ui32 index = 0; index < self.Keys().Size(); ++index) {
                         auto keyAtom = self.Keys().Item(index).Ptr();
+                        // clang-format off
                         structObj
                             .List(targetIndex++)
                                 .Add(0, keyAtom)
@@ -159,6 +164,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                                     .Add(1, keyAtom)
                                 .Seal()
                             .Seal();
+                        // clang-format on
                     }
 
                     for (ui32 index = 0; index < handlersMapping.size(); ++index) {
@@ -167,6 +173,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                             const auto& myColumn = columnNode->Content();
                             const auto& originalColumn = self.Handlers().Item(handlersMapping[index] == Max<ui32>() ?
                                 index : handlersMapping[index]).Ref().Child(0)->Content();
+                            // clang-format off
                             structObj
                                 .List(targetIndex++)
                                     .Atom(0, myColumn)
@@ -175,8 +182,10 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                                         .Atom(1, originalColumn)
                                     .Seal()
                                 .Seal();
+                            // clang-format on
                         } else {
                             for (auto childAtom : columnNode->Children()) {
+                                // clang-format off
                                 structObj
                                     .List(targetIndex++)
                                         .Add(0, childAtom)
@@ -185,6 +194,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                                             .Add(1, childAtom)
                                         .Seal()
                                     .Seal();
+                                // clang-format on
                             }
                         }
                     }
@@ -192,6 +202,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                     auto settings = self.Settings();
                     auto hoppingSetting = GetSetting(settings.Ref(), "hopping");
                     if (hoppingSetting && "HoppingTraits" == hoppingSetting->Child(1)->Content()) { // has legacy hopping window
+                        // clang-format off
                         structObj
                             .List(targetIndex++)
                                 .Atom(0, "_yql_time", TNodeFlags::Default)
@@ -200,13 +211,16 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                                     .Atom(1, "_yql_time", TNodeFlags::Default)
                                 .Seal()
                             .Seal();
+                        // clang-format on
                     }
 
                     return structObj.Seal();
+                // clang-format off
                 })
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr MergeAggregateTraits(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -270,20 +284,24 @@ TExprNode::TPtr MergeAggregateTraits(const TExprNode::TPtr& node, TExprContext& 
 
         for (auto& tuple : tuples) {
             bodyItems.push_back(
+                // clang-format off
                 ctx.Builder(tuple.Trait().Cast<TCoAggregationTraits>().FinishHandler().Pos())
                     .Apply(tuple.Trait().Cast<TCoAggregationTraits>().FinishHandler().Ref())
                         .With(0, arg)
                     .Seal()
                     .Build()
             );
+                // clang-format on
             columnNames.push_back(tuple.ColumnName().Cast<TCoAtom>().Ptr());
         }
 
         auto newHandler = ctx.NewLambda(arg->Pos(), ctx.NewArguments(arg->Pos(), { arg }), ctx.NewList(arg->Pos(), std::move(bodyItems)));
+        // clang-format off
         auto newTraits = Build<TCoAggregationTraits>(ctx, tuples.front().Pos())
             .InitFrom(tuples.front().Trait().Cast<TCoAggregationTraits>())
             .FinishHandler(newHandler)
             .Done().Ptr();
+        // clang-format on
         auto newTuple = ctx.ChangeChild(tuples.front().Ref(), TCoAggregateTuple::idx_Trait, std::move(newTraits));
         newTuple = ctx.ChangeChild(*newTuple, TCoAggregateTuple::idx_ColumnName, ctx.NewList(tuples.front().Pos(), std::move(columnNames)));
         resultAggTuples.push_back(std::move(newTuple));
@@ -293,11 +311,13 @@ TExprNode::TPtr MergeAggregateTraits(const TExprNode::TPtr& node, TExprContext& 
         return node;
     }
 
+    // clang-format off
     return Build<TCoAggregate>(ctx, node->Pos())
         .InitFrom(self)
         .Handlers(ctx.NewList(self.Pos(), std::move(resultAggTuples)))
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr SimplifySync(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -443,11 +463,11 @@ TExprNode::TPtr OptimizeXor(const TExprNode::TPtr& node, TExprContext& ctx) {
     TNodeSet set(children.size());
     TNodeMap<TExprNode::TListType::const_iterator> map(children.size());
     for (auto it = children.cbegin(); children.cend() != it;) {
-        if (set.emplace(it->Get()).second)
+        if (set.emplace(it->Get()).second) {
             ++it;
-        else if (const auto ins = map.emplace(it->Get(), it); ins.second)
+        } else if (const auto ins = map.emplace(it->Get(), it); ins.second) {
             ++it;
-        else {
+        } else {
             children.erase(it);
             children.erase(ins.first->second);
             set.clear();
@@ -539,12 +559,6 @@ TExprNode::TPtr OptimizeExistsAndUnwrap(const TExprNode::TPtr& node, TExprContex
     return ctx.ChangeChildren(*node, std::move(newChildren));
 }
 
-bool IsExtractCommonPredicatesFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
-    YQL_ENSURE(optCtx.Types);
-    static const char OptName[] = "ExtractCommonPredicatesFromLogicalOps";
-    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
-}
-
 size_t GetNodeId(const TExprNode* node, const TNodeMap<size_t>& node2id) {
     auto it = node2id.find(node);
     YQL_ENSURE(it != node2id.end());
@@ -617,6 +631,33 @@ TVector<TVector<size_t>> SplitToNonIntersectingGroups(const TExprNodeList& child
     return groups;
 }
 
+bool CanDropSideEffect(
+    const TExprNodeList& children,
+    const TNodeMap<size_t>& restMap,
+    size_t idx,
+    const std::function<const TExprNode*(const TExprNode::TPtr&)>& getAbsorbNode)
+{
+    size_t absorbPos = children.size();
+    const TExprNode* absorbNode = nullptr;
+    for (size_t pos = 0; pos < children.size(); ++pos) {
+        if (const TExprNode* n = getAbsorbNode(children[pos])) {
+            absorbPos = pos;
+            absorbNode = n;
+            break;
+        }
+    }
+    if (!absorbNode) {
+        return false;
+    }
+    for (size_t pos = 0; pos < absorbPos; ++pos) {
+        if (children[pos]->HasSideEffects()) {
+            return false;
+        }
+    }
+    const auto it = restMap.find(absorbNode);
+    return it != restMap.end() && it->second < idx;
+}
+
 TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_ENSURE(node->IsCallable("And"));
     TExprNodeList children = node->ChildrenList();
@@ -628,21 +669,31 @@ TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ct
 
     // AND Absorption law
     // (A OR B) AND A -> A
-    const TVector<TVector<size_t>> groups = SplitToNonIntersectingGroups(children, true);
+    const TVector<TVector<size_t>> groups = SplitToNonIntersectingGroups(children, /*visitOr=*/true);
 
     THashSet<size_t> toDrop;
     for (auto& group : groups) {
         TVector<size_t> orIndexes;
-        TNodeSet restSet;
+        TNodeMap<size_t> restMap;
         for (auto& index : group) {
             if (children[index]->IsCallable("Or")) {
                 orIndexes.push_back(index);
             } else {
-                restSet.insert(children[index].Get());
+                restMap.emplace(children[index].Get(), index);
             }
         }
+
         for (auto& idx : orIndexes) {
-            if (AnyOf(children[idx]->ChildrenList(), [&](const auto& n) { return restSet.contains(n.Get()); })) {
+            const TExprNodeList& orChildren = children[idx]->ChildrenList();
+            if (!children[idx]->HasSideEffects()) {
+                if (AnyOf(orChildren, [&](const auto& n) { return restMap.contains(n.Get()); })) {
+                    toDrop.insert(idx);
+                }
+                continue;
+            }
+            if (CanDropSideEffect(orChildren, restMap, idx, [&](const TExprNode::TPtr& child) -> const TExprNode* {
+                return restMap.contains(child.Get()) ? child.Get() : nullptr;
+            })) {
                 toDrop.insert(idx);
             }
         }
@@ -739,13 +790,11 @@ TExprNode::TPtr OptimizeAnd(const TExprNode::TPtr& node, TExprContext& ctx, TOpt
         return opt;
     }
 
-    if (IsExtractCommonPredicatesFromLogicalOpsEnabled(optCtx)) {
-        if (auto opt = ApplyAndAbsorption(node, ctx); opt != node) {
-            return opt;
-        }
+    if (auto opt = ApplyAndAbsorption(node, ctx); opt != node) {
+        return KeepWorld(opt, *node, ctx, *optCtx.Types);
     }
 
-    if (auto opt = OptimizeXNotXPairs(node, false, ctx); opt != node) {
+    if (auto opt = OptimizeXNotXPairs(node, /*replaceWith=*/false, ctx); opt != node) {
         return KeepWorld(opt, *node, ctx, *optCtx.Types);
     }
 
@@ -761,26 +810,38 @@ TExprNode::TPtr ApplyOrAbsorption(const TExprNode::TPtr& node, TExprContext& ctx
         // X AND A OR A -> A
         // (X AND (B OR A)) OR A OR B -> A OR B
         TVector<size_t> andIndexes;
-        TNodeSet restSet;
+        TNodeMap<size_t> restMap;
         for (size_t i = 0; i < children.size(); ++i) {
             if (children[i]->IsCallable("And")) {
                 andIndexes.push_back(i);
             } else {
-                restSet.insert(children[i].Get());
+                restMap.emplace(children[i].Get(), i);
             }
         }
 
         THashSet<size_t> toDrop;
         for (auto& idx : andIndexes) {
             TExprNodeList andChildren = children[idx]->ChildrenList();
-            bool haveCommonFactor = AnyOf(andChildren, [&](TExprNode::TPtr child) {
+            if (!children[idx]->HasSideEffects()) {
+                bool haveCommonFactor = AnyOf(andChildren, [&](TExprNode::TPtr child) {
+                    if (IsNoPush(*child)) {
+                        child = child->HeadPtr();
+                    }
+                    TExprNodeList orList = GetOrChildren(child);
+                    return AllOf(orList, [&](const auto& n) { return restMap.contains(n.Get()); });
+                });
+                if (haveCommonFactor) {
+                    toDrop.insert(idx);
+                }
+                continue;
+            }
+            if (CanDropSideEffect(andChildren, restMap, idx, [&](const TExprNode::TPtr& child_) -> const TExprNode* {
+                TExprNode::TPtr child = child_;
                 if (IsNoPush(*child)) {
                     child = child->HeadPtr();
                 }
-                TExprNodeList orList = GetOrChildren(child);
-                return AllOf(orList, [&](const auto& n) { return restSet.contains(n.Get()); });
-            });
-            if (haveCommonFactor) {
+                return AllOf(GetOrChildren(child), [&](const auto& n) { return restMap.contains(n.Get()); }) ? child.Get() : nullptr;
+            })) {
                 toDrop.insert(idx);
             }
         }
@@ -813,7 +874,7 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
         if (!IsStrict(node)) {
             return node;
         }
-        const TVector<TVector<size_t>> groups = SplitToNonIntersectingGroups(children, false);
+        const TVector<TVector<size_t>> groups = SplitToNonIntersectingGroups(children, /*visitOr=*/false);
         auto ptrComparator = [](const TExprNode::TPtr& l, const TExprNode::TPtr& r) {
             return l.Get() < r.Get();
         };
@@ -854,7 +915,7 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
 
                 TExprNodeList newGroup;
                 for (auto& idx : group) {
-                    auto childAnd = children[idx];
+                    const auto& childAnd = children[idx];
                     TExprNodeList preds = childAnd->ChildrenList();
                     EraseIf(preds, [&](const TExprNode::TPtr& p) { return commonSet.contains(IsNoPush(*p) ? p->Child(0) : p.Get()); });
                     if (preds.empty()) {
@@ -895,16 +956,15 @@ TExprNode::TPtr OptimizeOr(const TExprNode::TPtr& node, TExprContext& ctx, TOpti
         return ctx.NewCallable(node->Pos(), "NoPush", { ctx.ChangeChildren(*node, std::move(children)) });
     }
 
-    if (IsExtractCommonPredicatesFromLogicalOpsEnabled(optCtx)) {
-        if (auto opt = ApplyOrAbsorption(node, ctx); opt != node) {
-            return opt;
-        }
-        if (auto opt = ApplyOrDistributive(node, ctx); opt != node) {
-            return opt;
-        }
+    if (auto opt = ApplyOrAbsorption(node, ctx); opt != node) {
+        return KeepWorld(opt, *node, ctx, *optCtx.Types);
     }
 
-    if (auto opt = OptimizeXNotXPairs(node, true, ctx); opt != node) {
+    if (auto opt = ApplyOrDistributive(node, ctx); opt != node) {
+        return opt;
+    }
+
+    if (auto opt = OptimizeXNotXPairs(node, /*replaceWith=*/true, ctx); opt != node) {
         return KeepWorld(opt, *node, ctx, *optCtx.Types);
     }
 
@@ -929,6 +989,11 @@ TExprNode::TPtr CheckIfWorldWithSame(const TExprNode::TPtr& node, TExprContext& 
 }
 
 TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    static const char OptName[] = "SameBranchesCollapse";
+    if (IsOptimizerDisabled<OptName>(*optCtx.Types)) {
+        return node;
+    }
+
     if (node->Child(node->ChildrenSize() - 1U) == node->Child(node->ChildrenSize() - 2U)) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " with identical branches.";
         auto children = node->ChildrenList();
@@ -951,10 +1016,11 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
             YQL_CLOG(DEBUG, Core) << node->Content() << " with identical predicates.";
             auto children = node->ChildrenList();
             for (auto i = 0U; i < children.size() - 1U;) {
-                if (predicates.erase(children[i].Get()))
+                if (predicates.erase(children[i].Get())) {
                     i += 2U;
-                else
+                } else {
                     children.erase(children.cbegin() + i, children.cbegin() + i + 2U);
+                }
             }
             return ctx.ChangeChildren(*node, std::move(children));
         }
@@ -969,8 +1035,9 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
                         auto many = prev->ChildrenList();
                         many.emplace_back(std::move(next));
                         prev = ctx.ChangeChildren(*prev, std::move(many));
-                    } else
+                    } else {
                         prev = ctx.NewCallable(node->Pos(), "Or", {std::move(prev), std::move(next)});
+                    }
                     children.erase(children.cbegin() + i + 1U, children.cbegin() + i + 3U);
                     auto res = ctx.ChangeChildren(*node, std::move(children));
                     res = KeepWorld(res, *node, ctx, *optCtx.Types);
@@ -1005,7 +1072,7 @@ TExprNode::TPtr IfPresentSubsetFields(const TExprNode::TPtr& node, TExprContext&
         TSet<TStringBuf> usedFields;
         if (HaveFieldsSubset(lambda.TailPtr(), lambda.Head().Head(), usedFields, *optCtx.ParentsMap)) {
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
-            children[TCoIfPresent::idx_Optional] = FilterByFields(children[TCoIfPresent::idx_Optional]->Pos(), children[TCoIfPresent::idx_Optional], usedFields, ctx, false);
+            children[TCoIfPresent::idx_Optional] = FilterByFields(children[TCoIfPresent::idx_Optional]->Pos(), children[TCoIfPresent::idx_Optional], usedFields, ctx, /*singleValue=*/false);
             children[TCoIfPresent::idx_PresentHandler] = ctx.DeepCopyLambda(*children[TCoIfPresent::idx_PresentHandler]);
             return ctx.ChangeChildren(*node, std::move(children));
         }

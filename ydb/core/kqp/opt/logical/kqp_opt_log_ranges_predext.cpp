@@ -4,13 +4,13 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/protos/table_service_config.pb.h>
-
-#include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <yql/essentials/core/extract_predicate/extract_predicate.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
 
+#include <yql/essentials/core/extract_predicate/extract_predicate.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -41,6 +41,34 @@ bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
     }
 
     return true;
+}
+
+bool IsHybridRankTopInput(const TExprNode* node, const NYql::TParentsMap& parentsMap) {
+    const auto parents = parentsMap.find(node);
+    if (parents == parentsMap.end()) {
+        return false;
+    }
+
+    for (const auto* parent : parents->second) {
+        auto maybeTop = TMaybeNode<TCoTopBase>(parent);
+        if (!maybeTop || maybeTop.Cast().Input().Raw() != node) {
+            continue;
+        }
+
+        bool hasHybridRank = false;
+        VisitExpr(maybeTop.Cast().KeySelectorLambda().Body().Ptr(), [&](const TExprNode::TPtr& expr) {
+            if (expr->IsCallable("HybridRank")) {
+                hasHybridRank = true;
+                return false;
+            }
+            return true;
+        });
+        if (hasHybridRank) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 const TExprNode* GetSingleConsumerParent(const TExprNode* node, const NYql::TParentsMap& parentsMap) {
@@ -103,7 +131,7 @@ bool IsIdLambda(TExprBase body) {
     return false;
 }
 
-} // namespace
+} // anonymous namespace
 
 TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
@@ -151,7 +179,9 @@ TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOpt
     std::optional<std::pair<TString, bool>> selectedIndex;
 
     for (auto& indexInfo : mainTableDesc.Metadata->Indexes) {
-        if (indexInfo.Type == TIndexDescription::EType::GlobalAsync) {
+        if (indexInfo.Type == TIndexDescription::EType::GlobalAsync
+            || indexInfo.Type == TIndexDescription::EType::GlobalJson
+            || indexInfo.Type == TIndexDescription::EType::GlobalJsonCompact) {
             continue;
         }
 
@@ -365,7 +395,14 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
         if (primaryBuildResult.PointPrefixLen < mainTableDesc.Metadata->KeyColumnNames.size()) {
             auto maxKey = calcKey(primaryBuildResult, mainTableDesc.Metadata->KeyColumnNames.size(), false, mainTableDesc);
             for (auto& index : mainTableDesc.Metadata->Indexes) {
-                if (index.Type != TIndexDescription::EType::GlobalAsync && index.State == TIndexDescription::EIndexState::Ready) {
+                if (index.Type != TIndexDescription::EType::GlobalAsync
+                    && index.Type != TIndexDescription::EType::GlobalJson
+                    && index.Type != TIndexDescription::EType::GlobalJsonCompact
+                    && index.Type != TIndexDescription::EType::LocalMinMax
+                    && index.Type != TIndexDescription::EType::LocalBloomFilter
+                    && index.Type != TIndexDescription::EType::LocalBloomNgramFilter
+                    && index.State == TIndexDescription::EIndexState::Ready)
+                {
                     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(index.Name).first->Name);
 
                     bool uselessIndex = true;
@@ -595,7 +632,6 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
     return std::make_pair(*input, residualLambda);
 }
 
-
 TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx, const NYql::TParentsMap& parentsMap)
 {
@@ -604,6 +640,10 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     }
 
     auto flatmap = node.Cast<TCoFlatMapBase>();
+
+    if (IsHybridRankTopInput(node.Raw(), parentsMap)) {
+        return node;
+    }
 
     if (!IsPredicateFlatMap(flatmap.Lambda().Body().Ref())) {
         return node;

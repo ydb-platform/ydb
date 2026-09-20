@@ -1,0 +1,14 @@
+PRAGMA config.flags('DecimalCommonTypeConversionMode', 'with_common_type_fixup');
+
+SELECT
+    Decimal('10', 10, 3) + Decimal('10', 10, 2) AS add,
+    Decimal('10', 10, 2) - Decimal('3', 10, 3) AS sub,
+    Decimal('2', 10, 3) * Decimal('3', 10, 2) AS mul,
+    Decimal('10', 10, 2) / Decimal('2', 10, 3) AS div,
+    Decimal('10', 10, 3) % Decimal('3', 10, 2) AS mod,
+    Decimal('1', 17, 0) + Decimal('0.1', 18, 18) AS max_precision,
+    Just(Decimal('10', 10, 3)) + Decimal('10', 10, 2) AS optional_and_plain,
+    Decimal('10', 10, 3) + Just(Decimal('10', 10, 2)) AS plain_and_optional,
+    Just(Decimal('10', 10, 3)) + Just(Decimal('10', 10, 2)) AS both_optional,
+    Nothing(Optional<Decimal (10, 3)>) + Just(Decimal('10', 10, 2)) AS both_optional_empty
+;

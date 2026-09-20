@@ -18,7 +18,7 @@ from ydb.tests.stability.nemesis.internal.agent.agent_warden_catalog import (
     collect_agent_safety_check_specs,
 )
 from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
-from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
+from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult, WardenTimeWindow
 from ydb.tests.stability.nemesis.internal.safety_warden_execution import (
     SafetyWardenRun,
     build_safety_runs,
@@ -26,6 +26,8 @@ from ydb.tests.stability.nemesis.internal.safety_warden_execution import (
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+_AGENT_SAFETY_CHECK_TIMEOUT_S = 300.0
 
 
 def _safety_checks_snapshot(
@@ -73,14 +75,19 @@ class AgentWardenChecker:
         with self._lock:
             return self._last_report.to_dict()
 
-    def start_checks(self) -> bool:
+    def start_checks(self, time_window: WardenTimeWindow | None = None) -> bool:
         with self._lock:
             if self._is_running:
                 logger.debug("Safety checks already running, skipping")
                 return False
             self._is_running = True
             started = datetime.utcnow().isoformat() + "Z"
-            ctx = AgentSafetyContext(log_directory=self._log_directory, hostname=self._hostname)
+            window = time_window or WardenTimeWindow.from_hours_back(24)
+            ctx = AgentSafetyContext(
+                log_directory=self._log_directory,
+                hostname=self._hostname,
+                time_window=window,
+            )
             try:
                 specs = collect_agent_safety_check_specs(ctx)
                 slot_names, runs = build_safety_runs(specs, log_prefix=ctx.log_prefix)
@@ -132,7 +139,33 @@ class AgentWardenChecker:
             batches: List[List[WardenCheckResult] | None] = [None] * n
 
             async def _run_at_index(i: int, run: SafetyWardenRun) -> tuple[int, List[WardenCheckResult]]:
-                batch = await loop.run_in_executor(None, run)
+                try:
+                    batch = await asyncio.wait_for(
+                        loop.run_in_executor(None, run),
+                        timeout=_AGENT_SAFETY_CHECK_TIMEOUT_S,
+                    )
+                except asyncio.TimeoutError:
+                    # The underlying blocking call (grep/SSH/unified_agent select) is
+                    # still running in the executor thread, but we stop waiting for it
+                    # so the slot reaches a terminal state and the report can complete.
+                    logger.error(
+                        "Agent safety slot %d/%d (%s) timed out after %.0fs",
+                        i + 1,
+                        n,
+                        slot_names[i],
+                        _AGENT_SAFETY_CHECK_TIMEOUT_S,
+                    )
+                    batch = [
+                        WardenCheckResult(
+                            name=slot_names[i],
+                            category="safety",
+                            violations=[],
+                            status="error",
+                            error_message=(
+                                f"check timed out after {_AGENT_SAFETY_CHECK_TIMEOUT_S:.0f}s"
+                            ),
+                        )
+                    ]
                 return i, batch
 
             tasks = [_run_at_index(i, r) for i, r in enumerate(runs)]

@@ -1,6 +1,5 @@
 PRAGMA DisableSimpleColumns;
 
-/* postgres can not */
 $a = AsList(
     AsStruct(255ut AS K, 1 AS V),
     AsStruct(127ut AS K, 2 AS V),

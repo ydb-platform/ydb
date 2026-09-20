@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     ListFromRange(13, 42U),
     ListFromRange(13U, 42),

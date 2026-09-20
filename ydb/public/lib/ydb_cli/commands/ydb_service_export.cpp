@@ -228,7 +228,7 @@ int TCommandExportToYt::Run(TConfig& config) {
     settings.NumberOfRetries(NumberOfRetries);
     settings.UseTypeV3(UseTypeV3);
 
-    const TDriver driver = CreateDriver(config);
+    const auto driver = CreateDriver(config);
 
     TSchemeClient schemeClient(driver);
     TTableClient tableClient(driver);
@@ -436,7 +436,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
     }
 
-    const TDriver driver = CreateDriver(config);
+    const auto driver = CreateDriver(config);
 
     using namespace NExport;
     using namespace NScheme;
@@ -475,7 +475,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
 
 /// S3
 TCommandExportToS3::TCommandExportToS3()
-    : TCommandExportBase("s3", "Create export to S3.\nFor more info go to: ydb.tech/docs/en/reference/ydb-cli/export-import/export-s3")
+    : TCommandExportBase("s3", TStringBuilder() << "Create export to S3.\nFor more info go to: " << HttpsLink("ydb.tech/docs/en/reference/ydb-cli/export-import/export-s3", NConsoleClient::AutoColors(Cout)))
 {
     TItemS3::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},

@@ -154,7 +154,9 @@ public:
             sslData.Cert = TestSettings::GetServerCrt();
             sslData.Key = TestSettings::GetServerKey();
             sslData.Root = TestSettings::GetCaCrt();
-            sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
+            const auto& clientCertificateAuthorization = appConfig.GetClientCertificateAuthorization();
+            sslData.DoRequestClientCertificate = clientCertificateAuthorization.GetRequestClientCertificate();
+            sslData.ClientCertificateRequired = clientCertificateAuthorization.GetClientCertificateRequired();
 
             grpcOption.SetSslData(sslData);
         }

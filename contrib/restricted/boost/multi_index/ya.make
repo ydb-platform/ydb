@@ -25,7 +25,6 @@ PEERDIR(
     contrib/restricted/boost/mpl
     contrib/restricted/boost/preprocessor
     contrib/restricted/boost/smart_ptr
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/throw_exception
     contrib/restricted/boost/tuple
     contrib/restricted/boost/type_traits

@@ -1,4 +1,3 @@
-/* postgres can not */
 use plato;
 
 $data = (select value as attr, key as urlBase, cast(subkey as int32) as dupsCount from Input0);

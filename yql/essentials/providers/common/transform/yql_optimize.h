@@ -94,7 +94,6 @@ protected:
         };
     }
 
-protected:
     struct TOptInfo {
         TString OptName;
         TFilter Filter;

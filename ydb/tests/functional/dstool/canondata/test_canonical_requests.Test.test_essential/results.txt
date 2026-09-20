@@ -19,7 +19,8 @@ dstool
 │  ├─ stop                              Stop PDisk
 │  ├─ restart                           Restart PDisk
 │  ├─ readonly                          Change PDisk read-only status
-│  └─ move                              Move PDisk
+│  ├─ move                              Move PDisk
+│  └─ populate                          Populate pdisk with selected vdisks
 ├─ vdisk
 │  ├─ evict                             Relocate vdisks to other pdisks
 │  ├─ list                              List vdisks
@@ -92,6 +93,7 @@ dstool
    └─ partition
       ├─ create                         Create NBS 2.0 partition
       ├─ delete                         Delete NBS 2.0 partition
+      ├─ resize                         Grow an NBS 2.0 partition
       ├─ get-load-actor-adapter-actor-id
       │                                 Get LoadActorAdapter actor id for NBS 
       │                                 2.0 partition
@@ -121,8 +123,6 @@ Server access options:
   --http-timeout HTTP_TIMEOUT         Timeout for blocking socket I/O operations
                                        during HTTP(s) queries
   --insecure                          Allow insecure HTTPS fetching
-  --use-ip                            Use IP addresses instead of hostnames when
-                                       connecting to endpoints
 
 Free args: min: 1 max: unlimited
   <subcommand>  device, pdisk, vdisk, group, pool, box, node, cluster, nbs

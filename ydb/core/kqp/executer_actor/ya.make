@@ -11,18 +11,22 @@ SRCS(
     kqp_partition_helper.cpp
     kqp_planner.cpp
     kqp_planner_strategy.cpp
+    kqp_pq_topic_resolver.cpp
     kqp_streaming_helper.cpp
     kqp_table_resolver.cpp
     kqp_tasks_graph.cpp
     kqp_tasks_validate.cpp
     kqp_partitioned_executer.cpp
+    max_tasks_graph.cpp
     shard_key_ranges.cpp
 )
 
 PEERDIR(
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
+    library/cpp/html/pcdata
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/library/json_index
     ydb/core/client/minikql_compile
     ydb/core/formats
     ydb/core/fq/libs/checkpointing
@@ -47,8 +51,10 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/tasks
     ydb/library/yql/providers/common/http_gateway
+    ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/proto
     ydb/services/metadata/abstract
+    ydb/services/udf_store/wasm
 )
 
 GENERATE_ENUM_SERIALIZATION(

@@ -14,6 +14,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A tiny helper function to generate random file names.
+// TODO(babenko): migrate to std::string
 TString GenerateRandomFileName(const char* prefix);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -72,7 +73,7 @@ struct TWaitForPredicateOptions
     int IterationCount = 300;
     TDuration Period = TDuration::MilliSeconds(100);
     bool IgnoreExceptions = false;
-    TString Message = "<no-message>";
+    std::string Message = "<no-message>";
     TSourceLocation SourceLocation = YT_CURRENT_SOURCE_LOCATION;
 };
 
@@ -82,7 +83,7 @@ void WaitForPredicate(
 
 void WaitForPredicate(
     std::function<bool()> predicate,
-    const TString& message,
+    const std::string& message,
     TSourceLocation = YT_CURRENT_SOURCE_LOCATION);
 
 void WaitForPredicate(
@@ -195,11 +196,11 @@ template <class T>
 ////////////////////////////////////////////////////////////////////////////////
 
 #define HANDLE_RPC_CALL(mockType, method, capture, body) \
-    ::testing::Invoke(PP_DEPAREN(capture) ( \
+    PP_DEPAREN(capture) ( \
         [[maybe_unused]] mockType::TReq##method* request, \
         [[maybe_unused]] mockType::TRsp##method* response, \
         [[maybe_unused]] mockType::TCtx##method##Ptr context) \
-    body)
+    body
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1996,7 +1996,7 @@ Y_UNIT_TEST(TestPerfValidate) {
 Y_UNIT_TEST(TestPerfParse) {
     NMiniKQL::TScopedAlloc alloc(__LOCATION__);
     NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, /*functionRegistry=*/nullptr);
     NMiniKQL::TDefaultValueBuilder builder(holderFactory);
 
     std::array<NUdf::TUnboxedValue, Steps> v;
@@ -2012,7 +2012,7 @@ Y_UNIT_TEST(TestPerfParse) {
 Y_UNIT_TEST(TestPerfSerialize) {
     NMiniKQL::TScopedAlloc alloc(__LOCATION__);
     NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, /*functionRegistry=*/nullptr);
     NMiniKQL::TDefaultValueBuilder builder(holderFactory);
 
     const auto dom = TryParseJsonDom(json, &builder);

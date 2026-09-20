@@ -65,6 +65,8 @@ struct TStageInfo : private TMoveOnly {
 
     ui32 InputsCount = 0;
     ui32 OutputsCount = 0;
+    NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleTimeoutUs = Nothing();
 
     TVector<ui64> Tasks;
     TStageInfoMeta Meta;
@@ -345,46 +347,8 @@ public:
         Channels.clear();
     }
 
-    bool IsEgressTask(const TTaskType& task) const {
-        for (const auto& output : task.Outputs) {
-            for (ui64 channelId : output.Channels) {
-                if (GetChannel(channelId).DstTask) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    bool IsIngress(const TTaskType& task) const {
-        // No inputs at all or there is no input channels with checkpoints.
-        // We don't want to inject checkpoint into tasks that has checkpointed input channels,
-        // otherwise task can be checkpointed twice;
-        // once checkpoint will arrive from channels, it will pause reading from sources too.
-
-        if (!task.Inputs) {
-            return true;
-        }
-
-        bool hasSource = false;
-        for (const auto& input : task.Inputs) {
-            if (input.SourceType) {
-                hasSource = true;
-                continue;
-            }
-
-            for (ui64 channelId : input.Channels) {
-                if (GetChannel(channelId).CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
-                    return false;
-                }
-            }
-        }
-
-        return hasSource;
-    }
-
     static bool IsInfiniteSourceType(const TString& sourceType) {
-        return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
+        return sourceType == PqSource; // Now it is the only infinite source type. Others are finite.
     }
 
     void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {
@@ -396,7 +360,21 @@ public:
         std::vector<bool> processedTasks(GetTasks().size());
         // TODO use toposort instead of Dreadful O(n^2)
         for (TTaskType& task : GetTasks()) {
-            if (IsEgressTask(task)) {
+            bool isEgress = true;
+            for (const auto& output : task.Outputs) {
+                for (ui64 channelId : output.Channels) {
+                    if (GetChannel(channelId).DstTask) {
+                        isEgress = false;
+                        break;
+                    }
+                }
+
+                if (!isEgress) {
+                    break;
+                }
+            }
+
+            if (isEgress) {
                 tasksStack.push(&task);
             }
         }
@@ -451,6 +429,11 @@ public:
 
             NDqProto::EWatermarksMode watermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
             if (enableWatermarks) {
+                const auto& stageInfo = GetStageInfo(task.StageId);
+                if (stageInfo.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                    watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                    task.WatermarksIdleTimeoutUs = Max(task.WatermarksIdleTimeoutUs, stageInfo.WatermarksIdleTimeoutUs);
+                }
                 for (auto& input : task.Inputs) {
                     if (input.SourceType) {
                         if (input.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {

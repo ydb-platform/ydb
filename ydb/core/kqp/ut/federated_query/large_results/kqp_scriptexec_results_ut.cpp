@@ -131,13 +131,14 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
             if (const auto& resultsMeta = meta.ResultSetsMeta; !resultsMeta.empty()) {
                 UNIT_ASSERT_VALUES_EQUAL(resultsMeta.size(), 1);
                 const auto& resultMeta = resultsMeta[0];
-                Cerr << "Rows saved: " << resultMeta.RowsCount << ", elapsed time: " << TInstant::Now() - waitStart << "\n";
+                Cerr << "Rows saved: " << resultMeta.RowsCount << ", rows fetched: " << rowsFetched << ", elapsed time: " << TInstant::Now() - waitStart << "\n";
 
                 if (resultMeta.Finished) {
                     UNIT_ASSERT_VALUES_EQUAL(resultMeta.RowsCount, numberRows);
                 } else {
                     UNIT_ASSERT_GE(numberRows, resultMeta.RowsCount);
                 }
+
                 while (rowsFetched < resultMeta.RowsCount && FetchRows(queryClient, scriptExecutionOperation, settings, rowsFetched, rowContent)) {}
             }
 
@@ -211,7 +212,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToOneLineString());
         } else {
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::NOT_FOUND, status.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "No such execution");
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Script execution operation not found");
         }
 
         WaitRemoveScriptResults(db, resOp.Metadata().ExecutionId);

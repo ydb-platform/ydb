@@ -9,14 +9,17 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 SRCS(
+    column_table_index_entity_id_ut.cpp
     compression_ut.cpp
     dictionary_feature_flag_ut.cpp
     table_description_ut.cpp
+    topic_description_ut.cpp
     ydb_convert_ut.cpp
 )
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/testlib/basics
     ydb/core/testlib/pg
 )
 

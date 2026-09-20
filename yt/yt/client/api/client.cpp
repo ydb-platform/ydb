@@ -52,8 +52,9 @@ TFuture<std::optional<std::string>> TClusterAwareClientBase::FetchClusterNameFro
     return GetNode(ClusterNamePath, options).Apply(
         BIND([] (const TErrorOr<TYsonString>& clusterNameYsonOrError) -> std::optional<std::string> {
             if (!clusterNameYsonOrError.IsOK()) {
-                YT_LOG_WARNING(clusterNameYsonOrError, "Could not fetch cluster name from master cache (Path: %v)",
-                    ClusterNamePath);
+                YT_TLOG_WARNING("Could not fetch cluster name from master cache")
+                    .With("Path", ClusterNamePath)
+                    .With(clusterNameYsonOrError);
                 return {};
             }
 

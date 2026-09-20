@@ -134,6 +134,14 @@
           "growth_factor": 2
         },
         "policies": {
+          "write_conflict": {
+            "applies_when": {
+              "response": {
+                "service_error_code": "ReplicatedWriteConflictException",
+                "http_status_code": 409
+              }
+            }
+          },
 	  "still_processing": {
 	    "applies_when": {
 	      "response": {

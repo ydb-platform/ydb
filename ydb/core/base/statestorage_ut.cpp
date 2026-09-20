@@ -1,5 +1,6 @@
 #include "statestorage.h"
 
+#include <ydb/core/protos/config.pb.h>
 #include <util/generic/xrange.h>
 #include <util/generic/mem_copy.h>
 #include <util/generic/algorithm.h>
@@ -139,7 +140,7 @@ ui32 TStateStorageInfo::ContentHash() const {
 }
 
 static void CopyStateStorageRingInfo(
-    const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &source,
+    const NKikimrConfig::TStateStorageConfig::TRing &source,
     TStateStorageInfo *info,
     char *serviceId,
     ui32 depth
@@ -156,7 +157,7 @@ static void CopyStateStorageRingInfo(
         for (ui32 iring = 0, ering = source.RingSize(); iring != ering; ++iring) {
             serviceId[depth] = (iring + 1);
 
-            const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &ring = source.GetRing(iring);
+            const NKikimrConfig::TStateStorageConfig::TRing &ring = source.GetRing(iring);
             info->Rings[iring].UseRingSpecificNodeSelection = ring.GetUseRingSpecificNodeSelection();
             info->Rings[iring].IsDisabled = ring.GetIsDisabled();
 
@@ -199,7 +200,7 @@ static void CopyStateStorageRingInfo(
     Y_ABORT("must have rings or legacy node config");
 }
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TStateStorageConfig& config) {
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
     Y_ABORT_UNLESS(config.GetSSId() == 1);
     info->StateStorageVersion = config.GetStateStorageVersion();
@@ -219,7 +220,7 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
     return info;
 }
 
-void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& config,
+void BuildStateStorageInfos(const NKikimrConfig::TStateStorageConfig& config,
     TIntrusivePtr<TStateStorageInfo> &stateStorageInfo,
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
     TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo)
@@ -273,7 +274,7 @@ Y_UNIT_TEST_SUITE(TStateStorageConfigCompareWithOld) {
             Y_ABORT_UNLESS(oldRetHash == newRetHash);
         }
     }
-    void DoTest(NKikimrConfig::TDomainsConfig::TStateStorage oldConfig, NKikimrConfig::TDomainsConfig::TStateStorage newConfig, ui32 rgIndex = 0) {
+    void DoTest(NKikimrConfig::TStateStorageConfig oldConfig, NKikimrConfig::TStateStorageConfig newConfig, ui32 rgIndex = 0) {
         TIntrusivePtr<NStateStorageOld::TStateStorageInfo> oldstateStorageInfo;
         TIntrusivePtr<NStateStorageOld::TStateStorageInfo> oldboardInfo;
         TIntrusivePtr<NStateStorageOld::TStateStorageInfo> oldschemeBoardInfo;
@@ -288,7 +289,7 @@ Y_UNIT_TEST_SUITE(TStateStorageConfigCompareWithOld) {
         Compare(oldschemeBoardInfo, schemeBoardInfo, rgIndex);
     }
 
-    void FillRing1(NKikimrConfig::TDomainsConfig::TStateStorage::TRing* ring) {
+    void FillRing1(NKikimrConfig::TStateStorageConfig::TRing* ring) {
         ring->SetNToSelect(5);
         for (ui32 nodeId : xrange(5, 13)) {
             ring->AddNode(nodeId);
@@ -296,13 +297,13 @@ Y_UNIT_TEST_SUITE(TStateStorageConfigCompareWithOld) {
     }
 
     Y_UNIT_TEST(TestReplicaActorIdAndSelectionIsSame1) {
-        NKikimrConfig::TDomainsConfig::TStateStorage config;
+        NKikimrConfig::TStateStorageConfig config;
         auto* ring = config.MutableRing();
         FillRing1(ring);
         DoTest(config, config);
     }
 
-    void FillRing2(NKikimrConfig::TDomainsConfig::TStateStorage::TRing* ring) {
+    void FillRing2(NKikimrConfig::TStateStorageConfig::TRing* ring) {
         ring->SetNToSelect(9);
         ui32 node = 10;
         for (ui32 j : xrange(0, 9)) {
@@ -315,15 +316,15 @@ Y_UNIT_TEST_SUITE(TStateStorageConfigCompareWithOld) {
         }
     }
     Y_UNIT_TEST(TestReplicaActorIdAndSelectionIsSame2) {
-        NKikimrConfig::TDomainsConfig::TStateStorage config;
+        NKikimrConfig::TStateStorageConfig config;
         auto* ring = config.MutableRing();
         FillRing2(ring);
         DoTest(config, config);
     }
 
     Y_UNIT_TEST(TestReplicaActorIdAndSelectionIsSame3) {
-        NKikimrConfig::TDomainsConfig::TStateStorage oldConfig;
-        NKikimrConfig::TDomainsConfig::TStateStorage newConfig;
+        NKikimrConfig::TStateStorageConfig oldConfig;
+        NKikimrConfig::TStateStorageConfig newConfig;
         auto* oldRing = oldConfig.MutableRing();
         auto* newRing = newConfig.AddRingGroups();
         FillRing2(oldRing);
@@ -332,8 +333,8 @@ Y_UNIT_TEST_SUITE(TStateStorageConfigCompareWithOld) {
     }
 
     Y_UNIT_TEST(TestReplicaActorIdAndSelectionIsSame4) {
-        NKikimrConfig::TDomainsConfig::TStateStorage oldConfig;
-        NKikimrConfig::TDomainsConfig::TStateStorage newConfig;
+        NKikimrConfig::TStateStorageConfig oldConfig;
+        NKikimrConfig::TStateStorageConfig newConfig;
         auto* oldRing = oldConfig.MutableRing();
         auto* newRing = newConfig.AddRingGroups();
         FillRing1(newRing);

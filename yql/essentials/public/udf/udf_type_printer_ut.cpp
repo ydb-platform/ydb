@@ -21,11 +21,11 @@ void TestType(const TString& expected, F&& f) {
 
 Y_UNIT_TEST(TestLinear) {
     TestType("Linear<Int32>", [](const NKikimr::NMiniKQL::TTypeBuilder& typeBuilder) {
-        return typeBuilder.NewLinearType(typeBuilder.NewDataType(EDataSlot::Int32), false);
+        return typeBuilder.NewLinearType(typeBuilder.NewDataType(EDataSlot::Int32), /*isDynamic=*/false);
     });
 
     TestType("DynamicLinear<Int32>", [](const NKikimr::NMiniKQL::TTypeBuilder& typeBuilder) {
-        return typeBuilder.NewLinearType(typeBuilder.NewDataType(EDataSlot::Int32), true);
+        return typeBuilder.NewLinearType(typeBuilder.NewDataType(EDataSlot::Int32), /*isDynamic=*/true);
     });
 }
 } // Y_UNIT_TEST_SUITE(TUdfTypePrinter)

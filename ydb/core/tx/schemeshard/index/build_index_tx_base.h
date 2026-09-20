@@ -6,6 +6,8 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -21,6 +23,8 @@ public:
 private:
     using TChangeStateRec = std::tuple<TIndexBuildId, TIndexBuildInfo::EState>;
     TDeque<TChangeStateRec> StateChanges;
+    using TChangeSetColumnConstraintStateRec = std::tuple<TIndexBuildId, TSetColumnConstraintOperationInfo::EOperationState>;
+    TDeque<TChangeSetColumnConstraintStateRec> SetColumnConstraintStateChanges;
     using TBillingEventSchedule = std::tuple<TIndexBuildId, TDuration>;
     TDeque<TBillingEventSchedule> ToScheduleBilling;
     using TToBill = std::tuple<TIndexBuildId, TInstant, TInstant>;
@@ -38,6 +42,7 @@ protected:
     void Send(TActorId dst, THolder<IEventBase> message, ui32 flags = 0, ui64 cookie = 0);
     void AllocateTxId(TIndexBuildId buildId);
     void ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state);
+    void ChangeState(TIndexBuildId id, TSetColumnConstraintOperationInfo::EOperationState state);
     void Progress(TIndexBuildId id);
     void Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo& indexInfo);
     void Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo& indexInfo);
@@ -99,9 +104,13 @@ public:
         }
 
         if (IsMutableOperation) {
-            LOG_N("Reply " << Response->Record.ShortDebugString());
+            YDB_LOG_NOTICE_COMP(NKikimrServices::BUILD_INDEX, LogPrefix << "Reply ",
+                {"response", Response->Record.ShortDebugString()}
+            );
         } else {
-            LOG_D("Reply " << Response->Record.ShortDebugString());
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, LogPrefix << "Reply ",
+                {"response", Response->Record.ShortDebugString()}
+            );
         }
 
         Send(Request->Sender, std::move(Response), 0, Request->Cookie);
@@ -118,3 +127,5 @@ public:
 
 } // NSchemeShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

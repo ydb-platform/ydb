@@ -19,11 +19,13 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/kqp/common
+    ydb/library/json_index
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/cbo/solver
     yql/essentials/core/extract_predicate
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
+    ydb/library/yql/providers/dq/expr_nodes
 )
 
 YQL_LAST_ABI_VERSION()

@@ -54,8 +54,11 @@ public:
 void Bootstrap(const NActors::TActorContext& ctx);
 
 
-TStringBuilder LogPrefix() const {
-    return TStringBuilder() << "KafkaDescribeGroupsActor{DatabasePath=" << DatabasePath << "}: ";
+NStructuredLog::TStructuredMessage LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "KafkaDescribeGroupsActor"},
+        {"selfId", SelfId()},
+        {"databasePath", DatabasePath});
 }
 
 struct TDescribeGroupsKqpQuery {
@@ -95,6 +98,7 @@ private:
         const TString& protoStr);
     NYdb::TParams BuildSelectParams();
     TString GetYqlWithTableNames(const TString& templateStr);
+    TString GetMetadataDatabasePath() const;
     std::shared_ptr<TDescribeGroupsResponseData> BuildResponse();
     void SendToKqpDescribeGroupsMetadataRequest(const TActorContext& ctx);
     void SendFailResponse(EKafkaErrors errorCode, const std::optional<TString>& errorMessage = std::nullopt);

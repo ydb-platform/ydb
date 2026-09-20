@@ -20,7 +20,7 @@ class TYtBlockTableContentWrapper : public TMutableComputationNode<TYtBlockTable
     typedef TMutableComputationNode<TYtBlockTableContentWrapper> TBaseComputation;
 public:
     TYtBlockTableContentWrapper(TComputationMutables& mutables, NCommon::TCodecContext& codecCtx,
-        TVector<TString>&& files, const TString& inputSpec, TType* listType, bool decompress, std::optional<ui64> expectedRowCount)
+        TVector<TString>&& files, const TString& inputSpec, TType* listType, bool decompress, std::optional<ui64> expectedRowCount, EDatumValidationMode validationMode)
         : TBaseComputation(mutables)
         , Files_(std::move(files))
         , Decompress_(decompress)
@@ -28,6 +28,7 @@ public:
     {
         Spec_.SetUseBlockInput();
         Spec_.SetInputBlockRepresentation(TMkqlIOSpecs::EBlockRepresentation::BlockStruct);
+        Spec_.SetDatumValidationMode(validationMode);
         Spec_.SetIsTableContent();
         Spec_.Init(codecCtx, inputSpec, {}, {}, AS_TYPE(TListType, listType)->GetItemType(), {}, TString());
     }
@@ -46,7 +47,7 @@ private:
 };
 
 IComputationNode* WrapYtBlockTableContent(NCommon::TCodecContext& codecCtx,
-    TComputationMutables& mutables, TCallable& callable, TStringBuf pathPrefix)
+    TComputationMutables& mutables, TCallable& callable, TStringBuf pathPrefix, EDatumValidationMode validationMode)
 {
     MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 arguments");
     TString uniqueId(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
@@ -67,7 +68,7 @@ IComputationNode* WrapYtBlockTableContent(NCommon::TCodecContext& codecCtx,
     }
 
     return new TYtBlockTableContentWrapper(mutables, codecCtx, std::move(files), inputSpec,
-        callable.GetType()->GetReturnType(), decompress, length);
+        callable.GetType()->GetReturnType(), decompress, length, validationMode);
 }
 
 } // NYql

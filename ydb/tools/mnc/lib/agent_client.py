@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from typing import Optional
 
 import aiohttp
@@ -57,6 +58,42 @@ async def post_json(host: str, path: str, payload: dict, port: int = 8999, paren
     if not result:
         return None
     return step.response
+
+
+async def get_json(host: str, path: str, port: int = 8999) -> Optional[dict]:
+    return await _get_json(host, path, port)
+
+
+async def wait_task(host: str, task_id: str, port: int = 8999, poll_interval: float = 1.0) -> Optional[dict]:
+    while True:
+        task = await _get_json(host, f"/tasks/{task_id}", port)
+        if task is None:
+            return None
+        status = task.get("status")
+        if status == "completed":
+            result = task.get("result") or {}
+            return result.get("data")
+        if status in {"failed", "cancelled"}:
+            logger.error(f"agent task failed; host: {host} task_id: {task_id} status: {status} error: {task.get('error')}")
+            return None
+        await asyncio.sleep(poll_interval)
+
+
+async def post_json_and_wait(
+    host: str,
+    path: str,
+    payload: dict,
+    port: int = 8999,
+    parent_task: progress.TaskNode = None,
+) -> Optional[dict]:
+    response = await post_json(host, path, payload, port=port, parent_task=parent_task)
+    if response is None:
+        return None
+    task_id = response.get("task_id")
+    if not task_id:
+        logger.error(f"agent did not return task_id; host: {host} path: {path}")
+        return None
+    return await wait_task(host, task_id, port=port)
 
 
 class CheckAgentHealthOnHost(progress.SimpleStep):

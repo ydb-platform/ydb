@@ -9,6 +9,8 @@
 #include "sock_config.h"
 #include "sock64.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NRawSocket {
 
 using namespace NActors;
@@ -27,15 +29,19 @@ public:
     TPollerToken::TPtr PollerToken;
     THashSet<TActorId> Connections;
 
-    EErrorAction ErrorAction;
-
     TSocketListener(const TActorId& poller, const TListenerSettings& settings, const TConnectionCreator& connectionCreator,
-                    NKikimrServices::EServiceKikimr service, EErrorAction errorAction)
+                    NKikimrServices::EServiceKikimr service)
         : Poller(poller)
         , Settings(settings)
         , ConnectionCreator(connectionCreator)
-        , Service(service)
-        , ErrorAction(errorAction) {
+        , Service(service) {
+    }
+
+    STATEFN(StateInit) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvWakeup, Bootstrap);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
     }
 
     STATEFN(StateWorking) {
@@ -48,6 +54,9 @@ public:
     }
 
     void Bootstrap() {
+        Become(&TThis::StateInit);
+        Socket.Reset();
+
         TSocketType socket({.TcpNotDelay = Settings.TcpNotDelay});
         TSocketAddressType bindAddress(socket.MakeAddress(Settings.Address, Settings.Port));
         int err = socket.Bind(bindAddress.get());
@@ -62,36 +71,32 @@ public:
 
             err = Socket->Listen(LISTEN_QUEUE);
             if (err == 0) {
-                LOG_INFO_S(*NActors::TlsActivationContext, Service,
-                           "Listening on " << bindAddress->ToString() << (endpoint->SecureContext ? " (ssl)" : ""));
+                YDB_LOG_INFO("Listening",
+                    {"bindAddress", bindAddress->ToString()},
+                    {"secureContext", (endpoint->SecureContext ? "(ssl)" : "")});
                 Socket->SetNonBlock();
                 Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 Become(&TThis::StateWorking);
                 return;
             } else {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to listen on " << bindAddress->ToString() << ". Error: " << strerror(-err));
+                YDB_LOG_WARN("Failed to listen",
+                    {"bindAddress", bindAddress->ToString()},
+                    {"error", strerror(-err)});
             }
         } else {
-            LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to bind " << bindAddress->ToString() << ". Error: " << strerror(-err));
+            YDB_LOG_WARN("Failed to bind",
+                {"bindAddress", bindAddress->ToString()},
+                {"error", strerror(-err)});
         }
 
-        switch(ErrorAction) {
-            case EErrorAction::Abort:
-                Cerr << "Failed to set up listener on port " << Settings.Port
-                                << " errno# " << -err << " (" << strerror(-err) << ")" << Endl;
-                abort();
-                break;
-            
-            case EErrorAction::Ignore:
-                PassAway();
-                break;
-        }
+        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
     }
 
     void PassAway() override {
         for (const NActors::TActorId& connection : Connections) {
             Send(connection, new NActors::TEvents::TEvPoison());
         }
+        TBase::PassAway();
     }
 
     void Handle(TEvents::TEvUnsubscribe::TPtr ev) {
@@ -124,9 +129,8 @@ public:
 };
 
 NActors::IActor* CreateSocketListener(const NActors::TActorId& poller, const TListenerSettings& settings,
-                                      TConnectionCreator connectionCreator, NKikimrServices::EServiceKikimr service,
-                                      EErrorAction errorAction) {
-    return new TSocketListener(poller, settings, connectionCreator, service, errorAction);
+                                      TConnectionCreator connectionCreator, NKikimrServices::EServiceKikimr service) {
+    return new TSocketListener(poller, settings, connectionCreator, service);
 }
 
 } // namespace NKikimr::NRawSocket

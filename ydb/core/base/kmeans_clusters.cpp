@@ -17,7 +17,7 @@ namespace NKikimr::NKMeans {
 
 namespace {
     constexpr ui64 MinVectorDimension = 1;
-    constexpr ui64 MaxVectorDimension = 16384;
+    constexpr ui64 MaxVectorDimension = 65536;
     constexpr ui64 MinLevels = 1;
     constexpr ui64 MaxLevels = 16;
     constexpr ui64 MinClusters = 2;
@@ -69,6 +69,10 @@ namespace {
         const TString vectorType = to_lower(vectorType_);
         if (vectorType == "float")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+        else if (vectorType == "float16")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16;
+        else if (vectorType == "bfloat16")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16;
         else if (vectorType == "uint8")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         else if (vectorType == "int8")
@@ -98,13 +102,28 @@ namespace {
         }
         return result;
     }
+
+    bool ParseBool(const TString& name, const TString& value, TString& error) {
+        const TString lower = to_lower(value);
+        if (lower == "true" || lower == "1") {
+            return true;
+        }
+        if (lower == "false" || lower == "0") {
+            return false;
+        }
+        error = TStringBuilder() << "Invalid bool value for " << name << ": " << value;
+        return false;
+    }
 }
 
 // TODO(mbkkt) maybe compute floating sum in double? Needs benchmark
 template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
-    using TSum = std::conditional_t<std::is_floating_point_v<TCoord>, double, i64>;
+    // Half-precision coordinates are stored in 16 bits, but arithmetic uses float.
+    using TArithmeticCoord = std::conditional_t<std::is_same_v<TCoord, TFloat16> || std::is_same_v<TCoord, TBFloat16>, float, TCoord>;
+    static constexpr bool IsFloatingPoint = std::is_floating_point_v<TArithmeticCoord>;
+    using TSum = std::conditional_t<IsFloatingPoint, double, i64>;
     static constexpr bool AggregateNormalized = false;
 };
 
@@ -130,7 +149,7 @@ struct TCosineDistance : TMetric<TCoord> {
 template <typename TCoord>
 struct TL1Distance : TMetric<TCoord> {
     using TSum = typename TMetric<TCoord>::TSum;
-    using TRes = std::conditional_t<std::is_floating_point_v<TCoord>, TCoord, ui64>;
+    using TRes = std::conditional_t<TMetric<TCoord>::IsFloatingPoint, typename TMetric<TCoord>::TArithmeticCoord, ui64>;
 
     static TRes Init()
     {
@@ -147,7 +166,7 @@ struct TL1Distance : TMetric<TCoord> {
 template <typename TCoord>
 struct TL2Distance : TMetric<TCoord> {
     using TSum = typename TMetric<TCoord>::TSum;
-    using TRes = std::conditional_t<std::is_floating_point_v<TCoord>, TCoord, ui64>;
+    using TRes = std::conditional_t<TMetric<TCoord>::IsFloatingPoint, typename TMetric<TCoord>::TArithmeticCoord, ui64>;
 
     static TRes Init()
     {
@@ -164,7 +183,7 @@ struct TL2Distance : TMetric<TCoord> {
 template <typename TCoord>
 struct TMaxInnerProductSimilarity : TMetric<TCoord> {
     using TSum = typename TMetric<TCoord>::TSum;
-    using TRes = std::conditional_t<std::is_floating_point_v<TCoord>, TCoord, i64>;
+    using TRes = std::conditional_t<TMetric<TCoord>::IsFloatingPoint, typename TMetric<TCoord>::TArithmeticCoord, i64>;
 
     static TRes Init()
     {
@@ -184,6 +203,7 @@ class TClusters: public IClusters {
     static constexpr double MinVectorsNeedsReassigned = 0.01;
 
     using TCoord = TMetric::TCoord_;
+    using TArithmeticCoord = TMetric::TArithmeticCoord;
     using TSum = TMetric::TSum;
     using TEmbedding = TVector<TSum>;
 
@@ -329,13 +349,16 @@ public:
     }
 
     void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        clusters.clear();
         if (!IsExpectedFormat(embedding)) {
             return;
         }
-        clusters.clear();
         for (ui32 i = 0; const auto& cluster : Clusters) {
             auto cl = std::make_pair(i, (double)TMetric::Distance(cluster, embedding));
-            auto it = std::lower_bound(clusters.begin(), clusters.end(), cl, [](const std::pair<ui32, double>& a, const std::pair<ui32, double>& b) {
+            // upper_bound, not lower_bound: on equal distances the cluster with the lower number wins,
+            // the same way as in FindCluster(). Otherwise rows may be assigned to different clusters
+            // during the K-means and the upload passes of the index build.
+            auto it = std::upper_bound(clusters.begin(), clusters.end(), cl, [](const std::pair<ui32, double>& a, const std::pair<ui32, double>& b) {
                 return a.second < b.second;
             });
             if (clusters.size() < n) {
@@ -398,7 +421,7 @@ public:
                 }
             } else {
                 for (const auto coord : this->GetCoords(embedding.data())) {
-                    *coords++ += norm != 0 ? static_cast<TSum>(coord * (weight / norm)) : 0;
+                    *coords++ += norm != 0 ? static_cast<TSum>(static_cast<TArithmeticCoord>(coord) * (weight / norm)) : 0;
                 }
             }
         } else {
@@ -410,7 +433,7 @@ public:
                 }
             } else {
                 for (const auto coord : this->GetCoords(embedding.data())) {
-                    *coords++ += static_cast<TSum>(coord) * weight;
+                    *coords++ += static_cast<TSum>(static_cast<TArithmeticCoord>(coord)) * weight;
                 }
             }
         }
@@ -485,7 +508,7 @@ private:
             }
         } else {
             for (const auto coord : GetCoords(embedding.data())) {
-                const double value = static_cast<double>(coord);
+                const double value = static_cast<TArithmeticCoord>(coord);
                 normSquared += value * value;
             }
         }
@@ -539,11 +562,11 @@ private:
             }
 
             auto data = GetData(d.MutRef().data());
-            if constexpr (std::is_floating_point_v<TCoord>) {
+            if constexpr (TMetric::IsFloatingPoint) {
                 for (auto& coord : data) {
                     coord = norm != 0
                         ? static_cast<TCoord>(static_cast<double>(*embedding) / (static_cast<double>(c) * norm))
-                        : 0;
+                        : TCoord{};
                     ++embedding;
                 }
             } else {
@@ -575,7 +598,7 @@ private:
         } else {
             auto data = GetData(d.MutRef().data());
             for (auto& coord : data) {
-                coord = *embedding / count;
+                coord = static_cast<TCoord>(*embedding / count);
                 embedding++;
             }
         }
@@ -612,6 +635,10 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
     switch (settings.vector_type()) {
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
             return handleMetric.template operator()<float>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16:
+            return handleMetric.template operator()<TFloat16>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
+            return handleMetric.template operator()<TBFloat16>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return handleMetric.template operator()<ui8>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
@@ -635,6 +662,10 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
             error = TStringBuilder() << "Target vector too short for " << typeName << " type";
             return false;
         }
+        if ((targetVector.size() - HeaderLen) % elementSize != 0) {
+            error = TStringBuilder() << "Invalid target vector size for " << typeName << " type";
+            return false;
+        }
         settings.set_vector_type(type);
         settings.set_vector_dimension((targetVector.size() - HeaderLen) / elementSize);
         return true;
@@ -644,6 +675,16 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
     switch (formatByte) {
         case EFormat::FloatVector:
             if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, sizeof(float), "float")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Float16Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16, sizeof(TFloat16), "float16")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::BFloat16Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16, sizeof(TBFloat16), "bfloat16")) {
                 return nullptr;
             }
             break;
@@ -901,6 +942,21 @@ bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& vectorSettings, c
             vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(float));
         }
         break;
+    case EFormat::Float16Vector:
+    case EFormat::BFloat16Vector:
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(formatByte == EFormat::Float16Vector
+                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16
+                : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16);
+        }
+        if (!hasVectorDimension) {
+            if (embedding.size() < HeaderLen + sizeof(TFloat16)
+                || (embedding.size() - HeaderLen) % sizeof(TFloat16) != 0) {
+                return false;
+            }
+            vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(TFloat16));
+        }
+        break;
     case EFormat::Uint8Vector:
         if (!hasVectorType) {
             vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
@@ -951,12 +1007,24 @@ void AutoSelectKMeansSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 row
     const bool hasLevels = settings.has_levels() && settings.levels() > 0;
     const bool hasClusters = settings.has_clusters() && settings.clusters() > 0;
 
-    if (hasLevels && hasClusters) {
-        return;
-    }
-
     if (isPrefixed) {
         rowCount = static_cast<ui64>(std::sqrt(static_cast<double>(rowCount)));
+    }
+
+    if (!settings.has_overlap_clusters()) {
+        if (rowCount >= 50000) {
+            if (!settings.has_clusters() || settings.clusters() >= 3) {
+                settings.set_overlap_clusters(3);
+            }
+        }
+    }
+
+    if (settings.has_overlap_clusters() && settings.overlap_clusters() > 1 && !settings.has_overlap_ratio()) {
+        settings.set_overlap_ratio(1.2);
+    }
+
+    if (hasLevels && hasClusters) {
+        return;
     }
 
     if (rowCount < 100) {
@@ -1034,6 +1102,21 @@ void AutoSelectKMeansSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 row
     }
 }
 
+ui32 ComputeAdaptiveK(ui64 prefixRowCount, ui32 levels, ui32 overlapClusters, ui32 maxClusters) {
+    if (prefixRowCount < 100) {
+        return MinClusters;
+    }
+    double searchWidth = 10;
+    double avgClustersPerVector = 1;
+    if (overlapClusters > 1) {
+        searchWidth = 4;
+        avgClustersPerVector = overlapClusters - 0.5;
+    }
+    ui64 clusters = ComputeOptimalClusters(levels, searchWidth, prefixRowCount, avgClustersPerVector);
+    clusters = std::min(clusters, static_cast<ui64>(maxClusters));
+    return static_cast<ui32>(clusters < MinClusters ? MinClusters : clusters);
+}
+
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
     return ValidateSettingsImpl(settings, false, error);
 }
@@ -1065,6 +1148,8 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
         settings.set_overlap_clusters(ParseUInt32(nameLower, value, MinClusters, MaxClusters, error));
     } else if (nameLower == "overlap_ratio") {
         settings.set_overlap_ratio(ParseDouble(nameLower, value, error));
+    } else if (nameLower == "adaptive_clusters") {
+        settings.set_adaptive_clusters(ParseBool(nameLower, value, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;

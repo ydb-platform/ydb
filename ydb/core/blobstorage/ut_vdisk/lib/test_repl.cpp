@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replproxy.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 using namespace NKikimr;
 using namespace NKikimr::NRepl;
 
@@ -81,7 +83,9 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
             it->Next();
         }
 
-        LOG_INFO_S(ctx, NActorsServices::TEST, "numBlobs# " << numBlobs << " blobsSize# " << blobsSize);
+        YDB_LOG_INFO_CTX(ctx, "TReadUntilSuccessActor bootsrtap",
+            {"numBlobs", numBlobs},
+            {"blobsSize", blobsSize});
 
         Become(&TThis::StateFunc);
         ctx.Schedule(RepeatTimeout, new TEvents::TEvWakeup());
@@ -91,7 +95,8 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
         --Counter;
 
-        LOG_DEBUG_S(ctx, NActorsServices::TEST, "received reply " << ev->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Received reply",
+            {"event", ev->Get()->ToString()});
 
         ui32 ok = 0, notOk = 0, dataCorrupt = 0, miss = 0, noData = 0;
 
@@ -124,9 +129,13 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
             }
         }
 
-        LOG_INFO_S(ctx, NActorsServices::TEST, "ok# " << ok << " notOk# " << notOk <<
-                " noData# " << noData << " dataCorrupt# " << dataCorrupt <<
-                " miss# " << miss << " remain# " << PendingReads.size());
+        YDB_LOG_INFO_CTX(ctx, "Handle TEvBlobStorage::TEvVGetResult",
+            {"ok", ok},
+            {"notOk", notOk},
+            {"noData", noData},
+            {"dataCorrupt", dataCorrupt},
+            {"miss", miss},
+            {"remain", PendingReads.size()});
 
         if (!Counter && PendingReads.empty()) {
             if (ReadSet.empty()) {
@@ -292,11 +301,11 @@ SYNC_TEST_WITH_DATASET_BEGIN(TTestReplDataWriteAndSync)
 virtual void Scenario(const TActorContext &ctx) {
     // load data
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, DataSet));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
 }
 SYNC_TEST_WITH_DATASET_END(TTestReplDataWriteAndSync)
 
@@ -305,18 +314,18 @@ SYNC_TEST_WITH_DATASET_BEGIN(TTestReplDataWriteAndSyncMultipart)
 virtual void Scenario(const TActorContext &ctx) {
     // load data
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, DataSet));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // duplicate data to handoff
     for (ui8 part = 1; part <= 3; ++part) {
         SyncRunner->Run(ctx, ManyPutsToOneVDisk(SyncRunner->NotifyID(), Conf->VDisks->Get(3), DataSet, part,
                 NKikimrBlobStorage::EPutHandleClass::TabletLog));
     }
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is duplicated");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is duplicated");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
 }
 SYNC_TEST_WITH_DATASET_END(TTestReplDataWriteAndSyncMultipart)
 
@@ -328,11 +337,11 @@ SYNC_TEST_BEGIN(TTestReplProxyData, TSyncTestWithSmallCommonDataset)
 virtual void Scenario(const TActorContext &ctx) {
     // load data
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &DataSet));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
 
     TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
     for (ui32 i = 1; i < 7; i++) {
@@ -344,7 +353,7 @@ virtual void Scenario(const TActorContext &ctx) {
         }
 
         SyncRunner->Run(ctx, CreateVDiskReplProxyReader(Conf, SyncRunner->NotifyID(), instance, expSetPtr, &DataSet));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  REPL PROXY READER done");
+        YDB_LOG_NOTICE_CTX(ctx, "REPL PROXY READER done");
     }
 }
 SYNC_TEST_END(TTestReplProxyData, TSyncTestWithSmallCommonDataset)
@@ -367,21 +376,21 @@ virtual void Scenario(const TActorContext &ctx) {
                                                           channel, collect, collectGen, collectStep, keep, nullptr));
     // set gc settings
     SyncRunner->Run(ctx, gcCommand);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
+    YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
 
     TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
     for (ui32 i = 1; i < 7; i++) {
         TAutoPtr<TExpectedSet> expSetPtr(new TExpectedSet()); // empty, it's ok
         SyncRunner->Run(ctx, CreateVDiskReplProxyReader(Conf, SyncRunner->NotifyID(), instance, expSetPtr, &DataSet));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  REPL PROXY READER done");
+        YDB_LOG_NOTICE_CTX(ctx, "REPL PROXY READER done");
     }
 }
 SYNC_TEST_END(TTestReplProxyKeepBits, TSyncTestWithSmallCommonDataset)
@@ -403,23 +412,23 @@ virtual void Scenario(const TActorContext &ctx) {
                                                           nullptr, nullptr));
     // set gc settings
     SyncRunner->Run(ctx, gcCommand);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
+    YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
 
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
+    YDB_LOG_NOTICE_CTX(ctx, "SYNC done");
 
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 }
 SYNC_TEST_END(TTestCollectAllSimpleDataset, TSyncTestBase)
 

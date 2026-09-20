@@ -18,6 +18,8 @@
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -54,8 +56,8 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TResourcePoolsScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TResourcePoolsScan: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -199,6 +201,11 @@ private:
                 insert({TSchema::QueryMemoryLimitPercentPerNode::ColumnId, [] (const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& resourcePool) {
                     const auto& properties = resourcePool->Description.GetProperties().GetProperties();
                     auto it = properties.find("query_memory_limit_percent_per_node");
+                    return it == properties.end() ? TCell::Make<double>(-1) : TCell::Make<double>(std::stod(it->second));
+                }});
+                insert({TSchema::TotalMemoryLimitPercentPerNode::ColumnId, [] (const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& resourcePool) {
+                    const auto& properties = resourcePool->Description.GetProperties().GetProperties();
+                    auto it = properties.find("total_memory_limit_percent_per_node");
                     return it == properties.end() ? TCell::Make<double>(-1) : TCell::Make<double>(std::stod(it->second));
                 }});
             }

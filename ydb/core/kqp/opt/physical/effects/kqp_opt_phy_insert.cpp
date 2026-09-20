@@ -130,8 +130,7 @@ TExprBase KqpBuildInsertStages(TExprBase node, TExprContext& ctx, const TKqpOpti
     bool abortOnError = insert.OnConflict().Value() == "abort"sv;
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, insert.Table().Path());
 
-    const bool isSink = NeedSinks(table, kqpCtx);
-    const bool needPrecompute = !(isSink && abortOnError);
+    const bool needPrecompute = !abortOnError;
 
     if (needPrecompute) {
         const static TMaybe<THashSet<TStringBuf>> empty;

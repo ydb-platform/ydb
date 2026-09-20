@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "opentelemetry/sdk/instrumentationscope/scope_configurator.h"
+#include "opentelemetry/sdk/logs/log_record_limits.h"
 #include "opentelemetry/sdk/logs/logger_config.h"
 #include "opentelemetry/sdk/logs/logger_context.h"
 #include "opentelemetry/sdk/logs/logger_provider.h"
@@ -73,6 +74,19 @@ std::unique_ptr<opentelemetry::sdk::logs::LoggerProvider> LoggerProviderFactory:
 {
   std::unique_ptr<opentelemetry::sdk::logs::LoggerProvider> provider(
       new LoggerProvider(std::move(processors), resource, std::move(logger_configurator)));
+  return provider;
+}
+
+std::unique_ptr<opentelemetry::sdk::logs::LoggerProvider> LoggerProviderFactory::Create(
+    std::vector<std::unique_ptr<LogRecordProcessor>> &&processors,
+    const resource::Resource &resource,
+    std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>> logger_configurator,
+    LogRecordLimits log_record_limits)
+{
+  auto context = std::make_unique<LoggerContext>(std::move(processors), resource,
+                                                 std::move(logger_configurator), log_record_limits);
+  std::unique_ptr<opentelemetry::sdk::logs::LoggerProvider> provider(
+      new LoggerProvider(std::move(context)));
   return provider;
 }
 

@@ -25,17 +25,19 @@ struct TEvWriteCompleeted: public TEventLocal<TEvWriteCompleeted, EEv::EvWriteCo
     {
     }
 
-    const Ydb::StatusIds::StatusCode Status; 
+    const Ydb::StatusIds::StatusCode Status;
     const NYql::TIssues Issues;
 };
 
 struct TEvRetryTable: public TEventLocal<TEvRetryTable, EEv::EvRetryTable> {
-    TEvRetryTable(const TString& tablePath)
+    TEvRetryTable(const TString& tablePath, bool defaultTable)
         : TablePath(tablePath)
+        , DefaultTable(defaultTable)
     {
     }
 
     const TString TablePath;
+    const bool DefaultTable;
 };
 
 }

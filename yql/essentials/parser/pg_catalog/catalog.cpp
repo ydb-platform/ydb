@@ -59,6 +59,8 @@ using TAggregations = THashMap<ui32, TAggregateDesc>;
 
 using TAms = THashMap<ui32, TAmDesc>;
 
+using TCollations = THashMap<ui32, TCollationDesc>;
+
 using TNamespaces = THashMap<decltype(TNamespaceDesc::Oid), TNamespaceDesc>;
 
 using TOpFamilies = THashMap<TString, TOpFamilyDesc>;
@@ -1299,6 +1301,53 @@ private:
     TAms& Ams_;
 };
 
+class TCollationsParser: public TParser {
+public:
+    explicit TCollationsParser(TCollations& collations)
+        : Collations_(collations)
+    {
+    }
+
+    void OnKey(const TString& key, const TString& value) override {
+        if (key == "oid") {
+            CurrDesc_.Oid = FromString<ui32>(value);
+        } else if (key == "descr") {
+            CurrDesc_.Descr = value;
+        } else if (key == "collname") {
+            CurrDesc_.Name = value;
+        } else if (key == "collprovider") {
+            Y_ENSURE(value.size() == 1);
+            switch (value[0]) {
+                case (char)ECollationProvider::Default:
+                case (char)ECollationProvider::Icu:
+                case (char)ECollationProvider::Libc:
+                    CurrDesc_.Provider = (ECollationProvider)value[0];
+                    break;
+                default:
+                    throw yexception() << "Unknown collprovider value: " << value;
+            }
+        } else if (key == "collencoding") {
+            CurrDesc_.Encoding = FromString<i32>(value);
+        } else if (key == "collcollate") {
+            CurrDesc_.Collate = value;
+        } else if (key == "collctype") {
+            CurrDesc_.Ctype = value;
+        } else if (key == "colliculocale") {
+            CurrDesc_.IcuLocale = value;
+        }
+    }
+
+    void OnFinish() override {
+        Y_ENSURE(!CurrDesc_.Name.empty());
+        Collations_[CurrDesc_.Oid] = std::move(CurrDesc_);
+        CurrDesc_ = TCollationDesc();
+    }
+
+private:
+    TCollationDesc CurrDesc_;
+    TCollations& Collations_;
+};
+
 class TAmProcsParser: public TParser {
 public:
     TAmProcsParser(TAmProcs& amProcs, const THashMap<TString, ui32>& typeByName,
@@ -1582,6 +1631,13 @@ TAms ParseAms(const TString& dat) {
     return ret;
 }
 
+TCollations ParseCollations(const TString& dat) {
+    TCollations ret;
+    TCollationsParser parser(ret);
+    parser.Do(dat);
+    return ret;
+}
+
 TLanguages ParseLanguages(const TString& dat) {
     TLanguages ret;
     TLanguagesParser parser(ret);
@@ -1632,6 +1688,14 @@ const char* AllowedProcsRaw[] = {
 #include "safe_procs.h"
 #include "used_procs.h"
 #include "postgis_procs.h"
+};
+
+// Locale names known to the ICU library pg_collation_icu.generated.h was generated from
+// (see gen_icu_collations). Append-only: a locale's position here becomes part of its
+// collation oid (see IcuCollationOidBase below), so it must never change once assigned.
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
+const char* AllIcuCollationLocalesRaw[] = {
+#include "pg_collation_icu.generated.h"
 };
 
 struct TCatalog: public IExtensionSqlBuilder {
@@ -1733,6 +1797,8 @@ struct TCatalog: public IExtensionSqlBuilder {
         Y_ENSURE(NResource::FindExact("pg_conversion.dat", &conversionData));
         TString amData;
         Y_ENSURE(NResource::FindExact("pg_am.dat", &amData));
+        TString collationData;
+        Y_ENSURE(NResource::FindExact("pg_collation.dat", &collationData));
         TString languagesData;
         Y_ENSURE(NResource::FindExact("pg_language.dat", &languagesData));
         THashMap<ui32, TLazyTypeInfo> lazyTypeInfos;
@@ -1860,6 +1926,22 @@ struct TCatalog: public IExtensionSqlBuilder {
         State->AmOps = ParseAmOps(amOpData, State->TypeByName, State->Types, State->OperatorsByName, State->Operators, State->OpFamilies);
         State->AmProcs = ParseAmProcs(amProcData, State->TypeByName, State->ProcByName, State->Procs, State->OpFamilies);
         State->Ams = ParseAms(amData);
+        State->Collations = ParseCollations(collationData);
+        for (const auto& [k, v] : State->Collations) {
+            Y_ENSURE(State->CollationByName.insert(std::make_pair(v.Name, k)).second);
+        }
+
+        for (size_t i = 0; i < Y_ARRAY_SIZE(AllIcuCollationLocalesRaw); ++i) {
+            TCollationDesc desc;
+            desc.Oid = IcuCollationOidBase + i;
+            desc.IcuLocale = AllIcuCollationLocalesRaw[i];
+            desc.Name = desc.IcuLocale + "-x-icu";
+            desc.Provider = ECollationProvider::Icu;
+            desc.Descr = "ICU locale collation";
+            Y_ENSURE(State->Collations.insert(std::make_pair(desc.Oid, desc)).second);
+            Y_ENSURE(State->CollationByName.insert(std::make_pair(desc.Name, desc.Oid)).second);
+        }
+
         State->Namespaces = FillNamespaces();
         for (auto& [k, v] : State->Types) {
             if (v.TypeId != v.ArrayTypeId) {
@@ -2263,6 +2345,7 @@ struct TCatalog: public IExtensionSqlBuilder {
         TCasts Casts;
         TAggregations Aggregations;
         TAms Ams;
+        TCollations Collations;
         TNamespaces Namespaces;
         TOpFamilies OpFamilies;
         TOpClasses OpClasses;
@@ -2272,6 +2355,7 @@ struct TCatalog: public IExtensionSqlBuilder {
         TLanguages Languages;
         THashMap<TString, TVector<ui32>> ProcByName;
         THashMap<TString, ui32> TypeByName;
+        THashMap<TString, ui32> CollationByName;
         THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
         THashMap<TString, TVector<ui32>> OperatorsByName;
         THashMap<TString, TVector<ui32>> AggregationsByName;
@@ -2459,6 +2543,38 @@ const TAmDesc& LookupAm(ui32 oid) {
 void EnumAm(std::function<void(ui32, const TAmDesc&)> f) {
     const auto& catalog = TCatalog::Instance();
     for (const auto& [oid, desc] : catalog.State->Ams) {
+        f(oid, desc);
+    }
+}
+
+bool HasCollation(const TString& name) {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.State->CollationByName.contains(name);
+}
+
+const TCollationDesc& LookupCollation(const TString& name) {
+    const auto& catalog = TCatalog::Instance();
+    const auto oidPtr = catalog.State->CollationByName.FindPtr(name);
+    if (!oidPtr) {
+        throw yexception() << "No such collation: " << name;
+    }
+
+    return LookupCollation(*oidPtr);
+}
+
+const TCollationDesc& LookupCollation(ui32 oid) {
+    const auto& catalog = TCatalog::Instance();
+    const auto descPtr = catalog.State->Collations.FindPtr(oid);
+    if (!descPtr) {
+        throw yexception() << "No such collation: " << oid;
+    }
+
+    return *descPtr;
+}
+
+void EnumCollation(std::function<void(ui32, const TCollationDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& [oid, desc] : catalog.State->Collations) {
         f(oid, desc);
     }
 }

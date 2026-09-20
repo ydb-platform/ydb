@@ -15,7 +15,7 @@ DECLARE_REFCOUNTED_STRUCT(TServerCredentialsConfig)
 DECLARE_REFCOUNTED_STRUCT(TServerAddressConfig)
 DECLARE_REFCOUNTED_STRUCT(TServerConfig)
 DECLARE_REFCOUNTED_STRUCT(TChannelCredentialsConfig)
-DECLARE_REFCOUNTED_STRUCT(TChannelConfigTemplate)
+DECLARE_REFCOUNTED_STRUCT(TChannelFactoryConfig)
 DECLARE_REFCOUNTED_STRUCT(TChannelConfig)
 
 DECLARE_REFCOUNTED_STRUCT(IGrpcChannel)
@@ -26,8 +26,10 @@ extern const char* const TracingTraceIdMetadataKey;
 extern const char* const TracingSpanIdMetadataKey;
 extern const char* const TracingSampledMetadataKey;
 extern const char* const TracingDebugMetadataKey;
+extern const char* const TracingTraceParentMetadataKey;
 
 extern const char* const RequestIdMetadataKey;
+extern const char* const StartTimeMetadataKey;
 extern const char* const UserMetadataKey;
 extern const char* const UserTagMetadataKey;
 extern const char* const UserAgentMetadataKey;

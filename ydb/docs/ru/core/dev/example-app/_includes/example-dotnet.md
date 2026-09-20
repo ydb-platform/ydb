@@ -1,4 +1,4 @@
-# Приложение на C#
+# Приложение на C# {#csharp-app}
 
 На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-dotnet-sdk/examples), использующего [C# SDK](https://github.com/ydb-platform/ydb-dotnet-sdk) {{ ydb-short-name }}.
 

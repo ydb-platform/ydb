@@ -45,7 +45,7 @@ public:
         if (name == NKikimr::NUdf::TStringRef::Of("Func")) {
             builder.SimpleSignature<i32(i32)>();
             builder.Implementation(new TFunc(
-                builder.GetCounter("FuncCalls", true),
+                builder.GetCounter("FuncCalls", /*deriv=*/true),
                 builder.GetScopedProbe("FuncTime")));
         }
     }
@@ -107,7 +107,6 @@ public:
         return &Msg;
     }
 
-public:
     NPureCalcProto::TUnparsed Msg;
     bool Extracted = false;
 };
@@ -119,7 +118,7 @@ Y_UNIT_TEST(TestCounters) {
     auto factory = MakeProgramFactory();
 
     i64 callCounter = 0;
-    TMyCountersProvider myCountersProvider(&callCounter, nullptr);
+    TMyCountersProvider myCountersProvider(&callCounter, /*log=*/nullptr);
     factory->AddUdfModule("MyModule", new TMyModule);
     factory->SetCountersProvider(&myCountersProvider);
 
@@ -145,7 +144,7 @@ Y_UNIT_TEST(TestCountersFilteredColumns) {
     auto factory = MakeProgramFactory();
 
     i64 callCounter = 0;
-    TMyCountersProvider myCountersProvider(&callCounter, nullptr);
+    TMyCountersProvider myCountersProvider(&callCounter, /*log=*/nullptr);
     factory->AddUdfModule("MyModule", new TMyModule);
     factory->SetCountersProvider(&myCountersProvider);
 
@@ -173,7 +172,7 @@ Y_UNIT_TEST(TestScopedProbes) {
     auto factory = MakeProgramFactory();
 
     TString log;
-    TMyCountersProvider myCountersProvider(nullptr, &log);
+    TMyCountersProvider myCountersProvider(/*calls=*/nullptr, &log);
     factory->AddUdfModule("MyModule", new TMyModule);
     factory->SetCountersProvider(&myCountersProvider);
 

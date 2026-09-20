@@ -70,8 +70,10 @@ public:
         }
         GroupIds.Clear();
         AllocationInfo.clear();
-        AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "scope_cleaned")("process_id", ExternalProcessId)(
-            "external_scope_id", ExternalScopeId);
+        YDB_LOG_INFO_COMP(NKikimrServices::GROUPED_MEMORY_LIMITER, "",
+            {"event", "scope_cleaned"},
+            {"processId", ExternalProcessId},
+            {"externalScopeId", ExternalScopeId});
         return true;
     }
 
@@ -116,8 +118,11 @@ public:
         ui64 memoryAllocated = 0;
         auto it = AllocationInfo.find(allocationId);
         if (it == AllocationInfo.end()) {
-            AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("reason", "allocation_cleaned_in_previous_scope_id_live")(
-                "allocation_id", allocationId)("process_id", ExternalProcessId)("external_scope_id", ExternalScopeId);
+            YDB_LOG_WARN_COMP(NKikimrServices::GROUPED_MEMORY_LIMITER, "",
+                {"reason", "allocation_cleaned_in_previous_scope_id_live"},
+                {"allocationId", allocationId},
+                {"processId", ExternalProcessId},
+                {"externalScopeId", ExternalScopeId});
             return true;
         }
         bool waitFlag = false;
@@ -132,8 +137,12 @@ public:
                 waitFlag = true;
                 break;
         }
-        AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocation_unregister")("allocation_id", allocationId)("wait", waitFlag)(
-            "external_group_id", externalGroupId)("allocation_status", it->second->GetAllocationStatus());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::GROUPED_MEMORY_LIMITER, "",
+            {"event", "allocation_unregister"},
+            {"allocationId", allocationId},
+            {"wait", waitFlag},
+            {"externalGroupId", externalGroupId},
+            {"allocationStatus", it->second->GetAllocationStatus()});
         memoryAllocated = it->second->GetAllocatedVolume();
         AllocationInfo.erase(it);
         return !!memoryAllocated;
@@ -142,20 +151,26 @@ public:
     void UnregisterGroup(const bool isPriorityProcess, const ui64 externalGroupId) {
         if (GroupIds.UnregisterExternalId(externalGroupId)) {
             UnregisterGroupImplExt(externalGroupId);
-            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("external_group_id", externalGroupId)(
-                "min_group", GroupIds.GetMinExternalIdOptional());
+            YDB_LOG_INFO_COMP(NKikimrServices::GROUPED_MEMORY_LIMITER, "",
+                {"event", "remove_group"},
+                {"externalGroupId", externalGroupId},
+                {"minGroup", GroupIds.GetMinExternalIdOptional()});
             if (isPriorityProcess && (externalGroupId < GroupIds.GetMinExternalIdDef(externalGroupId))) {
                 Y_UNUSED(TryAllocateWaiting(isPriorityProcess, 0));
             }
         } else {
-            AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_absent_group")("external_group_id", externalGroupId);
+            YDB_LOG_WARN_COMP(NKikimrServices::GROUPED_MEMORY_LIMITER, "",
+                {"event", "remove_absent_group"},
+                {"externalGroupId", externalGroupId});
         }
     }
 
     void RegisterGroup(const bool isPriorityProcess, const ui64 externalGroupId) {
         GroupIds.RegisterExternalId(externalGroupId);
-        AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "register_group")("external_group_id", externalGroupId)(
-            "min_group", GroupIds.GetMinExternalIdOptional());
+        YDB_LOG_INFO_COMP(NKikimrServices::GROUPED_MEMORY_LIMITER, "",
+            {"event", "register_group"},
+            {"externalGroupId", externalGroupId},
+            {"minGroup", GroupIds.GetMinExternalIdOptional()});
         if (isPriorityProcess && (externalGroupId < GroupIds.GetMinExternalIdDef(externalGroupId))) {
             Y_UNUSED(TryAllocateWaiting(isPriorityProcess, 0));
         }
@@ -290,8 +305,8 @@ public:
         if (it->second->Unregister()) {
             AllocationScopes.erase(it);
             RefreshMemoryUsage();
+            WaitingScopes.erase(externalScopeId);
         }
-        WaitingScopes.erase(externalScopeId);
     }
 
     void RegisterScope(const ui64 externalScopeId) {

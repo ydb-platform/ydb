@@ -1,6 +1,9 @@
 #include "audit_helper.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/system/thread.h>
+
+#include <algorithm>
 
 namespace NKikimr {
 namespace Tests {
@@ -21,6 +24,27 @@ NAudit::TAuditLogBackends CreateTestAuditLogBackends(std::vector<std::string>& l
     NAudit::TAuditLogBackends logBackends;
     logBackends[NKikimrConfig::TAuditConfig::TXT].emplace_back(new TMemoryLogBackend(lineBuffer));
     return logBackends;
+}
+
+bool WaitAndFindAuditLine(
+    const std::vector<std::string>& auditLines,
+    const std::string& substr,
+    std::string& outLine,
+    size_t maxAttempts,
+    TDuration retryDelay)
+{
+    for (size_t attempt = 0; attempt < maxAttempts; ++attempt) {
+        auto found = std::find_if(auditLines.rbegin(), auditLines.rend(), [&](const auto& line) {
+            return line.contains(substr);
+        });
+        if (found != auditLines.rend()) {
+            outLine = *found;
+            Cerr << "AUDIT LOG checked line:" << Endl << "    " << outLine << Endl;
+            return true;
+        }
+        Sleep(retryDelay);
+    }
+    return false;
 }
 
 std::string FindAuditLine(const std::vector<std::string>& auditLines, const std::string& substr) {

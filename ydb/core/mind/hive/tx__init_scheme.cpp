@@ -2,6 +2,8 @@
 #include "hive_log.h"
 #include <ydb/library/actors/interconnect/interconnect.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -14,7 +16,8 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_INIT_SCHEME; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxInitScheme::Execute");
+        YDB_LOG_DEBUG("THive::TTxInitScheme::Execute initializing hive scheme",
+            {"logPrefix", GetLogPrefix()});
         bool wasEmpty = txc.DB.GetScheme().IsEmpty();
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
         if (!wasEmpty) {
@@ -87,14 +90,35 @@ public:
                 }
                 break;
             }
+            case 19: {
+                // In schema versions before 20 we did not persist confirmed storage versions
+                // So we treat them as unset, which by default means everything is confirmed
+                // This is important for version changes 19 -> 20 -> 19 -> 20,
+                // so that we do not treat updates made during downgrade as unconfirmed
+                NIceDb::TNiceDb db(txc.DB);
+                auto tabletRowset = db.Table<Schema::Tablet>().Range().Select<Schema::Tablet::ID, Schema::Tablet::ConfirmedStorageVersion>();
+                if (!tabletRowset.IsReady()) {
+                    return false;
+                }
+                while (!tabletRowset.EndOfSet()) {
+                    if (tabletRowset.HaveValue<Schema::Tablet::ConfirmedStorageVersion>()) {
+                        db.Table<Schema::Tablet>().Key(tabletRowset.GetKey()).UpdateToNull<Schema::Tablet::ConfirmedStorageVersion>();
+                    }
+                    if (!tabletRowset.Next()) {
+                        return false;
+                    }
+                }
+
+            }
             }
         }
-        NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(TSchemeIds::State::DatabaseVersion).Update(NIceDb::TUpdate<Schema::State::Value>(19));
+        NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(TSchemeIds::State::DatabaseVersion).Update(NIceDb::TUpdate<Schema::State::Value>(20));
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxInitScheme::Complete");
+        YDB_LOG_DEBUG("THive::TTxInitScheme::Complete",
+            {"logPrefix", GetLogPrefix()});
         const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         if (IsBridgeMode(ctx)) {

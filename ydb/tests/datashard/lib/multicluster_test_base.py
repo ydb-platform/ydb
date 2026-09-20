@@ -4,6 +4,7 @@ import logging
 import hashlib
 
 
+from ydb.tests.library.harness.daemon import SeveralDaemonErrors
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
@@ -65,8 +66,15 @@ class MulticlusterTestBase():
 
     @classmethod
     def teardown_class(cls):
+        exceptions = []
         for cluster in cls.clusters:
-            cluster.stop()
+            try:
+                cluster.stop()
+            except SeveralDaemonErrors as daemon_exceptions:
+                exceptions.append(str(daemon_exceptions))
+
+        if exceptions:
+            raise SeveralDaemonErrors(exceptions)
 
     def setup_method(self):
         current_test_full_name = os.environ.get("PYTEST_CURRENT_TEST")

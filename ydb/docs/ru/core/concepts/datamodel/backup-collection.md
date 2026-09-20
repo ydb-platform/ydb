@@ -135,7 +135,8 @@ block-beta
 Для экспорта резервных копий во внешнее хранилище используйте {{ ydb-short-name }} CLI:
 
 - [`ydb export s3`](../../reference/ydb-cli/export-import/export-s3.md) для S3-совместимого хранилища.
-- [`ydb tools dump`](../../reference/ydb-cli/export-import/tools-dump.md) для файловой системы.
+- [`ydb export nfs`](../../reference/ydb-cli/export-import/export-nfs.md) для NFS на хостах кластера.
+- [`ydb tools dump`](../../reference/ydb-cli/export-import/tools-dump.md) для файловой системы на локальном компьютере.
 
 Каждую резервную копию в цепочке необходимо экспортировать отдельно. Сохраняйте порядок цепочки при экспорте/импорте для успешного восстановления.
 
@@ -145,7 +146,7 @@ block-beta
 
 ## Восстановление из резервных копий
 
-Восстановление возвращает данные к состоянию самой поздней резервной копии в цепочке, находящейся в кластере. Чтобы восстановиться к более раннему состоянию, импортируйте из внешнего хранилища только нужный префикс цепочки — см. [Импорт и восстановление](../../recipes/backup-collections/importing-and-restoring.md).
+Восстановление возвращает данные к состоянию самой поздней резервной копии в цепочке, находящейся в кластере. Чтобы восстановиться к более раннему состоянию, импортируйте из внешнего хранилища только нужный префикс цепочки — см. [Импорт и восстановление](../../recipes/backup/backup-collections/importing-and-restoring.md).
 
 ### Процесс восстановления
 
@@ -171,7 +172,7 @@ block-beta
 
 - [Концепции резервного копирования](../backup.md): Обзор всех подходов к резервному копированию в {{ ydb-short-name }}
 - [Резервное копирование и восстановление: коллекции резервных копий](../../devops/backup-and-recovery/index.md#backup-collections): пошаговые сценарии и команды CLI
-- [Рецепты и примеры](../../recipes/backup-collections/index.md): Типовые сценарии и примеры
+- [Рецепты и примеры](../../recipes/backup/backup-collections/index.md): Типовые сценарии и примеры
 - Справочник YQL:
   - [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md)
   - [BACKUP](../../yql/reference/syntax/backup.md)

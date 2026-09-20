@@ -369,6 +369,16 @@ TMultiTablePartitions TClientBase::GetTablePartitions(
         });
 }
 
+void TClient::CheckClusterLiveness(const TCheckClusterLivenessOptions& options)
+{
+    CheckShutdown();
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForCheckClusterLiveness(),
+        [this, &options] (TMutationId /*mutationId*/) {
+            RawClient_->CheckClusterLiveness(options);
+        });
+}
+
 TMaybe<TYPath> TClientBase::GetFileFromCache(
     const TString& md5Signature,
     const TYPath& cachePath,
@@ -1185,9 +1195,9 @@ void TTransaction::Unlock(
         });
 }
 
-void TTransaction::Commit()
+void TTransaction::Commit(const TCommitTransactionOptions& options)
 {
-    PingableTx_->Commit();
+    PingableTx_->Commit(options);
 }
 
 void TTransaction::Abort()
@@ -1790,7 +1800,8 @@ void SetupClusterContext(
     static constexpr char httpsUrlSchema[] = "https://";
 
     if (!context.UseTLS) {
-        context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema);
+        context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema) ||
+                         (context.Config->PreferHttps && !context.ServerName.StartsWith(httpUrlSchema));
     }
 
     if (context.ServerName.StartsWith(httpUrlSchema)) {
@@ -1828,6 +1839,8 @@ TClientContext CreateClientContext(
 
     if (options.UseTLS_) {
         context.UseTLS = *options.UseTLS_;
+    } else {
+        context.UseTLS = context.Config->UseTLS;
     }
 
     SetupClusterContext(context, serverName);

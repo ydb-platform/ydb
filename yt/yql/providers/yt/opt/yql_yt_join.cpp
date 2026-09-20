@@ -147,9 +147,9 @@ const TStructExprType* MakeOutputJoinColumns(const THashMap<TString, const TType
     return ctx.MakeType<TStructExprType>(resultFields);
 }
 
-const TTypeAnnotationNode* UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx) {
+const TTypeAnnotationNode* UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx, const TTypeAnnotationContext& typesCtx) {
     TTypeAnnotationNode::TListType t = types;
-    const TTypeAnnotationNode* commonType = CommonType(pos, t, ctx);
+    const TTypeAnnotationNode* commonType = CommonType(pos, t, ctx, typesCtx);
     if (commonType && !commonType->IsOptionalOrNull()) {
         NUdf::TCastResultOptions options = 0;
         for (auto type : types) {
@@ -165,13 +165,13 @@ const TTypeAnnotationNode* UnifyJoinKeyType(TPositionHandle pos, const TVector<c
 }
 
 TVector<const TTypeAnnotationNode*> UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& left,
-    const TVector<const TTypeAnnotationNode*>& right, TExprContext& ctx)
+    const TVector<const TTypeAnnotationNode*>& right, TExprContext& ctx, const TTypeAnnotationContext& typesCtx)
 {
     YQL_ENSURE(left.size() == right.size());
     TVector<const TTypeAnnotationNode*> ret;
     ret.reserve(left.size());
     for (size_t i = 0; i < left.size(); ++i) {
-        ret.push_back(UnifyJoinKeyType(pos, { left[i], right[i] }, ctx));
+        ret.push_back(UnifyJoinKeyType(pos, { left[i], right[i] }, ctx, typesCtx));
     }
 
     return ret;
@@ -443,39 +443,42 @@ TCommonJoinCoreLambdas MakeCommonJoinCoreLambdas(TPositionHandle pos, TExprConte
     return result;
 }
 
-TExprNode::TPtr PrepareForCommonJoinCore(TPositionHandle pos, TExprContext& ctx, const TExprNode::TPtr& input,
+TExprNode::TPtr FlattenCommonJoinPayloadRow(TPositionHandle pos, TExprContext& ctx, const TExprNode::TPtr& row,
     const TExprNode::TPtr& reduceLambdaZero, const TExprNode::TPtr& reduceLambdaOne)
 {
     return ctx.Builder(pos)
-        .Callable("OrderedMap")
-            .Add(0, input)
-            .Lambda(1)
-                .Param("item")
-                .Callable("FlattenMembers")
-                    .List(0)
-                        .Atom(0, "")
-                        .Callable(1, "RemoveMember")
-                            .Arg(0, "item")
-                            .Atom(1, "_yql_join_payload")
-                        .Seal()
+        .Callable("FlattenMembers")
+            .List(0)
+                .Atom(0, "")
+                .Callable(1, "RemoveMember")
+                    .Add(0, row)
+                    .Atom(1, "_yql_join_payload")
+                .Seal()
+            .Seal()
+            .List(1)
+                .Atom(0, "")
+                .Callable(1, "Visit")
+                    .Callable(0, "Member")
+                        .Add(0, row)
+                        .Atom(1, "_yql_join_payload")
                     .Seal()
-                    .List(1)
-                        .Atom(0, "")
-                        .Callable(1, "Visit")
-                            .Callable(0, "Member")
-                                .Arg(0, "item")
-                                .Atom(1, "_yql_join_payload")
-                            .Seal()
-                            .Atom(1, "0", TNodeFlags::Default)
-                            .Add(2, reduceLambdaZero)
-                            .Atom(3, "1", TNodeFlags::Default)
-                            .Add(4, reduceLambdaOne)
-                        .Seal()
-                    .Seal()
+                    .Atom(1, "0", TNodeFlags::Default)
+                    .Add(2, reduceLambdaZero)
+                    .Atom(3, "1", TNodeFlags::Default)
+                    .Add(4, reduceLambdaOne)
                 .Seal()
             .Seal()
         .Seal()
         .Build();
+}
+
+TExprNode::TPtr PrepareForCommonJoinCore(TPositionHandle pos, TExprContext& ctx, const TExprNode::TPtr& input,
+    const TExprNode::TPtr& reduceLambdaZero, const TExprNode::TPtr& reduceLambdaOne)
+{
+    auto item = ctx.NewArgument(pos, "item");
+    auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, { item }),
+        FlattenCommonJoinPayloadRow(pos, ctx, item, reduceLambdaZero, reduceLambdaOne));
+    return ctx.NewCallable(pos, "OrderedMap", { input, std::move(lambda) });
 }
 
 // generate Reduce-only transformations which filter out null keys for each optional and non-convertible key

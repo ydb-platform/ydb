@@ -41,8 +41,15 @@ ui32 TSelectBuilder::AddFactory(const TStringBuf& udafName, size_t paramCount) {
     return it->second.Id;
 }
 
-TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> tabletId) const {
+TString TSelectBuilder::Build(
+    const TStringBuf& table,
+    std::optional<ui64> tabletId,
+    const TStringBuf& where,
+    const TStringBuf& declares) const {
     TStringBuilder res;
+    if (declares) {
+        res << declares;
+    }
     for (const auto& [udaf, factory] : Udaf2Factory) {
         TStringBuilder paramsStr;
         for (size_t i = 0; i < factory.ParamCount; ++i) {
@@ -77,9 +84,27 @@ TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> table
             res << ",";
         }
         if (agg.UdafFactory) {
-            Y_ABORT_UNLESS(agg.ColumnName);
-            res << "AGGREGATE_BY(" << TEscapedId{*agg.ColumnName}
-                << "," << "$f" << *agg.UdafFactory << "(" << agg.Params << "))";
+            res << "AGGREGATE_BY(";
+            if (agg.TupleColumnNames) {
+                res << (agg.TupleEncoding == ETupleEncoding::PresortKey
+                            ? "Udf(StatisticsInternal::PresortKey)"
+                            : "StablePickle")
+                    << "(AsTuple(";
+                bool firstCol = true;
+                for (const auto& columnName : *agg.TupleColumnNames) {
+                    if (firstCol) {
+                        firstCol = false;
+                    } else {
+                        res << ",";
+                    }
+                    res << TEscapedId{columnName};
+                }
+                res << "))";
+            } else {
+                Y_ABORT_UNLESS(agg.ColumnName);
+                res << TEscapedId{*agg.ColumnName};
+            }
+            res << "," << "$f" << *agg.UdafFactory << "(" << agg.Params << "))";
         } else {
             Y_ABORT_UNLESS(agg.AggName);
             res << *agg.AggName;
@@ -94,6 +119,9 @@ TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> table
     res << " FROM " << TEscapedId{table};
     if (tabletId) {
         res << " WITH TabletId = '" << *tabletId << "'";
+    }
+    if (where) {
+        res << " WHERE " << where;
     }
     return res;
 }

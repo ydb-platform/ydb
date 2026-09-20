@@ -29,6 +29,7 @@ import library.python.port_manager
 from moto.server import ThreadedMotoServer
 
 import boto3
+from botocore.exceptions import ClientError
 import datetime
 import random
 import os
@@ -82,10 +83,36 @@ class S3:
             bucket_config.secret_key,
             bucket_config.endpoint,
         )
-        s3.create_bucket(
-            Bucket=bucket_config.bucket,
-            CreateBucketConfiguration={'LocationConstraint': 'ru-central1'},
+        try:
+            s3.create_bucket(
+                Bucket=bucket_config.bucket,
+                CreateBucketConfiguration={'LocationConstraint': 'ru-central1'},
+            )
+        except ClientError as e:
+            # Creating test buckets should be idempotent between retries/reruns.
+            code = e.response.get('Error', {}).get('Code', '')
+            if code not in {'BucketAlreadyOwnedByYou', 'BucketAlreadyExists'}:
+                raise
+
+    def recreate_bucket(self, bucket_config: ObjectStorageParams):
+        s3 = self._make_s3_resource(
+            bucket_config.access_key,
+            bucket_config.secret_key,
+            bucket_config.endpoint,
         )
+        bucket = s3.Bucket(bucket_config.bucket)
+
+        try:
+            # Remove all object versions first to support versioned buckets.
+            bucket.object_versions.delete()
+            bucket.objects.all().delete()
+            bucket.delete()
+        except ClientError as e:
+            code = e.response.get('Error', {}).get('Code', '')
+            if code not in {'NoSuchBucket', '404'}:
+                raise
+
+        self.create_bucket(bucket_config)
 
     def count_objects(self, bucket_config: ObjectStorageParams):
         s3 = self._make_s3_resource(
@@ -175,9 +202,8 @@ class TieringTestBase(BaseTestSet):
             for bucket in self.s3_buckets
         ]
 
-        if self.s3.is_server_started():
-            for config in self.s3_configs:
-                self.s3.create_bucket(config)
+        for config in self.s3_configs:
+            self.s3.recreate_bucket(config)
 
         self.sources: list[str] = []
         for i, s3_config in enumerate(self.s3_configs):

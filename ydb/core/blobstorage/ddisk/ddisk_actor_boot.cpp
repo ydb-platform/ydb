@@ -2,19 +2,71 @@
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
+
 namespace NKikimr::NDDisk {
+
+    void TDDiskActor::ValidateChecksumsModeAfterLogReplay() {
+        if (!Config.EnableChecksums) {
+            if (!RestoredIntegrityMapping.IntegrityChunks.empty()) {
+                EnterBroken(TStringBuilder()
+                    << "restored " << RestoredIntegrityMapping.IntegrityChunks.size()
+                    << " integrity chunks while EnableChecksums=false");
+            }
+            return;
+        }
+
+        absl::flat_hash_set<TIntegrityManager::TDataChunkKey> coveredDataChunks;
+        coveredDataChunks.reserve(RestoredIntegrityMapping.Extents.size());
+        for (const auto& extent : RestoredIntegrityMapping.Extents) {
+            coveredDataChunks.insert(extent.Key);
+        }
+
+        size_t dataChunkCount = 0;
+        size_t uncoveredDataChunkCount = 0;
+        for (const auto& [tabletId, chunks] : ChunkRefs) {
+            for (const auto& [vChunkIndex, chunkRef] : chunks) {
+                if (!chunkRef.ChunkIdx) {
+                    continue;
+                }
+                ++dataChunkCount;
+                if (!coveredDataChunks.contains({tabletId, vChunkIndex})) {
+                    ++uncoveredDataChunkCount;
+                }
+            }
+        }
+
+        if (dataChunkCount && RestoredIntegrityMapping.IntegrityChunks.empty()) {
+            EnterBroken(TStringBuilder()
+                << "restored " << dataChunkCount
+                << " data chunks without integrity chunks while EnableChecksums=true");
+            return;
+        }
+
+        if (uncoveredDataChunkCount) {
+            EnterBroken(TStringBuilder()
+                << "restored " << uncoveredDataChunkCount << " of " << dataChunkCount
+                << " data chunks without integrity extents while EnableChecksums=true");
+        }
+    }
 
     void TDDiskActor::InitPDiskInterface() {
         Y_ABORT_UNLESS(!IsPersistentBufferActor);
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD01, "TDDiskActor::InitPDiskInterface", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
+        YDB_LOG_DEBUG("TDDiskActor::InitPDiskInterface",
+            {"marker", "BSDD01"},
+            {"DDiskId", DDiskId},
+            {"PDiskActorId", BaseInfo.PDiskActorID});
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvYardInit(BaseInfo.InitOwnerRound, TVDiskID(Info->GroupID,
             Info->GroupGeneration, BaseInfo.VDiskIdShort), BaseInfo.PDiskGuid, SelfId(), SelfId(), BaseInfo.VDiskSlotId,
-            0 /*groupSizeInUnits*/, true /*getDiskFd*/));
+            0 /*groupSizeInUnits*/, !Config.ForcePDiskFallback /*getUringRouterClient*/, Config.IdleSpinUs));
     }
 
     void TDDiskActor::Handle(NPDisk::TEvYardInitResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_INFO, BS_DDISK, BSDD02, "TDDiskActor::Handle(TEvYardInitResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult)",
+            {"marker", "BSDD02"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvYardInitResult)")) {
             return;
@@ -24,11 +76,25 @@ namespace NKikimr::NDDisk {
         PDiskParams = std::move(msg.PDiskParams);
         DiskFormat = std::move(msg.DiskFormat);
         OwnedChunksOnBoot = std::move(msg.OwnedChunks);
-        DiskFd = std::move(msg.DiskFd);
-        if (!DiskFd.IsOpen()) {
-            STLOG(PRI_INFO, BS_DDISK, BSDD17,
-                "TDDiskActor::Handle(TEvYardInitResult) DiskFd is invalid, all further I/O will be routed through PDisk",
-                (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
+#if defined(__linux__)
+        if (!Config.ForcePDiskFallback) {
+            UringRouter = std::move(msg.UringRouter);
+        }
+        if (!UringRouter) {
+            YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult) "
+                "UringRouter is not set, all further I/O will be routed "
+                "through PDisk",
+                {"marker", "BSDD17"},
+                {"DDiskId", DDiskId},
+                {"PDiskActorId", BaseInfo.PDiskActorID});
+        }
+#endif
+
+        if (Config.EnableChecksums) {
+            // The integrity manager needs the chunk size, so it is created here rather than in the ctor.
+            // VDiskSlotId + PDiskGuid identify this DDisk in TIntegrityChunkHeader.
+            IntegrityManager.emplace(DiskFormat->ChunkSize, BaseInfo.VDiskSlotId, BaseInfo.PDiskGuid,
+                Config.IntegrityChecksumCacheBytes);
         }
 
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
@@ -44,8 +110,24 @@ namespace NKikimr::NDDisk {
                 for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
                     tabletChunkMap[chunkRef.GetVChunkIndex()].ChunkIdx = chunkRef.GetChunkIdx();
                     ++*Counters.Chunks.ChunksOwned;
+                    if (chunkRef.HasExtentRef()) {
+                        const auto& ref = chunkRef.GetExtentRef();
+                        RestoredIntegrityMapping.Extents.push_back({
+                            .Key = {tabletRecord.GetTabletId(), chunkRef.GetVChunkIndex()},
+                            .DataChunkIdx = chunkRef.GetChunkIdx(),
+                            .Ref = {ref.GetIntegrityChunkIdx(), ref.GetExtentSlot(), ref.GetVChunkGeneration()},
+                        });
+                    }
                 }
             }
+            for (const auto& chunk : snapshot.GetIntegrityChunks()) {
+                RestoredIntegrityMapping.IntegrityChunks.push_back(
+                    {chunk.GetChunkIdx(), chunk.GetGeneration()});
+                CommittedIntegrityChunks.push_back(
+                    {chunk.GetChunkIdx(), chunk.GetGeneration()});
+                ++*Counters.Chunks.ChunksOwned;
+            }
+            RestoredIntegrityMapping.GenerationCounter = snapshot.GetGenerationCounter();
         }
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignaturePersistentBufferChunkMap); it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;
@@ -57,13 +139,17 @@ namespace NKikimr::NDDisk {
             for (auto idx : chunkMap.GetChunkIdxs()) {
                 PersistentBufferChunks.emplace_back(idx);
             }
+            PersistentBufferUniqueId = chunkMap.GetUniqueId();
         }
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound));
     }
 
     void TDDiskActor::Handle(NPDisk::TEvReadLogResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD03, "TDDiskActor::Handle(TEvReadLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvReadLogResult)",
+            {"marker", "BSDD03"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvReadLogResult)")) {
             return;
@@ -78,10 +164,35 @@ namespace NKikimr::NDDisk {
                         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord chunkMap;
                         const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
                         Y_ABORT_UNLESS(success);
-                        Y_ABORT_UNLESS(chunkMap.HasIncrement());
-                        const auto& increment = chunkMap.GetIncrement();
-                        ChunkRefs[increment.GetTabletId()][increment.GetVChunkIndex()].ChunkIdx = increment.GetChunkIdx();
-                        ++*Counters.Chunks.ChunksOwned;
+                        using TChunkMapLogRecord = NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+                        switch (chunkMap.GetRecordCase()) {
+                            case TChunkMapLogRecord::kIncrement: {
+                                const auto& increment = chunkMap.GetIncrement();
+                                if (increment.HasIntegrityChunk()) {
+                                    const auto& chunk = increment.GetIntegrityChunk();
+                                    RestoredIntegrityMapping.IntegrityChunks.push_back(
+                                        {chunk.GetChunkIdx(), chunk.GetGeneration()});
+                                    CommittedIntegrityChunks.push_back(
+                                        {chunk.GetChunkIdx(), chunk.GetGeneration()});
+                                    ++*Counters.Chunks.ChunksOwned;
+                                }
+                                const auto& data = increment.GetDataChunk();
+                                ChunkRefs[data.GetTabletId()][data.GetVChunkIndex()].ChunkIdx =
+                                    data.GetChunkIdx();
+                                ++*Counters.Chunks.ChunksOwned;
+                                if (data.HasExtentRef()) {
+                                    const auto& ref = data.GetExtentRef();
+                                    RestoredIntegrityMapping.Extents.push_back({
+                                        .Key = {data.GetTabletId(), data.GetVChunkIndex()},
+                                        .DataChunkIdx = data.GetChunkIdx(),
+                                        .Ref = {ref.GetIntegrityChunkIdx(), ref.GetExtentSlot(), ref.GetVChunkGeneration()},
+                                    });
+                                }
+                                break;
+                            }
+                            default:
+                                Y_ABORT("unexpected chunk map record case");
+                        }
                         ++*Counters.RecoveryLog.LogRecordsApplied;
                     }
                     break;
@@ -98,8 +209,28 @@ namespace NKikimr::NDDisk {
         }
 
         if (msg.IsEndOfLog) {
-            StartHandlingQueries();
+            ValidateChecksumsModeAfterLogReplay();
+            if (Config.EnableChecksums && !IsBroken()) {
+                // Restore the DataChunk -> IntegrityExtent mapping accumulated from the snapshot and
+                // the replayed increments. Used-block bitmaps are not persisted, so the restored
+                // extents come up BitmapUnknown: reads of them pass through unchanged and new writes
+                // are tracked again (bitmap restore from the extents on disk is a later phase).
+                IntegrityManager->ApplyMappingSnapshot(RestoredIntegrityMapping);
+                RestoredIntegrityMapping = {};
+                // A durable increment is only logged after formatting, so restored chunks are Ready.
+                // Empty integrity chunks (no restored extents) are released here.
+                ReclaimUnusedIntegrityChunks();
+            }
+            RestoredIntegrityMapping = {};
             CreatePersistentBuffer();
+
+            LogReplayComplete = true;
+            if (DeferredCutLogFreeUpToLsn) {
+                const ui64 freeUpToLsn = *DeferredCutLogFreeUpToLsn;
+                DeferredCutLogFreeUpToLsn.reset();
+                ProcessCutLog(freeUpToLsn);
+            }
+            StartHandlingQueries();
         } else {
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound,
                 msg.NextPosition));
@@ -110,56 +241,38 @@ namespace NKikimr::NDDisk {
         auto format = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(*DiskFormat), +[](NPDisk::TDiskFormat* ptr) {
             delete ptr;
         });
+        if (PersistentBufferUniqueId == 0) {
+            PersistentBufferUniqueId = RandomNumber<ui64>();
+        }
         auto pbActor = std::make_unique<TDDiskActor>(TVDiskConfig::TBaseInfo(BaseInfo),
             Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), CountersParent,
-            PersistentBufferChunks, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
+            PersistentBufferChunks, PersistentBufferUniqueId, PDiskParams, std::move(format)
+#if defined(__linux__)
+            , UringRouter
+#endif
+            );
+        pbActor->ParentDDiskId = SelfId();
         auto *as = TActivationContext::ActorSystem();
         PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
         as->RegisterLocalService(pbServiceId, PersistentBufferActorId);
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD03, "TDDiskActor::CreatePersistentBuffer()", (DDiskId, DDiskId), (pbServiceId, pbServiceId), (PersistentBufferActorId, PersistentBufferActorId));
+        YDB_LOG_DEBUG("TDDiskActor::CreatePersistentBuffer()",
+            {"marker", "BSDD03"},
+            {"DDiskId", DDiskId},
+            {"pbServiceId", pbServiceId},
+            {"persistentBufferActorId", PersistentBufferActorId});
     }
 
     void TDDiskActor::InitUring() {
 #if defined(__linux__)
-        NPDisk::TUringRouterConfig config;
-        config.QueueDepth = MaxInFlight;
-        config.UseSQPoll = Config.UseSQPoll;
-        config.UseIOPoll = Config.UseIOPoll;
-        if (!UringRouter) {
-            if (!Config.ForcePDiskFallback && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
-                UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
-                if (const auto result = UringRouter->RegisterFile(); !result) {
-                    STLOG(PRI_WARN, BS_DDISK, BSDD18,
-                        "TDDiskActor::InitUring failed to register fixed file for io_uring",
-                        (DDiskId, DDiskId), (Errno, result.error()));
-                }
-
-                UringRouter->Start();
-            }
+        if (Config.ForcePDiskFallback) {
+            UringRouter.reset();
         }
-
         if (UringRouter) {
-            const NPDisk::EUringFavor requestedFavor = config.GetUringFavor();
-            const NPDisk::EUringFavor actualFavor = UringRouter->GetUringFavor();
-            *Counters.DirectIO.RegularUringCount = (actualFavor == requestedFavor) ? 1 : 0;
-            *Counters.DirectIO.FallbackUringCount = (actualFavor == requestedFavor) ? 0 : 1;
-            *Counters.DirectIO.FallbackPDiskCount = 0;
-            if (actualFavor != requestedFavor) {
-                STLOG(PRI_WARN, BS_DDISK, BSDD19,
-                    "TDDiskActor::InitUring io_uring mode fallback",
-                    (DDiskId, DDiskId),
-                    (RequestedFavor, requestedFavor),
-                    (ActualFavor, actualFavor));
-            }
-            STLOG(PRI_INFO, BS_DDISK, BSDD20,
-                "TDDiskActor::InitUring started io_uring with config",
-                (DDiskId, DDiskId),
-                (Config, UringRouter->GetConfig()));
-        } else {
-            *Counters.DirectIO.RegularUringCount = 0;
-            *Counters.DirectIO.FallbackUringCount = 0;
-            *Counters.DirectIO.FallbackPDiskCount = 1;
+            YDB_LOG_INFO("TDDiskActor::InitUring using shared PDisk io_uring",
+                {"marker", "BSDD20"},
+                {"DDiskId", DDiskId},
+                {"config", UringRouter->GetConfig().ToString()});
         }
 #endif
     }
@@ -185,7 +298,19 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit,
-            const NProtoBuf::Message& data, ui64 *startingPointLsn, std::function<void()> callback) {
+            const NProtoBuf::Message& data, ui64 *startingPointLsn, std::function<void()> callback,
+            TVector<TChunkIdx> chunksToDelete) {
+        TVector<TChunkIdx> chunksToCommit;
+        if (chunkIdxToCommit) {
+            chunksToCommit.push_back(chunkIdxToCommit);
+        }
+        IssuePDiskLogRecord(signature, std::move(chunksToCommit), data, startingPointLsn,
+            std::move(callback), std::move(chunksToDelete));
+    }
+
+    void TDDiskActor::IssuePDiskLogRecord(TLogSignature signature, TVector<TChunkIdx> chunksToCommit,
+            const NProtoBuf::Message& data, ui64 *startingPointLsn, std::function<void()> callback,
+            TVector<TChunkIdx> chunksToDelete) {
         TString buffer;
         const bool success = data.SerializeToString(&buffer);
         Y_ABORT_UNLESS(success);
@@ -198,31 +323,39 @@ namespace NKikimr::NDDisk {
         NPDisk::TCommitRecord cr;
         cr.FirstLsnToKeep = startingPointLsn ? GetFirstLsnToKeep() : 0;
         cr.IsStartingPoint = startingPointLsn != nullptr;
-        if (chunkIdxToCommit) {
-            cr.CommitChunks.push_back(chunkIdxToCommit);
-        }
+        cr.CommitChunks = std::move(chunksToCommit);
+        cr.DeleteChunks = std::move(chunksToDelete);
 
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvLog(PDiskParams->Owner, PDiskParams->OwnerRound, signature, cr,
-            TRcBuf(std::move(buffer)), {lsn, lsn}, nullptr));
+            TRcBuf(std::move(buffer)), {lsn, lsn}, nullptr, TWriteSource::DDiskBoot));
 
-        LogCallbacks.emplace(lsn, std::move(callback));
+        LogCallbacks.emplace(lsn, TLogCallback{
+            .Callback = std::move(callback),
+            .IsDDisk = signature == TLogSignature::SignatureDDiskChunkMap,
+        });
     }
 
     void TDDiskActor::Handle(NPDisk::TEvLogResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD05, "TDDiskActor::Handle(TEvLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvLogResult)",
+            {"marker", "BSDD05"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvLogResult)")) {
             return;
         }
 
         for (const auto& result : msg.Results) {
-            const auto it = LogCallbacks.find(result.Lsn);
+            auto it = LogCallbacks.find(result.Lsn);
             Y_ABORT_UNLESS(it != LogCallbacks.end());
-            if (it->second) {
-                it->second();
-            }
+            // Move the callback out before erase: it may IssuePDiskLogRecord, which
+            // emplaces into LogCallbacks and would invalidate `it`.
+            TLogCallback cb = std::move(it->second);
             LogCallbacks.erase(it);
+            if ((!IsBroken() || !cb.IsDDisk) && cb.Callback) {
+                cb.Callback();
+            }
             ++*Counters.RecoveryLog.LogRecordsWritten;
         }
     }

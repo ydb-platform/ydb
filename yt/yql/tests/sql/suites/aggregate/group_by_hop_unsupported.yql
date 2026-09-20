@@ -1,0 +1,13 @@
+/* ytfile can not */
+/* yt can not */
+/* custom error: Aggregate with hopping is not supported */
+
+PRAGMA DqEngine = "disable";
+
+SELECT
+    user,
+    COUNT(*) AS cnt,
+FROM plato.Input
+GROUP BY
+    user,
+    HOP(DateTime::FromSeconds(CAST(ts AS Uint32)), "P1D", "P1D", "P1D");

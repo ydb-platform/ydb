@@ -43,7 +43,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPingChaosLeaseCommand
-    : public TTypedCommand<NApi::TPrerequisitePingOptions>
+    : public TTypedCommand<NApi::TChaosLeasePingOptions>
 {
 public:
     REGISTER_YSON_STRUCT_LITE(TPingChaosLeaseCommand);
@@ -52,7 +52,6 @@ public:
 
 private:
     NChaosClient::TChaosLeaseId ChaosLeaseId;
-    bool PingAncestors;
 
     void DoExecute(ICommandContextPtr context) override;
 };

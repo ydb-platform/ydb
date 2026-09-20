@@ -6,26 +6,18 @@
 #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_X86_64) && defined(__APPLE__)
 .text	
 
-
-
-.globl	_bn_mul_mont_gather5
-.private_extern _bn_mul_mont_gather5
+.globl	_bn_mul_mont_gather5_nohw
+.private_extern _bn_mul_mont_gather5_nohw
 
 .p2align	6
-_bn_mul_mont_gather5:
+_bn_mul_mont_gather5_nohw:
 
 _CET_ENDBR
+
+
 	movl	%r9d,%r9d
 	movq	%rsp,%rax
 
-	testl	$7,%r9d
-	jnz	L$mul_enter
-	leaq	_OPENSSL_ia32cap_P(%rip),%r11
-	movl	8(%r11),%r11d
-	jmp	L$mul4x_enter
-
-.p2align	4
-L$mul_enter:
 	movd	8(%rsp),%xmm5
 	pushq	%rbx
 
@@ -204,7 +196,7 @@ L$mul_body:
 	pshufd	$0x4e,%xmm0,%xmm1
 	por	%xmm1,%xmm0
 	leaq	256(%r12),%r12
-.byte	102,72,15,126,195
+	movq	%xmm0,%rbx
 
 	movq	(%r8),%r8
 	movq	(%rsi),%rax
@@ -330,7 +322,7 @@ L$outer:
 	leaq	256(%r12),%r12
 
 	movq	(%rsi),%rax
-.byte	102,72,15,126,195
+	movq	%xmm0,%rbx
 
 	xorq	%r15,%r15
 	movq	%r8,%rbp
@@ -452,17 +444,16 @@ L$mul_epilogue:
 	ret
 
 
+.globl	_bn_mul4x_mont_gather5
+.private_extern _bn_mul4x_mont_gather5
 
 .p2align	5
-bn_mul4x_mont_gather5:
+_bn_mul4x_mont_gather5:
 
+_CET_ENDBR
 .byte	0x67
 	movq	%rsp,%rax
 
-L$mul4x_enter:
-	andl	$0x80108,%r11d
-	cmpl	$0x80108,%r11d
-	je	L$mulx4x_enter
 	pushq	%rbx
 
 	pushq	%rbp
@@ -478,6 +469,9 @@ L$mul4x_enter:
 L$mul4x_prologue:
 
 .byte	0x67
+
+
+
 	shll	$3,%r9d
 	leaq	(%r9,%r9,2),%r10
 	negq	%r9
@@ -697,7 +691,7 @@ mul4x_internal:
 	pshufd	$0x4e,%xmm0,%xmm1
 	por	%xmm1,%xmm0
 	leaq	256(%r12),%r12
-.byte	102,72,15,126,195
+	movq	%xmm0,%rbx
 
 	movq	%r13,16+8(%rsp)
 	movq	%rdi,56+8(%rsp)
@@ -905,7 +899,7 @@ L$outer4x:
 	pshufd	$0x4e,%xmm4,%xmm0
 	por	%xmm4,%xmm0
 	leaq	256(%r12),%r12
-.byte	102,72,15,126,195
+	movq	%xmm0,%rbx
 
 	movq	(%r14,%r9,1),%r10
 	movq	%r8,%rbp
@@ -1087,20 +1081,15 @@ L$inner4x:
 	jmp	L$sqr4x_sub_entry
 
 
-.globl	_bn_power5
-.private_extern _bn_power5
+.globl	_bn_power5_nohw
+.private_extern _bn_power5_nohw
 
 .p2align	5
-_bn_power5:
+_bn_power5_nohw:
 
 _CET_ENDBR
 	movq	%rsp,%rax
 
-	leaq	_OPENSSL_ia32cap_P(%rip),%r11
-	movl	8(%r11),%r11d
-	andl	$0x80108,%r11d
-	cmpl	$0x80108,%r11d
-	je	L$powerx5_enter
 	pushq	%rbx
 
 	pushq	%rbp
@@ -1114,6 +1103,9 @@ _CET_ENDBR
 	pushq	%r15
 
 L$power5_prologue:
+
+
+
 
 	shll	$3,%r9d
 	leal	(%r9,%r9,2),%r10d
@@ -1179,10 +1171,10 @@ L$pwr_page_walk_done:
 	movq	%rax,40(%rsp)
 
 L$power5_body:
-.byte	102,72,15,110,207
-.byte	102,72,15,110,209
-.byte	102,73,15,110,218
-.byte	102,72,15,110,226
+	movq	%rdi,%xmm1
+	movq	%rcx,%xmm2
+	movq	%r10,%xmm3
+	movq	%rdx,%xmm4
 
 	call	__bn_sqr8x_internal
 	call	__bn_post4x_internal
@@ -1195,8 +1187,8 @@ L$power5_body:
 	call	__bn_sqr8x_internal
 	call	__bn_post4x_internal
 
-.byte	102,72,15,126,209
-.byte	102,72,15,126,226
+	movq	%xmm2,%rcx
+	movq	%xmm4,%rdx
 	movq	%rsi,%rdi
 	movq	40(%rsp),%rax
 	leaq	32(%rsp),%r8
@@ -1748,7 +1740,7 @@ L$sqr4x_shift_n_add:
 	adcq	%rdx,%r8
 	movq	%rbx,-16(%rdi)
 	movq	%r8,-8(%rdi)
-.byte	102,72,15,126,213
+	movq	%xmm2,%rbp
 __bn_sqr8x_reduction:
 	xorq	%rax,%rax
 	leaq	(%r9,%rbp,1),%rcx
@@ -1992,11 +1984,11 @@ L$8x_no_tail:
 	movq	-8(%rbp),%rcx
 	xorq	%rsi,%rsi
 
-.byte	102,72,15,126,213
+	movq	%xmm2,%rbp
 
 	movq	%r8,0(%rdi)
 	movq	%r9,8(%rdi)
-.byte	102,73,15,126,217
+	movq	%xmm3,%r9
 	movq	%r10,16(%rdi)
 	movq	%r11,24(%rdi)
 	movq	%r12,32(%rdi)
@@ -2017,9 +2009,9 @@ __bn_post4x_internal:
 	movq	0(%rbp),%r12
 	leaq	(%rdi,%r9,1),%rbx
 	movq	%r9,%rcx
-.byte	102,72,15,126,207
+	movq	%xmm1,%rdi
 	negq	%rax
-.byte	102,72,15,126,206
+	movq	%xmm1,%rsi
 	sarq	$3+2,%rcx
 	decq	%r12
 	xorq	%r10,%r10
@@ -2066,13 +2058,15 @@ L$sqr4x_sub_entry:
 	ret
 
 
+.globl	_bn_mulx4x_mont_gather5
+.private_extern _bn_mulx4x_mont_gather5
 
 .p2align	5
-bn_mulx4x_mont_gather5:
+_bn_mulx4x_mont_gather5:
 
+_CET_ENDBR
 	movq	%rsp,%rax
 
-L$mulx4x_enter:
 	pushq	%rbx
 
 	pushq	%rbp
@@ -2086,6 +2080,9 @@ L$mulx4x_enter:
 	pushq	%r15
 
 L$mulx4x_prologue:
+
+
+
 
 	shll	$3,%r9d
 	leaq	(%r9,%r9,2),%r10
@@ -2324,7 +2321,7 @@ mulx4x_internal:
 	pshufd	$0x4e,%xmm0,%xmm1
 	por	%xmm1,%xmm0
 	leaq	256(%rdi),%rdi
-.byte	102,72,15,126,194
+	movq	%xmm0,%rdx
 	leaq	64+32+8(%rsp),%rbx
 
 	movq	%rdx,%r9
@@ -2475,7 +2472,7 @@ L$mulx4x_outer:
 	pshufd	$0x4e,%xmm4,%xmm0
 	por	%xmm4,%xmm0
 	leaq	256(%rdi),%rdi
-.byte	102,72,15,126,194
+	movq	%xmm0,%rdx
 
 	movq	%rbp,(%rbx)
 	leaq	32(%rbx,%rax,1),%rbx
@@ -2603,13 +2600,15 @@ L$mulx4x_inner:
 	jmp	L$sqrx4x_sub_entry
 
 
+.globl	_bn_powerx5
+.private_extern _bn_powerx5
 
 .p2align	5
-bn_powerx5:
+_bn_powerx5:
 
+_CET_ENDBR
 	movq	%rsp,%rax
 
-L$powerx5_enter:
 	pushq	%rbx
 
 	pushq	%rbp
@@ -2623,6 +2622,9 @@ L$powerx5_enter:
 	pushq	%r15
 
 L$powerx5_prologue:
+
+
+
 
 	shll	$3,%r9d
 	leaq	(%r9,%r9,2),%r10
@@ -2687,10 +2689,10 @@ L$pwrx_page_walk_done:
 
 
 	pxor	%xmm0,%xmm0
-.byte	102,72,15,110,207
-.byte	102,72,15,110,209
-.byte	102,73,15,110,218
-.byte	102,72,15,110,226
+	movq	%rdi,%xmm1
+	movq	%rcx,%xmm2
+	movq	%r10,%xmm3
+	movq	%rdx,%xmm4
 	movq	%r8,32(%rsp)
 	movq	%rax,40(%rsp)
 
@@ -2709,8 +2711,8 @@ L$powerx5_body:
 
 	movq	%r10,%r9
 	movq	%rsi,%rdi
-.byte	102,72,15,126,209
-.byte	102,72,15,126,226
+	movq	%xmm2,%rcx
+	movq	%xmm4,%rdx
 	movq	40(%rsp),%rax
 
 	call	mulx4x_internal
@@ -3075,7 +3077,7 @@ L$sqrx8x_break:
 .p2align	5
 L$sqrx8x_outer_break:
 	movq	%r9,72(%rdi)
-.byte	102,72,15,126,217
+	movq	%xmm3,%rcx
 	movq	%r10,80(%rdi)
 	movq	%r11,88(%rdi)
 	movq	%r12,96(%rdi)
@@ -3149,7 +3151,7 @@ L$sqrx4x_shift_n_add_break:
 	movq	%rax,48(%rdi)
 	movq	%rbx,56(%rdi)
 	leaq	64(%rdi),%rdi
-.byte	102,72,15,126,213
+	movq	%xmm2,%rbp
 __bn_sqrx8x_reduction:
 	xorl	%eax,%eax
 	movq	32+8(%rsp),%rbx
@@ -3329,10 +3331,10 @@ L$sqrx8x_tail_done:
 	subq	16+8(%rsp),%rsi
 L$sqrx8x_no_tail:
 	adcq	0(%rdi),%r8
-.byte	102,72,15,126,217
+	movq	%xmm3,%rcx
 	adcq	8(%rdi),%r9
 	movq	56(%rbp),%rsi
-.byte	102,72,15,126,213
+	movq	%xmm2,%rbp
 	adcq	16(%rdi),%r10
 	adcq	24(%rdi),%r11
 	adcq	32(%rdi),%r12
@@ -3370,8 +3372,8 @@ __bn_postx4x_internal:
 	negq	%rax
 	sarq	$3+2,%rcx
 
-.byte	102,72,15,126,202
-.byte	102,72,15,126,206
+	movq	%xmm1,%rdx
+	movq	%xmm1,%rsi
 	decq	%r12
 	movq	8(%rbp),%r13
 	xorq	%r8,%r8

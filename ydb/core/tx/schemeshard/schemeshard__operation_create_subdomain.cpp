@@ -7,6 +7,8 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/persqueue/public/config.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -37,6 +39,7 @@ void PersistShards(NIceDb::TNiceDb& db, TTxState& txState, TSchemeShard* ss) {
 
 
 class TCreateSubDomain: public TSubOperation {
+    virtual const char* Name() const override final { return "TCreateSubDomain"; }
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -85,11 +88,9 @@ public:
 
         ui64 shardsToCreate = settings.GetCoordinators() + settings.GetMediators();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateSubDomain Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+        );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -245,6 +246,13 @@ public:
             return result;
         }
 
+        if (settings.HasTablesMetricsLevel()
+            && !CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), /* isRootDomain */ false, errStr)
+        ) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            return result;
+        }
+
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
@@ -309,8 +317,12 @@ public:
             alter->SetAuditSettings(settings.GetAuditSettings());
         }
 
+        if (settings.HasTablesMetricsLevel()) {
+            alter->SetTablesMetricsLevel(settings.GetTablesMetricsLevel());
+        }
+
         Y_ABORT_UNLESS(!context.SS->SubDomains.contains(newNode->PathId));
-        auto& subDomainInfo = context.SS->SubDomains[newNode->PathId];
+        auto& subDomainInfo = context.SS->SubDomains.Emplace(newNode->PathId);
         subDomainInfo = new TSubDomainInfo();
         subDomainInfo->SetAlter(alter);
 
@@ -318,7 +330,6 @@ public:
         context.SS->PersistUpdateNextShardIdx(db);
         context.SS->PersistSubDomain(db, newNode->PathId, *subDomainInfo);
         context.SS->PersistSubDomainAlter(db, newNode->PathId, *alter);
-        context.SS->IncrementPathDbRefCount(newNode->PathId);
 
         if (parentPath.Base()->HasActiveChanges()) {
             TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
@@ -355,11 +366,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateSubDomain AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSubDomain AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -403,3 +414,5 @@ ISubOperation::TPtr CreateSubDomain(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

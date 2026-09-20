@@ -35,6 +35,38 @@ class NodeServiceOperationBatchSchema:
 
 
 @dataclass
+class NodeOperationRequest:
+    nodes: List[str] = field(default_factory=list)
+    timeout: int = 30
+    wait: bool = True
+    force: bool = False
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(
+            nodes=data.get("nodes", []) or [],
+            timeout=data.get("timeout", 30),
+            wait=data.get("wait", True),
+            force=data.get("force", False),
+        )
+
+
+@dataclass
+class UninstallNodesRequest:
+    nodes: List[str] = field(default_factory=list)
+    timeout: int = 10
+    stop: bool = True
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(
+            nodes=data.get("nodes", []) or [],
+            timeout=data.get("timeout", 10),
+            stop=data.get("stop", True),
+        )
+
+
+@dataclass
 class StaticNodeParams:
     ic_port: int
     mon_port: int

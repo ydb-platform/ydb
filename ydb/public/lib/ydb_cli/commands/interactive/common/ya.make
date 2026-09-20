@@ -20,7 +20,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/interactive/complete
     ydb/public/lib/ydb_cli/commands/interactive/highlight
     ydb/public/lib/ydb_cli/common
-    yql/essentials/sql/v1/complete
+    yql/essentials/sql/v1/ide/completion
 )
 
 GENERATE_ENUM_SERIALIZATION(interactive_config.h)

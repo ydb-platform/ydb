@@ -7,6 +7,8 @@
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr {
@@ -68,8 +70,8 @@ void TCompleteWriteUnit::CompleteWrite(TOperation::TPtr op, const TActorContext&
 
     if (DataShard.GetDataTxProfileLogThresholdMs()
         && duration.MilliSeconds() >= DataShard.GetDataTxProfileLogThresholdMs()) {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                   op->ExecutionProfileLogString(DataShard.TabletID()));
+        YDB_LOG_WARN_CTX(ctx, "TCompleteWriteUnit::CompleteWrite: slow transaction execution profile",
+            {"executionProfile", op->ExecutionProfileLogString(DataShard.TabletID())});
     }
 
     if (DataShard.GetDataTxProfileBufferThresholdMs()
@@ -141,3 +143,7 @@ THolder<TExecutionUnit> CreateCompleteWriteUnit(TDataShard &dataShard, TPipeline
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

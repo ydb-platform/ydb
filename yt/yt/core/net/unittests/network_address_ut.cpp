@@ -113,11 +113,11 @@ TEST(TNetworkAddressTest, UnixSocketName)
     auto absctractAddress = TNetworkAddress::CreateAbstractUnixDomainSocketAddress("abc");
     EXPECT_EQ("unix://[abc]", ToString(absctractAddress));
 
-    auto binaryString = TString("a\0c", 3);
+    auto binaryString = std::string("a\0c", 3);
     auto binaryAbstractAddress = TNetworkAddress::CreateAbstractUnixDomainSocketAddress(binaryString);
 
     EXPECT_EQ(
-        Format("%Qv", TString("unix://[a\\x00c]")),
+        Format("%Qv", std::string("unix://[a\\x00c]")),
         Format("%Qv", ToString(binaryAbstractAddress)));
 }
 
@@ -147,7 +147,7 @@ TEST(TIP6AddressTest, ToString)
 
 TEST(TIP6AddressTest, InvalidAddress)
 {
-    for (const auto& addr : std::vector<TString>{
+    for (const auto& addr : std::vector<std::string>{
         ":::",
         "1::1::1",
         "0:1:2:3:4:5:6:7:8",
@@ -170,7 +170,7 @@ std::array<ui16, 8> AddressToWords(const TIP6Address& addr) {
 
 TEST(TIP6AddressTest, FromString)
 {
-    using TTestCase = std::pair<TString, std::array<ui16, 8>>;
+    using TTestCase = std::pair<std::string, std::array<ui16, 8>>;
 
     for (const auto& testCase : {
         TTestCase{"0:0:0:0:0:0:0:0", {0, 0, 0, 0, 0, 0, 0, 0}},
@@ -192,7 +192,7 @@ TEST(TIP6AddressTest, FromString)
 
 TEST(TIP6AddressTest, CanonicalText)
 {
-    for (const auto& str : std::vector<TString>{
+    for (const auto& str : std::vector<std::string>{
         "::",
         "::1",
         "1::",
@@ -287,7 +287,7 @@ TEST(TIP6AddressTest, ProjectId)
 
 TEST(TIP6AddressTest, InvalidInput)
 {
-    for (const auto& testCase : std::vector<TString>{
+    for (const auto& testCase : std::vector<std::string>{
         "",
         ":",
         "::/",
@@ -364,8 +364,8 @@ TEST(TMtnAddressTest, Simple)
 
 TEST(TInferYPClusterTest, ValidFqdns)
 {
-    TString gencfgHostName = "sas1-5535-9d7.sas-test.yp.gencfg-c.yandex.net";
-    TString ypHostName = "noqpmfiudzbb4hvs.man.yp-c.yandex.net";
+    std::string gencfgHostName = "sas1-5535-9d7.sas-test.yp.gencfg-c.yandex.net";
+    std::string ypHostName = "noqpmfiudzbb4hvs.man.yp-c.yandex.net";
 
     EXPECT_EQ(InferYPClusterFromHostName(gencfgHostName), "sas-test");
     EXPECT_EQ(InferYPClusterFromHostName(ypHostName), "man");
@@ -373,7 +373,7 @@ TEST(TInferYPClusterTest, ValidFqdns)
 
 TEST(TInferYPClusterTest, InvalidFqdn)
 {
-    TString hostName = "noqpmfiudzbb4hvs..yp-c.yandex.net";
+    std::string hostName = "noqpmfiudzbb4hvs..yp-c.yandex.net";
 
     EXPECT_EQ(InferYPClusterFromHostName(hostName), std::nullopt);
     EXPECT_EQ(InferYPClusterFromHostName("localhost"), std::nullopt);

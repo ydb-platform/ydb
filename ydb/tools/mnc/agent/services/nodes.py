@@ -366,11 +366,27 @@ class NodeService:
 
     @use_mutex
     async def stop_nodes(self, nodes: List[str], timeout: int = 10, wait: bool = False) -> NodeServiceOperationBatchSchema:
-        node_infos = [await self._get_node_info(node) for node in nodes]
+        current_nodes = await self.get_nodes(use_mutex=False)
+        installed_nodes = {node.node for node in current_nodes.nodes}
+        missing_nodes = [node for node in nodes if node not in installed_nodes]
+        nodes_to_stop = [node for node in nodes if node in installed_nodes]
+
+        result = {
+            node: NodeServiceOperationSchema(
+                node=node,
+                operation="stop_node",
+                success=True,
+                message=f"Node {node} is not installed",
+                data=None,
+            )
+            for node in missing_nodes
+        }
+
+        node_infos = [await self._get_node_info(node) for node in nodes_to_stop]
         node_info_map = {node.node: node for node in node_infos}
 
         running_state = await check_running_nodes(node_infos)
-        result = {
+        result.update({
             node: NodeServiceOperationSchema(
                 node=node,
                 operation="stop_node",
@@ -379,7 +395,7 @@ class NodeService:
                 data=None,
             )
             for node in running_state.not_running_nodes
-        }
+        })
         for node in running_state.running_nodes:
             node_info = node_info_map[node]
             async with node_info._mutex:
@@ -401,7 +417,7 @@ class NodeService:
             for node in running_state.not_running_nodes:
                 await term.shell(f"sudo rm -rf {config.mnc_home}/run/{node}.pid")
                 async with node_info_map[node]._mutex:
-                    await self.persistent_service.save_node_info(node, None, False)
+                    await self.persistent_service.save_node_info(node, None, node_info_map[node].enabled)
 
         return NodeServiceOperationBatchSchema(operations=[result[node] for node in nodes])
 
@@ -413,9 +429,17 @@ class NodeService:
             return None
         return echo_result.stdout.strip().split(separator)[1].strip()
 
-    async def _start_node(self, node_info: NodeInfo) -> NodeServiceOperationSchema:
+    async def _start_node(self, node_info: NodeInfo, force: bool = False) -> NodeServiceOperationSchema:
         async with node_info._mutex:
             node = node_info.node
+            if not node_info.enabled and not force:
+                return NodeServiceOperationSchema(
+                    node=node,
+                    operation="start_node",
+                    success=False,
+                    message=f"Node {node} is disabled",
+                    data=None,
+                )
             ydb_arg = await self._get_ydb_arg(node)
             if ydb_arg is None:
                 return NodeServiceOperationSchema(
@@ -428,6 +452,7 @@ class NodeService:
             bin_path = f"{config.mnc_home}/ydb/bin/ydb"
             stdout_path = f"{config.mnc_home}/{node}/stdout"
             stderr_path = f"{config.mnc_home}/{node}/stderr"
+            os.makedirs(f"{config.mnc_home}/run", exist_ok=True)
             await term.shell(f"sudo touch {stdout_path} {stderr_path}")
             await term.shell(f"sudo chmod 666 {stdout_path} {stderr_path}")
             out_f = open(stdout_path, "ab", buffering=0)
@@ -454,7 +479,9 @@ class NodeService:
                     message=f"Failed to write PID file for node {node}: {pid_result.stderr}",
                     data={"pid": node_info.pid, "mnc_home": config.mnc_home},
                 )
-            await self.persistent_service.save_node_info(node, node_info.pid, True)
+            if force:
+                node_info.enabled = True
+            await self.persistent_service.save_node_info(node, node_info.pid, node_info.enabled)
 
             return NodeServiceOperationSchema(
                 node=node,
@@ -465,7 +492,7 @@ class NodeService:
             )
 
     @use_mutex
-    async def start_nodes(self, nodes: List[str], timeout: int = 10, wait: bool = False) -> NodeServiceOperationBatchSchema:
+    async def start_nodes(self, nodes: List[str], timeout: int = 10, wait: bool = False, force: bool = False) -> NodeServiceOperationBatchSchema:
         node_infos = [await self._get_node_info(node) for node in nodes]
         node_info_map = {node.node: node for node in node_infos}
 
@@ -482,7 +509,7 @@ class NodeService:
 
         for node in running_state.not_running_nodes:
             node_info = node_info_map[node]
-            result[node] = await self._start_node(node_info)
+            result[node] = await self._start_node(node_info, force=force)
 
         if wait:
             for _ in range(2 * timeout):
@@ -506,11 +533,11 @@ class NodeService:
         return NodeServiceOperationBatchSchema(operations=[result[node] for node in nodes])
 
     @use_mutex
-    async def restart_nodes(self, nodes: List[str], timeout: int = 10, wait: bool = False) -> NodeServiceOperationBatchSchema:
+    async def restart_nodes(self, nodes: List[str], timeout: int = 10, wait: bool = False, force: bool = False) -> NodeServiceOperationBatchSchema:
         stop_result = await self.stop_nodes(nodes, timeout=timeout, wait=True, use_mutex=False)
         if not all(operation.success for operation in stop_result.operations):
             return stop_result
-        return await self.start_nodes(nodes, timeout=timeout, wait=wait, use_mutex=False)
+        return await self.start_nodes(nodes, timeout=timeout, wait=wait, force=force, use_mutex=False)
 
     @use_mutex
     async def enable_node(self, node: str) -> NodeServiceOperationSchema:
@@ -561,14 +588,14 @@ class NodeService:
         return await self._get_status(node)
 
     @use_mutex
-    async def uninstall_nodes(self, nodes: List[str], timeout: int = 10, do_not_stop: bool = True) -> NodeServiceOperationBatchSchema:
+    async def uninstall_nodes(self, nodes: List[str], timeout: int = 10, stop: bool = True) -> NodeServiceOperationBatchSchema:
         node_infos = [await self._get_node_info(node) for node in nodes]
         node_info_map = {node.node: node for node in node_infos}
         running_state = await check_running_nodes(node_infos)
 
         result = {}
 
-        if running_state.running_nodes and not do_not_stop:
+        if running_state.running_nodes and stop:
             stop_result = await self.stop_nodes(running_state.running_nodes, timeout=timeout, wait=True, use_mutex=False)
             ok = all(operation.success for operation in stop_result.operations)
             if not ok:
@@ -640,6 +667,7 @@ class NodeService:
 
         node_info = await self._get_node_info(node)
         async with node_info._mutex:
+            node_info.enabled = False
             await self.persistent_service.save_node_info(node, None, False)
 
         return node_info.node

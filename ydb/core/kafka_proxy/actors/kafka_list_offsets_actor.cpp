@@ -3,11 +3,11 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
-#include <ydb/services/persqueue_v1/actors/schema_actors.h>
 
 #include "actors.h"
 #include "kafka_list_offsets_actor.h"
-#include "kafka_topic_offsets_actor.h"
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 
 namespace NKafka {
@@ -64,19 +64,25 @@ void TKafkaListOffsetsActor::HandleMissingTopicName(const TListOffsetsRequestDat
 }
 
 TActorId TKafkaListOffsetsActor::SendOffsetsRequest(const TListOffsetsRequestData::TListOffsetsTopic& topic, const NActors::TActorContext&) {
-    KAFKA_LOG_D("ListOffsets actor: Get offsets for topic '" << topic.Name << "' for user " << GetUsernameOrAnonymous(Context));
+    YDB_LOG_DEBUG("ListOffsets actor: Get offsets for topic for user",
+        {LogPrefix()},
+        {"topicName", topic.Name},
+        {"userName", GetUsernameOrAnonymous(Context)});
 
-    TEvKafka::TGetOffsetsRequest offsetsRequest;
-    offsetsRequest.Topic = NormalizePath(Context->DatabasePath, topic.Name.value());
-    offsetsRequest.Token = GetUserSerializedToken(Context);
-    offsetsRequest.Database = Context->DatabasePath;
-
+    TVector<ui32> partitionIds;
+    partitionIds.reserve(topic.Partitions.size());
     for (const auto& partitionRequest: topic.Partitions) {
-        offsetsRequest.PartitionIds.push_back(partitionRequest.PartitionIndex);
+        partitionIds.push_back(partitionRequest.PartitionIndex);
     }
 
     PendingResponses++;
-    return Register(new TTopicOffsetsActor(offsetsRequest, SelfId()));
+    // ListOffsets checks DescribeSchema (Kafka DESCRIBE). SelectRow is OffsetFetch only.
+    return Register(CreateTopicOffsetsActor(SelfId(), {
+        .Path = NormalizePath(Context->DatabasePath, topic.Name.value()),
+        .Database = Context->DatabasePath,
+        .Token = GetUserSerializedToken(Context),
+        .PartitionIds = std::move(partitionIds),
+    }));
 }
 
 void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
@@ -85,7 +91,8 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
 
     Y_DEBUG_ABORT_UNLESS(it != TopicsRequestsInfo.end());
     if (it == TopicsRequestsInfo.end()) {
-        KAFKA_LOG_CRIT("ListOffsets actor: received unexpected TEvTopicOffsetsResponse. Ignoring.");
+        YDB_LOG_CRIT("ListOffsets actor: received unexpected TEvTopicOffsetsResponse. Ignoring",
+            {LogPrefix()});
         return RespondIfRequired(ctx);
     }
 
@@ -104,7 +111,8 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
             auto it = responseFromPQPartitionsMap.find(partitionRequestInfo.PartitionId);
             if (it == responseFromPQPartitionsMap.end()) {
-                KAFKA_LOG_CRIT("ListOffsets actor: partition not found. Expect malformed/incompled reply");
+                YDB_LOG_CRIT("ListOffsets actor: partition not found. Expect malformed/incompled reply",
+                    {LogPrefix()});
                 continue;
             }
             auto& responseFromPQPartition = it->second;
@@ -125,7 +133,9 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
                 ErrorCode = INVALID_REQUEST;
             }
         } else {
-            responsePartition.ErrorCode = ConvertErrorCode(ev->Get()->Status);
+            auto error = ConvertErrorCode(ev->Get()->Status);
+            responsePartition.ErrorCode = error;
+            ErrorCode = error;
         }
 
         responseTopic.Partitions.emplace_back(std::move(responsePartition));

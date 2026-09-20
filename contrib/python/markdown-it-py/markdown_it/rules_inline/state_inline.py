@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from collections import namedtuple
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 from ..common.utils import isMdAsciiPunct, isPunctChar, isWhiteSpace
 from ..ruler import StateBase
@@ -36,7 +35,10 @@ class Delimiter:
     level: bool | None = None
 
 
-Scanned = namedtuple("Scanned", ["can_open", "can_close", "length"])
+class Scanned(NamedTuple):
+    can_open: bool
+    can_close: bool
+    length: int
 
 
 class StateInline(StateBase):

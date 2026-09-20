@@ -29,7 +29,7 @@ public:
     TStringBuf GetSuffix() const;
     TStringBuf GetInput() const;
     TYPathBuf GetPath() const;
-    const TString& GetLiteralValue() const;
+    const std::string& GetLiteralValue() const;
 
     void Expect(ETokenType expectedType, TSourceLocation location = YT_CURRENT_SOURCE_LOCATION) const;
     void ExpectListIndex(TSourceLocation location = YT_CURRENT_SOURCE_LOCATION) const;
@@ -61,7 +61,7 @@ private:
     ETokenType PreviousType_;
     TStringBuf Token_;
     TStringBuf Input_;
-    TString LiteralValue_;
+    std::string LiteralValue_;
 
     void SetType(ETokenType type);
     const char* AdvanceEscaped(const char* current);

@@ -16,6 +16,9 @@ TRowDispatcherSettings::TJsonParserSettings::TJsonParserSettings(const NConfig::
     if (config.GetBufferCellCount()) {
         BufferCellCount = config.GetBufferCellCount();
     }
+    if (config.HasEnableStructuredParsing()) {
+        StructuredParsing = config.GetEnableStructuredParsing();
+    }
 }
 
 TRowDispatcherSettings::TCompileServiceSettings::TCompileServiceSettings(const NConfig::TCompileServiceConfig& config) {
@@ -46,9 +49,11 @@ TRowDispatcherSettings::TRowDispatcherSettings(const NConfig::TRowDispatcherConf
     , ConsumerMode(config.GetWithoutConsumer() ? EConsumerMode::Without : EConsumerMode::Required)
 {}
 
-TRowDispatcherSettings::TRowDispatcherSettings(const NKikimrConfig::TStreamingQueriesConfig::TExternalStorageConfig& config)
+TRowDispatcherSettings::TRowDispatcherSettings(const NKikimrConfig::TStreamingQueriesConfig::TExternalStorageConfig& config, bool enableStructuredJsonParsing)
     : Coordinator(config)
 {
+    JsonParser.SetStructuredParsing(enableStructuredJsonParsing);
+
     std::optional<size_t> userPoolSize;
     if (NKikimr::HasAppData() && NActors::TlsActivationContext && NActors::TlsActivationContext->ActorSystem()) {
         userPoolSize = NActors::TlsActivationContext->ActorSystem()->GetPoolThreadsCount(NKikimr::AppData()->UserPoolId);

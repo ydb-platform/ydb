@@ -18,15 +18,15 @@ public:
     explicit TChunkedBuffer(TStringBuf buf, const std::shared_ptr<const void>& owner);
     explicit TChunkedBuffer(TString&& str);
 
-    inline size_t ContigousSize() const {
+    [[nodiscard]] inline size_t ContigousSize() const {
         return Items_.empty() ? 0 : Front().Buf.size();
     }
 
-    inline size_t Size() const {
+    [[nodiscard]] inline size_t Size() const {
         return Size_;
     }
 
-    inline bool Empty() const {
+    [[nodiscard]] inline bool Empty() const {
         return Size_ == 0;
     }
 
@@ -35,7 +35,7 @@ public:
         std::shared_ptr<const void> Owner;
     };
 
-    const TChunk& Front() const;
+    [[nodiscard]] const TChunk& Front() const;
     size_t CopyTo(IOutputStream& dst, size_t toCopy = std::numeric_limits<size_t>::max()) const;
 
     TChunkedBuffer& Append(TStringBuf buf, const std::shared_ptr<const void>& owner);

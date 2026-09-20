@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <optional>
+
 #include "config.h"
 #include "downtime.h"
 #include "node_checkers.h"
@@ -17,7 +19,6 @@
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -30,6 +31,12 @@
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
+
+#include <utility>
+
+namespace Ydb::Maintenance {
+    class Node;
+}
 
 namespace NKikimr::NCms {
 
@@ -268,7 +275,7 @@ public:
             const NKikimrCms::TAction &action)
     {
         AddLockByRequest(notification.NotificationId);
-    
+
         TExternalLock lock(notification, action);
         auto pos = LowerBound(ExternalLocks.begin(), ExternalLocks.end(), lock, [](auto &l, auto &r) {
                 return l.LockStart < r.LockStart;
@@ -436,6 +443,20 @@ public:
     TSet<TVDiskID> VDisks;
     // SlotIdx -> VDiskID
     THashMap<ui32, TVDiskID> VSlots;
+    // The raw Whiteboard-reported PDisk state (e.g. Normal, Missing, Timeout,
+    // NodeDisconnected, one of the Initial*/*Error states, etc.), as opposed
+    // to the coarse UP/DOWN State above. Empty until
+    // TClusterInfo::UpdatePDiskState() has actually applied a real
+    // Whiteboard-reported state for this PDisk. Newly registered PDisks (via
+    // AddPDisk, from BSC base config) default their State to DOWN for
+    // maintenance-safety reasons even before any real state is known;
+    // consumers that need to tell "confirmed down" apart from "state was
+    // never reported" (e.g. because this PDisk id isn't covered by
+    // Whiteboard PDisk state collection at all) should check this field
+    // rather than relying on State alone. Kept so that UI/diagnostics can
+    // surface the actual underlying reason a disk is considered unavailable
+    // instead of just "down".
+    std::optional<EPDiskState> RawState;
 
 private:
     static bool NameToId(const TString &name, TPDiskID &id);
@@ -690,6 +711,7 @@ class TClusterInfo : public TThrRefBase {
 public:
     using TNodes = THashMap<ui32, TNodeInfoPtr>;
     using TTablets = THashMap<ui64, TTabletInfo>;
+    using TRunningSystemTabletsByNode = THashMap<ui32, THashSet<ui64>>;
     using TPDisks = THashMap<TPDiskID, TPDiskInfoPtr, TPDiskIDHash>;
     using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
     using TBSGroups = THashMap<ui32, TBSGroupInfo>;
@@ -722,7 +744,7 @@ public:
     void GenerateSysTabletsNodesCheckers();
     void GenerateClusterNodesCheckers();
 
-    bool IsStateStorageReplicaNode(ui32 nodeId) {
+    bool IsStateStorageReplicaNode(ui32 nodeId) const {
         return StateStorageReplicas.contains(nodeId);
     }
 
@@ -798,6 +820,21 @@ public:
         return Nodes.size();
     }
 
+    bool HostHasSysTablet(const TString &hostName) const {
+        ui32 nodeId;
+        if (TryFromString(hostName, nodeId)) {
+            return HasNode(nodeId) && NodeToTabletTypes.contains(nodeId);
+        }
+
+        auto pr = HostNameToNodeId.equal_range(hostName);
+        for (auto it = pr.first; it != pr.second; ++it) {
+            if (NodeToTabletTypes.contains(it->second)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     size_t NodesCount(const TString &hostName) const {
         ui32 nodeId;
         if (TryFromString(hostName, nodeId)) {
@@ -823,6 +860,10 @@ public:
     const TTablets &AllTablets() const {
         return Tablets;
     }
+
+    bool NodeHasRunningSystemTablet(ui32 nodeId) const;
+
+    bool HostHasRunningSystemTablet(const TString &hostName) const;
 
     bool HasPDisk(TPDiskID pdId) const {
         return PDisks.contains(pdId);
@@ -941,7 +982,7 @@ public:
     }
 
     ui64 AddExternalLocks(const TNotificationInfo &notification, const TActorContext *ctx);
-    
+
     TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
 
     void SetHostMarkers(const TString &hostName, const THashSet<NKikimrCms::EMarker> &markers);
@@ -979,6 +1020,10 @@ public:
 
     static bool IsStaticGroupVDisk(const TVDiskID &vdId) { return EGroupConfigurationType::Static == VDiskConfigurationType(vdId); }
     static bool IsDynamicGroupVDisk(const TVDiskID &vdId) { return EGroupConfigurationType::Dynamic == VDiskConfigurationType(vdId); }
+
+    // Computes cluster roles for the given node and appends them to the
+    // repeated `roles` field of the maintenance Node message.
+    void FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out) const;
 
 private:
     TNodeInfo &NodeRef(ui32 nodeId) const {
@@ -1061,6 +1106,7 @@ private:
 
     TNodes Nodes;
     TTablets Tablets;
+    TRunningSystemTabletsByNode RunningSystemTabletsByNode;
     TPDisks PDisks;
     TVDisks VDisks;
     TBSGroups BSGroups;

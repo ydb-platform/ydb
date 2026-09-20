@@ -6,7 +6,6 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
-    kqp_rbo_pg_ut.cpp
     kqp_rbo_yql_ut.cpp
     kqp_rbo_olap_ut.cpp
 )
@@ -24,6 +23,7 @@ PEERDIR(
     ydb/core/statistics/ut_common
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/hyperloglog
+    yql/essentials/udfs/common/url_base
 )
 
 ADDINCL(

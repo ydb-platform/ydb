@@ -11,7 +11,7 @@ Exit Status: 0
     "GroupReserveMin": 0,
     "GroupReservePartPPM": 0,
     "MaxScrubbedDisksAtOnce": 4294967295,
-    "EnableGroupLayoutSanitizer": false,
+    "EnableGroupLayoutSanitizer": true,
     "PDiskSpaceColorBorder": "GREEN"
   }
 ]

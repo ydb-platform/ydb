@@ -42,7 +42,13 @@ namespace NActors::NDetail {
             auto selfId = this->GetActor().SelfId();
             Bridge.Reset(new TBridge(this));
             Bridge->Ref(); // extra reference used by the event
-            selfId.Schedule(When, new TEvents::TEvResumeRunnable(Bridge.Get()));
+            TActivationContext::Schedule(
+                When,
+                new IEventHandle(
+                    selfId,
+                    {},
+                    new TEvents::TEvResumeRunnable(Bridge.Get()),
+                    TEvents::TEvResumeRunnable::EventFlags));
 
             return TBase::Start();
         }
@@ -184,7 +190,7 @@ namespace NActors {
 
     template<class R>
     inline auto WithTimeout(TDuration duration, async<R> wrapped) {
-        return NDetail::TWithTimeoutAwaiter<TDuration, R>(duration, [&wrapped]{ return wrapped.UnsafeMove(); });
+        return NDetail::TWithTimeoutAwaiter<TDuration, R>(duration, [&wrapped]{ return std::move(wrapped).UnsafeMove(); });
     }
 
     template<class TCallback, class... TArgs>
@@ -198,7 +204,7 @@ namespace NActors {
 
     template<class R>
     inline auto WithDeadline(TMonotonic deadline, async<R> wrapped) {
-        return NDetail::TWithTimeoutAwaiter<TMonotonic, R>(deadline, [&wrapped]{ return wrapped.UnsafeMove(); });
+        return NDetail::TWithTimeoutAwaiter<TMonotonic, R>(deadline, [&wrapped]{ return std::move(wrapped).UnsafeMove(); });
     }
 
     template<class TCallback, class... TArgs>
@@ -212,7 +218,7 @@ namespace NActors {
 
     template<class R>
     inline auto WithDeadline(TInstant deadline, async<R> wrapped) {
-        return NDetail::TWithTimeoutAwaiter<TInstant, R>(deadline, [&wrapped]{ return wrapped.UnsafeMove(); });
+        return NDetail::TWithTimeoutAwaiter<TInstant, R>(deadline, [&wrapped]{ return std::move(wrapped).UnsafeMove(); });
     }
 
 } // namespace NActors

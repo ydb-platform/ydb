@@ -47,6 +47,7 @@ enum EObjectType {
     SysView = 28;
     Secret = 29;
     StreamingQuery = 30;
+    TestShardSet = 31;
 }
 
 message TBrowseInfo {
@@ -447,6 +448,7 @@ message TStoragePDisk {
     string DecommitStatus = 10;
     uint64 SlotSize = 11;
     uint64 SlotCount = 12;
+    string MaintenanceStatus = 13;
     NKikimrWhiteboard.TPDiskStateInfo Whiteboard = 50;
 }
 
@@ -492,6 +494,7 @@ message TStorageGroupInfo {
     optional double MaxVDiskRawUsage = 26;
     optional double MaxNormalizedOccupancy = 27;
     optional string CapacityAlert = 28;
+    optional uint32 GroupSizeInUnits = 29;
     repeated TStorageVDisk VDisks = 30;
 }
 
@@ -919,6 +922,7 @@ message TTopicDataResponse {
             string Value = 2;
         }
         repeated TMetadataItem MessageMetadata = 11;
+        string Ip = 12;
     }
 
     uint64 StartOffset = 1;

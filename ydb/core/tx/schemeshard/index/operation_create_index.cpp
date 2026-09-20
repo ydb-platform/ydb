@@ -2,6 +2,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -9,29 +11,22 @@ using namespace NSchemeShard;
 using namespace NTableIndex;
 
 class TPropose: public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
 private:
     const TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateTableIndex TPropose"
-            << " operationId# " << OperationId;
-    }
-
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages({});
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", step: " << step
-                               << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -50,7 +45,7 @@ public:
         Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
         TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);
         context.SS->PersistTableIndex(db, path->PathId);
-        context.SS->Indexes[path->PathId] = indexData->AlterData;
+        context.SS->Indexes.Set(path->PathId, indexData->AlterData);
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
@@ -60,9 +55,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -99,6 +92,7 @@ class TCreateTableIndex: public TSubOperation {
     }
 
 public:
+    virtual const char* Name() const override final { return "TCreateTableIndex"; }
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
@@ -111,12 +105,10 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = tableIndexCreation.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateTableIndex Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", operationId: " << OperationId
-                         << ", transaction: " << Transaction.ShortDebugString()
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"transaction", Transaction.ShortDebugString()},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -147,9 +139,18 @@ public:
             }
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
-                checks
-                    .IsUnderCreating(NKikimrScheme::StatusNameConflict)
-                    .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
+                if (internal && TTableIndexInfo::IsLocalIndex(tableIndexCreation.GetType())) {
+                    // Local indexes have no impl table. The parent may be under this same
+                    // operation (CREATE/ALTER) or steady (migration), so only reject
+                    // foreign concurrent operations.
+                    if (parentPath.IsUnderOperation()) {
+                        checks.IsUnderTheSameOperation(OperationId.GetTxId());
+                    }
+                } else {
+                    checks
+                        .IsUnderCreating(NKikimrScheme::StatusNameConflict)
+                        .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
+                }
             } else {
                 checks.NotBackupTable(); // allow to create backup table with index, but not to build index on a backup table
             }
@@ -177,10 +178,14 @@ public:
             }
 
             if (checks) {
-                checks
-                    .PathsLimit()
-                    .IsValidLeafName(context.UserToken.Get())
-                    .IsValidACL(acl);
+                checks.PathsLimit();
+                if (!internal) {
+                    // Internal operations (e.g. index build auto-provisioning the unique index over
+                    // __ydb_row_id) may legitimately create system-prefixed index names that the
+                    // user-facing reserved-name check would reject.
+                    checks.IsValidLeafName(context.UserToken.Get());
+                }
+                checks.IsValidACL(acl);
             }
 
             if (!checks) {
@@ -237,8 +242,7 @@ public:
         newIndexPath->LastTxId = OperationId.GetTxId();
         newIndexPath->PathType = TPathElement::EPathType::EPathTypeTableIndex;
 
-        context.SS->Indexes[newIndexPath->PathId] = newIndexData;
-        context.SS->IncrementPathDbRefCount(newIndexPath->PathId);
+        context.SS->Indexes.Set(newIndexPath->PathId, newIndexData);
 
         if (!acl.empty()) {
             newIndexPath->ApplyACL(acl);
@@ -254,18 +258,15 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateTableIndex AbortPropose"
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "AbortPropose");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateTableIndex AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateTableIndex AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -284,3 +285,5 @@ ISubOperation::TPtr CreateNewTableIndex(TOperationId id, TTxState::ETxState stat
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

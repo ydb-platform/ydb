@@ -160,9 +160,12 @@ public:
             }
         }
 
-        P_LOG(PRI_DEBUG, BPD01, SelfInfo() << " is created",
-                (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx),
-                (Buffered, buffer ? " WithBuffer" : " NoBuffer"));
+        YDB_LOG_P_LOG(PRI_DEBUG, "Is created",
+            {"marker", "BPD01"},
+            {"selfInfo", SelfInfo()},
+            {"chunkIdx", ChunkIdx},
+            {"sectorIdx", SectorIdx},
+            {"buffered", buffer ? " WithBuffer" : " NoBuffer"});
     }
 
     const TString SelfInfo() {
@@ -177,8 +180,12 @@ public:
     void WriteNextChunkReference(TChunkIdx nextChunk, ui64 nextChunkNonce, TCompletionAction *action,
             TReqId reqId, NWilson::TTraceId *traceId) {
 
-        P_LOG(PRI_INFO, BPD01, SelfInfo() << " WriteNextChunkReference", (CurrentChunkIdx, ChunkIdx),
-            (nextChunkIdx, nextChunk), (Nonce, Nonce));
+        YDB_LOG_P_LOG(PRI_INFO, "WriteNextChunkReference",
+            {"marker", "BPD01"},
+            {"selfInfo", SelfInfo()},
+            {"currentChunkIdx", ChunkIdx},
+            {"nextChunkIdx", nextChunk},
+            {"nonce", Nonce});
 
         ui64 sectorOffset = Format.Offset(ChunkIdx, SectorIdx);
         ui8* sector = BufferedWriter->Seek(sectorOffset, ReplicationFactor, ReplicationFactor, reqId, traceId,
@@ -245,8 +252,12 @@ public:
     void NextSector(const ui64 dataMagic, TReqId reqId, NWilson::TTraceId *traceId) {
         if (OnNewChunk) {
             OnNewChunk = false;
-            P_LOG(PRI_DEBUG, BPD01, SelfInfo() << " NextSector on new chunk",
-                (CurrentChunkIdx, ChunkIdx), (SectorIdx, SectorIdx), (Nonce, Nonce));
+            YDB_LOG_P_LOG(PRI_DEBUG, "NextSector on new chunk",
+                {"marker", "BPD01"},
+                {"selfInfo", SelfInfo()},
+                {"currentChunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"nonce", Nonce});
         }
         ui32 reserve = 1;
         if (IsSysLog) {
@@ -315,10 +326,12 @@ public:
         sectorFooter.Nonce = Nonce;
         sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize, {});
         if (!IsLog) {
-            P_LOG(PRI_TRACE, BPD01, SelfInfo() << " PrepareParitySectorFooter",
-                    (SectorOffset, sectorOffset),
-                    (Nonce, Nonce),
-                    (Hash, sectorFooter.Hash));
+            YDB_LOG_P_LOG(PRI_TRACE, "PrepareParitySectorFooter",
+                {"marker", "BPD01"},
+                {"selfInfo", SelfInfo()},
+                {"sectorOffset", sectorOffset},
+                {"nonce", Nonce},
+                {"hash", sectorFooter.Hash});
         }
         BufferedWriter->MarkDirty();
         ++Nonce;
@@ -364,17 +377,21 @@ public:
     void TerminateLog(TReqId reqId, NWilson::TTraceId *traceId) {
         Y_VERIFY_S(IsLog, PCtx->PDiskLogPrefix);
         if (SectorBytesFree == 0 || SectorBytesFree == Format.SectorPayloadSize()) {
-            P_LOG(PRI_DEBUG, BPD63, SelfInfo() << " TerminateLog Sector is full or free",
-                    (SectorBytesFree, SectorBytesFree),
-                    (ChunkIdx, ChunkIdx),
-                    (SectorIdx, SectorIdx),
-                    (SectorOffset, Format.Offset(ChunkIdx, SectorIdx)));
+            YDB_LOG_P_LOG(PRI_DEBUG, "TerminateLog Sector is full or free",
+                {"marker", "BPD63"},
+                {"selfInfo", SelfInfo()},
+                {"sectorBytesFree", SectorBytesFree},
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"sectorOffset", Format.Offset(ChunkIdx, SectorIdx)});
         } else if (SectorBytesFree <= sizeof(TFirstLogPageHeader)) {
-            P_LOG(PRI_DEBUG, BPD65, SelfInfo() << " TerminateLog small",
-                    (SectorBytesFree, SectorBytesFree),
-                    (ChunkIdx, ChunkIdx),
-                    (SectorIdx, SectorIdx),
-                    (SectorOffset, Format.Offset(ChunkIdx, SectorIdx)));
+            YDB_LOG_P_LOG(PRI_DEBUG, "TerminateLog small",
+                {"marker", "BPD65"},
+                {"selfInfo", SelfInfo()},
+                {"sectorBytesFree", SectorBytesFree},
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"sectorOffset", Format.Offset(ChunkIdx, SectorIdx)});
             TFirstLogPageHeader terminator(LogPageTerminator, 0, 0, 0, 0, 0);
             if (IsSysLog) {
                 *Mon.BandwidthPSysLogPadding += SectorBytesFree;
@@ -384,10 +401,13 @@ public:
             RecordBytesLeft += SectorBytesFree;
             Write(&terminator, SectorBytesFree, reqId, traceId);
         } else {
-            P_LOG(PRI_DEBUG, BPD66, SelfInfo() << " TerminateLog large",
-                (SectorBytesFree, SectorBytesFree),
-                (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx),
-                (SectorOffset, Format.Offset(ChunkIdx, SectorIdx)));
+            YDB_LOG_P_LOG(PRI_DEBUG, "TerminateLog large",
+                {"marker", "BPD66"},
+                {"selfInfo", SelfInfo()},
+                {"sectorBytesFree", SectorBytesFree},
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"sectorOffset", Format.Offset(ChunkIdx, SectorIdx)});
             ui32 availableSize = SectorBytesFree - sizeof(TFirstLogPageHeader);
             TFirstLogPageHeader header(LogPageTerminator, availableSize, availableSize, 0, 0, 0);
             if (IsSysLog) {
@@ -415,8 +435,12 @@ public:
             TFirstLogPageHeader header(flags, payloadSize, dataSize, owner, signature, ownerLsn);
             RecordBytesLeft = sizeNeeded;
             isTornOffHeader = (SectorBytesFree == sizeof(TFirstLogPageHeader) && !isWhole);
-            P_LOG(PRI_DEBUG, BPD60, SelfInfo() << " LogPageHeader",
-                    (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx), (Nonce, Nonce));
+            YDB_LOG_P_LOG(PRI_DEBUG, "LogPageHeader",
+                {"marker", "BPD60"},
+                {"selfInfo", SelfInfo()},
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"nonce", Nonce});
             Write(&header, sizeof(TFirstLogPageHeader), reqId, traceId);
         }
         if (isTornOffHeader) {
@@ -430,8 +454,12 @@ public:
             } else {
                 *Mon.BandwidthPLogRecordHeader += sizeof(TLogPageHeader);
             }
-            P_LOG(PRI_DEBUG, BPD61, SelfInfo() << " LogPageHeader",
-                    (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx), (Nonce, Nonce));
+            YDB_LOG_P_LOG(PRI_DEBUG, "LogPageHeader",
+                {"marker", "BPD61"},
+                {"selfInfo", SelfInfo()},
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx},
+                {"nonce", Nonce});
             Write(&header, sizeof(TLogPageHeader), reqId, traceId);
         }
     }
@@ -457,7 +485,10 @@ public:
             } else {
                 *Mon.BandwidthPLogRecordHeader += sizeof(TLogPageHeader);
             }
-            P_LOG(PRI_DEBUG, BPD62, "LogPageHeader writing", (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx));
+            YDB_LOG_P_LOG(PRI_DEBUG, "LogPageHeader writing",
+                {"marker", "BPD62"},
+                {"chunkIdx", ChunkIdx},
+                {"sectorIdx", SectorIdx});
             Write(&header, sizeof(TLogPageHeader), reqId, traceId);
         }
         Write(data, size, reqId, traceId);

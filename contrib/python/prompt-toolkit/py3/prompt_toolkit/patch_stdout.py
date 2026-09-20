@@ -25,8 +25,9 @@ import queue
 import sys
 import threading
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator, TextIO, cast
+from typing import TextIO, cast
 
 from .application import get_app_session, run_in_terminal
 from .output import Output
@@ -40,7 +41,7 @@ __all__ = [
 @contextmanager
 def patch_stdout(raw: bool = False) -> Generator[None, None, None]:
     """
-    Replace `sys.stdout` by an :class:`_StdoutProxy` instance.
+    Replace `sys.stdout` and `sys.stderr` by an :class:`_StdoutProxy` instance.
 
     Writing to this proxy will make sure that the text appears above the
     prompt, and that it doesn't destroy the output from the renderer.  If no
@@ -51,6 +52,9 @@ def patch_stdout(raw: bool = False) -> Generator[None, None, None]:
         then make sure that the context manager is applied after the event loop
         is changed. Printing to stdout will be scheduled in the event loop
         that's active when the context manager is created.
+
+    Warning: In order for all text to appear above the prompt `stderr` will also
+        be redirected to the stdout proxy.
 
     :param raw: (`bool`) When True, vt100 terminal escape sequences are not
                 removed/escaped.

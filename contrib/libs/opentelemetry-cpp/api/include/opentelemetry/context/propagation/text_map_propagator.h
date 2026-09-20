@@ -18,6 +18,12 @@ namespace propagation
 class TextMapCarrier
 {
 public:
+  TextMapCarrier()                                      = default;
+  TextMapCarrier(const TextMapCarrier &)                = default;
+  TextMapCarrier &operator=(const TextMapCarrier &)     = default;
+  TextMapCarrier(TextMapCarrier &&) noexcept            = default;
+  TextMapCarrier &operator=(TextMapCarrier &&) noexcept = default;
+
   // returns the value associated with the passed key.
   virtual nostd::string_view Get(nostd::string_view key) const noexcept = 0;
 
@@ -42,6 +48,12 @@ public:
 class TextMapPropagator
 {
 public:
+  TextMapPropagator()                                         = default;
+  TextMapPropagator(const TextMapPropagator &)                = default;
+  TextMapPropagator &operator=(const TextMapPropagator &)     = default;
+  TextMapPropagator(TextMapPropagator &&) noexcept            = default;
+  TextMapPropagator &operator=(TextMapPropagator &&) noexcept = default;
+
   // Returns the context that is stored in the carrier with the TextMapCarrier as extractor.
   virtual context::Context Extract(const TextMapCarrier &carrier,
                                    context::Context &context) noexcept = 0;

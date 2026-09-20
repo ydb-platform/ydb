@@ -26,6 +26,7 @@ private:
     using TBase = NCommon::TSpecialReadContext;
     mutable TSpinLock DuplicatesManagerLock;
     NActors::TActorId DuplicatesManager = NActors::TActorId();
+    ui64 DuplicateFilterPortionCount = 0;
 
 private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
@@ -40,8 +41,7 @@ private:
     mutable std::optional<std::shared_ptr<TFetchingScript>> RestoreResultScript;
 
     bool NeedDuplicateFiltering() const {
-        return GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES &&
-               GetReadMetadata()->TableMetadataAccessor->NeedDuplicateFiltering();
+        return GetReadMetadata()->NeedDuplicateFiltering();
     }
 
 public:
@@ -76,13 +76,16 @@ public:
 
     virtual TString ProfileDebugString() const override;
 
-    void RegisterActors(const NCommon::ISourcesConstructor& sources);
+    void RegisterActors(NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
 
-    NActors::TActorId GetDuplicatesManagerVerified() const {
+    NActors::TActorId GetDuplicatesManager() const {
         TGuard<TSpinLock> g(DuplicatesManagerLock);
-        AFL_VERIFY(DuplicatesManager);
         return DuplicatesManager;
+    }
+
+    ui64 GetDuplicateFilterPortionCount() const {
+        return DuplicateFilterPortionCount;
     }
 
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)

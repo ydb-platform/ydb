@@ -16,7 +16,8 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
         const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool skipReadRuleCheck
 )
-    : ParentId(parentId)
+    : TBase(NKikimrServices::PQ_READ_PROXY)
+    , ParentId(parentId)
     , Cookie(cookie)
     , Session(session)
     , MetaCacheId(metaCache)
@@ -38,7 +39,8 @@ TReadInitAndAuthActor::~TReadInitAndAuthActor() = default;
 
 
 void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth for : " << ClientId);
+    LOG_D("Auth",
+        {"clientId", ClientId});
     Become(&TThis::StateFunc);
     DoCheckACL = AppData(ctx)->PQConfig.GetCheckACL() && Token;
     DescribeTopics(ctx, true);
@@ -51,7 +53,6 @@ void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bo
         AFL_ENSURE(topic.second.DiscoveryConverter->IsValid());
     }
 
-    //LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " describe topics: " << JoinSeq(", ", topicNames));
     ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topics, true, showPrivate));
 }
 
@@ -65,16 +66,17 @@ void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
             holder.DiscoveryConverter->RestorePrimaryPath();
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth is DEAD");
+    LOG_D("Auth is DEAD");
 
-    TActorBootstrapped<TReadInitAndAuthActor>::Die(ctx);
+    TBase::Die(ctx);
 }
 
 bool TReadInitAndAuthActor::OnUnhandledException(const std::exception& exc) {
     auto ctx = *NActors::TlsActivationContext;
-    LOG_CRIT_S(ctx, NKikimrServices::PQ_READ_PROXY,
-        TStringBuilder() << PQ_LOG_PREFIX << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-            << TBackTrace::FromCurrentException().PrintToString());
+    LOG_C("Unhandled exception",
+        {"typeName", TypeName(exc)},
+        {"exception", exc.what()},
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
     CloseSession("Internal error", PersQueue::ErrorCode::ErrorCode::ERROR, ctx.AsActorContext());
 
@@ -96,7 +98,7 @@ void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, c
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     schemeCacheRequest->ResultSet.emplace_back(entry);
     schemeCacheRequest->DatabaseName = AppData(ctx)->PQConfig.GetDatabase();
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Send client acl request");
+    LOG_D("Send client acl request");
     ctx.Send(NewSchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
 }
 
@@ -139,7 +141,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
 
 
 void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Handle describe topics response");
+    LOG_D("Handle describe topics response");
 
     bool reDescribe = false;
     auto i = 0u;
@@ -213,7 +215,8 @@ bool TReadInitAndAuthActor::CheckTopicACL(
     }
     if (!SkipReadRuleCheck && (Token || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen())) {
         //TODO : add here checking of client-service-type password. Provide it via API-call.
-        if (!NPQ::HasConsumer(pqDescr.GetPQTabletConfig(), ClientId)) {
+        const auto* consumer = NPQ::GetConsumer(pqDescr.GetPQTabletConfig(), ClientId);
+        if (!consumer || consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
             CloseSession(
                     TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster << "'",
                     PersQueue::ErrorCode::UNKNOWN_READ_RULE, ctx

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
+#include <library/cpp/yt/system/proc.h>
 
 #include <yt/yt/core/test_framework/framework.h>
 
@@ -50,6 +51,43 @@ TEST(TFSTest, TestIsDirEmpty)
     RemoveRecursive(dir);
 }
 
+TEST(TFSTest, TestMakeDirRecursive)
+{
+    auto dir = CombinePaths(NFs::CurrentWorkingDirectory(), "test");
+
+    for (const auto& path : {
+        CombinePaths(dir, ""),
+        CombinePaths(dir, "child"),
+        CombinePaths(dir, "child"),
+        CombinePaths(dir, "a/b/c"),
+        CombinePaths(dir, "child/a/b/c"),
+    }) {
+        EXPECT_NO_THROW(MakeDirRecursive(path));
+        EXPECT_TRUE(Exists(path));
+    }
+
+    RemoveRecursive(dir);
+}
+
+#ifdef _linux_
+TEST(TFSTest, TestMakeDirRecursiveReportsRealError)
+{
+    auto readOnlyDir = CombinePaths(NFs::CurrentWorkingDirectory(), "read_only");
+    MakeDirRecursive(readOnlyDir);
+    Chmod(readOnlyDir, 0500);
+
+    for (const auto& path : {
+        CombinePaths(readOnlyDir, "child"),
+        CombinePaths(readOnlyDir, "a/b/c"),
+    }) {
+        EXPECT_THROW_WITH_ERROR_CODE(MakeDirRecursive(path), ELinuxErrorCode::ACCESS);
+    }
+
+    Chmod(readOnlyDir, 0700);
+    RemoveRecursive(readOnlyDir);
+}
+#endif
+
 TEST(TFSTest, TestIsPathRelativeAndInvolvesNoTraversal)
 {
     EXPECT_TRUE(NFS::IsPathRelativeAndInvolvesNoTraversal(""));
@@ -90,7 +128,7 @@ TEST(TFSTest, TestGetRelativePath)
 }
 
 #ifdef _unix_
-TEST(TFSTest, TestCombinePathsWithBackslashUnix)
+TEST(TFSTest, CombinePathsWithBackslashUnix)
 {
     EXPECT_EQ(CombinePaths("/", "path/with/back\\slashed/file"), "/path/with/back\\slashed/file");
 }

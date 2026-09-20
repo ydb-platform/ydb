@@ -1,0 +1,141 @@
+.pd-menu {
+    margin: 0.5em 0 1em;
+}
+.pd-menu-btn {
+    margin-right: 0.4em;
+}
+.pd-block {
+    margin-bottom: 0.5em;
+}
+.pd-form {
+    margin-bottom: 1em;
+}
+.pd-details {
+    margin-bottom: 0.5em;
+}
+.pd-summary {
+    display: list-item;
+    cursor: pointer;
+}
+
+.dbg-config-legend-item {
+    text-align: center;
+    padding: 5px;
+}
+.dbg-config-both {
+    background-color: #dff0d8;
+}
+.dbg-config-ddisk {
+    background-color: #d9edf7;
+}
+.dbg-config-pbuffer {
+    background-color: #b8daff;
+}
+
+.chaos-cell {
+    text-align: center;
+}
+.chaos-toggle-form {
+    display: inline-block;
+    margin: 0;
+    vertical-align: middle;
+}
+.chaos-toggle {
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 1px solid #888;
+    border-radius: 2px;
+    cursor: pointer;
+    vertical-align: middle;
+}
+.chaos-toggle-on {
+    background-color: #5cb85c;
+}
+.chaos-toggle-off {
+    background-color: #d9534f;
+}
+
+.lat-controls {
+    margin: 0.5em 0;
+}
+.lat-hint {
+    font-size: 0.9em;
+    color: #666;
+}
+.lat-legend {
+    margin-bottom: 0.5em;
+    font-size: 0.9em;
+}
+.lat-legend-swatch {
+    display: inline-block;
+    width: 1.2em;
+    height: 1.2em;
+    border: 1px solid #ccc;
+    margin-right: 0.2em;
+    vertical-align: middle;
+}
+.lat-nav-btn {
+    margin-right: 0.3em;
+}
+.lat-label {
+    margin-right: 0.6em;
+}
+.lat-label-wide {
+    margin-right: 0.8em;
+}
+.lat-refresh-rate {
+    width: 4em;
+}
+.lat-bar {
+    min-width: 4.5em;
+}
+.lat-bar-track {
+    height: 4px;
+    background: #eee;
+    margin-top: 2px;
+}
+.lat-bar-fill {
+    height: 100%;
+}
+.lat-none {
+    color: #999;
+}
+.lat-node-title {
+    font-weight: bold;
+    margin-bottom: 0.3em;
+}
+.lat-slot-node {
+    margin-bottom: 0.8em;
+}
+.lat-pdisk-row {
+    margin: 0.2em 0 0.4em 1em;
+}
+.lat-pdisk-label {
+    display: inline-block;
+    color: #666;
+    font-size: 0.85em;
+    margin-right: 0.5em;
+    min-width: 5em;
+}
+.lat-slot {
+    display: inline-block;
+    vertical-align: top;
+    margin: 0 0.25em 0.2em 0;
+    text-decoration: none;
+    color: inherit;
+    min-width: 5em;
+}
+.lat-slot-id {
+    font-size: 0.75em;
+    color: #666;
+}
+.lat-sortable {
+    cursor: pointer;
+}
+.lat-hidden {
+    display: none;
+}
+.lat-filter-row {
+    margin-bottom: 0.5em;
+}

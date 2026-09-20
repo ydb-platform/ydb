@@ -7,7 +7,6 @@
 #include <ydb/library/yql/providers/dq/planner/execution_planner.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <yql/essentials/core/yql_udf_resolver.h>
 #include <yql/essentials/core/yql_execution.h>
@@ -17,10 +16,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace NYql {
-
-namespace NProto {
-class TDqConfig;
-}
 
 class IDqGateway : public TThrRefBase {
 public:
@@ -116,8 +111,5 @@ public:
 
     virtual void Stop() { }
 };
-
-TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port);
-TIntrusivePtr<IDqGateway> CreateDqGateway(const NProto::TDqConfig& config);
 
 } // namespace NYql

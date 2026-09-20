@@ -8,8 +8,8 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 
-#include <yql/essentials/sql/v1/complete/sql_complete.h>
-#include <yql/essentials/sql/v1/complete/text/word.h>
+#include <yql/essentials/sql/v1/ide/completion/sql_complete.h>
+#include <yql/essentials/sql/v1/ide/completion/text/word.h>
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 
@@ -97,9 +97,9 @@ public:
 
         YQLHighlighter = MakeYQLHighlighter(CurrentColorSchema);
 
-        std::vector<TString> completionCommands(settings.AdditionalCommands.begin(), settings.AdditionalCommands.end());
+        std::vector<TString> slashCommands(settings.AdditionalCommands.begin(), settings.AdditionalCommands.end());
         if (EnableSwitchMode) {
-            completionCommands.push_back("/switch");
+            slashCommands.push_back("/switch");
         }
 
         std::optional<TYQLCompleterConfig> yqlCompleterConfig;
@@ -107,7 +107,11 @@ public:
             Y_VALIDATE(settings.LazyDriver, "TLineReaderSettings::LazyDriver must be set when EnableYqlCompletion is true");
             yqlCompleterConfig = TYQLCompleterConfig{.Color = CurrentColorSchema, .LazyDriver = settings.LazyDriver, .Database = settings.Database, .IsVerbose = GetGlobalLogger().IsVerbose()};
         }
-        YQLCompleter = MakeYQLCompositeCompleter(completionCommands, yqlCompleterConfig);
+        YQLCompleter = MakeYQLCompositeCompleter({
+            .SlashCommands = std::move(slashCommands),
+            .TclCommands = settings.TclCommands,
+            .YqlCompleterConfig = std::move(yqlCompleterConfig),
+        });
 
         InitReplxx(settings.EnableYqlCompletion);
         Y_VALIDATE(Rx, "Replxx is not initialized");
@@ -232,6 +236,12 @@ public:
 
     void SetPrompt(const TString& prompt) final {
         Prompt = prompt;
+    }
+
+    void SetExcludeSchemeQueryCompletion(bool exclude) final {
+        if (YQLCompleter) {
+            YQLCompleter->SetExcludeSchemeQueryCompletion(exclude);
+        }
     }
 
 private:

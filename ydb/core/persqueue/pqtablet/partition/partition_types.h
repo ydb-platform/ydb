@@ -6,6 +6,7 @@
 #include <util/generic/maybe.h>
 
 #include <variant>
+#include <ydb/library/actors/core/log.h>
 
 
 namespace NKikimr::NPQ {
@@ -99,7 +100,7 @@ struct TMessage {
         case 4:
             return std::get<4>(Body).Cookie;
         default:
-            Y_ABORT("unreachable");
+            AFL_ENSURE(false)("reason", "unreachable")("index", Body.index());
         }
     }
 

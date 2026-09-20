@@ -7,11 +7,13 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/parser_helpers.h>
-#include <yt/yt/core/misc/property.h>
-#include <yt/yt/core/misc/static_ring_queue.h>
 
 #include <library/cpp/yt/coding/varint.h>
 #include <library/cpp/yt/coding/zig_zag.h>
+
+#include <library/cpp/yt/containers/static_ring_queue.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/yt/yson_string/format.h>
 
@@ -139,11 +141,11 @@ public:
     }
 
     // Return pair <context, context_position>.
-    std::pair<TString, size_t> GetContextFromCheckpoint() const
+    std::pair<std::string, size_t> GetContextFromCheckpoint() const
     {
-        TString result(MaxContextSize, '\0');
+        std::string result(MaxContextSize, '\0');
         size_t size, position;
-        SaveContext(result.Detach(), &size, &position);
+        SaveContext(result.data(), &size, &position);
         result.resize(size);
         return {result, position};
     }
@@ -216,7 +218,7 @@ public:
     void CheckpointContext()
     { }
 
-    std::pair<TString, size_t> GetContextFromCheckpoint() const
+    std::pair<std::string, size_t> GetContextFromCheckpoint() const
     {
         return {"<context is disabled>", 0};
     }
@@ -246,7 +248,7 @@ public:
         }
         if (IsEmpty() && TBlockStream::IsFinished() && !AllowFinish) {
             THROW_ERROR_EXCEPTION("Premature end of stream")
-                << *this;
+                .With(this->GetErrorAttributes());
         }
     }
 
@@ -284,11 +286,6 @@ public:
     {
         return TPositionBase::GetErrorAttributes(TBlockStream::Begin(), TBlockStream::Current());
     }
-
-    friend TError operator<<(const TError& error, const TCharStream<TBlockStream, TPositionBase>& stream)
-    {
-        return error << stream.GetErrorAttributes();
-    }
 };
 
 template <class TBaseStream>
@@ -312,7 +309,7 @@ private:
     [[noreturn]] void ThrowCannotParseVarint()
     {
         THROW_ERROR_EXCEPTION("Error parsing varint value")
-            << *this;
+            .With(this->GetErrorAttributes());
     }
 
     // Following functions is an adaptation Protobuf code from coded_stream.cc
@@ -558,7 +555,7 @@ public:
             } else if (isalpha(ch)) {
                 THROW_ERROR_EXCEPTION("Unexpected %Qv in numeric literal",
                     ch)
-                    << *this;
+                    .With(this->GetErrorAttributes());
             } else {
                 break;
             }
@@ -683,7 +680,7 @@ public:
         if (length < 0) {
             THROW_ERROR_EXCEPTION("Negative binary string literal length %v",
                 length)
-                << *this;
+                .With(this->GetErrorAttributes());
         }
 
         if (TBaseStream::Current() + length <= TBaseStream::End()) {
@@ -771,7 +768,7 @@ public:
             size_t chunkSize = std::min(needToRead, TBaseStream::Length());
             if (chunkSize == 0) {
                 THROW_ERROR_EXCEPTION("Error parsing binary double literal")
-                    << *this;
+                    .With(this->GetErrorAttributes());
             }
             std::copy(
                 TBaseStream::Current(),
@@ -791,7 +788,7 @@ public:
             THROW_ERROR_EXCEPTION("Expected %Qv but found %Qv",
                 symbol,
                 ch)
-                << *this;
+                .With(this->GetErrorAttributes());
         }
 
         TBaseStream::Advance(1);

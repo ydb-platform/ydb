@@ -66,7 +66,9 @@ public:
             hFunc(NMemory::TEvConsumerRegistered, HandleMain);
             hFunc(NMemory::TEvConsumerLimit, HandleMain);
             default:
-                AFL_ERROR(NKikimrServices::TX_CONVEYOR)("problem", "unexpected event for general cache")("ev_type", ev->GetTypeName());
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_CONVEYOR, "",
+                    {"problem", "unexpected event for general cache"},
+                    {"evType", ev->GetTypeName()});
                 break;
         }
     }
@@ -89,3 +91,12 @@ public:
 };
 
 }   // namespace NKikimr::NGeneralCache::NPrivate
+
+namespace NKikimr::NGeneralCache {
+
+template <class TPolicy>
+NActors::IActor* CreateService(const NPublic::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> signals) {
+    return new NPrivate::TDistributor<TPolicy>(config, signals);
+}
+
+}   // namespace NKikimr::NGeneralCache

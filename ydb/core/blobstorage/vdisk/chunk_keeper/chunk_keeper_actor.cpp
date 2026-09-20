@@ -8,6 +8,8 @@
 
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CHUNK_KEEPER
+
 namespace NKikimr {
 
 class TChunkKeeperActor : public TActorBootstrapped<TChunkKeeperActor> {
@@ -38,10 +40,11 @@ public:
     {}
 
     void Bootstrap() {
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK07, VDISKP(Ctx.LogCtx->VCtx, "Bootstrap TChunkKeeperActor"),
-                (CommittedData, PrintCommittedData()),
-                (IsActive, IsActive),
-                (ReadOnly, ReadOnly));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Bootstrap TChunkKeeperActor"),
+            {"marker", "BSCK07"},
+            {"committedData", PrintCommittedData()},
+            {"isActive", IsActive},
+            {"readOnly", ReadOnly});
         if (IsActive) {
             Become(&TThis::StateAccepting);
         } else {
@@ -118,13 +121,15 @@ private:
 
     void Handle(const TEvChunkKeeperAllocate::TPtr& ev) {
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperAllocate"),
-                (Subsystem, subsystem));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperAllocate"),
+            {"marker", "BSCK02"},
+            {"subsystem", subsystem});
         { // validation
             if (ReadOnly) {
                 TString errorReason = TStringBuilder() << "ChunkKeeper is in read-only mode, Subsystem# " << subsystem;
-                STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK04, VDISKP(Ctx.LogCtx->VCtx, "Bad allocation request"),
-                        (ErrorReason, errorReason));
+                YDB_LOG_ERROR(VDISKP(Ctx.LogCtx->VCtx, "Bad allocation request"),
+                    {"marker", "BSCK04"},
+                    {"errorReason", errorReason});
                 Send(ev->Sender, new TEvChunkKeeperAllocateResult(std::nullopt, NKikimrProto::ERROR, errorReason));
                 return;
             }
@@ -138,23 +143,26 @@ private:
     void Handle(const TEvChunkKeeperFree::TPtr& ev) {
         ui32 chunkIdx = ev->Get()->ChunkIdx;
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK03, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperFree"),
-                (ChunkIdx, chunkIdx),
-                (Subsystem, subsystem));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperFree"),
+            {"marker", "BSCK03"},
+            {"chunkIdx", chunkIdx},
+            {"subsystem", subsystem});
 
         { // validation
             if (ReadOnly) {
                 TString errorReason = TStringBuilder() << "ChunkKeeper is in read-only mode, ChunkIdx# " << chunkIdx << " Subsystem# " << subsystem;
-                STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK04, VDISKP(Ctx.LogCtx->VCtx, "Bad deallocation request"),
-                        (ErrorReason, errorReason));
+                YDB_LOG_ERROR(VDISKP(Ctx.LogCtx->VCtx, "Bad deallocation request"),
+                    {"marker", "BSCK04"},
+                    {"errorReason", errorReason});
                 Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, errorReason));
                 return;
             }
             auto it = Committed->Chunks.find(ev->Get()->ChunkIdx);
             if (it == Committed->Chunks.end()) {
                 TString errorReason = TStringBuilder() << "Chunk with idx# " << chunkIdx << " is not allocated";
-                STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK04, VDISKP(Ctx.LogCtx->VCtx, "Bad deallocation request"),
-                        (ErrorReason, errorReason));
+                YDB_LOG_ERROR(VDISKP(Ctx.LogCtx->VCtx, "Bad deallocation request"),
+                    {"marker", "BSCK04"},
+                    {"errorReason", errorReason});
                 Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, errorReason));
                 return;
             }
@@ -162,8 +170,9 @@ private:
                 TString errorReason = TStringBuilder() << "Chunk with idx# " << chunkIdx <<
                         " belongs to another subsystem Requested# " << subsystem << " Actual# " <<
                         it->second.Subsystem;
-                STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK05, VDISKP(Ctx.LogCtx->VCtx, "Bad deallocation request"),
-                        (ErrorReason, errorReason));
+                YDB_LOG_ERROR(VDISKP(Ctx.LogCtx->VCtx, "Bad deallocation request"),
+                    {"marker", "BSCK05"},
+                    {"errorReason", errorReason});
                 Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, errorReason));
                 return;
             }
@@ -197,15 +206,17 @@ private:
             });
             Send(ev->Sender, new TEvChunkKeeperDiscoverResult(std::move(res), NKikimrProto::OK));
         }
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK06, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperDiscover"),
-                (Subsystem, subsystem),
-                (DiscoveredChunks, discoveredChunks));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperDiscover"),
+            {"marker", "BSCK06"},
+            {"subsystem", subsystem},
+            {"discoveredChunks", discoveredChunks});
     }
 
     void Handle(const NPDisk::TEvCutLog::TPtr& ev) {
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK18, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvCutLog"),
-                (CurEntryPointLsn, CurEntryPointLsn),
-                (FreeUpToLsn, ev->Get()->FreeUpToLsn));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvCutLog"),
+            {"marker", "BSCK18"},
+            {"curEntryPointLsn", CurEntryPointLsn},
+            {"freeUpToLsn", ev->Get()->FreeUpToLsn});
         if (ReadOnly) {
             return;
         }
@@ -253,8 +264,9 @@ private:
     }
 
     void ProcessRequestAllocate(TRequestAllocate request) {
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK09, VDISKP(Ctx.LogCtx->VCtx, "Process allocation request"),
-                (Subsystem, request.Subsystem));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Process allocation request"),
+            {"marker", "BSCK09"},
+            {"subsystem", request.Subsystem});
         Become(&TThis::StateProcessing);
         auto msg = std::make_unique<NPDisk::TEvChunkReserve>(Ctx.LogCtx->PDiskCtx->Dsk->Owner,
                 Ctx.LogCtx->PDiskCtx->Dsk->OwnerRound, 1);
@@ -262,8 +274,9 @@ private:
     }
 
     void Handle(const NPDisk::TEvChunkReserveResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK10, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkReserveResult"),
-                (Event, ev->Get()->ToString()));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkReserveResult"),
+            {"marker", "BSCK10"},
+            {"event", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
 
         Y_VERIFY_S(ActiveRequest, VDISKP(Ctx.LogCtx->VCtx, "No ActiveRequest"
@@ -296,8 +309,9 @@ private:
             return;
         }
         default:
-            STLOG(PRI_WARN, BS_CHUNK_KEEPER, BSCK21, VDISKP(Ctx.LogCtx->VCtx, "Unsuccessful ChunkReserve request"),
-                    (ErrorReason, ev->Get()->ErrorReason));
+            YDB_LOG_WARN(VDISKP(Ctx.LogCtx->VCtx, "Unsuccessful ChunkReserve request"),
+                {"marker", "BSCK21"},
+                {"errorReason", ev->Get()->ErrorReason});
             Send(request->Sender, new TEvChunkKeeperAllocateResult({}, NKikimrProto::ERROR, ev->Get()->ErrorReason));
             ActiveRequest.reset();
             ProcessRequestQueue();
@@ -306,8 +320,9 @@ private:
     }
 
     void HandleLogResultAllocate(const NPDisk::TEvLogResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK11, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult while processing"
-                " allocation request"), (Event, ev->Get()->ToString()));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult while processing" " allocation request"),
+            {"marker", "BSCK11"},
+            {"event", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
 
         Y_VERIFY_S(ActiveRequest, VDISKP(Ctx.LogCtx->VCtx, "No ActiveRequest while processing allocation request"));
@@ -343,8 +358,9 @@ private:
             break;
         }
         default:
-            STLOG(PRI_WARN, BS_CHUNK_KEEPER, BSCK22, VDISKP(Ctx.LogCtx->VCtx, "Unsuccessful Log request"),
-                    (ErrorReason, ev->Get()->ErrorReason));
+            YDB_LOG_WARN(VDISKP(Ctx.LogCtx->VCtx, "Unsuccessful Log request"),
+                {"marker", "BSCK22"},
+                {"errorReason", ev->Get()->ErrorReason});
             Send(sender, new TEvChunkKeeperAllocateResult(chunkIdx, NKikimrProto::ERROR, ev->Get()->ErrorReason));
             break;
         }
@@ -352,15 +368,17 @@ private:
     }
 
     void ProcessRequestFree(TRequestFree request) {
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK13, VDISKP(Ctx.LogCtx->VCtx, "Processing deallocation request"),
-                (Subsystem, request.Subsystem),
-                (ChunkIdx, request.ChunkIdx));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Processing deallocation request"),
+            {"marker", "BSCK13"},
+            {"subsystem", request.Subsystem},
+            {"chunkIdx", request.ChunkIdx});
         auto it = Committed->Chunks.find(request.ChunkIdx);
         if (it == Committed->Chunks.end() || it->second.Subsystem != request.Subsystem) {
             TString errorReason = TStringBuilder() << "Chunk doesn't belong to this subsystem, possible double-free, "
                     "ChunkIdx# " << request.ChunkIdx;
-            STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK12, VDISKP(Ctx.LogCtx->VCtx, "Race occurred"),
-                    (ErrorReason, errorReason));
+            YDB_LOG_ERROR(VDISKP(Ctx.LogCtx->VCtx, "Race occurred"),
+                {"marker", "BSCK12"},
+                {"errorReason", errorReason});
             Send(request.Sender, new TEvChunkKeeperFreeResult(request.ChunkIdx, NKikimrProto::ERROR, errorReason));
             ActiveRequest.reset();
             ProcessRequestQueue();
@@ -376,8 +394,9 @@ private:
     }
 
     void HandleLogResultFree(const NPDisk::TEvLogResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK14, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult while processing"
-                " deallocation request"), (Event, ev->Get()->ToString()));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult while processing" " deallocation request"),
+            {"marker", "BSCK14"},
+            {"event", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
 
         Y_VERIFY_S(ActiveRequest, VDISKP(Ctx.LogCtx->VCtx, "No ActiveRequest while processing deallocation request"));
@@ -418,8 +437,9 @@ private:
             break;
         }
         default:
-            STLOG(PRI_WARN, BS_CHUNK_KEEPER, BSCK23, VDISKP(Ctx.LogCtx->VCtx, "Unsuccessful Log request"),
-                    (ErrorReason, ev->Get()->ErrorReason));
+            YDB_LOG_WARN(VDISKP(Ctx.LogCtx->VCtx, "Unsuccessful Log request"),
+                {"marker", "BSCK23"},
+                {"errorReason", ev->Get()->ErrorReason});
             Send(sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, ev->Get()->ErrorReason));
             break;
         }
@@ -427,14 +447,16 @@ private:
     }
 
     void ProcessRequestCutLog(TRequestCutLog) {
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK20, VDISKP(Ctx.LogCtx->VCtx, "Processing cut log request"));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Processing cut log request"),
+            {"marker", "BSCK20"});
         Become(&TThis::StateProcessing);
         IssueCommit(NPDisk::TCommitRecord{});
     }
 
     void HandleLogResultCutLog(const NPDisk::TEvLogResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK17, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult while processing cut log request"),
-                (Event, ev->Get()->ToString()));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult while processing cut log request"),
+            {"marker", "BSCK17"},
+            {"event", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
         ActiveRequest.reset();
 
@@ -446,8 +468,9 @@ private:
             SendCutLog();
             break;
         default:
-            STLOG(PRI_WARN, BS_CHUNK_KEEPER, BSCK24, VDISKP(Ctx.LogCtx->VCtx, "Unsuccessful Log request"),
-                    (ErrorReason, ev->Get()->ErrorReason));
+            YDB_LOG_WARN(VDISKP(Ctx.LogCtx->VCtx, "Unsuccessful Log request"),
+                {"marker", "BSCK24"},
+                {"errorReason", ev->Get()->ErrorReason});
             break;
         }
         ProcessRequestQueue();
@@ -460,16 +483,19 @@ private:
 
         auto commitMsg = std::make_unique<NPDisk::TEvLog>(Ctx.LogCtx->PDiskCtx->Dsk->Owner,
                 Ctx.LogCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureChunkKeeper,
-                std::move(commitRecord), SerializeEntryPoint(), seg, nullptr);
+                std::move(commitRecord), SerializeEntryPoint(), seg, nullptr, TWriteSource::ChunkKeeperCommit,
+                NPDisk::TEvLog::TCallback());
 
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK15, VDISKP(Ctx.LogCtx->VCtx, "Sending TEvLog"),
-                (Event, commitMsg->ToString()));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Sending TEvLog"),
+            {"marker", "BSCK15"},
+            {"event", commitMsg->ToString()});
         Send(Ctx.LogCtx->LoggerId, commitMsg.release());
     }
 
     void SendCutLog() {
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK19, VDISKP(Ctx.LogCtx->VCtx, "Sending TEvVDiskCutLog"),
-                (CurEntryPointLsn, CurEntryPointLsn));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Sending TEvVDiskCutLog"),
+            {"marker", "BSCK19"},
+            {"curEntryPointLsn", CurEntryPointLsn});
         Send(Ctx.LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, CurEntryPointLsn));
     }
 
@@ -482,7 +508,7 @@ private:
                     return;
                 }
             } else {
-                Y_VERIFY_DEBUG_S(!DeletionsInFlight.contains(chunkIdx), Ctx.LogCtx->VCtx->VDiskLogPrefix << 
+                Y_VERIFY_DEBUG_S(!DeletionsInFlight.contains(chunkIdx), Ctx.LogCtx->VCtx->VDiskLogPrefix <<
                         "Chunk is being allocated and deleted simultaneously, ChunkIdx# " << chunkIdx);
             }
             auto* chunk = proto.AddChunks();
@@ -507,12 +533,13 @@ private:
         TString str;
         google::protobuf::TextFormat::PrintToString(proto, &str);
 
-        STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK25, VDISKP(Ctx.LogCtx->VCtx, "Printing entrypoint"),
-                (CommittedChunks, Committed->Chunks.size()),
-                (AllocationsInFlight, AllocationsInFlight.size()),
-                (DeletionsInFlight, DeletionsInFlight.size()),
-                (ProtoSize, proto.ByteSizeLong()),
-                (Text, str));
+        YDB_LOG_DEBUG(VDISKP(Ctx.LogCtx->VCtx, "Printing entrypoint"),
+            {"marker", "BSCK25"},
+            {"committedChunks", Committed->Chunks.size()},
+            {"allocationsInFlight", AllocationsInFlight.size()},
+            {"deletionsInFlight", DeletionsInFlight.size()},
+            {"protoSize", proto.ByteSizeLong()},
+            {"text", str});
 #endif
         return data;
     }
@@ -549,30 +576,34 @@ private:
 
     void HandleError(const TEvChunkKeeperAllocate::TPtr& ev) {
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperAllocate in ErrorState"),
-                (Subsystem, subsystem));
+        YDB_LOG_NOTICE(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperAllocate in ErrorState"),
+            {"marker", "BSCK02"},
+            {"subsystem", subsystem});
         Send(ev->Sender, new TEvChunkKeeperAllocateResult(std::nullopt, NKikimrProto::ERROR, "ChunkKeeper is disabled"));
     }
 
     void HandleError(const TEvChunkKeeperFree::TPtr& ev) {
         ui32 chunkIdx = ev->Get()->ChunkIdx;
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperFree in ErrorState"),
-                (ChunkIdx, chunkIdx),
-                (Subsystem, subsystem));
+        YDB_LOG_NOTICE(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperFree in ErrorState"),
+            {"marker", "BSCK02"},
+            {"chunkIdx", chunkIdx},
+            {"subsystem", subsystem});
         Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, "ChunkKeeper is disabled"));
     }
 
     void HandleError(const TEvChunkKeeperDiscover::TPtr& ev) {
         ui32 subsystem = static_cast<ui32>(ev->Get()->Subsystem);
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperDiscover in ErrorState"),
-                (Subsystem, subsystem));
+        YDB_LOG_NOTICE(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvChunkKeeperDiscover in ErrorState"),
+            {"marker", "BSCK02"},
+            {"subsystem", subsystem});
         Send(ev->Sender, new TEvChunkKeeperDiscoverResult({}, NKikimrProto::ERROR, "ChunkKeeper is disabled"));
     }
 
     void HandleError(const NPDisk::TEvLogResult::TPtr& ev) {
-        STLOG(PRI_NOTICE, BS_CHUNK_KEEPER, BSCK02, VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult in ErrorState"),
-                (Event, ev->Get()->ToString()));
+        YDB_LOG_NOTICE(VDISKP(Ctx.LogCtx->VCtx, "Handle TEvLogResult in ErrorState"),
+            {"marker", "BSCK02"},
+            {"event", ev->Get()->ToString()});
         CHECK_PDISK_RESPONSE(Ctx.LogCtx->VCtx, ev, TActivationContext::AsActorContext());
         Send(Ctx.LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::ChunkKeeper, Max<ui64>()));
         DeletionsInFlight.clear();

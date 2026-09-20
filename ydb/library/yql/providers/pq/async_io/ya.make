@@ -15,10 +15,10 @@ PEERDIR(
     ydb/core/fq/libs/graph_params/proto
     ydb/core/fq/libs/protos
     ydb/core/fq/libs/row_dispatcher
+    ydb/library/accessor
     ydb/library/actors/log_backend
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/common/token_accessor/client
-    ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/gateway/clients/composite

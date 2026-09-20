@@ -115,7 +115,7 @@ Y_UNIT_TEST(TestPushStream) {
 
     const ui64 numberRows = 5;
     const auto inputConsumer = program->Apply(MakeHolder<TStatelessConsumer>(targetString, numberRows));
-    NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+    NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), /*supportsSizedAllocators=*/true, /*initiallyAcquired=*/false);
 
     const auto pushString = [&](TString inputValue) {
         NYql::NUdf::TUnboxedValue stringValue;

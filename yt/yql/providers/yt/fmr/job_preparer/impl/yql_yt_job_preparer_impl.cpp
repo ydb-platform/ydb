@@ -1,17 +1,20 @@
-#include <library/cpp/random_provider/random_provider.h>
-#include <util/system/fs.h>
-#include <util/stream/file.h>
-#include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/utils/yql_panic.h>
-
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
 #include <yt/yql/providers/yt/fmr/job_preparer/impl/yql_yt_job_preparer_impl.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/client/impl/yql_yt_table_data_service_client_impl.h>
-#include <yt/yql/providers/yt/fmr/table_data_service/discovery/file/yql_yt_file_service_discovery.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/impl/yql_yt_job_service_impl.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_client.h>
+
+#include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/string_utils/quote/quote.h>
+
+#include <util/system/fs.h>
+#include <util/stream/file.h>
+
 
 namespace NYql::NFmr {
 
@@ -21,7 +24,7 @@ class TFmrJobPreparer: public IFmrJobPreparer {
 public:
     TFmrJobPreparer(
         TFileStoragePtr fileStorage,
-        const TString& tableDataServiceDiscoveryFilePath,
+        ITableDataServiceDiscovery::TPtr tableDataServiceDiscovery,
         const TFmrJobPreparerSettings& settings,
         IFmrTvmClient::TPtr tvmClient,
         TTvmId destinationTvmId
@@ -32,7 +35,6 @@ public:
         YQL_ENSURE(FileStorage_ && FileStorage_->GetConfig().GetThreads() != 1, " File storage in job preparer should be asynchonous");
         ThreadPool_ = CreateThreadPool(NumThreads_, 0, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
         YtJobService_ = MakeYtJobSerivce();
-        auto tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = tableDataServiceDiscoveryFilePath});
         TableDataService_ = MakeTableDataServiceClient(tableDataServiceDiscovery, tvmClient, destinationTvmId);
     }
 
@@ -88,7 +90,10 @@ public:
         YQL_ENSURE(ytResourceType == "table" || ytResourceType == "file", "Remote yt resource should be either table or file");
 
         if (ytResourceType == "file") {
-            TString remoteFileUrl = "yt://" + ytServerName + "?path=" + path.Path_;
+            TString remoteFileUrl = "yt://" + ytServerName + "?path=" + CGIEscapeRet(path.Path_);
+            if (clusterConnection.TransactionId) {
+                remoteFileUrl += "&t=" + CGIEscapeRet(clusterConnection.TransactionId);
+            }
             YQL_CLOG(DEBUG, FastMapReduce) << "Downloading yt file with path " << path.Path_;
             return FileStorage_->PutUrlAsync(remoteFileUrl, token);
         }
@@ -156,12 +161,12 @@ private:
 
 IFmrJobPreparer::TPtr MakeFmrJobPreparer(
     TFileStoragePtr fileStorage,
-    const TString& tableDataServiceDiscoveryFilePath,
+    ITableDataServiceDiscovery::TPtr tableDataServiceDiscovery,
     const TFmrJobPreparerSettings& settings,
     IFmrTvmClient::TPtr tvmClient,
     TTvmId destinationTvmId
 ) {
-    return MakeIntrusive<TFmrJobPreparer>(fileStorage, tableDataServiceDiscoveryFilePath, settings, tvmClient, destinationTvmId);
+    return MakeIntrusive<TFmrJobPreparer>(fileStorage, std::move(tableDataServiceDiscovery), settings, tvmClient, destinationTvmId);
 }
 
 } // namespace NYql::NFmr

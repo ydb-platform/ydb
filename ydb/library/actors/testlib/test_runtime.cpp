@@ -1774,11 +1774,14 @@ namespace NActors {
         }
 
         if (UseRdmaAllocator) {
-            auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+            auto memPool = NInterconnect::NRdma::CreateDummyMemPool(/*emulateRegistration=*/true);
             setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
         }
 
         InitActorSystemSetup(*setup, node);
+        if (SetupNodeSubSystems) {
+            SetupNodeSubSystems(nodeIndex, setup.Get());
+        }
 
         return setup;
     }

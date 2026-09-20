@@ -287,7 +287,7 @@ def stack_depth_of_caller() -> int:
     frame = sys._getframe(2)
     size = 1
     while frame:
-        frame = frame.f_back  # type: ignore[assignment]
+        frame = frame.f_back
         size += 1
     return size
 
@@ -381,10 +381,10 @@ class ensure_free_stackframes:
             # is happening and it's hard to imagine an
             # intentionally-deeply-recursive use of this code.
             assert cur_depth <= 1000, (
-                "Hypothesis would usually add %d to the stack depth of %d here, "
-                "but we are already much deeper than expected.  Aborting now, to "
-                "avoid extending the stack limit in an infinite loop..."
-                % (self.new_limit - self.old_limit, self.old_limit)
+                f"Hypothesis would usually add {self.new_limit - self.old_limit} to "
+                f"the stack depth of {self.old_limit} here, but we are already much "
+                "deeper than expected.  Aborting now, to avoid extending the stack "
+                "limit in an infinite loop..."
             )
             try:
                 _stackframe_limiter.enter_context(

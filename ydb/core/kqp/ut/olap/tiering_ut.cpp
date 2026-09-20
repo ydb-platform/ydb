@@ -4,19 +4,25 @@
 #include "helpers/writer.h"
 
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <util/generic/size_literals.h>
+#include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/library/aws_init/aws.h>
+#include <ydb/services/scheme_secret/service.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
 
 #include <library/cpp/testing/hook/hook.h>
+
+#include <util/string/join.h>
 
 namespace NKikimr::NKqp {
 
@@ -44,6 +50,55 @@ private:
     std::atomic<ui64> AbortedWrites{ 0 };
 };
 
+// Wraps the real schema secrets service: while `Fail` is set, every resolution request is answered with UNAVAILABLE
+// (as if scheme shard / scheme cache were unreachable), otherwise the request is forwarded to the real service.
+class TFlakySchemaSecretsService: public TActorBootstrapped<TFlakySchemaSecretsService> {
+public:
+    struct TState {
+        std::atomic<bool> Fail = false;
+        std::atomic<ui32> FailedRequests = 0;
+    };
+
+private:
+    std::shared_ptr<TState> State;
+    TActorId Inner;
+
+public:
+    TFlakySchemaSecretsService(std::shared_ptr<TState> state)
+        : State(std::move(state)) {
+    }
+
+    void Bootstrap() {
+        Inner = Register(NSecret::TDescribeSchemaSecretsServiceFactory().CreateService());
+        Become(&TThis::StateWork);
+    }
+
+    STFUNC(StateWork) {
+        if (ev->GetTypeRewrite() == NSecret::TDescribeSchemaSecretsService::TEvResolveSecret::EventType && State->Fail.load()) {
+            auto* msg = ev->Get<NSecret::TDescribeSchemaSecretsService::TEvResolveSecret>();
+            msg->Promise.SetValue(NKqp::TEvDescribeSecretsResponse::TDescription(
+                Ydb::StatusIds::UNAVAILABLE, { NYql::TIssue("scheme shard is unavailable") }));
+            ++State->FailedRequests;
+            return;
+        }
+        Forward(ev, Inner);
+    }
+};
+
+class TFlakySchemaSecretsServiceFactory: public NSecret::IDescribeSchemaSecretsServiceFactory {
+private:
+    std::shared_ptr<TFlakySchemaSecretsService::TState> State = std::make_shared<TFlakySchemaSecretsService::TState>();
+
+public:
+    const std::shared_ptr<TFlakySchemaSecretsService::TState>& GetState() const {
+        return State;
+    }
+
+    NActors::IActor* CreateService() override {
+        return new TFlakySchemaSecretsService(State);
+    }
+};
+
 template <class TCtrl = NOlap::TWaitCompactionController>
 class TTieringTestHelper {
 private:
@@ -55,7 +110,7 @@ private:
     YDB_ACCESSOR(TString, TablePath, DEFAULT_TABLE_PATH);
 
 public:
-    TTieringTestHelper() {
+    TTieringTestHelper(bool enableLocalIndexAsSchemeObject = true, std::function<void(TKikimrSettings&)> patchSettings = {}) {
         CsController.emplace(NYDBTest::TControllers::RegisterCSControllerGuard<TCtrl>());
         (*CsController)->SetSkipSpecialCheckForEvict(true);
 
@@ -64,6 +119,11 @@ public:
         runnerSettings.SetColumnShardAlterObjectEnabled(true);
         runnerSettings.FeatureFlags.SetEnableColumnshardBool(true);
         runnerSettings.FeatureFlags.SetEnableColumnStore(true);
+        runnerSettings.FeatureFlags.SetEnableLocalIndexAsSchemeObject(enableLocalIndexAsSchemeObject);
+        if (patchSettings) {
+            patchSettings(runnerSettings);
+        }
+
         TestHelper.emplace(runnerSettings);
         // Shorten LongTx delays directly on AppData so MinSnapshotForNewReads advances quickly
         // for tier blob GC to run within the test's WaitCondition window.
@@ -74,7 +134,6 @@ public:
         longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
         longTxConfig.SetSnapshotsExchangeIntervalSeconds(1);
         longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
-        TestHelper->GetRuntime().GetAppData().FeatureFlags.SetEnableSnapshotsLocking(true);
         OlapHelper.emplace(TestHelper->GetKikimr());
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, NActors::NLog::PRI_DEBUG);
@@ -368,6 +427,215 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
     }
 
+    Y_UNIT_TEST(ReadAfterRestartWithTransientSchemaSecretsFailure) {
+        auto secretsServiceFactory = std::make_shared<TFlakySchemaSecretsServiceFactory>();
+        TTieringTestHelper tieringHelper(true, [&](TKikimrSettings& settings) {
+            settings.SetDescribeSchemaSecretsServiceFactory(secretsServiceFactory);
+        });
+        auto& secretsService = *secretsServiceFactory->GetState();
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        olapHelper.CreateTestOlapTable();
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                CREATE SECRET `/Root/tier1-access-key` WITH (value = "secretAccessKey");
+                CREATE SECRET `/Root/tier1-secret-key` WITH (value = "fakeSecret");
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                CREATE EXTERNAL DATA SOURCE `)" + DEFAULT_TIER_PATH + R"(` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="http://fake.fake/olap-)" + DEFAULT_TIER_NAME + R"(",
+                    AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_PATH="/Root/tier1-access-key",
+                    AWS_SECRET_ACCESS_KEY_SECRET_PATH="/Root/tier1-secret-key",
+                    AWS_REGION="ru-central1"
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        tieringHelper.WriteSampleData();
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        const TString selectQuery = R"(SELECT MAX(level) AS level FROM `/Root/olapStore/olapTable`)";
+        i32 expectedLevel;
+        {
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            expectedLevel = GetInt32(rows[0].at("level"));
+        }
+
+        std::vector<ui64> tableShards;
+        {
+            auto* runtime = testHelper.GetKikimr().GetTestServer().GetRuntime();
+            const auto describeResult = DescribeTable(&testHelper.GetKikimr().GetTestServer(), runtime->AllocateEdgeActor(), DEFAULT_TABLE_PATH);
+            for (const auto shard : describeResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards()) {
+                tableShards.push_back(shard);
+            }
+        }
+        UNIT_ASSERT(!tableShards.empty());
+        const auto allTableShardsActive = [&]() {
+            for (const auto shard : tableShards) {
+                if (!csController->IsActiveTablet(shard)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        UNIT_ASSERT(allTableShardsActive());
+
+        // Fail every secret resolution while the shards are restarting
+        secretsService.Fail = true;
+        testHelper.RebootTablets(DEFAULT_TABLE_PATH);
+        const TInstant rebootDeadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < rebootDeadline && (secretsService.FailedRequests.load() < tableShards.size() || !allTableShardsActive())) {
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_GE(secretsService.FailedRequests.load(), tableShards.size());
+        UNIT_ASSERT(allTableShardsActive());
+
+        // Secrets are resolvable again: the shard must restore access to the tier on its own
+        secretsService.Fail = false;
+
+        bool restored = false;
+        TString lastError;
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+        while (TInstant::Now() < deadline) {
+            auto it = tableClient.StreamExecuteScanQuery(selectQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto part = it.ReadNext().GetValueSync();
+            if (part.IsSuccess()) {
+                UNIT_ASSERT(part.HasResultSet());
+                auto resultSet = part.ExtractResultSet();
+                NYdb::TResultSetParser parser(resultSet);
+                UNIT_ASSERT(parser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(GetInt32(parser.GetValue("level")), expectedLevel);
+                restored = true;
+                break;
+            }
+            lastError = part.GetIssues().ToString();
+            Cerr << "read from tier failed: " << lastError << Endl;
+            Sleep(TDuration::Seconds(3));
+        }
+        UNIT_ASSERT_C(restored, "tier access was not restored after a transient secret resolution failure: " << lastError);
+    }
+
+    Y_UNIT_TEST(InFlightReadRetriesAfterTransientSchemaSecretsFailure) {
+        auto secretsServiceFactory = std::make_shared<TFlakySchemaSecretsServiceFactory>();
+        TTieringTestHelper tieringHelper(true, [&](TKikimrSettings& settings) {
+            settings.SetDescribeSchemaSecretsServiceFactory(secretsServiceFactory);
+            // Keep the same TReadingAction alive long enough for secrets to recover and the holder to pick up the new operator.
+            auto* policy = settings.AppConfig.MutableColumnShardConfig()->MutableReadRetryPolicy();
+            policy->SetInitialRetryDelayMs(50);
+            policy->SetMaxRetryDelayMs(500);
+            policy->SetMaxRetries(200);
+        });
+        auto& secretsService = *secretsServiceFactory->GetState();
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        olapHelper.CreateTestOlapTable();
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                CREATE SECRET `/Root/tier1-access-key` WITH (value = "secretAccessKey");
+                CREATE SECRET `/Root/tier1-secret-key` WITH (value = "fakeSecret");
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                CREATE EXTERNAL DATA SOURCE `)" + DEFAULT_TIER_PATH + R"(` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="http://fake.fake/olap-)" + DEFAULT_TIER_NAME + R"(",
+                    AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_PATH="/Root/tier1-access-key",
+                    AWS_SECRET_ACCESS_KEY_SECRET_PATH="/Root/tier1-secret-key",
+                    AWS_REGION="ru-central1"
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        tieringHelper.WriteSampleData();
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        const TString selectQuery = R"(SELECT MAX(level) AS level FROM `/Root/olapStore/olapTable`)";
+        i32 expectedLevel;
+        {
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            expectedLevel = GetInt32(rows[0].at("level"));
+        }
+
+        std::vector<ui64> tableShards;
+        {
+            auto* runtime = testHelper.GetKikimr().GetTestServer().GetRuntime();
+            const auto describeResult = DescribeTable(&testHelper.GetKikimr().GetTestServer(), runtime->AllocateEdgeActor(), DEFAULT_TABLE_PATH);
+            for (const auto shard : describeResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards()) {
+                tableShards.push_back(shard);
+            }
+        }
+        UNIT_ASSERT(!tableShards.empty());
+        const auto allTableShardsActive = [&]() {
+            for (const auto shard : tableShards) {
+                if (!csController->IsActiveTablet(shard)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        UNIT_ASSERT(allTableShardsActive());
+
+        secretsService.Fail = true;
+        testHelper.RebootTablets(DEFAULT_TABLE_PATH);
+        const TInstant rebootDeadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < rebootDeadline && (secretsService.FailedRequests.load() < tableShards.size() || !allTableShardsActive())) {
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_GE(secretsService.FailedRequests.load(), tableShards.size());
+        UNIT_ASSERT(allTableShardsActive());
+
+        auto it = tableClient.StreamExecuteScanQuery(selectQuery).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto partFuture = it.ReadNext();
+
+        // The scan must start while the operator is still unavailable and keep retrying on the same TReadingAction.
+        const TInstant startedReadDeadline = TInstant::Now() + TDuration::Seconds(5);
+        while (TInstant::Now() < startedReadDeadline && !partFuture.HasValue()) {
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(!partFuture.HasValue(), "in-flight scan finished before the tier recovered");
+
+        secretsService.Fail = false;
+
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+        while (!partFuture.HasValue() && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(partFuture.HasValue(), "in-flight scan did not finish after secrets were restored");
+        auto part = partFuture.GetValueSync();
+        UNIT_ASSERT_C(part.IsSuccess(), part.GetIssues().ToString());
+        UNIT_ASSERT(part.HasResultSet());
+        auto resultSet = part.ExtractResultSet();
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(GetInt32(parser.GetValue("level")), expectedLevel);
+    }
+
     Y_UNIT_TEST(TtlBorders) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();
@@ -578,8 +846,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-another-bucket").GetSize(), 0);
     }
 
-    Y_UNIT_TEST(TieringForIndexes) {
-        TTieringTestHelper tieringHelper;
+    Y_UNIT_TEST(TieringForIndexes, ELocalIndexAsSchemeObject) {
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        TTieringTestHelper tieringHelper{localIndexAsSchemeObject};
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
@@ -621,6 +890,286 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         ExecuteScanQuery(tableClient, "SELECT *  FROM `/Root/olapStore/olapTable`");
     }
+
+    // Issue #26733: a ngramm bloom index whose rebuilt filter exceeds the storage MaxBlobSize used to abort
+    // the tablet with "blob size for secondary data ... bigger than limit" during tiering actualization.
+    Y_UNIT_TEST(OversizedNGrammIndexOnTiering) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        {
+            auto alterQuery =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
+                    FEATURES=`{"column_name" : "uid", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        tieringHelper.WriteSampleData();
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        ExecuteScanQuery(tableClient, "SELECT * FROM `/Root/olapStore/olapTable`");
+    }
+
+    // 257 x 1 MiB inplace indexes on a single-shard table: schema creation and writes succeed, the
+    // aggregate is guarded by nothing.
+    Y_UNIT_TEST(LocalIndexesAboveCommitRedoLimitOneShard) {
+        constexpr ui32 IndexesCount = 257;
+        constexpr ui32 FilterSize = 1_MB;
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        testHelper.GetRuntime().GetAppData().FeatureFlags.SetEnableOlapRejectProbability(false);
+        olapHelper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        for (ui32 i = 0; i < IndexesCount; ++i) {
+            auto alterQuery = TStringBuilder()
+                << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_local_" << i
+                << ", TYPE=BLOOM_NGRAMM_FILTER, FEATURES=`{\"column_name\" : \"uid\", \"ngramm_size\" : 3, \"hashes_count\" : 2, "
+                << "\"filter_size_bytes\" : " << FilterSize << ", \"records_count\" : 1000000, "
+                << "\"storage_id\" : \"__LOCAL_METADATA\", \"inherit_portion_storage\" : false}`);";
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        WriteTestData(testHelper.GetKikimr(), DEFAULT_TABLE_PATH, 0, 3600000000, 1000);
+        auto rows = ExecuteScanQuery(tableClient, "SELECT COUNT(*) AS Cnt FROM `/Root/olapStore/olapTable`");
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Cnt")), 1000);
+
+        // TODO(#26733): enable after the aggregate inplace-index budget check in AppendIndexes. The load below
+        // wedges the shard: the first CS::GENERAL compaction persists 257 MiB of index rows in one TTxWriteIndex
+        // ("fatal commit failure: Redo commit of 269515307 bytes is more than the allowed limit",
+        // MaxCommitRedoMB = 256 MiB), the tablet dies, replays into the same compaction and restarts forever.
+        // for (ui64 i = 1; i < 10; ++i) {
+        //     WriteTestData(testHelper.GetKikimr(), DEFAULT_TABLE_PATH, 0, 3600000000 + i * 10000, 1000);
+        // }
+        // csController->WaitCompactions(TDuration::Seconds(5));
+        // csController->WaitActualization(TDuration::Seconds(5));
+        // testHelper.CreateTier(DEFAULT_TIER_NAME);
+        // testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        // csController->WaitCompactions(TDuration::Seconds(5));
+        // csController->WaitActualization(TDuration::Seconds(5));
+        // tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+    }
+
+    Y_UNIT_TEST_DUO(MinMaxIndexInheritsTiering, InheritPortionStorage) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        {
+            auto alterQuery = InheritPortionStorage ? 
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MIN_MAX,
+                    FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": true, "column_name": "level"}`);
+                )" : 
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MIN_MAX,
+                    FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": false, "column_name": "level"}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        tieringHelper.WriteSampleData();
+
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(10));
+        csController->WaitActualization(TDuration::Seconds(10));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        // After tiering: index chunks must follow the portion to the external tier if inherit_portion_storage is set to true, and stay in BS otherwise
+        {
+            auto selectQuery = TStringBuilder() << R"(
+                SELECT *
+                FROM `)" << DEFAULT_TABLE_PATH << R"(/.sys/primary_index_stats`
+                WHERE Activity == 1 AND EntityName == "index_minmax_level"
+            )";
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_GT(rows.size(), 0);
+            for (auto& row : rows) {
+                if (InheritPortionStorage) {
+                    UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("TierName")), DEFAULT_TIER_PATH);
+                    UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("Kind")), "EVICTED");
+                    UNIT_ASSERT_VALUES_UNEQUAL(GetUtf8(row.at("ChunkDetails")), "");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("TierName")), "__DEFAULT");
+                    UNIT_ASSERT_VALUES_EQUAL(GetUtf8(row.at("Kind")), "EVICTED");
+                    UNIT_ASSERT_VALUES_UNEQUAL(GetUtf8(row.at("ChunkDetails")), "");
+                }
+            }
+        }
+    }
+    
+    Y_UNIT_TEST(TieringViaIndex, ELocalIndexAsSchemeObject) {
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        TTieringTestHelper tieringHelper{localIndexAsSchemeObject};
+        auto& csController = tieringHelper.GetCsController();
+        auto& testHelper = tieringHelper.GetTestHelper();
+
+        // "inherit_portion_storage": false(defaults to true in alter object ddl) and 
+        // "storage_id": "__LOCAL_METADATA"(defaults to "__LOCAL_METADATA" in alter object ddl) 
+        // are mandatory because ttl only works with min_max index stored in local database, 
+        // and both of these options move data out of local db            
+        auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/ColumnWithTTLAndMinMaxIndex` (
+            id Int32 NOT NULL,
+            ts Timestamp NOT NULL,
+            PRIMARY KEY(id)
+        ) PARTITION BY HASH (`id`) 
+        WITH ( STORE = COLUMN );
+        ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` ADD INDEX `min_max_ts` LOCAL USING min_max ON(`ts`);
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::EStatus::SUCCESS, createStatus.GetIssues().ToString());
+
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        TString tablePath = "/Root/ColumnWithTTLAndMinMaxIndex";
+        testHelper.SetTiering(tablePath, DEFAULT_TIER_PATH, "ts");
+
+        testHelper.ExecuteQuery(R"(
+            $prev_year = Unwrap(DateTime::MakeTimestamp(
+                DateTime::ShiftYears(DateTime::Split(CurrentUtcTimestamp()), -1)
+            ));
+            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/ColumnWithTTLAndMinMaxIndex` (`id`, `ts`)
+            SELECT CAST(item AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
+            UPSERT INTO `/Root/ColumnWithTTLAndMinMaxIndex` (`id`, `ts`)
+            SELECT CAST(item+1 AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
+            )");
+        csController->WaitCompactions(TDuration::Seconds(10));
+        csController->WaitActualization(TDuration::Seconds(10));
+        tieringHelper.SetTablePath(tablePath);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+        {
+            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+            auto selectQuery = TStringBuilder();
+            selectQuery << R"(
+                SELECT TierName, SUM(ColumnRawBytes) as RawBytes, SUM(Rows) AS Rows
+                FROM `)" << tablePath << R"(/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+                GROUP BY TierName)";
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), DEFAULT_TIER_PATH);
+        }
+        {
+            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT COUNT(*) AS cnt FROM `" << tablePath << "`");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("cnt")), 1500001);
+        }
+
+    }
+
+    Y_UNIT_TEST(TieringDoesntWorkForMinMaxIndexStoredOutsideOfLocalDB, ELocalIndexAsSchemeObject) {
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        TTieringTestHelper tieringHelper{localIndexAsSchemeObject};
+        auto& testHelper = tieringHelper.GetTestHelper();
+        {
+            auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/ColumnWithTTLAndMinMaxIndex` (
+                id Int32 NOT NULL,
+                ts Timestamp NOT NULL,
+                PRIMARY KEY(id)
+            ) PARTITION BY HASH (`id`) 
+            WITH ( STORE = COLUMN );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::EStatus::SUCCESS, createStatus.GetIssues().ToString());            
+        }
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        {
+            auto addBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": false, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, addBadIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(dropBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, dropBadIndex.GetIssues().ToString());
+        }
+
+        {
+            auto addBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": true, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, addBadIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(dropBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, dropBadIndex.GetIssues().ToString());
+        }
+
+        {
+            auto addBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": true, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, addBadIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(dropBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, dropBadIndex.GetIssues().ToString());
+        }
+
+        {
+            auto addFirstIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": false, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addFirstIndex.GetStatus(), NYdb::EStatus::SUCCESS, addFirstIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString()); 
+            // A second min_max index on column `ts`, which already has `index_minmax_ts`, must be
+            // rejected: a column cannot have two indexes of the same type.
+            auto addDuplicateIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts2, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": true, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addDuplicateIndex.GetStatus(), NYdb::EStatus::SUCCESS, addDuplicateIndex.GetIssues().ToString());
+
+        }
+        
+    }
+
 
     Y_UNIT_TEST(TieringBoolToS3) {
         TTieringTestHelper tieringHelper;
@@ -707,6 +1256,25 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_GT(GetUint64(rows[0].at("cnt")), 0);
         }
     }
+
+    Y_UNIT_TEST(MoveTableWithTieringRejected) {
+        TTieringTestHelper tieringHelper;
+        auto& testHelper = tieringHelper.GetTestHelper();
+        const TString tablePath = "/Root/olapTable";
+
+        tieringHelper.GetOlapHelper().CreateTestOlapStandaloneTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        testHelper.SetTiering(tablePath, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(
+                "ALTER TABLE `" + tablePath + "` RENAME TO `/Root/renamedTable`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "tiering");
+        }
+    }
+
 }
 
 }   // namespace NKikimr::NKqp

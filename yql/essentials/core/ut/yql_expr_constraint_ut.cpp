@@ -84,134 +84,6 @@ void CheckConstraint(const TExprNode::TPtr& exprRoot, const TStringBuf nodeName,
     }
 }
 
-Y_UNIT_TEST(PruneAdjacentKeysAddUniqueDistinct) {
-    const auto s = R"((
-            (let res (DataSink 'result))
-            (let list (AsList
-                (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
-                (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"4")))
-                (AsStruct '('"a" (Int32 '"1")) '('"b" (Int32 '"3")))
-            ))
-            (let pruned (PruneAdjacentKeys list (lambda '(item) (Member item '"a"))))
-            (let world (Write! world res (Key) pruned '()))
-            (let world (Commit! world res))
-            (return world)
-        ))";
-
-    TExprContext exprCtx;
-    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a))");
-    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a))");
-}
-
-Y_UNIT_TEST(PruneAdjacentKeysAddUniqueDistinctForAlreadyUniqueDistinct) {
-    const auto s = R"((
-            (let res (DataSink 'result))
-            (let list (AsList
-                (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
-                (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"4")))
-                (AsStruct '('"a" (Int32 '"1")) '('"b" (Int32 '"5")))
-            ))
-            (let list (AssumeUnique list '('b)))
-            (let list (AssumeDistinct list '('b)))
-            (let pruned (PruneAdjacentKeys list (lambda '(item) (Member item '"a"))))
-            (let world (Write! world res (Key) pruned '()))
-            (let world (Commit! world res))
-            (return world)
-        ))";
-
-    TExprContext exprCtx;
-    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a)(b))");
-    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a)(b))");
-}
-
-Y_UNIT_TEST(PruneAdjacentKeysAddUniqueDistinctForAlreadyUniqueDistinctYetAnother) {
-    const auto s = R"((
-            (let res (DataSink 'result))
-            (let list (AsList
-                (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
-                (AsStruct '('"a" (Int32 '"0")) '('"b" (Int32 '"4")))
-                (AsStruct '('"a" (Int32 '"1")) '('"b" (Int32 '"5")))
-            ))
-            (let list (AssumeUnique list '('a 'b)))
-            (let list (AssumeDistinct list '('a 'b)))
-            (let pruned (PruneAdjacentKeys list (lambda '(item) (Member item '"a"))))
-            (let world (Write! world res (Key) pruned '()))
-            (let world (Commit! world res))
-            (return world)
-        ))";
-
-    TExprContext exprCtx;
-    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a))");
-    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a))");
-}
-
-Y_UNIT_TEST(PruneAdjacentKeysForTupleAddUniqueDistinct) {
-    const auto s = R"((
-            (let res (DataSink 'result))
-            (let list (AsList
-                (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
-                (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"4")))
-                (AsStruct '('"a" (Int32 '"1")) '('"b" (Int32 '"3")))
-            ))
-            (let pruned (PruneAdjacentKeys list (lambda '(item) '((Member item '"a") (Member item '"b")))))
-            (let world (Write! world res (Key) pruned '()))
-            (let world (Commit! world res))
-            (return world)
-        ))";
-
-    TExprContext exprCtx;
-    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a,b))");
-    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a,b))");
-}
-
-Y_UNIT_TEST(PruneAdjacentKeysForTupleAddUniqueDistinctForAlreadyUniqueDistinct) {
-    const auto s = R"((
-            (let res (DataSink 'result))
-            (let list (AsList
-                (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
-                (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"4")))
-                (AsStruct '('"a" (Int32 '"1")) '('"b" (Int32 '"5")))
-            ))
-            (let list (AssumeUnique list '('b)))
-            (let list (AssumeDistinct list '('b)))
-            (let pruned (PruneAdjacentKeys list (lambda '(item) '((Member item '"a") (Member item '"b")))))
-            (let world (Write! world res (Key) pruned '()))
-            (let world (Commit! world res))
-            (return world)
-        ))";
-
-    TExprContext exprCtx;
-    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((b))");
-    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((b))");
-}
-
-Y_UNIT_TEST(PruneAdjacentKeysForTupleAddUniqueDistinctForAlreadyUniqueDistinctYetAnother) {
-    const auto s = R"((
-            (let res (DataSink 'result))
-            (let list (AsList
-                (AsStruct '('"a" (Nothing (OptionalType (DataType 'Int32)))) '('"b" (Int32 '"3")))
-                (AsStruct '('"a" (Int32 '"0")) '('"b" (Int32 '"4")))
-                (AsStruct '('"a" (Int32 '"1")) '('"b" (Int32 '"5")))
-            ))
-            (let list (AssumeUnique list '('a 'b)))
-            (let list (AssumeDistinct list '('a 'b)))
-            (let pruned (PruneAdjacentKeys list (lambda '(item) '((Member item '"a") (Member item '"b")))))
-            (let world (Write! world res (Key) pruned '()))
-            (let world (Commit! world res))
-            (return world)
-        ))";
-
-    TExprContext exprCtx;
-    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PruneAdjacentKeys", "Unique((a,b))");
-    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PruneAdjacentKeys", "Distinct((a,b))");
-}
-
 Y_UNIT_TEST(Sort) {
     const auto s = R"((
             (let res (DataSink 'result))
@@ -4197,6 +4069,79 @@ Y_UNIT_TEST(StreamingConstraintShuffleByKeys) {
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TStreamingConstraintNode>(exprRoot, "ShuffleByKeys", "Streaming");
     }
+}
+
+Y_UNIT_TEST(DirectStreamingConstraintWithSwitch) {
+    const auto s = R"((
+(let res (DataSink 'result))
+
+(let list1 (AsList
+    (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+))
+
+(let list2 (AsList
+    (AsStruct '('key (String '2)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '5)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '4)) '('subkey (String 'b)) '('value (String 'v)))
+))
+
+(let data (Mux '(list1 list2)))
+(let data (AssumeConstraints data '"{\"Streaming\" = #}"))
+
+(let data (Switch (Iterator data) '0 '('0) (lambda '(s) (FlatMap s (lambda '(item) (Just item)))) '('1) (lambda '(s) s)))
+
+(let result (Nth (Demux data) '1))
+
+(let world (Write! world res (Key) (Collect result) '()))
+(let world (Commit! world res))
+(return world)
+))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Demux", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Nth", "Streaming");
+}
+
+Y_UNIT_TEST(MultiItemStreamingConstraintWithSwitch) {
+    const auto s = R"((
+(let res (DataSink 'result))
+
+(let list1 (AsList
+    (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+))
+
+(let list2 (AsList
+    (AsStruct '('key (String '2)) '('subkey (String 'c)) '('value (String 'v)))
+    (AsStruct '('key (String '5)) '('subkey (String 'd)) '('value (String 'v)))
+    (AsStruct '('key (String '4)) '('subkey (String 'b)) '('value (String 'v)))
+))
+(let list2 (AssumeConstraints list2 '"{\"Streaming\" = #}"))
+
+(let data (Mux '(list1 list2)))
+
+(let data (Switch (Iterator data) '0 '('0) (lambda '(s) (FlatMap s (lambda '(item) (Just item)))) '('1) (lambda '(s) s)))
+
+(let result (Nth (Demux data) '1))
+
+(let world (Write! world res (Key) (Collect result) '()))
+(let world (Commit! world res))
+(return world)
+))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Mux", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Demux", "Streaming");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Nth", "Streaming");
 }
 
 } // Y_UNIT_TEST_SUITE(TYqlExprConstraints)

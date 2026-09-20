@@ -19,6 +19,7 @@
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/core/yql_window_features.h>
 #include <yql/essentials/minikql/dom/json.h>
@@ -31,6 +32,8 @@
 
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
+
+#include <library/cpp/string_utils/parse_size/parse_size.h>
 
 #include <util/generic/serialized_enum.h>
 #include <util/generic/singleton.h>
@@ -61,11 +64,13 @@ namespace NTypeAnnImpl {
 
     const TTypeAnnotationNode* ParseTypeCached(const TString& typeStr, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
         if (!ctx.ParseTypeCache.contains(typeStr)) {
+            // clang-format off
             auto typeNode = ctx.Builder({})
                 .Callable("ParseType")
                     .Atom(0, typeStr)
                 .Seal()
                 .Build();
+            // clang-format on
 
             TExtContext extContext(ctx, typeCtx);
             auto status = ParseTypeWrapper(typeNode, typeNode, extContext);
@@ -193,7 +198,7 @@ namespace NTypeAnnImpl {
             container->Child(rhsIndex)->Pos(ctx),
             TStringBuilder() << "Type at " << rhsIndex << " is " << *rhsType));
 
-        ctx.AddError(std::move(issue));
+        ctx.AddError(issue);
         return false;
     }
 
@@ -269,6 +274,7 @@ namespace NTypeAnnImpl {
 
     // TODO: Use ExpandType
     TExprNode::TPtr MakeNothingData(TExprContext& ctx, TPositionHandle pos, TStringBuf data) {
+        // clang-format off
         return ctx.Builder(pos)
             .Callable("Nothing")
                 .Callable(0, "OptionalType")
@@ -278,6 +284,7 @@ namespace NTypeAnnImpl {
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 
     std::pair<TExprNode::TPtr, const TTypeAnnotationNode*> MakeRepr(const TExprNode::TPtr& input, const TTypeAnnotationNode* type, TExprContext& ctx) {
@@ -395,6 +402,7 @@ namespace NTypeAnnImpl {
                 ctx.NewLambda(input->Pos(), ctx.NewArguments(input->Pos(), { arg }), std::move(body))
                 });
 
+            // clang-format off
             return { ctx.Builder(input->Pos())
                 .Callable("ToDict")
                     .Add(0, mapped)
@@ -418,11 +426,13 @@ namespace NTypeAnnImpl {
                     .Seal()
                 .Seal()
                 .Build(), ctx.MakeType<TDictExprType>(dictType->GetKeyType(), inner.second) };
+            // clang-format on
         }
 
         case ETypeAnnotationKind::Resource: {
             auto resType = type->Cast<TResourceExprType>();
             if (resType->GetTag() == "Yson2.Node") {
+                // clang-format off
                 return { ctx.Builder(input->Pos())
                     .Callable("Apply")
                         .Callable(0, "Udf")
@@ -431,9 +441,11 @@ namespace NTypeAnnImpl {
                         .Add(1, input)
                     .Seal()
                     .Build(), ctx.MakeType<TDataExprType>(EDataSlot::Yson) };
+                // clang-format on
             }
 
             if (resType->GetTag() == "Yson.Node") {
+                // clang-format off
                 return { ctx.Builder(input->Pos())
                     .Callable("Apply")
                         .Callable(0, "Udf")
@@ -442,9 +454,11 @@ namespace NTypeAnnImpl {
                         .Add(1, input)
                     .Seal()
                     .Build(), ctx.MakeType<TDataExprType>(EDataSlot::Yson) };
+                // clang-format on
             }
 
             if (resType->GetTag() == "DateTime2.TM") {
+                // clang-format off
                 return { ctx.Builder(input->Pos())
                     .Callable("Apply")
                         .Callable(0, "Udf")
@@ -453,9 +467,11 @@ namespace NTypeAnnImpl {
                         .Add(1, input)
                     .Seal()
                     .Build(), ctx.MakeType<TDataExprType>(EDataSlot::TzTimestamp) };
+                // clang-format on
             }
 
             if (resType->GetTag() == "DateTime2.TM64") {
+                // clang-format off
                 return { ctx.Builder(input->Pos())
                     .Callable("Apply")
                         .Callable(0, "Udf")
@@ -464,9 +480,11 @@ namespace NTypeAnnImpl {
                         .Add(1, input)
                     .Seal()
                     .Build(), ctx.MakeType<TDataExprType>(EDataSlot::TzTimestamp64) };
+                // clang-format on
             }
 
             if (resType->GetTag() == "JsonNode") {
+                // clang-format off
                 return { ctx.Builder(input->Pos())
                     .Callable("Apply")
                         .Callable(0, "Udf")
@@ -475,6 +493,7 @@ namespace NTypeAnnImpl {
                         .Add(1, input)
                     .Seal()
                     .Build(), ctx.MakeType<TDataExprType>(EDataSlot::Json) };
+                // clang-format on
             }
 
             return { nullptr, nullptr };
@@ -997,11 +1016,13 @@ namespace NTypeAnnImpl {
 
             if (textValue) {
                 // need to replace binary arg with text one
+                // clang-format off
                 output = ctx.Expr.Builder(input->Pos())
                     .Callable(input->Content())
                         .Atom(0, *textValue)
                     .Seal()
                     .Build();
+                // clang-format on
                 return IGraphTransformer::TStatus::Repeat;
             }
 
@@ -1297,12 +1318,14 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Member")
                 .Add(0, arg)
                 .Atom(1, structType->GetItems()[0]->GetName())
             .Seal()
             .Build();
+        // clang-format on
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -1411,6 +1434,7 @@ namespace NTypeAnnImpl {
                 input->SetTypeAnn(ctx.Expr.MakeType<TErrorExprType>(TIssue(ctx.Expr.GetPosition(input->Pos()), errStr)));
                 return IGraphTransformer::TStatus::Ok;
             }
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("SqlColumnFromType")
                     .Add(0, input->HeadPtr())
@@ -1418,6 +1442,7 @@ namespace NTypeAnnImpl {
                     .Add(2, input->ChildPtr(1)) // original column/type name
                 .Seal()
                 .Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -1425,11 +1450,13 @@ namespace NTypeAnnImpl {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), errStr));
             return IGraphTransformer::TStatus::Error;
         }
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Member")
-                .Add(0, std::move(rowNode))
+                .Add(0, rowNode)
                 .Atom(1, structType->GetItems()[*pos]->GetName())
             .Seal().Build();
+        // clang-format on
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -1613,6 +1640,7 @@ namespace NTypeAnnImpl {
         YQL_ENSURE(IsSameAnnotation(*memberType, *resultType) ||
                    IsSameAnnotation(*ctx.Expr.MakeType<TOptionalExprType>(memberType), *resultType));
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("IfStrict")
                 .Callable(0, "Exists")
@@ -1622,6 +1650,7 @@ namespace NTypeAnnImpl {
                 .Add(2, defaultNode)
             .Seal()
             .Build();
+        // clang-format on
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -1771,12 +1800,14 @@ namespace NTypeAnnImpl {
             auto list = prefixes->ChildrenList();
             Sort(list, descending);
 
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable(input->Content())
                     .Add(0, input->HeadPtr())
                     .Add(1, ctx.Expr.NewList(prefixes->Pos(), std::move(list)))
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -2068,7 +2099,7 @@ namespace NTypeAnnImpl {
                 flattenItemType = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType({keyType, payloadType}));
                 allFieldOptional = false;
             } else if (mode == "optional" || (mode == "auto" && fieldOptional)) {
-                if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 03), ctx.Types.BackportMode) && !fieldOptional) {
+                if (!IsAvailable(NFeature::FlattenOptionalByNonOptional, ctx.Types) && !fieldOptional) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(structObj->Pos()), TStringBuilder() <<
                         "Expected optional type in field of struct: '" << fieldName <<
                         "', but got: " << *field->GetItemType()));
@@ -2460,6 +2491,7 @@ namespace NTypeAnnImpl {
         }
         // passthrough with Struct
         case ETypeAnnotationKind::Struct:
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("RemovePrefixMembers")
                     .Add(0, input->HeadPtr())
@@ -2468,6 +2500,7 @@ namespace NTypeAnnImpl {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
             break;
         default:
             output = input->HeadPtr();
@@ -2644,7 +2677,7 @@ namespace NTypeAnnImpl {
             }
         }
 
-        const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr);
+        const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types);
         if (!commonItemType) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -2885,9 +2918,55 @@ namespace NTypeAnnImpl {
             }
             return IGraphTransformer::TStatus::Repeat;
         }
-    }
 
-    IGraphTransformer::TStatus AddWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        IGraphTransformer::TStatus ConvertDifferentDecimalsToCommonType(
+            TExprNode::TPtr& left,
+            const TDataExprType& leftType,
+            TExprNode::TPtr& right,
+            const TDataExprType& rightType,
+            TExprContext& ctx,
+            const TTypeAnnotationContext& typeCtx)
+        {
+            if (typeCtx.GetDecimalConversionMode() != EDecimalConversionMode::WithCommonTypeFixup) {
+                ctx.AddError(TIssue(ctx.GetPosition(left->Pos()),
+                                    TStringBuilder() << "Decimal common type fix must be enabled for arithmetic operations on different Decimal types"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto* commonType = CommonType<false>(left->Pos(), &leftType, &rightType, ctx, typeCtx);
+            if (!commonType) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto status = TryConvertTo(left, leftType, *commonType, ctx, typeCtx)
+                                    .Combine(TryConvertTo(right, rightType, *commonType, ctx, typeCtx));
+            return status.Level == IGraphTransformer::TStatus::Error ? status : IGraphTransformer::TStatus::Repeat;
+        }
+
+        IGraphTransformer::TStatus TryConvertDifferentDecimalsToCommonType(
+            const TExprNode::TPtr& input,
+            const TDataExprType& leftType,
+            const TDataExprType& rightType,
+            TStringBuf operation,
+            TExprContext& ctx,
+            const TTypeAnnotationContext& typeCtx)
+        {
+            if (!IsAvailable(NFeature::DecimalArithmeticWithCommonType, typeCtx) ||
+                !IsDataTypeDecimal(leftType.GetSlot()) || !IsDataTypeDecimal(rightType.GetSlot()) ||
+                IsSameAnnotation(leftType, rightType)) {
+                return IGraphTransformer::TStatus::Ok;
+            }
+
+            TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
+                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), TStringBuilder()
+                                                                                << "Cannot infer common Decimal type for '" << operation << "' operation.");
+            });
+            return ConvertDifferentDecimalsToCommonType(
+                input->ChildRef(0), leftType, input->ChildRef(1), rightType, ctx, typeCtx);
+        }
+        } // namespace
+
+    IGraphTransformer::TStatus AddWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (auto status = TryConvertToPgOp("+", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -2923,6 +3002,22 @@ namespace NTypeAnnImpl {
             }
         }
 
+        if (const auto status = TryConvertDifferentDecimalsToCommonType(
+                input, *dataType[0], *dataType[1], "+", ctx.Expr, ctx.Types);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (IsAvailable(NFeature::DecimalIntegralArithmetic, ctx.Types) &&
+            ((IsDataTypeDecimal(dataType[0]->GetSlot()) && IsDataTypeIntegral(dataType[1]->GetSlot())) ||
+             (IsDataTypeIntegral(dataType[0]->GetSlot()) && IsDataTypeDecimal(dataType[1]->GetSlot())))) {
+            output = ctx.Expr.RenameNode(*input, "DecimalIntegralAdd");
+            if (!IsDataTypeDecimal(dataType[0]->GetSlot())) {
+                output->ChildRef(0).Swap(output->ChildRef(1));
+            }
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         auto isAddAllowed = IsAddAllowedYqlTypes(input->ChildPtr(0)->GetTypeAnn(), input->ChildPtr(1)->GetTypeAnn(), ctx.Expr);
         if (!isAddAllowed.has_value()) {
             ctx.Expr.AddError(TIssue(
@@ -2952,7 +3047,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus SubWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus SubWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (auto status = TryConvertToPgOp("-", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -2993,6 +3088,18 @@ namespace NTypeAnnImpl {
             }
         }
 
+        if (const auto status = TryConvertDifferentDecimalsToCommonType(
+                input, *dataType[0], *dataType[1], "-", ctx.Expr, ctx.Types);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (IsAvailable(NFeature::DecimalIntegralArithmetic, ctx.Types) &&
+            IsDataTypeDecimal(dataType[0]->GetSlot()) && IsDataTypeIntegral(dataType[1]->GetSlot())) {
+            output = ctx.Expr.RenameNode(*input, "DecimalIntegralSub");
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         const bool isLeftNumeric = IsDataTypeNumeric(dataType[0]->GetSlot());
         const bool isRightNumeric = IsDataTypeNumeric(dataType[1]->GetSlot());
         // bool isOk = false;
@@ -3022,7 +3129,7 @@ namespace NTypeAnnImpl {
             if (!(*dataTypeOne == *dataTypeTwo)) {
                 ctx.Expr.AddError(TIssue(
                     ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Cannot substract different decimals."
+                    TStringBuilder() << "Cannot subtract different decimals."
                 ));
 
                 return IGraphTransformer::TStatus::Error;
@@ -3056,7 +3163,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus MulWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus MulWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (auto status = TryConvertToPgOp("*", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -3095,6 +3202,12 @@ namespace NTypeAnnImpl {
             if (check_result != IGraphTransformer::TStatus::Ok) {
                 return check_result;
             }
+        }
+
+        if (const auto status = TryConvertDifferentDecimalsToCommonType(
+                input, *dataType[0], *dataType[1], "*", ctx.Expr, ctx.Types);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
         }
 
         if (IsDataTypeNumeric(dataType[0]->GetSlot()) && IsDataTypeNumeric(dataType[1]->GetSlot())) {
@@ -3140,7 +3253,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus DivWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus DivWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (auto status = TryConvertToPgOp("/", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -3181,6 +3294,12 @@ namespace NTypeAnnImpl {
             }
         }
 
+        if (const auto status = TryConvertDifferentDecimalsToCommonType(
+                input, *dataType[0], *dataType[1], "/", ctx.Expr, ctx.Types);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         if (IsDataTypeNumeric(dataType[0]->GetSlot()) && IsDataTypeNumeric(dataType[1]->GetSlot())) {
             auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataType[0]->GetSlot()),
                 GetNumericDataTypeLevel(dataType[1]->GetSlot())));
@@ -3219,7 +3338,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus ModWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus ModWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (auto status = TryConvertToPgOp("%", input, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -3260,6 +3379,12 @@ namespace NTypeAnnImpl {
             }
         }
 
+        if (const auto status = TryConvertDifferentDecimalsToCommonType(
+                input, *dataType[0], *dataType[1], "%", ctx.Expr, ctx.Types);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         if (IsDataTypeNumeric(dataType[0]->GetSlot()) && IsDataTypeNumeric(dataType[1]->GetSlot())) {
             auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataType[0]->GetSlot()),
                 GetNumericDataTypeLevel(dataType[1]->GetSlot())));
@@ -3295,7 +3420,18 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus DecimalBinaryWrapperBase(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx, bool blocks) {
+    enum class EDecimalRightOperand {
+        Integral,
+        DecimalOrIntegral,
+    };
+
+    IGraphTransformer::TStatus DecimalBinaryWrapperBaseImpl(
+        const TExprNode::TPtr& input,
+        TExprNode::TPtr& output,
+        TContext& ctx,
+        bool blocks,
+        EDecimalRightOperand rightOperand)
+    {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -3336,6 +3472,12 @@ namespace NTypeAnnImpl {
 
         if (IsDataTypeDecimal(dataType[0]->GetSlot())) {
             if (IsDataTypeDecimal(dataType[1]->GetSlot())) {
+                if (rightOperand == EDecimalRightOperand::Integral) {
+                    ctx.Expr.AddError(TIssue(
+                        ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Expected integral right operand, but got: " << *input->Tail().GetTypeAnn()));
+                    return IGraphTransformer::TStatus::Error;
+                }
                 const auto dataTypeOne = static_cast<const TDataExprParamsType*>(dataType[0]);
                 const auto dataTypeTwo = static_cast<const TDataExprParamsType*>(dataType[1]);
 
@@ -3383,6 +3525,21 @@ namespace NTypeAnnImpl {
             input->SetTypeAnn(resultType);
         }
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus DecimalBinaryWrapperBase(
+        const TExprNode::TPtr& input,
+        TExprNode::TPtr& output,
+        TContext& ctx,
+        bool blocks)
+    {
+        return DecimalBinaryWrapperBaseImpl(
+            input, output, ctx, blocks, EDecimalRightOperand::DecimalOrIntegral);
+    }
+
+    IGraphTransformer::TStatus DecimalIntegralAdditiveWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return DecimalBinaryWrapperBaseImpl(
+            input, output, ctx, /*blocks=*/false, EDecimalRightOperand::Integral);
     }
 
     IGraphTransformer::TStatus DecimalBinaryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -3454,6 +3611,7 @@ namespace NTypeAnnImpl {
         if (IsDataTypeDecimal(dataSlot)) {
             const auto params = static_cast<const TDataExprParamsType*>(dataType);
             if (/* const auto scale = */ FromString<ui8>(params->GetParamTwo())) {
+                    // clang-format off
                     output = ctx.Expr.Builder(input->Pos())
                         .Callable(IncOrDec ? "Add" : "Sub")
                             .Add(0, input->Child(0))
@@ -3464,6 +3622,7 @@ namespace NTypeAnnImpl {
                             .Seal()
                         .Seal()
                         .Build();
+                    // clang-format on
                 return IGraphTransformer::TStatus::Repeat;
             }
         } else if (!IsDataTypeNumeric(dataSlot)) {
@@ -3631,6 +3790,7 @@ namespace NTypeAnnImpl {
         if (IsDataTypeSigned(dataSlot)) {
             auto dataTypeName = TString("U") += NKikimr::NUdf::GetDataTypeInfo(dataSlot).Name;
             dataTypeName[1] = 'i';
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable(input->Content())
                     .Callable(0, "BitCast")
@@ -3641,6 +3801,7 @@ namespace NTypeAnnImpl {
                     .Seal()
                     .Add(1, input->TailPtr())
                 .Seal().Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -3872,8 +4033,7 @@ namespace NTypeAnnImpl {
     template<bool IsScore>
     IGraphTransformer::TStatus FullTextBuiltinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         YQL_ENSURE(output);
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 05), ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << input->Content() << " function is not available before version 2025.05"));
+        if (!EnsureAvailable(input->Pos(), NFeature::FullTextFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3941,9 +4101,101 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus HybridRankBuiltinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        YQL_ENSURE(output);
+        if (!EnsureAvailable(input->Pos(), NFeature::HybridRankFunction, ctx.Expr, ctx.Types)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // Named-arguments form: (HybridRank (Tuple positional...) (AsStruct options) [kind customLambda]).
+        // The optional trailing children are a "rank"/"score" marker followed by a custom fusion lambda: the
+        // marker comes first because it selects how the lambda is interpreted -- RankLambda fuses the
+        // per-document rank vector (Int64), ScoreLambda the per-document raw-score vector (Double). See the
+        // SQL frontend, which lifts the lambda out of the named-args struct and prepends the marker.
+        TExprNode::TPtr positionalArguments = input;
+        bool hasCustomLambda = false;
+        bool isScoreLambda = false;
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+            if (!EnsureMaxArgsCount(*input, 4, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            positionalArguments = input->ChildPtr(0);
+            hasCustomLambda = input->ChildrenSize() == 4;  // child 2 = "rank"/"score" marker, child 3 = lambda
+            if (hasCustomLambda) {
+                isScoreLambda = input->Child(2)->IsAtom() && input->Child(2)->Content() == "score";
+            }
+        }
+
+        if (positionalArguments->ChildrenSize() < 2) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(positionalArguments->Pos()), TStringBuilder() <<
+                "HybridRank expects at least 2 positional arguments (fulltext score and vector distance), but got " <<
+                positionalArguments->ChildrenSize()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        for (ui32 i = 0; i < positionalArguments->ChildrenSize(); ++i) {
+            if (!EnsureComputable(*positionalArguments->Child(i), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        // The custom fusion lambda receives the document's per-branch values as a Dict<Int64, V> (branch
+        // index -> value; a branch the document is absent from has no entry, so $x[i] is NULL) and returns a
+        // numeric fused score (larger = better). For RankLambda the value is the 1-based rank (Int64); for
+        // ScoreLambda it is the raw branch score (Double). The KQP rewrite assembles the dict and applies the
+        // lambda; here we bind the argument type and validate the body up front so misuse fails early.
+        if (hasCustomLambda) {
+            const TStringBuf lambdaName = isScoreLambda ? "ScoreLambda" : "RankLambda";
+            // ConvertToLambda rejects a non-lambda value ("Expected lambda, but got: ...") -- no need to
+            // pre-check input->Child(3)->IsLambda() here.
+            bool isUniversal = false;
+            const auto status = ConvertToLambda(input->ChildRef(3), ctx.Expr, isUniversal, 1, 1);
+            if (status.Level != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
+            if (isUniversal) {
+                // The lambda slot is itself a universal-typed expression (still being inferred); propagate
+                // the universal type to HybridRank instead of forcing Double.
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+            const auto keyType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64);
+            const auto valueType = ctx.Expr.MakeType<TDataExprType>(isScoreLambda ? EDataSlot::Double : EDataSlot::Int64);
+            const auto argType = ctx.Expr.MakeType<TDictExprType>(keyType, valueType);
+            if (!UpdateLambdaAllArgumentsTypes(input->ChildRef(3), {argType}, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            const auto& lambda = input->ChildPtr(3);
+            if (!lambda->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+            const auto retType = RemoveOptionalType(lambda->GetTypeAnn());
+            if (retType->GetKind() == ETypeAnnotationKind::Universal) {
+                // The lambda return type is still universal (being inferred); propagate the universal type
+                // to HybridRank instead of forcing Double.
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+            if (retType->GetKind() != ETypeAnnotationKind::Data ||
+                !IsDataTypeNumeric(retType->Cast<TDataExprType>()->GetSlot()))
+            {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() <<
+                    "HybridRank " << lambdaName << " must return a numeric score, but got " << *lambda->GetTypeAnn()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Double));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus SqlConcatWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 04), ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Concat function is not available before version 2025.04"));
+        if (!EnsureAvailable(input->Pos(), NFeature::ConcatFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3991,8 +4243,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus NullIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 04), ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "NullIf function is not available before version 2025.04"));
+        if (!EnsureAvailable(input->Pos(), NFeature::NullIfFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4186,10 +4437,11 @@ namespace NTypeAnnImpl {
             }
             hasOptionals = hasOptionals || isOptional;
         }
-        if (hasOptionals && !ignoreNulls)
+        if (hasOptionals && !ignoreNulls) {
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool)));
-        else
+        } else {
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool));
+        }
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -4291,7 +4543,7 @@ namespace NTypeAnnImpl {
 
             output = ctx.Expr.RenameNode(*input, "AsList");
             return IGraphTransformer::TStatus::Repeat;
-        } else if (const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
+        } else if (const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types, warn)) {
             if (const auto status = ConvertChildrenToType(input, commonItemType, ctx.Expr, ctx.Types);
                 status != IGraphTransformer::TStatus::Ok) {
                 return status;
@@ -4494,6 +4746,7 @@ namespace NTypeAnnImpl {
         }
 
         if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("FromFlow")
                     .Callable(0, "WithContext")
@@ -4504,6 +4757,7 @@ namespace NTypeAnnImpl {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -4598,6 +4852,66 @@ namespace NTypeAnnImpl {
             input->SetTypeAnn(taggedType->GetBaseType());
         }
 
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus AsErasedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::TypeErasure.MinLangVer, ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "AsErased function is not available before version 2026.02"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TResourceExprType>(NKikimr::NMiniKQL::ErasedResourceTag));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus PeekErasedWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, NFeature::TypeErasure.MinLangVer, ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "PeekErased function is not available before version 2026.02"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!EnsureResourceType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto* resType = input->Head().GetTypeAnn()->Cast<TResourceExprType>();
+        if (resType->GetTag() != NKikimr::NMiniKQL::ErasedResourceTag) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
+                << "Expected Resource<" << NKikimr::NMiniKQL::ErasedResourceTag << ">, but got: " << *input->Head().GetTypeAnn()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (auto status = EnsureTypeRewrite(input->ChildRef(1), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        const auto expectedType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(expectedType));
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -5099,9 +5413,11 @@ namespace NTypeAnnImpl {
         const TDataExprType* targetDataType = nullptr;
         auto targetSlot = NKikimr::NUdf::FindDataSlot(targetDataTypeName);
         if (!targetSlot) {
+            // clang-format off
             auto typeExpr = ctx.Expr.Builder(input->Child(1)->Pos()).Callable("ParseType")
                     .Add(0, input->ChildPtr(1))
                 .Seal().Build();
+            // clang-format on
             auto parseTypeResult = ParseTypeWrapper(typeExpr, typeExpr, ctx);
             if (parseTypeResult == IGraphTransformer::TStatus::Error) {
                 return parseTypeResult;
@@ -5688,6 +6004,7 @@ namespace NTypeAnnImpl {
 
         if (isDecimal) {
             const auto decimalType = sourceDataType->Cast<TDataExprParamsType>();
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("SafeCast")
                     .Add(0, input->HeadPtr())
@@ -5698,11 +6015,13 @@ namespace NTypeAnnImpl {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         } else if (isInterval) {
             output = isOptional ? input->HeadPtr() : ctx.Expr.Builder(input->Pos()).Callable("Just").Add(0, input->HeadPtr()).Seal().Build();
         } else if (!IsDataTypeIntegral(sourceDataType->GetSlot())) {
             output = input->HeadPtr();
         } else {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("SafeCast")
                     .Add(0, input->HeadPtr())
@@ -5711,6 +6030,7 @@ namespace NTypeAnnImpl {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
         return IGraphTransformer::TStatus::Repeat;
@@ -5836,7 +6156,7 @@ namespace NTypeAnnImpl {
         }
 
         if (IsNull(input->Head())) {
-            output = MakeBool(input->Pos(), false, ctx.Expr);
+            output = MakeBool(input->Pos(), /*value=*/false, ctx.Expr);
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -5928,12 +6248,14 @@ namespace NTypeAnnImpl {
             if (changedArg1) {
                 auto lambda1 = ctx.Expr.NewLambda(input->Pos(), ctx.Expr.NewArguments(input->Pos(), { arg1 }), std::move(convertedArg1));
                 if (leftType->GetKind() == ETypeAnnotationKind::Optional) {
+                    // clang-format off
                     input->ChildRef(0) = ctx.Expr.Builder(input->Pos())
                         .Callable(isNarrowing ? "Map" : "FlatMap")
                             .Add(0, input->HeadPtr())
                             .Add(1, lambda1)
                         .Seal()
                         .Build();
+                    // clang-format on
                 } else {
                     input->HeadRef() = ctx.Expr.ReplaceNode(lambda1->TailPtr(), lambda1->Head().Head(), input->HeadPtr());
                 }
@@ -6027,6 +6349,7 @@ namespace NTypeAnnImpl {
             TExprNodeList coalesceArgs;
             for (const auto& column : realCoalesceColumns) {
                 coalesceArgs.push_back(
+                    // clang-format off
                     ctx.Expr.Builder(input->Pos())
                         .Callable("Member")
                             .Add(0, inputStruct)
@@ -6034,8 +6357,10 @@ namespace NTypeAnnImpl {
                         .Seal()
                         .Build()
                 );
+                    // clang-format on
             }
 
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("ReplaceMember")
                     .Add(0, inputStruct)
@@ -6043,14 +6368,17 @@ namespace NTypeAnnImpl {
                     .Add(2, ctx.Expr.NewCallable(input->Pos(), "Coalesce", std::move(coalesceArgs)))
                 .Seal()
                 .Build();
+            // clang-format on
 
             for (size_t i = 1; i < realCoalesceColumns.size(); ++i) {
+                // clang-format off
                 output = ctx.Expr.Builder(input->Pos())
                     .Callable("RemoveMember")
                         .Add(0, output)
                         .Add(1, realCoalesceColumns[i])
                     .Seal()
                     .Build();
+                // clang-format on
             }
         }
 
@@ -6163,6 +6491,7 @@ namespace NTypeAnnImpl {
         }
 
         if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
+            // clang-format off
             output = ctx.Expr.ChangeChild(*input, 0, ctx.Expr.Builder(input->Pos())
                 .Callable("Nothing")
                     .Callable(0, "OptionalType")
@@ -6170,6 +6499,7 @@ namespace NTypeAnnImpl {
                     .Seal()
                 .Seal()
                 .Build());
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -6340,13 +6670,16 @@ namespace NTypeAnnImpl {
                         return IGraphTransformer::TStatus::Error;
                     }
 
+                    // clang-format off
                     output = ctx.Expr.Builder(input->Pos())
                         .Callable("Member")
                             .Add(0, depOn)
                             .Atom(1, "_yql_sys_tablepath", TNodeFlags::Default)
                         .Seal()
                         .Build();
+                    // clang-format on
                     if (isOptional) {
+                        // clang-format off
                         output = ctx.Expr.Builder(input->Pos())
                             .Callable("Coalesce")
                                 .Add(0, output)
@@ -6355,6 +6688,7 @@ namespace NTypeAnnImpl {
                                 .Seal()
                             .Seal()
                             .Build();
+                        // clang-format on
                     }
                     return IGraphTransformer::TStatus::Repeat;
                 }
@@ -6394,6 +6728,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TExprNode::TListType deps = input->ChildrenList();
         deps.erase(deps.begin());
         auto source = ctx.Expr.NewCallable(input->Pos(), "CurrentUtcTimestamp", std::move(deps));
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Apply")
                 .Callable(0, "Udf")
@@ -6407,6 +6742,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -6467,13 +6803,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     if (!EnsureSpecificDataType(depOn->Pos(), *dataType, NUdf::EDataSlot::Uint64, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
+                    // clang-format off
                     output = ctx.Expr.Builder(input->Pos())
                         .Callable("Member")
                             .Add(0, depOn)
                             .Atom(1, "_yql_sys_tablerecord", TNodeFlags::Default)
                         .Seal()
                         .Build();
+                    // clang-format on
                     if (isOptional) {
+                        // clang-format off
                         output = ctx.Expr.Builder(input->Pos())
                             .Callable("Coalesce")
                                 .Add(0, output)
@@ -6482,6 +6821,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                 .Seal()
                             .Seal()
                             .Build();
+                        // clang-format on
                     }
                     return IGraphTransformer::TStatus::Repeat;
                 }
@@ -6837,6 +7177,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Variant")
                 .Callable(0, "Void")
@@ -6845,6 +7186,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 .Add(2, input->TailPtr())
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -6854,6 +7196,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Variant")
                 .Add(0, input->HeadPtr())
@@ -6870,6 +7213,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -6879,6 +7223,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Variant")
                 .Callable(0, "Void")
@@ -6895,6 +7240,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -6998,7 +7344,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (IsNull(input->Head())) {
-            output = ContainsOrLookup ? MakeBool(input->Pos(), false, ctx.Expr) : input->HeadPtr();
+            output = ContainsOrLookup ? MakeBool(input->Pos(), /*value=*/false, ctx.Expr) : input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -7020,7 +7366,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if constexpr (InList) {
             if (dictType->GetKind() == ETypeAnnotationKind::EmptyList) {
-                output = MakeBool(input->Pos(), false, ctx.Expr);
+                output = MakeBool(input->Pos(), /*value=*/false, ctx.Expr);
                 return IGraphTransformer::TStatus::Repeat;
             }
 
@@ -7030,7 +7376,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         } else {
             if (dictType->GetKind() == ETypeAnnotationKind::EmptyDict) {
                 if constexpr (ContainsOrLookup) {
-                    output = MakeBool(input->Pos(), false, ctx.Expr);
+                    output = MakeBool(input->Pos(), /*value=*/false, ctx.Expr);
                 } else {
                     output = MakeNull(input->Pos(), ctx.Expr);
                 }
@@ -7142,6 +7488,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             if (!ctx.Expr.AddWarning(issue)) {
                 return IGraphTransformer::TStatus::Error;
             }
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("SqlIn")
                     .Add(0, collection)
@@ -7149,6 +7496,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .Add(2, RemoveSetting(*options, "warnNoAnsi", ctx.Expr))
                 .Seal()
                 .Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         };
 
@@ -7407,7 +7755,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             output = ctx.Expr.RenameNode(*input, IsSet ? "AsSet" : "AsDict");
             return IGraphTransformer::TStatus::Repeat;
-        } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
+        } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types, warn)) {
             if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types);
                 status != IGraphTransformer::TStatus::Ok) {
                 return status;
@@ -7519,15 +7867,17 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     *thenType << ", else type: " << *elseType));
                 return IGraphTransformer::TStatus::Error;
             }
-        } else if (const auto commonType = CommonType<false>(input->Pos(), thenType, elseType, ctx.Expr)) {
+        } else if (const auto commonType = CommonType<false>(input->Pos(), thenType, elseType, ctx.Expr, ctx.Types)) {
             if (const auto status = TryConvertTo(input->ChildRef(1), *commonType, ctx.Expr, ctx.Types)
                 .Combine(TryConvertTo(input->TailRef(), *commonType, ctx.Expr, ctx.Types));
-                status != IGraphTransformer::TStatus::Ok)
+                status != IGraphTransformer::TStatus::Ok) {
                 return status;
+                }
 
             input->SetTypeAnn(commonType);
-        } else
+        } else {
             return IGraphTransformer::TStatus::Error;
+        }
 
         return IGraphTransformer::TStatus::Ok;
     }
@@ -7608,12 +7958,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if (input->ChildrenSize() == 3) {
             auto children = input->ChildrenList();
+            // clang-format off
             auto idLambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
                     .Param("world")
                     .Arg("world")
                 .Seal()
                 .Build();
+            // clang-format on
 
             children.push_back(idLambda);
             output = ctx.Expr.ChangeChildren(*input, std::move(children));
@@ -7830,6 +8182,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
             mergeLambda = input->ChildPtr(2);
         } else {
+            // clang-format off
             mergeLambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
                     .Param("name")
@@ -7843,9 +8196,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .Seal()
                 .Seal()
             .Build();
+            // clang-format on
         }
 
         auto buildJustMember = [&ctx, &input](const TExprNode::TPtr &st, const TStringBuf& name) -> TExprNode::TPtr {
+            // clang-format off
             return ctx.Expr.Builder(input->Pos())
                 .Callable("Just")
                     .Callable(0, "Member")
@@ -7854,6 +8209,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .Seal()
                 .Seal()
             .Build();
+            // clang-format on
         };
 
         auto mergeMembers = [&ctx, &buildJustMember, &input, &left, &right, &mergeLambda](const TStringBuf& name, bool hasLeft, bool hasRight) -> TExprNode::TPtr {
@@ -7869,6 +8225,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     ExpandType(input->Pos(), *ctx.Expr.MakeType<TOptionalExprType>(left->GetTypeAnn()->Cast<TStructExprType>()->FindItemType(name)), ctx.Expr)
                 });
 
+            // clang-format off
             return ctx.Expr.Builder(input->Pos())
                 .List()
                     .Atom(0, name)
@@ -7883,6 +8240,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .Seal()
                 .Seal()
             .Build();
+            // clang-format on
         };
 
         TExprNode::TListType children;
@@ -7980,6 +8338,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             auto tupleType = input->Head().GetTypeAnn()->Cast<TTupleExprType>();
             TExprNode::TListType children;
             for (ui32 pos = 0; pos < tupleType->GetSize(); ++pos) {
+                // clang-format off
                 children.push_back(ctx.Expr.Builder(input->Pos())
                     .Apply(input->Child(1))
                         .With(0)
@@ -7990,6 +8349,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Done()
                     .Seal()
                     .Build());
+                // clang-format on
             }
 
             output = ctx.Expr.NewList(input->Pos(), std::move(children));
@@ -7997,6 +8357,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             auto structType = input->Head().GetTypeAnn()->Cast<TStructExprType>();
             TExprNode::TListType children;
             for (auto item : structType->GetItems()) {
+                // clang-format off
                 children.push_back(ctx.Expr.Builder(input->Pos())
                     .List()
                         .Atom(0, item->GetName())
@@ -8010,6 +8371,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Seal()
                     .Seal()
                     .Build());
+                // clang-format on
             }
 
             output = ctx.Expr.NewCallable(input->Pos(), "AsStruct", std::move(children));
@@ -8179,6 +8541,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (collection->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
             for (const auto member : collection->GetTypeAnn()->Cast<TStructExprType>()->GetItems()) {
                 if (!result) {
+                    // clang-format off
                     result = ctx.Expr.Builder(input->Pos())
                         .Apply(initFunc)
                             .With(0).Callable("Member")
@@ -8187,7 +8550,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Seal().Done()
                         .Seal()
                     .Build();
+                    // clang-format on
                 } else {
+                    // clang-format off
                     result = ctx.Expr.Builder(input->Pos())
                         .Apply(reduceFunc)
                             .With(0).Callable("Member")
@@ -8197,11 +8562,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .With(1, result)
                         .Seal()
                     .Build();
+                    // clang-format on
                 }
             }
         } else if (collection->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
             for (size_t idx = 0; idx < collection->GetTypeAnn()->Cast<TTupleExprType>()->GetSize(); idx++) {
                 if (!result) {
+                    // clang-format off
                     result = ctx.Expr.Builder(input->Pos())
                         .Apply(initFunc)
                             .With(0).Callable("Nth")
@@ -8210,7 +8577,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Seal().Done()
                         .Seal()
                     .Build();
+                    // clang-format on
                 } else {
+                    // clang-format off
                     result = ctx.Expr.Builder(input->Pos())
                         .Apply(reduceFunc)
                             .With(0).Callable("Nth")
@@ -8220,6 +8589,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .With(1, result)
                         .Seal()
                     .Build();
+                    // clang-format on
                 }
             }
         } else if (collection->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
@@ -8368,6 +8738,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto pos = ctx.Expr.GetPosition(input->Head().Pos());
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("AsStruct")
                 .List(0)
@@ -8390,6 +8761,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -8893,6 +9265,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if (const auto inputType = input->Head().GetTypeAnn(); inputType && inputType->GetKind() == ETypeAnnotationKind::Optional
             && inputType->Cast<TOptionalExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Optional) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("Map")
                     .Add(0, input->HeadPtr())
@@ -8906,6 +9279,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Seal()
                     .Seal()
                 .Seal().Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -9501,6 +9875,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         // (7) settings
         bool isStrict = false;
+        bool settingsWasChanged = false;
         TExprNode::TPtr settings;
         if (input->ChildrenSize() > 7) {
             settings = input->ChildPtr(7);
@@ -9541,6 +9916,30 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
                     if (!EnsureAtom(child->Tail(), ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
+                    }
+
+                    ui64 extraMemValue = 0;
+                    if (settingName == "cpu") {
+                        double cpuValue = 0.0;
+                        if (!TryFromString(child->Tail().Content(), cpuValue) || cpuValue <= 0.0) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Tail().Pos()), TStringBuilder()
+                                << "Bad cpu setting value: " << child->Tail().Content()
+                                << ". Expected a positive number (e.g., '2')"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    } else if (settingName == "extraMem" && !TryFromString(child->Tail().Content(), extraMemValue)) {
+                        try {
+                            extraMemValue = NSize::ParseSize(child->Tail().Content());
+                        } catch (const std::exception& e) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Tail().Pos()), TStringBuilder()
+                                << "Bad extraMem setting value: " << child->Tail().Content()
+                                << ". Expected a number (bytes) or a human-readable size like '2048M', '1G', '512K'"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        auto normalizedValue = ctx.Expr.NewAtom(child->Tail().Pos(), ToString(extraMemValue));
+                        auto normalizedSetting = ctx.Expr.NewList(child->Pos(), {ctx.Expr.NewAtom(child->Head().Pos(), "extraMem"), normalizedValue});
+                        settings = ReplaceSetting(*settings, normalizedSetting, ctx.Expr);
+                        settingsWasChanged = true;
                     }
 
                     if (ctx.Types.LangVer != UnknownLangVersion) {
@@ -9604,6 +10003,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     return IGraphTransformer::TStatus::Error;
                 }
             }
+        }
+
+        if (settingsWasChanged) {
+            output = ctx.Expr.ChangeChild(*input, 7, std::move(settings));
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         if (input->ChildrenSize() != 8 || !cachedType) {
@@ -9706,6 +10110,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             YQL_ENSURE(SplitUdfName(cached.NormalizedName, normalizedModuleName, normalizedFuncName));
             auto udfInfo = ctx.Types.UdfModules.FindPtr(normalizedModuleName);
             TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : ""_sb;
+            // clang-format off
             auto ret = ctx.Expr.Builder(input->Pos())
                 .Callable("Udf")
                     .Atom(0, cached.NormalizedName)
@@ -9717,31 +10122,40 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .Atom(6, fileAlias)
                     .List(7)
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            // clang-format on
                             ui32 settingIndex = 0;
                             if (cached.SupportsBlocks) {
+                                // clang-format off
                                 parent.List(settingIndex++)
                                     .Atom(0, "blocks")
                                     .Seal();
+                                // clang-format on
                             }
 
                             if (cached.IsStrict) {
+                                // clang-format off
                                 parent.List(settingIndex++)
                                     .Atom(0, "strict")
                                     .Seal();
+                                // clang-format on
                             }
 
                             if (cached.MinLangVer != UnknownLangVersion) {
+                                // clang-format off
                                 parent.List(settingIndex++)
                                     .Atom(0, "minLang")
                                     .Atom(1, cached.MinLangVer)
                                     .Seal();
+                                // clang-format on
                             }
 
                             if (cached.MaxLangVer != UnknownLangVersion) {
+                                // clang-format off
                                 parent.List(settingIndex++)
                                     .Atom(0, "maxLang")
                                     .Atom(1, cached.MaxLangVer)
                                     .Seal();
+                                // clang-format on
                             }
 
                             if (settings) {
@@ -9754,8 +10168,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                 }
 
                                 if (auto setting = GetSetting(*settings, "layers"); setting && setting->Child(1)->ChildrenSize() > 0) {
+                                    // clang-format off
                                     auto sett = parent.List(settingIndex++)
                                         .Atom(0, "layers");
+                                    // clang-format on
                                     size_t idx = 1;
                                     for (const auto& nameStr: setting->Child(1)->Children()) {
                                         sett.Atom(idx++, nameStr->Child(0)->Content());
@@ -9765,10 +10181,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             }
 
                             return parent;
+                        // clang-format off
                         })
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
 
             output = ret;
             return IGraphTransformer::TStatus::Repeat;
@@ -9812,7 +10230,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (cachedType->UseStaticLinear()) {
-            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -10000,6 +10418,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                 return IGraphTransformer::TStatus::Error;
                             }
                         }
+                        // clang-format off
                         auto sett = ctx.Expr.Builder(setting->Pos())
                             .List()
                                 .Do([&setting](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -10011,6 +10430,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                     return parent;
                                 })
                             .Seal().Build();
+                        // clang-format on
                         output = ctx.Expr.ChangeChild(*input, 4, ctx.Expr.ChangeChild(*input->Child(4), i, std::move(sett)));
                         return IGraphTransformer::TStatus::Repeat;
                     }
@@ -10048,7 +10468,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (callableType->UseStaticLinear()) {
-            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -10162,12 +10582,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     ctx.Expr.NewArguments(input->Pos(), { args[i] }),
                     std::move(output));
 
+                // clang-format off
                 output = ctx.Expr.Builder(input->Pos())
                     .Callable(i == 0 ? autoMapFunction : "FlatMap")
                         .Add(0, input->Child(autoMapArgs[i]))
                         .Add(1, lambda)
                     .Seal()
                     .Build();
+                // clang-format on
             }
 
             return IGraphTransformer::TStatus::Repeat;
@@ -10471,12 +10893,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     ctx.Expr.NewArguments(input->Pos(), { args[i] }),
                     std::move(output));
 
+                // clang-format off
                 output = ctx.Expr.Builder(input->Pos())
                     .Callable(i == 0 ? autoMapFunction : "FlatMap")
                         .Add(0, inputArgs[i])
                         .Add(1, lambda)
                     .Seal()
                     .Build();
+                // clang-format on
             }
 
             return IGraphTransformer::TStatus::Repeat;
@@ -10493,9 +10917,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus BuildSimplePgCall(TPositionHandle pos, TStringBuf name,
-        const TExprNodeList& args, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 04), ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "SimplePg functions are not available before version 2025.04"));
+        const TExprNodeList& args, TExprNode::TPtr& output, TExtContext& ctx)
+    {
+        if (!EnsureAvailable(pos, NFeature::SimplePgFunction, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -10786,50 +11210,68 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return BuildSimplePgCall(input->Pos(), udfName->Content().substr(9), positionalArgs, output, ctx);
         }
 
+        // clang-format off
         TExprNode::TPtr udf = ctx.Expr.Builder(input->Pos())
             .Callable("Udf")
                 .Add(0, udfName)
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    // clang-format on
                     if (runConfig) {
+                        // clang-format off
                         parent
                             .Add(1, runConfig)
                             .Seal();
+                        // clang-format on
                     } else {
+                        // clang-format off
                         parent
                             .Callable(1, "Void")
                             .Seal();
+                        // clang-format on
                     }
                     return parent;
+                // clang-format off
                 })
                 .Callable(2, "TupleType")
                     .Callable(0, "TupleType")
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            // clang-format on
                             size_t idx = 0;
                             for (auto& arg : positionalArgs) {
+                                // clang-format off
                                 parent
                                     .Callable(idx++, "TypeOf")
                                         .Add(0, arg)
                                     .Seal();
+                                // clang-format on
                             }
                             return parent;
+                        // clang-format off
                         })
                     .Seal()
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        // clang-format on
                         if (namedArgs) {
+                            // clang-format off
                             parent
                                 .Callable(1, "TypeOf")
                                     .Add(0, namedArgs)
                                 .Seal();
+                            // clang-format on
                         } else {
+                            // clang-format off
                             parent
                                 .Callable(1, "StructType")
                                 .Seal();
+                            // clang-format on
                         }
                         return parent;
+                    // clang-format off
                     })
                     .Add(2, externalTypes)
                 .Seal()
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    // clang-format on
                     if (typeConfig) {
                         parent.Add(3, typeConfig);
                     } else if (options) {
@@ -10844,9 +11286,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     }
 
                     return parent;
+                // clang-format off
                 })
             .Seal()
             .Build();
+        // clang-format on
 
         const bool needNamedApply = namedArgs || input->ChildrenSize() > 6;
         TExprNodeList applyArgs = { udf };
@@ -10939,7 +11383,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (callableType->UseStaticLinear()) {
-            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -11144,6 +11588,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     isOptionalItem = true;
                 }
             }
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable(isOptionalItem ? "FlatMap" : "Map")
                     .Add(0, input->HeadPtr())
@@ -11154,6 +11599,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Seal()
                     .Seal()
                 .Seal().Build();
+            // clang-format on
         } else {
             output = ctx.Expr.RenameNode(*input, "VariantItem");
         }
@@ -11416,6 +11862,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Repeat;
             }
 
+            // clang-format off
             output = appendOtherArgs(ctx.Expr.Builder(input->Pos())
                 .Callable(isOptionalResult ? "FlatMap" : "Map")
                     .Add(0, input->HeadPtr())
@@ -11426,6 +11873,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Seal()
                     .Seal()
                 .Seal().Build();
+            // clang-format on
         } else {
             output = ctx.Expr.RenameNode(*input, "Visit");
         }
@@ -11734,6 +12182,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             if (input->Head().Content() == "tuple" || input->Head().Content() == "struct") {
                 key = ctx.Expr.NewCallable(input->Pos(), "String", { std::move(key) });
             } else if (input->Head().Content() == "dict") {
+                // clang-format off
                 key = ctx.Expr.Builder(input->Pos())
                     .Callable("SafeCast")
                         .Add(0, std::move(key))
@@ -11741,11 +12190,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Atom(0, "String", TNodeFlags::Default)
                         .Seal()
                 .Seal().Build();
+                // clang-format on
             } else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Unknown access mode: " << input->Head().Content()));
                 return IGraphTransformer::TStatus::Error;
             }
             if (isYsonAutoConvert || isYsonStrict) {
+                // clang-format off
                 auto asStruct = ctx.Expr.Builder(input->Pos())
                     .Callable("AsStruct")
                         .List(0)
@@ -11758,7 +12209,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
 
+                // clang-format off
                 auto ysonOptions = ctx.Expr.Builder(input->Pos())
                     .Callable("NamedApply")
                         .Callable(0, "Udf")
@@ -11768,7 +12221,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Add(2, std::move(asStruct))
                     .Seal()
                     .Build();
+                // clang-format on
 
+                // clang-format off
                 output = ctx.Expr.Builder(input->Pos())
                     .Callable("Apply")
                         .Callable(0, "Udf")
@@ -11779,8 +12234,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Add(3, std::move(ysonOptions))
                     .Seal()
                     .Build();
+                // clang-format on
 
             } else {
+                // clang-format off
                 output = ctx.Expr.Builder(input->Pos())
                     .Callable("Apply")
                         .Callable(0, "Udf")
@@ -11790,6 +12247,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Add(2, std::move(key))
                     .Seal()
                     .Build();
+                // clang-format on
                 }
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -11933,6 +12391,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 }
             }
 
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("OrderedLMap")
                     .Add(0, applyChildren[listArg + 1])
@@ -11941,24 +12400,29 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Callable("ToSequence")
                             .Callable(0, "Apply")
                                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    // clang-format on
                                     for (size_t i = 0; i < applyChildren.size(); ++i) {
                                         if (i != listArg + 1) {
                                             parent.Add(i, applyChildren[i]);
                                         } else if (expectList) {
+                                            // clang-format off
                                             parent.Callable(i, "ForwardList")
                                                 .Arg(0, "stream")
                                                 .Seal();
+                                            // clang-format on
                                         } else {
                                             parent.Arg(i, "stream");
                                         }
                                     }
                                     return parent;
+                                // clang-format off
                                 })
                             .Seal()
                         .Seal()
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
         else {
             auto lambda = input->HeadPtr();
@@ -11978,6 +12442,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Ok;
             }
 
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("OrderedLMap")
                     .Add(0, applyChildren[listArg + 1])
@@ -11985,6 +12450,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Param("stream")
                         .Callable("ToSequence")
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                // clang-format on
                                 auto replacer = parent.Apply(0, lambda);
                                 for (size_t i = 1; i < applyChildren.size(); ++i) {
                                     if (i != listArg + 1) {
@@ -11995,11 +12461,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                 }
                                 replacer.Seal();
                                 return parent;
+                            // clang-format off
                             })
                         .Seal()
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
         return IGraphTransformer::TStatus::Repeat;
@@ -12083,6 +12551,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             udfArgs.push_back(ctx.Expr.NewCallable(pos, "Void", {}));
             // userType
             udfArgs.push_back(
+                // clang-format off
                 ctx.Expr.Builder(pos)
                     .Callable("TupleType")
                         .Add(0, ExpandType(pos, *positionalArgsUdfType, ctx.Expr))
@@ -12092,6 +12561,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .Seal()
                     .Build()
             );
+                // clang-format on
 
             if (udf->ChildrenSize() == 3)  {
                 // typeConfig
@@ -12109,22 +12579,27 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     return IGraphTransformer::TStatus::Error;
                 }
 
+                // clang-format off
                 applied = ctx.Expr.Builder(pos)
                     .Apply(udf)
                         .With(0, udfInput)
                     .Seal()
                     .Build();
+                // clang-format on
             } else {
+                // clang-format off
                 applied = ctx.Expr.Builder(pos)
                     .Callable("Apply")
                         .Add(0, udf)
                         .Add(1, udfInput)
                     .Seal()
                     .Build();
+                // clang-format on
             }
             if (extractKeyLambda->Content() == "byAll") {
                 output = ctx.Expr.NewCallable(pos, "ToSequence", { applied });
             } else if (extractKeyLambda->Content() == "byAllList") {
+                // clang-format off
                 output = ctx.Expr.Builder(pos)
                     .Callable("ForwardList")
                         .Callable(0, "ToStream")
@@ -12132,6 +12607,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             } else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), TStringBuilder() << "Expected 'byAll' ot 'byAllList' as second argument"));
                 return IGraphTransformer::TStatus::Error;
@@ -12175,6 +12651,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             handler = expectList ?
+                // clang-format off
                 ctx.Expr.Builder(input->Child(2)->Pos())
                     .Lambda()
                         .Param("key")
@@ -12211,12 +12688,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Seal()
                         .Seal()
                     .Seal().Build();
+                // clang-format on
         } else {
             if (const auto& lambda = *input->Child(2); lambda.Head().ChildrenSize() != 2) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda.Pos()), TStringBuilder() << "Expected lambda with 2 arguments"));
                 return IGraphTransformer::TStatus::Error;
             }
 
+            // clang-format off
             handler = ctx.Expr.Builder(input->Child(2)->Pos())
                 .Lambda()
                     .Param("key")
@@ -12235,8 +12714,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Seal()
                     .Seal()
                 .Seal().Build();
+            // clang-format on
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("ForwardList")
                 .Callable(0, "Chopper")
@@ -12260,6 +12741,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .Add(3, std::move(handler))
                 .Seal()
             .Seal().Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -12405,18 +12887,21 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Ok;
         }
         else if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Apply(input->ChildPtr(1))
                     .With(0, input->HeadPtr())
                 .Seal()
                 .Build();
+            // clang-format on
         }
         else if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Variant) {
             auto underlyingType = input->Head().GetTypeAnn()->Cast<TVariantExprType>()->GetUnderlyingType();
             if (underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
                 auto tupleTypeItems = underlyingType->Cast<TTupleExprType>()->GetItems();
-                if (std::adjacent_find(tupleTypeItems.cbegin(), tupleTypeItems.cend(), std::not_equal_to<const TTypeAnnotationNode*>()) == tupleTypeItems.cend()) {
+                if (std::adjacent_find(tupleTypeItems.cbegin(), tupleTypeItems.cend(), std::not_equal_to<>()) == tupleTypeItems.cend()) {
                     // All types are the same
+                    // clang-format off
                     output = ctx.Expr.Builder(input->Pos())
                         .Apply(input->ChildPtr(1))
                             .With(0)
@@ -12426,13 +12911,17 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Done()
                         .Seal()
                         .Build();
+                    // clang-format on
                 }
                 else { // Non equal types
+                    // clang-format off
                     output = ctx.Expr.Builder(input->Pos())
                         .Callable("Visit")
                             .Add(0, input->HeadPtr())
                             .Do([&input, &tupleTypeItems](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                // clang-format on
                                 for (size_t i = 0; i < tupleTypeItems.size(); ++i) {
+                                    // clang-format off
                                     parent
                                         .Atom(i * 2 + 1, ToString(i))
                                         .Lambda(i * 2 + 2)
@@ -12442,11 +12931,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                             .Seal()
                                         .Seal()
                                     .Seal();
+                                    // clang-format on
                                 }
                                 return parent;
+                            // clang-format off
                             })
                         .Seal()
                         .Build();
+                    // clang-format on
                 }
             }
             else { // underlyingType->GetKind() == ETypeAnnotationKind::Struct
@@ -12455,6 +12947,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     [](const TItemExprType* t1, const TItemExprType* t2) { return t1->GetItemType() != t2->GetItemType(); }) == structTypeItems.cend())
                 {
                     // All types are the same
+                    // clang-format off
                     output = ctx.Expr.Builder(input->Pos())
                         .Apply(input->ChildPtr(1))
                             .With(0)
@@ -12464,13 +12957,17 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Done()
                         .Seal()
                         .Build();
+                    // clang-format on
                 }
                 else { // Non equal types
+                    // clang-format off
                     output = ctx.Expr.Builder(input->Pos())
                         .Callable("Visit")
                             .Add(0, input->HeadPtr())
                             .Do([&input, &structTypeItems](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                // clang-format on
                                 for (size_t i = 0; i < structTypeItems.size(); ++i) {
+                                    // clang-format off
                                     parent
                                         .Atom(i * 2 + 1, structTypeItems[i]->GetName())
                                         .Lambda(i * 2 + 2)
@@ -12480,11 +12977,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                             .Seal()
                                         .Seal()
                                     .Seal();
+                                    // clang-format on
                                 }
                                 return parent;
+                            // clang-format off
                             })
                         .Seal()
                         .Build();
+                    // clang-format on
                 }
             }
         }
@@ -12975,6 +13475,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
         YQL_ENSURE(childColumnOrder->Size() == numColumns);
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("AssumeColumnOrder")
                 .Callable(0, input->IsCallable("OrderedSqlRename") ? "OrderedMap" : "Map")
@@ -12983,7 +13484,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Param("item")
                         .Callable("AsStruct")
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                // clang-format on
                                 for (ui32 i = 0; i < numColumns; ++i) {
+                                    // clang-format off
                                     parent
                                         .List(i)
                                             .Add(0, input->Child(1)->ChildPtr(i))
@@ -12992,8 +13495,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                                 .Atom(1, childColumnOrder->at(i).PhysicalName)
                                             .Seal()
                                         .Seal();
+                                    // clang-format on
                                 }
                                 return parent;
+                            // clang-format off
                             })
                         .Seal()
                     .Seal()
@@ -13001,6 +13506,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 .Add(1, input->ChildPtr(1))
             .Seal()
             .Build();
+        // clang-format on
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -13210,9 +13716,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(resourceArg->Pos()), "You should use resource from QueueCreate"));
             return false;
         }
+        // clang-format off
         auto typeExpr = ctx.Expr.Builder(resourceArg->Pos()).Callable("ParseType")
                 .Atom(0, TString(resourceTag.data()+ResourceQueuePrefix.size(), resourceTag.size()-ResourceQueuePrefix.size()))
             .Seal().Build();
+        // clang-format on
         auto parseTypeResult = ParseTypeWrapper(typeExpr, typeExpr, ctx);
         if (parseTypeResult == IGraphTransformer::TStatus::Error) {
             return false;
@@ -13608,8 +14116,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
     IGraphTransformer::TStatus WithSideEffectsModeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 04), ctx.Types.BackportMode)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "SideEffects is not available before version 2025.04"));
+        if (!EnsureAvailable(input->Pos(), NFeature::SideEffects, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -13787,11 +14294,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             auto strType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::String);
             auto expectedOtherType = ctx.Expr.MakeType<TDictExprType>(strType, strType);
             if (IsSameAnnotation(*unpackedOtherType, *expectedOtherType)) {
+                // clang-format off
                 otherMember = ctx.Expr.Builder(input->Pos())
                     .Callable("Member")
                     .Add(0, input->Child(0))
                     .Atom(1, otherField)
                     .Seal().Build();
+                // clang-format on
             } else {
                 otherType = nullptr;
             }
@@ -13809,15 +14318,18 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             auto expectedRestType1opt = ctx.Expr.MakeType<TOptionalExprType>(expectedRestType1);
             auto expectedRestType2 = ysonType;
             auto expectedRestType2opt = ctx.Expr.MakeType<TOptionalExprType>(expectedRestType2);
+            // clang-format off
             auto member = ctx.Expr.Builder(input->Pos())
                 .Callable("Member")
                 .Add(0, input->Child(0))
                 .Atom(1, restField)
                 .Seal().Build();
+            // clang-format on
 
             if (IsSameAnnotation(*restType, *expectedRestType1) || IsSameAnnotation(*restType, *expectedRestType1opt)) {
                 restMember = member;
             } else if (IsSameAnnotation(*restType, *expectedRestType2) || IsSameAnnotation(*restType, *expectedRestType2opt)) {
+                // clang-format off
                 auto parsedDict = ctx.Expr.Builder(input->Pos())
                     .Callable("Apply")
                         .Callable(0, "Udf")
@@ -13826,7 +14338,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Add(1, member)
                     .Seal()
                     .Build();
+                // clang-format on
 
+                // clang-format off
                 restMember = ctx.Expr.Builder(input->Pos())
                     .Callable("ToDict")
                         .Callable(0, "Map")
@@ -13872,6 +14386,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             } else {
                 restType = nullptr;
             }
@@ -13899,6 +14414,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if (fieldType) {
             if (fieldType->GetKind() == ETypeAnnotationKind::Optional) {
+                // clang-format off
                 output = ctx.Expr.Builder(input->Pos())
                     .Callable("Coalesce")
                         .Callable(0, "Member")
@@ -13912,7 +14428,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Atom(3, memberName)
                         .Seal()
                     .Seal().Build();
+                // clang-format on
             } else {
+                // clang-format off
                 output = ctx.Expr.Builder(input->Pos())
                     .Callable("Just")
                         .Callable(0, "Member")
@@ -13920,8 +14438,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Atom(1, fullMemberName)
                         .Seal()
                     .Seal().Build();
+                // clang-format on
             }
         } else if (otherType || restType) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("TryWeakMemberFromDict")
                     .Add(0, otherMember)
@@ -13929,17 +14449,21 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .Atom(2, targetType)
                     .Atom(3, memberName)
                 .Seal().Build();
+            // clang-format on
             if (isDefault) {
+                // clang-format off
                 output = ctx.Expr.Builder(input->Pos())
                     .Callable("Coalesce")
                         .Add(0, output)
                         .Add(1, input->Child(3))
                     .Seal().Build();
+                // clang-format on
             }
         } else {
             if (isDefault) {
                 output = input->ChildPtr(3);
             } else {
+                // clang-format off
                 output = ctx.Expr.Builder(input->Pos())
                     .Callable("Nothing")
                         .Callable(0, "OptionalType")
@@ -13948,6 +14472,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Seal()
                         .Seal()
                     .Seal().Build();
+                // clang-format on
             }
         }
         return IGraphTransformer::TStatus::Repeat;
@@ -14026,11 +14551,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Uint32")
                 .Atom(0, ToString(lambda->Head().ChildrenSize()))
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -14057,11 +14584,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Uint32")
                 .Atom(0, ToString(optionalArgsCount))
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -14116,11 +14645,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("String")
                 .Atom(0, ctx.Types.OperationOptions.Id.GetOrElse(""))
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -14130,11 +14661,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("String")
                 .Atom(0, ctx.Types.OperationOptions.SharedId.GetOrElse(""))
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -14144,11 +14677,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("String")
                 .Atom(0, ctx.Types.OperationOptions.AuthenticatedUser.GetOrElse(""))
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -14164,11 +14699,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             str = "";
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("String")
                 .Atom(0, str)
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -14290,6 +14827,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     if (updatedChildren.empty()) {
                         updatedChildren.resize(tupleType->GetSize());
                     }
+                    // clang-format off
                     updatedChildren[i] = ctx.Expr.Builder(input->Head().Pos())
                         .Callable("RemovePrefixMembers")
                             .Callable(0, "Nth")
@@ -14301,18 +14839,21 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Seal()
                         .Seal()
                         .Build();
+                    // clang-format on
                 }
                 itemTypes.push_back(itemType);
             }
             if (!updatedChildren.empty()) {
                 for (size_t i = 0; i < updatedChildren.size(); ++i) {
                     if (!updatedChildren[i]) {
+                        // clang-format off
                         updatedChildren[i] = ctx.Expr.Builder(input->Head().Pos())
                             .Callable("Nth")
                                 .Add(0, input->HeadPtr())
                                 .Atom(1, ToString(i), TNodeFlags::Default)
                             .Seal()
                             .Build();
+                        // clang-format on
                     }
                 }
                 output = ctx.Expr.ChangeChild(*input, 0, ctx.Expr.NewList(input->Head().Pos(), std::move(updatedChildren)));
@@ -14344,6 +14885,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     if (updatedChildren.empty()) {
                         updatedChildren.resize(structType->GetSize());
                     }
+                    // clang-format off
                     updatedChildren[i] = ctx.Expr.Builder(input->Head().Pos())
                         .List()
                             .Atom(0, itemName)
@@ -14358,6 +14900,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Seal()
                         .Seal()
                         .Build();
+                    // clang-format on
                 }
 
                 itemTypes.push_back(ctx.Expr.MakeType<TItemExprType>(itemName, itemType));
@@ -14366,6 +14909,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 for (size_t i = 0; i < updatedChildren.size(); ++i) {
                     if (!updatedChildren[i]) {
                         auto itemName = structType->GetItems()[i]->GetName();
+                        // clang-format off
                         updatedChildren[i] = ctx.Expr.Builder(input->Head().Pos())
                             .List()
                                 .Atom(0, itemName)
@@ -14375,6 +14919,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                 .Seal()
                             .Seal()
                             .Build();
+                        // clang-format on
                     }
                 }
                 output = ctx.Expr.ChangeChild(*input, 0, ctx.Expr.NewCallable(input->Head().Pos(), "AsStruct", std::move(updatedChildren)));
@@ -15648,8 +16193,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus LinearDestroyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        if (!IsAvailableLangVersion(MakeLangVersion(2025, 5), ctx.Types.LangVer)) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "LinearDestroy is not available before version 2025.05"));
+        if (!EnsureAvailable(input->Pos(), NFeature::LinearDestroy, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -15803,32 +16347,32 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Plus"] = &PlusMinusWrapper;
         Functions["Minus"] = &PlusMinusWrapper;
         Functions["CheckedMinus"] = &PlusMinusWrapper;
-        Functions["+"] = &AddWrapper;
-        Functions["Add"] = &AddWrapper;
-        Functions["CheckedAdd"] = &AddWrapper;
-        Functions["+MayWarn"] = &AddWrapper;
-        Functions["AddMayWarn"] = &AddWrapper;
+        ExtFunctions["+"] = &AddWrapper;
+        ExtFunctions["Add"] = &AddWrapper;
+        ExtFunctions["CheckedAdd"] = &AddWrapper;
+        ExtFunctions["+MayWarn"] = &AddWrapper;
+        ExtFunctions["AddMayWarn"] = &AddWrapper;
         Functions["AggrAdd"] = &AggrAddWrapper;
-        Functions["-"] = &SubWrapper;
-        Functions["Sub"] = &SubWrapper;
-        Functions["CheckedSub"] = &SubWrapper;
-        Functions["-MayWarn"] = &SubWrapper;
-        Functions["SubMayWarn"] = &SubWrapper;
-        Functions["*"] = &MulWrapper;
-        Functions["Mul"] = &MulWrapper;
-        Functions["CheckedMul"] = &MulWrapper;
-        Functions["*MayWarn"] = &MulWrapper;
-        Functions["MulMayWarn"] = &MulWrapper;
-        Functions["/"] = &DivWrapper;
-        Functions["Div"] = &DivWrapper;
-        Functions["CheckedDiv"] = &DivWrapper;
-        Functions["/MayWarn"] = &DivWrapper;
-        Functions["DivMayWarn"] = &DivWrapper;
-        Functions["%"] = &ModWrapper;
-        Functions["Mod"] = &ModWrapper;
-        Functions["CheckedMod"] = &ModWrapper;
-        Functions["%MayWarn"] = &ModWrapper;
-        Functions["ModMayWarn"] = &ModWrapper;
+        ExtFunctions["-"] = &SubWrapper;
+        ExtFunctions["Sub"] = &SubWrapper;
+        ExtFunctions["CheckedSub"] = &SubWrapper;
+        ExtFunctions["-MayWarn"] = &SubWrapper;
+        ExtFunctions["SubMayWarn"] = &SubWrapper;
+        ExtFunctions["*"] = &MulWrapper;
+        ExtFunctions["Mul"] = &MulWrapper;
+        ExtFunctions["CheckedMul"] = &MulWrapper;
+        ExtFunctions["*MayWarn"] = &MulWrapper;
+        ExtFunctions["MulMayWarn"] = &MulWrapper;
+        ExtFunctions["/"] = &DivWrapper;
+        ExtFunctions["Div"] = &DivWrapper;
+        ExtFunctions["CheckedDiv"] = &DivWrapper;
+        ExtFunctions["/MayWarn"] = &DivWrapper;
+        ExtFunctions["DivMayWarn"] = &DivWrapper;
+        ExtFunctions["%"] = &ModWrapper;
+        ExtFunctions["Mod"] = &ModWrapper;
+        ExtFunctions["CheckedMod"] = &ModWrapper;
+        ExtFunctions["%MayWarn"] = &ModWrapper;
+        ExtFunctions["ModMayWarn"] = &ModWrapper;
         Functions["BitAnd"] = &BitOpsWrapper<2>;
         Functions["BitOr"] = &BitOpsWrapper<2>;
         Functions["BitXor"] = &BitOpsWrapper<2>;
@@ -15857,6 +16401,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AggrConcat"] = &AggrConcatWrapper;
         ExtFunctions["FulltextMatch"] = &FullTextBuiltinWrapper<false>;
         ExtFunctions["FulltextScore"] = &FullTextBuiltinWrapper<true>;
+        ExtFunctions["HybridRank"] = &HybridRankBuiltinWrapper;
         ExtFunctions["SqlConcat"] = &SqlConcatWrapper;
         ExtFunctions["Substring"] = &SubstringWrapper;
         ExtFunctions["Find"] = &FindWrapper;
@@ -15880,6 +16425,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Last"] = &ToOptionalWrapper;
         Functions["AsTagged"] = &AsTaggedWrapper;
         Functions["Untag"] = &UntagWrapper;
+        ExtFunctions["AsErased"] = &AsErasedWrapper;
+        ExtFunctions["PeekErased"] = &PeekErasedWrapper;
         Functions["And"] = &LogicalWrapper<false>;
         Functions["Or"] = &LogicalWrapper<false>;
         Functions["Xor"] = &LogicalWrapper<true>;
@@ -15934,13 +16481,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Merge"] = &ExtendWrapper;
         Functions["Extract"] = &ExtractWrapper;
         Functions["OrderedExtract"] = &ExtractWrapper;
-        Functions["UnionAll"] = &SelectOpWrapper;
-        Functions["UnionMerge"] = &SelectOpWrapper;
-        Functions["Union"] = &SelectOpWrapper;
-        Functions["IntersectAll"] = &SelectOpWrapper;
-        Functions["Intersect"] = &SelectOpWrapper;
-        Functions["ExceptAll"] = &SelectOpWrapper;
-        Functions["Except"] = &SelectOpWrapper;
+        ExtFunctions["UnionAll"] = &SelectOpWrapper;
+        ExtFunctions["UnionMerge"] = &SelectOpWrapper;
+        ExtFunctions["Union"] = &SelectOpWrapper;
+        ExtFunctions["IntersectAll"] = &SelectOpWrapper;
+        ExtFunctions["Intersect"] = &SelectOpWrapper;
+        ExtFunctions["ExceptAll"] = &SelectOpWrapper;
+        ExtFunctions["Except"] = &SelectOpWrapper;
         ExtFunctions["ListExtend"] = &ListExtendWrapper<false>;
         ExtFunctions["ListExtendStrict"] = &ListExtendWrapper<true>;
         Functions["ListUnionAll"] = &ListUnionAllWrapper;
@@ -15992,7 +16539,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ToBytes"] = &ToBytesWrapper;
         Functions["GroupByKey"] = &GroupByKeyWrapper;
         Functions["PartitionByKey"] = &PartitionByKeyWrapper;
-        Functions["PartitionsByKeys"] = &PartitionsByKeysWrapper;
+        Functions["PartitionsByKeys"] = &PartitionsByKeysWrapper<false>;
+        Functions["LPartitionsByKeys"] = &PartitionsByKeysWrapper<true>;
         Functions["Reverse"] = &ReverseWrapper;
         ExtFunctions["Skip"] = &TakeWrapperEx;
         ExtFunctions["Take"] = &TakeWrapperEx;
@@ -16128,12 +16676,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CommonJoinCore"] = &CommonJoinCoreWrapper;
         Functions["GraceJoinCore"] = &GraceJoinCoreWrapper;
         Functions["GraceSelfJoinCore"] = &GraceSelfJoinCoreWrapper;
+        Functions["ListJoinCore"] = &ListJoinCoreWrapper;
         Functions["CombineCore"] = &CombineCoreWrapper;
         Functions["GroupingCore"] = &GroupingCoreWrapper;
-        ExtFunctions["HoppingTraits"] = &HoppingTraitsWrapper;
-        Functions["HoppingCore"] = &HoppingCoreWrapper;
-        Functions["MultiHoppingCore"] = &MultiHoppingCoreWrapper;
-        Functions["EquiJoin"] = &EquiJoinWrapper;
+        ExtFunctions["EquiJoin"] = &EquiJoinWrapper;
         Functions["OptionalReduce"] = &OptionalReduceWrapper;
         ExtFunctions["OptionalItemType"] = &TypeArgWrapper<ETypeArgument::OptionalItem>;
         ExtFunctions["LinearItemType"] = &TypeArgWrapper<ETypeArgument::LinearItem>;
@@ -16209,16 +16755,18 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SqlAccess"] = &SqlAccessWrapper;
         Functions["SqlProcess"] = &SqlProcessWrapper;
         Functions["SqlReduce"] = &SqlReduceWrapper;
+        ExtFunctions["SqlCombine"] = &SqlCombineWrapper;
         Functions["SqlExternalFunction"] = &SqlExternalFunctionWrapper;
         Functions["SqlExtractKey"] = &SqlExtractKeyWrapper;
         Functions["SqlReduceUdf"] = &SqlReduceUdfWrapper;
+        Functions["SqlCombineInput"] = &SqlCombineInputWrapper;
         Functions["SqlProject"] = &SqlProjectWrapper;
         Functions["SqlTypeFromYson"] = &SqlTypeFromYsonWrapper;
         Functions["SqlColumnOrderFromYson"] = &SqlColumnOrderFromYsonWrapper;
         Functions["OrderedSqlProject"] = &SqlProjectWrapper;
         Functions["SqlProjectItem"] = &SqlProjectItemWrapper;
         Functions["SqlProjectStarItem"] = &SqlProjectItemWrapper;
-        Functions["PgSelf"] = &PgSelfWrapper;
+        Functions["PgSelf"] = &SqlSelfWrapper;
         Functions["PgStar"] = &SqlStarWrapper;
         Functions["PgQualifiedStar"] = &PgQualifiedStarWrapper;
         Functions["PgColumnRef"] = &SqlColumnRefWrapper;
@@ -16256,8 +16804,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGrouping"] = &SqlGroupingWrapper;
         Functions["PgGroupingSet"] = &SqlGroupingSetWrapper;
         Functions["PgToRecord"] = &PgToRecordWrapper;
-        Functions["PgIterate"] = &PgIterateWrapper;
-        Functions["PgIterateAll"] = &PgIterateWrapper;
+        Functions["PgIterate"] = &SqlIterateWrapper;
+        Functions["PgIterateAll"] = &SqlIterateWrapper;
         Functions["StructUnion"] = &StructMergeWrapper;
         Functions["StructIntersection"] = &StructMergeWrapper;
         Functions["StructDifference"] = &StructMergeWrapper;
@@ -16341,6 +16889,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PruneAdjacentKeys"] = &PruneKeysWrapper;
         Functions["PruneKeys"] = &PruneKeysWrapper;
 
+        Functions["DecimalIntegralAdd"] = &DecimalIntegralAdditiveWrapper;
+        Functions["DecimalIntegralSub"] = &DecimalIntegralAdditiveWrapper;
         Functions["DecimalDiv"] = &DecimalBinaryWrapper;
         Functions["DecimalMod"] = &DecimalBinaryWrapper;
         Functions["DecimalMul"] = &DecimalBinaryWrapper;
@@ -16422,6 +16972,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockOr"] = &BlockLogicalWrapper;
         Functions["BlockXor"] = &BlockLogicalWrapper;
         Functions["BlockNot"] = &BlockLogicalWrapper;
+        Functions["BlockGuess"] = &BlockGuessWrapper;
+        Functions["BlockWay"] = &BlockWayWrapper;
+        Functions["BlockVariant"] = &BlockVariantWrapper;
+        Functions["BlockVariantItem"] = &BlockVariantItemWrapper;
+        Functions["BlockDynamicVariant"] = &BlockDynamicVariantWrapper;
         Functions["BlockIf"] = &BlockIfWrapper;
         Functions["BlockJust"] = &BlockJustWrapper;
         Functions["BlockAsStruct"] = &BlockAsStructWrapper;
@@ -16468,6 +17023,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["RoundDown"] = &RoundWrapper;
         Functions["NextValue"] = &NextValueWrapper;
 
+        ExtFunctions["HoppingTraits"] = &HoppingTraitsWrapper;
+        Functions["HoppingCore"] = &HoppingCoreWrapper;
+        Functions["MultiHoppingCore"] = &MultiHoppingCoreWrapper;
         Functions["MatchRecognize"] = &MatchRecognizeWrapper;
         Functions["MatchRecognizeMeasuresCallables"] = &MatchRecognizeMeasuresCallablesWrapper;
         Functions["MatchRecognizeMeasuresCallable"] = &MatchRecognizeMeasuresCallableWrapper;
@@ -16477,6 +17035,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["MatchRecognizeDefines"] = &MatchRecognizeDefinesWrapper;
         ExtFunctions["MatchRecognizeCore"] = &MatchRecognizeCoreWrapper;
         Functions["TimeOrderRecover"] = &TimeOrderRecoverWrapper;
+        Functions["WatermarkGenerator"] = &WatermarkGeneratorWrapper;
 
         Functions["FromPg"] = &FromPgWrapper;
         Functions["ToPg"] = &ToPgWrapper;
@@ -16592,6 +17151,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["YqlValuesList"] = &SqlValuesListWrapper;
         Functions["YqlColumnRef"] = &SqlColumnRefWrapper;
         Functions["YqlSubLink"] = &SqlSubLinkWrapper;
+        Functions["YqlSelf"] = &SqlSelfWrapper;
         Functions["YqlStar"] = &SqlStarWrapper;
         Functions["YqlWhere"] = &SqlWhereWrapper;
         Functions["YqlSort"] = &SqlSortWrapper;
@@ -16599,6 +17159,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["YqlGroupRef"] = &SqlGroupRefWrapper;
         Functions["YqlGrouping"] = &SqlGroupingWrapper;
         Functions["YqlGroupingSet"] = &SqlGroupingSetWrapper;
+        Functions["YqlIterate"] = &SqlIterateWrapper;
+        Functions["YqlIterateAll"] = &SqlIterateWrapper;
         ExtFunctions["YqlAggFactory"] = &YqlAggFactoryWrapper;
         ExtFunctions["YqlAgg"] = &YqlAggWrapper;
         ExtFunctions["YqlWinFactory"] = &YqlWinFactoryWrapper;
@@ -16698,7 +17260,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return dataProvider.GetIntentDeterminationTransformer().Transform(input, output, ctx);
         }
 
-    private:
         const TTypeAnnotationContext& Types_;
     };
 
@@ -16767,6 +17328,17 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         IGraphTransformer::TStatus ValidateProviderWriteResult(const TExprNode::TPtr& input, TExprContext& ctx) {
             if (!input->GetTypeAnn() || input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Bad datasink write result"));
+                return TStatus::Error;
+            }
+            return TStatus::Ok;
+        }
+
+        IGraphTransformer::TStatus ValidateProviderMaterializeResult(const TExprNode::TPtr& input, TExprContext& ctx) {
+            if (!input->GetTypeAnn() ||
+                input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple ||
+                input->GetTypeAnn()->Cast<TTupleExprType>()->GetSize() != 2 ||
+                input->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[0]->GetKind() != ETypeAnnotationKind::World) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Bad datasink materialize result"));
                 return TStatus::Error;
             }
             return TStatus::Ok;
@@ -16897,12 +17469,14 @@ IGraphTransformer::TStatus ValidateProviders(const TExprNode::TPtr& node, TExprN
 
                     auto children = input->ChildrenList();
                     children[0] = ret;
+                    // clang-format off
                     auto sink = ctx.Builder(input->Pos())
                         .Callable("DataSink")
                             .Atom(0, x.first)
                             .Atom(1, x.second)
                         .Seal()
                         .Build();
+                    // clang-format on
 
                     children.insert(children.begin() + 1, sink);
                     ret = ctx.NewCallable(input->Pos(), CommitName, std::move(children));

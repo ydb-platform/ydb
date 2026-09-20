@@ -346,7 +346,7 @@ message TTableServiceConfig {
         reserved 1; // Old scheduler param
         reserved 2; // Old scheduler param
         reserved 3; // Old scheduler param
-        optional bool   AccountDefaultPool = 4 [ default = false ];
+        optional bool   AccountDefaultPool = 4 [ default = true ];
         optional uint64 UpdateFairShareMs = 5 [ default = 500 ];  // 0.5 sec
         optional uint64 MaxTaskDelayUs = 6 [ default = 3000000 ]; // 3.0 sec
         optional uint64 MinTaskDelayUs = 7 [ default = 10 ];

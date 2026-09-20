@@ -25,7 +25,6 @@
 #include <optional>
 #include <string>
 #include <type_traits>
-#include <unordered_map>
 
 namespace NKikimr::NMiniKQL {
 
@@ -37,9 +36,7 @@ class TStreamingAggregationFlowWrapperBase : public TStatefulFlowComputationNode
 
 protected:
     template <typename TValue>
-    using TMap = std::unordered_map<
-        NUdf::TUnboxedValuePod, TValue, TValueHasher, TValueEqual,
-        TMKQLAllocator<std::pair<const NUdf::TUnboxedValuePod, TValue>>>;
+    using TMap = TMKQLHashMap<NUdf::TUnboxedValuePod, TValue, TValueHasher, TValueEqual>;
 
 public:
     TStreamingAggregationFlowWrapperBase(

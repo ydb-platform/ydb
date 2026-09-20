@@ -106,7 +106,6 @@ bool TVacuumLogic::NeedLogSnaphot() {
     switch (State) {
         case EVacuumState::PendingFirstSnapshot:
         case EVacuumState::PendingSecondSnapshot:
-        case EVacuumState::PendingThirdSnapshot:
         case EVacuumState::PendingFinalSnapshot:
             return true;
         default:
@@ -130,11 +129,6 @@ void TVacuumLogic::OnMakeLogSnapshot(ui32 generation, ui32 step) {
         case EVacuumState::PendingSecondSnapshot: {
             SecondLogSnaphotStep = TGCTime(generation, step);
             ChangeState(EVacuumState::WaitSecondSnapshot);
-            break;
-        }
-        case EVacuumState::PendingThirdSnapshot: {
-            ThirdLogSnaphotStep = TGCTime(generation, step);
-            ChangeState(EVacuumState::WaitThirdSnapshot);
             break;
         }
         case EVacuumState::PendingFinalSnapshot: {
@@ -165,17 +159,11 @@ void TVacuumLogic::OnSnapshotCommited(ui32 generation, ui32 step, const TActorCo
         case EVacuumState::WaitSecondSnapshot: {
             if (SecondLogSnaphotStep <= TGCTime(generation, step)) {
                 Ops->Send(Owner->Tablet(), new TEvTablet::TEvGcForStepAckRequest(FirstLogSnaphotStep.Generation, FirstLogSnaphotStep.Step));
-                if (GcLogic->HasGarbageBefore(FirstLogSnaphotStep)) {
+                if (GcLogic->HasGarbageBefore(SecondLogSnaphotStep)) {
                     ChangeState(EVacuumState::WaitAllGCs);
                 } else {
                     ChangeState(EVacuumState::WaitLogGC);
                 }
-            }
-            break;
-        }
-        case EVacuumState::WaitThirdSnapshot: {
-            if (ThirdLogSnaphotStep <= TGCTime(generation, step)) {
-                ChangeState(GcLogic->HasGarbageBefore(SecondLogSnaphotStep) ? EVacuumState::WaitFinalGC : EVacuumState::PendingFinalSnapshot);
             }
             break;
         }
@@ -201,20 +189,14 @@ void TVacuumLogic::OnCollectedGarbage(const TActorContext& ctx) {
     }
     switch (State) {
         case EVacuumState::WaitAllGCs: {
-            if (!GcLogic->HasGarbageBefore(FirstLogSnaphotStep)) {
+            if (!GcLogic->HasGarbageBefore(SecondLogSnaphotStep)) {
                 ChangeState(EVacuumState::WaitLogGC);
             }
             break;
         }
         case EVacuumState::WaitTabletGC: {
-            if (!GcLogic->HasGarbageBefore(FirstLogSnaphotStep)) {
-                StartThirdSnapshot();
-            }
-            break;
-        }
-        case EVacuumState::WaitFinalGC: {
             if (!GcLogic->HasGarbageBefore(SecondLogSnaphotStep)) {
-                ChangeState(EVacuumState::PendingFinalSnapshot);
+                StartFinalSnapshot();
             }
             break;
         }
@@ -241,7 +223,7 @@ void TVacuumLogic::OnGcForStepAckResponse(ui32 generation, ui32 step, const TAct
         }
         case EVacuumState::WaitLogGC: {
             if (FirstLogSnaphotStep <= TGCTime(generation, step)) {
-                StartThirdSnapshot();
+                StartFinalSnapshot();
             }
             break;
         }
@@ -254,12 +236,10 @@ void TVacuumLogic::OnGcForStepAckResponse(ui32 generation, ui32 step, const TAct
 bool TVacuumLogic::NeedGC() {
     switch (State) {
         case EVacuumState::PendingSecondSnapshot:
+            return GcLogic->HasGarbageBefore(FirstLogSnaphotStep);
         case EVacuumState::WaitSecondSnapshot:
         case EVacuumState::WaitAllGCs:
         case EVacuumState::WaitTabletGC: {
-            return GcLogic->HasGarbageBefore(FirstLogSnaphotStep);
-        }
-        case EVacuumState::WaitFinalGC: {
             return GcLogic->HasGarbageBefore(SecondLogSnaphotStep);
         }
         default: {
@@ -283,8 +263,8 @@ void TVacuumLogic::CompleteVacuum(const TActorContext& ctx) {
 }
 
 
-void TVacuumLogic::StartThirdSnapshot() {
-    ChangeState(EVacuumState::PendingThirdSnapshot);
+void TVacuumLogic::StartFinalSnapshot() {
+    ChangeState(EVacuumState::PendingFinalSnapshot);
 }
 
 void TVacuumLogic::ChangeState(EVacuumState to) {

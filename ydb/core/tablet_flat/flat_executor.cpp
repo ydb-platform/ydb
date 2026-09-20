@@ -3423,6 +3423,7 @@ void TExecutor::Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorCo
     TActiveTransactionZone activeTransaction(this);
 
     GcLogic->OnConfirmSnapshot(step, ctx);
+    DriveVacuumGc(true);
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {

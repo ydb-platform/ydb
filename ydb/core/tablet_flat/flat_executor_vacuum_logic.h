@@ -24,9 +24,6 @@ public:
         WaitAllGCs,
         WaitTabletGC,
         WaitLogGC,
-        PendingThirdSnapshot,
-        WaitThirdSnapshot,
-        WaitFinalGC,
         PendingFinalSnapshot,
         WaitFinalSnapshot,
     };
@@ -52,7 +49,7 @@ public:
 
 private:
     void CompleteVacuum(const TActorContext& ctx);
-    void StartThirdSnapshot();
+    void StartFinalSnapshot();
     void ChangeState(EVacuumState to);
     bool UpdateMaxGeneration(TVacuumTag tag);
 
@@ -77,8 +74,6 @@ private:
     // two subsequent are snapshots required to force GC
     TGCTime FirstLogSnaphotStep;
     TGCTime SecondLogSnaphotStep;
-    // GC reaches a snapshot only after the next one commits, so the third lets everything before the second be collected.
-    TGCTime ThirdLogSnaphotStep;
     // Taken once nothing deleted before the second snapshot awaits GC, so a restart finds no old deletions to replay.
     TGCTime FinalLogSnaphotStep;
 };

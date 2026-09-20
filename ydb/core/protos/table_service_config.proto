@@ -415,7 +415,7 @@ message TTableServiceConfig {
 
     optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableNewRBO = 84 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableNewRBO = 84 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableOlapScalarApply = 86 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableOlapSubstringPushdown = 87 [default = true, (InvalidateCompileCache) = true];
@@ -472,7 +472,7 @@ message TTableServiceConfig {
 
     optional EBackportMode BackportMode = 108 [ default = All, (InvalidateCompileCache) = true];
 
-    optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableFallbackToYqlOptimizer = 109 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableWatermarks = 110 [default = true, (InvalidateCompileCache) = true];
 

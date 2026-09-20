@@ -164,8 +164,8 @@ class TWriteActorFixture : public TPqIoTestFixture {
 public:
     void Start(ui64 restoredPublicationId = 0, bool write = true) {
         Edge = CaSetup->Runtime->AllocateEdgeActor();
-        auto gateway = NTestUtils::CreateMockPqGateway();
-        gateway->GetDeferredPublishClientController().SetRequestHandler(
+        Gateway = NTestUtils::CreateMockPqGateway();
+        Gateway->GetDeferredPublishClientController().SetRequestHandler(
             [actorSystem = CaSetup->Runtime->GetActorSystem(0), edge = Edge](TPublicationRequest request) {
                 actorSystem->Send(edge, new TEvRequest(std::move(request)));
             });
@@ -176,7 +176,7 @@ public:
             settings.SetDeferredPublicationExtIdPrefix("query:execution");
             auto [sink, sinkActor] = CreateDqPqWriteActor(std::move(settings), 0, TCollectStatsLevel::None, TString("tx"), 7,
                 {}, Driver, CredentialsFactory, &actor.GetAsyncOutputCallbacks(),
-                Counters, gateway, false, DqPqDefaultFreeSpace, 3, false, true);
+                Counters, Gateway, false, DqPqDefaultFreeSpace, 3, false, true);
             actor.InitAsyncOutput(sink, sinkActor);
             Error = CaSetup->AsyncOutputPromises->Issue.GetFuture();
         });
@@ -250,8 +250,21 @@ public:
         UNIT_ASSERT_STRING_CONTAINS(Error.GetValue().ToOneLineString(), message);
     }
 
+    void FailWriteSession() {
+        Gateway->WaitWriteSession("topic")->AddCloseSessionEvent(EStatus::UNAVAILABLE);
+        AssertError("was closed. Status: UNAVAILABLE");
+    }
+
+    void AssertNoRequests() {
+        // The sink shares the fake compute actor's mailbox. Drain the reply
+        // before checking that it did not issue another SDK request.
+        CaSetup->Execute([](TFakeActor&) {});
+        UNIT_ASSERT(CaSetup->Runtime->CaptureMailboxEvents(Edge.Hint(), Edge.NodeId()).empty());
+    }
+
 private:
     TActorId Edge;
+    NTestUtils::IMockPqGateway::TPtr Gateway;
     const NMonitoring::TDynamicCounterPtr Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     NThreading::TFuture<TSinkState> SavedState;
     NThreading::TFuture<NDqProto::TCheckpoint> CommittedState;
@@ -404,6 +417,35 @@ Y_UNIT_TEST_SUITE(TDqPqWriteActor) {
         UNIT_ASSERT_VALUES_EQUAL(Counter("Listed"), 1);
         UNIT_ASSERT_VALUES_EQUAL(Counter("CancelRequests"), 1);
         UNIT_ASSERT_VALUES_EQUAL(Counter("Canceled"), 0);
+    }
+
+    Y_UNIT_TEST_TWIN_F(StopsAfterListReplyToFailedWriter, HasStalePublication, TWriteActorFixture) {
+        Start();
+        auto list = Request(EPublicationMethod::List);
+        FailWriteSession();
+
+        std::vector<NTopic::TPublicationSummary> publications;
+        if constexpr (HasStalePublication) {
+            publications.push_back({101, "query:execution:7:0:1:0", "query:execution:7:0"});
+        }
+        list->Get()->Reply(EStatus::SUCCESS, std::move(publications));
+        AssertNoRequests();
+    }
+
+    Y_UNIT_TEST_TWIN_F(StopsAfterCancelReplyToFailedWriter, HasMoreStalePublications, TWriteActorFixture) {
+        Start();
+        std::vector<NTopic::TPublicationSummary> publications = {
+            {101, "query:execution:7:0:1:0", "query:execution:7:0"},
+        };
+        if constexpr (HasMoreStalePublications) {
+            publications.push_back({102, "query:execution:7:0:2:0", "query:execution:7:0"});
+        }
+        Request(EPublicationMethod::List)->Get()->Reply(EStatus::SUCCESS, std::move(publications));
+        auto cancel = Request(EPublicationMethod::Cancel);
+        FailWriteSession();
+
+        cancel->Get()->Reply(EStatus::SUCCESS, {});
+        AssertNoRequests();
     }
 }
 

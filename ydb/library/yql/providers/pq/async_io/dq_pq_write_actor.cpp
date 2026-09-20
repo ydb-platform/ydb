@@ -888,6 +888,10 @@ private:
     }
 
     void Handle(TEvPrivate::TEvDeferredPublicationsListed::TPtr& ev) {
+        if (Failed) {
+            return;
+        }
+
         Metrics.LastListLatencyUs->Set(ev->Get()->Latency.MicroSeconds());
         Metrics.ListRequests->Inc();
 
@@ -902,6 +906,10 @@ private:
     }
 
     void Handle(TEvPrivate::TEvDeferredPublicationCanceled::TPtr& ev) {
+        if (Failed) {
+            return;
+        }
+
         Metrics.ReportCancelLatency(ev->Get()->Latency);
         Metrics.CancelRequests->Inc();
 

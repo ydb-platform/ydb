@@ -929,6 +929,32 @@ public:
         } else {
             Counters->WriteActorRemoteShardWrites->Inc();
         }
+
+        // Each message carries its own cookie and, while batches are being written
+        // (WRITE) or prepared (PREPARE, IMMEDIATE_COMMIT), only the answer echoing the
+        // last sent message's cookie is meaningful: results of messages superseded by
+        // a resend are ignored (the resend produces its own answer or a delivery
+        // problem). Two exceptions must pass:
+        //  - In COMMIT mode the rule must not apply: commit completions echo the
+        //    cookie of the prepare message whose round was already popped at Prepare
+        //    time, every participant shard (including lock-only ones without a
+        //    controller record) sends exactly one completion, and all of them must be
+        //    processed.
+        //  - (TODO: Fix this) Datashard gate rejections (e.g. STATUS_WRONG_SHARD_STATE for a shard
+        //    split/offlined behind the pipe) are not replies to a specific message:
+        //    they carry cookie 0 and must be processed to drive the re-resolve logic.
+        if (Mode != EMode::COMMIT) {
+            const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
+            if (ev->Cookie != 0 && (!metadata || metadata->Cookie != ev->Cookie)) {
+                YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",
+                    {"logPrefix", this->LogPrefix},
+                    {"shardID", ev->Get()->Record.GetOrigin()},
+                    {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
+                    {"cookie", ev->Cookie});
+                return;
+            }
+        }
+
         const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
 
@@ -1011,7 +1037,7 @@ public:
             } else if (AttachWriteSeqNum && Mode == EMode::WRITE) {
                 // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs.
                 // Retries are bounded in RetryShard before the write re-resolves and then fails.
-                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryShard(ev->Get()->Record.GetOrigin());
             } else {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
@@ -1366,9 +1392,14 @@ public:
                 {"shardId", shardId},
                 {"tablePath", TablePath},
                 {"sink", this->SelfId()});
-            RetryShard(shardId, metadata->Cookie);
+            RetryShard(shardId);
             return false;
         }
+
+        // Each outbound message, a first attempt or a retry, gets its own fresh cookie.
+        // Only the answer echoing the last sent message's cookie is processed, so the
+        // value is minted at send time (retries therefore advance the cookie as well).
+        const ui64 cookie = ShardedWriteController->AllocateMessageCookie(shardId);
 
         // BreakerQuerySpanId is set in AddAction during write phase, not here
 
@@ -1482,7 +1513,7 @@ public:
             {"lockNodeId", evWrite->Record.GetLockNodeId()},
             {"locks", locks},
             {"size", serializationResult.TotalDataSize},
-            {"cookie", metadata->Cookie},
+            {"cookie", cookie},
             {"operationsCount", evWrite->Record.OperationsSize()},
             {"isFinal", metadata->IsFinal},
             {"attempts", metadata->SendAttempts},
@@ -1496,15 +1527,15 @@ public:
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
             0,
-            metadata->Cookie,
+            cookie,
             NWilson::TTraceId(ParentTraceId));
 
-        ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
+        ShardedWriteController->OnMessageSent(shardId, cookie);
 
         return true;
     }
 
-    void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
+    void RetryShard(const ui64 shardId) {
         if (Mode != EMode::WRITE) {
             // At current time retries are only supported for WRITE mode.
             RuntimeError(
@@ -1518,11 +1549,10 @@ public:
 
         AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
-        if (!metadata || (ifCookieEqual && metadata->Cookie != ifCookieEqual)) {
-            YDB_LOG_INFO("Shard retry skipped because metadata was not found for the given cookie.",
+        if (!metadata) {
+            YDB_LOG_INFO("Shard retry skipped because metadata was not found.",
                 {"logPrefix", this->LogPrefix},
-                {"shardID", shardId},
-                {"cookie", ifCookieEqual.value_or(0)});
+                {"shardID", shardId});
             return;
         }
 
@@ -1578,7 +1608,7 @@ public:
         YDB_LOG_DEBUG("Retry Next",
             {"logPrefix", this->LogPrefix},
             {"shardID", shardId},
-            {"cookie", ifCookieEqual.value_or(0)},
+            {"cookie", metadata->Cookie},
             {"attempt", metadata->SendAttempts},
             {"delay", CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts)});
 
@@ -1616,7 +1646,7 @@ public:
         }
 
         if (InconsistentTx) {
-            RetryShard(ev->Get()->TabletId, std::nullopt);
+            RetryShard(ev->Get()->TabletId);
             return;
         }
 
@@ -1628,7 +1658,7 @@ public:
         // tablet generation restores the writer chain and answers once.
         if (AttachWriteSeqNum && Mode == EMode::WRITE) {
             // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs
-            RetryShard(ev->Get()->TabletId, std::nullopt);
+            RetryShard(ev->Get()->TabletId);
             return;
         }
 

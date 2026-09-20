@@ -1697,6 +1697,11 @@ public:
             return Cookie;
         }
 
+        ui64 AllocateCookie() {
+            Cookie = NextCookie++;
+            return Cookie;
+        }
+
         size_t GetBatchesInFlight() const {
             return BatchesInFlight;
         }
@@ -2087,6 +2092,12 @@ public:
         meta.NextOverloadSeqNo = shardInfo.GetOverloadSeqNo();
 
         return meta;
+    }
+
+    ui64 AllocateMessageCookie(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.GetShard(shardId);
+        AFL_ENSURE(!shardInfo.IsEmpty());
+        return shardInfo.AllocateCookie();
     }
 
     TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) override {

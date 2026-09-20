@@ -1520,8 +1520,7 @@ void TKafkaBalancerActor::SendJoinGroupResponseOk(const TActorContext& ctx, ui64
         }
 
         auto labels = BuildGroupLabels(Context, GroupId, "api.kafka.consumer_group.members_count");
-        std::optional<i64> memberCount;
-        memberCount = static_cast<i64>(WorkerStates.size());
+        std::optional<i64> memberCount = static_cast<i64>(WorkerStates.size());
         Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvGetGroupMemberCounter(
             std::move(labels), Context->ConnectionId, GroupId, memberCount));
     }

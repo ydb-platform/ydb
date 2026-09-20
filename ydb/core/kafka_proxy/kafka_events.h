@@ -305,11 +305,11 @@ struct TEvKafka {
         {}
     };
 
-    struct TEvGroupMemberCounter : public TEventLocal<TEvGroupMemberCounter, EvGroupMemberCounter> {
+    struct TEvSaveGroupMemberCounter : public TEventLocal<TEvSaveGroupMemberCounter, EvGroupMemberCounter> {
         NMonitoring::TDynamicCounters::TCounterPtr Counter;
         TString GroupId;
 
-        TEvGroupMemberCounter(NMonitoring::TDynamicCounters::TCounterPtr counter, TString groupId)
+        TEvSaveGroupMemberCounter(NMonitoring::TDynamicCounters::TCounterPtr counter, TString groupId)
             : Counter(std::move(counter))
             , GroupId(std::move(groupId))
         {}

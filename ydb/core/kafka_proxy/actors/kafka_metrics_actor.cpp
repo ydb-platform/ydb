@@ -85,7 +85,7 @@ namespace NKafka {
         if (req.MemberCount.has_value()) {
             counter->Set(*req.MemberCount);
         }
-        Send(req.ConnectionId, new TEvKafka::TEvGroupMemberCounter(std::move(counter), req.GroupId));
+        Send(req.ConnectionId, new TEvKafka::TEvSaveGroupMemberCounter(std::move(counter), req.GroupId));
     }
 
 

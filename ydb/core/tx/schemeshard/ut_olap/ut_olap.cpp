@@ -2544,6 +2544,24 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         )";
     }
 
+    static TString AlterUpsertMinMaxIndex(const TString& tableName, const TString& indexName,
+            const TString& columnName) {
+        return TStringBuilder() << R"(
+            Name: ")" << tableName << R"("
+            AlterSchema {
+                UpsertIndexes {
+                    Name: ")" << indexName << R"("
+                    StorageId: "__LOCAL_METADATA"
+                    InheritPortionStorage: false
+                    ClassName: "MIN_MAX"
+                    MinMaxIndex {
+                        ColumnName: ")" << columnName << R"("
+                    }
+                }
+            }
+        )";
+    }
+
     Y_UNIT_TEST(CreateColumnTableOk) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -2940,6 +2958,63 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableLifecycle/bloom_data_v2");
             TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+    }
+
+    Y_UNIT_TEST(AlterColumnTableAddMinMaxIndexRejectedAtPathsLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "c_int64" Type: "Int64" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 pathsBefore = DescribePath(runtime, "/MyRoot")
+            .GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TSchemeLimits limits;
+        limits.MaxPaths = 1;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertMinMaxIndex("Table", "idx_c_int64_minmax", "c_int64"),
+            {{NKikimrScheme::StatusResourceExhausted, "paths count limit exceeded"}});
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription().GetPathsInside(),
+            pathsBefore);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_c_int64_minmax"), {NLs::PathNotExist});
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/Table");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_VALUES_EQUAL(schema.IndexesSize(), 0);
+        }
+
+        limits.MaxPaths = pathsBefore + 100;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertMinMaxIndex("Table", "idx_c_int64_minmax", "c_int64"));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_c_int64_minmax"), {NLs::PathExist});
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/Table");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_VALUES_EQUAL(schema.IndexesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetIndexes(0).GetName(), "idx_c_int64_minmax");
         }
     }
 

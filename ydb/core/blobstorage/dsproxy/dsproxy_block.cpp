@@ -14,7 +14,7 @@ namespace NKikimr {
 class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     const ui64 TabletId;
     const ui32 Generation;
-    const ui32 Version;
+    const std::optional<ui32> Version;
     const TInstant Deadline;
     const ui64 IssuerGuid;
     const TWriteSource WriteSource;

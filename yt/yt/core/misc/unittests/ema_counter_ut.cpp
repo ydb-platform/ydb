@@ -178,6 +178,99 @@ TEST(TEmaCounterTest, Merge)
     EXPECT_NEAR(0.968, base.WindowRates[0], 1e-3);
 }
 
+TEST(TEmaCounterTest, SameTimestampUpdatesMatchOneBatch)
+{
+    TEmaCounter<i64> incremental({TDuration::Seconds(30), TDuration::Minutes(5)});
+    auto batched = incremental;
+    auto now = TInstant::Seconds(1000);
+    incremental.Update(0, now);
+    batched.Update(0, now);
+    i64 count = 0;
+    for (int batch = 1; batch <= 100; ++batch) {
+        now += TDuration::Seconds(batch % 7 + 1);
+        for (int row = 0; row < batch; ++row) {
+            incremental.Update(++count, now);
+        }
+        batched.Update(count, now);
+        EXPECT_EQ(incremental.Count, batched.Count);
+        EXPECT_NEAR(incremental.ImmediateRate, batched.ImmediateRate, 1e-10);
+        for (int window = 0; window < std::ssize(incremental.WindowDurations); ++window) {
+            EXPECT_NEAR(incremental.WindowRates[window], batched.WindowRates[window], 1e-10);
+        }
+    }
+    // The same increments must not leak into the next empty interval.
+    now += TDuration::Seconds(30);
+    incremental.Update(count, now);
+    batched.Update(count, now);
+    EXPECT_EQ(incremental.ImmediateRate, 0);
+    ASSERT_TRUE(incremental.GetRate(0, now));
+    ASSERT_TRUE(batched.GetRate(0, now));
+    EXPECT_NEAR(*incremental.GetRate(0, now), *batched.GetRate(0, now), 1e-10);
+}
+
+TEST(TEmaCounterTest, SameTimestampAtInitializationAndObsoleteUpdates)
+{
+    auto start = TInstant::Seconds(1000);
+    TEmaCounter<i64> counter({TDuration::Seconds(30)});
+    counter.Update(10, start);
+    counter.Update(20, start);
+    EXPECT_EQ(counter.Count, 20);
+    EXPECT_EQ(counter.ImmediateRate, 0);
+    EXPECT_EQ(counter.WindowRates[0], 0);
+
+    counter.Update(50, start + TDuration::Seconds(30));
+    EXPECT_EQ(counter.ImmediateRate, 1);
+    auto rate = counter.WindowRates[0];
+
+    counter.Update(500, start);
+    counter.Update(50, start + TDuration::Seconds(30));
+    EXPECT_EQ(counter.Count, 50);
+    EXPECT_EQ(counter.WindowRates[0], rate);
+}
+
+TEST(TEmaCounterTest, SameTimestampFloatingPointAndCounterReset)
+{
+    auto start = TInstant::Seconds(1000);
+    TEmaCounter<double> counter({TDuration::Seconds(30)});
+    counter.Update(10, start);
+    counter.Update(0, start + TDuration::Seconds(30));
+    EXPECT_EQ(counter.ImmediateRate, 0);
+    counter.Update(0.5, start + TDuration::Seconds(30));
+    EXPECT_NEAR(counter.ImmediateRate, 0.5 / 30, 1e-10);
+    counter.Update(1.5, start + TDuration::Seconds(60));
+    EXPECT_NEAR(counter.ImmediateRate, 1.0 / 30, 1e-10);
+}
+
+TEST(TEmaCounterTest, SameTimestampAfterMerging)
+{
+    for (bool useMerge : {false, true}) {
+        SCOPED_TRACE(useMerge);
+        auto start = TInstant::Seconds(1000);
+        TEmaCounter<i64> counter({TDuration::Seconds(30), TDuration::Minutes(5)});
+        auto other = counter;
+        counter.Update(0, start);
+        other.Update(0, start);
+        counter.Update(30, start + TDuration::Seconds(30));
+        other.Update(15, start + TDuration::Seconds(15));
+
+        if (useMerge) {
+            counter.Merge(other, start + TDuration::Seconds(30));
+        } else {
+            counter += other;
+        }
+        auto immediateRate = counter.ImmediateRate;
+        auto windowRates = counter.WindowRates;
+
+        counter.Update(55, start + TDuration::Seconds(30));
+        EXPECT_EQ(counter.Count, 55);
+        EXPECT_EQ(counter.ImmediateRate, immediateRate);
+        EXPECT_EQ(counter.WindowRates, windowRates);
+
+        counter.Update(75, start + TDuration::Seconds(60));
+        EXPECT_EQ(counter.ImmediateRate, 20.0 / 30);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

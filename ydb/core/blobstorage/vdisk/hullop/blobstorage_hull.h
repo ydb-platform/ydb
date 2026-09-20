@@ -8,6 +8,8 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 
+#include <optional>
+
 namespace NKikimr {
 
     class TLsnMngr;
@@ -143,10 +145,14 @@ namespace NKikimr {
 
         ///////////////// COMPLETE TABLE DELETION ///////////////////////////////
         // Complete table deletion is implemented as 2 commands:
-        // 1. Set BLOCK with gen=Max<ui32>()
+        // 1. Set BLOCK with gen=Max<ui32>() -- this is the persistent tombstone
         // 2. Set BARRIER (i.e. GarbageCollect) with collectGeneration=Max<ui32>() and
         //    collectStep=Max<ui32>(). For this command perGenCounter must also be
         //    set to Max<ui32>()
+        //
+        // Once the Max generation block is present, the tablet is treated as fully
+        // deleted: no blob data is needed, and compaction may drop every barrier
+        // record for that tablet. The Max generation block itself is kept.
 
         ////////////////////////////////////////////////////////////////////////
         // Blocks
@@ -157,7 +163,7 @@ namespace NKikimr {
                 ui64 tabletID,
                 ui32 gen,
                 ui64 issuerGuid,
-                ui32 version,
+                std::optional<ui32> version,
                 TWriteSource writeSource,
                 ui32 *actGen,
                 TLsnSeg *seg,
@@ -222,6 +228,8 @@ namespace NKikimr {
         ui64 GetLogoBlobSyncDataSizeInFlight() const { return LogoBlobSyncDataSizeInFlight; }
         ui64 GetBlockSyncDataSizeInFlight() const { return BlockSyncDataSizeInFlight; }
         ui64 GetBarrierSyncDataSizeInFlight() const { return BarrierSyncDataSizeInFlight; }
+
+        TFreshSpaceDebt GetFreshSpaceDebt() const;
 
         ///////////////// STATUS REQUEST ////////////////////////////////////////////
         void StatusRequest(const TActorContext &ctx, TEvLocalStatusResult *result);

@@ -78,8 +78,9 @@ public:
         SendDatabaseNavigate();
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[" << Settings_.Database << "] ";
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"database", Settings_.Database});
     }
 
     void OnException(const std::exception& exc) override {

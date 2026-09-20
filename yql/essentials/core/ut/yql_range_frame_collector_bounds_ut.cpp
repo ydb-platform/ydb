@@ -8,9 +8,11 @@ namespace NYql::NWindow {
 namespace {
 
 TExprNode::TPtr MakeAtomNode(TExprContext& ctx, const TString& value) {
+    // clang-format off
     return ctx.Builder(TPositionHandle())
         .Atom(value)
         .Build();
+    // clang-format on
 }
 
 TWindowFrameSettingWithOffset MakeOffset(TExprNode::TPtr node, TMaybe<TNodeTransform> caster = Nothing(), TMaybe<ui32> procId = Nothing()) {

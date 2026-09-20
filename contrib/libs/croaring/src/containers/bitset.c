@@ -59,8 +59,7 @@ void bitset_container_set_all(bitset_container_t *bitset) {
     bitset->cardinality = (1 << 16);
 }
 
-/* Create a new bitset. Return NULL in case of failure. */
-bitset_container_t *bitset_container_create(void) {
+static bitset_container_t *bitset_container_allocate(void) {
     bitset_container_t *bitset =
         (bitset_container_t *)roaring_malloc(sizeof(bitset_container_t));
 
@@ -85,7 +84,23 @@ bitset_container_t *bitset_container_create(void) {
         roaring_free(bitset);
         return NULL;
     }
-    bitset_container_clear(bitset);
+    return bitset;
+}
+
+/* Create a new bitset. Return NULL in case of failure. */
+bitset_container_t *bitset_container_create(void) {
+    bitset_container_t *bitset = bitset_container_allocate();
+    if (bitset) {
+        bitset_container_clear(bitset);
+    }
+    return bitset;
+}
+
+bitset_container_t *bitset_container_create_uninitialized(void) {
+    bitset_container_t *bitset = bitset_container_allocate();
+    if (bitset) {
+        bitset->cardinality = 0;
+    }
     return bitset;
 }
 
@@ -937,7 +952,11 @@ int bitset_container_to_uint32_array(
 #if CROARING_IS_X64
    int support = croaring_hardware_support();
 #if CROARING_COMPILER_SUPPORTS_AVX512
-   if(( support & ROARING_SUPPORTS_AVX512 ) &&  (bc->cardinality >= 8192))  // heuristic
+   // Unlike the AVX2 kernel, the AVX-512 one needs no cardinality heuristic:
+   // it skips empty words and only stores the blocks that carry a value, so it
+   // beat the scalar loop at every cardinality measured from 16 to 65536 (on
+   // an Emerald Rapids Xeon, 1.3x at 512 values, 6x at 4096, 7.5x at 8192).
+   if( support & ROARING_SUPPORTS_AVX512 )
 		return (int) bitset_extract_setbits_avx512(bc->words,
                 BITSET_CONTAINER_SIZE_IN_WORDS, out, bc->cardinality, base);
    else

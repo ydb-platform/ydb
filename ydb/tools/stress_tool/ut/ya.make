@@ -13,6 +13,7 @@ SRC(
 
 PEERDIR(
     ydb/apps/version
+    ydb/core/load_test/ddisk
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
     yql/essentials/minikql/comp_nodes/llvm16

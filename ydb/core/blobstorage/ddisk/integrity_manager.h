@@ -39,17 +39,15 @@ namespace NKikimr::NDDisk {
 // generation counter) is persisted in the DDisk chunk-map log by the actor and restored on boot
 // via ApplyMappingSnapshot(). A durable increment always references a fully formatted extent (and,
 // when it carries an IntegrityChunk, a fully formatted chunk), so every restored chunk is Ready.
-// The used-block bitmaps and checksums still live in memory only; extent formatting writes valid
-// TIntegrityBlock images with empty bitmaps, and TIntegrityBlocks are not rewritten on data
-// writes. Restored extents therefore have unknown bitmaps: reads of them pass through unchanged
-// until a later phase restores bitmaps from the extents on disk; new writes are tracked again.
+// Extent formatting writes valid TIntegrityBlock images with empty bitmaps. Data writes persist
+// updated bitmaps, checksums and digests in ping-pong TIntegrityBlock pairs. Restored extents start
+// with unknown bitmaps and lazily load the pairs needed by reads or writes.
 //
 // Memory: used-block bitmaps are small (1 bit per 4 KiB data block) and are kept per extent,
-// never evicted - reads depend on them. Checksums and digests are kept sparsely, one
-// TIntegrityBlockState (~4 KiB) per TIntegrityBlock actually written with checksums, bounded by a
-// manager-wide LRU budget. Evicting a state loses its checksums and its digest together, which
-// preserves the invariant "digest = XOR of contributions of the currently known checksums" - the
-// same information loss a checksum-less overwrite already produces.
+// never evicted - reads depend on them. The expected digest and current slot are also pinned per
+// pair so an acknowledged lost metadata write remains detectable after cache eviction. Checksum
+// arrays are kept sparsely, one TIntegrityBlockState (~4 KiB) per resident TIntegrityBlock,
+// bounded by a manager-wide LRU budget and loaded again from the slot pair after eviction.
 //
 // On-disk layout of an integrity chunk (same size as a data chunk):
 //   [0, IntegrityChunkHeaderRegionSize)  - TIntegrityChunkHeader replicas
@@ -178,7 +176,7 @@ public:
 public:
     // Geometry is derived from the data chunk size so that unit tests can use small chunks.
     // ddiskId / pdiskGuid are stamped into TIntegrityChunkHeader. checksumCacheBytes bounds the
-    // total memory spent on cached checksums/digests (see the memory note above).
+    // memory spent on evictable checksum arrays and their cache state (see the memory note above).
     TIntegrityManager(ui64 dataChunkSizeBytes, ui64 ddiskId, ui64 pdiskGuid,
         ui64 checksumCacheBytes = DefaultChecksumCacheBytes);
 
@@ -314,9 +312,8 @@ private:
         Ready,
     };
 
-    // Checksums and digest of one TIntegrityBlock (ChecksumsPerIntegrityBlock data blocks),
-    // allocated lazily on the first checksummed write to its range and evictable via the
-    // manager-wide LRU (checksums, Known and Digest live and die together).
+    // Checksums of one TIntegrityBlock (ChecksumsPerIntegrityBlock data blocks), allocated lazily
+    // on the first checksummed write to its range and evictable via the manager-wide LRU.
     struct TIntegrityBlockState : TIntrusiveListItem<TIntegrityBlockState> {
         TDataChunkKey Key;   // owning extent, for eviction
         ui32 PairIdx = 0;    // TIntegrityBlock pair index within the extent
@@ -375,7 +372,7 @@ private:
         // One pinned entry per on-disk A/B pair.
         std::vector<TPairMeta> Pairs;
         absl::flat_hash_map<ui32, TPairRuntime> PairRuntime;
-        // Sparse per-TIntegrityBlock checksum/digest states, keyed by TIntegrityBlock index.
+        // Sparse per-TIntegrityBlock checksum states, keyed by TIntegrityBlock index.
         absl::flat_hash_map<ui32, std::unique_ptr<TIntegrityBlockState>> BlockStates;
     };
 

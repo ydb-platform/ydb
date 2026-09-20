@@ -1,14 +1,18 @@
 #include "partition_direct_actor.h"
 
+#include "bsc_proxy.h"
 #include "load_actor_adapter.h"
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
@@ -21,6 +25,7 @@
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/mon.h>
 
 #include <util/system/fs.h>
@@ -128,6 +133,7 @@ void TPartitionActor::DefaultSignalTabletActive(const TActorContext& ctx)
 
 void TPartitionActor::CleanupResources(const TActorContext& ctx)
 {
+    UnregisterFrontendVolume(ctx);
     if (LoadActorAdapter) {
         ctx.Send(LoadActorAdapter, new TEvents::TEvPoisonPill());
         LoadActorAdapter = {};
@@ -138,13 +144,9 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
         CleanupActor = {};
     }
 
-    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
-    if (AddHostInFlight) {
-        NTabletPipe::CloseAndForgetClient(
-            SelfId(),
-            AddHostInFlight->BSPipeClient);
-        AddHostInFlight.reset();
-    }
+    StopBscProxy(ctx);
+    AddHostInFlight.reset();
+    RemoveHostInFlight.reset();
 
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
@@ -159,7 +161,8 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
          executingDirtyMapPromises =
              std::move(ExecutingUpdateDirtyMapStatePromises),
          pendingDirtyMapRequests =
-             std::move(PendingUpdateDirtyMapStateRequests)]() mutable
+             std::move(PendingUpdateDirtyMapStateRequests),
+         touchedVChunks = std::move(TouchedVChunks)]() mutable
     {
         for (auto& promise: executingConfigPromises) {
             promise.TrySetValue(EPersistResult::Cancelled);
@@ -174,6 +177,8 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
         for (auto& req: pendingDirtyMapRequests) {
             req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
         }
+
+        touchedVChunks.OnSaveInterrupted();
     };
 
     if (FastPathService) {
@@ -189,6 +194,24 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
     } else {
         failUpdateRequests();
     }
+}
+
+void TPartitionActor::UnregisterFrontendVolume(const TActorContext& ctx)
+{
+    FrontendRegistrationClosed = true;
+    if (FrontendRegistrationId.empty()) {
+        return;
+    }
+    if (auto& frontend = GetNbsService()->Frontend; frontend) {
+        frontend->UnregisterVolume(FrontendRegistrationId);
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Frontend unregister requested: registrationId=%s",
+            LogTitle.GetWithTime().c_str(),
+            FrontendRegistrationId.c_str());
+    }
+    FrontendRegistrationId.clear();
 }
 
 void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
@@ -307,13 +330,14 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
     Y_ABORT_UNLESS(nbsService->Scheduler);
     Y_ABORT_UNLESS(nbsService->Timer);
 
+    const ui32 volumeDbgCount = DefaultVolumeDirectBlockGroupCount;
     TVector<IDirectBlockGroupPtr> directBlockGroups;
-    directBlockGroups.reserve(DirectBlockGroupsCount);
+    auto arenaAllocator = CreateArenaAllocator();
+    directBlockGroups.reserve(volumeDbgCount);
     TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls;
-    chaosInjectorControls.reserve(DirectBlockGroupsCount);
+    chaosInjectorControls.reserve(volumeDbgCount);
 
-    auto executors =
-        nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
+    auto executors = nbsService->ExecutorPool.GetExecutors(volumeDbgCount);
 
     // Session counters are aggregated at the disk level: all direct block
     // groups of this tablet share the same counters chain, so per-group
@@ -323,7 +347,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
         StorageConfig->GetDDiskPoolName(),
         DiskDescription);
 
-    for (ui32 dbgIndex = 0; dbgIndex < DirectBlockGroupsCount; dbgIndex++) {
+    for (ui32 dbgIndex = 0; dbgIndex < volumeDbgCount; dbgIndex++) {
         const auto& conn =
             DirectBlockGroupsConnections.GetDirectBlockGroupConnections(
                 dbgIndex);
@@ -337,6 +361,8 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             persistentBufferDDiskIds.push_back(NBsController::TDDiskId(
                 connection.GetPersistentBufferDDiskId()));
         }
+        // Temporarily preserving original behavior
+        TVector<EHostHealth> hostHealths(ddiskIds.size(), EHostHealth::Online);
 
         const bool enableChecksums =
             nbsService->StorageConfig->GetEnableChecksums();
@@ -355,6 +381,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
         transport = std::move(chaosInjector);
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
+            arenaAllocator,
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
             executors[dbgIndex],
@@ -363,6 +390,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
+            std::move(hostHealths),
             conn.GetDBGConnectionsConfigGeneration(),
             std::move(transport),
             dbgCountersRoot);
@@ -380,6 +408,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
         std::move(directBlockGroups),
         std::move(chaosInjectorControls),
         vChunkConfigs,
+        &TouchedVChunks,
         dirtyMapStates,
         StorageConfig,
         nbsService->Scheduler,
@@ -389,31 +418,25 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void TPartitionActor::CreateBSControllerPipeClient(
-    const NActors::TActorContext& ctx)
-{
-    BSControllerPipeClient = ctx.Register(
-        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
-}
-
 void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 {
-    CreateBSControllerPipeClient(ctx);
-
     auto request = MakeAllocateDDiskBlockGroupRequest();
 
-    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-    const ui64 regionsCount =
-        AlignUp(blockCount * VolumeConfig.GetBlockSize(), RegionSize) /
-        RegionSize;
+    const ui64 regionsCount = GetRegionCount(
+        VolumeConfig.GetPartitions(0).GetBlockCount(),
+        VolumeConfig.GetBlockSize(),
+        StorageConfig->GetVChunkSize());
+    const ui32 vChunkPerDbgCount = GetVChunkCountPerDirectBlockGroup(
+        regionsCount,
+        DefaultVolumeDirectBlockGroupCount);
 
-    for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
+    for (size_t i = 0; i < DefaultVolumeDirectBlockGroupCount; i++) {
         auto* query = request->Record.AddQueries();
         query->SetDirectBlockGroupId(i);
-        query->SetTargetNumVChunks(regionsCount);
+        query->SetTargetNumVChunks(vChunkPerDbgCount);
     }
 
-    NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
+    SendToBsc(ctx, THolder<IEventBase>(request.release()));
 }
 
 std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
@@ -482,23 +505,54 @@ void TPartitionActor::HandleFastPathServiceReady(
         "%s All DBGs reached initial locked quorum, opening endpoint",
         LogTitle.GetWithTime().c_str());
 
-    // Re-send the BSC request for an add-host in flight at the last restart
-    // (no live add can be in flight this early). BSController is idempotent.
+    // Re-send the BSC request for a membership op in flight at the last
+    // restart (no live op can be in flight this early). Both are idempotent.
     if (AddHostInFlight.has_value()) {
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s Replaying in-flight AddHost dbgId=%lu newHostIndex=%s",
+            "%s Replaying in-flight AddHost dbgId=%lu liveHostCount=%u",
             LogTitle.GetWithTime().c_str(),
             AddHostInFlight->DirectBlockGroupId,
-            PrintHostIndex(AddHostInFlight->NewHostIndex).c_str());
-        SendAllocateDDiskForAddHost(
+            AddHostInFlight->LiveHostCount);
+        SendAllocateDDiskForAddHost(ctx, AddHostInFlight->DirectBlockGroupId);
+    }
+
+    if (RemoveHostInFlight.has_value()) {
+        LOG_INFO(
             ctx,
-            AddHostInFlight->DirectBlockGroupId,
-            AddHostInFlight->NewHostIndex);
+            NKikimrServices::NBS_PARTITION,
+            "%s Replaying in-flight RemoveHost dbgId=%lu ddisk=%s",
+            LogTitle.GetWithTime().c_str(),
+            RemoveHostInFlight->DirectBlockGroupId,
+            RemoveHostInFlight->DDiskId.ShortDebugString().c_str());
+        SendRemoveHostRequest(ctx);
     }
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
+
+    if (auto& frontend = GetNbsService()->Frontend;
+        frontend && !FrontendRegistrationClosed)
+    {
+        auto registration = frontend->RegisterVolume(VolumeConfig);
+        Y_ABORT_UNLESS(
+            !HasError(registration),
+            "%s Could not publish frontend metadata: %s",
+            LogTitle.GetWithTime().c_str(),
+            FormatError(registration.GetError()).c_str());
+
+        FrontendRegistrationId = registration.ExtractResult();
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Frontend metadata published: registrationId=%s "
+            "blockSize=%u blocksCount=%llu",
+            LogTitle.GetWithTime().c_str(),
+            FrontendRegistrationId.c_str(),
+            VolumeConfig.GetBlockSize(),
+            static_cast<unsigned long long>(
+                VolumeConfig.GetPartitions(0).GetBlockCount()));
+    }
 
     {
         auto service = GetNbsService();
@@ -533,6 +587,8 @@ void TPartitionActor::HandleFastPathServiceShutdown(
     const NActors::TActorContext& ctx)
 {
     Y_UNUSED(ev);
+
+    UnregisterFrontendVolume(ctx);
 
     if (!FastPathService) {
         LOG_INFO(
@@ -627,8 +683,10 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         ev->Get()->Record.DebugString().data());
 
     // The first allocation response sets up the group; any later one is the
-    // result of an add-host request.
-    if (DDiskBlockGroupAllocated) {
+    // result of the single in-flight membership op (add xor remove).
+    if (RemoveHostInFlight.has_value()) {
+        HandleRemoveHostAllocationResult(ev, ctx);
+    } else if (DDiskBlockGroupAllocated) {
         HandleAddHostAllocationResult(ev, ctx);
     } else {
         HandleInitialAllocationResult(ev, ctx);
@@ -642,11 +700,8 @@ void TPartitionActor::HandleInitialAllocationResult(
     const auto* msg = ev->Get();
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
-        Y_ABORT_UNLESS(
-            msg->Record.GetResponses().size() == DirectBlockGroupsCount);
-
         TDirectBlockGroupsConnections ids;
-        for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
+        for (size_t i = 0; i < VChunkPerRegionCount; i++) {
             auto* directBlockGroupConnections =
                 ids.AddDirectBlockGroupConnections();
             const auto& response = msg->Record.GetResponses()[i];
@@ -671,8 +726,6 @@ void TPartitionActor::HandleInitialAllocationResult(
             msg->Record.GetStatus(),
             msg->Record.GetErrorReason().data());
     }
-
-    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
 }
 
 void TPartitionActor::HandleGetLoadActorAdapterActorId(
@@ -722,29 +775,25 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         msg->Record.GetVolumeConfig().GetVersion());
 
     if (DDiskBlockGroupAllocated) {
-        // The config is already applied and the partition cannot be
-        // reconfigured while it serves IO. Schemeshard aborts on any status
-        // other than OK or ERROR_UPDATE_IN_PROGRESS, so answer a repeated
-        // delivery of the applied config idempotently and report a newer one
-        // as not applied yet.
+        // The config is already applied. SchemeShard aborts on any status
+        // other than OK or ERROR_UPDATE_IN_PROGRESS. Answer a repeated
+        // delivery of the applied config and a newer alter (resize) with OK.
+        // Capacity is not grown yet: do not persist or reallocate, so IO
+        // bounds stay at the original size until grow is implemented.
         const ui64 appliedVersion = VolumeConfig.GetVersion();
         const ui64 requestedVersion =
             msg->Record.GetVolumeConfig().GetVersion();
-        const auto status = requestedVersion <= appliedVersion
-                                ? NKikimrBlockStore::OK
-                                : NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS;
 
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "%s Already has ddisk connections, applied version %lu, "
-            "requested version %lu, status %s",
+            "requested version %lu, status OK",
             LogTitle.GetWithTime().c_str(),
             appliedVersion,
-            requestedVersion,
-            NKikimrBlockStore::EStatus_Name(status).c_str());
+            requestedVersion);
 
-        ReplyUpdateVolumeConfig(ctx, ev, status);
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
         return;
     }
 
@@ -839,7 +888,48 @@ void TPartitionActor::HandleUpdateDirtyMapState(
     }
 }
 
+void TPartitionActor::HandleSetVChunkTouched(
+    const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    if (TouchedVChunks.Add(
+            ev->Get()->VChunkIndex,
+            std::move(ev->Get()->UpdateCompleted)))
+    {
+        ExecuteTx(ctx, CreateTx<TSetVChunkTouched>(TouchedVChunks.BeginSave()));
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
+
+void TPartitionActor::SendToBsc(
+    const TActorContext& ctx,
+    THolder<IEventBase> request,
+    ui64 cookie)
+{
+    if (CurrentStateFunc() == &TThis::StateDelete) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip BSC send during delete",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
+
+    if (!BscProxy) {
+        BscProxy = ctx.Register(new TBscProxy(SelfId(), LogTitle));
+    }
+    ctx.Send(BscProxy, new TBscProxy::TEvSend(std::move(request)), 0, cookie);
+}
+
+void TPartitionActor::StopBscProxy(const TActorContext& ctx)
+{
+    if (!BscProxy) {
+        return;
+    }
+    ctx.Send(BscProxy, new TEvents::TEvPoisonPill());
+    BscProxy = {};
+}
 
 void TPartitionActor::HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev)
 {
@@ -893,9 +983,18 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvUpdateDirtyMapState,
             HandleUpdateDirtyMapState);
         HFunc(
+            TEvPartitionDirectPrivate::TEvSetVChunkTouched,
+            HandleSetVChunkTouched);
+        HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
         HFunc(TEvPartitionDirectPrivate::TEvAddHostToDBG, HandleAddHostToDBG);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvPersistHostHealth,
+            HandlePersistHostHealth);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvRemoveHostFromDBG,
+            HandleRemoveHostFromDBG);
 
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceShutdown,
@@ -964,6 +1063,19 @@ TAllocationResponse ValidateAllocationResponse(
     }
 
     return {.Group = &allocated};
+}
+
+size_t LiveHostCount(
+    const ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupConnections&
+        connections)
+{
+    size_t liveCount = 0;
+    for (const auto& connection: connections.GetConnections()) {
+        if (!connection.GetRemovedFromBSC()) {
+            ++liveCount;
+        }
+    }
+    return liveCount;
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

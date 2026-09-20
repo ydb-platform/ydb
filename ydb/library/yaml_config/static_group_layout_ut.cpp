@@ -240,12 +240,15 @@ Y_UNIT_TEST_SUITE(StaticGroupLayout) {
     }
 
     Y_UNIT_TEST(Mirror3dc3NodesConfigurationAccepted) {
-        auto config = MakeDocument({
-            .Placement = EPlacement::OneNodePerRealm,
-            .PoolGeometry = EPoolGeometry::Disk,
-        });
-        UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
-                    == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc3Nodes);
+        for (TStringBuf erasure : {"mirror-3-dc", "9", "'9'", "09"}) {
+            auto config = MakeDocument({
+                .Placement = EPlacement::OneNodePerRealm,
+                .PoolGeometry = EPoolGeometry::Disk,
+                .GroupErasure = erasure,
+            });
+            UNIT_ASSERT_C(NYamlConfig::CheckStaticGroupLayout(config)
+                          == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc3Nodes, erasure);
+        }
     }
 
     Y_UNIT_TEST(DiskGeometryRejectsNineNodePlacement) {
@@ -285,9 +288,11 @@ Y_UNIT_TEST_SUITE(StaticGroupLayout) {
     }
 
     Y_UNIT_TEST(Mirror3dcConfigurationAccepted) {
-        auto config = MakeDocument();
-        UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
-                    == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc);
+        for (TStringBuf erasure : {"mirror-3-dc", "9", "'9'", "09"}) {
+            auto config = MakeDocument({.GroupErasure = erasure});
+            UNIT_ASSERT_C(NYamlConfig::CheckStaticGroupLayout(config)
+                          == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc, erasure);
+        }
     }
 
     Y_UNIT_TEST(ExplicitEmptyRackIsNotDefaulted) {
@@ -381,14 +386,16 @@ Y_UNIT_TEST_SUITE(StaticGroupLayout) {
     }
 
     Y_UNIT_TEST(Block42ConfigurationAccepted) {
-        auto config = MakeDocument({
-            .PoolGeometry = EPoolGeometry::Missing,
-            .PoolErasure = "block-4-2",
-            .GroupErasure = "block-4-2",
-            .GroupShape = {.Rings = 1, .FailDomains = 8},
-        });
-        UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
-                    == NYamlConfig::EStaticGroupLayoutCheckResult::Block42);
+        for (TStringBuf erasure : {"block-4-2", "4", "'4'", "04"}) {
+            auto config = MakeDocument({
+                .PoolGeometry = EPoolGeometry::Missing,
+                .PoolErasure = "block-4-2",
+                .GroupErasure = erasure,
+                .GroupShape = {.Rings = 1, .FailDomains = 8},
+            });
+            UNIT_ASSERT_C(NYamlConfig::CheckStaticGroupLayout(config)
+                          == NYamlConfig::EStaticGroupLayoutCheckResult::Block42, erasure);
+        }
     }
 
     Y_UNIT_TEST(Block42ExplicitDefaultGeometryAccepted) {
@@ -445,6 +452,16 @@ Y_UNIT_TEST_SUITE(StaticGroupLayout) {
         });
         UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
                     == NYamlConfig::EStaticGroupLayoutCheckResult::Incorrect);
+    }
+
+    Y_UNIT_TEST(InvalidNumericErasureRequiresManualDecision) {
+        for (TStringBuf erasure : {"0", "18", "42", "-1", "4.0", "9.0", "4junk", "9junk", "4294967300", "4294967305"}) {
+            for (const TGroupShape shape : {TGroupShape{}, TGroupShape{.Rings = 1, .FailDomains = 8}}) {
+                auto config = MakeDocument({.GroupErasure = erasure, .GroupShape = shape});
+                UNIT_ASSERT_C(NYamlConfig::CheckStaticGroupLayout(config)
+                              == NYamlConfig::EStaticGroupLayoutCheckResult::Incorrect, erasure);
+            }
+        }
     }
 
 }

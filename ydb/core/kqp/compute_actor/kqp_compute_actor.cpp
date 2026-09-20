@@ -184,7 +184,8 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     RegisterKqpVectorSearchActor(*factory, counters, std::move(vectorIndexLevelsCache));
     RegisterKqpFullTextSource(*factory, counters);
     RegisterKqpSysViewSource(*factory, counters);
-    NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory);
+    bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
+    NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory, enableStreamingQueriesCounters ? counters->GetKqpCounters() : nullptr);
 
     RegisterDqSourceKikimrLookupProviderFactories(*factory);
 
@@ -201,7 +202,6 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
             static_cast<ui32>(NYql::NDq::EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER) == static_cast<ui32>(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER),
             "ES_SOLOMON_PROVIDER is out of sync with ydb/core/base/events.h");
         NYql::NDq::RegisterDQSolomonReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
-        bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
         NYql::NDq::RegisterDQSolomonWriteActorFactory(*factory, federatedQuerySetup->CredentialsFactory, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters);
 
         const auto& pqGatewayFactory = federatedQuerySetup->PqGatewayFactory;

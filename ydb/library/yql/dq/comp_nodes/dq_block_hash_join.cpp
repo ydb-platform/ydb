@@ -220,8 +220,16 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
         TSides<std::unique_ptr<IBlockLayoutConverter>> layouts;
         const auto& userTypes = Meta_->UserTypes;
         for(ESide side: EachSide) {
-            const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), Meta_->KeyColumns.SelectSide(side));
+            const auto& keyColumns = Meta_->KeyColumns.SelectSide(side);
+            const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), keyColumns);
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
+            TVector<ui32> equalNullsInputColumns;
+            equalNullsInputColumns.reserve(Meta_->Settings.EqualNullsKeys.size());
+            for (ui32 joinKeyIdx : Meta_->Settings.EqualNullsKeys) {
+                MKQL_ENSURE(joinKeyIdx < keyColumns.size(), "EqualNulls key index is out of range");
+                equalNullsInputColumns.push_back(keyColumns[joinKeyIdx]);
+            }
+            layouts.SelectSide(side)->ApplyEqualNulls(equalNullsInputColumns);
         }
         const auto& userNullTypes = userTypes.SelectSide(Join.NullSupplying());
 
@@ -266,8 +274,8 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
             MKQL_ENSURE(width == expectedSize,
                         Sprintf("runtime(%i) vs compile-time(%i) tuple width mismatch", width, expectedSize));
             const auto flushSink = [&](auto flush) { WriteFlushToOutput(output, std::move(flush)); };
-            switch (RunPackedHashJoinBatch<MaxOutputRows_>(*Ctx_, Join_, Output_, flushSink,
-                                                           PairFilter_ ? &*PairFilter_ : nullptr)) {
+            switch (RunPackedHashJoinBatch(*Ctx_, Join_, Output_, flushSink,
+                                           PairFilter_ ? &*PairFilter_ : nullptr)) {
             case EFetchResult::One:
                 return NYql::NUdf::EFetchStatus::Ok;
             case EFetchResult::Yield:
@@ -287,7 +295,6 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Join> Output_;
         std::optional<TPackedTuplePairFilter> PairFilter_;
-        static constexpr i64 MaxOutputRows_ = 10000;
     };
 
     void RegisterDependencies() const final {
@@ -369,12 +376,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
     meta.Renames = BuildImplRenames(parsed.UserRenames);
 
-    {
-        const auto settingsTuple = AS_VALUE(TTupleLiteral, callable.GetInput(7));
-        if (settingsTuple->GetValuesCount() >= 1) {
-            meta.Settings.BuildSide = static_cast<EBuildSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>());
-        }
-    }
+    meta.Settings = ParseHashJoinSettingsTuple(callable.GetInput(7));
     if (meta.Settings.LeftIsBuild()) {
         std::swap(meta.InputTypes.Build, meta.InputTypes.Probe);
         std::swap(meta.KeyColumns.Build, meta.KeyColumns.Probe);

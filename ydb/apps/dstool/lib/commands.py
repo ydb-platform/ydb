@@ -52,8 +52,9 @@ try:
     import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_delete as nbs_partition_delete
     import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_get_load_actor_adapter_actor_id as nbs_partition_get_load_actor_adapter_actor_id
     import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_io as nbs_partition_io
+    import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_resize as nbs_partition_resize
     _nbs_partition_modules = [
-        nbs_partition_create, nbs_partition_delete,
+        nbs_partition_create, nbs_partition_delete, nbs_partition_resize,
         nbs_partition_get_load_actor_adapter_actor_id, nbs_partition_io,
     ]
 except ImportError:
@@ -92,7 +93,7 @@ default_structure = [
 # available; otherwise argparse would render them as UNIMPLEMETED stubs.
 if _nbs_partition_modules:
     default_structure.append(
-        ('nbs', [('partition', ['create', 'delete', 'get-load-actor-adapter-actor-id', 'io'])]),
+        ('nbs', [('partition', ['create', 'delete', 'resize', 'get-load-actor-adapter-actor-id', 'io'])]),
     )
 
 

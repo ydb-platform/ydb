@@ -1,5 +1,3 @@
-/* syntax version 1 */
-
 $typing = TupleType(VoidType(), VoidType(), String);
 
 $vectorCreate = YQL::Udf(AsAtom("Vector.Create"), Void(), $typing);

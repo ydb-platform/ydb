@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
 
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
@@ -29,8 +30,11 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(StorePartitionIds, __VA_ARGS__)                                        \
     xxx(UpdateVChunkConfig, __VA_ARGS__)                                       \
     xxx(UpdateDirtyMapState, __VA_ARGS__)                                      \
+    xxx(SetVChunkTouched, __VA_ARGS__)                                         \
     xxx(StartAddHost, __VA_ARGS__)                                             \
     xxx(AddHostToDBG, __VA_ARGS__)                                             \
+    xxx(StartRemoveHost, __VA_ARGS__)                                          \
+    xxx(CommitRemoveHost, __VA_ARGS__)                                         \
     xxx(Monitoring, __VA_ARGS__)
 
 // BLOCKSTORE_PARTITION_TRANSACTIONS
@@ -43,6 +47,8 @@ struct TTxPartition
         ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
     using TAddHostInProgress =
         ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
+    using TRemoveHostInProgress =
+        ::NYdb::NBS::PartitionDirect::NProto::TRemoveHostInProgress;
 
     //
     // InitSchema
@@ -64,7 +70,9 @@ struct TTxPartition
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TVChunkConfigs VChunkConfigs;
         TDirtyMapStateProtos DirtyMapStates;
+        TTouchedVChunks TouchedVChunks;
         TMaybe<TAddHostInProgress> AddHostInProgress;
+        TMaybe<TRemoveHostInProgress> RemoveHostInProgress;
 
         void Clear()
         {
@@ -72,7 +80,9 @@ struct TTxPartition
             DirectBlockGroupsConnections.Clear();
             VChunkConfigs.clear();
             DirtyMapStates.clear();
+            TouchedVChunks = {};
             AddHostInProgress.Clear();
+            RemoveHostInProgress.Clear();
         }
     };
 
@@ -166,20 +176,37 @@ struct TTxPartition
     };
 
     //
+    // SetVChunkTouched
+    //
+    struct TSetVChunkTouched
+    {
+        TVector<TTouchedVChunks::TChunk> Chunks;
+
+        explicit TSetVChunkTouched(TVector<TTouchedVChunks::TChunk> chunks)
+            : Chunks(std::move(chunks))
+        {}
+
+        void Clear()
+        {
+            // nothing to do
+        }
+    };
+
+    //
     // TStartAddHost
     //
     struct TStartAddHost
     {
         const size_t DirectBlockGroupId;
-        const THostIndex NewHostIndex;
+        const ui32 LiveHostCount;
         const ui32 DBGConnectionsConfigGeneration;
 
         TStartAddHost(
             size_t directBlockGroupId,
-            THostIndex newHostIndex,
+            ui32 liveHostCount,
             ui32 dbgConnectionsConfigGeneration)
             : DirectBlockGroupId(directBlockGroupId)
-            , NewHostIndex(newHostIndex)
+            , LiveHostCount(liveHostCount)
             , DBGConnectionsConfigGeneration(dbgConnectionsConfigGeneration)
         {}
 
@@ -201,6 +228,41 @@ struct TTxPartition
                   std::move(directBlockGroupsConnections))
             , DirectBlockGroupId(directBlockGroupId)
             , NewHostIndex(newHostIndex)
+        {}
+
+        void Clear()
+        {}
+    };
+
+    //
+    // TStartRemoveHost
+    //
+    struct TStartRemoveHost
+    {
+        const TRemoveHostInProgress Intent;
+
+        explicit TStartRemoveHost(TRemoveHostInProgress intent)
+            : Intent(std::move(intent))
+        {}
+
+        void Clear()
+        {}
+    };
+
+    struct TCommitRemoveHost
+    {
+        const TDirectBlockGroupsConnections DirectBlockGroupsConnections;
+        const size_t DirectBlockGroupId;
+        const THostIndex RemoveIndex;
+
+        TCommitRemoveHost(
+            TDirectBlockGroupsConnections directBlockGroupsConnections,
+            size_t directBlockGroupId,
+            THostIndex removeIndex)
+            : DirectBlockGroupsConnections(
+                  std::move(directBlockGroupsConnections))
+            , DirectBlockGroupId(directBlockGroupId)
+            , RemoveIndex(removeIndex)
         {}
 
         void Clear()

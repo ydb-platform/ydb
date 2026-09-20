@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/data_events/payload_helper.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NDataShard::NTxHelpers {
 
 ui64 AllocateTxId(TTestActorRuntime& runtime, const TActorId& sender) {
@@ -289,6 +291,11 @@ std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> TTransactionState::TWriteP
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> msg(ev->Release().Release());
     for (const auto& lock : msg->Record.GetTxLocks()) {
         State.Locks.push_back(lock);
+        for (const auto& seqNum : lock.GetWriteSeqNums()) {
+            UNIT_ASSERT_VALUES_EQUAL(State.WriterIndex.value(), seqNum.GetWriterIndex());
+            auto& curSeqNum = State.Shard2SeqNum[lock.GetDataShard()];
+            curSeqNum = std::max(curSeqNum, seqNum.GetWriteSeqNum());
+        }
     }
     return msg;
 }
@@ -299,10 +306,16 @@ TString TTransactionState::TWritePromise::NextString(TDuration simTimeout) {
         return "<timeout>";
     }
     auto status = msg->Record.GetStatus();
-    if (status != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
-        return TStringBuilder() << "ERROR: " << status;
+    TStringBuilder res;
+    if (status == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+        res << "OK";
+    } else {
+        res << "ERROR: " << status;
     }
-    return "OK";
+    if (msg->Record.GetIsDuplicate()) {
+        res << " (duplicate)";
+    }
+    return res;
 }
 
 void TTransactionState::InitCommit(std::vector<ui64> participants) {
@@ -328,18 +341,46 @@ TString TTransactionState::Rollback(ui64 shardId) {
     auto sender = Runtime.AllocateEdgeActor();
     ui32 nodeIndex = sender.NodeId() - Runtime.GetNodeId(0);
 
-    const auto* pLock = FindLastLock(shardId);
-    if (!pLock) {
+    auto locks = GetLocksForShard(shardId);
+    if (locks.empty()) {
         return "<noop>";
     }
 
     auto req = MakeHolder<NEvents::TDataEvents::TEvWrite>(
         0, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
-    *req->Record.MutableLocks()->AddLocks() = *pLock;
+    for (auto& lock : locks) {
+        *req->Record.MutableLocks()->AddLocks() = lock;
+    }
 
     Runtime.SendToPipe(shardId, sender, req.Release(), nodeIndex);
     return TWritePromise{*this, sender}.NextString();
+}
+
+void TTransactionState::MapAncestorShard(ui64 descendantShard, ui64 ancestorShard) {
+    AncestorMappings[descendantShard].insert(ancestorShard);
+}
+
+TVector<NKikimrDataEvents::TLock> TTransactionState::GetLocksForShard(ui64 shardId) const {
+    THashSet<std::tuple<ui64, ui64>> seen; // (LockId, DataShard)
+    TVector<NKikimrDataEvents::TLock> result;
+    const auto* ancestorSet = AncestorMappings.FindPtr(shardId);
+
+    for (auto it = Locks.rbegin(); it != Locks.rend(); ++it) {
+        const auto& lock = *it;
+        auto lockKey = std::make_tuple(lock.GetLockId(), lock.GetDataShard());
+        if (seen.contains(lockKey)) {
+            continue;
+        }
+        if (lock.GetDataShard() == shardId) {
+            seen.insert(lockKey);
+            result.push_back(lock);
+        } else if (ancestorSet && ancestorSet->contains(lock.GetDataShard())) {
+            seen.insert(lockKey);
+            result.push_back(lock);
+        }
+    }
+    return result;
 }
 
 }

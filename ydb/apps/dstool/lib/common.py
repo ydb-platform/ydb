@@ -10,7 +10,6 @@ import fnmatch
 import os
 import os.path
 import ssl
-import socket
 from google.protobuf import text_format
 from argparse import FileType
 from functools import wraps
@@ -39,7 +38,6 @@ import typing
 
 bad_hosts = set()
 cache = {}
-name_cache = {}
 
 EPDiskType = kikimr_bs3.EPDiskType
 EVirtualGroupState = kikimr_bs3.EVirtualGroupState
@@ -110,7 +108,6 @@ class ConnectionParams:
         self.cadata = None
         self.insecure = None
         self.parser = None
-        self.use_ip = None
         self.http_endpoints = dict()
         self.grpc_endpoints = dict()
         self.args = None
@@ -142,26 +139,10 @@ class ConnectionParams:
                 self.cadata = f.read()
         return self.cadata
 
-    def get_netloc(self, host, port):
-        netloc = '%s:%d' % (host, port)
-        if netloc in name_cache:
-            netloc = name_cache[netloc]
-        else:
-            for af, socktype, proto, canonname, sa in socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, socket.AI_PASSIVE):
-                host, port = socket.getnameinfo(sa, socket.NI_NUMERICHOST | socket.NI_NUMERICSERV)
-                if af == socket.AF_INET6:
-                    host = '[%s]' % host
-                new_netloc = '%s:%s' % (host, port)
-                name_cache[netloc] = new_netloc
-                netloc = new_netloc
-        return netloc
-
     def make_url(self, endpoint, path, params):
-        if self.use_ip:
-            location = self.get_netloc(endpoint.host, endpoint.port)
-        else:
-            location = endpoint.host_with_port
-        return urllib.parse.urlunsplit((endpoint.protocol, location, path, urllib.parse.urlencode(params), ''))
+        return urllib.parse.urlunsplit(
+            (endpoint.protocol, endpoint.host_with_port, path, urllib.parse.urlencode(params), '')
+        )
 
     def assign_token(self, typed_token):
         self.token_type, self.token = typed_token
@@ -208,8 +189,9 @@ class ConnectionParams:
         if token_file_path is None:
             return default_token_type, None
         try:
-            return self.read_token_from_file_and_close(open(token_file_path, 'r'), default_token_type)
-        except Exception:
+            with open(token_file_path, 'r') as token_file:
+                return self.read_token_from_file(token_file, default_token_type)
+        except OSError:
             return default_token_type, None
 
     def parse_token_value(self, token_value, default_token_type):
@@ -273,7 +255,6 @@ class ConnectionParams:
                                                                                   'If this parameter is empty, the default roots will be used.')
         g.add_argument('--http-timeout', type=int, default=5, help='Timeout for blocking socket I/O operations during HTTP(s) queries')
         g.add_argument('--insecure', action='store_true', help='Allow insecure HTTPS fetching')
-        g.add_argument('--use-ip', action='store_true', help='Use IP addresses instead of hostnames when connecting to endpoints')
 
 
 connection_params = ConnectionParams()

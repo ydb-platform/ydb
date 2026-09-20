@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr {
 namespace NSchemeShard {
 using namespace NTableIndex;
@@ -217,6 +219,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
+
+    size_t IndexPartitions = 0;
+    size_t IndexHistogramFields = 0;
+    std::shared_ptr<TEqHeightHistogram> IndexHistogram;
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
@@ -746,8 +752,10 @@ public:
                 }
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "Restored index build id# " << indexInfo->Id << ": " << *indexInfo);
+        YDB_LOG_DEBUG("Restored index build",
+            {"buildId", indexInfo->Id},
+            {"indexInfo", *indexInfo},
+        );
     }
 
     template<class TRow>
@@ -764,8 +772,10 @@ public:
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
         TSerializedTableRange bound{range};
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx);
+        YDB_LOG_DEBUG("AddShardStatus",
+            {"buildId", Id},
+            {"shardIdx", shardIdx},
+        );
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
             KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
             KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders)
@@ -822,6 +832,11 @@ public:
 
     bool IsBuildSecondaryUniqueIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
+    }
+
+    bool IsBuildSimpleIndex() const {
+        return BuildKind == EBuildKind::BuildSecondaryIndex ||
+            BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
     }
 
     bool IsBuildPrefixedVectorIndex() const {
@@ -1006,6 +1021,9 @@ public:
         return 0.f;
     }
 
+    std::vector<ui32> GetSecondaryIndexKeyTags(TSchemeShard* ss) const;
+    void FillIndexPresharding(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& implDesc) const;
+    bool HasPartitionSettings() const;
     void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
     void SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* to) const;
 
@@ -1143,3 +1161,5 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
 
     o << "}";
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

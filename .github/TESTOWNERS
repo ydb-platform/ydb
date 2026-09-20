@@ -2,9 +2,9 @@
 /*.md @ydb-platform/docs
 /ydb/docs/ @ydb-platform/docs
 
-#YQL @vitstn @ydb-platform/yql
-/ydb/library/yql/ @ydb-platform/yql
-/ydb/library/yql/dq @ydb-platform/yql @ydb-platform/qp
+#YQL @vitstn TEAM:@ydb-platform/qp
+/ydb/library/yql/ @ydb-platform/qp
+/ydb/library/yql/dq @ydb-platform/qp
 /ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
 
 #Row Tables Development Team @azevaykin TEAM:@ydb-platform/datashard
@@ -30,24 +30,24 @@
 /ydb/core/keyvalue @ydb-platform/cs
 /ydb/services/keyvalue @ydb-platform/cs
 
-#Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/system-infra
-/ydb/core/mind/hive @ydb-platform/system-infra
-/ydb/core/tx/schemeshard @ydb-platform/system-infra
-/ydb/core/util @ydb-platform/system-infra
-/ydb/core/client @ydb-platform/system-infra
-/ydb/core/engine @ydb-platform/system-infra
-/ydb/tests/functional/hive @ydb-platform/system-infra
-/ydb/core/tx/scheme_board @ydb-platform/system-infra
-/ydb/core/tx/scheme_cache @ydb-platform/system-infra
-/ydb/core/audit @ydb-platform/system-infra
-/ydb/core/health_check @ydb-platform/system-infra
-/ydb/library/aclib @ydb-platform/system-infra
-/ydb/mvp/oidc_proxy @ydb-platform/system-infra
-/ydb/tests/functional/audit @ydb-platform/system-infra
-/ydb/tests/functional/limits @ydb-platform/system-infra
-/ydb/tests/functional/scheme_shard @ydb-platform/system-infra
-/ydb/tests/functional/tenants @ydb-platform/system-infra
-/ydb/services/ydb/table_split_ut @ydb-platform/system-infra
+#Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/core
+/ydb/core/mind/hive @ydb-platform/core
+/ydb/core/tx/schemeshard @ydb-platform/core
+/ydb/core/util @ydb-platform/core
+/ydb/core/client @ydb-platform/core
+/ydb/core/engine @ydb-platform/qp
+/ydb/tests/functional/hive @ydb-platform/core
+/ydb/core/tx/scheme_board @ydb-platform/core
+/ydb/core/tx/scheme_cache @ydb-platform/core
+/ydb/core/audit @ydb-platform/security
+/ydb/core/health_check @ydb-platform/core
+/ydb/library/aclib @ydb-platform/security
+/ydb/mvp/oidc_proxy @ydb-platform/security
+/ydb/tests/functional/audit @ydb-platform/security
+/ydb/tests/functional/limits @ydb-platform/core
+/ydb/tests/functional/scheme_shard @ydb-platform/core
+/ydb/tests/functional/tenants @ydb-platform/core
+/ydb/services/ydb/table_split_ut @ydb-platform/core
 
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
@@ -84,8 +84,8 @@
 /ydb/public/lib/ydb_cli @ydb-platform/appteam
 /ydb/apps/ydb @ydb-platform/appteam
 
-#YDB Postgres Compatibility @rekby TEAM:@ydb-platform/postgres-compatibility
-/ydb/tests/postgres_integrations @ydb-platform/postgres-compatibility
+#YDB Postgres Compatibility @rekby TEAM:@ydb-platform/qp
+/ydb/tests/postgres_integrations @ydb-platform/qp
 
 #YDB Engineering Team @maximyurchuk TEAM:@ydb-platform/engineering
 /ydb/tests/functional/tpc @ydb-platform/engineering

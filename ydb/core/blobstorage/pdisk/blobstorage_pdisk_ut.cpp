@@ -14,6 +14,14 @@
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 #include <util/system/hp_timer.h>
+#include <util/generic/scope.h>
+#if defined(__linux__)
+#include "blobstorage_pdisk_test_peer.h"
+#include <ydb/library/pdisk_io/uring_router_test_peer.h>
+#include <ydb/library/pdisk_io/uring_test_support.h>
+#include <thread>
+#include <sys/file.h>
+#endif
 
 namespace NKikimr {
 
@@ -58,6 +66,136 @@ NPDisk::TEvChunkWrite::TPartsPtr GenParts(TReallyFastRng32& rng, size_t size) {
 }
 
 Y_UNIT_TEST_SUITE(TPDiskTest) {
+    Y_UNIT_TEST(ReservedChunksSurviveOwnerReinit) {
+        TActorTestContext testCtx{{}}; // Real PDisk with a sector-map device.
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        const ui32 chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+
+        const auto reinit = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+            new NPDisk::TEvYardInit(TVDiskMock::OwnerRound.fetch_add(1), vdisk.VDiskID,
+                testCtx.TestCtx.PDiskGuid, testCtx.Sender), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(reinit->OwnedChunks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reinit->OwnedChunks.front(), chunk);
+        vdisk.PDiskParams = reinit->PDiskParams;
+        vdisk.ReadLog();
+
+        testCtx.RestartPDiskSync();
+        // InitFull verifies that PDisk reports exactly the committed chunks: none here.
+        vdisk.InitFull();
+    }
+
+    // Small enough to drain the chunk pool chunk by chunk within a test.
+    TActorTestContext::TSettings FewChunksSettings() {
+        TActorTestContext::TSettings settings{};
+        settings.UseSectorMap = true;
+        settings.ChunkSize = NPDisk::SmallDiskMaximumChunkSize;
+        settings.DiskSize = (ui64)settings.ChunkSize * 50;
+        settings.SmallDisk = true;
+        return settings;
+    }
+
+    // Reserve chunk by chunk until PDisk refuses, which drains all but a handful of the
+    // chunks it is willing to hand out.
+    TVector<ui32> ReserveUntilOutOfSpace(TActorTestContext& testCtx, TVDiskMock& vdisk) {
+        TVector<ui32> chunks;
+        for (;;) {
+            const auto res = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+                    new NPDisk::TEvChunkReserve(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 1),
+                    std::nullopt);
+            if (res->Status != NKikimrProto::OK) {
+                UNIT_ASSERT_VALUES_EQUAL(res->Status, NKikimrProto::OUT_OF_SPACE);
+                break;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(res->ChunkIds.size(), 1);
+            chunks.push_back(res->ChunkIds.front());
+        }
+        UNIT_ASSERT(!chunks.empty());
+        return chunks;
+    }
+
+    Y_UNIT_TEST(ChunkForgetReleasesReservedChunk) {
+        TActorTestContext testCtx(FewChunksSettings());
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        const TVector<ui32> chunks = ReserveUntilOutOfSpace(testCtx, vdisk);
+
+        // A reservation was never committed, so PDisk can drop it without a log record.
+        testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
+                new NPDisk::TEvChunkForget(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    TVector<ui32>{chunks.back()}),
+                NKikimrProto::OK);
+        // Returning one chunk undoes the allocation that was refused, so one more fits again.
+        testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+                new NPDisk::TEvChunkReserve(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 1),
+                NKikimrProto::OK);
+
+        // Forgetting a chunk that is no longer held is refused rather than double-freed.
+        testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
+                new NPDisk::TEvChunkForget(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    TVector<ui32>{chunks.front()}),
+                NKikimrProto::OK);
+        testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
+                new NPDisk::TEvChunkForget(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    TVector<ui32>{chunks.front()}),
+                NKikimrProto::ERROR);
+
+        // Nothing was committed along the way, so PDisk must not report anything as owned.
+        testCtx.RestartPDiskSync();
+        vdisk.InitFull();
+    }
+
+    Y_UNIT_TEST(ForgottenReservedChunkIsReusedAsEmpty) {
+        TActorTestContext testCtx(FewChunksSettings());
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        const TVector<ui32> chunks = ReserveUntilOutOfSpace(testCtx, vdisk);
+        const TString writeData = PrepareData(4096);
+        for (const ui32 chunk : chunks) {
+            testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+                    new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
+                    NKikimrProto::OK);
+        }
+        {
+            const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                    new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunks.front(), 0, writeData.size(), 0, nullptr),
+                    NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
+        }
+
+        testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
+                new NPDisk::TEvChunkForget(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    TVector<ui32>(chunks)),
+                NKikimrProto::OK);
+
+        // Draining the pool again hands most of the very same chunks back.
+        const TVector<ui32> reused = ReserveUntilOutOfSpace(testCtx, vdisk);
+        const TSet<ui32> before(chunks.begin(), chunks.end());
+        size_t recycled = 0;
+        for (const ui32 chunk : reused) {
+            recycled += before.count(chunk);
+        }
+        UNIT_ASSERT_C(recycled, "no forgotten chunk was handed out again");
+
+        // Each of them got a fresh nonce range, so nothing the previous reservation wrote
+        // still validates: the data must read back as a gap rather than as its old contents.
+        for (const ui32 chunk : reused) {
+            const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                    new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, 0, writeData.size(), 0, nullptr),
+                    std::nullopt);
+            if (readRes->Status == NKikimrProto::OK) {
+                UNIT_ASSERT_C(!readRes->Data.IsReadable(0, writeData.size()),
+                    "recycled chunkIdx# " << chunk << " still serves the data of its previous owner");
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestAbstractPDiskInterface) {
         TString path = "/tmp/asdqwe";
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(path, 12345, 0xffffffffull,
@@ -68,6 +206,121 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
         pDisk->Wakeup();
     }
+
+#if defined(__linux__)
+    Y_UNIT_TEST(TestProductionStopRetiresRouterWithRetainedInitResult) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = false;
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        TManualEvent callback, release, joining;
+        std::shared_ptr<NPDisk::TUringRouter> router;
+        ctx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            NPDisk::TPDiskTestPeer::ConfigureRouter(*pdisk, [&](NPDisk::TUringRouter& instance) {
+                NPDisk::NUringPrivate::TRouterHooks hooks;
+                hooks.BeforeTerminalCallback = [&] { callback.Signal(); release.WaitI(); };
+                hooks.BeforeJoin = [&] { joining.Signal(); };
+                NPDisk::TUringRouterTestPeer::SetHooks(instance, std::move(hooks));
+            });
+        });
+        auto init = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0, true), NKikimrProto::OK);
+        UNIT_ASSERT(init->UringRouter);
+        router = std::dynamic_pointer_cast<NPDisk::TUringRouter>(init->UringRouter);
+        UNIT_ASSERT(router);
+        struct TRead : NPDisk::TUringOperationBase {
+            ui32 Completed = 0;
+            ui32 Dropped = 0;
+            void OnComplete(TActorSystem*) noexcept override { ++Completed; }
+            void OnDrop(TActorSystem*) noexcept override { ++Dropped; }
+        } op;
+        alignas(4096) char buffer[4096];
+        auto* pdisk = ctx.GetPDisk();
+        std::atomic<bool> stopped = false;
+        std::thread stop;
+        Y_DEFER {
+            release.Signal();
+            if (stop.joinable()) { stop.join(); }
+        };
+        op.SetOperationType(NPDisk::TUringOperationBase::EREAD);
+        op.PrepareIov(buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(router->Read(&op));
+        callback.WaitI();
+        stop = std::thread([&] { pdisk->Stop(); stopped.store(true); });
+        joining.WaitI();
+        // The native callback owns one inflight operation until released.
+        const bool premature = stopped.load();
+        release.Signal();
+        stop.join();
+        UNIT_ASSERT(!premature);
+        UNIT_ASSERT_VALUES_EQUAL(op.Completed, 1);
+        UNIT_ASSERT_VALUES_EQUAL(op.Dropped, 0);
+        UNIT_ASSERT_VALUES_EQUAL(router->GetInflight(), 0);
+        UNIT_ASSERT(NPDisk::TUringRouterTestPeer::Retired(*router));
+        UNIT_ASSERT(!pdisk->BlockDevice->DuplicateFd().IsOpen());
+        UNIT_ASSERT(!init->UringRouter->Read(&op));
+        UNIT_ASSERT_VALUES_EQUAL(op.Completed, 1);
+        TFile independent(ctx.TestCtx.Path, OpenExisting | RdWr);
+        UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_EX | LOCK_NB), 0);
+        UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_UN), 0);
+    }
+
+    Y_UNIT_TEST(TestUringSampleSinkOutlivesPDiskAndMonitor) {
+        auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
+            TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        auto pdisk = MakeHolder<NPDisk::TPDisk>(std::make_shared<NPDisk::TPDiskCtx>(), cfg,
+            MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        auto sink = pdisk->MakeUringSampleSink();
+        std::weak_ptr<NPDisk::TDeviceOverestimationAggregator> aggregator = pdisk->Mon.DeviceOverestimationMerged;
+        pdisk.Reset();
+        UNIT_ASSERT(!aggregator.expired());
+        NPDisk::TDeviceIoSample sample;
+        sample.Size = 4096;
+        sample.SubmitCycles = 1;
+        sample.CompleteCycles = 2;
+        sink(sample);
+        UNIT_ASSERT_VALUES_EQUAL(aggregator.lock()->ComputeAndReset(0).SampleCount, 1);
+        sink = {};
+        UNIT_ASSERT(aggregator.expired());
+    }
+
+    Y_UNIT_TEST(TestSharedUringRouterFailureNotification) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        const TActorId recipient = runtime.AllocateEdgeActor();
+
+        auto pCtx = std::make_shared<NPDisk::TPDiskCtx>(runtime.GetActorSystem(0), 12345, recipient);
+        auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
+            TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
+
+        pDisk->CheckSharedUringRouter();
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId()).empty());
+
+        // No worker or I/O is started, so this also works without kernel io_uring support.
+        pDisk->SharedUringRouter = std::make_shared<NPDisk::TUringRouter>(TFileHandle{}, pCtx->ActorSystem);
+        pDisk->SharedUringRouter->StopAsync(true);
+        UNIT_ASSERT(pDisk->SharedUringRouter->IsBroken());
+        for (ui32 i = 0; i < 3; ++i) {
+            pDisk->CheckSharedUringRouter();
+        }
+
+        auto events = runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId());
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(events.front()->GetTypeRewrite(), NPDisk::TEvDeviceError::EventType);
+        UNIT_ASSERT_VALUES_EQUAL(events.front()->Get<NPDisk::TEvDeviceError>()->Info,
+            "shared TUringRouter entered broken state");
+
+        pDisk->CheckSharedUringRouter();
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId()).empty());
+    }
+#endif
 
     Y_UNIT_TEST(TestThatEveryValueOfEStateEnumKeepsItIntegerValue) {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1391,6 +1644,85 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
     }
 
+    Y_UNIT_TEST(TightSpaceColorsLargeDiskCyanAtThreePercent) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TActorTestContext testCtx({
+            .DiskSize = ui64(128) << 20 << 11, // 2048 chunks of 128 MB
+            .EnableTightPDiskSpaceColors = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        auto checkSpace = [&] {
+            return testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+                NKikimrProto::OK);
+        };
+
+        THolder<NPDisk::TEvCheckSpaceResult> space;
+        for (int i = 0; i < 100000; ++i) {
+            space = checkSpace();
+            const auto color = StatusFlagToSpaceColor(space->StatusFlags);
+            if (color >= TColor::CYAN) {
+                UNIT_ASSERT_VALUES_EQUAL(color, TColor::CYAN);
+                UNIT_ASSERT_C(space->NormalizedOccupancy > 0.96 && space->NormalizedOccupancy < 0.985,
+                    "occupancy# " << space->NormalizedOccupancy
+                    << " expected ~0.97 (3% free), not ~0.87 (13% free)");
+                return;
+            }
+            UNIT_ASSERT_GT(space->FreeChunks, 0);
+            ui32 n = 1;
+            if (space->NormalizedOccupancy < 0.90 && space->FreeChunks > 16) {
+                n = Min<ui32>(32, space->FreeChunks - 16);
+            }
+            vdisk.ReserveChunk(n);
+            vdisk.CommitReservedChunks();
+        }
+        UNIT_ASSERT_C(false, "never reached CYAN");
+    }
+
+    Y_UNIT_TEST(TightSpaceColorsSmallDiskUsesChunkFloors) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TActorTestContext testCtx({
+            .DiskSize = 10_GB,
+            .SmallDisk = true,
+            .EnableTightPDiskSpaceColors = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        auto checkSpace = [&] {
+            return testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+                NKikimrProto::OK);
+        };
+
+        THolder<NPDisk::TEvCheckSpaceResult> space;
+        for (int i = 0; i < 100000; ++i) {
+            space = checkSpace();
+            const auto color = StatusFlagToSpaceColor(space->StatusFlags);
+            if (color >= TColor::CYAN) {
+                UNIT_ASSERT_VALUES_EQUAL(color, TColor::CYAN);
+                UNIT_ASSERT_C(space->NormalizedOccupancy < 0.95,
+                    "occupancy# " << space->NormalizedOccupancy
+                    << " small-disk cyan should be the chunk floor, not 3% (~0.97)");
+                UNIT_ASSERT_C(space->NormalizedOccupancy > 0.70,
+                    "occupancy# " << space->NormalizedOccupancy);
+                return;
+            }
+            UNIT_ASSERT_GT(space->FreeChunks, 0);
+            ui32 n = 1;
+            if (space->NormalizedOccupancy < 0.70 && space->FreeChunks > 16) {
+                n = Min<ui32>(16, space->FreeChunks - 16);
+            }
+            vdisk.ReserveChunk(n);
+            vdisk.CommitReservedChunks();
+        }
+        UNIT_ASSERT_C(false, "never reached CYAN");
+    }
+
     Y_UNIT_TEST(SpaceColorDcbOverride) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
@@ -2212,6 +2544,161 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(expectedHardLimitChunks, 3u);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedHardLimitChunks);
         UNIT_ASSERT_LE(ui64(evCheckSpaceResult->TotalChunks) * formatChunkSize, expectedSlotSize);
+    }
+
+    static std::pair<ui32, ui32> GetFormatChunkSizes(TActorTestContext& testCtx) {
+        return testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return std::make_pair(pdisk->Format.ChunkSize, pdisk->Format.GetUserAccessibleChunkSize());
+        });
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeIsUsedAsIs) {
+        constexpr ui32 physicalChunkSize = 128_MB;
+        TActorTestContext testCtx({
+            .PhysicalChunkSize = physicalChunkSize,
+        });
+
+        const auto [formatChunkSize, userAccessibleChunkSize] = GetFormatChunkSizes(testCtx);
+        UNIT_ASSERT_VALUES_EQUAL(formatChunkSize, physicalChunkSize);
+        // The user-accessible size is what is left after the per-sector PDisk metadata.
+        UNIT_ASSERT_LT(userAccessibleChunkSize, physicalChunkSize);
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->ChunkSize, userAccessibleChunkSize);
+
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        const ui32 chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+        vdisk.SendEvLogSync();
+
+        // A VDisk may use its whole user-accessible chunk, including the very last block.
+        const TString writeData = PrepareData(vdisk.PDiskParams->AppendBlockSize);
+        const ui32 offset = userAccessibleChunkSize - writeData.size();
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, offset, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
+            NKikimrProto::OK);
+
+        const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+            new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, offset, writeData.size(), 0, nullptr),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeAutomaticFormatting) {
+        TActorTestContext testCtx({
+            .PhysicalChunkSize = 128_MB,
+            .InitiallyZeroed = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const auto [physical, usable] = GetFormatChunkSizes(testCtx);
+        UNIT_ASSERT_VALUES_EQUAL(physical, 128_MB);
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->ChunkSize, usable);
+        UNIT_ASSERT_VALUES_EQUAL(usable % vdisk.PDiskParams->AppendBlockSize, 0);
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeSmallDiskAutomaticFormatting) {
+        TActorTestContext testCtx({
+            .DiskSize = 10_GB,
+            .PhysicalChunkSize = 128_MB,
+            .SmallDisk = true,
+            .InitiallyZeroed = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const auto [physical, usable] = GetFormatChunkSizes(testCtx);
+        // The retry must preserve physical mode, rather than adding metadata headroom to 32 MiB.
+        UNIT_ASSERT_VALUES_EQUAL(physical, NPDisk::SmallDiskMaximumChunkSize);
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->ChunkSize, usable);
+        UNIT_ASSERT_VALUES_EQUAL(usable % vdisk.PDiskParams->AppendBlockSize, 0);
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        vdisk.SendEvLogSync();
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeMustBeAligned) {
+        TTestContext testCtx(true /*useSectorMap*/);
+        ui32 chunkSize = 128_MB;
+        // A multiple of the sector size, but not of NPDisk::ChunkSizeAlignment.
+        const ui32 physicalChunkSize = 128_MB + (4 << 10);
+        UNIT_ASSERT_EXCEPTION(FormatPDiskForTest(testCtx.Path, 1, chunkSize, 0, false, testCtx.SectorMap,
+            false, false, true, std::nullopt, std::nullopt, physicalChunkSize), yexception);
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeSurvivesConfigOptionRemoval) {
+        constexpr ui32 physicalChunkSize = 128_MB;
+        TActorTestContext testCtx({
+            .PhysicalChunkSize = physicalChunkSize,
+        });
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        const ui32 chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+        vdisk.SendEvLogSync();
+
+        const TString writeData = PrepareData(4096);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
+            NKikimrProto::OK);
+
+        // The physical chunk size lives in the format record, so dropping the config option changes nothing.
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->PhysicalChunkSize = 0;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+
+        const auto [formatChunkSize, userAccessibleChunkSize] = GetFormatChunkSizes(testCtx);
+        UNIT_ASSERT_VALUES_EQUAL(formatChunkSize, physicalChunkSize);
+
+        vdisk.InitFull();
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->ChunkSize, userAccessibleChunkSize);
+
+        const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+            new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, 0, writeData.size(), 0, nullptr),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeHasNoEffectWithoutFormatting) {
+        TActorTestContext testCtx({});
+
+        const auto [formatChunkSize, userAccessibleChunkSize] = GetFormatChunkSizes(testCtx);
+        // Derived from the 128 MiB user-accessible default, so bigger than 128 MiB.
+        UNIT_ASSERT_GT(formatChunkSize, 128_MB);
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        const ui32 chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+        vdisk.SendEvLogSync();
+
+        const TString writeData = PrepareData(4096);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
+            NKikimrProto::OK);
+
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->PhysicalChunkSize = 128_MB;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+
+        const auto sizesAfterRestart = GetFormatChunkSizes(testCtx);
+        UNIT_ASSERT_VALUES_EQUAL(sizesAfterRestart.first, formatChunkSize);
+        UNIT_ASSERT_VALUES_EQUAL(sizesAfterRestart.second, userAccessibleChunkSize);
+
+        vdisk.InitFull();
+        const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+            new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                chunk, 0, writeData.size(), 0, nullptr),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
     }
 
     Y_UNIT_TEST(StaticGroupChunkReserve) {

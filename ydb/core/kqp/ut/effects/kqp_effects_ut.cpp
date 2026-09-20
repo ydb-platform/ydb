@@ -662,15 +662,14 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         )").ExtractValueSync();
         UNIT_ASSERT_C(alterResult.IsSuccess(), alterResult.GetIssues().ToString());
 
+        // The statement is compiled against a schema version the transaction has not seen, so
+        // it is refused right away instead of being deferred and failing at commit.
         auto upsertResult2 = session1.ExecuteDataQuery(R"(
             UPSERT INTO `TestTable` (Key, Value1) VALUES
                 (1u, "First"),
                 (2u, "Second");
         )", TTxControl::Tx(*tx1)).ExtractValueSync();
-        UNIT_ASSERT_C(upsertResult2.IsSuccess(), upsertResult2.GetIssues().ToString());
-
-        auto commitResult = tx1->Commit().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(upsertResult2.GetStatus(), EStatus::ABORTED, upsertResult2.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(AlterAfterUpsertBeforeUpsertSelectTransaction) {

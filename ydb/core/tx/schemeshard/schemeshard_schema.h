@@ -2664,6 +2664,9 @@ struct Schema : NIceDb::Schema {
         struct IsCancelled :            Column<14, NScheme::NTypeIds::Bool>   { static constexpr bool Default = false; };
         struct CancellationReason :     Column<15, NScheme::NTypeIds::Utf8>   {};
 
+        struct DomainOwnerId :          Column<16, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct DomainLocalId :          Column<17, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
@@ -2680,7 +2683,9 @@ struct Schema : NIceDb::Schema {
             StartTime,
             EndTime,
             IsCancelled,
-            CancellationReason
+            CancellationReason,
+            DomainOwnerId,
+            DomainLocalId
         >;
     };
 

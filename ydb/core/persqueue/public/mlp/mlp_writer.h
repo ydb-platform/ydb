@@ -20,6 +20,12 @@ public:
     void Bootstrap();
     void PassAway() override;
 
+protected:
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"topic", Settings.TopicName});
+    }
+
 private:
 
     void DoDescribe();

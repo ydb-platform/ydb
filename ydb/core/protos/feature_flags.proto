@@ -402,4 +402,7 @@ message TFeatureFlags {
     optional bool EnableTightPDiskSpaceColors = 333 [default = false, (RequireRestart) = true];
     optional bool CollectHourMetric = 334 [default = false];
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
+    // Admission gate for ColumnShard SET NOT NULL. Keep disabled until the
+    // persistent write barrier and existing-data validation protocol are wired.
+    optional bool EnableColumnStoreSetNotNull = 336 [default = false];
 }

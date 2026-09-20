@@ -19,6 +19,8 @@ Y_UNIT_TEST_SUITE(RuntimeFeatureFlags) {
         CHECK_FLAG_MATCHES(flags, proto, TrimEntireDeviceOnStartup);
         CHECK_FLAG_MATCHES(flags, proto, EnableFailureInjectionTermination);
         CHECK_FLAG_MATCHES(flags, proto, EnableTopicDeferredPublish);
+        CHECK_FLAG_MATCHES(flags, proto, EnableColumnStoreSetNotNull);
+        UNIT_ASSERT(!flags.GetEnableColumnStoreSetNotNull());
     }
 
     Y_UNIT_TEST(ConversionToProto) {

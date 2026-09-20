@@ -12,6 +12,48 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(SetNotNullTest) {
+    Y_UNIT_TEST(ColumnTableFeatureDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableSetColumnConstraint(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnStoreSetNotNull(false);
+
+        ui64 txId = 100;
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "value" Type: "Int64" }
+                KeyColumnNames: [ "key" ]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Direct SchemeShard requests must be gated independently of the SQL frontend.
+        const auto response = TestSetColumnConstraint(runtime, ++txId,
+            TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/ColumnTable", {"value"});
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), Ydb::StatusIds::UNSUPPORTED,
+            response.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response.ShortDebugString(), "EnableColumnStoreSetNotNull");
+
+        const auto describe = DescribePath(runtime, "/MyRoot/ColumnTable");
+        const auto& columns = describe.GetPathDescription().GetColumnTableDescription().GetSchema().GetColumns();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+        bool foundValue = false;
+        for (const auto& column : columns) {
+            if (column.GetName() == "value") {
+                foundValue = true;
+                UNIT_ASSERT(!column.GetNotNull());
+            }
+        }
+        UNIT_ASSERT(foundValue);
+        // A rejected request must not create a persistent long-running operation.
+        const auto operations = TestListSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(operations.GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(operations.EntriesSize(), 0);
+    }
+
     Y_UNIT_TEST(BasicRequest) {
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);

@@ -5455,6 +5455,47 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(AlterTableSetNotNullOnColumnTableFeatureDisabled) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnStoreSetNotNull(false);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        auto create = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/table_name` (
+                id Uint64 NOT NULL,
+                value Int64,
+                PRIMARY KEY (id)
+            ) WITH (STORE = COLUMN);
+        )", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        auto write = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/table_name` (id, value) VALUES (1u, 10);
+        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+
+        // Even clean existing data must not bypass the ColumnShard admission flag.
+        auto alter = client.ExecuteQuery(R"(
+            ALTER TABLE `/Root/table_name` ALTER COLUMN value SET NOT NULL;
+        )", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(!alter.IsSuccess(), alter.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(alter.GetIssues().ToString(), "EnableColumnStoreSetNotNull");
+
+        auto nullWrite = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/table_name` (id, value) VALUES (2u, NULL);
+        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(nullWrite.IsSuccess(), nullWrite.GetIssues().ToString());
+
+        auto read = client.ExecuteQuery(R"(
+            SELECT id, value FROM `/Root/table_name` ORDER BY id;
+        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+        CompareYson(R"([[1u;[10]];[2u;#]])", FormatResultSetYson(read.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(AlterTableDropNotNullOnColumnTable) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

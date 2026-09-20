@@ -111,4 +111,5 @@ RECURSE_FOR_TESTS(
     backup
     data_accessor
     export
+    validation/not_null
 )

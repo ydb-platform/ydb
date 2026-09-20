@@ -83,6 +83,11 @@ public:
         Self->PersistSubDomainSchemeQuotas(db, subDomainPathId, *subDomainInfo);
 
         const auto tablePath = TPath::Resolve(settings.GetTablePath(), Self);
+        if (tablePath.IsResolved() && tablePath->IsColumnTable() &&
+            !AppData()->FeatureFlags.GetEnableColumnStoreSetNotNull()) {
+            return Reply(Ydb::StatusIds::UNSUPPORTED,
+                "SET NOT NULL for column tables is disabled (EnableColumnStoreSetNotNull)");
+        }
         {
             const auto checks = tablePath.Check();
             checks

@@ -12,10 +12,10 @@ Release date: TBD.
 * Added [storage group decommissioning through virtual storage groups](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data moves to virtual groups in the background while applications continue reading and writing data.
 * Added [authentication through external OpenID Connect identity providers](./security/authentication.md?version=v26.3#external-idp). {{ ydb-short-name }} validates JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
 * Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
-* Column-oriented tables use an updated compaction strategy to organize data more efficiently.
-* Bulk authorization requests to AccessService are enabled by default, reducing authorization request overhead.
+* Columnar engine optimization: column-oriented tables use an updated compaction strategy that organizes data more efficiently.
+* Authentication and authorization subsystem optimization: bulk authorization requests to AccessService are enabled by default, reducing authorization request overhead.
 * Streaming YQL queries can access system virtual attributes such as `__ydb_create_time`, `__ydb_write_time`, and others, as well as user attributes `__ydb_user_attributes`. [Feature documentation](./concepts/query_execution/topics.md?version=v26.3#system-metadata).
-* Full VDisk synchronization is faster because processed SyncLog data is removed locally by default.
+* Distributed Storage optimization: full VDisk synchronization is faster because processed SyncLog data is removed locally by default.
 * Added transfer metrics and statistics to `DescribeTransfer` for monitoring and diagnostics.
 * Added a configurable limit for stored forced-compaction operations. Completed and cancelled operations can be removed automatically when the limit is reached.
 * Change Data Capture records can include the [OpenTelemetry trace ID](./concepts/cdc.md?version=v26.3#record-structure) of the request that produced the change.

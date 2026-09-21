@@ -3,6 +3,7 @@
 #include "antlr_token.h"
 #include "select_yql.h"
 #include "sql_expression.h"
+#include "sql_group_by.h"
 #include "sql_select_window.h"
 #include "sql_select.h"
 
@@ -1333,16 +1334,8 @@ private:
     }
 
     TSQLResult<TGroupBy> Build(const TRule_group_by_clause& rule) {
-        TPosition position = Ctx_.TokenPosition(rule.GetToken1());
         Token(rule.GetToken1());
-
-        if (rule.HasBlock2()) {
-            return Unsupported("GROUP COMPACT BY");
-        }
-
-        if (Ctx_.IsAnyUnusedHintForToken(position, [](const auto& hint) { return to_lower(hint.Name) == "compact"; })) {
-            return Unsupported("GROUP /*+ compact */ BY");
-        }
+        const bool isCompact = NSQLTranslationV1::IsCompactGroupBy(Ctx_, rule);
 
         if (TPosition position; IsDistinctOptSet(rule.GetRule_opt_set_quantifier4(), position)) {
             Ctx_.Error(position) << "DISTINCT is not supported in GROUP BY clause yet!";
@@ -1353,7 +1346,11 @@ private:
             return Unsupported("GROUP BY ... WITH an_id");
         }
 
-        return Build(rule.GetRule_grouping_element_list5());
+        auto groupBy = Build(rule.GetRule_grouping_element_list5());
+        if (groupBy) {
+            groupBy->IsCompact = isCompact;
+        }
+        return groupBy;
     }
 
     TSQLResult<TGroupBy> Build(const TRule_grouping_element_list& rule) {

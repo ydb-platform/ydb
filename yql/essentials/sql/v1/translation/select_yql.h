@@ -71,6 +71,7 @@ struct TGroupBy {
         TGroupingSets::TCube>;
 
     TVector<TElement> Elements;
+    bool IsCompact = false;
 };
 
 struct TOrderBy {

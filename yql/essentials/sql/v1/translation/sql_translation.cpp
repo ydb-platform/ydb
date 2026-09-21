@@ -6289,6 +6289,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         return legacy();
     }
 
+    auto sqlHints = Ctx_.GetSqlHints();
     TNodeResult result = std::unexpected(ESQLError::Basic);
     {
         Ctx_.SetYqlSelectMode(mode);
@@ -6337,6 +6338,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
             }
 
             YQL_ENSURE(mode == EYqlSelect::Auto);
+            Ctx_.SetSqlHints(std::move(sqlHints));
             return legacy();
         }
     }

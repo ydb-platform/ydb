@@ -10100,6 +10100,13 @@
             "uri": "https://{canondata_backend}/1597364/fdeffca975c2d2d1bc708528a504feb47b36c5c9/resource.tar.gz#test_sql2yql.test_select_yql-group_by_apb_z_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-group_by_compact]": [
+        {
+            "checksum": "3ae786bb5162970b65b597832bccbb8f",
+            "size": 1190,
+            "uri": "https://{canondata_backend}/1773845/5069a9287b23fefff001d15e6440b679fcd3c6bf/resource.tar.gz#test_sql2yql.test_select_yql-group_by_compact_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-group_by_count_b]": [
         {
             "checksum": "1924d6eca93036d971ea3158ec947432",
@@ -18854,6 +18861,11 @@
     "test_sql_format.test[select_yql-group_by_apb_z]": [
         {
             "uri": "file://test_sql_format.test_select_yql-group_by_apb_z_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-group_by_compact]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-group_by_compact_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-group_by_count_b]": [

@@ -334,6 +334,9 @@ public:
 
         if (GroupBy) {
             item->Add(Q(Y(Q("group_by"), Q(BuildGroupBy(*GroupBy)))));
+            if (GroupBy->IsCompact) {
+                item->Add(Q(Y(Q("group_by_compact"))));
+            }
         }
 
         if (Having) {

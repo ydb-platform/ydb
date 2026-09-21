@@ -90,6 +90,28 @@ Y_UNIT_TEST(AutoFallbackPreservesMode) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
 }
 
+Y_UNIT_TEST(AutoFallbackPreservesHints) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        FROM (
+            SELECT k, Avg(v) AS v
+            FROM plato.x
+            GROUP /*+ COMPACT() */ BY k
+        )
+        SELECT * WITHOUT v;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Aggregate", "compact"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["compact"], 1);
+}
+
 Y_UNIT_TEST(Minimal) {
     NSQLTranslation::TTranslationSettings settings;
     // TODO: remove YqlSelectLangVersion
@@ -839,11 +861,61 @@ Y_UNIT_TEST(AutoGroupByCompactHint) {
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
-    TWordCountHive stat = {"YqlSelect", "Aggregate", "compact"};
+    TWordCountHive stat = {"YqlSelect", "Aggregate", "group_by_compact"};
     VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
-    UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 1);
-    UNIT_ASSERT_VALUES_EQUAL(stat["compact"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["group_by_compact"], 1);
+}
+
+Y_UNIT_TEST(GroupByCompact) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT k, Avg(v) FROM plato.x GROUP COMPACT BY k;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "group_by_compact"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["group_by_compact"], 1);
+}
+
+Y_UNIT_TEST(GroupByCompactPragma) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA CompactGroupBy;
+        SELECT k, Avg(v) FROM plato.x GROUP BY k;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "group_by_compact"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["group_by_compact"], 1);
+}
+
+Y_UNIT_TEST(GroupByDisableCompactPragma) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA DisableCompactGroupBy;
+        SELECT k, Avg(v) FROM plato.x GROUP COMPACT BY k;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "group_by_compact"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["group_by_compact"], 0);
 }
 
 Y_UNIT_TEST(GroupByExprAliasUnsupported) {

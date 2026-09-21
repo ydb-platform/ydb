@@ -3,9 +3,9 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 
-namespace NKikimr::NOlap::NReader::NTrivial {
+namespace NKikimr::NOlap::NReader::NSimple {
 
-class TNotSortedCollection: public ISourcesCollection {
+class TUnorderedResultCollection: public ISourcesCollection {
 private:
     using TBase = ISourcesCollection;
     std::optional<ui32> Limit;
@@ -24,9 +24,6 @@ private:
     virtual void DoAbort() override {
         SourcesConstructor->Abort();
     }
-
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor(
-        const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override;
 
     virtual bool DoIsFinished() const override {
         return SourcesConstructor->IsFinished();
@@ -56,11 +53,11 @@ private:
 
 public:
     virtual TString GetClassName() const override {
-        return "NOT_SORTED";
+        return "UNORDERED_RESULT";
     }
 
-    TNotSortedCollection(const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor,
-        const std::optional<ui32> limit)
+    TUnorderedResultCollection(const std::shared_ptr<TSpecialReadContext>& context,
+        std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::optional<ui32> limit)
         : TBase(context, std::move(sourcesConstructor))
         , Limit(limit)
     {
@@ -72,4 +69,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NOlap::NReader::NTrivial
+}   // namespace NKikimr::NOlap::NReader::NSimple

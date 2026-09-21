@@ -5,9 +5,9 @@
 
 #include <ydb/library/accessor/positive_integer.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NTrivial {
 
-class TScanWithLimitCollection: public ISourcesCollection {
+class TOrderedResultWithLimitCollection: public ISourcesCollection {
 private:
     using TBase = ISourcesCollection;
 
@@ -44,15 +44,6 @@ private:
     bool Cleared = false;
 
     void DrainToLimit();
-
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor(
-        const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
-        if (AppDataVerified().ColumnShardConfig.GetEnableCursorV1()) {
-            return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceIdx(), readyRecords, source->GetPortionIdOptional());
-        } else {
-            return std::make_shared<TDeprecatedSimpleScanCursor>(nullptr, source->GetDeprecatedPortionId(), readyRecords);
-        }
-    }
 
     virtual void DoClear() override {
         Cleared = true;
@@ -101,15 +92,15 @@ private:
 
 public:
     virtual TString GetClassName() const override {
-        return "SORT_LIMIT";
+        return "ORDERED_RESULT_WITH_LIMIT";
     }
 
     const std::shared_ptr<NCommon::IDataSource>& GetNextSource() const {
         return NextSource;
     }
 
-    TScanWithLimitCollection(
+    TOrderedResultWithLimitCollection(
         const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor);
 };
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NTrivial

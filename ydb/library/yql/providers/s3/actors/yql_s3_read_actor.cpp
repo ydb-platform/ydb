@@ -773,10 +773,11 @@ public:
             ThrowParquetNotOk(readers[0]->GetSchema(&schema));
             std::vector<int> columnIndices;
             std::vector<TColumnConverter> columnConverters;
+            TMissingColumns missingColumns;
 
-            BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, ReadSpec->RowSpec, ReadSpec->Settings);
+            BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 
-            // select count(*) case - single reader is enough
+            // no columns to read (select count(*) or all requested columns are absent in file) - single reader is enough
             if (!columnIndices.empty()) {
                 if (ReadSpec->ParallelRowGroupCount) {
                     readerCount = ReadSpec->ParallelRowGroupCount;
@@ -849,7 +850,7 @@ public:
                     readyGroupIndex = ReadyRowGroups.top();
                     ReadyRowGroups.pop();
                 } else {
-                    // select count(*) case - no columns, no download, just fetch meta info instantly
+                    // no columns to read (select count(*) or all requested columns are absent in file) - no download, just fetch meta info instantly
                     readyGroupIndex = readyGroupCount;
                 }
                 SourceContext->DecChunkCount();
@@ -882,7 +883,7 @@ public:
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
                     StartUnit();
                     Y_DEFER { StopUnit(); };
-                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
+                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
                     auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                     decodedBytes += size;
                     if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {
@@ -944,8 +945,9 @@ public:
         ThrowParquetNotOk(fileReader->GetSchema(&schema));
         std::vector<int> columnIndices;
         std::vector<TColumnConverter> columnConverters;
+        TMissingColumns missingColumns;
 
-        BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, ReadSpec->RowSpec, ReadSpec->Settings);
+        BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 
         for (int group = 0; group < fileReader->num_row_groups(); group++) {
 
@@ -970,7 +972,7 @@ public:
             bool isCancelled = false;
             ui64 numRows = 0;
             while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
+                auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
                 auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                 decodedBytes += size;
                 if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {

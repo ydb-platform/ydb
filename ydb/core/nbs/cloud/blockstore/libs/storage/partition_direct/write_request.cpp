@@ -167,14 +167,16 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
     CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
 
     ReplyOrNotifyBelated(completedWritesOfCurrentResponse);
+    if (IsReplied) {
+        return;
+    }
+
     SendAdditionalDirectWrites();
 }
 
 void TWriteRequestExecutor::SendAdditionalDirectWrites()
 {
-    if (IsReplied) {
-        return;
-    }
+    Y_DEBUG_ABORT_UNLESS(!IsReplied);
 
     LOG_TRACE(
         *ActorSystem,
@@ -215,7 +217,8 @@ void TWriteRequestExecutor::SendAdditionalDirectWrites()
 
 void TWriteRequestExecutor::SendDirectWriteRequestsToDesired(size_t count)
 {
-    if (IsReplied || !count) {
+    Y_DEBUG_ABORT_UNLESS(!IsReplied);
+    if (!count) {
         return;
     }
 
@@ -235,7 +238,8 @@ void TWriteRequestExecutor::SendDirectWriteRequestsToDesired(size_t count)
 
 void TWriteRequestExecutor::SendDirectWriteRequestsToHandoffs(size_t count)
 {
-    if (IsReplied || !count) {
+    Y_DEBUG_ABORT_UNLESS(!IsReplied);
+    if (!count) {
         return;
     }
 
@@ -262,9 +266,7 @@ void TWriteRequestExecutor::SendDirectWriteRequestsToHandoffs(size_t count)
 
 void TWriteRequestExecutor::SendDirectWriteRequest(THostIndex host)
 {
-    if (IsReplied) {
-        return;
-    }
+    Y_DEBUG_ABORT_UNLESS(!IsReplied);
 
     LOG_DEBUG(
         *ActorSystem,
@@ -481,6 +483,10 @@ void TWriteRequestExecutor::ScheduleRequestTimeout()
 
 void TWriteRequestExecutor::OnHedgingTimeout()
 {
+    if (IsReplied) {
+        return;
+    }
+
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,

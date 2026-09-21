@@ -128,6 +128,54 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             WriteClient->AllCompletedWrites.Get(THostIndex{1}));
     }
 
+    Y_UNIT_TEST_F(ShouldNotHedgeAfterReply, TWriteRequestTestFixture)
+    {
+        Init();
+
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::DirectWrite);
+        writeRequest->Run();
+
+        UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
+
+        DirectWritePromises[0].SetValue(CreateOkDirectResponse());
+        DirectWritePromises[1].SetValue(CreateOkDirectResponse());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, WriteClient->Response.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, WriteClient->Response->Error.GetCode());
+
+        // The hedge fires after the reply: no handoff writes are sent.
+        RunScheduledHedge();
+
+        UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldNotSendAdditionalDirectWritesAfterReply,
+        TWriteRequestTestFixture)
+    {
+        Init();
+
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::IndirectWrite);
+        writeRequest->Run();
+
+        UNIT_ASSERT_VALUES_EQUAL(0, DirectWritePromises.size());
+        UNIT_ASSERT(ManyPBufferCallback);
+
+        ManyPBufferCallback(CreateOkResponse());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, WriteClient->Response.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, WriteClient->Response->Error.GetCode());
+
+        // The hedge fires after the reply: no direct writes are sent.
+        RunScheduledHedge();
+
+        UNIT_ASSERT_VALUES_EQUAL(0, DirectWritePromises.size());
+    }
+
     Y_UNIT_TEST_F(
         ShouldSucceedWithHedgingWhenPrimariesHangAndHandoffsOk,
         TWriteRequestTestFixture)

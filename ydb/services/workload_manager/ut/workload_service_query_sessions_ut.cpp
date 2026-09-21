@@ -179,7 +179,10 @@ class TQuerySessionReader {
 public:
     struct Row {
         std::optional<std::string> SessionId;
+        std::optional<ui32> NodeId;
         std::optional<std::string> State;
+        std::optional<std::string> Query;
+        std::optional<ui32> QueryCount;
         std::optional<std::string> WmPoolId;
         std::optional<std::string> WmClassifiedBy;
         std::optional<TInstant> StateChangeAt;
@@ -209,8 +212,8 @@ private:
 
         Results.clear();
         TString q = fmt::format(R"(
-            SELECT SessionId, State, WmPoolId, WmClassifiedBy, StateChangeAt, QueryStartAt,
-                   WmState, WmEnterTime, WmExitTime
+            SELECT SessionId, NodeId, State, Query, QueryCount, WmPoolId, WmClassifiedBy,
+                   StateChangeAt, QueryStartAt, WmState, WmEnterTime, WmExitTime
             FROM `.sys/query_sessions`
             WHERE {predicate}
             ORDER BY SessionId
@@ -227,7 +230,10 @@ private:
         while (parser->TryNextRow()) {
             Results.push_back(Row{
                 .SessionId       = parser->ColumnParser("SessionId").GetOptionalUtf8(),
+                .NodeId          = parser->ColumnParser("NodeId").GetOptionalUint32(),
                 .State           = parser->ColumnParser("State").GetOptionalUtf8(),
+                .Query           = parser->ColumnParser("Query").GetOptionalUtf8(),
+                .QueryCount      = parser->ColumnParser("QueryCount").GetOptionalUint32(),
                 .WmPoolId        = parser->ColumnParser("WmPoolId").GetOptionalUtf8(),
                 .WmClassifiedBy  = parser->ColumnParser("WmClassifiedBy").GetOptionalUtf8(),
                 .StateChangeAt   = parser->ColumnParser("StateChangeAt").GetOptionalTimestamp(),
@@ -236,6 +242,25 @@ private:
                 .WmEnterTime     = parser->ColumnParser("WmEnterTime").GetOptionalTimestamp(),
                 .WmExitTime      = parser->ColumnParser("WmExitTime").GetOptionalTimestamp(),
             });
+        }
+    }
+
+public:
+    void Dump(IOutputStream& out) const {
+        out << "TQuerySessionReader: " << Results.size() << " rows\n";
+        for (size_t i = 0; i < Results.size(); ++i) {
+            const auto& r = Results[i];
+            out << "  [" << i << "]"
+                << " SessionId=" << r.SessionId.value_or("<null>")
+                << " NodeId=" << (r.NodeId ? ToString(*r.NodeId) : TString("<null>"))
+                << " State=" << r.State.value_or("<null>")
+                << " Query=" << r.Query.value_or("<null>")
+                << " QueryCount=" << (r.QueryCount ? ToString(*r.QueryCount) : TString("<null>"))
+                << " WmPoolId=" << r.WmPoolId.value_or("<null>")
+                << " WmClassifiedBy=" << r.WmClassifiedBy.value_or("<null>")
+                << " StateChangeAt=" << (r.StateChangeAt ? r.StateChangeAt->ToString() : TString("<null>"))
+                << " QueryStartAt=" << (r.QueryStartAt ? r.QueryStartAt->ToString() : TString("<null>"))
+                << "\n";
         }
     }
 

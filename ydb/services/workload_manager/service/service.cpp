@@ -11,9 +11,12 @@
 
 #include <ydb/services/workload_manager/actors/actors.h>
 #include <ydb/services/workload_manager/common/helpers.h>
+#include <ydb/services/workload_manager/gateway/resource_pools_cache_actor.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
 
 #include <ydb/core/mind/tenant_node_enumeration.h>
+
+#include <ydb/services/metadata/abstract/common.h>
 
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
@@ -99,6 +102,10 @@ public:
             if (poolState.NewPoolHandler) {
                 Send(*poolState.NewPoolHandler, new TEvents::TEvPoison());
             }
+        }
+
+        if (CacheActor) {
+            Send(CacheActor, new TEvents::TEvPoison());
         }
 
         PassAway();
@@ -219,6 +226,13 @@ public:
         }
     }
 
+    // Test-only: WaitForClassifierPropagation injects TEvRefreshSubscriberData via this well-known service id; forward to cache actor.
+    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+        if (CacheActor) {
+            TActivationContext::Send(ev->Forward(CacheActor));
+        }
+    }
+
     STRICT_STFUNC(MainState,
         sFunc(TEvents::TEvPoison, HandlePoison);
         sFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleSetConfigSubscriptionResponse);
@@ -230,6 +244,7 @@ public:
         hFunc(TEvPlaceRequestIntoPool, Handle);
         hFunc(TEvCleanupRequest, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
+        hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
 
         hFunc(TEvFetchDatabaseResponse, Handle);
         hFunc(TEvPrivate::TEvFetchPoolResponse, Handle);
@@ -537,6 +552,7 @@ private:
         ServiceInitialized = true;
 
         LOG_I("Started workload service initialization");
+        CacheActor = Register(CreateResourcePoolsCacheActor(SelfId()));
         Register(CreateCleanupTablesActor());
         RunNodeInfoRequest();
     }
@@ -660,7 +676,7 @@ private:
         }
 
         LOG_I("Creating new database state for id " << databaseId);
-        return &DatabaseToState.insert({databaseId, TDatabaseState{.SelfId = SelfId(), .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless, .WorkloadManagerConfig = WorkloadManagerConfig}}).first->second;
+        return &DatabaseToState.insert({databaseId, TDatabaseState{.SelfId = SelfId(), .CacheActor = CacheActor, .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless, .WorkloadManagerConfig = WorkloadManagerConfig}}).first->second;
     }
 
     TPoolState* GetOrCreatePoolState(const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig) {
@@ -713,6 +729,7 @@ private:
     std::unordered_map<TString, TPoolState> PoolIdToState;  // DatabaseID/PoolID to state
     std::unique_ptr<TCpuQuotaManagerState> CpuQuotaManager;
     ui32 NodeCount = 0;
+    TActorId CacheActor;
 };
 
 }  // anonymous namespace

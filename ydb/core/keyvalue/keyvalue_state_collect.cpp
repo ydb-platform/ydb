@@ -85,8 +85,7 @@ bool TKeyValueState::RemoveCollectedTrash(ISimpleDb &db) {
         for (ui32 maxItemsToStore = 200'000; trash && maxItemsToStore; trash.pop_back(), --maxItemsToStore) {
             const TLogoBlobID& id = trash.back();
             THelpers::DbEraseTrash(id, db);
-            ui32 num = trashBin.erase(id);
-            Y_ABORT_UNLESS(num == 1);
+            EraseTrash(trashBin, id);
             TotalTrashSize -= id.BlobSize();
             CountTrashDeleted(id);
             ++collected;
@@ -196,6 +195,8 @@ void TKeyValueState::ResetVacuumGeneration(const TActorContext &ctx, ui64 genera
         Trash.insert(trash.begin(), trash.end());
     }
     TrashForVacuum.clear();
+    // every bin is merged into Trash, so its size is the exact node count
+    StateBytes.TrashBytes = Trash.size() * TrashNodeBytes;
     for (const auto& [requestedGeneration, recipients] : VacuumGenerationToSender) {
         for (const auto& recipient : recipients) {
             ctx.Send(recipient, TEvKeyValue::TEvVacuumResponse::MakeAborted(requestedGeneration, "Vacuum generation was reset", generation, TabletId));

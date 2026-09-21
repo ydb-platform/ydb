@@ -236,6 +236,29 @@ public:
         return VacuumResetGeneration;
     }
 
+    // estimate of the logical state (vector sizes, no hash buckets or allocator rounding), not an allocated-memory bound
+    struct TStateBytes {
+        ui64 IndexBytes = 0;
+        ui64 InlineDataBytes = 0;
+        ui64 RefCountsBytes = 0;
+        ui64 TrashBytes = 0;
+
+        ui64 Total() const {
+            return IndexBytes + InlineDataBytes + RefCountsBytes + TrashBytes;
+        }
+
+        bool operator==(const TStateBytes& other) const = default;
+
+        TString ToString() const {
+            return TStringBuilder() << "{Index# " << IndexBytes << " InlineData# " << InlineDataBytes
+                << " RefCounts# " << RefCountsBytes << " Trash# " << TrashBytes << "}";
+        }
+    };
+
+    const TStateBytes& GetStateBytes() const {
+        return StateBytes;
+    }
+
 protected:
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
 
@@ -254,6 +277,16 @@ protected:
     ui64 CompletedVacuumTrashGeneration = 0;
     TMap<ui64, THashSet<TActorId>> VacuumGenerationToSender;
     ui64 VacuumResetGeneration = 0; // needs to distinguish between vacuum clanups of different resets
+
+    // red-black tree node: color, parent and two child pointers
+    static constexpr ui64 TreeNodeOverheadBytes = 4 * sizeof(void*);
+    // TString keeps its bytes in a separate heap block: refcount, length, capacity and the allocator header
+    static constexpr ui64 KeyHeapOverheadBytes = 32;
+    static constexpr ui64 IndexNodeBytes = sizeof(TIndex::value_type) + TreeNodeOverheadBytes + KeyHeapOverheadBytes;
+    static constexpr ui64 ChainItemBytes = sizeof(TIndexRecord::TChainItem);
+    static constexpr ui64 RefCountNodeBytes = sizeof(std::pair<const TLogoBlobID, ui32>) + sizeof(void*);
+    static constexpr ui64 TrashNodeBytes = sizeof(TLogoBlobID) + TreeNodeOverheadBytes;
+    TStateBytes StateBytes;
 
     // move data operation state
     static constexpr ui64 MaxMoveDataRecordsInOneTx = 16 << 10;
@@ -837,7 +870,32 @@ public:
         });
     }
 
+private:
+    static TStateBytes GetIndexRecordBytes(const TString& key, const TIndexRecord& record);
+    void SubtractStateBytes(ui64& total, ui64 bytes);
+    void AccountIndexRecord(const TString& key, const TIndexRecord& record);
+    void UnaccountIndexRecord(const TString& key, const TIndexRecord& record);
+    // the only ways to change Index: the callback may mutate the record but must not erase it
+    template<typename TFunc>
+    TIndexRecord& ModifyIndexRecord(const TString& key, TFunc&& modify) {
+        const auto [it, inserted] = Index.try_emplace(key);
+        if (!inserted) {
+            UnaccountIndexRecord(it->first, it->second);
+        }
+        const size_t sizeBefore = Index.size();
+        modify(it->second);
+        Y_ABORT_UNLESS(Index.size() == sizeBefore);
+        AccountIndexRecord(it->first, it->second);
+        return it->second;
+    }
+    TVector<TIndexRecord::TChainItem> EraseIndexRecord(TIndex::iterator it);
+    ui32& GetOrCreateRefCount(const TLogoBlobID& id);
+    void EraseRefCount(THashMap<TLogoBlobID, ui32>::iterator it);
+    void InsertTrash(TSet<TLogoBlobID>& trashBin, const TLogoBlobID& id);
+    void EraseTrash(TSet<TLogoBlobID>& trashBin, const TLogoBlobID& id);
+
 public: // For testing
+    TStateBytes RecountStateBytes() const;
     TString Dump() const;
     void VerifyEqualIndex(const TKeyValueState& state) const;
 };

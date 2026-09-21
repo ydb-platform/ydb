@@ -66,7 +66,7 @@ component=SessionActor message="Query had broken other locks" breakerTxSpanId=22
 component=DataShard tabletId=<tablet-id> message="Write transaction was a victim of broken locks" victimQuerySpanId=1111111111111111
 ```
 
-**Лог жертвы (SessionActor)**
+**Лог жертвы (SessionActor):**
 
 Для одной транзакции в лог пишется две записи:
 

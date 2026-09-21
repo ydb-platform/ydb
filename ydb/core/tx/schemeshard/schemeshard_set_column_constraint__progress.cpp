@@ -718,6 +718,10 @@ public:
         Y_ENSURE(operationInfoPtr);
         auto& operationInfo = *operationInfoPtr->get();
 
+        if (operationInfo.IsBroken) {
+            return true;
+        }
+
         if (!operationInfo.DependencyTxIds.empty()) {
             LOG_N("TTxProgressSetColumnConstraint: " << BuildId << ": waiting for dependencies");
             return true;

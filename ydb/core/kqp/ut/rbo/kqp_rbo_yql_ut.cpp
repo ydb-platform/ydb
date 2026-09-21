@@ -5511,6 +5511,86 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST(LeftJoinInequalityOnClause) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoinForCross(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto tableSession = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows1;
+        rows1.BeginList();
+        for (size_t i = 0; i < 4; ++i) {
+            rows1.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows1.EndList();
+        auto resultUpsert = db.BulkUpsert("/Root/t1", rows1.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows2;
+        rows2.BeginList();
+        for (size_t i = 0; i < 3; ++i) {
+            rows2.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows2.EndList();
+        resultUpsert = db.BulkUpsert("/Root/t2", rows2.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        const TString query = R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT t1.a, t1.b, t2.a, t2.b
+            FROM `/Root/t1` AS t1
+            LEFT JOIN `/Root/t2` AS t2 ON t1.a > t2.b
+            ORDER BY t1.a, t2.a;
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+        auto explain = session.ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+
+        const auto plan = TString{*explain.GetStats()->GetPlan()};
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* crossJoin = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Cross");
+        UNIT_ASSERT_C(crossJoin, plan);
+        const auto filters = crossJoin->GetMapSafe().find("Filters");
+        UNIT_ASSERT_C(filters != crossJoin->GetMapSafe().end() && filters->second.IsArray(), plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(filters->second.GetArraySafe().size(), 1, plan);
+
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResultSetYson(result.GetResultSet(0)),
+            R"([[0;[1];#;#];[1;[2];#;#];[2;[3];[0];[1]];[3;[4];[0];[1]];[3;[4];[1];[2]]])"
+        );
+    }
+
     Y_UNIT_TEST(JoinFiltersAdvanced) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

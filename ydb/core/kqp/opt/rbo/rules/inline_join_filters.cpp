@@ -107,10 +107,11 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
 
     // Build an inner join, but in case of LeftSemi and LeftOnly, the right side may contain duplicate IUs
     // which will break the plan. So we rename them
+    const auto joinKind = join->JoinKeys.empty() ? "Cross" : "Inner";
     auto commonIUs = IUSetIntersect(join->GetLeftInput()->GetOutputIUs(), join->GetRightInput()->GetOutputIUs());
     auto rightRenameMap = MakeRenameMap(commonIUs, props.InternalVarIdx, usedIUs);
     auto innerJoin = MakeJoinWithRightRenames(
-        join->GetLeftInput(), join->GetRightInput(), join->Pos, "Inner", join->JoinKeys, {}, rightRenameMap, ctx.ExprCtx, props);
+        join->GetLeftInput(), join->GetRightInput(), join->Pos, joinKind, join->JoinKeys, {}, rightRenameMap, ctx.ExprCtx, props);
     auto filterExpr = MakeConjunction(join->JoinFilters);
 
     auto newFilter = MakeIntrusive<TOpFilter>(innerJoin, input->Pos, filterExpr);

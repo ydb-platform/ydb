@@ -108,6 +108,7 @@ def create_ydb_configurator(
     enable_tablet_dev_ui_secure_path=None,
     binary_paths=None,
     extra_feature_flags=None,
+    empty_administration_allowed_sids=False,
 ):
     cluster_config = {
         'default_clusteradmin': 'root@builtin',
@@ -136,6 +137,11 @@ def create_ydb_configurator(
     assert (
         'administration_allowed_sids' in security_config and len(security_config['administration_allowed_sids']) > 0
     ), 'administration_allowed_sids was supposed to be set due to default_clusteradmin'
+
+    # the cluster admin keeps its default_access on the domain, but an empty list of
+    # administration_allowed_sids makes every token an administrator
+    if empty_administration_allowed_sids:
+        security_config['administration_allowed_sids'] = []
 
     if enforce_user_token_requirement:
         config_generator.yaml_config.setdefault('auth_config', {})

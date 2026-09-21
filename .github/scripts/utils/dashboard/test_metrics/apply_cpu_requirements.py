@@ -20,8 +20,14 @@ import re
 from pathlib import Path
 from typing import Optional
 
+try:
+    from .ya_make_requirements import requirements_span
+except ImportError:
+    from ya_make_requirements import requirements_span
+
 PART_SUFFIX_RE = re.compile(r"/part\d+$")
-RE_REQ_LINE = re.compile(r"^(\s*REQUIREMENTS\s*\()(.*?)(\)\s*)$")
+RE_REQ_LINE = re.compile(r"^(\s*REQUIREMENTS\s*\()(.*?)(\)\s*)$", re.DOTALL)
+RE_REQ_OPEN = re.compile(r"^\s*REQUIREMENTS\s*\(", re.IGNORECASE)
 RE_CPU = re.compile(r"\bcpu\s*:\s*([^\s)]+(?:\([^)]*\))?)", re.IGNORECASE)
 RE_IF = re.compile(r"^\s*IF\s*\((.*)\)\s*$")
 RE_ELSEIF = re.compile(r"^\s*ELSEIF\s*\((.*)\)\s*$")
@@ -46,12 +52,25 @@ def normalize_cpu_req(value: object) -> str:
 
 
 def update_requirements_line(line: str, cpu: str) -> str:
-    m = RE_REQ_LINE.match(line)
+    return update_requirements_text(line, cpu)
+
+
+def update_requirements_text(text: str, cpu: str) -> str:
+    m = RE_REQ_LINE.match(text.rstrip("\n"))
     if not m:
-        return line
+        return text
     prefix, body, suffix = m.group(1), m.group(2), m.group(3)
     if RE_CPU.search(body):
         body = RE_CPU.sub("cpu:" + str(cpu), body, count=1)
+    elif "\n" in body:
+        indent = "        "
+        for raw in body.splitlines():
+            stripped = raw.strip()
+            if stripped:
+                indent = raw[: len(raw) - len(stripped)]
+                break
+        trimmed = body.rstrip()
+        body = trimmed + "\n" + indent + "cpu:" + str(cpu) + "\n"
     else:
         body = (body.strip() + " " if body.strip() else "") + "cpu:" + str(cpu)
     return prefix + body + suffix
@@ -178,7 +197,7 @@ def _find_requirements_line(lines: list[str], sanitizer: Optional[str]) -> Optio
             current_active = stack[-1][2] if stack else True
             current_sanitizer_scope = stack[-1][4] if stack else False
             continue
-        if current_active and RE_REQ_LINE.match(raw):
+        if current_active and RE_REQ_OPEN.match(raw):
             if not seen_sanitizer_or_valgrind_if or (not sanitizer or current_sanitizer_scope):
                 return i
     return None
@@ -315,10 +334,19 @@ def apply_cpu_requirements_to_content(
     req_idx = _find_requirements_line(lines, sanitizer)
 
     if req_idx is not None:
-        new_line = update_requirements_line(lines[req_idx], cpu)
-        if new_line != lines[req_idx]:
-            lines[req_idx] = new_line
-            changed = True
+        span = requirements_span(lines, req_idx)
+        if span is None:
+            new_line = update_requirements_line(lines[req_idx], cpu)
+            if new_line != lines[req_idx]:
+                lines[req_idx] = new_line
+                changed = True
+        else:
+            start, end = span
+            old_block = "\n".join(lines[start : end + 1])
+            new_block = update_requirements_text(old_block, cpu)
+            if new_block != old_block:
+                lines[start : end + 1] = new_block.splitlines()
+                changed = True
     else:
         if not _has_module_block(lines):
             return content, "skip (no module block)"

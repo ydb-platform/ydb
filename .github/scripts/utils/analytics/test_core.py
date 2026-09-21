@@ -148,6 +148,12 @@ class CoreLifecycleTest(unittest.TestCase):
             self.assertEqual(row["labels"]["model"], "foo")
             self.assertEqual(row["run_id"], 99)
 
+    def test_ignores_github_run_id(self):
+        os.environ.pop("ANALYTICS_RUN_ID", None)
+        os.environ["GITHUB_RUN_ID"] = "123"
+        record = attach_context({"name": "llm_call"})
+        self.assertNotIn("run_id", record)
+
 
 if __name__ == "__main__":
     unittest.main()

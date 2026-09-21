@@ -7,6 +7,7 @@ and ya.make update script generator.
 
 from __future__ import annotations
 
+import html as html_lib
 import json
 from pathlib import Path
 from typing import Any, Optional
@@ -20,10 +21,17 @@ except ImportError:
 def js_script_json(value: Any) -> str:
     """JSON text safe to embed in a <script> tag.
 
-    Keep the ``</`` escape outside f-strings: Python < 3.12 rejects a
-    backslash in an f-string expression, and CI runners are still 3.10/3.11.
+    Escape ``<`` / ``>`` / ``&`` as JSON unicode so any case of ``</script>``
+    cannot close the tag. Keep this helper outside f-string expressions
+    (Python < 3.12 rejects a backslash there; CI runners are still 3.10/3.11).
     """
-    return json.dumps(value, ensure_ascii=False).replace("</", "<\\/")
+    text = json.dumps(value, ensure_ascii=False)
+    text = text.replace("<", "\\u003c")
+    text = text.replace(">", "\\u003e")
+    text = text.replace("&", "\\u0026")
+    text = text.replace("\u2028", "\\u2028")
+    text = text.replace("\u2029", "\\u2029")
+    return text
 
 
 def build_html_dashboard(
@@ -66,6 +74,7 @@ def build_html_dashboard(
     rf_budget = rf.get("mem_budget_gb", "?")
     rf_ya_mem = rf.get("ya_make_mem_limit_gb", "?")
     payload_js = js_script_json(payload)
+    suite_filter_html = html_lib.escape(suite_filter or "ALL SUITES", quote=True)
 
     html = f"""<!doctype html>
 <html>
@@ -214,7 +223,7 @@ def build_html_dashboard(
       <span id="headerLinks" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"></span>
     </div>
     <div style="margin-top:8px;font-size:13px;color:#64748b;">
-      Suite filter: {suite_filter or 'ALL SUITES'}
+      Suite filter: {suite_filter_html}
     </div>
     <div id="overlayStatus" style="margin-top:4px;font-size:12px;"></div>
   </div>
@@ -330,7 +339,7 @@ def build_html_dashboard(
         <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
         <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
         <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
-        <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics. If value looks like microseconds (&gt;1000), it is divided by <code>1e6</code>.</li>
+        <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
         <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / duration_used_sec</code> (duration_used_sec = max(report, evlog)). Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
         <li><b>RAM per chunk (report):</b> <code>ram_kb_report = max(0, suite_max_proc_tree_memory_consumption_kb − suite_initial_maxrss_(kb))</code> when both suite metrics exist (memory attributed to the test run); else <code>suite_max_proc_tree_memory_consumption_kb</code>; else <code>ru_maxrss</code>; fallback <code>ru_rss / 1024</code>.</li>
         <li><b>RAM shown on charts:</b> <code>ram_gb = ram_kb_report / (1024 * 1024)</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>

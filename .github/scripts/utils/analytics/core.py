@@ -90,12 +90,12 @@ CREDENTIAL_ENVS = (
 
 
 def default_metrics_file() -> str:
-    return os.environ.get("ANALYTICS_FILE") or os.environ.get("CI_METRICS_FILE") or "analytics.jsonl"
+    return os.environ.get("ANALYTICS_FILE") or "analytics.jsonl"
 
 
 def default_env_defaults() -> Dict[str, Any]:
     """Non-CI defaults. Wrappers overlay their own context on top."""
-    run_id = _as_uint(os.environ.get("ANALYTICS_RUN_ID") or os.environ.get("GITHUB_RUN_ID"))
+    run_id = _as_uint(os.environ.get("ANALYTICS_RUN_ID"))
     return {"run_id": run_id} if run_id is not None else {}
 
 
@@ -660,6 +660,7 @@ def send(
     enrich: Optional[EnrichFn] = None,
     info_name: Optional[str] = None,
     flush: Optional[Callable[..., int]] = None,
+    table_path: Optional[str] = None,
     **fields: Any,
 ) -> int:
     """End leftover spans (or record a named instant event) and export the batch.
@@ -674,6 +675,7 @@ def send(
     extras.pop("enrich", None)
     extras.pop("info_name", None)
     extras.pop("flush", None)
+    extras.pop("table_path", None)
     snapshot = extras.pop("payload", None)
     pending = read_pending_spans(path)
     span_source = _pending_source(pending, name)
@@ -697,6 +699,8 @@ def send(
                 **hook,
             )
     flush_fn = flush or flush_file
+    if table_path:
+        return flush_fn(path, table_path=table_path)
     return flush_fn(path)
 
 
@@ -1048,6 +1052,7 @@ def _cmd_send(args: argparse.Namespace) -> int:
         started_epoch=args.started_epoch,
         finished_epoch=args.finished_epoch,
         info_name=getattr(args, "info_name", None),
+        table_path=getattr(args, "table_path", None),
     )
     return 0
 

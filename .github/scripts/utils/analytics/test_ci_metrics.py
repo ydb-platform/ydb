@@ -179,6 +179,7 @@ class WorkflowRunMetricsTest(unittest.TestCase):
             {
                 "id": 777,
                 "name": "Build and test relwithdebinfo",
+                "created_at": "2026-09-21T10:04:00Z",
                 "started_at": "2026-09-21T10:05:00Z",
                 "completed_at": "2026-09-21T11:05:00Z",
                 "conclusion": "success",
@@ -217,10 +218,33 @@ class WorkflowRunMetricsTest(unittest.TestCase):
         self.assertEqual(job_row["build_preset"], "relwithdebinfo")
         self.assertEqual(job_row["kind"], "duration")
         self.assertEqual(job_row["value"], 60 * 60 * 1000)
-        self.assertEqual(json.loads(job_row["labels"])["queued_ms"], 5 * 60 * 1000)
+        self.assertEqual(json.loads(job_row["labels"])["queued_ms"], 60 * 1000)
 
         queue_row = next(row for row in rows if row["name"] == "queue")
-        self.assertEqual(queue_row["value"], 5 * 60 * 1000)
+        self.assertEqual(queue_row["value"], 60 * 1000)
+        self.assertEqual(queue_row["event_ts"], datetime(2026, 9, 21, 10, 4, tzinfo=timezone.utc))
+
+    def test_queue_falls_back_to_run_created_when_job_created_missing(self):
+        run = {
+            "id": 1,
+            "event": "push",
+            "name": "PR-check",
+            "head_sha": "abc",
+            "head_branch": "main",
+            "created_at": "2026-09-21T10:00:00Z",
+        }
+        jobs = [
+            {
+                "id": 2,
+                "name": "Build and test relwithdebinfo",
+                "started_at": "2026-09-21T10:03:00Z",
+                "completed_at": "2026-09-21T10:04:00Z",
+                "conclusion": "success",
+            }
+        ]
+        rows = metrics_from_workflow_run(run, jobs)
+        queue_row = next(row for row in rows if row["name"] == "queue")
+        self.assertEqual(queue_row["value"], 3 * 60 * 1000)
 
 
 class SchemaTest(unittest.TestCase):

@@ -30,8 +30,6 @@ from core import (  # noqa: F401 — re-export helpers tests and exporters impor
     Analytics as CoreAnalytics,
     add_track_cli_args as add_core_cli_args,
     _as_uint,
-    _is_info_name,
-    _pending_source,
     _properties_from_args,
     append_record,
     build_column_types as core_build_column_types,
@@ -51,6 +49,7 @@ from core import (  # noqa: F401 — re-export helpers tests and exporters impor
     resolve_track_name,
     resolve_track_value,
     rows_from_jsonl as core_rows_from_jsonl,
+    send as core_send,
     start as core_start,
     track as core_track,
     upsert_metrics as core_upsert_metrics,
@@ -362,6 +361,26 @@ def github_env_defaults() -> Dict[str, Any]:
     }
 
 
+def _iter_github_run_jobs(token: str, repo: str, run_id: str, *, per_page: int = 100, max_pages: int = 20):
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    for page in range(1, max_pages + 1):
+        request = Request(
+            f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?per_page={per_page}&page={page}",
+            headers=headers,
+        )
+        with urlopen(request, timeout=10) as response:
+            payload = json.load(response)
+        jobs = payload.get("jobs") or []
+        for job in jobs:
+            yield job
+        if len(jobs) < per_page:
+            return
+
+
 def maybe_resolve_job_id() -> None:
     if os.environ.get("GITHUB_NUMERIC_JOB_ID"):
         return
@@ -371,21 +390,12 @@ def maybe_resolve_job_id() -> None:
     if not token or not repo or not run_id:
         return
     try:
-        request = Request(
-            f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
-        with urlopen(request, timeout=10) as response:
-            payload = json.load(response)
+        jobs = list(_iter_github_run_jobs(token, repo, run_id))
     except (URLError, TimeoutError, json.JSONDecodeError, OSError):
         return
     preset = os.environ.get("BUILD_PRESET") or ""
     hint = os.environ.get("CI_JOB_TITLE") or os.environ.get("GITHUB_JOB") or ""
-    for job in payload.get("jobs") or []:
+    for job in jobs:
         name = str(job.get("name") or "")
         job_id = job.get("id")
         if job_id is None:
@@ -579,53 +589,19 @@ def send(
     merged = dict(props)
     merged.update(extras)
     path = file or default_metrics_file()
-    merged.pop("info_name", None)
+    table_path = merged.pop("table_path", None)
+    info_name = merged.pop("info_name", None) or BUILD_INFO_NAME
     merged.pop("flush", None)
-    return core_send_via_module(
+    return core_send(
         name,
         merged,
         file=path,
-        runner=runner,
-        usage=usage,
-        extras=merged,
+        attach=attach_context,
+        enrich=_ci_enrich(runner, usage, path),
+        info_name=info_name,
+        flush=flush_file,
+        table_path=table_path,
     )
-
-
-def core_send_via_module(
-    name: Optional[str],
-    properties: Dict[str, Any],
-    *,
-    file: str,
-    runner: bool,
-    usage: bool,
-    extras: Dict[str, Any],
-) -> int:
-    """Same as core.send, but flush_file is this module's (tests patch it)."""
-    extras = dict(extras)
-    snapshot = extras.pop("payload", None)
-    pending = read_pending_spans(file)
-    span_source = _pending_source(pending, name)
-    enrich = _ci_enrich(runner, usage, file)
-    if name and not any(span.get("name") == name for span in pending):
-        if snapshot is not None:
-            extras["payload"] = snapshot
-            extras.setdefault("kind", "info")
-        track(name, extras, file=file, runner=runner, usage=usage)
-    else:
-        end(name, extras, file=file, runner=runner, usage=usage)
-        if snapshot is not None:
-            info_name = name if _is_info_name(name, extras.get("kind")) else BUILD_INFO_NAME
-            track(
-                info_name,
-                {"payload": snapshot},
-                file=file,
-                kind="info",
-                source=extras.get("source") or span_source,
-                conclusion=extras.get("conclusion"),
-                runner=runner,
-                usage=usage,
-            )
-    return flush_file(file)
 
 
 @contextmanager
@@ -758,7 +734,8 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
         job_completed = parse_datetime(job.get("completed_at"))
         conclusion = job.get("conclusion") or job.get("status")
         preset = guess_build_preset(job_name)
-        queued_ms = duration_ms_between(run_created, job_started)
+        job_created = parse_datetime(job.get("created_at")) or run_created
+        queued_ms = duration_ms_between(job_created, job_started)
         common = {
             "run_id": run_id,
             "github_job_id": job_id,
@@ -793,14 +770,14 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
                     now=now,
                 )
             )
-            if queued_ms is not None and run_created is not None:
+            if queued_ms is not None and job_created is not None:
                 rows.append(
                     normalize_metric(
                         {
                             **common,
                             "name": "queue",
                             "source": "github_job",
-                            "started_at": run_created,
+                            "started_at": job_created,
                             "value": queued_ms,
                             "conclusion": conclusion,
                             "labels": {"queued_ms": queued_ms},
@@ -905,6 +882,7 @@ def _cmd_send(args: argparse.Namespace) -> int:
         finished_epoch=args.finished_epoch,
         runner=bool(getattr(args, "runner", False)),
         usage=bool(getattr(args, "usage", False)),
+        table_path=getattr(args, "table_path", None),
     )
     return 0
 

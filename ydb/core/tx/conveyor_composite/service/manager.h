@@ -1,5 +1,6 @@
 #pragma once
 #include "category.h"
+#include "query.h"
 #include "workers_pool.h"
 
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
@@ -9,9 +10,11 @@
 namespace NKikimr::NConveyorComposite {
 class TTasksManager {
 private:
+    TQueryRegistry QueryRegistry;
     std::vector<std::shared_ptr<TWorkersPool>> WorkerPools;
     THashMap<TString, ui64> WorkerPoolNameToIndex;
     std::vector<std::shared_ptr<TProcessCategory>> Categories;
+    const NActors::TActorId DistributorId;
 
     auto BuildWorkerPools() const {
         return WorkerPools | std::views::filter([](const auto& pool) { return pool != nullptr; });
@@ -20,6 +23,7 @@ private:
     ui64 FindFreeWorkerPoolsPosition();
     ui64 AddWorkerPool(const NConfig::TWorkersPool& poolConfig,
         const NActors::TActorId& distributorActorId, TCounters& counters);
+    ui64 CalculateParallelUpperBound(const TSchedulerQueryIdentity& identity) const;
 
 public:
     TString DebugString() const {
@@ -33,15 +37,7 @@ public:
         return sb;
     }
 
-    TTasksManager(const TString& /*convName*/, const NConfig::TConfig& config, const NActors::TActorId distributorActorId, TCounters& counters)
-    {
-        for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
-            Categories.emplace_back(std::make_shared<TProcessCategory>(config.GetCategoryConfig(i), counters));
-        }
-        for (const auto& poolConfig : config.GetWorkerPools()) {
-            AddWorkerPool(poolConfig, distributorActorId, counters);
-        }
-    }
+    TTasksManager(const TString& convName, const NConfig::TConfig& config, NActors::TActorId distributorActorId, TCounters& counters);
 
     TWorkersPool& MutableWorkersPool(const ui64 workersPoolId) {
         Y_ENSURE(workersPoolId < WorkerPools.size(), "worker pool index is out of range: " << workersPoolId);
@@ -49,15 +45,7 @@ public:
         return *WorkerPools[workersPoolId];
     }
 
-    [[nodiscard]] bool DrainTasks() {
-        bool result = false;
-        for (const auto& pool : BuildWorkerPools()) {
-            if (pool->DrainTasks()) {
-                result = true;
-            }
-        }
-        return result;
-    }
+    [[nodiscard]] bool DrainTasks();
 
     TProcessCategory& MutableCategoryVerified(const ESpecialTaskCategory category) {
         AFL_VERIFY((ui64)category < Categories.size());
@@ -69,6 +57,11 @@ public:
     bool IsReadyForUpdate() const;
     void ApplyConfigUpdate(const NConfig::TConfig& config,
         const NActors::TActorId& distributorActorId, TCounters& counters);
+
+    bool RegisterProcess(const ESpecialTaskCategory category, const TString& scopeId, const ui64 internalProcessId,
+        const TCPULimitsConfig& cpuLimits, const TSchedulerQueryIdentity& identity);
+    void UnregisterProcess(ESpecialTaskCategory category, ui64 internalProcessId);
+    bool SetQuery(const TSchedulerQueryIdentity& identity, NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr query);
 };
 
 }   // namespace NKikimr::NConveyorComposite

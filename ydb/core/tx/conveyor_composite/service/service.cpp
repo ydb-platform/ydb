@@ -1,7 +1,9 @@
 #include "manager.h"
 #include "service.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/config/validation/validators.h>
+#include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 #include <ydb/core/tx/conveyor_composite/tracing/probes.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
@@ -147,6 +149,10 @@ void TDistributor::HandleMain(TEvInternal::TEvRetryConfigSubscription::TPtr& /*e
     SubscribeToCompositeConveyorConfig();
 }
 
+void TDistributor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
+    Y_UNUSED(Manager->DrainTasks());
+}
+
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
     auto& ev = *evExt->Get();
     const TDuration backSendDuration = (TMonotonic::Now() - ev.GetConstructInstant());
@@ -177,16 +183,38 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
     auto& event = *ev->Get();
     LWPROBE(RegisterProcess, ConveyorName, ToString(event.GetCategory()), event.GetScopeId(), event.GetInternalProcessId());
-    auto& cat = Manager->MutableCategoryVerified(event.GetCategory());
-    std::shared_ptr<TProcessScope> scope = cat.UpsertScope(event.GetScopeId(), event.GetCPULimits());
-    cat.RegisterProcess(event.GetInternalProcessId(), std::move(scope));
+    const bool isNewIdentity = Manager->RegisterProcess(event.GetCategory(), event.GetScopeId(), event.GetInternalProcessId(),
+        event.GetCPULimits(), event.GetSchedulerQueryIdentity());
+    if (isNewIdentity && !event.GetSchedulerQueryIdentity().IsDefault()) {
+        // TODO: Replace this temporary direct scheduler lookup with a request to TKqpQueryManager once that interface is available.
+        if (const auto& scheduler = AppData()->KqpComputeScheduler) {
+            if (auto query = scheduler->GetQuery(event.GetSchedulerQueryIdentity().QueryId)) {
+                Manager->SetQuery(event.GetSchedulerQueryIdentity(), std::move(query));
+            }
+        }
+    }
+}
+
+void TDistributor::HandleMain(NKqp::NScheduler::TEvQueryResponse::TPtr& ev) {
+    auto query = std::move(ev->Get()->Query);
+    if (!query) {
+        return;
+    }
+    const auto& fullPoolId = query->GetFullPoolId();
+    const TSchedulerQueryIdentity identity{
+        .DatabaseId = fullPoolId.DatabaseId,
+        .PoolId = fullPoolId.PoolId,
+        .QueryId = std::get<NKqp::NScheduler::NHdrf::TQueryId>(query->GetId()),
+    };
+    if (Manager->SetQuery(identity, std::move(query))) {
+        Y_UNUSED(Manager->DrainTasks());
+    }
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     auto& event = *ev->Get();
     LWPROBE(UnregisterProcess, ConveyorName, ToString(event.GetCategory()), event.GetInternalProcessId());
-    auto* evData = ev->Get();
-    Manager->MutableCategoryVerified(evData->GetCategory()).UnregisterProcess(evData->GetInternalProcessId());
+    Manager->UnregisterProcess(event.GetCategory(), event.GetInternalProcessId());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {

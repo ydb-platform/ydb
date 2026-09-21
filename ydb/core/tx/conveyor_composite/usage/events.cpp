@@ -11,4 +11,13 @@ TEvExecution::TEvNewTask::TEvNewTask(ITask::TPtr task, const ESpecialTaskCategor
     AFL_VERIFY(Task);
 }
 
+TEvExecution::TEvRegisterProcess::TEvRegisterProcess(const TCPULimitsConfig& cpuLimits, const ESpecialTaskCategory category,
+    const TString& scopeId, const ui64 internalProcessId, const std::optional<TSchedulerQueryIdentity>& schedulerQueryIdentity)
+    : Category(category)
+    , ScopeId(scopeId)
+    , InternalProcessId(internalProcessId)
+    , CPULimits(cpuLimits)
+    , SchedulerQueryIdentity(schedulerQueryIdentity.value_or(TSchedulerQueryIdentity{})) {
+}
+
 }   // namespace NKikimr::NConveyorComposite

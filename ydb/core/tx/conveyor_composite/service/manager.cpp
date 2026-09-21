@@ -3,8 +3,42 @@
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 
 #include <algorithm>
+#include <numeric>
 
 namespace NKikimr::NConveyorComposite {
+
+TTasksManager::TTasksManager(
+    const TString& /*convName*/, const NConfig::TConfig& config, const NActors::TActorId distributorActorId, TCounters& counters)
+    : DistributorId(distributorActorId) {
+    const TSchedulerQueryIdentity defaultIdentity = {};
+    for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
+        Categories.emplace_back(std::make_shared<TProcessCategory>(config.GetCategoryConfig(i), counters));
+        QueryRegistry.RegisterProcess(defaultIdentity);
+    }
+    for (const auto& poolConfig : config.GetWorkerPools()) {
+        AddWorkerPool(poolConfig, distributorActorId, counters);
+    }
+    QueryRegistry.UpdateWorkCapacity(defaultIdentity, CalculateParallelUpperBound(defaultIdentity));
+}
+
+bool TTasksManager::DrainTasks() {
+    const TMonotonic now = TMonotonic::Now();
+    TDrainContext context{
+        .Now = now,
+        .AverageWakeUpDeadline = QueryRegistry.GetAverageWakeUpDeadline(now),
+    };
+    bool result = false;
+    for (const auto& pool : BuildWorkerPools()) {
+        if (pool->DrainTasks(context)) {
+            result = true;
+        }
+    }
+    if (const auto deadline = QueryRegistry.GetMinWakeUpDeadline()) {
+        TActivationContext::Schedule(
+            *deadline, new NActors::IEventHandle(DistributorId, {}, new NActors::TEvents::TEvWakeup()));
+    }
+    return result;
+}
 
 ui64 TTasksManager::FindFreeWorkerPoolsPosition() {
     const auto it = std::find(WorkerPools.begin(), WorkerPools.end(), nullptr);
@@ -21,8 +55,42 @@ ui64 TTasksManager::AddWorkerPool(const NConfig::TWorkersPool& poolConfig,
     Y_ENSURE(WorkerPoolNameToIndex.emplace(poolConfig.GetName(), workersPoolId).second,
         "duplicate worker pool name: " << poolConfig.GetName());
     WorkerPools[workersPoolId] = std::make_shared<TWorkersPool>(poolConfig.GetName(), workersPoolId, distributorActorId, poolConfig,
-        counters.GetWorkersPoolSignals(poolConfig.GetName()), Categories);
+        counters.GetWorkersPoolSignals(poolConfig.GetName()), Categories, &QueryRegistry);
     return workersPoolId;
+}
+
+ui64 TTasksManager::CalculateParallelUpperBound(const TSchedulerQueryIdentity& identity) const {
+    auto workersCounts = BuildWorkerPools()
+        | std::views::filter([&](const auto& pool) { return pool->HasProcesses(identity); })
+        | std::views::transform(&TWorkersPool::GetWorkersCount);
+    return std::accumulate(workersCounts.begin(), workersCounts.end(), ui64{0});
+}
+
+bool TTasksManager::RegisterProcess(const ESpecialTaskCategory category, const TString& scopeId, const ui64 internalProcessId,
+    const TCPULimitsConfig& cpuLimits, const TSchedulerQueryIdentity& identity) {
+    const bool isNewIdentity = QueryRegistry.RegisterProcess(identity);
+    auto& processCategory = MutableCategoryVerified(category);
+    auto scope = processCategory.UpsertScope(scopeId, cpuLimits);
+    processCategory.RegisterProcess(internalProcessId, std::move(scope), identity);
+    QueryRegistry.UpdateWorkCapacity(identity, CalculateParallelUpperBound(identity));
+    return isNewIdentity;
+}
+
+void TTasksManager::UnregisterProcess(const ESpecialTaskCategory category, const ui64 internalProcessId) {
+    const auto identity = MutableCategoryVerified(category).UnregisterProcess(internalProcessId);
+    const bool removed = QueryRegistry.UnregisterProcess(identity);
+    if (!removed) {
+        QueryRegistry.UpdateWorkCapacity(identity, CalculateParallelUpperBound(identity));
+    }
+}
+
+bool TTasksManager::SetQuery(
+    const TSchedulerQueryIdentity& identity, NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr query) {
+    if (!QueryRegistry.SetQuery(identity, std::move(query))) {
+        return false;
+    }
+    QueryRegistry.UpdateWorkCapacity(identity, CalculateParallelUpperBound(identity));
+    return true;
 }
 
 void TTasksManager::PrepareConfigUpdate(const NConfig::TConfig& config) {
@@ -95,6 +163,9 @@ void TTasksManager::ApplyConfigUpdate(const NConfig::TConfig& config,
     }
     for (const auto category : GetEnumAllValues<ESpecialTaskCategory>()) {
         MutableCategoryVerified(category).ApplyConfig(config.GetCategoryConfig(category));
+    }
+    for (const auto& identity : QueryRegistry.GetIdentitiesView()) {
+        QueryRegistry.UpdateWorkCapacity(identity, CalculateParallelUpperBound(identity));
     }
 }
 

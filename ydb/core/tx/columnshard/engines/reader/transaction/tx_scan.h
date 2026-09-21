@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/conveyor_composite/usage/common.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -22,6 +23,7 @@ private:
     bool GetDeduplicationEnabled(const TSnapshot& snapshot) const;
     TString GetReaderName() const;
     NConveyorComposite::TCPULimitsConfig GetCpuLimits() const;
+    std::optional<NConveyorComposite::TSchedulerQueryIdentity> GetSchedulerQueryIdentity() const;
     const TVersionedPresetSchemas& GetPresetSchemas() const;
     std::optional<ESourcesSorting> GetCursorSourcesSorting() const;
 

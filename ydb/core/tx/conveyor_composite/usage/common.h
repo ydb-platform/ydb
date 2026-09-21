@@ -2,9 +2,20 @@
 #include <ydb/core/tx/conveyor_composite/common/category.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
+#include <util/generic/hash.h>
+
 namespace NKikimr::NConveyorComposite {
 using ITask = NConveyor::ITask;
 class TCPULimitsConfig;
+
+struct TSchedulerQueryIdentity {
+    TString DatabaseId;
+    TString PoolId;
+    ui64 QueryId = 0;
+
+        bool operator==(const TSchedulerQueryIdentity&) const;
+        bool IsDefault() const;
+};
 
 class TProcessGuard: TNonCopyable {
 private:
@@ -22,7 +33,8 @@ public:
     }
 
     explicit TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
-        const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId);
+        const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId,
+        const std::optional<TSchedulerQueryIdentity>& schedulerQueryIdentity = std::nullopt);
 
     bool SendTaskToExecute(const std::shared_ptr<ITask>& task) const;
 
@@ -47,3 +59,12 @@ public:
 };
 
 }   // namespace NKikimr::NConveyorComposite
+
+template <>
+struct THash<NKikimr::NConveyorComposite::TSchedulerQueryIdentity> {
+    size_t operator()(const NKikimr::NConveyorComposite::TSchedulerQueryIdentity& identity) const {
+        return CombineHashes(
+            CombineHashes(THash<TString>{}(identity.DatabaseId), THash<TString>{}(identity.PoolId)),
+            THash<ui64>{}(identity.QueryId));
+    }
+};

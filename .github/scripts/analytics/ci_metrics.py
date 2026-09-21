@@ -259,31 +259,64 @@ def guess_build_preset(job_name: Optional[str]) -> Optional[str]:
     return match.group(1) if match else None
 
 
+def github_event_payload() -> Dict[str, Any]:
+    """GitHub always writes the triggering event to $GITHUB_EVENT_PATH."""
+    path = os.environ.get("GITHUB_EVENT_PATH")
+    if not path or not os.path.isfile(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def github_env_defaults() -> Dict[str, Any]:
-    """CI context from GitHub Actions env. Safe to call outside Actions."""
+    """CI context from default GitHub Actions env + event payload.
+
+    Safe to call outside Actions. Custom vars (BUILD_PRESET, ORIGINAL_HEAD, …)
+    override the stock GitHub values when a workflow set them.
+    """
+    event = github_event_payload()
+    pull = event.get("pull_request") if isinstance(event.get("pull_request"), dict) else {}
+    head = pull.get("head") if isinstance(pull.get("head"), dict) else {}
+    base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
     run_id = _as_uint(os.environ.get("GITHUB_RUN_ID"))
     repository = os.environ.get("GITHUB_REPOSITORY") or "ydb-platform/ydb"
     run_url = f"https://github.com/{repository}/actions/runs/{run_id}" if run_id is not None else None
+    job_name = (
+        os.environ.get("CI_JOB_TITLE")
+        or os.environ.get("ANALYTICS_JOB_NAME")
+        or os.environ.get("GITHUB_JOB")
+        or None
+    )
     return {
         "run_id": run_id,
         "github_job_id": _as_uint(os.environ.get("GITHUB_NUMERIC_JOB_ID")) or 0,
         "workflow": os.environ.get("GITHUB_WORKFLOW") or None,
-        "job_name": (
-            os.environ.get("CI_JOB_TITLE")
-            or os.environ.get("ANALYTICS_JOB_NAME")
-            or os.environ.get("GITHUB_JOB")
-            or None
-        ),
+        "job_name": job_name,
         "event_name": os.environ.get("GITHUB_EVENT_NAME") or None,
         "branch": (
             os.environ.get("BRANCH_NAME")
             or os.environ.get("GITHUB_BASE_REF")
+            or (base.get("ref") if isinstance(base.get("ref"), str) else None)
             or os.environ.get("GITHUB_REF_NAME")
             or None
         ),
-        "build_preset": os.environ.get("BUILD_PRESET") or None,
-        "pr_number": _as_uint(os.environ.get("PR_NUMBER") or os.environ.get("GITHUB_PR_NUMBER")),
-        "commit": os.environ.get("ORIGINAL_HEAD") or os.environ.get("GITHUB_SHA") or None,
+        "build_preset": os.environ.get("BUILD_PRESET") or guess_build_preset(job_name),
+        "pr_number": _as_uint(
+            os.environ.get("PR_NUMBER")
+            or os.environ.get("GITHUB_PR_NUMBER")
+            or pull.get("number")
+            or (event.get("number") if pull else None)
+        ),
+        "commit": (
+            os.environ.get("ORIGINAL_HEAD")
+            or (head.get("sha") if isinstance(head.get("sha"), str) else None)
+            or os.environ.get("GITHUB_SHA")
+            or None
+        ),
         "run_attempt": _as_uint(os.environ.get("GITHUB_RUN_ATTEMPT")),
         "run_url": run_url,
     }

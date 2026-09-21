@@ -251,6 +251,52 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                 else:
                     os.environ[key] = value
 
+    def test_reads_pull_request_from_event_path(self):
+        old = {key: os.environ.get(key) for key in (
+            "GITHUB_EVENT_PATH",
+            "PR_NUMBER",
+            "GITHUB_PR_NUMBER",
+            "ORIGINAL_HEAD",
+            "GITHUB_SHA",
+            "BRANCH_NAME",
+            "GITHUB_BASE_REF",
+            "GITHUB_REF_NAME",
+            "BUILD_PRESET",
+            "CI_JOB_TITLE",
+            "ANALYTICS_JOB_NAME",
+            "GITHUB_JOB",
+        )}
+        try:
+            for key in old:
+                os.environ.pop(key, None)
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "event.json")
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(
+                        {
+                            "number": 53660,
+                            "pull_request": {
+                                "number": 53660,
+                                "head": {"sha": "abc123def"},
+                                "base": {"ref": "main"},
+                            },
+                        },
+                        handle,
+                    )
+                os.environ["GITHUB_EVENT_PATH"] = path
+                os.environ["CI_JOB_TITLE"] = "Build and test relwithdebinfo"
+                defaults = github_env_defaults()
+            self.assertEqual(defaults["pr_number"], 53660)
+            self.assertEqual(defaults["commit"], "abc123def")
+            self.assertEqual(defaults["branch"], "main")
+            self.assertEqual(defaults["build_preset"], "relwithdebinfo")
+        finally:
+            for key, value in old.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
 
 class ParseDatetimeTest(unittest.TestCase):
     def test_epoch_strings_and_iso(self):

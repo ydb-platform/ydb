@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/actors/core/subsystem.h>
+#include "metric_system.h"
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/metrics/inmemory_backend.h>
 #include <ydb/library/actors/metrics/lines/on_change_line_frontend.h>
@@ -24,23 +24,15 @@ namespace NActors {
         {}
     };
 
-    class TInMemoryMetricsRegistry : public ISubSystem {
+    class TInMemoryMetricsRegistry : public IMetricSystem {
     public:
         explicit TInMemoryMetricsRegistry(TInMemoryMetricsConfig config);
         ~TInMemoryMetricsRegistry() override;
 
-        // Asynchronous registration. Pending handles are valid but Append=false.
-        // The manager rejects duplicate canonical keys and admission overflow.
-        // Backend lifetime must exceed writer lifetime; snapshots own their pins.
-        template<class TFrontend = TRawLineFrontend<ui64>>
-        TLine<TFrontend> CreateLine(TStringBuf name, std::span<const TLabel> labels, const typename TFrontend::TConfig& config = {}) {
-            return TLine<TFrontend>(&Backend, CreateLineWithMeta(name, labels, TFrontend::MakeMeta(config)));
-        }
-
         // Nonblocking admission; false if stopped or the command queue is full.
         // Accepted requests are processed in queue order. Snapshot replies carry
         // the cookie and owned data; shutdown may cancel requests without reply.
-        bool SetCommonLabels(std::span<const TLabel> labels);
+        bool SetCommonLabels(std::span<const TLabel> labels) override;
         bool RequestSnapshot(const TActorId& recipient, ui64 cookie = 0);
         // Selection happens when the manager processes the request. Stats remain
         // registry-wide; an unknown line produces an empty snapshot.
@@ -54,7 +46,7 @@ namespace NActors {
         struct TRequest;
         class TImpl;
         bool Enqueue(std::shared_ptr<TRequest> request);
-        std::shared_ptr<TLineWriterState> CreateLineWithMeta(TStringBuf name, std::span<const TLabel> labels, const TLineMeta& meta);
+        std::shared_ptr<IMetricLine> CreateLineWithMeta(TStringBuf name, std::span<const TLabel> labels, const TLineMeta& meta) override;
         void ProcessRequests(TActorSystem* system, const TActorId& sender);
         void OnAfterStart(TActorSystem&) override;
         void OnBeforeStop(TActorSystem&) override;

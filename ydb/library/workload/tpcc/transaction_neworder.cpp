@@ -468,7 +468,7 @@ TAsyncExecuteQueryResult UpdateStocks(
 
 TAsyncExecuteQueryResult InsertOrderLines(
     TSession& session, const TTransaction& tx, TTransactionContext& context,
-    const std::vector<OrderLine>& orderLines) {
+    const std::vector<OrderLine>& orderLines, bool commit = false) {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
         PRAGMA TablePathPrefix("{}");
@@ -502,7 +502,7 @@ TAsyncExecuteQueryResult InsertOrderLines(
 
     auto result = session.ExecuteQuery(
         query,
-        TTxControl::Tx(tx),
+        TxControl(tx, commit),
         std::move(params));
 
     LOG_T("Terminal " << context.TerminalID << " waiting for order lines insert result");
@@ -716,6 +716,7 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     }
 
     if (hasInvalidItem) {
+        // TPC-C rollback path: explicit RollbackTransaction, not CommitTx on the last operator.
         co_await tx.Rollback();
         throw TUserAbortedException();
     }
@@ -850,9 +851,9 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         co_return updateStocksResult;
     }
 
-    // Insert order lines
+    // Insert order lines and commit in a single round-trip.
 
-    auto orderLinesFuture = InsertOrderLines(session, tx, context, orderLines);
+    auto orderLinesFuture = InsertOrderLines(session, tx, context, orderLines, /*commit=*/true);
     auto orderLinesResult = co_await TSuspendWithFuture(orderLinesFuture, context.TaskQueue, context.TerminalID);
     if (!orderLinesResult.IsSuccess()) {
         if (ShouldExit(orderLinesResult)) {
@@ -866,15 +867,10 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         co_return orderLinesResult;
     }
 
-    LOG_T("Terminal " << context.TerminalID << " is committing NewOrder transaction, session: " << session.GetId());
-
-    auto commitFuture = tx.Commit();
-    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
-
     TMonotonic endTs = TMonotonic::Now();
     latency = endTs - startTs;
 
-    co_return commitResult;
+    co_return orderLinesResult;
 }
 
 } // namespace NYdb::NTPCC

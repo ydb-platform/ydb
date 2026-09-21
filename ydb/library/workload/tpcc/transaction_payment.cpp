@@ -213,7 +213,8 @@ TAsyncExecuteQueryResult UpdateCustomer(
 TAsyncExecuteQueryResult InsertHistoryRecord(
     TSession& session, const TTransaction& tx, TTransactionContext& context,
     int customerDistrictID, int customerWarehouseID, int customerID,
-    int districtID, int warehouseID, double amount, const TString& data)
+    int districtID, int warehouseID, double amount, const TString& data,
+    bool commit = false)
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
@@ -251,7 +252,7 @@ TAsyncExecuteQueryResult InsertHistoryRecord(
 
     auto result = session.ExecuteQuery(
         query,
-        TTxControl::Tx(tx),
+        TxControl(tx, commit),
         std::move(params));
 
     LOG_T("Terminal " << context.TerminalID << " waiting for history insert result");
@@ -493,7 +494,7 @@ NThreading::TFuture<TStatus> GetPaymentTask(
 
     auto historyFuture = InsertHistoryRecord(session, tx, context,
         customerDistrictID, customerWarehouseID, customer.c_id,
-        districtID, warehouseID, paymentAmount, historyData);
+        districtID, warehouseID, paymentAmount, historyData, /*commit=*/true);
 
     auto historyResult = co_await TSuspendWithFuture(historyFuture, context.TaskQueue, context.TerminalID);
     if (!historyResult.IsSuccess()) {
@@ -508,16 +509,10 @@ NThreading::TFuture<TStatus> GetPaymentTask(
         co_return historyResult;
     }
 
-    LOG_T("Terminal " << context.TerminalID << " is committing Payment transaction: "
-        << "customer " << customer.c_id << ", amount " << paymentAmount << ", session: " << session.GetId());
-
-    auto commitFuture = tx.Commit();
-    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
-
     TMonotonic endTs = TMonotonic::Now();
     latency = endTs - startTs;
 
-    co_return commitResult;
+    co_return historyResult;
 }
 
 } // namespace NYdb::NTPCC

@@ -153,7 +153,7 @@ public:
     [[nodiscard]] TString Dump() const override;
 
     // The FastPath service that owns the disk-wide in-flight write count.
-    // Must be set before GetWriteMode() is used in adaptive mode.
+    // Wired from TDirectBlockGroup::Run after FastPath exists.
     void SetDiskStateProvider(IDiskStateProvider* diskStateProvider);
 
     // If necessary, adds hosts to make the hostIndex valid.
@@ -175,7 +175,6 @@ private:
     const TOracleConfigPtr OracleConfig;
 
     IHostStateController* const HostStateController;
-    IDiskStateProvider* DiskStateProvider = nullptr;
     const TDuration DefaultReadHedgingDelay;
     const TDuration DefaultReadRequestTimeout;
     const TDuration DefaultWriteHedgingDelay;
@@ -186,6 +185,7 @@ private:
     const EWriteMode DefaultWriteMode;
     const size_t MaxInflightWritesForDirectWrite;
 
+    IDiskStateProvider* DiskStateProvider = nullptr;
     TVector<THostStat> HostStatistics;
     TVector<THostState> HostStates;
     TVector<EHostHealth> HostsHealths;

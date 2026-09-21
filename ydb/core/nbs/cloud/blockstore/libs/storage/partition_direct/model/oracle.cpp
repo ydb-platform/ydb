@@ -292,10 +292,9 @@ TDuration TOracle::GetReadRequestTimeout() const
 
 EWriteMode TOracle::GetWriteMode() const
 {
-    if (!MaxInflightWritesForDirectWrite) {
+    if (!MaxInflightWritesForDirectWrite || !DiskStateProvider) {
         return DefaultWriteMode;
     }
-    Y_ABORT_UNLESS(DiskStateProvider);
     return DiskStateProvider->GetInflightWriteCount() <=
                    MaxInflightWritesForDirectWrite
                ? EWriteMode::DirectWrite

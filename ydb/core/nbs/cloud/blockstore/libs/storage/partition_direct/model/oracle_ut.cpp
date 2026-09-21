@@ -1178,6 +1178,19 @@ Y_UNIT_TEST_SUITE(TOracle)
             oracle.GetWriteMode());
     }
 
+    Y_UNIT_TEST(GetWriteModeShouldKeepConfiguredModeWhenDiskStateProviderUnset)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        rawConfig.SetWriteMode(NProto::EWriteMode::IndirectWrite);
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EWriteMode::IndirectWrite,
+            oracle.GetWriteMode());
+    }
+
     Y_UNIT_TEST(GetWriteModeShouldSelectByInflightWhenThresholdSet)
     {
         NProto::TStorageServiceConfig rawConfig;

@@ -139,6 +139,7 @@ public:
 
     void OnWriteFinished() override;
 
+    // IDiskStateProvider implementation
     size_t GetInflightWriteCount() const override;
 
     void StopTablet(const TString& reason) override;

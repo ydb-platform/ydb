@@ -66,7 +66,7 @@ COLUMNS_SCHEMA = [
     ("github_job_id", "Uint64", False),
     ("name", "Utf8", False),
     ("kind", "Utf8", False),
-    ("source", "Utf8", True),
+    ("source", "Utf8", False),
     ("workflow", "Utf8", True),
     ("job_name", "Utf8", True),
     ("event_name", "Utf8", True),
@@ -83,7 +83,7 @@ COLUMNS_SCHEMA = [
     ("exported_at", "Timestamp", True),
 ]
 
-PRIMARY_KEYS = ("date", "run_id", "github_job_id", "name", "kind", "event_ts")
+PRIMARY_KEYS = ("date", "run_id", "github_job_id", "source", "name", "kind", "event_ts")
 BUILD_PRESET_RE = re.compile(
     r"(relwithdebinfo|release-asan|release-tsan|release-msan|release|debug)"
 )
@@ -299,7 +299,10 @@ def _resolve_value_and_unit(raw: Dict[str, Any], kind: str, event_ts: datetime) 
     if value is None:
         value = _as_float(raw.get("duration_ms"))
     if value is None:
-        value = duration_ms_between(event_ts, parse_datetime(raw.get("finished_at")))
+        value = duration_ms_between(
+            event_ts,
+            parse_datetime(raw.get("finished_at") or raw.get("finished_epoch")),
+        )
     unit = raw.get("unit")
     if not unit:
         unit = KIND_UNITS.get(kind) or None
@@ -320,6 +323,7 @@ def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> 
     kind = str(raw.get("kind") or DEFAULT_KIND).strip() or DEFAULT_KIND
     value, unit = _resolve_value_and_unit(raw, kind, event_ts)
     labels = _coerce_labels(raw)
+    source = raw.get("source") or labels.get("source") or labels.get("stage_kind") or "unknown"
 
     return {
         "date": event_ts.date(),
@@ -328,7 +332,7 @@ def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> 
         "github_job_id": _as_uint(raw.get("github_job_id")) or 0,
         "name": name,
         "kind": kind,
-        "source": raw.get("source") or labels.get("source") or None,
+        "source": source,
         "workflow": raw.get("workflow") or None,
         "job_name": raw.get("job_name") or None,
         "event_name": raw.get("event_name") or None,
@@ -438,6 +442,7 @@ def timed(name: str, **kwargs: Any) -> Iterator[None]:
 def rows_from_jsonl(lines: Iterable[str], defaults: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     now = datetime.now(timezone.utc)
     rows: List[Dict[str, Any]] = []
+    skipped = 0
     for line in lines:
         text = line.strip()
         if not text:
@@ -445,14 +450,20 @@ def rows_from_jsonl(lines: Iterable[str], defaults: Optional[Dict[str, Any]] = N
         try:
             payload = json.loads(text)
         except json.JSONDecodeError:
+            skipped += 1
             continue
         if not isinstance(payload, dict):
+            skipped += 1
             continue
         if defaults:
             payload = merge_defaults(payload, defaults)
         row = normalize_metric(payload, now=now)
-        if row is not None:
-            rows.append(row)
+        if row is None:
+            skipped += 1
+            continue
+        rows.append(row)
+    if skipped:
+        print(f"Skipped {skipped} invalid CI metric line(s)")
     return rows
 
 

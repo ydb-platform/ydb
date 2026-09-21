@@ -160,8 +160,8 @@ runs:
           -H "Accept: application/vnd.github+json" \
           -H "X-GitHub-Api-Version: 2022-11-28" \
           "$jobs_url" || true)
-        job_id=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select(.name | contains($n)) | .id' | head -1 || true)
-        job_title=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select(.name | contains($n)) | .name' | head -1 || true)
+        job_id=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | split(" ")[-1]) == $n) | .id' | head -1 || true)
+        job_title=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | split(" ")[-1]) == $n) | .name' | head -1 || true)
         echo "GITHUB_NUMERIC_JOB_ID=${job_id:-0}" >> "$GITHUB_ENV"
         echo "CI_JOB_TITLE=${job_title:-$ANALYTICS_JOB_NAME}" >> "$GITHUB_ENV"
 
@@ -202,6 +202,7 @@ runs:
             --kind duration \
             --source ya_phase \
             --started-epoch "$started_epoch" \
+            --finished-epoch "$(date +%s)" \
             --conclusion "$conclusion" \
             --label "cache_mode=${CI_CACHE_MODE:-unknown}" \
             "${extra_args[@]}" || true
@@ -544,7 +545,7 @@ runs:
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
           ya_dir=$(pwd)
-          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
+          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl) || true
 
           # build tests resource dashboard with metrics overlay (CPU/RAM/disk)
           TESTS_METRICS_DIR="$CURRENT_PUBLIC_DIR/tests_metrics"
@@ -568,7 +569,7 @@ runs:
             --resources-jsonl "$RESOURCES_JSONL" \
             --build-preset "$BUILD_PRESET" \
             --runner "${{ runner.name }}" \
-            --pr "${{ github.event.number }}" \
+            --pr "${PR_NUMBER}" \
             --branch "${BRANCH_NAME}" \
             --commit "${ORIGINAL_HEAD}" \
             --artifacts-url "${PUBLIC_DIR_URL}" \

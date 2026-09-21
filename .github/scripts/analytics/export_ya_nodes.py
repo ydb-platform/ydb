@@ -20,7 +20,7 @@ import re
 import sys
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from ci_metrics import emit
+from ci_metrics import packet, track
 
 NODE_KIND_RE = re.compile(
     r"^(CompileAndLink|SharedLibrary|Preprocess|Compile|Link|Archive|Opt)\b"
@@ -244,22 +244,23 @@ def emit_nodes(
     extra_labels: Optional[Dict[str, Any]] = None,
 ) -> int:
     count = 0
-    for node in nodes:
-        labels = {"node_kind": node["node_kind"], "raw_name": node.get("raw_name") or node["name"]}
-        if node.get("inclusion_count") is not None:
-            labels["inclusion_count"] = node["inclusion_count"]
-        if extra_labels:
-            labels.update(extra_labels)
-        emit(
-            node["name"],
-            file=file,
-            kind="duration",
-            source=source,
-            value=node["duration_ms"],
-            unit="ms",
-            labels=labels,
-        )
-        count += 1
+    with packet(file):
+        for node in nodes:
+            properties = {"node_kind": node["node_kind"], "raw_name": node.get("raw_name") or node["name"]}
+            if node.get("inclusion_count") is not None:
+                properties["inclusion_count"] = node["inclusion_count"]
+            if extra_labels:
+                properties.update(extra_labels)
+            track(
+                node["name"],
+                properties,
+                file=file,
+                kind="duration",
+                source=source,
+                value=node["duration_ms"],
+                unit="ms",
+            )
+            count += 1
     return count
 
 

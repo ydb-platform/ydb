@@ -208,26 +208,37 @@ jobs:
           if [ "$RC" -ne 0 ]; then
             CONCLUSION=failure
           fi
-          python3 .github/scripts/analytics/ci_metrics.py emit \
+          python3 .github/scripts/analytics/ci_metrics.py track \
             --name ydbd_clean_build \
-            --kind duration \
-            --source clean_build \
-            --started-at "$START_TS" \
-            --started-epoch "$START_SEC" \
-            --finished-epoch "$END_SEC" \
-            --conclusion "$CONCLUSION" \
-            --label cache_mode=none \
-            --extra "$EXTRA" || true
+            --json "$(EXTRA="$EXTRA" START_TS="$START_TS" START_SEC="$START_SEC" END_SEC="$END_SEC" CONCLUSION="$CONCLUSION" python3 -c '
+import json, os
+extra = json.loads(os.environ["EXTRA"])
+extra.update({
+    "kind": "duration",
+    "source": "clean_build",
+    "started_at": os.environ["START_TS"],
+    "started_epoch": os.environ["START_SEC"],
+    "finished_epoch": os.environ["END_SEC"],
+    "conclusion": os.environ["CONCLUSION"],
+    "cache_mode": "none",
+})
+print(json.dumps(extra, separators=(",", ":")))
+')" || true
           if [[ "$BINARY_SIZE_BYTES" =~ ^[0-9]+$ ]]; then
-            python3 .github/scripts/analytics/ci_metrics.py emit \
+            python3 .github/scripts/analytics/ci_metrics.py track \
               --name ydbd_size \
-              --kind gauge \
-              --unit bytes \
-              --source clean_build \
-              --value "$BINARY_SIZE_BYTES" \
-              --started-at "$START_TS" \
-              --label cache_mode=none \
-              --label "build_target=$BUILD_TARGET" || true
+              --json "$(BINARY_SIZE_BYTES="$BINARY_SIZE_BYTES" START_TS="$START_TS" BUILD_TARGET="$BUILD_TARGET" python3 -c '
+import json, os
+print(json.dumps({
+    "kind": "gauge",
+    "unit": "bytes",
+    "source": "clean_build",
+    "value": int(os.environ["BINARY_SIZE_BYTES"]),
+    "started_at": os.environ["START_TS"],
+    "cache_mode": "none",
+    "build_target": os.environ.get("BUILD_TARGET") or "",
+}, separators=(",", ":")))
+')" || true
           fi
           if [ -f ya_evlog.jsonl ]; then
             python3 .github/scripts/analytics/export_ya_nodes.py \
@@ -298,7 +309,7 @@ jobs:
         if: always()
         continue-on-error: true
         shell: bash
-        run: python3 .github/scripts/analytics/ci_metrics.py flush
+        run: python3 .github/scripts/analytics/ci_metrics.py send
 
       - name: Upload logs
         if: always()

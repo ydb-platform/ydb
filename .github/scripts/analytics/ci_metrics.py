@@ -1,28 +1,34 @@
 #!/usr/bin/env python3
-"""Generic CI analytics/metrics client: buffer locally, flush to ydb-qa.
+"""Shared analytics writer for CI (same shape as web/mobile SDKs).
 
-One table (`analytics/ci_metrics`) for any CI metric: durations, gauges, counts,
-events. Callers only differ by `name` / `kind` / `source` / `labels`.
+One table (`analytics/ci_metrics`). Callers send an event/metric name plus a
+JSON properties object. Events are queued locally and sent as a packet through
+one transport (YDBWrapper bulk upsert). A single `track()` is sent immediately;
+use `packet()` to group many measurements into one send.
 
 From a workflow::
 
-    python3 .github/scripts/analytics/ci_metrics.py emit \\
-        --name graph_compare --started-epoch "$START" --conclusion success \\
-        --source ya_phase --label cache_mode=dist_cache
+    python3 .github/scripts/analytics/ci_metrics.py track \\
+        --name graph_compare \\
+        --json '{"source":"ya_phase","started_epoch":"'"$START"'","conclusion":"success","cache_mode":"dist_cache"}'
 
-    python3 .github/scripts/analytics/ci_metrics.py emit \\
-        --name ydbd_size --kind gauge --value 123456 --unit bytes --source clean_build
-
-    python3 .github/scripts/analytics/ci_metrics.py flush
+    python3 .github/scripts/analytics/ci_metrics.py track \\
+        --name ydbd_size --json '{"kind":"gauge","value":123456,"unit":"bytes","source":"clean_build"}'
 
 From Python::
 
-    from ci_metrics import emit, timed, flush_file
+    from ci_metrics import Analytics, packet, timed, track
 
-    emit("ydbd_size", kind="gauge", value=size, unit="bytes", source="clean_build")
+    analytics = Analytics()
+    analytics.track("ydbd_size", {"kind": "gauge", "value": size, "unit": "bytes", "source": "clean_build"})
     with timed("graph_compare", source="ya_phase"):
         run_graph_compare()
-    flush_file()
+    with packet():
+        for node in nodes:
+            track(node.name, {"value": node.duration_ms, "node_kind": node.kind, "source": "nightly_build"})
+
+`emit` is an alias of `track` (still sends on the event). `flush` / `send`
+retries any packet that was not acknowledged.
 
 Never fails the caller (CLI exit 0). Table path defaults to analytics/ci_metrics;
 a missing key in vars.YDB_QA_CONFIG does not break the upload.
@@ -281,6 +287,8 @@ def merge_defaults(raw: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str, A
 
 def _coerce_labels(raw: Dict[str, Any]) -> Dict[str, Any]:
     labels = raw.get("labels")
+    if labels in (None, ""):
+        labels = raw.get("properties")
     if isinstance(labels, str):
         try:
             labels = json.loads(labels)
@@ -392,6 +400,142 @@ def append_record(path: str, record: Dict[str, Any]) -> None:
         handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
 
 
+def offset_file(path: str) -> str:
+    return f"{path}.offset"
+
+
+def read_send_offset(path: str) -> int:
+    marker = offset_file(path)
+    try:
+        with open(marker, encoding="utf-8") as handle:
+            return max(int(handle.read().strip() or "0"), 0)
+    except (FileNotFoundError, ValueError):
+        return 0
+
+
+def write_send_offset(path: str, offset: int) -> None:
+    with open(offset_file(path), "w", encoding="utf-8") as handle:
+        handle.write(str(offset))
+
+
+def load_unsent_lines(path: str) -> tuple[List[str], int]:
+    """Return (unsent JSONL lines, byte offset after them)."""
+    if not path or not os.path.exists(path):
+        return [], 0
+    size = os.path.getsize(path)
+    offset = read_send_offset(path)
+    if offset > size:
+        offset = 0
+    if offset >= size:
+        return [], size
+    with open(path, encoding="utf-8") as handle:
+        handle.seek(offset)
+        chunk = handle.read()
+        new_offset = handle.tell()
+    return chunk.splitlines(), new_offset
+
+
+def has_send_credentials() -> bool:
+    return bool(os.environ.get("CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"))
+
+
+def build_track_record(name: str, properties: Optional[Dict[str, Any]] = None, **fields: Any) -> Dict[str, Any]:
+    """Build one analytics event: name + measurement JSON."""
+    props: Dict[str, Any] = {}
+    if properties:
+        props.update(properties)
+    for key, value in fields.items():
+        if value is not None and value != "":
+            props[key] = value
+    kind = props.pop("kind", None) or DEFAULT_KIND
+    source = props.pop("source", None)
+    value = props.pop("value", None)
+    if value is None and props.get("duration_ms") is not None:
+        value = props.get("duration_ms")
+    unit = props.pop("unit", None)
+    conclusion = props.pop("conclusion", None)
+    event_ts = props.pop("event_ts", None)
+    started_at = props.pop("started_at", None)
+    started_epoch = props.pop("started_epoch", None)
+    finished_epoch = props.pop("finished_epoch", None)
+    props.pop("finished_at", None)
+    return build_emit_record(
+        name=name,
+        kind=str(kind),
+        source=None if source is None else str(source),
+        value=_as_float(value),
+        unit=None if unit is None else str(unit),
+        started_at=started_at or event_ts,
+        started_epoch=None if started_epoch is None else str(started_epoch),
+        finished_epoch=None if finished_epoch is None else str(finished_epoch),
+        conclusion=None if conclusion is None else str(conclusion),
+        labels=props or None,
+    )
+
+
+_packet_nesting = 0
+
+
+def in_packet() -> bool:
+    return _packet_nesting > 0
+
+
+@contextmanager
+def packet(file: Optional[str] = None) -> Iterator[None]:
+    """Collect tracks into one packet and send on exit."""
+    global _packet_nesting
+    _packet_nesting += 1
+    try:
+        yield
+    finally:
+        _packet_nesting -= 1
+        if _packet_nesting == 0:
+            flush_file(file)
+
+
+def track(
+    name: str,
+    properties: Optional[Dict[str, Any]] = None,
+    *,
+    file: Optional[str] = None,
+    send: Optional[bool] = None,
+    kind: Optional[str] = None,
+    source: Optional[str] = None,
+    value: Optional[float] = None,
+    unit: Optional[str] = None,
+    started_at: Optional[str] = None,
+    started_epoch: Optional[str] = None,
+    finished_epoch: Optional[str] = None,
+    conclusion: Optional[str] = None,
+    labels: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Enqueue one event and send the packet unless inside `packet()` or send=False."""
+    merged: Dict[str, Any] = {}
+    if properties:
+        merged.update(properties)
+    if labels:
+        merged.update(labels)
+    path = file or default_metrics_file()
+    append_record(
+        path,
+        build_track_record(
+            name,
+            merged,
+            kind=kind,
+            source=source,
+            value=value,
+            unit=unit,
+            started_at=started_at,
+            started_epoch=started_epoch,
+            finished_epoch=finished_epoch,
+            conclusion=conclusion,
+        ),
+    )
+    should_send = (not in_packet()) if send is None else send
+    if should_send:
+        flush_file(path)
+
+
 def emit(
     name: str,
     *,
@@ -405,28 +549,28 @@ def emit(
     finished_epoch: Optional[str] = None,
     conclusion: Optional[str] = None,
     labels: Optional[Dict[str, Any]] = None,
+    send: Optional[bool] = None,
 ) -> None:
-    """Append one metric to the local JSONL buffer. Does not talk to YDB."""
-    append_record(
-        file or default_metrics_file(),
-        build_emit_record(
-            name=name,
-            kind=kind,
-            source=source,
-            value=value,
-            unit=unit,
-            started_at=started_at,
-            started_epoch=started_epoch,
-            finished_epoch=finished_epoch,
-            conclusion=conclusion,
-            labels=labels,
-        ),
+    """Alias of track() — kept so existing callers keep working."""
+    track(
+        name,
+        labels,
+        file=file,
+        send=send,
+        kind=kind,
+        source=source,
+        value=value,
+        unit=unit,
+        started_at=started_at,
+        started_epoch=started_epoch,
+        finished_epoch=finished_epoch,
+        conclusion=conclusion,
     )
 
 
 @contextmanager
 def timed(name: str, **kwargs: Any) -> Iterator[None]:
-    """Measure a block and emit a duration metric. Re-raises; still records on failure."""
+    """Measure a block and track a duration event. Re-raises; still records on failure."""
     file = kwargs.pop("file", None)
     start = time.time()
     conclusion = "success"
@@ -436,7 +580,29 @@ def timed(name: str, **kwargs: Any) -> Iterator[None]:
         conclusion = "failure"
         raise
     finally:
-        emit(name, file=file, started_epoch=str(start), **kwargs, conclusion=conclusion)
+        track(name, started_epoch=str(start), file=file, conclusion=conclusion, **kwargs)
+
+
+class Analytics:
+    """Small SDK-style client around track/packet/send."""
+
+    def __init__(self, file: Optional[str] = None, source: Optional[str] = None):
+        self.file = file
+        self.source = source
+
+    def track(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
+        props = dict(properties or {})
+        if self.source and not props.get("source") and kwargs.get("source") is None:
+            kwargs["source"] = self.source
+        if self.file and kwargs.get("file") is None:
+            kwargs["file"] = self.file
+        track(name, props, **kwargs)
+
+    def packet(self):
+        return packet(self.file)
+
+    def send(self) -> int:
+        return flush_file(self.file)
 
 
 def rows_from_jsonl(lines: Iterable[str], defaults: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
@@ -599,30 +765,62 @@ def upsert_metrics(
 
 
 def flush_file(path: Optional[str] = None, table_path: Optional[str] = None, defaults: Optional[Dict[str, Any]] = None) -> int:
-    metrics_path = path or default_metrics_file()
-    if not metrics_path or not os.path.exists(metrics_path):
-        print(f"No CI metrics file at {metrics_path!r}, skipping")
-        return 0
-    with open(metrics_path, "r", encoding="utf-8") as handle:
-        rows = rows_from_jsonl(handle, defaults=defaults if defaults is not None else github_env_defaults())
-    if not rows:
-        print(f"No valid metric rows in {metrics_path}")
-        return 0
-    wrapper_cls = _ydb_wrapper_cls()
-    with wrapper_cls() as wrapper:
-        if not wrapper.check_credentials():
-            print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+    """Send the unacknowledged packet. Safe to call repeatedly."""
+    try:
+        metrics_path = path or default_metrics_file()
+        lines, new_offset = load_unsent_lines(metrics_path)
+        if not lines:
             return 0
-        path_used = table_path or resolve_table_path(wrapper)
-        uploaded = upsert_metrics(wrapper, rows, table_path=path_used)
-    print(f"Uploaded {uploaded} CI metric rows to {path_used}")
-    return uploaded
+        rows = rows_from_jsonl(lines, defaults=defaults if defaults is not None else github_env_defaults())
+        if not rows:
+            print(f"No valid metric rows in {metrics_path}, keeping packet")
+            return 0
+        if not has_send_credentials():
+            print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, keeping local packet")
+            return 0
+        wrapper_cls = _ydb_wrapper_cls()
+        with wrapper_cls() as wrapper:
+            if not wrapper.check_credentials():
+                print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, keeping local packet")
+                return 0
+            path_used = table_path or resolve_table_path(wrapper)
+            uploaded = upsert_metrics(wrapper, rows, table_path=path_used)
+        write_send_offset(metrics_path, new_offset)
+        print(f"Uploaded {uploaded} CI metric rows to {path_used}")
+        return uploaded
+    except Exception as exc:  # noqa: BLE001 — telemetry must not fail CI
+        print(f"Warning: analytics send failed: {exc}", file=sys.stderr)
+        return 0
 
 
-def _cmd_emit(args: argparse.Namespace) -> int:
-    emit(
+def send(path: Optional[str] = None, table_path: Optional[str] = None) -> int:
+    """Public name for the shared send interface."""
+    return flush_file(path, table_path=table_path)
+
+
+def _properties_from_args(args: argparse.Namespace) -> Dict[str, Any]:
+    properties: Dict[str, Any] = {}
+    raw_json = getattr(args, "json", None)
+    if raw_json:
+        try:
+            parsed = json.loads(raw_json)
+        except json.JSONDecodeError:
+            properties["raw_json"] = raw_json
+        else:
+            if isinstance(parsed, dict):
+                properties.update(parsed)
+            else:
+                properties["raw_json"] = parsed
+    properties.update(parse_labels(getattr(args, "label", None), getattr(args, "extra", None)))
+    return properties
+
+
+def _cmd_track(args: argparse.Namespace) -> int:
+    track(
         args.name,
+        _properties_from_args(args),
         file=args.file,
+        send=not getattr(args, "no_send", False),
         kind=args.kind,
         source=args.source,
         value=args.value,
@@ -631,7 +829,6 @@ def _cmd_emit(args: argparse.Namespace) -> int:
         started_epoch=args.started_epoch,
         finished_epoch=args.finished_epoch,
         conclusion=args.conclusion,
-        labels=parse_labels(args.label, args.extra) or None,
     )
     return 0
 
@@ -642,11 +839,28 @@ def _cmd_flush(args: argparse.Namespace) -> int:
 
 
 def parse_args(argv=None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Emit or flush generic CI metrics to ydb-qa")
+    parser = argparse.ArgumentParser(description="Track CI analytics events and send packets to ydb-qa")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    emit_p = sub.add_parser("emit", help="Append one metric event to the local JSONL buffer")
+    track_p = sub.add_parser("track", help="Record one event/metric and send the packet")
+    track_p.add_argument("--name", required=True)
+    track_p.add_argument("--json", default=None, help="measurement JSON object")
+    track_p.add_argument("--kind", default=None, choices=sorted(KIND_UNITS))
+    track_p.add_argument("--source", default=None, help="Producer, e.g. ya_phase / clean_build")
+    track_p.add_argument("--value", type=float, default=None)
+    track_p.add_argument("--unit", default=None)
+    track_p.add_argument("--started-at", default=None, help="ISO-8601 timestamp")
+    track_p.add_argument("--started-epoch", default=None, help="epoch seconds or ms")
+    track_p.add_argument("--finished-epoch", default=None, help="epoch seconds or ms")
+    track_p.add_argument("--conclusion", default=None)
+    track_p.add_argument("--label", action="append", default=[], help="key=value (repeatable)")
+    track_p.add_argument("--extra", default=None, help="JSON object merged into properties")
+    track_p.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
+    track_p.add_argument("--no-send", action="store_true", help="Queue only; caller will send()")
+
+    emit_p = sub.add_parser("emit", help="Alias of track (sends on the event)")
     emit_p.add_argument("--name", required=True)
+    emit_p.add_argument("--json", default=None, help="measurement JSON object")
     emit_p.add_argument("--kind", default=DEFAULT_KIND, choices=sorted(KIND_UNITS))
     emit_p.add_argument("--source", default=None, help="Producer, e.g. ya_phase / github_step / clean_build")
     emit_p.add_argument("--value", type=float, default=None)
@@ -656,12 +870,17 @@ def parse_args(argv=None) -> argparse.Namespace:
     emit_p.add_argument("--finished-epoch", default=None, help="epoch seconds or ms")
     emit_p.add_argument("--conclusion", default=None)
     emit_p.add_argument("--label", action="append", default=[], help="key=value (repeatable)")
-    emit_p.add_argument("--extra", default=None, help="JSON object merged into labels")
+    emit_p.add_argument("--extra", default=None, help="JSON object merged into properties")
     emit_p.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
+    emit_p.add_argument("--no-send", action="store_true", help="Queue only; caller will send()")
 
-    flush_p = sub.add_parser("flush", help="Upload the local JSONL buffer to YDB")
+    flush_p = sub.add_parser("flush", help="Retry sending any unacknowledged packet")
     flush_p.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
     flush_p.add_argument("--table-path", default=None)
+
+    send_p = sub.add_parser("send", help="Alias of flush")
+    send_p.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
+    send_p.add_argument("--table-path", default=None)
 
     return parser.parse_args(argv)
 
@@ -669,9 +888,9 @@ def parse_args(argv=None) -> argparse.Namespace:
 def main(argv=None) -> int:
     try:
         args = parse_args(argv)
-        if args.command == "emit":
-            return _cmd_emit(args)
-        if args.command == "flush":
+        if args.command in ("track", "emit"):
+            return _cmd_track(args)
+        if args.command in ("flush", "send"):
             return _cmd_flush(args)
         return 0
     except Exception as exc:  # noqa: BLE001 — telemetry must not fail CI

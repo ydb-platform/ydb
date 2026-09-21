@@ -17,7 +17,7 @@
 
 Конфиг раннеров: `.github/config/runners_footprints.yml` — provisioned maximum (vcpu/ram) по build preset. Фактическое потребление — из `resources_monitor.jsonl`; на дашборде красная линия = monitor, фиолетовая пунктирная = лимит из конфига.
 
-Общие CI-метрики пишутся в ydb-qa таблицу `analytics/ci_metrics` клиентом `.github/scripts/analytics/ci_metrics.py` (`emit` / `flush`). Скрипты только копируют сырые значения; агрегаты, топы и регрессии — SQL по таблице. Сравнение PR-check с target branch — отдельный следующий этап.
+Общие CI-метрики пишет `.github/scripts/analytics/ci_metrics.py` — общий клиент как в веб/мобильной аналитике: `track(name, json)` кладёт событие в локальный пакет и сразу отправляет его в ydb-qa (`analytics/ci_metrics`) через YDBWrapper. Несколько измерений одной операции собираются через `packet()` и уходят одним send. `send` / `flush` только досылает пакет, если предыдущая отправка не подтвердилась. Агрегаты и регрессии — SQL; сравнение PR-check с target branch — следующий этап.
 
 Что пишется:
 

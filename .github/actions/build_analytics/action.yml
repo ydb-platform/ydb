@@ -81,5 +81,5 @@ runs:
           --source build_bloat \
           --label cache_mode=dist_cache \
           --label profile=ftime_trace || true
-        python3 .github/scripts/analytics/ci_metrics.py flush || true
+        python3 .github/scripts/analytics/ci_metrics.py send || true
 

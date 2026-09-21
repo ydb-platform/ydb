@@ -13,19 +13,25 @@ from datetime import datetime, timezone
 from ci_metrics import (
     DEFAULT_TABLE_PATH,
     PRIMARY_KEYS,
+    Analytics,
     append_record,
     build_create_table_sql,
     build_emit_record,
+    build_track_record,
     emit,
     github_env_defaults,
     guess_build_preset,
+    load_unsent_lines,
     main,
     metrics_from_workflow_run,
     normalize_metric,
+    packet,
     parse_datetime,
     parse_labels,
     rows_from_jsonl,
     timed,
+    track,
+    write_send_offset,
 )
 
 
@@ -327,6 +333,98 @@ class EmitApiTest(unittest.TestCase):
             path = os.path.join(tmp, "nested", "out.jsonl")
             append_record(path, {"name": "x"})
             self.assertTrue(os.path.exists(path))
+
+
+class TrackApiTest(unittest.TestCase):
+    def test_name_and_properties_json(self):
+        record = build_track_record(
+            "ya_make_try_1",
+            {
+                "kind": "duration",
+                "source": "ya_phase",
+                "started_epoch": "1000",
+                "finished_epoch": "1010",
+                "conclusion": "success",
+                "cache_mode": "dist_cache",
+                "ya_attempt": 1,
+            },
+        )
+        self.assertEqual(record["name"], "ya_make_try_1")
+        self.assertEqual(record["kind"], "duration")
+        self.assertEqual(record["source"], "ya_phase")
+        self.assertEqual(record["value"], 10000.0)
+        self.assertEqual(record["labels"]["cache_mode"], "dist_cache")
+        self.assertEqual(record["labels"]["ya_attempt"], 1)
+
+    def test_cli_track_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            self.assertEqual(
+                main(
+                    [
+                        "track",
+                        "--file",
+                        path,
+                        "--name",
+                        "ydbd_size",
+                        "--json",
+                        json.dumps({"kind": "gauge", "value": 42, "unit": "bytes", "source": "clean_build", "cache_mode": "none"}),
+                    ]
+                ),
+                0,
+            )
+            with open(path, encoding="utf-8") as handle:
+                row = json.loads(handle.readline())
+            self.assertEqual(row["name"], "ydbd_size")
+            self.assertEqual(row["kind"], "gauge")
+            self.assertEqual(row["value"], 42.0)
+            self.assertEqual(row["labels"]["cache_mode"], "none")
+
+    def test_packet_sends_once(self):
+        sends = []
+
+        def fake_flush(path=None, table_path=None, defaults=None):
+            sends.append(path)
+            return 0
+
+        import ci_metrics as client
+
+        original = client.flush_file
+        client.flush_file = fake_flush
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "ci_metrics.jsonl")
+                with packet(path):
+                    track("a", {"value": 1, "source": "test"}, file=path)
+                    track("b", {"value": 2, "source": "test"}, file=path)
+                self.assertEqual(sends, [path])
+                with open(path, encoding="utf-8") as handle:
+                    self.assertEqual(len([line for line in handle if line.strip()]), 2)
+        finally:
+            client.flush_file = original
+
+    def test_unsent_offset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            first = json.dumps({"name": "one"}) + "\n"
+            second = json.dumps({"name": "two"}) + "\n"
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(first + second)
+            write_send_offset(path, len(first.encode("utf-8")))
+            lines, offset = load_unsent_lines(path)
+            self.assertEqual(lines, [json.dumps({"name": "two"})])
+            self.assertEqual(offset, len((first + second).encode("utf-8")))
+
+    def test_analytics_client_default_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            analytics = Analytics(file=path, source="ya_phase")
+            analytics.track("graph_compare", {"value": 5, "conclusion": "success"}, send=False)
+            with open(path, encoding="utf-8") as handle:
+                row = json.loads(handle.readline())
+            self.assertEqual(row["name"], "graph_compare")
+            self.assertEqual(row["source"], "ya_phase")
+            self.assertEqual(row["value"], 5.0)
 
 
 class ParseLabelsTest(unittest.TestCase):

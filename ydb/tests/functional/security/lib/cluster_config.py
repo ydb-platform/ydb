@@ -138,8 +138,10 @@ def create_ydb_configurator(
         'administration_allowed_sids' in security_config and len(security_config['administration_allowed_sids']) > 0
     ), 'administration_allowed_sids was supposed to be set due to default_clusteradmin'
 
-    # the cluster admin keeps its default_access on the domain, but an empty list of
-    # administration_allowed_sids makes every token an administrator
+    # default_clusteradmin gives root@builtin two things: a place in administration_allowed_sids
+    # and FULL ACL grants on the cluster root. Only the first one is dropped here: without the second
+    # one root@builtin could not even create a database. An empty administration_allowed_sids
+    # is what makes every token an administrator.
     if empty_administration_allowed_sids:
         security_config['administration_allowed_sids'] = []
 

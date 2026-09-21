@@ -13,11 +13,7 @@ logger = logging.getLogger(__name__)
 
 ADMIN_TOKEN = 'root@builtin'
 DATABASE = '/Root/test'
-TABLE_NAME = 'table'
-TABLE_PATH = f'{DATABASE}/{TABLE_NAME}'
-# the least a user needs to reach the object, no ydb.access.grant among them
-USER_GRANTS = ['ydb.database.connect', 'ydb.granular.describe_schema']
-GRANTED_PERMISSION = 'ydb.granular.select_row'
+TABLE_PATH = f'{DATABASE}/table'
 
 
 @pytest.fixture(scope='module')
@@ -41,7 +37,7 @@ def cluster_with_tenant_database(certificates, empty_administration_allowed_sids
         cluster.wait_tenant_up(DATABASE, token=ADMIN_TOKEN)
         try:
             # an object of the admin, the user under test owns nothing
-            run_with_assert(admin_config(cluster), f"CREATE TABLE {TABLE_NAME} (a Uint64, PRIMARY KEY (a));")
+            run_with_assert(admin_config(cluster), f"CREATE TABLE `{TABLE_PATH}` (a Uint64, PRIMARY KEY (a));")
             yield cluster
         finally:
             cluster.remove_database(DATABASE, token=ADMIN_TOKEN)
@@ -100,7 +96,8 @@ def provide_grants(admin_driver_config, user_name, object_name, required_grants)
 def create_user_with_minimal_grants(cluster, admin_driver_config):
     user_name = unique_user_name("user")
     run_with_assert(admin_driver_config, f"CREATE USER {user_name};")
-    provide_grants(admin_driver_config, user_name, DATABASE, USER_GRANTS)
+    # the least a user needs to reach the object, no 'ydb.access.grant' among them
+    provide_grants(admin_driver_config, user_name, DATABASE, ['ydb.database.connect', 'ydb.granular.describe_schema'])
     user_driver_config = ydb.DriverConfig(
         endpoint="%s:%s" % (cluster.nodes[1].host, cluster.nodes[1].port),
         database=DATABASE,
@@ -110,7 +107,7 @@ def create_user_with_minimal_grants(cluster, admin_driver_config):
 
 
 def self_grant_query(user_name):
-    return f"GRANT '{GRANTED_PERMISSION}' ON `{TABLE_PATH}` TO {user_name};"
+    return f"GRANT 'ydb.granular.select_row' ON `{TABLE_PATH}` TO {user_name};"
 
 
 def test_user_can_grant_itself_without_cluster_admins(cluster_without_cluster_admins):

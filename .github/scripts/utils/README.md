@@ -17,7 +17,7 @@
 
 Конфиг раннеров: `.github/config/runners_footprints.yml` — provisioned maximum (vcpu/ram) по build preset. Фактическое потребление — из `resources_monitor.jsonl`; на дашборде красная линия = monitor, фиолетовая пунктирная = лимит из конфига.
 
-Общие CI-метрики пишет `.github/scripts/analytics/ci_metrics.py` (модель как в продуктовых SDK: `start` / `end` / `track` / `send`). Базовый контекст (workflow, run/job id, commit, preset) подставляется сам. Из любого workflow достаточно one-liner — скрипт-сборщик не нужен:
+Общие CI-метрики пишет `.github/scripts/analytics/ci_metrics.py` (модель как в продуктовых SDK: `start` / `end` / `track` / `send`). Базовый контекст подставляется сам: колонки workflow/job/commit/PR плюс `github.*` / `github.event.*` из env и `$GITHUB_EVENT_PATH` (`event.number`, `pull_request.head/base`, `event_name` вроде `pull_request_target`). Из любого workflow достаточно one-liner — скрипт-сборщик не нужен:
 
 ```bash
 # Длительность: start до работы, send после (duration считается сам)

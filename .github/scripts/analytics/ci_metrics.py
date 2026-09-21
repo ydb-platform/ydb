@@ -259,6 +259,61 @@ def guess_build_preset(job_name: Optional[str]) -> Optional[str]:
     return match.group(1) if match else None
 
 
+GITHUB_ENV_CONTEXT = (
+    ("GITHUB_ACTION", "github.action"),
+    ("GITHUB_ACTOR", "github.actor"),
+    ("GITHUB_BASE_REF", "github.base_ref"),
+    ("GITHUB_EVENT_NAME", "github.event_name"),
+    ("GITHUB_HEAD_REF", "github.head_ref"),
+    ("GITHUB_JOB", "github.job"),
+    ("GITHUB_REF", "github.ref"),
+    ("GITHUB_REF_NAME", "github.ref_name"),
+    ("GITHUB_REF_TYPE", "github.ref_type"),
+    ("GITHUB_REPOSITORY", "github.repository"),
+    ("GITHUB_REPOSITORY_ID", "github.repository_id"),
+    ("GITHUB_REPOSITORY_OWNER", "github.repository_owner"),
+    ("GITHUB_RUN_ATTEMPT", "github.run_attempt"),
+    ("GITHUB_RUN_ID", "github.run_id"),
+    ("GITHUB_RUN_NUMBER", "github.run_number"),
+    ("GITHUB_SHA", "github.sha"),
+    ("GITHUB_TRIGGERING_ACTOR", "github.triggering_actor"),
+    ("GITHUB_WORKFLOW", "github.workflow"),
+    ("GITHUB_WORKFLOW_REF", "github.workflow_ref"),
+    ("GITHUB_WORKFLOW_SHA", "github.workflow_sha"),
+    ("RUNNER_ARCH", "runner.arch"),
+    ("RUNNER_NAME", "runner.name"),
+    ("RUNNER_OS", "runner.os"),
+)
+GITHUB_EVENT_TOP_SCALARS = (
+    "number",
+    "action",
+    "ref",
+    "before",
+    "after",
+    "created",
+    "deleted",
+    "forced",
+    "compare",
+    "master_branch",
+    "base_ref",
+)
+GITHUB_ACTOR_KEYS = ("login", "id", "type", "html_url")
+GITHUB_REPO_KEYS = ("full_name", "name", "default_branch", "private", "fork", "html_url", "id")
+GITHUB_REF_KEYS = ("ref", "sha", "label")
+GITHUB_PULL_KEYS = (
+    "number",
+    "id",
+    "html_url",
+    "state",
+    "draft",
+    "merged",
+    "mergeable",
+    "mergeable_state",
+    "merge_commit_sha",
+)
+MAX_CONTEXT_STRING = 256
+
+
 def github_event_payload() -> Dict[str, Any]:
     """GitHub always writes the triggering event to $GITHUB_EVENT_PATH."""
     path = os.environ.get("GITHUB_EVENT_PATH")
@@ -272,14 +327,125 @@ def github_event_payload() -> Dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _context_value(value: Any) -> Any:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text or len(text) > MAX_CONTEXT_STRING:
+            return None
+        return text
+    return None
+
+
+def _put_context(out: Dict[str, Any], key: str, value: Any) -> None:
+    resolved = _context_value(value)
+    if resolved is None:
+        return
+    out.setdefault(key, resolved)
+
+
+def _put_keys(out: Dict[str, Any], prefix: str, obj: Any, keys: Iterable[str]) -> None:
+    if not isinstance(obj, dict):
+        return
+    for key in keys:
+        _put_context(out, f"{prefix}.{key}", obj.get(key))
+
+
+def _as_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _event_pull(event: Dict[str, Any]) -> Dict[str, Any]:
+    return _as_dict(event.get("pull_request"))
+
+
+def _event_issue(event: Dict[str, Any]) -> Dict[str, Any]:
+    return _as_dict(event.get("issue"))
+
+
+def _event_pr_number(event: Dict[str, Any]) -> Optional[int]:
+    pull = _event_pull(event)
+    issue = _event_issue(event)
+    event_name = os.environ.get("GITHUB_EVENT_NAME") or ""
+    if pull:
+        return _as_uint(pull.get("number") or event.get("number"))
+    if issue.get("pull_request"):
+        return _as_uint(issue.get("number") or event.get("number"))
+    if event_name.startswith("pull_request"):
+        return _as_uint(event.get("number"))
+    return None
+
+
+def github_event_context(event: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Identity fields of github.event.* for whichever entity this run has."""
+    event = github_event_payload() if event is None else event
+    out: Dict[str, Any] = {}
+    if not event:
+        return out
+    for key in GITHUB_EVENT_TOP_SCALARS:
+        _put_context(out, f"github.event.{key}", event.get(key))
+    pull = _event_pull(event)
+    if pull:
+        _put_keys(out, "github.event.pull_request", pull, GITHUB_PULL_KEYS)
+        _put_keys(out, "github.event.pull_request.user", pull.get("user"), GITHUB_ACTOR_KEYS)
+        head = _as_dict(pull.get("head"))
+        base = _as_dict(pull.get("base"))
+        _put_keys(out, "github.event.pull_request.head", head, GITHUB_REF_KEYS)
+        _put_keys(out, "github.event.pull_request.head.repo", head.get("repo"), GITHUB_REPO_KEYS)
+        _put_keys(out, "github.event.pull_request.base", base, GITHUB_REF_KEYS)
+        _put_keys(out, "github.event.pull_request.base.repo", base.get("repo"), GITHUB_REPO_KEYS)
+        names = [
+            str(item.get("name"))
+            for item in (pull.get("labels") or [])
+            if isinstance(item, dict) and item.get("name")
+        ]
+        if names:
+            out.setdefault("github.event.pull_request.labels", names)
+    issue = _event_issue(event)
+    if issue:
+        _put_keys(out, "github.event.issue", issue, ("number", "id", "html_url", "state"))
+        if issue.get("pull_request"):
+            _put_context(out, "github.event.issue.pull_request", True)
+    _put_keys(out, "github.event.repository", event.get("repository"), GITHUB_REPO_KEYS)
+    _put_keys(out, "github.event.organization", event.get("organization"), ("login", "id"))
+    _put_keys(out, "github.event.sender", event.get("sender"), GITHUB_ACTOR_KEYS)
+    _put_keys(out, "github.event.head_commit", event.get("head_commit"), ("id", "tree_id"))
+    _put_keys(out, "github.event.workflow_run", event.get("workflow_run"), ("id", "name", "event", "status", "conclusion", "html_url", "head_sha", "head_branch", "run_attempt", "run_number"))
+    inputs = event.get("inputs")
+    if isinstance(inputs, dict):
+        for key, value in inputs.items():
+            _put_context(out, f"github.event.inputs.{key}", value)
+    return out
+
+
+def github_context_labels() -> Dict[str, Any]:
+    """Stock GitHub/runner env + event entities. Empty keys are omitted."""
+    out: Dict[str, Any] = {}
+    for env_key, dest_key in GITHUB_ENV_CONTEXT:
+        raw = os.environ.get(env_key)
+        if env_key.endswith("_ID") or env_key.endswith("_ATTEMPT") or env_key.endswith("_NUMBER"):
+            _put_context(out, dest_key, _as_uint(raw) if raw not in (None, "") else None)
+        else:
+            _put_context(out, dest_key, raw)
+    out.update(github_event_context())
+    return out
+
+
 def github_env_defaults() -> Dict[str, Any]:
-    """CI context from default GitHub Actions env + event payload.
+    """Table-column CI context from GitHub env + event payload.
 
     Safe to call outside Actions. Custom vars (BUILD_PRESET, ORIGINAL_HEAD, …)
     override the stock GitHub values when a workflow set them.
     """
     event = github_event_payload()
-    pull = event.get("pull_request") if isinstance(event.get("pull_request"), dict) else {}
+    pull = _event_pull(event)
     head = pull.get("head") if isinstance(pull.get("head"), dict) else {}
     base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
     run_id = _as_uint(os.environ.get("GITHUB_RUN_ID"))
@@ -305,12 +471,7 @@ def github_env_defaults() -> Dict[str, Any]:
             or None
         ),
         "build_preset": os.environ.get("BUILD_PRESET") or guess_build_preset(job_name),
-        "pr_number": _as_uint(
-            os.environ.get("PR_NUMBER")
-            or os.environ.get("GITHUB_PR_NUMBER")
-            or pull.get("number")
-            or (event.get("number") if pull else None)
-        ),
+        "pr_number": _as_uint(os.environ.get("PR_NUMBER") or os.environ.get("GITHUB_PR_NUMBER")) or _event_pr_number(event),
         "commit": (
             os.environ.get("ORIGINAL_HEAD")
             or (head.get("sha") if isinstance(head.get("sha"), str) else None)
@@ -626,6 +787,8 @@ def attach_context(record: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(labels, dict):
         labels = {}
     for key, value in cicd_resource_attributes(ctx).items():
+        labels.setdefault(key, value)
+    for key, value in github_context_labels().items():
         labels.setdefault(key, value)
     if labels:
         record["labels"] = labels

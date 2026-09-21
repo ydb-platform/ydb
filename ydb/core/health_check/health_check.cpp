@@ -276,7 +276,7 @@ public:
     struct TSelfCheckResult {
         struct TIssueRecord {
             Ydb::Monitoring::IssueLog IssueLog;
-            ETags Tag;
+            ETags Tag = ETags::None;
         };
 
         Ydb::Monitoring::StatusFlag::Status OverallStatus = Ydb::Monitoring::StatusFlag::GREY;
@@ -2029,6 +2029,18 @@ public:
         return TStringBuilder() << nodeInfo.NodeId << '/' << nodeInfo.Host << ':' << nodeInfo.Port;
     }
 
+    TString GetNodeDataCenterId(TNodeId nodeId) const {
+        auto itNodeInfo = MergedNodeInfo.find(nodeId);
+        if (itNodeInfo == MergedNodeInfo.end()) {
+            return {};
+        }
+        const TNodeLocation& location = itNodeInfo->second->Location;
+        if (!location.HasKey(TNodeLocation::TKeys::DataCenter)) {
+            return {};
+        }
+        return location.GetDataCenterId();
+    }
+
     static void Check(TSelfCheckContext& context, const NKikimrWhiteboard::TSystemStateInfo::TPoolStats& poolStats) {
         if (poolStats.name() == "System" || poolStats.name() == "IC" || poolStats.name() == "IO") {
             if (poolStats.usage() >= 0.99) {
@@ -3124,7 +3136,67 @@ public:
         }
     };
 
-    bool FindRecordsForMerge(TList<TSelfCheckContext::TIssueRecord>& records, TList<TSelfCheckContext::TIssueRecord>& similar, TList<TSelfCheckContext::TIssueRecord>& merged) {
+    enum class EDiskMergeScope {
+        Node, // only the disks of the same node are merged together
+        DataCenter, // the disks of the whole data center are merged together
+    };
+
+    // a vdisk id is "<group>-<generation>-<failRealm>-<failDomain>-<vdisk>", see GetVDiskId()
+    static TString GetFailRealmKey(TStringBuf vDiskId) {
+        TStringBuf groupId = vDiskId.NextTok('-');
+        vDiskId.NextTok('-'); // group generation is the same for all the vdisks of a group
+        TStringBuf failRealm = vDiskId.NextTok('-');
+        if (groupId.empty() || failRealm.empty()) {
+            return {};
+        }
+        return TStringBuilder() << groupId << '-' << failRealm;
+    }
+
+    TString GetRecordDataCenter(const TSelfCheckContext::TIssueRecord& record) const {
+        return GetNodeDataCenterId(record.IssueLog.location().storage().node().id());
+    }
+
+    bool AreDisksInSameMergeScope(EDiskMergeScope scope, const TSelfCheckContext::TIssueRecord& first, const TSelfCheckContext::TIssueRecord& second) const {
+        if (scope == EDiskMergeScope::DataCenter) {
+            TString dataCenter = GetRecordDataCenter(first);
+            return dataCenter && dataCenter == GetRecordDataCenter(second);
+        }
+        return first.IssueLog.location().storage().node().id() == second.IssueLog.location().storage().node().id();
+    }
+
+    // An outage of a whole fail realm (which is a data center for mirror-3-dc) takes down the disks of many
+    // nodes at once, so merging those issues per node results in one issue per node. Move the issues of the
+    // groups which lost more than one disk in the same fail realm away, so that they can be merged per data
+    // center instead. Isolated disk failures are left in place and are still merged per node.
+    void ExtractLostFailRealmRecords(TList<TSelfCheckContext::TIssueRecord>& records, TList<TSelfCheckContext::TIssueRecord>& lostRealmRecords) {
+        if (records.empty() || records.front().Tag != ETags::VDiskState) {
+            return;
+        }
+        std::unordered_map<TString, int> failedDisksInRealm;
+        for (const auto& record : records) {
+            for (const auto& vDiskId : record.IssueLog.location().storage().pool().group().vdisk().id()) {
+                if (TString key = GetFailRealmKey(vDiskId)) {
+                    ++failedDisksInRealm[key];
+                }
+            }
+        }
+        auto hasLostFailRealm = [&](const TSelfCheckContext::TIssueRecord& record) {
+            const auto& vDiskIds = record.IssueLog.location().storage().pool().group().vdisk().id();
+            return AnyOf(vDiskIds, [&](const TString& vDiskId) {
+                return failedDisksInRealm[GetFailRealmKey(vDiskId)] > 1;
+            });
+        };
+        for (auto it = records.begin(); it != records.end(); ) {
+            if (hasLostFailRealm(*it) && GetRecordDataCenter(*it)) {
+                auto move = it++;
+                lostRealmRecords.splice(lostRealmRecords.end(), records, move);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    bool FindRecordsForMerge(TList<TSelfCheckContext::TIssueRecord>& records, TList<TSelfCheckContext::TIssueRecord>& similar, TList<TSelfCheckContext::TIssueRecord>& merged, EDiskMergeScope scope) {
         while (!records.empty() && similar.empty()) {
             similar.splice(similar.end(), records, records.begin());
             for (auto it = records.begin(); it != records.end(); ) {
@@ -3132,7 +3204,7 @@ public:
                     && it->IssueLog.message() == similar.begin()->IssueLog.message()
                     && it->IssueLog.level() == similar.begin()->IssueLog.level();
                 if (isSimilar && similar.begin()->Tag == ETags::VDiskState) {
-                    isSimilar = it->IssueLog.location().storage().node().id() == similar.begin()->IssueLog.location().storage().node().id();
+                    isSimilar = AreDisksInSameMergeScope(scope, *similar.begin(), *it);
                 }
                 if (isSimilar && similar.begin()->IssueLog.location().storage().pool().group().has_pile()) {
                     isSimilar = it->IssueLog.location().storage().pool().group().pile().name()
@@ -3177,6 +3249,13 @@ public:
         return children;
     }
 
+    // a merged issue cannot point to a single node anymore if it covers disks from several of them
+    static void ClearNodeIfMerged(Ydb::Monitoring::LocationStorage& main, const Ydb::Monitoring::LocationStorage& donor) {
+        if (main.node().id() != donor.node().id()) {
+            main.clear_node();
+        }
+    }
+
     void MoveDataInFirstRecord(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& similar) {
         auto mainReasons = similar.begin()->IssueLog.mutable_reason();
         std::unordered_set<TString> ids;
@@ -3202,15 +3281,19 @@ public:
                     break;
                 }
                 case ETags::VDiskState: {
-                    auto mainVdiskIds = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id();
+                    auto mainStorage = similar.begin()->IssueLog.mutable_location()->mutable_storage();
+                    auto mainVdiskIds = mainStorage->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id();
                     auto donorVdiskIds = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id();
                     mainVdiskIds->Add(donorVdiskIds->begin(), donorVdiskIds->end());
+                    ClearNodeIfMerged(*mainStorage, it->IssueLog.location().storage());
                     break;
                 }
                 case ETags::PDiskState: {
-                    auto mainPdisk = similar.begin()->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
+                    auto mainStorage = similar.begin()->IssueLog.mutable_location()->mutable_storage();
+                    auto mainPdisk = mainStorage->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
                     auto donorPdisk = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
                     mainPdisk->Add(donorPdisk->begin(), donorPdisk->end());
+                    ClearNodeIfMerged(*mainStorage, it->IssueLog.location().storage());
                     break;
                 }
                 default:
@@ -3233,16 +3316,24 @@ public:
         similar.begin()->IssueLog.set_listed(ids.size());
     }
 
-    void MergeLevelRecords(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records) {
+    void MergeSimilarRecords(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records, EDiskMergeScope scope) {
         TList<TSelfCheckContext::TIssueRecord> handled;
         while (!records.empty()) {
             TList<TSelfCheckContext::TIssueRecord> similar;
-            if (FindRecordsForMerge(records, similar, handled)) {
+            if (FindRecordsForMerge(records, similar, handled, scope)) {
                 MoveDataInFirstRecord(context, similar);
                 handled.splice(handled.end(), similar, similar.begin());
             }
         }
         records.splice(records.end(), handled);
+    }
+
+    void MergeLevelRecords(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records) {
+        TList<TSelfCheckContext::TIssueRecord> lostRealmRecords;
+        ExtractLostFailRealmRecords(records, lostRealmRecords);
+        MergeSimilarRecords(context, lostRealmRecords, EDiskMergeScope::DataCenter);
+        MergeSimilarRecords(context, records, EDiskMergeScope::Node);
+        records.splice(records.end(), lostRealmRecords);
     }
 
     void MergeLevelRecords(TMergeIssuesContext& context, ETags levelTag) {

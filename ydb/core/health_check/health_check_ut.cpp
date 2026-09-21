@@ -774,6 +774,174 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
+    // a mirror-3-dc group has 9 vdisks in 3 fail realms (data centers) of 3 fail domains (nodes) each
+    const ui32 MIRROR_3_DC_REALMS = 3;
+    const ui32 MIRROR_3_DC_DOMAINS = 3;
+    const ui32 MIRROR_3_DC_VDISKS = MIRROR_3_DC_REALMS * MIRROR_3_DC_DOMAINS;
+
+    void SetNodeDataCenters(TEvInterconnect::TEvNodesInfo::TPtr* ev, ui32 firstNodeId, ui32 nodesPerDataCenter) {
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
+        for (auto& node : *nodes) {
+            TString dataCenter = TStringBuilder() << "dc-" << (node.NodeId - firstNodeId) / nodesPerDataCenter;
+            node.Location = TNodeLocation(dataCenter, {}, TStringBuilder() << "rack-" << node.NodeId, "unit-1");
+        }
+        auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+            new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
+        );
+        ev->Swap(newEv);
+    }
+
+    void AddMirror3DcGroupsToSysViewResponse(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr* ev, size_t groupCount) {
+        auto& record = (*ev)->Get()->Record;
+        auto entrySample = record.entries(0);
+        record.clear_entries();
+
+        auto groupId = GROUP_START_ID;
+        for (size_t i = 0; i < groupCount; ++i) {
+            auto* entry = record.add_entries();
+            entry->CopyFrom(entrySample);
+            entry->mutable_key()->set_groupid(groupId++);
+            entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::MIRROR_3_DC);
+            entry->mutable_info()->set_storagepoolid(1);
+            entry->mutable_info()->set_generation(DEFAULT_GROUP_GENERATION);
+        }
+    }
+
+    // every group takes the same set of nodes: the vdisk of the fail domain d of the fail realm r lives on
+    // the node with the index r * MIRROR_3_DC_DOMAINS + d
+    void AddMirror3DcVSlotsToSysViewResponse(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr* ev,
+                                             const TVector<THashSet<ui32>>& failedVDisksPerGroup, ui32 firstNodeId) {
+        auto& record = (*ev)->Get()->Record;
+        auto entrySample = record.entries(0);
+        record.clear_entries();
+
+        const auto* descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
+        auto groupId = GROUP_START_ID;
+        auto vslotId = VCARD_START_ID;
+        for (const auto& failedVDisks : failedVDisksPerGroup) {
+            for (ui32 vDiskIdx = 0; vDiskIdx < MIRROR_3_DC_VDISKS; ++vDiskIdx) {
+                auto* entry = record.add_entries();
+                entry->CopyFrom(entrySample);
+                entry->mutable_key()->set_nodeid(firstNodeId + vDiskIdx);
+                entry->mutable_key()->clear_pdiskid(); // pdisks are out of scope here
+                entry->mutable_key()->set_vslotid(vslotId++);
+                entry->mutable_info()->set_groupid(groupId);
+                entry->mutable_info()->set_groupgeneration(DEFAULT_GROUP_GENERATION);
+                entry->mutable_info()->set_failrealm(vDiskIdx / MIRROR_3_DC_DOMAINS);
+                entry->mutable_info()->set_faildomain(vDiskIdx % MIRROR_3_DC_DOMAINS);
+                entry->mutable_info()->set_vdisk(vDiskIdx);
+                auto status = failedVDisks.contains(vDiskIdx) ? NKikimrBlobStorage::EVDiskStatus::ERROR
+                                                              : NKikimrBlobStorage::EVDiskStatus::READY;
+                entry->mutable_info()->set_statusv2(descriptor->FindValueByNumber(status)->name());
+            }
+            ++groupId;
+        }
+    }
+
+    Ydb::Monitoring::SelfCheckResult RequestHcWithMirror3DcGroups(const TVector<THashSet<ui32>>& failedVDisksPerGroup) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(MIRROR_3_DC_VDISKS)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+        const ui32 firstNodeId = runtime.GetNodeId(0);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                    ChangeDescribeSchemeResult(x);
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    SetNodeDataCenters(x, firstNodeId, MIRROR_3_DC_DOMAINS);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    AddMirror3DcVSlotsToSysViewResponse(x, failedVDisksPerGroup, firstNodeId);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddMirror3DcGroupsToSysViewResponse(x, failedVDisksPerGroup.size());
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_merge_records(true);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+    }
+
+    const Ydb::Monitoring::IssueLog* FindIssue(const Ydb::Monitoring::SelfCheckResult& result, const TString& type,
+                                               TLocationFilter locationFilter = {}) {
+        for (const auto& issueLog : result.issue_log()) {
+            if (issueLog.type() == type && locationFilter(issueLog.location())) {
+                return &issueLog;
+            }
+        }
+        return nullptr;
+    }
+
+    Y_UNIT_TEST(Mirror3DcDataCenterOutageMergesVDisksOfAllGroups) {
+        // the whole first data center is down, so every group is missing all the disks of its first fail realm
+        TVector<THashSet<ui32>> failedVDisksPerGroup(3, THashSet<ui32>{0, 1, 2});
+        auto result = RequestHcWithMirror3DcGroups(failedVDisksPerGroup);
+        Ctest << result.ShortDebugString() << Endl;
+
+        auto poolFilter = [] { return TLocationFilter().Pool(STORAGE_POOL_NAME); };
+        // all the groups are degraded in the same way, and so are all the disks of the failed data center
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, poolFilter());
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 1, poolFilter());
+
+        const auto* vDiskIssue = FindIssue(result, "VDISK", poolFilter());
+        UNIT_ASSERT(vDiskIssue);
+        UNIT_ASSERT_VALUES_EQUAL(vDiskIssue->message(), "VDisks are not available");
+        const ui32 failedVDiskCount = failedVDisksPerGroup.size() * MIRROR_3_DC_DOMAINS;
+        UNIT_ASSERT_VALUES_EQUAL(vDiskIssue->count(), failedVDiskCount);
+        UNIT_ASSERT_VALUES_EQUAL(vDiskIssue->location().storage().pool().group().vdisk().id_size(), failedVDiskCount);
+        // the merged issue covers several nodes, so it is not about a single one anymore
+        UNIT_ASSERT_VALUES_EQUAL(vDiskIssue->location().storage().node().id(), 0);
+    }
+
+    Y_UNIT_TEST(Mirror3DcSingleDiskFailuresAreMergedByNode) {
+        // every group is missing a single disk of its first fail realm, and these disks are on different nodes
+        TVector<THashSet<ui32>> failedVDisksPerGroup = {{0}, {1}, {2}};
+        auto result = RequestHcWithMirror3DcGroups(failedVDisksPerGroup);
+        Ctest << result.ShortDebugString() << Endl;
+
+        auto poolFilter = [] { return TLocationFilter().Pool(STORAGE_POOL_NAME); };
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, poolFilter());
+        // no group lost more than one disk in the same fail realm, so the disk issues are still kept per node
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 3, poolFilter());
+
+        const auto* vDiskIssue = FindIssue(result, "VDISK", poolFilter());
+        UNIT_ASSERT(vDiskIssue);
+        UNIT_ASSERT_VALUES_EQUAL(vDiskIssue->message(), "VDisk is not available");
+        UNIT_ASSERT(vDiskIssue->location().storage().node().id() != 0);
+    }
+
     void StorageTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);

@@ -29,6 +29,7 @@ from core import (
     build_create_table_sql as core_build_create_table_sql,
     duration_ms_between,
     end as core_end,
+    enrich as core_enrich,
     flush_file as core_flush_file,
     has_send_credentials,
     merge_defaults,
@@ -493,6 +494,21 @@ def end(
     )
 
 
+def enrich(
+    name: str,
+    properties: Optional[Dict[str, Any]] = None,
+    *,
+    file: Optional[str] = None,
+    **fields: Any,
+) -> int:
+    props = dict(properties or {})
+    _runner, _usage, extras = _runner_from(props, fields)
+    path = file or default_metrics_file()
+    extras.pop("runner", None)
+    extras.pop("usage", None)
+    return core_enrich(name, props, file=path, **extras)
+
+
 def track(
     name: str,
     properties: Optional[Dict[str, Any]] = None,
@@ -583,6 +599,11 @@ class Analytics(CoreAnalytics):
             track_fn=track,
             send_fn=send,
         )
+        self._enrich_fn = enrich
+
+    def enrich(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
+        kwargs = self._base_kwargs(kwargs)
+        return self._enrich_fn(name, properties, **kwargs)
 
 
 def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
@@ -802,6 +823,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     add_track_cli_args(sub.add_parser("start", help="Open a span (auto start time + CI resource)"), kind_default="duration")
     add_track_cli_args(sub.add_parser("end", help="Close open span(s); duration is computed"))
     add_track_cli_args(sub.add_parser("track", help="Queue a completed event (no open span)"))
+    add_track_cli_args(sub.add_parser("enrich", help="Add labels to last unsent record; duration stays"))
     send_p = sub.add_parser("send", help="End leftover spans and export the batch")
     add_track_cli_args(send_p)
     send_p.add_argument("--table-path", default=None)
@@ -820,6 +842,7 @@ def main(argv=None) -> int:
             track_fn=track,
             send_fn=send,
             flush_fn=flush_file,
+            enrich_fn=enrich,
             default_file=default_metrics_file(),
             extra_kwargs_fn=_cli_runner_flags,
         )

@@ -596,6 +596,126 @@ def end(
     return len(completed)
 
 
+FROZEN_ENRICH_KEYS = frozenset(
+    {
+        "event_ts",
+        "value",
+        "unit",
+        "kind",
+        "started_epoch",
+        "finished_epoch",
+        "started_at",
+        "name",
+        "source",
+        "run_id",
+        "conclusion",
+    }
+)
+
+
+def _labels_of(record: Dict[str, Any]) -> Dict[str, Any]:
+    labels = record.get("labels")
+    return labels if isinstance(labels, dict) else {}
+
+
+def _record_name_matches(record: Dict[str, Any], name: str, match_labels: Dict[str, Any]) -> bool:
+    if record.get("name") != name:
+        return False
+    labels = _labels_of(record)
+    for key, value in match_labels.items():
+        if str(labels.get(key, "")) != str(value):
+            return False
+    return True
+
+
+def enrich(
+    name: str,
+    properties: Optional[Dict[str, Any]] = None,
+    *,
+    file: Optional[str] = None,
+    **fields: Any,
+) -> int:
+    """Merge labels into the last unsent completed record with this name.
+
+    Does not change duration, event_ts, or conclusion. Use after end() and
+    before send() so S3 URLs attach without rewriting the measured time.
+    """
+    path = file or default_metrics_file()
+    extras = _record_kwargs(properties, None)
+    extras.update({key: value for key, value in fields.items() if value is not None})
+    extras.pop("file", None)
+    extras.pop("attach", None)
+    extras.pop("enrich", None)
+    extras.pop("info_name", None)
+    extras.pop("flush", None)
+    extras.pop("table_path", None)
+    extra_labels = extras.pop("labels", None)
+    match_labels: Dict[str, Any] = {}
+    if extras.get("ya_attempt") not in (None, ""):
+        match_labels["ya_attempt"] = extras["ya_attempt"]
+    if isinstance(extra_labels, dict) and extra_labels.get("ya_attempt") not in (None, ""):
+        match_labels.setdefault("ya_attempt", extra_labels["ya_attempt"])
+    if not name or not os.path.exists(path):
+        return 0
+    offset = read_send_offset(path)
+    with open(path, encoding="utf-8") as handle:
+        prefix = handle.read(offset) if offset else ""
+        rest = handle.read()
+    lines = rest.splitlines()
+    index = None
+    parsed: List[Optional[Dict[str, Any]]] = []
+    for line in lines:
+        text = line.strip()
+        if not text:
+            parsed.append(None)
+            continue
+        try:
+            item = json.loads(text)
+        except json.JSONDecodeError:
+            parsed.append(None)
+            continue
+        parsed.append(item if isinstance(item, dict) else None)
+    for i in range(len(parsed) - 1, -1, -1):
+        item = parsed[i]
+        if item is not None and _record_name_matches(item, name, match_labels):
+            index = i
+            break
+    if index is None or parsed[index] is None:
+        return 0
+    record = parsed[index] or {}
+    labels = dict(_labels_of(record))
+    if isinstance(extra_labels, dict):
+        for key, value in extra_labels.items():
+            if value not in (None, ""):
+                labels[key] = value
+    for key, value in extras.items():
+        if key in FROZEN_ENRICH_KEYS or value in (None, ""):
+            continue
+        labels[key] = value
+    if labels:
+        record["labels"] = labels
+    rewritten = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+    out_lines = []
+    for i, line in enumerate(lines):
+        if i == index:
+            out_lines.append(rewritten)
+        else:
+            out_lines.append(line)
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        if prefix:
+            handle.write(prefix)
+            if not prefix.endswith("\n") and out_lines:
+                handle.write("\n")
+        if out_lines:
+            handle.write("\n".join(out_lines) + "\n")
+    os.replace(tmp, path)
+    return 1
+
+
 def track(
     name: str,
     properties: Optional[Dict[str, Any]] = None,
@@ -754,6 +874,9 @@ class Analytics:
         if self.enrich and kwargs.get("enrich") is None:
             kwargs["enrich"] = self.enrich
         return self._end(name, properties, **kwargs)
+
+    def enrich(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
+        return enrich(name, properties, **self._base_kwargs(kwargs))
 
     def track(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
         self._track(name, properties, **self._record_kwargs(kwargs))
@@ -950,6 +1073,9 @@ def _properties_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     run_id = getattr(args, "run_id", None)
     if run_id not in (None, ""):
         properties["run_id"] = run_id
+    error = getattr(args, "error", None)
+    if error not in (None, ""):
+        properties["error"] = error
     return properties
 
 
@@ -989,15 +1115,17 @@ def run_cli(
     track_fn: Optional[Callable[..., Any]] = None,
     send_fn: Optional[Callable[..., Any]] = None,
     flush_fn: Optional[Callable[..., Any]] = None,
+    enrich_fn: Optional[Callable[..., Any]] = None,
     default_file: Optional[str] = None,
     extra_kwargs_fn: Optional[Callable[[argparse.Namespace], Dict[str, Any]]] = None,
 ) -> int:
-    """Dispatch start/end/track/send/flush. Wrappers pass their own fns."""
+    """Dispatch start/end/track/send/flush/enrich. Wrappers pass their own fns."""
     start_fn = start_fn or start
     end_fn = end_fn or end
     track_fn = track_fn or track
     send_fn = send_fn or send
     flush_fn = flush_fn or flush_file
+    enrich_fn = enrich_fn or enrich
     file = getattr(args, "file", None) or default_file
     extra = extra_kwargs_fn(args) if extra_kwargs_fn else {}
     if args.command == "flush":
@@ -1033,6 +1161,12 @@ def run_cli(
             finished_epoch=args.finished_epoch,
             **extra,
         )
+        return 0
+    if args.command == "enrich":
+        if not name:
+            print("Warning: enrich requires an event name", file=sys.stderr)
+            return 0
+        enrich_fn(name, props, file=file, **extra)
         return 0
     if args.command == "track":
         if not name:
@@ -1093,6 +1227,7 @@ def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optiona
     parser.add_argument("--started-epoch", default=None, help="epoch seconds or ms")
     parser.add_argument("--finished-epoch", default=None, help="epoch seconds or ms")
     parser.add_argument("--conclusion", default=None)
+    parser.add_argument("--error", default=None, help="Short error/status reason (labels.error)")
     parser.add_argument("--label", action="append", default=[], help="key=value attribute")
     parser.add_argument("--attr", action="append", default=[], help="Alias of --label (OTel attribute)")
     parser.add_argument("--extra", default=None, help="JSON object merged into attributes")
@@ -1112,6 +1247,9 @@ def parse_args(argv=None) -> argparse.Namespace:
 
     track_p = sub.add_parser("track", help="Queue a completed event (no open span)")
     add_track_cli_args(track_p)
+
+    enrich_p = sub.add_parser("enrich", help="Add labels to last unsent record; duration stays")
+    add_track_cli_args(enrich_p)
 
     send_p = sub.add_parser("send", help="End leftover spans and export the batch")
     add_track_cli_args(send_p)

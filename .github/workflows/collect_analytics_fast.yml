@@ -57,7 +57,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       continue-on-error: true
-      run: python3 .github/scripts/analytics/export_github_job_metrics.py
+      run: python3 .github/scripts/utils/analytics/export_github_job_metrics.py
     - name: Upload GitHub issue mapping table
       continue-on-error: true
       run: python3 .github/scripts/analytics/github_issue_mapping.py

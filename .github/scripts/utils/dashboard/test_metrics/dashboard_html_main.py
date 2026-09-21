@@ -17,6 +17,15 @@ except ImportError:
     from dashboard_html_payload import build_dashboard_payload  # type: ignore[no-redef]
 
 
+def js_script_json(value: Any) -> str:
+    """JSON text safe to embed in a <script> tag.
+
+    Keep the ``</`` escape outside f-strings: Python < 3.12 rejects a
+    backslash in an f-string expression, and CI runners are still 3.10/3.11.
+    """
+    return json.dumps(value, ensure_ascii=False).replace("</", "<\\/")
+
+
 def build_html_dashboard(
     suite_filter: Optional[str],
     runs: list[dict[str, Any]],
@@ -56,6 +65,7 @@ def build_html_dashboard(
     rf_ram = rf.get("ram_gb", "?")
     rf_budget = rf.get("mem_budget_gb", "?")
     rf_ya_mem = rf.get("ya_make_mem_limit_gb", "?")
+    payload_js = js_script_json(payload)
 
     html = f"""<!doctype html>
 <html>
@@ -436,7 +446,7 @@ def build_html_dashboard(
       }}, 0);
     }}
 
-    const data = {json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")};
+    const data = {payload_js};
     const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
     const _fmtCache = {{}};
     function formatHeadlineValue(metric, value) {{

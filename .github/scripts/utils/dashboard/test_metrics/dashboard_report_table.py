@@ -14,6 +14,11 @@ CHUNK_GROUP_BRACKET_ONLY_RE = re.compile(r"\[([^\]]+)\]\s+chunk", re.IGNORECASE)
 PART_SUFFIX_RE = re.compile(r"/part\d+$")
 
 
+def js_script_json(value: Any) -> str:
+    """JSON text safe to embed in a <script> tag. Keep out of f-strings (Py<3.12)."""
+    return json.dumps(value, ensure_ascii=False).replace("</", "<\\/")
+
+
 def normalize_suite_path(path: str) -> str:
     return PART_SUFFIX_RE.sub("", path)
 
@@ -133,6 +138,7 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
         "suite_summary": suite_summary,
         "rows": rows,
     }
+    payload_js = js_script_json(payload)
     html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -200,7 +206,7 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
     </div>
   </div>
   <script>
-    const data = {json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")};
+    const data = {payload_js};
     const cols = [
       ['suite_path', 'suite_path'],
       ['tests_in_suite', 'tests in suite'],

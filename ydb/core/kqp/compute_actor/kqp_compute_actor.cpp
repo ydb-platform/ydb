@@ -187,7 +187,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
     NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory, enableStreamingQueriesCounters ? counters->GetKqpCounters() : nullptr);
 
-    RegisterDqSourceKikimrLookupProviderFactories(*factory);
+    NDqSourceLookup::RegisterKikimrLookupProviderFactories(*factory);
 
     if (federatedQuerySetup) {
         auto s3HttpRetryPolicy = NYql::GetFqHTTPRetryPolicy();

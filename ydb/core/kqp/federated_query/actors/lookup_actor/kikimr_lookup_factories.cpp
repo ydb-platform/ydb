@@ -4,11 +4,11 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 
-namespace NYql::NDq {
+namespace NYql::NDq::NDqSourceLookup {
 
-    void RegisterDqSourceKikimrLookupProviderFactories(TDqAsyncIoFactory& factory) {
+    void RegisterKikimrLookupProviderFactories(TDqAsyncIoFactory& factory) {
         auto lookupActorFactory = [](NKqpProto::TDqSourceKikimrLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
-            return CreateDqSourceKikimrLookupActor(std::move(lookupSource), std::move(args));
+            return CreateKikimrLookupActor(std::move(lookupSource), std::move(args));
         };
 
         factory.RegisterLookupSource<NKqpProto::TDqSourceKikimrLookupSource>("kikimr", lookupActorFactory);

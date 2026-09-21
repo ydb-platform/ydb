@@ -1,0 +1,6 @@
+{
+  "release": "26.3.1.20",
+  "release_line": "26.3",
+  "release_kind": "final",
+  "requested_actions": ["publish release", "switch default stable documentation"]
+}

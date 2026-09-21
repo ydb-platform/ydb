@@ -9,7 +9,7 @@ SPLIT_FACTOR(10)
 SIZE(MEDIUM)
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32 cpu:8)
+    REQUIREMENTS(ram:32 cpu:4)
     IF (SANITIZER_TYPE == "thread")
         SIZE(LARGE)
         INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

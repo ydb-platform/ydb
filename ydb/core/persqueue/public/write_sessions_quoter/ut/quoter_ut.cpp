@@ -38,7 +38,9 @@ void TWriteSessionsQuoterTest::SetUp(NUnitTest::TTestContext&) {
     egg.App0 = new TAppData(0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr);
     egg.App0->PQConfig.SetWriteSessionsInitRps(1);
     Runtime.Initialize(std::move(egg));
-    Runtime.SetScheduledEventFilter(TTestActorRuntimeBase::NopFilterFunc);
+    Runtime.SetScheduledEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event, TDuration, TInstant&) {
+        return event->GetTypeRewrite() != TEvents::TEvWakeup::EventType;
+    });
     Quoter = Runtime.Register(CreateWriteSessionsQuoter());
     Runtime.RegisterService(MakeWriteSessionsQuoterId(), Quoter);
 }

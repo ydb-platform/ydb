@@ -49,7 +49,6 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
             YDB_LOG_DEBUG("",
                 {"event", "has_result"},
                 {"sourceIdx", source->GetSourceIdx()},
-                {"#_dup_source_idx", source->GetSourceIdx()},
                 {"table", resultChunk->GetTable()->num_rows()},
                 {"isFinished", isFinished});
             auto cursor = Collection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount(),
@@ -60,8 +59,7 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
         } else if (!isFinished) {
             YDB_LOG_DEBUG("",
                 {"event", "continue_source"},
-                {"sourceIdx", source->GetSourceIdx()},
-                {"#_dup_source_idx", source->GetSourceIdx()});
+                {"sourceIdx", source->GetSourceIdx()});
             source->MutableAs<IDataSource>()->ContinueCursor(source);
         }
         if (!isFinished) {

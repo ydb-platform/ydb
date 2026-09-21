@@ -38,6 +38,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetricsSubsystem) {
         TActorSystem actorSystem(setup);
         UNIT_ASSERT_VALUES_EQUAL(GetInMemoryMetrics(actorSystem)->GetConfig().MemoryBytes, 4096);
         UNIT_ASSERT_EQUAL(GetInMemoryMetrics(), nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(GetMetricSystem(actorSystem), GetInMemoryMetrics(actorSystem));
     }
 
     Y_UNIT_TEST(AsyncRegistrationRefillAndClose) {

@@ -6,7 +6,7 @@
 
 ### Функциональность
 
-* [Для колоночных таблиц доступны экспорт и импорт резервных копий, включая S3-совместимое хранилище](./recipes/backup/backup-collections/exporting-to-external-storage.md?version=main).
+* [Для колоночных таблиц доступны экспорт и импорт резервных копий, включая S3-совместимое хранилище](./recipes/backup-collections/exporting-to-external-storage.md?version=main).
 * Колонки колоночных таблиц поддерживают [словарное кодирование](./yql/reference/syntax/create_table/index.md?version=v26.3#encoding). Используйте `ENCODING(DICT)` для значений с низкой кардинальностью.
 * Для колоночных таблиц включены [локальные min_max-индексы](./dev/min_max-skip-index.md?version=v26.3). Они пропускают фрагменты данных вне диапазона запроса, сокращая объём чтения. Используйте `ADD INDEX ... LOCAL USING min_max` для применения к колонке.
 * Добавлена [декомиссия групп хранения посредством использования виртуальных групп](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Данные перемещаются в виртуальные группы в фоновом режиме, приложения продолжают чтение и запись.

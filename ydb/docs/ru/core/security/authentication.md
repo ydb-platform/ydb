@@ -222,7 +222,7 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 {% note info %}
 
-Единый вход (Single Sign-On, SSO) через внешний IdP в веб-интерфейсе поддерживается только в [{{ ydb-short-name }} Enterprise Manager](../devops/enterprise-manager/index.md). Встроенный веб-интерфейс кластера {{ ydb-short-name }} не поддерживает вход через SSO. В Enterprise Manager перенаправление на страницу входа IdP, получение и обновление токенов выполняет Gateway. Подробнее о настройке — в статье [{#T}](../devops/enterprise-manager/sso.md).
+Единый вход (Single Sign-On, SSO) через внешний IdP в веб-интерфейсе поддерживается только в [{{ ydb-short-name }} Enterprise Manager](../devops/enterprise-manager/index.md). Подробнее о настройке — в статье [{#T}](../devops/enterprise-manager/sso.md). Встроенный веб-интерфейс кластера {{ ydb-short-name }} не поддерживает вход через SSO.
 
 {% endnote %}
 

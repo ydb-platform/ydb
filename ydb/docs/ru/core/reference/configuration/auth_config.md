@@ -306,8 +306,6 @@ auth_config:
 
 {{ ydb-short-name }} поддерживает [аутентификацию по JWT-токенам внешнего провайдера идентификации с использованием OpenID Connect](../../security/authentication.md#external-idp). Для включения аутентификации необходимо добавить секцию `external_idp_config` в `auth_config`.
 
-Эта конфигурация включает проверку JWT-токенов на стороне сервера {{ ydb-short-name }}. SSO в веб-интерфейсе поддерживается только в {{ ydb-short-name }} Enterprise Manager и требует [дополнительной настройки Gateway](../../devops/enterprise-manager/sso.md).
-
 Пример конфигурации:
 
 ```yaml

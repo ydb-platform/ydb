@@ -167,7 +167,8 @@ jobs:
           python3 .github/scripts/analytics/ci_metrics.py start ydbd_clean_build \
             --source clean_build \
             --attr cache_mode=none \
-            --attr "build_target=$BUILD_TARGET" || true
+            --attr "build_target=$BUILD_TARGET" \
+            --runner || true
 
           set +e
           /usr/bin/time -f 'REAL_SECONDS=%e' -o time_result.txt \
@@ -214,7 +215,8 @@ jobs:
           fi
           python3 .github/scripts/analytics/ci_metrics.py end ydbd_clean_build \
             --conclusion "$CONCLUSION" \
-            --json "$EXTRA" || true
+            --json "$EXTRA" \
+            --usage || true
           if [[ "$BINARY_SIZE_BYTES" =~ ^[0-9]+$ ]]; then
             python3 .github/scripts/analytics/ci_metrics.py track ydbd_size \
               --kind gauge \

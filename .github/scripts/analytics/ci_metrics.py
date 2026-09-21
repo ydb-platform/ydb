@@ -16,9 +16,9 @@ Callers may add attributes; they never have to pass job id or start time.
 From a workflow::
 
     python3 .github/scripts/analytics/ci_metrics.py start ydbd_cached_build \\
-        --source nightly_build --attr cache_mode=dist_cache
+        --source nightly_build --attr cache_mode=dist_cache --runner
     # ... work ...
-    python3 .github/scripts/analytics/ci_metrics.py send --conclusion success
+    python3 .github/scripts/analytics/ci_metrics.py send --conclusion success --usage
 
     python3 .github/scripts/analytics/ci_metrics.py track ydbd_size \\
         --kind gauge --value 123456 --unit bytes --source nightly_build
@@ -44,6 +44,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+
+from runner_info import apply_runner_labels, pop_runner_options
 
 try:
     import ydb
@@ -804,8 +806,26 @@ def _record_kwargs(properties: Optional[Dict[str, Any]], labels: Optional[Dict[s
     return merged
 
 
+def _apply_runner_flags(
+    record: Dict[str, Any],
+    *,
+    runner: bool,
+    usage: bool,
+    file: Optional[str] = None,
+) -> Dict[str, Any]:
+    if not runner and not usage:
+        return record
+    labels = record.get("labels") if isinstance(record.get("labels"), dict) else {}
+    apply_runner_labels(labels, runner=runner, usage=usage, metrics_path=file)
+    if labels:
+        record["labels"] = labels
+    return record
+
+
 def close_span(record: Dict[str, Any], extras: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     extras = dict(extras or {})
+    pop_runner_options(extras)
+    extras.pop("file", None)
     labels = record.get("labels") if isinstance(record.get("labels"), dict) else {}
     extra_labels = extras.pop("labels", None)
     if isinstance(extra_labels, dict):
@@ -845,14 +865,20 @@ def start(
     started_epoch: Optional[str] = None,
     conclusion: Optional[str] = None,
     labels: Optional[Dict[str, Any]] = None,
+    runner: bool = False,
+    usage: bool = False,
     **_ignored: Any,
 ) -> str:
     """Open a span. Duration is computed later by end()/send()."""
     path = file or default_metrics_file()
+    merged = _record_kwargs(properties, labels)
+    flag_runner, flag_usage = pop_runner_options(merged)
+    runner = runner or flag_runner
+    usage = usage or flag_usage
     epoch = started_epoch or _now_epoch()
     record = build_track_record(
         name,
-        _record_kwargs(properties, labels),
+        merged,
         kind=kind or "duration",
         source=source,
         started_at=started_at,
@@ -865,6 +891,7 @@ def start(
     if started is not None:
         record["event_ts"] = started.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     record = attach_context(record)
+    _apply_runner_flags(record, runner=runner, usage=usage, file=path)
     span_id = secrets.token_hex(8)
     labels_obj = record.get("labels") if isinstance(record.get("labels"), dict) else {}
     labels_obj["span_id"] = span_id
@@ -886,6 +913,7 @@ def end(
     path = file or default_metrics_file()
     extras = _record_kwargs(properties, None)
     extras.update({key: value for key, value in fields.items() if value is not None})
+    runner, usage = pop_runner_options(extras)
     pending = read_pending_spans(path)
     completed: List[Dict[str, Any]] = []
     if name:
@@ -900,6 +928,7 @@ def end(
         pending = []
     write_pending_spans(pending, path)
     for record in completed:
+        _apply_runner_flags(record, runner=runner, usage=usage, file=path)
         append_record(path, record)
     return len(completed)
 
@@ -918,10 +947,15 @@ def track(
     finished_epoch: Optional[str] = None,
     conclusion: Optional[str] = None,
     labels: Optional[Dict[str, Any]] = None,
+    runner: bool = False,
+    usage: bool = False,
 ) -> None:
     """Queue a completed event. Does not open a span and does not export."""
     path = file or default_metrics_file()
     merged = _record_kwargs(properties, labels)
+    flag_runner, flag_usage = pop_runner_options(merged)
+    runner = runner or flag_runner
+    usage = usage or flag_usage
     resolved_kind = kind
     if resolved_kind is None and value is None and finished_epoch is None and merged.get("value") is None:
         resolved_kind = "info" if "payload" in merged else "event"
@@ -937,7 +971,9 @@ def track(
         finished_epoch=finished_epoch,
         conclusion=conclusion,
     )
-    append_record(path, attach_context(record))
+    record = attach_context(record)
+    _apply_runner_flags(record, runner=runner, usage=usage, file=path)
+    append_record(path, record)
 
 
 def send(
@@ -955,6 +991,7 @@ def send(
     path = file or default_metrics_file()
     extras = _record_kwargs(properties, None)
     extras.update({key: value for key, value in fields.items() if value is not None})
+    runner, usage = pop_runner_options(extras)
     snapshot = extras.pop("payload", None)
     pending = read_pending_spans(path)
     span_source = _pending_source(pending, name)
@@ -962,9 +999,9 @@ def send(
         if snapshot is not None:
             extras["payload"] = snapshot
             extras.setdefault("kind", "info")
-        track(name, extras, file=path)
+        track(name, extras, file=path, runner=runner, usage=usage)
     else:
-        end(name, extras, file=path)
+        end(name, extras, file=path, runner=runner, usage=usage)
         if snapshot is not None:
             info_name = name if _is_info_name(name, extras.get("kind")) else BUILD_INFO_NAME
             track(
@@ -974,6 +1011,8 @@ def send(
                 kind="info",
                 source=extras.get("source") or span_source,
                 conclusion=extras.get("conclusion"),
+                runner=runner,
+                usage=usage,
             )
     return flush_file(path)
 
@@ -1336,6 +1375,8 @@ def _cmd_track(args: argparse.Namespace) -> int:
         started_epoch=args.started_epoch,
         finished_epoch=args.finished_epoch,
         conclusion=args.conclusion,
+        runner=bool(getattr(args, "runner", False)),
+        usage=bool(getattr(args, "usage", False)),
     )
     return 0
 
@@ -1354,6 +1395,8 @@ def _cmd_start(args: argparse.Namespace) -> int:
         started_at=args.started_at,
         started_epoch=args.started_epoch,
         conclusion=args.conclusion,
+        runner=bool(getattr(args, "runner", False)),
+        usage=bool(getattr(args, "usage", False)),
     )
     return 0
 
@@ -1368,6 +1411,8 @@ def _cmd_end(args: argparse.Namespace) -> int:
         value=resolve_track_value(args),
         unit=args.unit,
         finished_epoch=args.finished_epoch,
+        runner=bool(getattr(args, "runner", False)),
+        usage=bool(getattr(args, "usage", False)),
     )
     return 0
 
@@ -1385,6 +1430,8 @@ def _cmd_send(args: argparse.Namespace) -> int:
         started_at=args.started_at,
         started_epoch=args.started_epoch,
         finished_epoch=args.finished_epoch,
+        runner=bool(getattr(args, "runner", False)),
+        usage=bool(getattr(args, "usage", False)),
     )
     return 0
 
@@ -1417,6 +1464,18 @@ def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optiona
     parser.add_argument("--attr", action="append", default=[], help="Alias of --label (OTel attribute)")
     parser.add_argument("--extra", default=None, help="JSON object merged into attributes")
     parser.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
+    parser.add_argument(
+        "--runner",
+        action="store_true",
+        default=False,
+        help="Attach static runner inventory (boot/cpu/ram/disks); collected once and reused",
+    )
+    parser.add_argument(
+        "--usage",
+        action="store_true",
+        default=False,
+        help="Attach a fresh CPU/RAM/disk usage snapshot for this event only",
+    )
 
 
 def parse_args(argv=None) -> argparse.Namespace:

@@ -10,6 +10,9 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 
+import runner_info
+from runner_info import INVENTORY_LABEL, USAGE_LABEL
+
 from ci_metrics import (
     BUILD_INFO_NAME,
     DEFAULT_TABLE_PATH,
@@ -851,5 +854,138 @@ class ParseLabelsTest(unittest.TestCase):
         self.assertEqual(labels["extra"], "not-json")
 
 
+class RunnerFlagsTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.metrics = os.path.join(self.tmp.name, "ci_metrics.jsonl")
+        self.cache = os.path.join(self.tmp.name, "runner.json")
+        self.saved = {key: os.environ.get(key) for key in ("CI_RUNNER_INFO_FILE", "RUNNER_TEMP")}
+        os.environ["CI_RUNNER_INFO_FILE"] = self.cache
+        os.environ.pop("RUNNER_TEMP", None)
+        self.inv_calls = 0
+        self.use_calls = 0
+        self.orig_inv = runner_info.collect_inventory
+        self.orig_use = runner_info.collect_usage
+        runner_info.collect_inventory = self._inventory
+        runner_info.collect_usage = self._usage
+
+    def tearDown(self):
+        runner_info.collect_inventory = self.orig_inv
+        runner_info.collect_usage = self.orig_use
+        for key, value in self.saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def _inventory(self):
+        self.inv_calls += 1
+        return {
+            "boot_time": 1700000000,
+            "cpu_count": 8,
+            "cpu_model": "Test CPU",
+            "mem_total_bytes": 16 * 1024**3,
+            "disk_total_bytes": 100 * 1024**3,
+            "disks": [{"name": "sda", "size_bytes": 100 * 1024**3}],
+        }
+
+    def _usage(self):
+        self.use_calls += 1
+        return {
+            "cpu_pct": 10.0 * self.use_calls,
+            "loadavg_1": 0.5,
+            "mem_used_bytes": 1024 * self.use_calls,
+            "disk_used_bytes": 2048 * self.use_calls,
+        }
+
+    def test_no_flags_skips_proc(self):
+        start("step", file=self.metrics, source="wf")
+        pending = read_pending_spans(self.metrics)
+        labels = pending[0].get("labels") or {}
+        self.assertNotIn(INVENTORY_LABEL, labels)
+        self.assertNotIn(USAGE_LABEL, labels)
+        self.assertEqual(self.inv_calls, 0)
+        self.assertEqual(self.use_calls, 0)
+
+    def test_runner_collects_once_and_reuses(self):
+        self.assertEqual(
+            main(["start", "ydbd_cached_build", "--file", self.metrics, "--source", "nightly_build", "--runner"]),
+            0,
+        )
+        self.assertEqual(self.inv_calls, 1)
+        first = read_pending_spans(self.metrics)[0]["labels"][INVENTORY_LABEL]
+        self.assertEqual(first["cpu_count"], 8)
+        self.assertEqual(first["boot_time"], 1700000000)
+        self.assertTrue(os.path.isfile(self.cache))
+        self.assertEqual(
+            main(["track", "ydbd_size", "--file", self.metrics, "--kind", "gauge", "--value", "1", "--runner"]),
+            0,
+        )
+        self.assertEqual(self.inv_calls, 1)
+        with open(self.metrics, encoding="utf-8") as handle:
+            row = json.loads(handle.readline())
+        self.assertEqual(row["labels"][INVENTORY_LABEL]["mem_total_bytes"], 16 * 1024**3)
+        self.assertNotIn("runner", row["labels"])
+
+    def test_usage_is_per_snapshot(self):
+        self.assertEqual(
+            main(["track", "ydbd_size", "--file", self.metrics, "--kind", "gauge", "--value", "1", "--usage"]),
+            0,
+        )
+        self.assertEqual(
+            main(["track", "ydbd_size", "--file", self.metrics, "--kind", "gauge", "--value", "2", "--usage"]),
+            0,
+        )
+        self.assertEqual(self.use_calls, 2)
+        self.assertEqual(self.inv_calls, 0)
+        with open(self.metrics, encoding="utf-8") as handle:
+            rows = [json.loads(line) for line in handle if line.strip()]
+        self.assertEqual(rows[0]["labels"][USAGE_LABEL]["cpu_pct"], 10.0)
+        self.assertEqual(rows[1]["labels"][USAGE_LABEL]["cpu_pct"], 20.0)
+        self.assertFalse(os.path.exists(self.cache))
+
+    def test_start_runner_end_usage(self):
+        sends = []
+
+        def fake_flush(path=None, table_path=None, defaults=None):
+            sends.append(path)
+            return 0
+
+        import ci_metrics as client
+
+        original = client.flush_file
+        client.flush_file = fake_flush
+        try:
+            start("ydbd_clean_build", file=self.metrics, source="clean_build", runner=True, started_epoch="1000")
+            self.assertEqual(self.inv_calls, 1)
+            self.assertEqual(
+                main(
+                    [
+                        "send",
+                        "--file",
+                        self.metrics,
+                        "--conclusion",
+                        "success",
+                        "--finished-epoch",
+                        "1010",
+                        "--usage",
+                    ]
+                ),
+                0,
+            )
+            with open(self.metrics, encoding="utf-8") as handle:
+                row = json.loads(handle.readline())
+            labels = row["labels"]
+            self.assertEqual(labels[INVENTORY_LABEL]["cpu_count"], 8)
+            self.assertEqual(labels[USAGE_LABEL]["mem_used_bytes"], 1024)
+            self.assertNotIn("usage", labels)
+            self.assertEqual(self.use_calls, 1)
+            self.assertEqual(sends, [self.metrics])
+        finally:
+            client.flush_file = original
+
+
 if __name__ == "__main__":
     unittest.main()
+

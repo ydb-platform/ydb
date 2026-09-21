@@ -203,6 +203,9 @@ runs:
           if [ -n "${CI_BUILD_TARGET:-}" ]; then
             extra_args+=(--label "build_target=${CI_BUILD_TARGET}")
           fi
+          if [ -n "${CI_BUILD_SPAN:-}" ] && [ "$name" = "$CI_BUILD_SPAN" ]; then
+            extra_args+=(--runner)
+          fi
           python3 .github/scripts/analytics/ci_metrics.py start \
             --name "$name" \
             --source "$source" \
@@ -213,9 +216,14 @@ runs:
         record_ci_end() {
           local name="$1"
           local conclusion="${2:-success}"
+          local extra_args=()
+          if [ -n "${CI_BUILD_SPAN:-}" ] && [ "$name" = "$CI_BUILD_SPAN" ]; then
+            extra_args+=(--usage)
+          fi
           python3 .github/scripts/analytics/ci_metrics.py end \
             --name "$name" \
-            --conclusion "$conclusion" || true
+            --conclusion "$conclusion" \
+            "${extra_args[@]}" || true
         }
 
         if [ -n "${{ inputs.bazel_remote_uri }}" ]; then

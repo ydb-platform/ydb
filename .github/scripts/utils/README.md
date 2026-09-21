@@ -22,9 +22,9 @@
 ```bash
 # Длительность: start до работы, send после (duration считается сам)
 python3 .github/scripts/analytics/ci_metrics.py start my_step \
-  --source my_wf --attr cache_mode=dist_cache
+  --source my_wf --attr cache_mode=dist_cache --runner
 # ... work ...
-python3 .github/scripts/analytics/ci_metrics.py send --conclusion success
+python3 .github/scripts/analytics/ci_metrics.py send --conclusion success --usage
 
 # Уже готовое измерение / gauge / событие
 python3 .github/scripts/analytics/ci_metrics.py track wait \
@@ -40,6 +40,8 @@ python3 .github/scripts/analytics/ci_metrics.py send
 
 `--json` / `--json-file` с плоским объектом обогащают атрибуты текущей записи. Список компонентов / `nodes` / `modules` / `cpp_compilation_times` и т.п. уходит в `labels.payload` отдельной строкой `build_info` (`kind=info`), а не в duration. `send --json-file modules.json` после `start` закроет span и допишет этот снимок в тот же пакет.
 
+`--runner` один раз снимает инвентарь хоста (`labels["runner.inventory"]`: `boot_time`, `cpu_count`, `cpu_model`, `mem_total_bytes`, `disk_total_bytes`, `disks`) и кладёт его в кэш (`$CI_RUNNER_INFO_FILE` или `$RUNNER_TEMP/ci_runner_info.json`). Повторные вызовы с `--runner` переиспользуют кэш — эти величины на раннере не меняются. `--usage` каждый раз заново снимает загрузку (`labels["runner.usage"]`: `cpu_pct`, `loadavg_*`, `mem_*`, `disk_*`) только для этого события. Без флагов `/proc` не читается. Nightly `ydbd_cached_build` и clean `ydbd_clean_build` передают `--runner` на `start` и `--usage` на `end`.
+
 Или composite action:
 
 ```yaml
@@ -49,12 +51,14 @@ python3 .github/scripts/analytics/ci_metrics.py send
     name: my_step
     source: my_wf
     labels: cache_mode=dist_cache
+    runner: true
 # ... work ...
 - uses: ./.github/actions/analytics_track
   with:
     command: send
     conclusion: success
     json-file: modules.json
+    usage: true
 ```
 
 `track` / `start` только пишут в JSONL. `send` закрывает открытые span'ы и отправляет пакет в ydb-qa (`analytics/ci_metrics`) через YDBWrapper. Пачку узлов собирает `export_ya_nodes.py` (строка на узел + один `build_info` со всеми компонентами). Агрегаты — SQL; сравнение PR-check с target — следующий этап.

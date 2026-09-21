@@ -104,6 +104,8 @@ private:
     TVector<TPersistResultPromise> ExecutingUpdateVChunkConfigPromises;
     TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests
         PendingUpdateVChunkConfigRequests;
+    // Persisted vchunk config overrides, keyed by vchunk index.
+    TVChunkConfigs VChunkConfigs;
 
     // Batch persisting of ahead and behind fields.
     bool ExecutingUpdateDirtyMapState = false;
@@ -241,6 +243,10 @@ private:
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h
     void HandleFastPathServiceReady(
         const TEvPartitionDirectPrivate::TEvFastPathServiceReady::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleRenderMonPage(
+        const TEvPartitionDirectPrivate::TEvRenderMonPage::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceShutdown(

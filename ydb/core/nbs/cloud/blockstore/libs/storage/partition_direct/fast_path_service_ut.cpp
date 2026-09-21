@@ -31,10 +31,17 @@ using EChaosMode = TChaosConfig::TChaosNodeConfig::EChaosMode;
 class TEmptyTouchedProvider final: public ITouchedProvider
 {
 public:
-    [[nodiscard]] TRegionVChunks GetTouchedVChunks(
-        ui32 startVChunkIndex) const override
+    // Implemented ITouchedProvider.
+    [[nodiscard]] bool Get(ui32 vChunkIndex) const override
     {
-        Y_UNUSED(startVChunkIndex);
+        Y_UNUSED(vChunkIndex);
+        return false;
+    }
+
+    [[nodiscard]] TRegionVChunks GetTouchedVChunks(
+        ui32 regionIndex) const override
+    {
+        Y_UNUSED(regionIndex);
         return {};
     }
 };

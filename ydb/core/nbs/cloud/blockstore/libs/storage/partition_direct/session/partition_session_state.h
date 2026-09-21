@@ -65,12 +65,16 @@ private:
         IStoragePtr storage,
         TVolumeConfigPtr ioGeometry);
 
+    // Disk metadata for registration and the classic MountVolume response.
     const std::unique_ptr<const NKikimrBlockStore::TVolumeConfig>
         VolumeMetadata;
-    const TString RegistrationId;
+    // Effective backend geometry for I/O validation and device handler
+    // creation.
     const TVolumeConfigPtr IoGeometry;
+    const TString RegistrationId;
     const std::shared_ptr<TStorageGate> StorageGate;
     const IStoragePtr Storage;
+    // Active session identity and its handler.
     TTrueAtomicSharedPtr<TSnapshot> Snapshot;
 };
 

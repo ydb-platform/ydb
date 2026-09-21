@@ -142,39 +142,38 @@ NThreading::TFuture<TResponse> ErrorResponse(NProto::TError error)
 }   // namespace
 
 // Control and data references must always come from the same registration.
-struct TNbsFrontendBlockStore::TPartitionRegistration
+struct TNbsBlockStoreFacade::TPartitionRegistration
 {
-    NActors::TActorSystem* ActorSystem;
     NActors::TActorId ActorId;
     std::shared_ptr<TPartitionSessionState> SessionState;
 };
 
 // Registry updates are rare; I/O reads a single immutable map snapshot.
-struct TNbsFrontendBlockStore::TSnapshot
+struct TNbsBlockStoreFacade::TSnapshot
 {
     bool AcceptingRequests = false;
     THashMap<TString, std::shared_ptr<const TPartitionRegistration>> Partitions;
 };
 
-TNbsFrontendBlockStore::TNbsFrontendBlockStore(TLog log)
+TNbsBlockStoreFacade::TNbsBlockStoreFacade(TLog log)
     : Snapshot(new TSnapshot())
     , Log(std::move(log))
 {}
 
-TNbsFrontendBlockStore::~TNbsFrontendBlockStore() noexcept = default;
+TNbsBlockStoreFacade::~TNbsBlockStoreFacade() noexcept = default;
 
-void TNbsFrontendBlockStore::Start()
+void TNbsBlockStoreFacade::Start()
 {
-    with_lock (Mutex) {
+    with_lock (RegistryMutex) {
         auto next = std::make_unique<TSnapshot>(*Snapshot);
         next->AcceptingRequests = true;
         Snapshot.atomic_store(TTrueAtomicSharedPtr<TSnapshot>(next.release()));
     }
 }
 
-void TNbsFrontendBlockStore::Stop()
+void TNbsBlockStoreFacade::Stop()
 {
-    with_lock (Mutex) {
+    with_lock (RegistryMutex) {
         auto next = std::make_unique<TSnapshot>(*Snapshot);
         next->AcceptingRequests = false;
         Snapshot.atomic_store(TTrueAtomicSharedPtr<TSnapshot>(next.release()));
@@ -182,13 +181,13 @@ void TNbsFrontendBlockStore::Stop()
 }
 
 NNbs1CompatApi::NBlockStore::TStorageBuffer
-TNbsFrontendBlockStore::AllocateBuffer(size_t bytesCount)
+TNbsBlockStoreFacade::AllocateBuffer(size_t bytesCount)
 {
     Y_UNUSED(bytesCount);
     return nullptr;
 }
 
-TResultOrError<TString> TNbsFrontendBlockStore::RegisterVolume(
+TResultOrError<TString> TNbsBlockStoreFacade::RegisterVolume(
     NActors::TActorSystem* actorSystem,
     const NActors::TActorId& actorId,
     std::shared_ptr<TPartitionSessionState> sessionState)
@@ -200,23 +199,26 @@ TResultOrError<TString> TNbsFrontendBlockStore::RegisterVolume(
     }
     const auto& diskId = sessionState->GetVolumeMetadata().GetDiskId();
     const TString registrationId = sessionState->GetRegistrationId();
-    with_lock (Mutex) {
+    with_lock (RegistryMutex) {
+        if (ActorSystem && ActorSystem != actorSystem) {
+            return MakeError(
+                E_ARGUMENT,
+                "Partition belongs to another actor system");
+        }
+        ActorSystem = actorSystem;
         auto next = std::make_unique<TSnapshot>(*Snapshot);
-        next->Partitions[diskId] =
-            std::make_shared<TPartitionRegistration>(TPartitionRegistration{
-                actorSystem,
-                actorId,
-                std::move(sessionState)});
+        next->Partitions[diskId] = std::make_shared<TPartitionRegistration>(
+            TPartitionRegistration{actorId, std::move(sessionState)});
         Snapshot.atomic_store(TTrueAtomicSharedPtr<TSnapshot>(next.release()));
     }
     return registrationId;
 }
 
-void TNbsFrontendBlockStore::UnregisterVolume(
+void TNbsBlockStoreFacade::UnregisterVolume(
     const TString& diskId,
     const TString& registrationId)
 {
-    with_lock (Mutex) {
+    with_lock (RegistryMutex) {
         const auto it = Snapshot->Partitions.find(diskId);
         if (it == Snapshot->Partitions.end() ||
             it->second->SessionState->GetRegistrationId() != registrationId)
@@ -230,8 +232,8 @@ void TNbsFrontendBlockStore::UnregisterVolume(
 }
 
 TResultOrError<
-    std::shared_ptr<const TNbsFrontendBlockStore::TPartitionRegistration>>
-TNbsFrontendBlockStore::FindPartition(const TString& diskId) const
+    std::shared_ptr<const TNbsBlockStoreFacade::TPartitionRegistration>>
+TNbsBlockStoreFacade::FindPartition(const TString& diskId) const
 {
     const auto snapshot = Snapshot.atomic_load();
     if (!snapshot->AcceptingRequests) {
@@ -247,14 +249,14 @@ TNbsFrontendBlockStore::FindPartition(const TString& diskId) const
 }
 
 template <typename TEvent>
-auto TNbsFrontendBlockStore::SendSessionRequest(
+auto TNbsBlockStoreFacade::SendSessionRequest(
     const std::shared_ptr<const TPartitionRegistration>& partition,
     std::unique_ptr<TEvent> event)
 {
     const auto future = event->Result.GetFuture();
-    // Serialize sending with unregister, so actor-system cleanup cannot leave
-    // a sender using the ActorSystem pointer from an already removed entry.
-    with_lock (Mutex) {
+    // Registration must remain current until Send() returns: unregister also
+    // runs during actor-system cleanup, and ActorSystem is non-owning.
+    with_lock (RegistryMutex) {
         const auto current = FindPartition(
             partition->SessionState->GetVolumeMetadata().GetDiskId());
         if (HasError(current)) {
@@ -263,26 +265,24 @@ auto TNbsFrontendBlockStore::SendSessionRequest(
             event->Result.TrySetValue(
                 MakeError(E_REJECTED, "Partition registration changed"));
         } else {
-            partition->ActorSystem->Send(partition->ActorId, event.release());
+            ActorSystem->Send(partition->ActorId, event.release());
         }
     }
     return future;
 }
 
 template <typename TMethod>
-NThreading::TFuture<typename TMethod::TResponse>
-TNbsFrontendBlockStore::Execute(
+NThreading::TFuture<typename TMethod::TResponse> TNbsBlockStoreFacade::Execute(
     TCallContextPtr callContext,
     std::shared_ptr<typename TMethod::TRequest> request)
 {
-    STORAGE_DEBUG(
-        TMethod::Name << " RequestId=" << request->GetHeaders().GetRequestId());
+    using namespace NNbs1CompatApi::NBlockStore;
     using TResponse = typename TMethod::TResponse;
 
-    if constexpr (std::is_same_v<
-                      TMethod,
-                      NNbs1CompatApi::NBlockStore::TBlockStorePingMethod>)
-    {
+    STORAGE_DEBUG(
+        TMethod::Name << " RequestId=" << request->GetHeaders().GetRequestId());
+
+    if constexpr (std::is_same_v<TMethod, TBlockStorePingMethod>) {
         TResponse response;
         if (!Snapshot.atomic_load()->AcceptingRequests) {
             *response.MutableError() = MakeError(
@@ -297,19 +297,18 @@ TNbsFrontendBlockStore::Execute(
             return ErrorResponse<TResponse>(found.GetError());
         }
         auto partition = found.ExtractResult();
-        if constexpr (
-            std::is_same_v<
-                TMethod,
-                NNbs1CompatApi::NBlockStore::TBlockStoreMountVolumeMethod>)
-        {
+        if constexpr (std::is_same_v<TMethod, TBlockStoreMountVolumeMethod>) {
             return ExecuteMountVolume(*request, std::move(partition));
         } else if constexpr (
-            std::is_same_v<
-                TMethod,
-                NNbs1CompatApi::NBlockStore::TBlockStoreUnmountVolumeMethod>)
+            std::is_same_v<TMethod, TBlockStoreUnmountVolumeMethod>)
         {
             return ExecuteUnmountVolume(*request, std::move(partition));
         } else {
+            static_assert(
+                std::is_same_v<TMethod, TBlockStoreReadBlocksMethod> ||
+                    std::is_same_v<TMethod, TBlockStoreWriteBlocksMethod>,
+                "Unsupported classic NBS method");
+
             auto backend = partition->SessionState->AcquireIoBackend(
                 request->GetHeaders().GetClientId(),
                 request->GetSessionId());
@@ -317,16 +316,15 @@ TNbsFrontendBlockStore::Execute(
                 LogRequestError<TMethod>(Log, *request, backend.GetError());
                 return ErrorResponse<TResponse>(backend.GetError());
             }
-            if constexpr (
-                std::is_same_v<
-                    TMethod,
-                    NNbs1CompatApi::NBlockStore::TBlockStoreReadBlocksMethod>)
+            if constexpr (std::is_same_v<TMethod, TBlockStoreReadBlocksMethod>)
             {
                 return ExecuteReadBlocks(
                     std::move(callContext),
                     std::move(request),
                     backend.ExtractResult());
-            } else {
+            } else if constexpr (
+                std::is_same_v<TMethod, TBlockStoreWriteBlocksMethod>)
+            {
                 return ExecuteWriteBlocks(
                     std::move(callContext),
                     std::move(request),
@@ -337,7 +335,7 @@ TNbsFrontendBlockStore::Execute(
 }
 
 NThreading::TFuture<NCompatProto::TMountVolumeResponse>
-TNbsFrontendBlockStore::ExecuteMountVolume(
+TNbsBlockStoreFacade::ExecuteMountVolume(
     const NCompatProto::TMountVolumeRequest& request,
     std::shared_ptr<const TPartitionRegistration> partition)
 {
@@ -371,7 +369,7 @@ TNbsFrontendBlockStore::ExecuteMountVolume(
 }
 
 NThreading::TFuture<NCompatProto::TUnmountVolumeResponse>
-TNbsFrontendBlockStore::ExecuteUnmountVolume(
+TNbsBlockStoreFacade::ExecuteUnmountVolume(
     const NCompatProto::TUnmountVolumeRequest& request,
     std::shared_ptr<const TPartitionRegistration> partition)
 {
@@ -390,7 +388,7 @@ TNbsFrontendBlockStore::ExecuteUnmountVolume(
 }
 
 NThreading::TFuture<NCompatProto::TReadBlocksResponse>
-TNbsFrontendBlockStore::ExecuteReadBlocks(
+TNbsBlockStoreFacade::ExecuteReadBlocks(
     TCallContextPtr callContext,
     std::shared_ptr<NCompatProto::TReadBlocksRequest> request,
     TPartitionIoBackend backend)
@@ -459,7 +457,7 @@ TNbsFrontendBlockStore::ExecuteReadBlocks(
 }
 
 NThreading::TFuture<NCompatProto::TWriteBlocksResponse>
-TNbsFrontendBlockStore::ExecuteWriteBlocks(
+TNbsBlockStoreFacade::ExecuteWriteBlocks(
     TCallContextPtr callContext,
     std::shared_ptr<NCompatProto::TWriteBlocksRequest> request,
     TPartitionIoBackend backend)
@@ -538,9 +536,9 @@ TNbsFrontendBlockStore::ExecuteWriteBlocks(
             });
 }
 
-std::shared_ptr<TNbsFrontendBlockStore> CreateNbsFrontendBlockStore(TLog log)
+std::shared_ptr<TNbsBlockStoreFacade> CreateNbsBlockStoreFacade(TLog log)
 {
-    return std::make_shared<TNbsFrontendBlockStore>(std::move(log));
+    return std::make_shared<TNbsBlockStoreFacade>(std::move(log));
 }
 
 }   // namespace NYdb::NBS::NBlockStore

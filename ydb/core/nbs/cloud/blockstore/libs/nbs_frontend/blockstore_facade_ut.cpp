@@ -1,5 +1,4 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_test.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
@@ -84,7 +83,7 @@ public:
             Config,
             Storage,
             MakeTestIoConfig(Config, stripeBytes))));
-        FrontendEnv.Frontend.Start();
+        FrontendEnv.Facade->Start();
         auto mount = std::make_shared<NCompatProto::TMountVolumeRequest>();
         mount->SetDiskId(TestDiskId);
         mount->MutableHeaders()->SetClientId(TestClientId);
@@ -137,8 +136,7 @@ public:
     }
 
     TFrontendTestEnv FrontendEnv;
-    NNbs1CompatApi::NBlockStore::IBlockStorePtr BlockStore =
-        FrontendEnv.Frontend.GetBlockStore();
+    NNbs1CompatApi::NBlockStore::IBlockStorePtr BlockStore = FrontendEnv.Facade;
     std::shared_ptr<TTestStorage> Storage = std::make_shared<TTestStorage>();
     TCallContextPtr Context = MakeIntrusive<TCallContext>(ui64{42});
     NKikimrBlockStore::TVolumeConfig Config;
@@ -181,11 +179,11 @@ NThreading::TFuture<NCompatProto::TReadBlocksResponse> StartPendingSplitRead(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
+Y_UNIT_TEST_SUITE(TNbsBlockStoreFacadeTest)
 {
     Y_UNIT_TEST(ShouldRejectEveryMethodOutsideAcceptingState)
     {
-        auto blockStore = CreateNbsFrontendBlockStore(TLog{});
+        auto blockStore = CreateNbsBlockStoreFacade(TLog{});
 
         // A newly created facade must keep every method behind the closed
         // admission gate until Start() is called.
@@ -224,7 +222,7 @@ Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
 
     Y_UNIT_TEST(ShouldServePingAndRejectDiskRequestsWithoutRegistration)
     {
-        auto blockStore = CreateNbsFrontendBlockStore(TLog{});
+        auto blockStore = CreateNbsBlockStoreFacade(TLog{});
 
         const auto checkStarted = [&]
         {
@@ -617,7 +615,7 @@ Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
                 .GetError()
                 .GetCode(),
             E_NOT_FOUND);
-        env.FrontendEnv.Frontend.Stop();
+        env.FrontendEnv.Facade->Stop();
         UNIT_ASSERT_VALUES_EQUAL(
             env.BlockStore->ReadBlocks(env.Context, read)
                 .GetValueSync()
@@ -721,7 +719,7 @@ Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
         TIoTestEnv env;
         const auto response =
             StartPendingSplitRead(env, &completions, &sglists);
-        env.FrontendEnv.Frontend.Stop();
+        env.FrontendEnv.Facade->Stop();
 
         completions[0].SetValue({});
         UNIT_ASSERT(!response.HasValue());
@@ -747,7 +745,7 @@ Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
         TIoTestEnv env;
         const auto response =
             StartPendingSplitRead(env, &completions, &sglists);
-        env.FrontendEnv.Frontend.Stop();
+        env.FrontendEnv.Facade->Stop();
 
         completions[0].SetValue({MakeError(E_IO, "first stripe failed")});
         UNIT_ASSERT_VALUES_EQUAL(

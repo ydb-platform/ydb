@@ -107,9 +107,9 @@ TFrontendTestEnv::TFrontendTestEnv()
 
 TFrontendTestEnv::~TFrontendTestEnv()
 {
-    Frontend.Stop();
+    Facade->Stop();
     for (const auto& registration: Registrations) {
-        Frontend.UnregisterVolume(registration.DiskId, registration.Token);
+        Facade->UnregisterVolume(registration.DiskId, registration.Token);
     }
     Actors.reset();
 }
@@ -130,7 +130,7 @@ TResultOrError<TString> TFrontendTestEnv::RegisterVolume(
     const auto actorId =
         Actors->Register(new TTestPartitionSessionActor(state));
     auto registration =
-        Frontend.RegisterVolume(Actors->GetActorSystem(0), actorId, state);
+        Facade->RegisterVolume(Actors->GetActorSystem(0), actorId, state);
     Registrations.push_back(
         {metadata.GetDiskId(), state->GetRegistrationId(), actorId});
     return registration;
@@ -140,7 +140,7 @@ void TFrontendTestEnv::UnregisterVolume(
     const TString& diskId,
     const TString& registrationId)
 {
-    Frontend.UnregisterVolume(diskId, registrationId);
+    Facade->UnregisterVolume(diskId, registrationId);
     for (auto it = Registrations.begin(); it != Registrations.end(); ++it) {
         if (it->DiskId == diskId && it->Token == registrationId) {
             auto event = std::make_unique<TEvStopSession>();

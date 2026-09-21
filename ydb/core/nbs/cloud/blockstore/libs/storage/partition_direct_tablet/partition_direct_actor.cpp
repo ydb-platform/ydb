@@ -7,7 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
@@ -63,10 +63,12 @@ TPartitionActor::~TPartitionActor()
         SessionState->Stop();
     }
     // Actor-system cleanup can destroy a partition without PassAway(). Its
-    // frontend registration must not retain FastPath beyond the actor system.
+    // blockStoreFacade registration must not retain FastPath beyond the actor system.
     if (!FrontendRegistrationId.empty()) {
-        if (auto service = GetNbsService(); service && service->Frontend) {
-            service->Frontend->UnregisterVolume(
+        if (auto service = GetNbsService();
+            service && service->BlockStoreFacade)
+        {
+            service->BlockStoreFacade->UnregisterVolume(
                 VolumeConfig.GetDiskId(),
                 FrontendRegistrationId);
         }
@@ -219,8 +221,8 @@ void TPartitionActor::UnregisterFrontendVolume(const TActorContext& ctx)
     if (FrontendRegistrationId.empty()) {
         return;
     }
-    if (auto& frontend = GetNbsService()->Frontend; frontend) {
-        frontend->UnregisterVolume(
+    if (auto& blockStoreFacade = GetNbsService()->BlockStoreFacade; blockStoreFacade) {
+        blockStoreFacade->UnregisterVolume(
             VolumeConfig.GetDiskId(),
             FrontendRegistrationId);
         LOG_INFO(
@@ -553,8 +555,8 @@ void TPartitionActor::HandleFastPathServiceReady(
 
     // MVP: use either classic gRPC or the local NBS2 vhost endpoint for a disk,
     // never both concurrently.
-    if (auto& frontend = GetNbsService()->Frontend;
-        frontend && !FrontendRegistrationClosed)
+    if (auto& blockStoreFacade = GetNbsService()->BlockStoreFacade;
+        blockStoreFacade && !FrontendRegistrationClosed)
     {
         auto sessionState = TPartitionSessionState::Create(
             VolumeConfig,
@@ -566,10 +568,10 @@ void TPartitionActor::HandleFastPathServiceReady(
             FormatError(sessionState.GetError()).c_str());
         SessionState = sessionState.ExtractResult();
         auto registration =
-            frontend->RegisterVolume(ctx.ActorSystem(), SelfId(), SessionState);
+            blockStoreFacade->RegisterVolume(ctx.ActorSystem(), SelfId(), SessionState);
         Y_ABORT_UNLESS(
             !HasError(registration),
-            "%s Could not publish frontend backend: %s",
+            "%s Could not publish volume: %s",
             LogTitle.GetWithTime().c_str(),
             FormatError(registration.GetError()).c_str());
 

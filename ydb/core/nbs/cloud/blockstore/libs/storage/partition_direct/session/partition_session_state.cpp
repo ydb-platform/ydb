@@ -170,8 +170,8 @@ TPartitionSessionState::TPartitionSessionState(
     TVolumeConfigPtr ioGeometry)
     : VolumeMetadata(
           std::make_unique<NKikimrBlockStore::TVolumeConfig>(volumeMetadata))
-    , RegistrationId(CreateGuidAsString())
     , IoGeometry(std::move(ioGeometry))
+    , RegistrationId(CreateGuidAsString())
     , StorageGate(std::make_shared<TStorageGate>(std::move(storage)))
     , Storage(CreateOverlappedRequestsGuardStorageWrapper(
           CreateSplitRequestsStorageWrapper(StorageGate)))

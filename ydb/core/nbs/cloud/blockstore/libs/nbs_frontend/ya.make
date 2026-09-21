@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     blockstore_facade.cpp
-    frontend_runtime.cpp
 )
 
 PEERDIR(

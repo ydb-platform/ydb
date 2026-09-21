@@ -19,7 +19,7 @@ namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TNbsFrontendRuntime;
+class TNbsBlockStoreFacade;
 
 struct TNbsService: public IStartable
 {
@@ -37,7 +37,7 @@ struct TNbsService: public IStartable
     const ITimerPtr Timer;
     // Single scheduler thread for the whole NBS service and all partitions.
     const ISchedulerPtr Scheduler;
-    std::unique_ptr<TNbsFrontendRuntime> Frontend;
+    std::shared_ptr<TNbsBlockStoreFacade> BlockStoreFacade;
 
     explicit TNbsService(const NKikimrConfig::TNbsConfig& config);
     ~TNbsService() override;

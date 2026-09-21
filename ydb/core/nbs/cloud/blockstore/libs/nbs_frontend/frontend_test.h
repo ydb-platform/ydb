@@ -1,6 +1,6 @@
 #pragma once
 
-#include "frontend_runtime.h"
+#include "blockstore_facade.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -48,8 +48,9 @@ public:
     // Simulates partition teardown; an old token cannot remove a replacement.
     void UnregisterVolume(const TString& diskId, const TString& registrationId);
 
-    // Tests exercise the production runtime directly.
-    TNbsFrontendRuntime Frontend{TLog{}};
+    // Tests exercise the production facade directly.
+    const std::shared_ptr<TNbsBlockStoreFacade> Facade =
+        CreateNbsBlockStoreFacade(TLog{});
 
 private:
     struct TRegistration;

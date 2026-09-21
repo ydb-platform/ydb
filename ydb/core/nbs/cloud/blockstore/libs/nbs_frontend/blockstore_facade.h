@@ -19,15 +19,15 @@ namespace NYdb::NBS::NBlockStore {
 
 // Adapts classic RPCs and owns the host-local DiskId -> partition registry.
 // Session ownership stays with each partition, not with this shared facade.
-class TNbsFrontendBlockStore final
+class TNbsBlockStoreFacade final
     : public NNbs1CompatApi::NBlockStore::TBlockStoreImpl<
-          TNbsFrontendBlockStore,
+          TNbsBlockStoreFacade,
           NNbs1CompatApi::NBlockStore::IBlockStore>
 {
 public:
     // Creates an empty registry with request admission closed.
-    explicit TNbsFrontendBlockStore(TLog log);
-    ~TNbsFrontendBlockStore() noexcept override;
+    explicit TNbsBlockStoreFacade(TLog log);
+    ~TNbsBlockStoreFacade() noexcept override;
 
     // Opens admission without changing partition sessions.
     void Start() override;
@@ -40,6 +40,7 @@ public:
         size_t bytesCount) override;
 
     // Publishes a matched control target and session/backend incarnation.
+    // The first registration binds this facade to one actor system.
     TResultOrError<TString> RegisterVolume(
         NActors::TActorSystem* actorSystem,
         const NActors::TActorId& actorId,
@@ -96,12 +97,15 @@ private:
             NNbs1CompatApi::NBlockStore::NProto::TWriteBlocksRequest> request,
         NStorage::NPartitionDirect::TPartitionIoBackend backend);
 
-    TMutex Mutex;
+    // Serializes registry/admission updates and session request dispatch.
+    TMutex RegistryMutex;
+    // Non-owning; all registered partitions belong to this actor system.
+    NActors::TActorSystem* ActorSystem = nullptr;
     TTrueAtomicSharedPtr<TSnapshot> Snapshot;
     TLog Log;
 };
 
-// Creates one facade shared by the runtime and transport services.
-std::shared_ptr<TNbsFrontendBlockStore> CreateNbsFrontendBlockStore(TLog log);
+// Creates one facade shared by TNbsService and transport services.
+std::shared_ptr<TNbsBlockStoreFacade> CreateNbsBlockStoreFacade(TLog log);
 
 }   // namespace NYdb::NBS::NBlockStore

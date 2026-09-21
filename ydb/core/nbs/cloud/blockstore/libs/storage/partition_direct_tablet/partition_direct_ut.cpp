@@ -1,7 +1,7 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
@@ -992,8 +992,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto config = CreateNbsConfig(EWriteMode::DirectWrite);
         config.MutableNbsFrontendConfig()->SetEnabled(true);
         scopedService = std::make_unique<TScopedNbsService>(config);
-        auto* frontend = GetNbsService()->Frontend.get();
-        auto blockStore = frontend->GetBlockStore();
+        auto blockStore = GetNbsService()->BlockStoreFacade;
         auto volumeConfig = CreateVolumeConfig(DefaultVolumeBlockCount);
         volumeConfig.SetStorageMediaKind(NProto::STORAGE_MEDIA_SSD);
         auto mount = [&]
@@ -1023,9 +1022,9 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         // backend.
         StopNbsService();
         env.reset();
-        frontend->Start();
+        blockStore->Start();
         UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
-        frontend->Stop();
+        blockStore->Stop();
     }
 
     Y_UNIT_TEST(ShouldPublishAndRevokeFrontendMetadata)
@@ -1039,7 +1038,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto config = CreateNbsConfig(EWriteMode::DirectWrite);
         config.MutableNbsFrontendConfig()->SetEnabled(true);
         scopedService = std::make_unique<TScopedNbsService>(config);
-        auto blockStore = GetNbsService()->Frontend->GetBlockStore();
+        auto blockStore = GetNbsService()->BlockStoreFacade;
         auto volumeConfig = CreateVolumeConfig(DefaultVolumeBlockCount);
         volumeConfig.SetStorageMediaKind(NProto::STORAGE_MEDIA_SSD);
         auto mount = [&]

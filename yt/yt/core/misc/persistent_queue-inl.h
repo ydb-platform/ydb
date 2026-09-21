@@ -20,7 +20,8 @@ template <class T, size_t ChunkSize>
 TPersistentQueueChunk<T, ChunkSize>::~TPersistentQueueChunk()
 {
     while (ConstructedSize_ > 0) {
-        std::destroy_at(std::addressof(GetElement(--ConstructedSize_)));
+        std::destroy_at(std::addressof(GetElement(ConstructedSize_ - 1)));
+        --ConstructedSize_;
     }
 }
 
@@ -35,14 +36,14 @@ void TPersistentQueueChunk<T, ChunkSize>::Append(T&& value)
 template <class T, size_t ChunkSize>
 T& TPersistentQueueChunk<T, ChunkSize>::GetElement(size_t index)
 {
-    YT_ASSERT(index < ChunkSize);
+    YT_ASSERT(index < ConstructedSize_);
     return *std::launder(reinterpret_cast<T*>(Storage_[index]));
 }
 
 template <class T, size_t ChunkSize>
 const T& TPersistentQueueChunk<T, ChunkSize>::GetElement(size_t index) const
 {
-    YT_ASSERT(index < ChunkSize);
+    YT_ASSERT(index < ConstructedSize_);
     return *std::launder(reinterpret_cast<const T*>(Storage_[index]));
 }
 

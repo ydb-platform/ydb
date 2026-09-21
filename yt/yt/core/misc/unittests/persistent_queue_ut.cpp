@@ -25,6 +25,22 @@ TEST(TPersistentQueueTest, Empty)
     EXPECT_EQ(snapshot.Begin(), snapshot.End());
 }
 
+#ifndef NDEBUG
+
+TEST(TPersistentQueueChunkDeathTest, RejectsAccessToUnconstructedElements)
+{
+    auto chunk = New<TPersistentQueueChunk<int, 2>>();
+    EXPECT_DEATH({ (void)chunk->GetElement(0); }, "index < ConstructedSize_");
+
+    chunk->Append(42);
+    EXPECT_EQ(42, chunk->GetElement(0));
+
+    const TPersistentQueueChunk<int, 2>& constChunk = *chunk;
+    EXPECT_DEATH({ (void)constChunk.GetElement(1); }, "index < ConstructedSize_");
+}
+
+#endif
+
 TEST(TPersistentQueueTest, EnqueueDequeue)
 {
     TQueueType queue;

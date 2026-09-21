@@ -40,8 +40,14 @@ public:
     const T& GetElement(size_t index) const;
 
 private:
+#ifdef NDEBUG
+    using TConstructedSize = size_t;
+#else
+    using TConstructedSize = std::atomic<size_t>;
+#endif
+
     alignas(T) std::byte Storage_[ChunkSize][sizeof(T)];
-    size_t ConstructedSize_ = 0;
+    TConstructedSize ConstructedSize_ = 0;
 };
 
 template <class T, size_t ChunkSize>

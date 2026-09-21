@@ -910,12 +910,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = RequestHcWithMirror3DcGroups(failedVDisksPerGroup);
         Ctest << result.ShortDebugString() << Endl;
 
-        auto poolFilter = [] { return TLocationFilter().Pool(STORAGE_POOL_NAME); };
+        auto poolFilter = TLocationFilter().Pool(STORAGE_POOL_NAME);
         // all the groups are degraded in the same way, and so are all the disks of the failed data center
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, poolFilter());
-        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 1, poolFilter());
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, poolFilter);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 1, poolFilter);
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "VDISK"});
 
-        const auto* vDiskIssue = FindIssue(result, "VDISK", poolFilter());
+        const auto* vDiskIssue = FindIssue(result, "VDISK", poolFilter);
         UNIT_ASSERT(vDiskIssue);
         UNIT_ASSERT_VALUES_EQUAL(vDiskIssue->message(), "VDisks are not available");
         const ui32 failedVDiskCount = failedVDisksPerGroup.size() * MIRROR_3_DC_DOMAINS;
@@ -931,12 +932,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = RequestHcWithMirror3DcGroups(failedVDisksPerGroup);
         Ctest << result.ShortDebugString() << Endl;
 
-        auto poolFilter = [] { return TLocationFilter().Pool(STORAGE_POOL_NAME); };
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, poolFilter());
+        auto poolFilter = TLocationFilter().Pool(STORAGE_POOL_NAME);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, poolFilter);
         // no group lost more than one disk in the same fail realm, so the disk issues are still kept per node
-        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 3, poolFilter());
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 3, poolFilter);
 
-        const auto* vDiskIssue = FindIssue(result, "VDISK", poolFilter());
+        const auto* vDiskIssue = FindIssue(result, "VDISK", poolFilter);
         UNIT_ASSERT(vDiskIssue);
         UNIT_ASSERT_VALUES_EQUAL(vDiskIssue->message(), "VDisk is not available");
         UNIT_ASSERT(vDiskIssue->location().storage().node().id() != 0);

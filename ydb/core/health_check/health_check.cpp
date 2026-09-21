@@ -3157,17 +3157,17 @@ public:
     }
 
     bool AreDisksInSameMergeScope(EDiskMergeScope scope, const TSelfCheckContext::TIssueRecord& first, const TSelfCheckContext::TIssueRecord& second) const {
-        if (scope == EDiskMergeScope::DataCenter) {
-            TString dataCenter = GetRecordDataCenter(first);
-            return dataCenter && dataCenter == GetRecordDataCenter(second);
+        switch (scope) {
+            case EDiskMergeScope::DataCenter: {
+                TString dataCenter = GetRecordDataCenter(first);
+                return dataCenter && dataCenter == GetRecordDataCenter(second);
+            }
+            case EDiskMergeScope::Node: {
+                return first.IssueLog.location().storage().node().id() == second.IssueLog.location().storage().node().id();
+            }
         }
-        return first.IssueLog.location().storage().node().id() == second.IssueLog.location().storage().node().id();
     }
 
-    // An outage of a whole fail realm (which is a data center for mirror-3-dc) takes down the disks of many
-    // nodes at once, so merging those issues per node results in one issue per node. Move the issues of the
-    // groups which lost more than one disk in the same fail realm away, so that they can be merged per data
-    // center instead. Isolated disk failures are left in place and are still merged per node.
     void ExtractLostFailRealmRecords(TList<TSelfCheckContext::TIssueRecord>& records, TList<TSelfCheckContext::TIssueRecord>& lostRealmRecords) {
         if (records.empty() || records.front().Tag != ETags::VDiskState) {
             return;

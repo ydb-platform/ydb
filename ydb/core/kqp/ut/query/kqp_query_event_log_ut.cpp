@@ -662,7 +662,7 @@ Y_UNIT_TEST(LongIssuesTruncatedAtWarn) {
 }
 
 Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
-    constexpr size_t QUERY_TEXT_LIMIT = 6 * 1024 - 32;
+    constexpr size_t QUERY_TEXT_LIMIT = 3 * 1024;
 
     TStringStream logStream;
     {

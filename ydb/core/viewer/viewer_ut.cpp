@@ -1206,7 +1206,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckVDiskReplicationStatus(true);
     }
 
-    void CheckPDiskControllerStatuses(bool groups) {
+    void CheckPDiskControllerStatuses(bool groups, bool whiteboardAvailable = true) {
         // Controller statuses are joined by NodeId/PDiskId even when GUIDs differ.
         // The response keeps the Whiteboard disk identity and the BSC statuses.
         TPortManager tp;
@@ -1220,6 +1220,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TTestActorRuntime& runtime = *server.GetRuntime();
         const TActorId sender = runtime.AllocateEdgeActor();
 
+        const ui32 groupCount = whiteboardAvailable ? 6 : 1;
+        bool requestedDetailedStatus = false;
+        ui32 droppedVDiskResponses = 0;
+        ui32 droppedPDiskResponses = 0;
+
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
@@ -1229,10 +1234,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
                     auto& record = (*x)->Get()->Record;
                     record.ClearEntries();
-                    auto* group = record.AddEntries();
-                    group->MutableKey()->SetGroupId(0);
-                    group->MutableInfo()->SetGeneration(1);
-                    group->MutableInfo()->SetErasureSpeciesV2("none");
+                    for (ui32 pdiskId = 1; pdiskId <= groupCount; ++pdiskId) {
+                        auto* group = record.AddEntries();
+                        group->MutableKey()->SetGroupId(pdiskId);
+                        group->MutableInfo()->SetGeneration(1);
+                        group->MutableInfo()->SetErasureSpeciesV2("none");
+                    }
                     break;
                 }
                 case NSysView::TEvSysView::EvGetVSlotsResponse: {
@@ -1240,9 +1247,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         break;
                     }
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
-                    (*x)->Get()->Record.ClearEntries();
-                    // This group references only the PDisk with mismatched GUIDs.
-                    AddSysViewVDisk(x, runtime.GetNodeId(0), 5, 1, "READY");
+                    auto& record = (*x)->Get()->Record;
+                    record.ClearEntries();
+                    for (ui32 pdiskId = 1; pdiskId <= groupCount; ++pdiskId) {
+                        AddSysViewVDisk(x, runtime.GetNodeId(0), pdiskId, 1, "READY");
+                        record.MutableEntries(record.EntriesSize() - 1)->MutableInfo()->SetGroupId(pdiskId);
+                    }
                     break;
                 }
                 case NSysView::TEvSysView::EvGetPDisksResponse: {
@@ -1275,26 +1285,47 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     }
                     break;
                 }
+                case TEvWhiteboard::EvVDiskStateRequest: {
+                    if (!groups) {
+                        break;
+                    }
+                    auto* x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateRequest::TPtr*>(&ev);
+                    for (int field : (*x)->Get()->Record.GetFieldsRequired()) {
+                        requestedDetailedStatus |= field == TVDiskStateInfo::kDetailedReplicationStatusFieldNumber || field == -1;
+                    }
+                    break;
+                }
                 case TEvWhiteboard::EvVDiskStateResponse: {
                     if (!groups) {
                         break;
                     }
+                    if (!whiteboardAvailable) {
+                        ++droppedVDiskResponses;
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
                     auto* x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
                     auto& record = (*x)->Get()->Record;
                     record.ClearVDiskStateInfo();
-                    auto* vdisk = record.AddVDiskStateInfo();
-                    vdisk->MutableVDiskId()->SetGroupID(0);
-                    vdisk->MutableVDiskId()->SetGroupGeneration(1);
-                    vdisk->MutableVDiskId()->SetVDisk(0);
-                    vdisk->SetPDiskId(5);
-                    vdisk->SetVDiskSlotId(1);
-                    vdisk->SetVDiskState(EVDiskState::OK);
-                    vdisk->SetReplicated(true);
-                    vdisk->SetAllocatedSize(100);
-                    vdisk->SetAvailableSize(900);
+                    for (ui32 pdiskId = 1; pdiskId <= groupCount; ++pdiskId) {
+                        auto* vdisk = record.AddVDiskStateInfo();
+                        vdisk->MutableVDiskId()->SetGroupID(pdiskId);
+                        vdisk->MutableVDiskId()->SetGroupGeneration(1);
+                        vdisk->MutableVDiskId()->SetVDisk(0);
+                        vdisk->SetPDiskId(pdiskId);
+                        vdisk->SetVDiskSlotId(1);
+                        vdisk->SetVDiskState(EVDiskState::OK);
+                        vdisk->SetReplicated(true);
+                        vdisk->SetDetailedReplicationStatus(TVDiskDetailedReplicationStatus::Replicated);
+                        vdisk->SetAllocatedSize(100);
+                        vdisk->SetAvailableSize(900);
+                    }
                     break;
                 }
                 case TEvWhiteboard::EvPDiskStateResponse: {
+                    if (!whiteboardAvailable) {
+                        ++droppedPDiskResponses;
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
                     auto* x = reinterpret_cast<TEvWhiteboard::TEvPDiskStateResponse::TPtr*>(&ev);
                     auto& record = (*x)->Get()->Record;
                     record.ClearPDiskStateInfo();
@@ -1320,6 +1351,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         TString path = groups ? "/storage/groups?fields_required=VDisk,PDisk,Read" :
             "/viewer/json/nodes?type=static&fields_required=NodeId,PDisks&offload_merge=false";
+        if (!whiteboardAvailable) {
+            path += "&timeout=100";
+        }
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
             TStringBuilder() << "GET " << path << " HTTP/1.1\r\n\r\n", endpoint, {});
         runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
@@ -1327,32 +1361,61 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         NJson::TJsonValue json;
         NJson::ReadJsonTree(result->Response->Body, &json, true);
+        if (groups) {
+            UNIT_ASSERT_C(requestedDetailedStatus, NJson::WriteJson(json, false));
+        }
+        if (!whiteboardAvailable) {
+            UNIT_ASSERT(droppedVDiskResponses > 0);
+            UNIT_ASSERT(droppedPDiskResponses > 0);
+        }
         const auto& items = json.GetMap().at(groups ? "StorageGroups" : "Nodes").GetArray();
-        UNIT_ASSERT_VALUES_EQUAL(items.size(), 1);
-        const auto& disks = items[0].GetMap().at(groups ? "VDisks" : "PDisks").GetArray();
-        UNIT_ASSERT_VALUES_EQUAL(disks.size(), groups ? 1 : 6);
-        for (const auto& disk : disks) {
-            const auto& fields = groups ? disk.GetMap().at("PDisk").GetMap() : disk.GetMap();
-            const auto& whiteboard = groups ? fields.at("Whiteboard").GetMap() : fields;
-            const ui32 pdiskId = whiteboard.at("PDiskId").GetUInteger();
-            UNIT_ASSERT_VALUES_EQUAL(whiteboard.at("State").GetString(), "Normal");
-            UNIT_ASSERT_VALUES_EQUAL(fields.at("Path").GetString(), Sprintf("/dev/whiteboard-%u", pdiskId));
-            if (groups) {
-                UNIT_ASSERT_VALUES_EQUAL(pdiskId, 5);
-                UNIT_ASSERT_VALUES_EQUAL(fields.at("PDiskId").GetString(), Sprintf("%u-%u", runtime.GetNodeId(0), pdiskId));
-                UNIT_ASSERT_VALUES_EQUAL(whiteboard.at("Guid").GetString(), "5001");
-            }
-            if (pdiskId == 5) {
-                UNIT_ASSERT_VALUES_EQUAL(fields.at("Guid").GetString(), "5001");
-            }
-            if (pdiskId == 3 || pdiskId == 4) {
-                UNIT_ASSERT(!fields.contains("Status"));
-                UNIT_ASSERT(!fields.contains("DecommitStatus"));
-                UNIT_ASSERT(!fields.contains("MaintenanceStatus"));
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(fields.at("Status").GetString(), pdiskId == 2 ? "INACTIVE" : "ACTIVE");
-                UNIT_ASSERT_VALUES_EQUAL(fields.at("DecommitStatus").GetString(), pdiskId == 2 ? "DECOMMIT_PENDING" : "DECOMMIT_NONE");
-                UNIT_ASSERT_VALUES_EQUAL(fields.at("MaintenanceStatus").GetString(), pdiskId == 2 ? "LONG_TERM_MAINTENANCE_PLANNED" : "NO_NEW_VDISKS");
+        UNIT_ASSERT_VALUES_EQUAL(items.size(), groups ? groupCount : 1);
+        for (const auto& item : items) {
+            const auto& disks = item.GetMap().at(groups ? "VDisks" : "PDisks").GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(disks.size(), groups ? 1 : 6);
+            for (const auto& disk : disks) {
+                const auto& fields = groups ? disk.GetMap().at("PDisk").GetMap() : disk.GetMap();
+                ui32 pdiskId;
+                if (groups && !whiteboardAvailable) {
+                    // Without Whiteboard, /groups preserves the controller's PDisk data.
+                    pdiskId = 1;
+                    UNIT_ASSERT_VALUES_EQUAL(fields.at("Guid").GetString(), "1001");
+                    UNIT_ASSERT_VALUES_EQUAL(fields.at("Path").GetString(), Sprintf("/dev/pdisk-%u-1", runtime.GetNodeId(0)));
+                    UNIT_ASSERT(!fields.contains("Whiteboard"));
+                    UNIT_ASSERT(!disk.GetMap().contains("Whiteboard"));
+                } else {
+                    const auto& whiteboard = groups ? fields.at("Whiteboard").GetMap() : fields;
+                    pdiskId = whiteboard.at("PDiskId").GetUInteger();
+                    UNIT_ASSERT_VALUES_EQUAL(whiteboard.at("State").GetString(), "Normal");
+                    UNIT_ASSERT_VALUES_EQUAL(fields.at("Path").GetString(), Sprintf("/dev/whiteboard-%u", pdiskId));
+                    if (pdiskId == 1) {
+                        UNIT_ASSERT_VALUES_EQUAL(fields.at("Guid").GetString(), "1001");
+                    } else if (pdiskId == 5) {
+                        UNIT_ASSERT_VALUES_EQUAL(fields.at("Guid").GetString(), "5001");
+                        UNIT_ASSERT_VALUES_EQUAL(whiteboard.at("Guid").GetString(), "5001");
+                    } else if (pdiskId == 6) {
+                        UNIT_ASSERT_VALUES_EQUAL(fields.at("Guid").GetString(), "6001");
+                    } else if (pdiskId == 2) {
+                        UNIT_ASSERT(!whiteboard.contains("Guid"));
+                        if (groups) {
+                            // /groups materializes the missing numeric GUID as a string.
+                            UNIT_ASSERT_VALUES_EQUAL(fields.at("Guid").GetString(), "0");
+                        }
+                    }
+                    if (groups) {
+                        const auto& vdiskWhiteboard = disk.GetMap().at("Whiteboard").GetMap();
+                        UNIT_ASSERT_VALUES_EQUAL(vdiskWhiteboard.at("DetailedReplicationStatus").GetString(), "Replicated");
+                    }
+                }
+                if (pdiskId == 3 || pdiskId == 4) {
+                    UNIT_ASSERT(!fields.contains("Status"));
+                    UNIT_ASSERT(!fields.contains("DecommitStatus"));
+                    UNIT_ASSERT(!fields.contains("MaintenanceStatus"));
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(fields.at("Status").GetString(), pdiskId == 2 ? "INACTIVE" : "ACTIVE");
+                    UNIT_ASSERT_VALUES_EQUAL(fields.at("DecommitStatus").GetString(), pdiskId == 2 ? "DECOMMIT_PENDING" : "DECOMMIT_NONE");
+                    UNIT_ASSERT_VALUES_EQUAL(fields.at("MaintenanceStatus").GetString(), pdiskId == 2 ? "LONG_TERM_MAINTENANCE_PLANNED" : "NO_NEW_VDISKS");
+                }
             }
         }
     }
@@ -1361,8 +1424,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckPDiskControllerStatuses(false);
     }
 
-    Y_UNIT_TEST(StorageGroupsPDiskControllerStatusesWithDifferentGuids) {
+    Y_UNIT_TEST(StorageGroupsPDiskControllerStatuses) {
         CheckPDiskControllerStatuses(true);
+    }
+
+    Y_UNIT_TEST(StorageGroupsKeepsPDiskControllerStatusesWithoutWhiteboard) {
+        CheckPDiskControllerStatuses(true, false);
     }
 
     Y_UNIT_TEST(NodesPageKeepsPDisksForDisconnectedNode)

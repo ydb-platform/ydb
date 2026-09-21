@@ -402,4 +402,6 @@ message TFeatureFlags {
     optional bool EnableTightPDiskSpaceColors = 333 [default = false, (RequireRestart) = true];
     optional bool CollectHourMetric = 334 [default = false];
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
+    // Gate for CMS NBS2 maintenance checks. Requires NbsConfig.Enabled.
+    optional bool EnableCmsNbs2MaintenanceChecks = 336 [default = false];
 }

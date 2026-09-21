@@ -332,6 +332,7 @@ private:
     void ProcessInitQueue(const TActorContext &ctx);
 
     void SubscribeForConfig(const TActorContext &ctx);
+    bool IsNbs2MaintenanceChecksEnabled(const TActorContext &ctx) const;
     void AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const;
     bool CheckPermissionRequest(const NKikimrCms::TPermissionRequest &request,
         NKikimrCms::TPermissionResponse &response,

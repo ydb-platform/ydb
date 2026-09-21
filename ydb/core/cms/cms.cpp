@@ -302,6 +302,12 @@ void TCms::SubscribeForConfig(const TActorContext &ctx)
         (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem}, ctx.SelfID);
 }
 
+bool TCms::IsNbs2MaintenanceChecksEnabled(const TActorContext &ctx) const
+{
+    const auto* appData = AppData(ctx);
+    return appData->NbsEnabled && appData->FeatureFlags.GetEnableCmsNbs2MaintenanceChecks();
+}
+
 void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
 {
     for (const auto &entry : State->Permissions)

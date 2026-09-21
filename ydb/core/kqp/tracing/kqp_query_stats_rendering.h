@@ -23,6 +23,7 @@ void AddQueryExecutionAttributes(NWilson::TSpan& span, const TQueryTraceDescript
     ui64 spilledBytes = 0;
     double maxTaskSkew = 0;
     bool taskStatsIncomplete = false;
+    bool taskStatsFailed = false;
     for (const auto& execution : stats.GetExecutions()) {
         cpuUs += GetExecutionTraceCpuTimeUs(execution);
         NKqpProto::TKqpExecutionExtraStats extra;
@@ -31,6 +32,7 @@ void AddQueryExecutionAttributes(NWilson::TSpan& span, const TQueryTraceDescript
             spilledBytes += extra.GetSpilledBytes();
             maxTaskSkew = Max(maxTaskSkew, extra.GetMaxTaskSkew());
             taskStatsIncomplete |= extra.GetTaskStatsIncomplete();
+            taskStatsFailed |= extra.GetTaskStatsFailed();
         }
         for (const auto& table : execution.GetTables()) {
             rowsRead += table.GetReadRows();
@@ -49,6 +51,7 @@ void AddQueryExecutionAttributes(NWilson::TSpan& span, const TQueryTraceDescript
         span.Attribute("ydb.spilled_bytes", static_cast<i64>(spilledBytes));
         span.Attribute("ydb.max_task_skew", maxTaskSkew);
         span.Attribute("ydb.task_stats_incomplete", taskStatsIncomplete);
+        span.Attribute("ydb.task_stats_failed", taskStatsFailed);
     }
     span.Attribute("ydb.consumed_ru", static_cast<i64>(requestUnits));
     span.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(status));

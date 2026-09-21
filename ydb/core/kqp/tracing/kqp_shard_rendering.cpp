@@ -57,7 +57,9 @@ void TShardReadTrace::ReadResult(NWilson::TSpan& parent, ui64 shardId, ui32 node
         shard.LastResponse = parent.GetActorSystem()->Monotonic();
         shard.LastStatus = status;
         shard.Reads += finished || status != Ydb::StatusIds::SUCCESS;
-        shard.FailedReads += status != Ydb::StatusIds::SUCCESS;
+        shard.FailedReads += status != Ydb::StatusIds::SUCCESS
+            && status != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+        shard.StoppedReads += status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         RetainShards();
     }
 }

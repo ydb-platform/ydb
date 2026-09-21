@@ -85,6 +85,7 @@ message TKqpExecutionExtraStats {
     bool TaskStatsIncomplete = 8;
     // Internal execution total, also available when client statistics are disabled.
     optional uint64 CpuTimeUs = 9;
+    bool TaskStatsFailed = 10;
 
     // Profile stats
     uint64 ResolveCpuTimeUs = 100;

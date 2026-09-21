@@ -169,8 +169,11 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr comp
         CommandTagName = CompileResult->CommandTagName;
     }
     if (KqpSessionSpan) {
-        TraceDescription = DescribeQueryTrace(GetType(), Statements.size(),
+        auto description = DescribeQueryTrace(GetType(), Statements.size(),
             PreparedQuery->GetPhysicalQuery(), CommandTagName);
+        if (description.Operation) {
+            TraceDescription = std::move(description);
+        }
     }
     for (const auto& param : PreparedQuery->GetParameters()) {
         const auto& ast = CompileResult->GetAst();

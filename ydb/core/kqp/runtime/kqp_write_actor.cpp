@@ -5177,6 +5177,7 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
                 TxPlanned = true;
+                CommitPhase.End(Ydb::StatusIds::SUCCESS);
                 StartCommitPhase({"Apply commit", "CommitApplyShards", "TKqpBufferWriteActor", nullptr, "DataShard"});
                 if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
                     AFL_ENSURE(res->Record.HasStepId());
@@ -5494,7 +5495,10 @@ public:
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
         if (!TxManager->IsRollBack()) {
             CancelProposal();
-            Rollback(BufferWriteActorStateSpan.GetTraceId(), /* waitForResult */ false);
+            NWilson::TTraceId rollbackTraceId = BufferWriteActorStateSpan
+                ? NWilson::TTraceId(BufferWriteActorStateSpan.GetTraceId())
+                : NWilson::TTraceId(LastTraceId_);
+            Rollback(std::move(rollbackTraceId), /* waitForResult */ false);
         }
         PassAway();
     }
@@ -5991,6 +5995,7 @@ public:
             OnOperationFinished(Counters->BufferActorPrepareLatencyHistogram);
             TxManager->StartExecute();
             AFL_ENSURE(GetTotalMemory() == 0);
+            CommitPhase.End(Ydb::StatusIds::SUCCESS);
             DistributedCommit();
             return;
         }
@@ -6287,17 +6292,23 @@ public:
 
     void UpdateTracingState(const TQueryTraceSpanDescription& description, NWilson::TTraceId traceId,
             ui8 verbosity = TWilsonKqp::BufferWriteActorState) {
+        if (!traceId) {
+            return;
+        }
         CommitPhase.End(Ydb::StatusIds::SUCCESS);
         EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::SUCCESS);
         BufferWriteActorStateSpan = MakeQueryPhaseTraceSpan(verbosity, std::move(traceId),
             description, NWilson::EFlags::AUTO_END);
+        LastTraceId_ = BufferWriteActorStateSpan.GetTraceId();
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             actor->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
         });
     }
 
     void ReplyErrorImpl(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
-        CommitPhase.End(NYql::NDq::DqStatusToYdbStatus(statusCode));
+        const auto ydbStatus = NYql::NDq::DqStatusToYdbStatus(statusCode);
+        CommitPhase.End(ydbStatus);
+        EndQueryTraceSpan(BufferWriteActorStateSpan, ydbStatus);
         YDB_LOG_ERROR("Buffer write actor is replying with error to session.",
             {"logPrefix", this->LogPrefix},
             {"statusCode", NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)},
@@ -6536,6 +6547,7 @@ private:
 
     // The buffer actor owns this phase span and closes it at phase transitions, success, or error.
     NWilson::TSpan BufferWriteActorStateSpan;
+    NWilson::TTraceId LastTraceId_;
     TCommitTracePhase CommitPhase;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
     ui64 QuerySpanId = 0;

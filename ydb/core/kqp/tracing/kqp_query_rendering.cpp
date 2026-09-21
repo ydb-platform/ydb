@@ -104,7 +104,7 @@ void TShardTraceEvents::Finish(NWilson::TSpan& span) {
 }
 
 bool TCommitTracePhase::StartSpan(const NWilson::TSpan& parent, const TQueryTraceSpanDescription& description) {
-    End(Ydb::StatusIds::SUCCESS);
+    End(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
     Span_ = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
         parent.GetTraceId(), description, NWilson::EFlags::AUTO_END, parent.GetActorSystem());
     return bool(Span_);
@@ -244,9 +244,10 @@ TQueryTraceDescription DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& quer
     if (!operation) {
         if (inferredWriteVerb) {
             if (mixedWriteVerbs) {
-                return {"EXECUTE SCRIPT", "EXECUTE SCRIPT"};
+                operation = "WRITE";
+            } else {
+                operation = inferredWriteVerb;
             }
-            operation = inferredWriteVerb;
         } else if (hasReads || query.ResultBindingsSize() > 0) {
             operation = "SELECT";
         }

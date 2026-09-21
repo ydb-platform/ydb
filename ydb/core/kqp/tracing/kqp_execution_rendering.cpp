@@ -40,6 +40,7 @@ void TBatchExecutionTrace::AddExecution(const NYql::NDqProto::TDqExecutionStats&
     SpilledBytes_ += extra.GetSpilledBytes();
     MaxTaskSkew_ = std::max(MaxTaskSkew_, extra.GetMaxTaskSkew());
     TaskStatsIncomplete_ |= extra.GetTaskStatsIncomplete();
+    TaskStatsFailed_ |= extra.GetTaskStatsFailed();
 }
 
 void TBatchExecutionTrace::Export(NYql::NDqProto::TDqExecutionStats& stats) const {
@@ -49,6 +50,7 @@ void TBatchExecutionTrace::Export(NYql::NDqProto::TDqExecutionStats& stats) cons
     extra.SetSpilledBytes(SpilledBytes_);
     extra.SetMaxTaskSkew(MaxTaskSkew_);
     extra.SetTaskStatsIncomplete(TaskStatsIncomplete_);
+    extra.SetTaskStatsFailed(TaskStatsFailed_);
     stats.MutableExtra()->PackFrom(extra);
 }
 
@@ -246,8 +248,8 @@ void TExecutionTrace::FinishStage(TStage& stage, Ydb::StatusIds::StatusCode stat
     for (const auto& [key, value] : attributes) {
         stage.Span.Attribute(key, value);
     }
-    stage.Span.Attribute("ydb.task_stats_incomplete",
-        stage.Reports != stage.TaskCount || stage.FailedTasks);
+    stage.Span.Attribute("ydb.task_stats_incomplete", stage.Reports != stage.TaskCount);
+    stage.Span.Attribute("ydb.task_stats_failed", bool(stage.FailedTasks));
     stage.Span.Attribute("ydb.task_duration_incomplete", stage.Durations != stage.Reports);
     EndQueryTraceSpan(stage.Span, stage.Status != Ydb::StatusIds::SUCCESS ? stage.Status : status);
 }
@@ -255,11 +257,13 @@ void TExecutionTrace::FinishStage(TStage& stage, Ydb::StatusIds::StatusCode stat
 void TExecutionTrace::Finish(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionStats& stats,
         Ydb::StatusIds::StatusCode status) {
     double maxSkew = 0;
-    bool incomplete = status != Ydb::StatusIds::SUCCESS || UnrepresentedStageTasks_;
+    bool incomplete = UnrepresentedStageTasks_;
+    bool failed = false;
     for (auto& [id, stage] : Stages_) {
         const double skew = stage.MaxTaskSkew();
         maxSkew = std::max(maxSkew, skew);
-        incomplete |= stage.Reports != stage.TaskCount || stage.FailedTasks;
+        incomplete |= stage.Reports != stage.TaskCount;
+        failed |= stage.FailedTasks;
         FinishStage(stage, status == Ydb::StatusIds::SUCCESS && stage.Reports != stage.TaskCount
             ? Ydb::StatusIds::STATUS_CODE_UNSPECIFIED : status, SpilledBytesAvailable_);
     }
@@ -271,6 +275,7 @@ void TExecutionTrace::Finish(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionS
     span.Attribute("ydb.spilled_bytes", static_cast<i64>(SpilledBytes_));
     span.Attribute("ydb.max_task_skew", maxSkew);
     span.Attribute("ydb.task_stats_incomplete", incomplete);
+    span.Attribute("ydb.task_stats_failed", failed);
     bool durationIncomplete = false;
     for (const auto& [id, stage] : Stages_) {
         Y_UNUSED(id);
@@ -284,6 +289,7 @@ void TExecutionTrace::Finish(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionS
     extra.SetSpilledBytes(SpilledBytes_);
     extra.SetMaxTaskSkew(maxSkew);
     extra.SetTaskStatsIncomplete(incomplete);
+    extra.SetTaskStatsFailed(failed);
     stats.MutableExtra()->PackFrom(extra);
 }
 

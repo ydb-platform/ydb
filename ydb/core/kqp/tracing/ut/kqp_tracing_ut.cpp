@@ -222,7 +222,8 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
                     }
                 } else {
                     UNIT_ASSERT(stage.end_time_unix_nano() > completedEnd);
-                    UNIT_ASSERT(FindAttribute(stage, "ydb.task_stats_incomplete")->value().bool_value());
+                    UNIT_ASSERT(!FindAttribute(stage, "ydb.task_stats_incomplete")->value().bool_value());
+                    UNIT_ASSERT(FindAttribute(stage, "ydb.task_stats_failed")->value().bool_value());
                 }
             }
         }

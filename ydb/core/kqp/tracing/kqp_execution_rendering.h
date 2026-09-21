@@ -29,6 +29,7 @@ private:
     ui64 SpilledBytes_ = 0;
     double MaxTaskSkew_ = 0;
     bool TaskStatsIncomplete_ = false;
+    bool TaskStatsFailed_ = false;
 };
 
 // Consumes terminal task reports once; the executer's planner deduplicates them.

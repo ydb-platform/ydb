@@ -558,8 +558,8 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, TIssue&& issue) {
-        EndQueryTraceSpan(MetadataSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
-        EndQueryTraceSpan(PartitioningSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+        EndQueryTraceSpan(MetadataSpan, status);
+        EndQueryTraceSpan(PartitioningSpan, status);
         auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
         replyEv->Status = status;
         replyEv->Issues.AddIssue(std::move(issue));

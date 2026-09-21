@@ -17,4 +17,13 @@
 
 Конфиг раннеров: `.github/config/runners_footprints.yml` — provisioned maximum (vcpu/ram) по build preset. Фактическое потребление — из `resources_monitor.jsonl`; на дашборде красная линия = monitor, фиолетовая пунктирная = лимит из конфига.
 
-Общие CI-метрики пишутся в ydb-qa таблицу `analytics/ci_metrics` клиентом `.github/scripts/analytics/ci_metrics.py` (`emit` / `flush`). Сейчас так снимаются длительности PR-check (GitHub job/step + in-job ya phases) и cache-free ydbd build (duration + binary size).
+Общие CI-метрики пишутся в ydb-qa таблицу `analytics/ci_metrics` клиентом `.github/scripts/analytics/ci_metrics.py` (`emit` / `flush`). Скрипты только копируют сырые значения; агрегаты, топы и регрессии — SQL по таблице. Сравнение PR-check с target branch — отдельный следующий этап.
+
+Что пишется:
+
+- PR-check: GitHub job/step (`export_github_job_metrics.py`) + in-job ya phases (`graph_compare`, `ya_make_try_*`, dashboard, s3)
+- Nightly-Build (remote cache): `ydbd_cached_build`, `ydbd_size`, все Compile/Link узлы из `ya_evlog.jsonl` (`source=nightly_build`, `cache_mode=dist_cache`)
+- ydbd-clean-build (без кеша): `ydbd_clean_build`, `ydbd_size`, те же узлы evlog (`source=clean_build`, `cache_mode=none`)
+- Build-analytics-run: сырые `time_s` / `mean_compilation_time_s` + `inclusion_count` из `html_cpp_impact/output.json` и `html_headers_impact/output.json` (`source=build_bloat`), плюс evlog (`source=build_analytics`). HTML treemap по-прежнему в S3 и в `code-agility/*` через `ydb_upload.py`
+
+Модули: `.github/scripts/analytics/export_ya_nodes.py` пишет одну строку на узел (`labels.node_kind` = `Compile` / `Link` / `Header`). Для заголовков `value` — mean time, `labels.inclusion_count` — как в output.json, без `mean * count`.

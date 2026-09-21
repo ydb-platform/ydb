@@ -17,29 +17,47 @@
 
 Конфиг раннеров: `.github/config/runners_footprints.yml` — provisioned maximum (vcpu/ram) по build preset. Фактическое потребление — из `resources_monitor.jsonl`; на дашборде красная линия = monitor, фиолетовая пунктирная = лимит из конфига.
 
-Общие CI-метрики пишет `.github/scripts/analytics/ci_metrics.py`. Из любого workflow достаточно one-liner — скрипт-сборщик не нужен:
+Общие CI-метрики пишет `.github/scripts/analytics/ci_metrics.py` (модель как в продуктовых SDK: `start` / `end` / `track` / `send`). Базовый контекст (workflow, run/job id, commit, preset) подставляется сам. Из любого workflow достаточно one-liner — скрипт-сборщик не нужен:
 
 ```bash
-python3 .github/scripts/analytics/ci_metrics.py track my_step \
-  --source my_wf --started-epoch "$START" --conclusion success
+# Длительность: start до работы, send после (duration считается сам)
+python3 .github/scripts/analytics/ci_metrics.py start my_step \
+  --source my_wf --attr cache_mode=dist_cache
+# ... work ...
+python3 .github/scripts/analytics/ci_metrics.py send --conclusion success
 
-python3 .github/scripts/analytics/ci_metrics.py track --event wait \
+# Уже готовое измерение / gauge / событие
+python3 .github/scripts/analytics/ci_metrics.py track wait \
   --source my_wf --duration-sec 12 --json '{"lock":"schema"}'
+python3 .github/scripts/analytics/ci_metrics.py track ydbd_size \
+  --kind gauge --value 123456 --unit bytes --source my_wf
+
+# Большой снимок (не duration): kind=info, имя build_info, тело в labels.payload
+python3 .github/scripts/analytics/ci_metrics.py track build_info \
+  --kind info --source my_wf --json-file modules.json
+python3 .github/scripts/analytics/ci_metrics.py send
 ```
+
+`--json` / `--json-file` с плоским объектом обогащают атрибуты текущей записи. Список компонентов / `nodes` / `modules` / `cpp_compilation_times` и т.п. уходит в `labels.payload` отдельной строкой `build_info` (`kind=info`), а не в duration. `send --json-file modules.json` после `start` закроет span и допишет этот снимок в тот же пакет.
 
 Или composite action:
 
 ```yaml
 - uses: ./.github/actions/analytics_track
   with:
+    command: start
     name: my_step
     source: my_wf
-    started-epoch: ${{ env.START }}
-    conclusion: success
     labels: cache_mode=dist_cache
+# ... work ...
+- uses: ./.github/actions/analytics_track
+  with:
+    command: send
+    conclusion: success
+    json-file: modules.json
 ```
 
-`track` сразу отправляет пакет в ydb-qa (`analytics/ci_metrics`) через YDBWrapper. Пачку узлов собирает `export_ya_nodes.py` (`packet()` + один send). `send` / `flush` только досылает неподтверждённое. Агрегаты — SQL; сравнение PR-check с target — следующий этап.
+`track` / `start` только пишут в JSONL. `send` закрывает открытые span'ы и отправляет пакет в ydb-qa (`analytics/ci_metrics`) через YDBWrapper. Пачку узлов собирает `export_ya_nodes.py` (строка на узел + один `build_info` со всеми компонентами). Агрегаты — SQL; сравнение PR-check с target — следующий этап.
 
 Что пишется:
 

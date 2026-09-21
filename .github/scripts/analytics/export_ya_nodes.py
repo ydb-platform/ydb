@@ -20,7 +20,7 @@ import re
 import sys
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from ci_metrics import packet, track
+from ci_metrics import BUILD_INFO_NAME, packet, track
 
 NODE_KIND_RE = re.compile(
     r"^(CompileAndLink|SharedLibrary|Preprocess|Compile|Link|Archive|Opt)\b"
@@ -236,12 +236,49 @@ def load_jsonl_objects(path: str) -> List[Dict[str, Any]]:
     return events
 
 
+def _compact_node(node: Dict[str, Any]) -> Dict[str, Any]:
+    compact = {
+        "name": node["name"],
+        "node_kind": node["node_kind"],
+        "duration_ms": node["duration_ms"],
+    }
+    raw_name = node.get("raw_name")
+    if raw_name and raw_name != node["name"]:
+        compact["raw_name"] = raw_name
+    if node.get("inclusion_count") is not None:
+        compact["inclusion_count"] = node["inclusion_count"]
+    return compact
+
+
+def emit_build_info(
+    nodes: List[Dict[str, Any]],
+    *,
+    source: str,
+    file: Optional[str] = None,
+    extra_labels: Optional[Dict[str, Any]] = None,
+    origin: Optional[str] = None,
+) -> None:
+    """One kind=info snapshot of every component (sibling of per-node durations)."""
+    payload: Dict[str, Any] = {
+        "schema": "ya_nodes",
+        "nodes": [_compact_node(node) for node in nodes],
+    }
+    if origin:
+        payload["origin"] = origin
+    properties: Dict[str, Any] = {"payload": payload}
+    if extra_labels:
+        properties.update(extra_labels)
+    track(BUILD_INFO_NAME, properties, file=file, kind="info", source=source)
+
+
 def emit_nodes(
     nodes: List[Dict[str, Any]],
     *,
     source: str,
     file: Optional[str] = None,
     extra_labels: Optional[Dict[str, Any]] = None,
+    build_info: bool = True,
+    origin: Optional[str] = None,
 ) -> int:
     count = 0
     with packet(file):
@@ -261,6 +298,9 @@ def emit_nodes(
                 unit="ms",
             )
             count += 1
+        if build_info and nodes:
+            emit_build_info(nodes, source=source, file=file, extra_labels=extra_labels, origin=origin)
+            count += 1
     return count
 
 
@@ -272,6 +312,19 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--source", default="ya_node")
     parser.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
     parser.add_argument("--label", action="append", default=[], help="key=value extra labels")
+    parser.add_argument(
+        "--build-info",
+        dest="build_info",
+        action="store_true",
+        default=True,
+        help="Also write one kind=info build_info snapshot of all nodes (default)",
+    )
+    parser.add_argument(
+        "--no-build-info",
+        dest="build_info",
+        action="store_false",
+        help="Skip the build_info snapshot; keep per-node duration rows only",
+    )
     return parser.parse_args(argv)
 
 
@@ -301,7 +354,14 @@ def main(argv=None) -> int:
                 print(f"No evlog at {args.evlog!r}, skipping")
             else:
                 nodes = nodes_from_evlog(load_jsonl_objects(evlog_path))
-                emitted += emit_nodes(nodes, source=args.source, file=args.file, extra_labels=extra)
+                emitted += emit_nodes(
+                    nodes,
+                    source=args.source,
+                    file=args.file,
+                    extra_labels=extra,
+                    build_info=args.build_info,
+                    origin=evlog_path,
+                )
                 print(f"Emitted {len(nodes)} ya graph nodes from {evlog_path}")
         if args.cpp_json:
             if not os.path.exists(args.cpp_json):
@@ -310,7 +370,14 @@ def main(argv=None) -> int:
                 with open(args.cpp_json, encoding="utf-8") as handle:
                     payload = json.load(handle)
                 nodes = nodes_from_cpp_json(payload if isinstance(payload, dict) else {})
-                emitted += emit_nodes(nodes, source=args.source, file=args.file, extra_labels=extra)
+                emitted += emit_nodes(
+                    nodes,
+                    source=args.source,
+                    file=args.file,
+                    extra_labels=extra,
+                    build_info=args.build_info,
+                    origin=args.cpp_json,
+                )
                 print(f"Emitted {len(nodes)} cpp files from {args.cpp_json}")
         if args.headers_json:
             if not os.path.exists(args.headers_json):
@@ -319,7 +386,14 @@ def main(argv=None) -> int:
                 with open(args.headers_json, encoding="utf-8") as handle:
                     payload = json.load(handle)
                 nodes = nodes_from_headers_json(payload if isinstance(payload, dict) else {})
-                emitted += emit_nodes(nodes, source=args.source, file=args.file, extra_labels=extra)
+                emitted += emit_nodes(
+                    nodes,
+                    source=args.source,
+                    file=args.file,
+                    extra_labels=extra,
+                    build_info=args.build_info,
+                    origin=args.headers_json,
+                )
                 print(f"Emitted {len(nodes)} headers from {args.headers_json}")
         if not has_input:
             print("Nothing to emit: pass --evlog, --cpp-json and/or --headers-json")

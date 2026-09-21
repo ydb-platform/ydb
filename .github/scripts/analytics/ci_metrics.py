@@ -1,39 +1,33 @@
 #!/usr/bin/env python3
-"""Shared analytics writer for CI (same shape as web/mobile SDKs).
+"""CI analytics client (OpenTelemetry span + batch-export model).
 
-One table (`analytics/ci_metrics`). Callers send an event/metric name plus a
-JSON properties object. Events are queued locally and sent as a packet through
-one transport (YDBWrapper bulk upsert). A single `track()` is sent immediately;
-use `packet()` to group many measurements into one send.
+Lifecycle, same as OTel / product SDKs::
 
-From a workflow (one-liner — enough for a single event)::
+    start(name)   open a span, stamp resource + start time
+    end(name?)    close span(s); duration = now - start
+    track(name)   instant event or already-complete measurement (no open span)
+    flush()       export the completed batch to ydb-qa
+    send()        end leftover open spans + flush
+                  send(name, attrs) with no matching span = track + flush
 
-    python3 .github/scripts/analytics/ci_metrics.py track graph_compare \\
-        --source ya_phase --started-epoch "$START" --conclusion success
+Auto resource follows CI/CD semantic conventions (pipeline/run/task, git ref).
+Callers may add attributes; they never have to pass job id or start time.
 
-    python3 .github/scripts/analytics/ci_metrics.py track --event wait_for_lock \\
-        --source my_wf --duration-sec 12
+From a workflow::
+
+    python3 .github/scripts/analytics/ci_metrics.py start ydbd_cached_build \\
+        --source nightly_build --attr cache_mode=dist_cache
+    # ... work ...
+    python3 .github/scripts/analytics/ci_metrics.py send --conclusion success
 
     python3 .github/scripts/analytics/ci_metrics.py track ydbd_size \\
-        --kind gauge --value 123456 --unit bytes --source clean_build --json '{"cache_mode":"none"}'
+        --kind gauge --value 123456 --unit bytes --source nightly_build
 
-From Python::
+    python3 .github/scripts/analytics/ci_metrics.py track build_info \\
+        --kind info --source nightly_build --json-file modules.json
+    python3 .github/scripts/analytics/ci_metrics.py send
 
-    from ci_metrics import Analytics, packet, timed, track
-
-    analytics = Analytics()
-    analytics.track("ydbd_size", {"kind": "gauge", "value": size, "unit": "bytes", "source": "clean_build"})
-    with timed("graph_compare", source="ya_phase"):
-        run_graph_compare()
-    with packet():
-        for node in nodes:
-            track(node.name, {"value": node.duration_ms, "node_kind": node.kind, "source": "nightly_build"})
-
-`emit` is an alias of `track` (still sends on the event). `flush` / `send`
-retries any packet that was not acknowledged.
-
-Never fails the caller (CLI exit 0). Table path defaults to analytics/ci_metrics;
-a missing key in vars.YDB_QA_CONFIG does not break the upload.
+Never fails the caller (CLI exit 0).
 """
 
 from __future__ import annotations
@@ -42,11 +36,14 @@ import argparse
 import json
 import os
 import re
+import secrets
 import sys
 import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Iterator, List, Optional
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 try:
     import ydb
@@ -57,12 +54,27 @@ DEFAULT_TABLE_PATH = "analytics/ci_metrics"
 TABLE_CONFIG_KEY = "ci_metrics"
 TTL_MINUTES = 180 * 24 * 60  # 180 days
 DEFAULT_KIND = "duration"
+BUILD_INFO_NAME = "build_info"
 KIND_UNITS = {
     "duration": "ms",
     "gauge": "",
     "count": "count",
     "event": "",
+    "info": "",
 }
+# Whole-graph / all-component dumps go under labels.payload (kind=info).
+FAT_SNAPSHOT_KEYS = frozenset(
+    {
+        "components",
+        "modules",
+        "nodes",
+        "files",
+        "headers",
+        "payload",
+        "cpp_compilation_times",
+        "headers_compile_duration",
+    }
+)
 # Accepted as labels when leftover stage-specific writers still send them.
 LEGACY_LABEL_KEYS = ("cache_mode", "ya_attempt", "queued_ms", "stage_kind")
 
@@ -279,6 +291,68 @@ def github_env_defaults() -> Dict[str, Any]:
     }
 
 
+def maybe_resolve_job_id() -> None:
+    """Fill GITHUB_NUMERIC_JOB_ID from the GitHub API once, if the job left it unset."""
+    if os.environ.get("GITHUB_NUMERIC_JOB_ID"):
+        return
+    token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    if not token or not repo or not run_id:
+        return
+    try:
+        request = Request(
+            f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        with urlopen(request, timeout=10) as response:
+            payload = json.load(response)
+    except (URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return
+    preset = os.environ.get("BUILD_PRESET") or ""
+    hint = os.environ.get("CI_JOB_TITLE") or os.environ.get("GITHUB_JOB") or ""
+    for job in payload.get("jobs") or []:
+        name = str(job.get("name") or "")
+        job_id = job.get("id")
+        if job_id is None:
+            continue
+        padded = f" {name} "
+        if preset and (f" {preset} " in padded or name.endswith(f" {preset}") or name.split()[-1] == preset):
+            os.environ["GITHUB_NUMERIC_JOB_ID"] = str(job_id)
+            os.environ.setdefault("CI_JOB_TITLE", name)
+            return
+        if hint and hint in name:
+            os.environ["GITHUB_NUMERIC_JOB_ID"] = str(job_id)
+            os.environ.setdefault("CI_JOB_TITLE", name)
+            return
+
+
+def cicd_resource_attributes(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    """OpenTelemetry CI/CD + VCS resource attributes from GitHub context."""
+    mapping = (
+        ("workflow", "cicd.pipeline.name"),
+        ("run_id", "cicd.pipeline.run.id"),
+        ("run_url", "cicd.pipeline.run.url"),
+        ("job_name", "cicd.pipeline.task.name"),
+        ("github_job_id", "cicd.pipeline.task.run.id"),
+        ("branch", "vcs.ref.head.name"),
+        ("commit", "vcs.ref.head.revision"),
+        ("build_preset", "cicd.pipeline.task.build_preset"),
+        ("pr_number", "vcs.pr.number"),
+    )
+    attrs: Dict[str, Any] = {}
+    for source_key, dest_key in mapping:
+        value = ctx.get(source_key)
+        if value in (None, "", 0):
+            continue
+        attrs[dest_key] = value
+    return attrs
+
+
 def merge_defaults(raw: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str, Any]:
     merged = dict(defaults)
     for key, value in raw.items():
@@ -475,6 +549,103 @@ def build_track_record(name: str, properties: Optional[Dict[str, Any]] = None, *
     )
 
 
+def pending_file(metrics_path: Optional[str] = None) -> str:
+    return f"{metrics_path or default_metrics_file()}.pending"
+
+
+def read_pending_spans(metrics_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    path = pending_file(metrics_path)
+    if not os.path.exists(path):
+        return []
+    spans: List[Dict[str, Any]] = []
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                item = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(item, dict):
+                spans.append(item)
+    return spans
+
+
+def write_pending_spans(spans: List[Dict[str, Any]], metrics_path: Optional[str] = None) -> None:
+    path = pending_file(metrics_path)
+    if not spans:
+        if os.path.exists(path):
+            os.remove(path)
+        return
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        for span in spans:
+            handle.write(json.dumps(span, ensure_ascii=False, separators=(",", ":")) + "\n")
+    os.replace(tmp, path)
+
+
+def _now_epoch() -> str:
+    return str(time.time())
+
+
+def attach_context(record: Dict[str, Any]) -> Dict[str, Any]:
+    maybe_resolve_job_id()
+    ctx = github_env_defaults()
+    record = merge_defaults(record, {key: value for key, value in ctx.items() if value is not None})
+    labels = record.get("labels")
+    if not isinstance(labels, dict):
+        labels = {}
+    for key, value in cicd_resource_attributes(ctx).items():
+        labels.setdefault(key, value)
+    if labels:
+        record["labels"] = labels
+    return record
+
+
+def _record_kwargs(properties: Optional[Dict[str, Any]], labels: Optional[Dict[str, Any]], **fields: Any) -> Dict[str, Any]:
+    merged: Dict[str, Any] = {}
+    if properties:
+        merged.update(properties)
+    if labels:
+        merged.update(labels)
+    return merged
+
+
+def close_span(record: Dict[str, Any], extras: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    extras = dict(extras or {})
+    labels = record.get("labels") if isinstance(record.get("labels"), dict) else {}
+    extra_labels = extras.pop("labels", None)
+    if isinstance(extra_labels, dict):
+        for key, value in extra_labels.items():
+            labels.setdefault(key, value)
+    for key in ("conclusion", "kind", "source", "unit", "value", "finished_epoch", "started_epoch", "started_at"):
+        incoming = extras.pop(key, None)
+        if incoming not in (None, "") and record.get(key) in (None, ""):
+            record[key] = incoming
+    extras.pop("name", None)
+    extras.pop("file", None)
+    extras.pop("send", None)
+    for key, value in extras.items():
+        if value not in (None, ""):
+            labels.setdefault(key, value)
+    if record.get("finished_epoch") in (None, "") and record.get("value") is None:
+        record["finished_epoch"] = _now_epoch()
+    if record.get("value") is None and record.get("started_epoch") is not None:
+        finished = parse_datetime(record.get("finished_epoch")) or datetime.now(timezone.utc)
+        record["value"] = duration_ms_between(parse_datetime(record.get("started_epoch")), finished)
+        record.setdefault("unit", "ms")
+        record.setdefault("kind", "duration")
+    if record.get("conclusion"):
+        labels.setdefault("cicd.pipeline.result", record["conclusion"])
+    if labels:
+        record["labels"] = labels
+    return record
+
+
 _packet_nesting = 0
 
 
@@ -482,17 +653,74 @@ def in_packet() -> bool:
     return _packet_nesting > 0
 
 
-@contextmanager
-def packet(file: Optional[str] = None) -> Iterator[None]:
-    """Collect tracks into one packet and send on exit."""
-    global _packet_nesting
-    _packet_nesting += 1
-    try:
-        yield
-    finally:
-        _packet_nesting -= 1
-        if _packet_nesting == 0:
-            flush_file(file)
+def start(
+    name: str,
+    properties: Optional[Dict[str, Any]] = None,
+    *,
+    file: Optional[str] = None,
+    kind: Optional[str] = None,
+    source: Optional[str] = None,
+    started_at: Optional[str] = None,
+    started_epoch: Optional[str] = None,
+    conclusion: Optional[str] = None,
+    labels: Optional[Dict[str, Any]] = None,
+    **_ignored: Any,
+) -> str:
+    """Open a span. Duration is computed later by end()/send()."""
+    path = file or default_metrics_file()
+    epoch = started_epoch or _now_epoch()
+    record = build_track_record(
+        name,
+        _record_kwargs(properties, labels),
+        kind=kind or "duration",
+        source=source,
+        started_at=started_at,
+        conclusion=conclusion,
+    )
+    # Keep the start stamp; do not bake duration until end()/send().
+    record["started_epoch"] = epoch
+    record.pop("value", None)
+    started = parse_datetime(started_at) or parse_datetime(epoch)
+    if started is not None:
+        record["event_ts"] = started.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    record = attach_context(record)
+    span_id = secrets.token_hex(8)
+    labels_obj = record.get("labels") if isinstance(record.get("labels"), dict) else {}
+    labels_obj["span_id"] = span_id
+    record["labels"] = labels_obj
+    spans = read_pending_spans(path)
+    spans.append(record)
+    write_pending_spans(spans, path)
+    return span_id
+
+
+def end(
+    name: Optional[str] = None,
+    properties: Optional[Dict[str, Any]] = None,
+    *,
+    file: Optional[str] = None,
+    **fields: Any,
+) -> int:
+    """Close matching open span (LIFO by name) or every open span if name is omitted."""
+    path = file or default_metrics_file()
+    extras = _record_kwargs(properties, None)
+    extras.update({key: value for key, value in fields.items() if value is not None})
+    pending = read_pending_spans(path)
+    completed: List[Dict[str, Any]] = []
+    if name:
+        remaining = list(pending)
+        for index in range(len(remaining) - 1, -1, -1):
+            if remaining[index].get("name") == name:
+                completed.append(close_span(remaining.pop(index), extras))
+                break
+        pending = remaining
+    else:
+        completed = [close_span(span, extras) for span in pending]
+        pending = []
+    write_pending_spans(pending, path)
+    for record in completed:
+        append_record(path, record)
+    return len(completed)
 
 
 def track(
@@ -511,30 +739,26 @@ def track(
     conclusion: Optional[str] = None,
     labels: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Enqueue one event and send the packet unless inside `packet()` or send=False."""
-    merged: Dict[str, Any] = {}
-    if properties:
-        merged.update(properties)
-    if labels:
-        merged.update(labels)
+    """Queue a completed event. Does not open a span and does not export."""
     path = file or default_metrics_file()
-    append_record(
-        path,
-        build_track_record(
-            name,
-            merged,
-            kind=kind,
-            source=source,
-            value=value,
-            unit=unit,
-            started_at=started_at,
-            started_epoch=started_epoch,
-            finished_epoch=finished_epoch,
-            conclusion=conclusion,
-        ),
+    merged = _record_kwargs(properties, labels)
+    resolved_kind = kind
+    if resolved_kind is None and value is None and finished_epoch is None and merged.get("value") is None:
+        resolved_kind = "info" if "payload" in merged else "event"
+    record = build_track_record(
+        name,
+        merged,
+        kind=resolved_kind,
+        source=source,
+        value=value,
+        unit=unit,
+        started_at=started_at,
+        started_epoch=started_epoch,
+        finished_epoch=finished_epoch,
+        conclusion=conclusion,
     )
-    should_send = (not in_packet()) if send is None else send
-    if should_send:
+    append_record(path, attach_context(record))
+    if send:
         flush_file(path)
 
 
@@ -551,14 +775,14 @@ def emit(
     finished_epoch: Optional[str] = None,
     conclusion: Optional[str] = None,
     labels: Optional[Dict[str, Any]] = None,
-    send: Optional[bool] = None,
+    send: Optional[bool] = True,
 ) -> None:
-    """Alias of track() — kept so existing callers keep working."""
+    """Legacy one-shot: track a completed event and export it."""
     track(
         name,
         labels,
         file=file,
-        send=send,
+        send=True if send is None else send,
         kind=kind,
         source=source,
         value=value,
@@ -570,41 +794,110 @@ def emit(
     )
 
 
+def send(
+    name: Optional[str] = None,
+    properties: Optional[Dict[str, Any]] = None,
+    *,
+    file: Optional[str] = None,
+    **fields: Any,
+) -> int:
+    """End leftover spans (or record a named instant event) and export the batch.
+
+    A fat snapshot in extras (`payload` / --json-file) is written as a sibling
+    `build_info` row (kind=info), not folded into a duration span.
+    """
+    path = file or default_metrics_file()
+    extras = _record_kwargs(properties, None)
+    extras.update({key: value for key, value in fields.items() if value is not None})
+    snapshot = extras.pop("payload", None)
+    pending = read_pending_spans(path)
+    span_source = _pending_source(pending, name)
+    if name and not any(span.get("name") == name for span in pending):
+        if snapshot is not None:
+            extras["payload"] = snapshot
+            extras.setdefault("kind", "info")
+        track(name, extras, file=path, send=False)
+    else:
+        end(name, extras, file=path)
+        if snapshot is not None:
+            info_name = name if _is_info_name(name, extras.get("kind")) else BUILD_INFO_NAME
+            track(
+                info_name,
+                {"payload": snapshot},
+                file=path,
+                kind="info",
+                source=extras.get("source") or span_source,
+                conclusion=extras.get("conclusion"),
+                send=False,
+            )
+    return flush_file(path)
+
+
+@contextmanager
+def packet(file: Optional[str] = None) -> Iterator[None]:
+    """Group completed tracks and export once on exit (batch span processor)."""
+    global _packet_nesting
+    _packet_nesting += 1
+    try:
+        yield
+    finally:
+        _packet_nesting -= 1
+        if _packet_nesting == 0:
+            flush_file(file)
+
+
 @contextmanager
 def timed(name: str, **kwargs: Any) -> Iterator[None]:
-    """Measure a block and track a duration event. Re-raises; still records on failure."""
+    """start()/end() around a block. Re-raises; still ends the span on failure."""
     file = kwargs.pop("file", None)
-    start = time.time()
-    conclusion = "success"
+    start(name, file=file, **kwargs)
     try:
         yield
     except Exception:
-        conclusion = "failure"
+        end(name, file=file, conclusion="failure")
         raise
-    finally:
-        track(name, started_epoch=str(start), file=file, conclusion=conclusion, **kwargs)
+    else:
+        end(name, file=file, conclusion="success")
 
 
 class Analytics:
-    """Small SDK-style client around track/packet/send."""
+    """OpenTelemetry-shaped client: start / end / track / flush / send."""
 
     def __init__(self, file: Optional[str] = None, source: Optional[str] = None):
         self.file = file
         self.source = source
 
-    def track(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
-        props = dict(properties or {})
-        if self.source and not props.get("source") and kwargs.get("source") is None:
+    def _kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        if self.source and kwargs.get("source") is None:
             kwargs["source"] = self.source
         if self.file and kwargs.get("file") is None:
             kwargs["file"] = self.file
-        track(name, props, **kwargs)
+        return kwargs
+
+    def start(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
+        return start(name, properties, **self._kwargs(kwargs))
+
+    def end(self, name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
+        return end(name, properties, **self._kwargs(kwargs))
+
+    def track(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
+        track(name, properties, **self._kwargs(kwargs))
+
+    def flush(self) -> int:
+        return flush_file(self.file)
+
+    def send(self, name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
+        return send(name, properties, **self._kwargs(kwargs))
+
+    def track_info(self, name: str, payload: Any, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
+        """Queue a snapshot record (kind=info). `payload` is stored as-is in attributes."""
+        props = dict(properties or {})
+        props["payload"] = payload
+        kwargs.setdefault("kind", "info")
+        self.track(name, props, **kwargs)
 
     def packet(self):
         return packet(self.file)
-
-    def send(self) -> int:
-        return flush_file(self.file)
 
 
 def rows_from_jsonl(lines: Iterable[str], defaults: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
@@ -795,9 +1088,53 @@ def flush_file(path: Optional[str] = None, table_path: Optional[str] = None, def
         return 0
 
 
-def send(path: Optional[str] = None, table_path: Optional[str] = None) -> int:
-    """Public name for the shared send interface."""
-    return flush_file(path, table_path=table_path)
+def _is_fat_snapshot(parsed: Any) -> bool:
+    """True for all-component dumps (lists, nested graphs) rather than flat attrs."""
+    if isinstance(parsed, list):
+        return True
+    if not isinstance(parsed, dict):
+        return False
+    if any(key in parsed for key in FAT_SNAPSHOT_KEYS):
+        return True
+    for value in parsed.values():
+        if isinstance(value, list):
+            return True
+        if isinstance(value, dict) and any(isinstance(inner, (list, dict)) for inner in value.values()):
+            return True
+    return False
+
+
+def _is_info_name(name: Optional[str], kind: Optional[str]) -> bool:
+    if kind == "info":
+        return True
+    text = (name or "").strip()
+    return text == BUILD_INFO_NAME or text.endswith("_info")
+
+
+def _pending_source(pending: List[Dict[str, Any]], name: Optional[str]) -> Optional[str]:
+    if not pending:
+        return None
+    if name:
+        for span in reversed(pending):
+            if span.get("name") == name and span.get("source") not in (None, ""):
+                return str(span["source"])
+        return None
+    source = pending[-1].get("source")
+    return None if source in (None, "") else str(source)
+
+
+def _merge_json_property(properties: Dict[str, Any], parsed: Any) -> None:
+    """Merge caller JSON into attributes. Arrays and fat snapshots go under payload."""
+    if _is_fat_snapshot(parsed):
+        if isinstance(parsed, dict) and "payload" in parsed and len(parsed) == 1:
+            properties["payload"] = parsed["payload"]
+        else:
+            properties["payload"] = parsed
+        return
+    if isinstance(parsed, dict):
+        properties.update(parsed)
+        return
+    properties["payload"] = parsed
 
 
 def _properties_from_args(args: argparse.Namespace) -> Dict[str, Any]:
@@ -809,11 +1146,19 @@ def _properties_from_args(args: argparse.Namespace) -> Dict[str, Any]:
         except json.JSONDecodeError:
             properties["raw_json"] = raw_json
         else:
-            if isinstance(parsed, dict):
-                properties.update(parsed)
-            else:
-                properties["raw_json"] = parsed
-    properties.update(parse_labels(getattr(args, "label", None), getattr(args, "extra", None)))
+            _merge_json_property(properties, parsed)
+    json_file = getattr(args, "json_file", None)
+    if json_file:
+        try:
+            with open(json_file, encoding="utf-8") as handle:
+                parsed = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            properties["json_file_error"] = str(exc)
+        else:
+            _merge_json_property(properties, parsed)
+    label_items = list(getattr(args, "label", None) or [])
+    label_items.extend(getattr(args, "attr", None) or [])
+    properties.update(parse_labels(label_items, getattr(args, "extra", None)))
     return properties
 
 
@@ -854,7 +1199,7 @@ def _cmd_track(args: argparse.Namespace) -> int:
         name,
         _properties_from_args(args),
         file=args.file,
-        send=not getattr(args, "no_send", False),
+        send=False,
         kind=resolve_track_kind(args),
         source=args.source,
         value=resolve_track_value(args),
@@ -867,8 +1212,77 @@ def _cmd_track(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_start(args: argparse.Namespace) -> int:
+    name = resolve_track_name(args)
+    if not name:
+        print("Warning: start requires a span name", file=sys.stderr)
+        return 0
+    start(
+        name,
+        _properties_from_args(args),
+        file=args.file,
+        kind=resolve_track_kind(args) or "duration",
+        source=args.source,
+        started_at=args.started_at,
+        started_epoch=args.started_epoch,
+        conclusion=args.conclusion,
+    )
+    return 0
+
+
+def _cmd_end(args: argparse.Namespace) -> int:
+    end(
+        resolve_track_name(args) or None,
+        _properties_from_args(args),
+        file=args.file,
+        conclusion=args.conclusion,
+        source=args.source,
+        value=resolve_track_value(args),
+        unit=args.unit,
+        finished_epoch=args.finished_epoch,
+    )
+    return 0
+
+
+def _cmd_send(args: argparse.Namespace) -> int:
+    send(
+        resolve_track_name(args) or None,
+        _properties_from_args(args),
+        file=args.file,
+        conclusion=args.conclusion,
+        source=args.source,
+        kind=resolve_track_kind(args),
+        value=resolve_track_value(args),
+        unit=args.unit,
+        started_at=args.started_at,
+        started_epoch=args.started_epoch,
+        finished_epoch=args.finished_epoch,
+    )
+    return 0
+
+
 def _cmd_flush(args: argparse.Namespace) -> int:
     flush_file(args.file, table_path=args.table_path)
+    return 0
+
+
+def _cmd_emit(args: argparse.Namespace) -> int:
+    name = resolve_track_name(args)
+    if not name:
+        return 0
+    emit(
+        name,
+        file=args.file,
+        kind=resolve_track_kind(args) or DEFAULT_KIND,
+        source=args.source,
+        value=resolve_track_value(args),
+        unit=args.unit,
+        started_at=args.started_at,
+        started_epoch=args.started_epoch,
+        finished_epoch=args.finished_epoch,
+        conclusion=args.conclusion,
+        labels=_properties_from_args(args) or None,
+    )
     return 0
 
 
@@ -877,6 +1291,11 @@ def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optiona
     parser.add_argument("--name", default=None, help="Event/metric name")
     parser.add_argument("--event", dest="event_flag", default=None, help="Alias of --name")
     parser.add_argument("--json", default=None, help="Optional measurement JSON (merged with flags)")
+    parser.add_argument(
+        "--json-file",
+        default=None,
+        help="Path to a JSON snapshot (all-component build_info, modules, evlog dump)",
+    )
     parser.add_argument("--kind", default=kind_default, choices=sorted(KIND_UNITS))
     parser.add_argument("--source", default=None, help="Producer, e.g. ya_phase / my_workflow")
     parser.add_argument("--value", type=float, default=None)
@@ -887,29 +1306,36 @@ def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optiona
     parser.add_argument("--started-epoch", default=None, help="epoch seconds or ms")
     parser.add_argument("--finished-epoch", default=None, help="epoch seconds or ms")
     parser.add_argument("--conclusion", default=None)
-    parser.add_argument("--label", action="append", default=[], help="key=value (repeatable)")
-    parser.add_argument("--extra", default=None, help="JSON object merged into properties")
+    parser.add_argument("--label", action="append", default=[], help="key=value attribute")
+    parser.add_argument("--attr", action="append", default=[], help="Alias of --label (OTel attribute)")
+    parser.add_argument("--extra", default=None, help="JSON object merged into attributes")
     parser.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
-    parser.add_argument("--no-send", action="store_true", help="Queue only; caller will send()")
+    parser.add_argument("--no-send", action="store_true", help="Ignored; track never exports")
 
 
 def parse_args(argv=None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Track CI analytics events and send packets to ydb-qa")
+    parser = argparse.ArgumentParser(description="CI analytics: start/end/track + batch send")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    track_p = sub.add_parser("track", help="Record one event/metric and send it now")
+    start_p = sub.add_parser("start", help="Open a span (auto start time + CI resource)")
+    add_track_cli_args(start_p, kind_default="duration")
+
+    end_p = sub.add_parser("end", help="Close open span(s); duration is computed")
+    add_track_cli_args(end_p)
+
+    track_p = sub.add_parser("track", help="Queue a completed event (no open span)")
     add_track_cli_args(track_p)
 
-    emit_p = sub.add_parser("emit", help="Alias of track")
+    emit_p = sub.add_parser("emit", help="track + flush (legacy one-shot)")
     add_track_cli_args(emit_p, kind_default=DEFAULT_KIND)
 
-    flush_p = sub.add_parser("flush", help="Retry sending any unacknowledged packet")
+    send_p = sub.add_parser("send", help="End leftover spans and export the batch")
+    add_track_cli_args(send_p)
+    send_p.add_argument("--table-path", default=None)
+
+    flush_p = sub.add_parser("flush", help="Export completed events only")
     flush_p.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
     flush_p.add_argument("--table-path", default=None)
-
-    send_p = sub.add_parser("send", help="Alias of flush")
-    send_p.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
-    send_p.add_argument("--table-path", default=None)
 
     return parser.parse_args(argv)
 
@@ -917,9 +1343,17 @@ def parse_args(argv=None) -> argparse.Namespace:
 def main(argv=None) -> int:
     try:
         args = parse_args(argv)
-        if args.command in ("track", "emit"):
+        if args.command == "start":
+            return _cmd_start(args)
+        if args.command == "end":
+            return _cmd_end(args)
+        if args.command == "track":
             return _cmd_track(args)
-        if args.command in ("flush", "send"):
+        if args.command == "emit":
+            return _cmd_emit(args)
+        if args.command == "send":
+            return _cmd_send(args)
+        if args.command == "flush":
             return _cmd_flush(args)
         return 0
     except Exception as exc:  # noqa: BLE001 — telemetry must not fail CI

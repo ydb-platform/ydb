@@ -11,6 +11,7 @@ import unittest
 from datetime import datetime, timezone
 
 from ci_metrics import (
+    BUILD_INFO_NAME,
     DEFAULT_TABLE_PATH,
     PRIMARY_KEYS,
     Analytics,
@@ -28,7 +29,9 @@ from ci_metrics import (
     packet,
     parse_datetime,
     parse_labels,
+    read_pending_spans,
     rows_from_jsonl,
+    start,
     timed,
     track,
     write_send_offset,
@@ -101,6 +104,21 @@ class NormalizeMetricTest(unittest.TestCase):
         )
         self.assertEqual(row["value"], 10000.0)
         self.assertEqual(row["source"], "unknown")
+
+    def test_build_info_snapshot(self):
+        row = normalize_metric(
+            {
+                "name": "build_info",
+                "kind": "info",
+                "source": "nightly_build",
+                "run_id": 11,
+                "event_ts": "2026-09-21T03:00:00Z",
+                "labels": {"payload": {"nodes": [{"name": "a.cpp", "duration_ms": 10}]}},
+            }
+        )
+        self.assertEqual(row["kind"], "info")
+        self.assertIsNone(row["value"])
+        self.assertEqual(json.loads(row["labels"])["payload"]["nodes"][0]["name"], "a.cpp")
 
     def test_gauge(self):
         row = normalize_metric(
@@ -472,6 +490,234 @@ class TrackApiTest(unittest.TestCase):
             self.assertEqual(row["name"], "graph_compare")
             self.assertEqual(row["source"], "ya_phase")
             self.assertEqual(row["value"], 5.0)
+
+    def test_start_send_computes_duration(self):
+        sends = []
+
+        def fake_flush(path=None, table_path=None, defaults=None):
+            sends.append(path)
+            return 0
+
+        import ci_metrics as client
+
+        original = client.flush_file
+        client.flush_file = fake_flush
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "ci_metrics.jsonl")
+                self.assertEqual(
+                    main(
+                        [
+                            "start",
+                            "ydbd_cached_build",
+                            "--file",
+                            path,
+                            "--source",
+                            "nightly_build",
+                            "--started-epoch",
+                            "1000",
+                            "--attr",
+                            "cache_mode=dist_cache",
+                        ]
+                    ),
+                    0,
+                )
+                self.assertTrue(read_pending_spans(path))
+                self.assertFalse(os.path.exists(path) and os.path.getsize(path))
+                self.assertEqual(
+                    main(
+                        [
+                            "send",
+                            "--file",
+                            path,
+                            "--conclusion",
+                            "success",
+                            "--finished-epoch",
+                            "1010",
+                        ]
+                    ),
+                    0,
+                )
+                self.assertEqual(read_pending_spans(path), [])
+                with open(path, encoding="utf-8") as handle:
+                    row = json.loads(handle.readline())
+                self.assertEqual(row["name"], "ydbd_cached_build")
+                self.assertEqual(row["kind"], "duration")
+                self.assertEqual(row["source"], "nightly_build")
+                self.assertEqual(row["value"], 10000.0)
+                self.assertEqual(row["conclusion"], "success")
+                self.assertEqual(row["labels"]["cache_mode"], "dist_cache")
+                self.assertEqual(sends, [path])
+        finally:
+            client.flush_file = original
+
+    def test_cli_build_info_json_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            snap = os.path.join(tmp, "modules.json")
+            with open(snap, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "components": [
+                            {"name": "ydb/apps/ydbd", "duration_ms": 12000},
+                            {"name": "ydb/core/tablet", "duration_ms": 800},
+                        ]
+                    },
+                    handle,
+                )
+            self.assertEqual(
+                main(
+                    [
+                        "track",
+                        BUILD_INFO_NAME,
+                        "--file",
+                        path,
+                        "--source",
+                        "nightly_build",
+                        "--json-file",
+                        snap,
+                    ]
+                ),
+                0,
+            )
+            with open(path, encoding="utf-8") as handle:
+                row = json.loads(handle.readline())
+            self.assertEqual(row["name"], BUILD_INFO_NAME)
+            self.assertEqual(row["kind"], "info")
+            self.assertEqual(row["source"], "nightly_build")
+            self.assertNotIn("value", row)
+            self.assertEqual(row["labels"]["payload"]["components"][0]["name"], "ydb/apps/ydbd")
+
+    def test_send_after_start_writes_sibling_build_info(self):
+        sends = []
+
+        def fake_flush(path=None, table_path=None, defaults=None):
+            sends.append(path)
+            return 0
+
+        import ci_metrics as client
+
+        original = client.flush_file
+        client.flush_file = fake_flush
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "ci_metrics.jsonl")
+                snap = os.path.join(tmp, "modules.json")
+                with open(snap, "w", encoding="utf-8") as handle:
+                    json.dump({"nodes": [{"name": "a.cpp", "duration_ms": 10}]}, handle)
+                start("ydbd_clean_build", file=path, source="clean_build", started_epoch="1000")
+                self.assertEqual(
+                    main(
+                        [
+                            "send",
+                            "--file",
+                            path,
+                            "--conclusion",
+                            "success",
+                            "--finished-epoch",
+                            "1005",
+                            "--json-file",
+                            snap,
+                        ]
+                    ),
+                    0,
+                )
+                with open(path, encoding="utf-8") as handle:
+                    rows = [json.loads(line) for line in handle if line.strip()]
+                names = {row["name"]: row for row in rows}
+                self.assertEqual(names["ydbd_clean_build"]["kind"], "duration")
+                self.assertEqual(names["ydbd_clean_build"]["value"], 5000.0)
+                self.assertNotIn("payload", names["ydbd_clean_build"].get("labels") or {})
+                self.assertEqual(names[BUILD_INFO_NAME]["kind"], "info")
+                self.assertEqual(names[BUILD_INFO_NAME]["source"], "clean_build")
+                self.assertEqual(names[BUILD_INFO_NAME]["labels"]["payload"]["nodes"][0]["name"], "a.cpp")
+                self.assertEqual(sends, [path])
+        finally:
+            client.flush_file = original
+
+    def test_packet_does_not_end_open_spans(self):
+        sends = []
+
+        def fake_flush(path=None, table_path=None, defaults=None):
+            sends.append(path)
+            return 0
+
+        import ci_metrics as client
+
+        original = client.flush_file
+        client.flush_file = fake_flush
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "ci_metrics.jsonl")
+                start("ydbd_cached_build", file=path, source="nightly_build")
+                with packet(path):
+                    track("ydb/foo.cpp", {"node_kind": "Compile"}, file=path, kind="duration", value=1, source="nightly_build")
+                pending = read_pending_spans(path)
+                self.assertEqual(len(pending), 1)
+                self.assertEqual(pending[0]["name"], "ydbd_cached_build")
+                with open(path, encoding="utf-8") as handle:
+                    rows = [json.loads(line) for line in handle if line.strip()]
+                self.assertEqual([row["name"] for row in rows], ["ydb/foo.cpp"])
+                self.assertEqual(sends, [path])
+        finally:
+            client.flush_file = original
+
+    def test_send_json_file_without_start(self):
+        sends = []
+
+        def fake_flush(path=None, table_path=None, defaults=None):
+            sends.append(path)
+            return 0
+
+        import ci_metrics as client
+
+        original = client.flush_file
+        client.flush_file = fake_flush
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "ci_metrics.jsonl")
+                snap = os.path.join(tmp, "modules.json")
+                with open(snap, "w", encoding="utf-8") as handle:
+                    json.dump({"modules": [{"name": "ydbd"}]}, handle)
+                self.assertEqual(
+                    main(["send", "--file", path, "--source", "other_wf", "--json-file", snap]),
+                    0,
+                )
+                with open(path, encoding="utf-8") as handle:
+                    row = json.loads(handle.readline())
+                self.assertEqual(row["name"], BUILD_INFO_NAME)
+                self.assertEqual(row["kind"], "info")
+                self.assertEqual(row["source"], "other_wf")
+                self.assertEqual(row["labels"]["payload"]["modules"][0]["name"], "ydbd")
+                self.assertEqual(sends, [path])
+        finally:
+            client.flush_file = original
+
+    def test_track_info_helper(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            analytics = Analytics(file=path, source="build_bloat")
+            analytics.track_info(BUILD_INFO_NAME, {"cpp_compilation_times": [{"path": "a.cpp", "time_s": 1.5}]})
+            with open(path, encoding="utf-8") as handle:
+                row = json.loads(handle.readline())
+            self.assertEqual(row["kind"], "info")
+            self.assertEqual(row["labels"]["payload"]["cpp_compilation_times"][0]["path"], "a.cpp")
+
+    def test_cpp_json_file_nests_under_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            snap = os.path.join(tmp, "output.json")
+            with open(snap, "w", encoding="utf-8") as handle:
+                json.dump({"total_compilation_time": 3.5, "cpp_compilation_times": [{"path": "a.cpp", "time_s": 2.0}]}, handle)
+            self.assertEqual(
+                main(["track", "build_info", "--file", path, "--source", "build_bloat", "--json-file", snap]),
+                0,
+            )
+            with open(path, encoding="utf-8") as handle:
+                row = json.loads(handle.readline())
+            self.assertEqual(row["kind"], "info")
+            self.assertEqual(row["labels"]["payload"]["total_compilation_time"], 3.5)
+            self.assertNotIn("cpp_compilation_times", row["labels"])
 
 
 class ParseLabelsTest(unittest.TestCase):

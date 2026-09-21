@@ -52,13 +52,17 @@ jobs:
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
-    - name: Mark cached-build start
+    - name: Start cached-build span
+      continue-on-error: true
       shell: bash
       run: |
-        echo "NIGHTLY_BUILD_START=$(date +%s)" >> "$GITHUB_ENV"
         echo "BUILD_PRESET=${{ matrix.build_preset }}" >> "$GITHUB_ENV"
         echo "BRANCH_NAME=${{ matrix.branch }}" >> "$GITHUB_ENV"
         echo "CI_CACHE_MODE=dist_cache" >> "$GITHUB_ENV"
+        python3 .github/scripts/analytics/ci_metrics.py start ydbd_cached_build \
+          --source nightly_build \
+          --attr cache_mode=dist_cache \
+          --attr build_target=ydb/apps/ydbd || true
     - name: Build and test
       id: nightly_build
       uses: ./.github/actions/build_and_test_ya
@@ -85,13 +89,6 @@ jobs:
           CONCLUSION=failure
         fi
         python3 -m pip install ydb ydb[yc] >/dev/null
-        python3 .github/scripts/analytics/ci_metrics.py track ydbd_cached_build \
-          --source nightly_build \
-          --started-epoch "${NIGHTLY_BUILD_START}" \
-          --finished-epoch "$(date +%s)" \
-          --conclusion "$CONCLUSION" \
-          --label cache_mode=dist_cache \
-          --label build_target=ydb/apps/ydbd || true
         if [ -e ydb/apps/ydbd/ydbd ] || [ -L ydb/apps/ydbd/ydbd ]; then
           BINARY_SIZE_BYTES=$(stat -L -c%s ydb/apps/ydbd/ydbd)
           python3 .github/scripts/analytics/ci_metrics.py track ydbd_size \
@@ -105,7 +102,7 @@ jobs:
           --evlog "tmp/results/try_*/ya_evlog.jsonl" \
           --source nightly_build \
           --label cache_mode=dist_cache || true
-        python3 .github/scripts/analytics/ci_metrics.py send || true
+        python3 .github/scripts/analytics/ci_metrics.py send --conclusion "$CONCLUSION" || true
     - name: Setup s3cmd
       uses: ./.github/actions/s3cmd
       with:

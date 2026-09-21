@@ -15,6 +15,7 @@ ENDIF()
 
 SRCS(
     inmemory_metrics.cpp
+    metric_system.cpp
     stats.cpp
 )
 

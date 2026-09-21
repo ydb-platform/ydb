@@ -10,7 +10,7 @@
 #include <ydb/library/actors/core/executor_thread_ctx.h>
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/probes.h>
-#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
+#include <ydb/library/actors/core/subsystems/metric_system.h>
 
 #include <ydb/library/actors/core/activity_guard.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -152,7 +152,7 @@ void THarmonizer::EnsureInMemoryMetricsInitialized() {
 
     InMemoryMetrics.Initialized = true;
 
-    auto* registry = InMemoryMetrics.ActorSystem->GetSubSystem<TInMemoryMetricsRegistry>();
+    auto* registry = GetMetricSystem(*InMemoryMetrics.ActorSystem);
     if (!registry) {
         return;
     }

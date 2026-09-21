@@ -13,6 +13,8 @@ SRCS(
     line_types.cpp
     line_types.h
     line_write.h
+    line_write.cpp
+    metric_line.h
     lines/on_change_line_frontend.h
     lines/raw_line_frontend.h
 )

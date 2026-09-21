@@ -15,6 +15,7 @@ using namespace NActors;
 using TOperation = ydb::yc::priv::operation::Operation;
 
 class TIamDelegationService : public TIamActorBase<TIamDelegationService> {
+private:
     using TBase = TIamActorBase<TIamDelegationService>;
 
 public:

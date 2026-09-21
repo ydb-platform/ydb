@@ -7,14 +7,12 @@
 #include <ydb/core/security/iam_delegation/system_token_source.h>
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/kqp/common/simple/services.h>
-#include <library/cpp/http/misc/parsed_request.h>
-#include <library/cpp/http/server/http.h>
-#include <library/cpp/http/server/response.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/testlib/service_mocks/folder_service_mock.h>
@@ -22,14 +20,18 @@
 #include <ydb/library/testlib/service_mocks/operation_service_mock.h>
 #include <ydb/library/testlib/service_mocks/service_account_service_mock.h>
 #include <ydb/library/testlib/service_mocks/service_control_service_mock.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/ycloud/impl/service_account_service.h>
 #include <ydb/library/ycloud/impl/folder_service.h>
-#include <util/stream/file.h>
+#include <ydb/library/ycloud/impl/service_account_service.h>
+
+#include <library/cpp/http/misc/parsed_request.h>
+#include <library/cpp/http/server/http.h>
+#include <library/cpp/http/server/response.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
+
 #include <util/generic/guid.h>
 #include <util/network/sock.h>
-#include <library/cpp/testing/unittest/tests_data.h>
+#include <util/stream/file.h>
 
 #include <grpcpp/server_builder.h>
 
@@ -39,6 +41,19 @@ using namespace NActors;
 using namespace Tests;
 
 namespace {
+
+// Hang guard: polls until the condition holds; the condition must be made inevitable by the test itself.
+template <class TCondition>
+void WaitUntil(TCondition condition, TStringBuf what, TDuration timeout = TDuration::Seconds(120)) {
+    const TInstant deadline = TInstant::Now() + timeout;
+    while (!condition()) {
+        UNIT_ASSERT_C(TInstant::Now() < deadline, "timed out waiting for " << what);
+        Sleep(TDuration::MilliSeconds(20));
+    }
+}
+
+// An operation the mock never reports as done.
+constexpr ui32 NEVER_DONE_OPERATION = 1000000;
 
 struct TFixture {
     TPortManager PortManager;
@@ -118,14 +133,9 @@ struct TFixture {
             ->GetSubgroup("component", "token_service")->GetCounter(name, derivative)->Val();
     }
 
-    // Hang guard: polls until the condition holds; the condition must be made inevitable by the test itself.
     template <class TCondition>
     void WaitUntil(TCondition condition, TStringBuf what, TDuration timeout = TDuration::Seconds(120)) {
-        const TInstant deadline = TInstant::Now() + timeout;
-        while (!condition()) {
-            UNIT_ASSERT_C(TInstant::Now() < deadline, "timed out waiting for " << what);
-            Sleep(TDuration::MilliSeconds(20));
-        }
+        ::NKikimr::NIamDelegation::WaitUntil(std::move(condition), what, timeout);
     }
 
     // Resolves the cloud of the service account with the given user token and returns the reply.
@@ -264,11 +274,7 @@ public:
 
     // hang guard: the requests are made inevitable by the test
     void WaitRequests(ui32 count) {
-        const TInstant deadline = TInstant::Now() + TDuration::Seconds(120);
-        while (RequestCount() < count) {
-            UNIT_ASSERT_C(TInstant::Now() < deadline, "only " << RequestCount() << " system token requests");
-            Sleep(TDuration::MilliSeconds(10));
-        }
+        WaitUntil([&]() { return RequestCount() >= count; }, "the system token requests");
         UNIT_ASSERT_VALUES_EQUAL(RequestCount(), count);
     }
 };
@@ -277,23 +283,26 @@ const TTokenKey KEY{"sa-1", "cloud-1"};
 
 } // namespace
 
-// Runs the real TIamDelegatedTokenService against a live IAM installation instead of the mocks.
-// Skipped unless IAM_LIVE_TOKEN_FILE, IAM_LIVE_CLOUD and IAM_LIVE_SA are set, so it never runs in CI:
-//   IAM_LIVE_TOKEN_FILE=/path/to/token IAM_LIVE_CLOUD=<cloud-id> IAM_LIVE_SA=<service-account-id> \
-//   IAM_LIVE_ENDPOINT=ts.private-api.cloud-preprod.yandex.net:4282 ya make -tA ... -F 'IamDelegationLive::*'
-// The services verify TLS against the endpoint host, so the tests that start them need direct network
-// access to the IAM endpoints (or a tunnel plus a hosts entry for the real names).
+#ifdef IAM_LIVE_TESTS
+// Probes of the real services against a live IAM installation instead of the mocks. Compiled only with
+// -DIAM_LIVE_TESTS (see ya.make), so they are neither run nor counted in CI. Each probe needs its own
+// environment and skips when it is missing:
+//   IAM_LIVE_TOKEN_FILE  a file with the token the probe authenticates with (never printed)
+//   IAM_LIVE_SA          the service account to resolve or delegate
+//   IAM_LIVE_CLOUD       the cloud of the delegation (SetupAndRevoke, CreateForService)
+//   IAM_LIVE_SUBJECT     the subject the delegation is made on behalf of (SetupAndRevoke)
+//   IAM_LIVE_SC_ENDPOINT, IAM_LIVE_RM_ENDPOINT   the IAM control plane and Resource Manager (ResolveCloud)
+// The services verify TLS against the endpoint host, so the probes need direct network access to the IAM
+// endpoints (or a tunnel plus a hosts entry for the real names).
 Y_UNIT_TEST_SUITE(IamDelegationLive) {
     static TString EnvOr(const char* name, const TString& fallback = {}) {
         const char* v = getenv(name);
         return v ? TString(v) : fallback;
     }
 
-    // Can YDB derive the cloud from the service account alone, instead of defaulting RESOURCE to
-    // the cloud of the current database? Chain: GetServiceAccount(sa) -> folder_id,
-    // ResolveFolders([folder_id]) -> cloud_id. Both clients already exist in ydb/library/ycloud.
-    // Note these are two more endpoints: IAM (:4283) and Resource Manager (:4284), the latter a
-    // host we do not otherwise talk to.
+    // The cloud resolver against real IAM: GetServiceAccount on the control plane, then ResolveFolders on
+    // Resource Manager, both with the user's token. Prints what it learns; a refusal from IAM is a valid
+    // outcome, only a transport failure is a defect.
     Y_UNIT_TEST(ResolveCloudFromServiceAccountAgainstRealIam) {
         const TString tokenFile = EnvOr("IAM_LIVE_TOKEN_FILE");
         const TString sa = EnvOr("IAM_LIVE_SA");
@@ -305,55 +314,16 @@ Y_UNIT_TEST_SUITE(IamDelegationLive) {
         }
         TString token = TFileInput(tokenFile).ReadAll();
         StripInPlace(token);
-        const TString sslName = EnvOr("IAM_LIVE_SSL_NAME");
-        const TString rmSslName = EnvOr("IAM_LIVE_RM_SSL_NAME");
 
         TFixture f;
-
-        // 1. service account -> folder
-        NCloud::TServiceAccountServiceSettings saSettings(iamEp, "ydb-live-probe");
-        saSettings.EnableSsl = true;
-        saSettings.SslTargetNameOverride = sslName;
-        const TActorId saClient = f.Runtime->Register(NCloud::CreateServiceAccountService(saSettings));
-
-        auto saReq = MakeHolder<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>();
-        saReq->Token = token;
-        saReq->Request.set_service_account_id(sa);
-        f.Runtime->Send(new IEventHandle(saClient, f.Sender, saReq.Release()));
-        TAutoPtr<IEventHandle> h1;
-        auto* saResp = f.Runtime->GrabEdgeEvent<NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(h1);
-        UNIT_ASSERT(saResp);
-        Cerr << "GetServiceAccount: " << (saResp->Status.Ok() ? "OK" : saResp->Status.Msg) << Endl;
-        if (!saResp->Status.Ok()) {
-            return; // nothing further to learn
-        }
-        const TString folderId = saResp->Response.folder_id();
-        Cerr << "  sa " << sa << " -> folder " << folderId
-             << ", name '" << saResp->Response.name() << "'" << Endl;
-        UNIT_ASSERT_C(folderId, "service account carries no folder_id");
-
-        // 2. folder -> cloud
-        NCloud::TFolderServiceSettings rmSettings;
-        rmSettings.Endpoint = rmEp;
-        rmSettings.EnableSsl = true;
-        rmSettings.SslTargetNameOverride = rmSslName;
-        const TActorId rmClient = f.Runtime->Register(NCloud::CreateFolderService(rmSettings));
-
-        auto rmReq = MakeHolder<NCloud::TEvFolderService::TEvResolveFoldersRequest>();
-        rmReq->Token = token;
-        rmReq->Request.add_folder_ids(folderId);
-        f.Runtime->Send(new IEventHandle(rmClient, f.Sender, rmReq.Release()));
-        TAutoPtr<IEventHandle> h2;
-        auto* rmResp = f.Runtime->GrabEdgeEvent<NCloud::TEvFolderService::TEvResolveFoldersResponse>(h2);
-        UNIT_ASSERT(rmResp);
-        Cerr << "ResolveFolders: " << (rmResp->Status.Ok() ? "OK" : rmResp->Status.Msg) << Endl;
-        if (!rmResp->Status.Ok()) {
-            return;
-        }
-        UNIT_ASSERT_VALUES_EQUAL(rmResp->Response.resolved_folders().size(), 1);
-        Cerr << "  folder " << folderId << " -> cloud "
-             << rmResp->Response.resolved_folders(0).cloud_id() << Endl;
-        UNIT_ASSERT_C(rmResp->Response.resolved_folders(0).cloud_id(), "resolved folder carries no cloud_id");
+        f.Settings.ServiceControlEndpoint = iamEp;
+        f.Settings.ResourceManagerEndpoint = rmEp;
+        f.Settings.EnableSsl = true;
+        const auto result = f.ResolveCloud(sa, token);
+        Cerr << "ResolveCloud: " << result->Get()->Result.Status << " " << result->Get()->Result.Issues.ToOneLineString()
+             << " folder " << result->Get()->FolderId << " cloud " << result->Get()->CloudId << Endl;
+        UNIT_ASSERT_C(result->Get()->Result.Status != Ydb::StatusIds::UNAVAILABLE,
+            "transport failure talking to " << iamEp << " / " << rmEp << ": " << result->Get()->Result.Issues.ToOneLineString());
     }
 
     // Full lifecycle against real IAM: SetupDelegation, then CreateForService for the delegated
@@ -459,6 +429,7 @@ Y_UNIT_TEST_SUITE(IamDelegationLive) {
             << ": " << result->Issues.ToOneLineString());
     }
 }
+#endif // IAM_LIVE_TESTS
 
 Y_UNIT_TEST_SUITE(IamDelegationSettings) {
     // The identity of YDB and the token service come from replication_config.iam_service_control when
@@ -668,7 +639,7 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
     Y_UNIT_TEST(OperationPollTimeout) {
         TFixture f;
         f.ServiceControlMock.NotDoneCount = 1;
-        f.OperationMock.GetsUntilDone = 1000000;
+        f.OperationMock.GetsUntilDone = NEVER_DONE_OPERATION;
         const auto service = f.StartDelegationService();
 
         const auto result = f.Setup(service, f.Spec());
@@ -768,7 +739,7 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
     Y_UNIT_TEST(PoisonWhileWaiting) {
         TFixture f;
         f.ServiceControlMock.NotDoneCount = 1;
-        f.OperationMock.GetsUntilDone = 1000000;
+        f.OperationMock.GetsUntilDone = NEVER_DONE_OPERATION;
         const auto service = f.StartDelegationService();
 
         // the request polls the never-done operation; the actor is poisoned in the middle of it
@@ -782,6 +753,7 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
         const auto fresh = f.StartDelegationService();
         UNIT_ASSERT_C(f.Setup(fresh, f.Spec("sa-2", "ref-2")).IsSuccess(), "a fresh service must work after the poison");
     }
+
     Y_UNIT_TEST(SetupDoneOperationCarriesError) {
         TFixture f;
         f.ServiceControlMock.OperationErrorCount = 1;
@@ -1023,14 +995,12 @@ Y_UNIT_TEST_SUITE(IamDelegatedTokenService) {
     }
 
     // Polls the service until it serves a token other than `previous` (hang guard: the test makes the new token inevitable).
-    THolder<TEvIamDelegation::TEvGetTokenResult> WaitForNewToken(TFixture& f, const TActorId& service, const TString& previous, TDuration timeout = TDuration::Seconds(120)) {
-        const TInstant deadline = TInstant::Now() + timeout;
-        auto result = f.GetToken(service, KEY);
-        while (result->IsSuccess() && result->Token == previous) {
-            UNIT_ASSERT_C(TInstant::Now() < deadline, "no new token after " << previous);
-            Sleep(TDuration::MilliSeconds(100));
+    THolder<TEvIamDelegation::TEvGetTokenResult> WaitForNewToken(TFixture& f, const TActorId& service, const TString& previous) {
+        THolder<TEvIamDelegation::TEvGetTokenResult> result;
+        WaitUntil([&]() {
             result = f.GetToken(service, KEY);
-        }
+            return !result->IsSuccess() || result->Token != previous;
+        }, TStringBuilder() << "a token other than " << previous);
         return result;
     }
 
@@ -1055,6 +1025,7 @@ Y_UNIT_TEST_SUITE(IamDelegatedTokenService) {
 
     Y_UNIT_TEST(FailureAndRecovery) {
         TFixture f;
+        f.TokenMock.HoldServiceTokenCallsFrom = 2; // the second attempt waits for the test, whatever the backoff
         const auto service = f.StartTokenService();
 
         // no delegation: PERMISSION_DENIED
@@ -1063,8 +1034,9 @@ Y_UNIT_TEST_SUITE(IamDelegatedTokenService) {
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::UNAUTHORIZED);
         UNIT_ASSERT_VALUES_EQUAL(f.TokenSensor("MintErrors"), 1);
 
-        // the delegation appears: the background loop retries with backoff and recovers (hang guard only)
+        // the delegation appears: the background loop's next attempt recovers (hang guard only)
         f.TokenMock.SetServiceToken("cloud-1", "sa-1", "delegated");
+        f.TokenMock.ReleaseHeldServiceTokenCalls();
         f.WaitUntil([&]() { result = f.GetToken(service, KEY); return result->IsSuccess(); }, "recovery");
         UNIT_ASSERT_VALUES_EQUAL(f.TokenSensor("Mints"), 1);
     }
@@ -1074,6 +1046,7 @@ Y_UNIT_TEST_SUITE(IamDelegatedTokenService) {
         TFixture f;
         f.TokenMock.SetServiceToken("cloud-1", "sa-1", "delegated");
         f.Settings.MaxTokenCacheLifetime = TDuration::Seconds(1); // the loop refreshes at its tight-loop guard (5 s)
+        f.Settings.IdleKeyTtl = TDuration::Minutes(10); // eviction is not what this test is about
         const auto service = f.StartTokenService();
 
         auto result = f.GetToken(service, KEY);
@@ -1114,6 +1087,58 @@ Y_UNIT_TEST_SUITE(IamDelegatedTokenService) {
 
     // Nobody asks for the key: at the next wake-up of its loop (5 s, later than IdleKeyTtl = 2 s) the entry is
     // dropped without a mint, and a new request starts a new loop.
+    // The system token is rejected at refresh time (UNAUTHENTICATED): a problem of this node, not a revocation.
+    // The valid cached token is served on while the loop retries.
+    Y_UNIT_TEST(UnauthenticatedRefreshKeepsCachedToken) {
+        TFixture f;
+        f.TokenMock.SetServiceToken("cloud-1", "sa-1", "delegated");
+        f.Settings.MaxTokenCacheLifetime = TDuration::Seconds(1);
+        f.Settings.IdleKeyTtl = TDuration::Minutes(10);
+        const auto service = f.StartTokenService();
+
+        auto result = f.GetToken(service, KEY);
+        UNIT_ASSERT_VALUES_EQUAL(result->Token, "delegated-1");
+
+        f.TokenMock.ServiceTokenFailStatus = grpc::StatusCode::UNAUTHENTICATED;
+        f.TokenMock.ServiceTokenFailCount = 100;
+        f.WaitUntil([&]() {
+            result = f.GetToken(service, KEY);
+            UNIT_ASSERT_C(result->IsSuccess(), result->Issues.ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result->Token, "delegated-1");
+            return f.TokenSensor("MintErrors") >= 1;
+        }, "the refused refresh");
+        result = f.GetToken(service, KEY);
+        UNIT_ASSERT_C(result->IsSuccess(), result->Issues.ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(result->Token, "delegated-1");
+    }
+
+    // A token service that answers without expires_at: the token is not served, the request fails.
+    Y_UNIT_TEST(MintWithoutExpiresAtIsAnError) {
+        TFixture f;
+        f.TokenMock.SetServiceToken("cloud-1", "sa-1", "delegated");
+        f.TokenMock.OmitServiceTokenExpiry = true;
+        const auto service = f.StartTokenService();
+
+        const auto result = f.GetToken(service, KEY);
+        UNIT_ASSERT(!result->IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::INTERNAL_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result->Issues.ToOneLineString(), "without expires_at");
+        UNIT_ASSERT_VALUES_EQUAL(f.TokenSensor("MintErrors"), 1);
+    }
+
+    // A token service that answers with an empty token: the same.
+    Y_UNIT_TEST(MintOfEmptyTokenIsAnError) {
+        TFixture f;
+        f.TokenMock.UniqueServiceTokens = false;
+        f.TokenMock.SetServiceToken("cloud-1", "sa-1", "");
+        const auto service = f.StartTokenService();
+
+        const auto result = f.GetToken(service, KEY);
+        UNIT_ASSERT(!result->IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::INTERNAL_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result->Issues.ToOneLineString(), "empty token");
+    }
+
     Y_UNIT_TEST(IdleEviction) {
         TFixture f;
         f.TokenMock.SetServiceToken("cloud-1", "sa-1", "delegated");
@@ -1216,7 +1241,7 @@ Y_UNIT_TEST_SUITE(IamDelegatedTokenService) {
         f.TokenMock.SetServiceToken("cloud-1", "sa-1", "delegated");
         f.TokenMock.SetServiceToken("cloud-1", "sa-2", "other");
         f.TokenMock.HoldServiceTokenCallsFrom = 1;
-        f.TokenMock.ServiceTokenHoldTarget = "sa-1";
+        f.TokenMock.SetServiceTokenHoldTarget("sa-1");
         f.Settings.RequestTimeout = TDuration::Minutes(5);
         const auto service = f.StartTokenService();
 
@@ -1394,6 +1419,11 @@ Y_UNIT_TEST_SUITE(IamSystemTokenSource) {
                     const auto* flavor = params.Input.Headers().FindHeader("Metadata-Flavor");
                     Parent->LastFlavor = flavor ? flavor->Value() : TString();
                 }
+                const auto code = static_cast<HttpCodes>(Parent->StatusCode.load());
+                if (code != HTTP_OK) {
+                    THttpResponse(code).SetContent("no token here").OutTo(params.Output);
+                    return true;
+                }
                 THttpResponse(HTTP_OK).SetContentType("application/json")
                     .SetContent(R"({"access_token":"ssa-token","expires_in":3600})").OutTo(params.Output);
                 return true;
@@ -1421,6 +1451,7 @@ Y_UNIT_TEST_SUITE(IamSystemTokenSource) {
 
         const ui16 Port;
         THttpServer Server;
+        std::atomic<int> StatusCode = HTTP_OK; // what the next requests are answered with
         TMutex Mutex;
         ui32 Requests = 0;
         TString LastPath;
@@ -1430,6 +1461,43 @@ Y_UNIT_TEST_SUITE(IamSystemTokenSource) {
     // The production path end to end: the token source asks the metadata service through the SDK provider
     // (GET .../service-accounts/default/token with the Metadata-Flavor header), delivers the token to the
     // delegation service, and ServiceControl accepts the call authorized with it.
+    // The metadata service answers 404 (no service account is attached to the VM yet): the SDK provider gives
+    // up for good on such an answer, so the source drops it and asks with a fresh one on the next request.
+    Y_UNIT_TEST(ProviderIsRecreatedAfterANonRetryableMetadataError) {
+        TPortManager portManager;
+        TMetadataServer metadata(portManager.GetPort());
+        metadata.StatusCode = HTTP_NOT_FOUND;
+        TFixture f;
+        auto source = CreateVmMetadataSystemTokenSource("127.0.0.1", metadata.Port);
+
+        const auto request = [&](ui64 cookie) {
+            source->RequestToken(f.Runtime->GetActorSystem(0), f.Sender, cookie);
+            TAutoPtr<IEventHandle> handle;
+            auto* ready = f.Runtime->GrabEdgeEvent<TEvIamDelegation::TEvSystemTokenReady>(handle);
+            UNIT_ASSERT(ready);
+            UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, cookie);
+            return std::make_pair(ready->Token, ready->Error);
+        };
+
+        const auto first = request(1);
+        UNIT_ASSERT_VALUES_EQUAL(first.first, "");
+        UNIT_ASSERT_STRING_CONTAINS(first.second, "404");
+        ui32 requestsAfterFailure = 0;
+        with_lock (metadata.Mutex) {
+            requestsAfterFailure = metadata.Requests;
+        }
+        UNIT_ASSERT(requestsAfterFailure >= 1);
+
+        // the account is attached: the next request goes to the metadata service again and gets the token
+        metadata.StatusCode = HTTP_OK;
+        const auto second = request(2);
+        UNIT_ASSERT_VALUES_EQUAL_C(second.second, "", second.second);
+        UNIT_ASSERT_VALUES_EQUAL(second.first, "ssa-token");
+        with_lock (metadata.Mutex) {
+            UNIT_ASSERT(metadata.Requests > requestsAfterFailure);
+        }
+    }
+
     Y_UNIT_TEST(TokenFromMetadataServiceAuthorizesTheCall) {
         TPortManager portManager;
         TMetadataServer metadata(portManager.GetPort());
@@ -1467,6 +1535,7 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         *appConfig.MutableReplicationConfig()->MutableIamServiceControl() = c.Replication;
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableIamDelegationSecrets(c.Flag);
+        *appConfig.MutableFeatureFlags() = featureFlags; // the config dispatcher's first notification carries the flags of the app config
         auto settings = TServerSettings(portManager.GetPort(2134));
         settings.SetDomainName("Root").SetAppConfig(appConfig).SetFeatureFlags(featureFlags);
         TServer server(settings);
@@ -1509,6 +1578,61 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
 
     Y_UNIT_TEST(BothWithFullConfig) {
         Check({.Iam = FullIamConfig(), .TokenService = true, .DelegationService = true}, "full IamConfig");
+    }
+
+    // The services follow the configuration at runtime: a config notification with the missing endpoint starts
+    // the delegation service next to the token service already running (each registered once), and one that
+    // turns the flag off stops both.
+    Y_UNIT_TEST(ConfigNotificationStartsAndStopsTheServices) {
+        TPortManager portManager;
+        auto iam = FullIamConfig();
+        iam.ClearServiceControlEndpoint();
+        NKikimrConfig::TAppConfig appConfig;
+        *appConfig.MutableIamConfig() = iam;
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableIamDelegationSecrets(true);
+        *appConfig.MutableFeatureFlags() = featureFlags; // the config dispatcher's first notification carries the flags of the app config
+        auto settings = TServerSettings(portManager.GetPort(2134));
+        settings.SetDomainName("Root").SetAppConfig(appConfig).SetFeatureFlags(featureFlags);
+        TServer server(settings);
+        auto* runtime = server.GetRuntime();
+        const auto proxy = NKqp::MakeKqpProxyID(runtime->GetNodeId(0));
+        const auto sender = runtime->AllocateEdgeActor();
+
+        runtime->Send(new IEventHandle(proxy, sender, new NKqp::TEvKqp::TEvCreateSessionRequest()));
+        UNIT_ASSERT(runtime->GrabEdgeEvent<NKqp::TEvKqp::TEvCreateSessionResponse>(sender, TDuration::Seconds(120)));
+        const auto tokenService = runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0);
+        UNIT_ASSERT(tokenService);
+        UNIT_ASSERT(!runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0));
+
+        // The proxy acknowledges a notification before it re-initializes the services, so the state a notification
+        // leads to is awaited after the acknowledgement (hang guards: the notification makes each state inevitable).
+        const auto notify = [&](const NKikimrConfig::TFeatureFlags& flags, const NKikimrConfig::TIamConfig& iamConfig) {
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            *request->Record.MutableConfig()->MutableFeatureFlags() = flags;
+            *request->Record.MutableConfig()->MutableIamConfig() = iamConfig;
+            runtime->Send(new IEventHandle(proxy, sender, request.Release()));
+            UNIT_ASSERT(runtime->GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender, TDuration::Seconds(120)));
+        };
+
+        const auto registered = [&](const TActorId& serviceId) { return bool(runtime->GetLocalServiceId(serviceId, 0)); };
+        notify(featureFlags, FullIamConfig());
+        WaitUntil([&]() { return registered(MakeIamDelegationServiceId()); }, "the delegation service to start");
+        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0), tokenService); // not re-registered
+
+        featureFlags.SetEnableIamDelegationSecrets(false);
+        notify(featureFlags, FullIamConfig());
+        WaitUntil([&]() { return !registered(MakeIamDelegatedTokenServiceId()) && !registered(MakeIamDelegationServiceId()); }, "the services to stop");
+        {
+            // the stopped actor is gone: a tracked event comes back undelivered
+            const auto probe = runtime->AllocateEdgeActor();
+            runtime->Send(new IEventHandle(tokenService, probe, new TEvents::TEvWakeup(), IEventHandle::FlagTrackDelivery));
+            UNIT_ASSERT(runtime->GrabEdgeEvent<TEvents::TEvUndelivered>(probe, TDuration::Seconds(120)));
+        }
+
+        featureFlags.SetEnableIamDelegationSecrets(true);
+        notify(featureFlags, FullIamConfig());
+        WaitUntil([&]() { return registered(MakeIamDelegatedTokenServiceId()) && registered(MakeIamDelegationServiceId()); }, "the services to start again");
     }
 
     Y_UNIT_TEST(BothWithIdentityFromTheReplicationSection) {
@@ -1558,6 +1682,37 @@ Y_UNIT_TEST_SUITE(IamCloudResolver) {
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "did not resolve folder folder-1");
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->FolderId, "folder-1");
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->CloudId, "");
+    }
+
+    // The account is known but IAM returned it without a folder: an error naming the account, not a lookup of "".
+    Y_UNIT_TEST(ServiceAccountWithoutFolder) {
+        TFixture f;
+        f.ServiceAccountMock.ServiceAccountData["sa-1"].clear_folder_id();
+        const auto result = f.ResolveCloud("sa-1");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Result.Status, Ydb::StatusIds::INTERNAL_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "returned no folder for sa-1");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->FolderId, "");
+    }
+
+    // Resource Manager resolved the folder but reported no cloud for it.
+    Y_UNIT_TEST(ResolvedFolderWithoutCloudId) {
+        TFixture f;
+        f.FolderMock.Folders["folder-1"].clear_cloud_id();
+        const auto result = f.ResolveCloud("sa-1");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Result.Status, Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "did not resolve folder folder-1");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->CloudId, "");
+    }
+
+    // No user token to authorize the lookups with: refused at once, nothing is sent to IAM.
+    Y_UNIT_TEST(EmptyUserTokenIsRefused) {
+        TFixture f;
+        const auto result = f.ResolveCloud("sa-1", "");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Result.Status, Ydb::StatusIds::UNAUTHORIZED);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "no user token to look service account sa-1 up with");
+        with_lock (f.ServiceAccountMock.MetadataMutex) {
+            UNIT_ASSERT_VALUES_EQUAL(f.ServiceAccountMock.CapturedUserAgent, "");
+        }
     }
 
     Y_UNIT_TEST(UnknownFolder) {

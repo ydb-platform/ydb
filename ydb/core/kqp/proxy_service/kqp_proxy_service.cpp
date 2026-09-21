@@ -237,6 +237,7 @@ public:
         ctx.Register(CreateVectorIndexLevelsCacheMaintainer(
             VectorIndexLevelsCache, GetKqpResourceManager(), TableServiceConfig.GetResourceManager()));
         FeatureFlags = AppData()->FeatureFlags;
+        IamConfig = AppData()->IamConfig;
         WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
         WarmupApplicable = IsCompileCacheWarmupEnabled(TableServiceConfig, AppData()->TenantName,
             AppData()->DomainsInfo->Domain ? AppData()->DomainsInfo->Domain->Name : TString());
@@ -584,6 +585,9 @@ public:
         auto* newFeatureFlags = event.MutableConfig()->MutableFeatureFlags();
         bool enableSecureChanged = newFeatureFlags->GetEnableSecureScriptExecutions() != FeatureFlags.GetEnableSecureScriptExecutions();
         FeatureFlags.Swap(newFeatureFlags);
+        if (event.GetConfig().HasIamConfig()) {
+            IamConfig.Swap(event.MutableConfig()->MutableIamConfig());
+        }
         if (enableSecureChanged && ScriptExecutionsCreationStatus != EScriptExecutionsCreationStatus::NotStarted) {
             ScriptExecutionsTalesGeneration++;
             StartScriptExecutionsTablesCreation();
@@ -2129,15 +2133,21 @@ private:
     // The two are started independently. Minting a token needs only the IAM token service, while
     // setting a delegation up also needs the IAM control plane, so a cluster configured without the
     // control plane endpoint keeps reading the delegation secrets it already has and only loses the
-    // ability to create new ones.
+    // ability to create new ones. Runs at bootstrap and on every config notification: the services
+    // follow the feature flag and IamConfig at runtime, a service missing so far is started once its
+    // configuration is complete, and both are stopped when the flag is turned off.
     void InitIamDelegationServices() {
-        if (!FeatureFlags.GetEnableIamDelegationSecrets() || (IamDelegatedTokenService && IamDelegationService)) {
+        if (!FeatureFlags.GetEnableIamDelegationSecrets()) {
+            StopIamDelegationServices();
+            return;
+        }
+        if (IamDelegatedTokenService && IamDelegationService) {
             return;
         }
         try {
-            const auto settings = NIamDelegation::TIamDelegationSettings::FromConfig(AppData()->IamConfig, AppData()->ReplicationConfig);
+            const auto settings = NIamDelegation::TIamDelegationSettings::FromConfig(IamConfig, AppData()->ReplicationConfig);
             if (const TString error = settings.Validate()) {
-                YDB_LOG_WARN("IAM delegation services are not started", {"reason", error});
+                WarnIamDelegationOnce("IAM delegation services are not started", error);
                 return;
             }
             const auto& metadata = AppData()->AuthConfig.GetLocalMetadataService();
@@ -2148,16 +2158,40 @@ private:
                 TActivationContext::ActorSystem()->RegisterLocalService(NIamDelegation::MakeIamDelegatedTokenServiceId(), IamDelegatedTokenService);
             }
             if (const TString error = settings.ValidateForDelegation()) {
-                YDB_LOG_WARN("IAM delegation service is not started, new IAM delegation secrets cannot be created;"
-                    " the existing ones keep working", {"reason", error});
+                WarnIamDelegationOnce("IAM delegation service is not started, new IAM delegation secrets cannot be created;"
+                    " the existing ones keep working", error);
                 return;
             }
             if (!IamDelegationService) {
                 IamDelegationService = TActivationContext::Register(NIamDelegation::CreateIamDelegationService(settings, tokenSource));
                 TActivationContext::ActorSystem()->RegisterLocalService(NIamDelegation::MakeIamDelegationServiceId(), IamDelegationService);
             }
+            IamDelegationWarning.clear();
         } catch (const std::exception& ex) {
             YDB_LOG_ERROR("Failed to start IAM delegation services", {"exception", ex.what()});
+        }
+    }
+
+    void StopIamDelegationServices() {
+        if (IamDelegationService) {
+            TActivationContext::ActorSystem()->RegisterLocalService(NIamDelegation::MakeIamDelegationServiceId(), TActorId());
+            Send(IamDelegationService, new TEvents::TEvPoison());
+            IamDelegationService = TActorId();
+        }
+        if (IamDelegatedTokenService) {
+            TActivationContext::ActorSystem()->RegisterLocalService(NIamDelegation::MakeIamDelegatedTokenServiceId(), TActorId());
+            Send(IamDelegatedTokenService, new TEvents::TEvPoison());
+            IamDelegatedTokenService = TActorId();
+            YDB_LOG_INFO("IAM delegation services stopped: EnableIamDelegationSecrets is off");
+        }
+        IamDelegationWarning.clear();
+    }
+
+    // The same configuration problem is reported once, not on every config notification.
+    void WarnIamDelegationOnce(TStringBuf message, const TString& reason) {
+        if (IamDelegationWarning != reason) {
+            IamDelegationWarning = reason;
+            YDB_LOG_WARN(message, {"reason", reason});
         }
     }
 
@@ -2185,6 +2219,7 @@ private:
     std::shared_ptr<const NKikimrConfig::TQueryServiceConfig> SharedQueryServiceConfig;
     std::shared_ptr<const NKikimrConfig::TTliConfig> SharedTliConfig;
     NKikimrConfig::TFeatureFlags FeatureFlags;
+    NKikimrConfig::TIamConfig IamConfig; // the section of the last config notification, or the startup one
     NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusiveConstPtr<NYql::TKikimrConfiguration> KqpConfig;
@@ -2241,6 +2276,7 @@ private:
     TActorId AccessServiceService;
     TActorId IamDelegationService;
     TActorId IamDelegatedTokenService;
+    TString IamDelegationWarning; // the reason of the last warning about the IAM delegation services
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

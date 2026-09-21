@@ -27,14 +27,17 @@
 
 namespace NKikimr::NIamDelegation {
 
-// Error of an IAM call that must not be retried (or whose retries are exhausted).
+// Error of an IAM call that must not be retried (or whose retries are exhausted). GrpcCode is the code of
+// the last gRPC answer when there was one (grpc::StatusCode::OK when the failure was not a gRPC answer).
 class TIamCallError : public yexception {
 public:
-    explicit TIamCallError(Ydb::StatusIds::StatusCode status)
+    explicit TIamCallError(Ydb::StatusIds::StatusCode status, grpc::StatusCode grpcCode = grpc::StatusCode::OK)
         : Status(status)
+        , GrpcCode(grpcCode)
     {}
 
     const Ydb::StatusIds::StatusCode Status;
+    const grpc::StatusCode GrpcCode;
 };
 
 inline bool IsRetryableGrpcStatus(const NYdbGrpc::TGrpcStatus& status) {
@@ -130,7 +133,10 @@ inline Ydb::StatusIds::StatusCode MapGrpcStatus(int code) {
             return Ydb::StatusIds::OVERLOADED;
         case grpc::StatusCode::CANCELLED:
             return Ydb::StatusIds::CANCELLED;
-        default:
+        case grpc::StatusCode::INTERNAL:
+        case grpc::StatusCode::DATA_LOSS:
+            return Ydb::StatusIds::INTERNAL_ERROR;
+        default: // UNAVAILABLE, UNKNOWN, ABORTED and anything new: a transport-level problem
             return Ydb::StatusIds::UNAVAILABLE;
     }
 }
@@ -165,7 +171,7 @@ enum class ENotFound {
 // gRPC calls through the ycloud actor clients with retries. All methods are nested coroutines
 // and must be awaited from a top-level coroutine of the derived actor.
 template <class TDerived>
-class TIamActorBase : public NActors::TActorBootstrapped<TDerived> {
+class TIamActorBase : public NActors::TActorBootstrapped<TDerived>, public NActors::IActorExceptionHandler {
 protected:
     using TBase = NActors::TActorBootstrapped<TDerived>;
 
@@ -174,6 +180,15 @@ protected:
         , TokenSource(std::move(tokenSource))
     {
         static_assert(std::derived_from<TDerived, TIamActorBase>, "TDerived must derive from TIamActorBase<TDerived>");
+    }
+
+    // An exception that escapes a handler or a top-level coroutine is logged and the actor lives on: the
+    // request it was serving is lost (its sender times out), the others are not.
+    using NActors::IActorExceptionHandler::OnUnhandledException;
+    bool OnUnhandledException(const std::exception& e) override {
+        YDB_LOG_ERROR_COMP(NKikimrServices::IAM_DELEGATION, "Unhandled exception in an IAM delegation actor",
+            {"actor", TBase::SelfId()}, {"exception", e.what()});
+        return true;
     }
 
     // The source completes on its own thread, but the reply is an ordinary mailbox event: it cannot be
@@ -217,6 +232,7 @@ protected:
         for (;;) {
             TString retryableError;
             Ydb::StatusIds::StatusCode retryableStatus = Ydb::StatusIds::UNAVAILABLE;
+            grpc::StatusCode retryableGrpcCode = grpc::StatusCode::OK;
 
             TString token;
             try {
@@ -239,8 +255,9 @@ protected:
                 } else if ((*response)->GetTypeRewrite() == NActors::TEvents::TEvUndelivered::EventType) {
                     retryableError = "the client actor is not available";
                 } else {
-                    Y_ENSURE((*response)->GetTypeRewrite() == TResponseEv::EventType,
-                        "unexpected reply " << (*response)->GetTypeName() << " to " << method);
+                    if ((*response)->GetTypeRewrite() != TResponseEv::EventType) {
+                        throw TIamCallError(Ydb::StatusIds::INTERNAL_ERROR) << method << ": unexpected reply " << (*response)->GetTypeName();
+                    }
                     typename TResponseEv::TPtr typed(reinterpret_cast<NActors::TEventHandle<TResponseEv>*>(response->Release()));
                     const auto& status = typed->Get()->Status;
                     if (status.Ok()) {
@@ -249,11 +266,13 @@ protected:
                     if (notFound == ENotFound::IsAbsent && !status.InternalError && status.GRpcStatusCode == grpc::StatusCode::NOT_FOUND) {
                         co_return typename TResponseEv::TPtr();
                     }
+                    const auto grpcCode = static_cast<grpc::StatusCode>(status.GRpcStatusCode);
                     if (!IsRetryableGrpcStatus(status)) {
-                        throw TIamCallError(MapGrpcStatus(status.GRpcStatusCode)) << method << " failed: " << status.Msg << ExplainIamFailure(status);
+                        throw TIamCallError(MapGrpcStatus(status.GRpcStatusCode), grpcCode) << method << " failed: " << status.Msg << ExplainIamFailure(status);
                     }
                     retryableError = TStringBuilder() << status.GRpcStatusCode << " " << status.Msg;
                     retryableStatus = MapGrpcStatus(status.GRpcStatusCode);
+                    retryableGrpcCode = grpcCode;
                 }
             }
 
@@ -263,12 +282,23 @@ protected:
                 {"attempt", backoff.GetIteration() + 1}
             );
             if (!backoff.HasMore()) {
-                throw TIamCallError(retryableStatus) << method << " failed after " << Settings.MaxRetries << " attempts: " << retryableError;
+                throw TIamCallError(retryableStatus, retryableGrpcCode) << method << " failed after " << Settings.MaxRetries << " attempts: " << retryableError;
             }
             co_await NActors::AsyncSleepFor(backoff.Next());
         }
     }
 
+    // The longest one call with all its retries can take: the attempts themselves plus the backoff between them.
+    TDuration MaxCallDuration() const {
+        TDuration total;
+        TBackoff backoff(Settings.MaxRetries > 0 ? Settings.MaxRetries - 1 : 0, TDuration::MilliSeconds(200), TDuration::Seconds(10));
+        while (backoff.HasMore()) {
+            total += backoff.Next();
+        }
+        return (Settings.RequestTimeout * 2 + TDuration::Seconds(1)) * Settings.MaxRetries + total;
+    }
+
+protected:
     const TIamDelegationSettings Settings;
     const ISystemTokenSource::TPtr TokenSource;
 };

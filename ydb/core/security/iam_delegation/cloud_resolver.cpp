@@ -16,6 +16,7 @@ using namespace NActors;
 // The calls are authorized with the user's token, which is what the base class obtains from its token
 // source: a static source holding the user's token makes CallWithRetry send it as is.
 class TCloudResolver : public TIamActorBase<TCloudResolver> {
+private:
     using TBase = TIamActorBase<TCloudResolver>;
 
 public:
@@ -29,10 +30,22 @@ public:
         , ServiceAccountId(serviceAccountId)
         , ReplyTo(replyTo)
         , Cookie(cookie)
+        , HasUserToken(!userToken.empty())
     {}
 
     void Bootstrap() {
         Become(&TThis::StateWork);
+
+        if (!HasUserToken) {
+            // nothing to authorize the lookups with: answered at once rather than retried as a missing system token
+            auto result = std::make_unique<TEvIamDelegation::TEvResolveCloudResult>();
+            result->ServiceAccountId = ServiceAccountId;
+            result->Result = TDelegationResult::Error(Ydb::StatusIds::UNAUTHORIZED,
+                TStringBuilder() << "no user token to look service account " << ServiceAccountId << " up with");
+            Send(ReplyTo, result.release(), 0, Cookie);
+            BeginShutdown();
+            co_return;
+        }
 
         {
             NCloud::TServiceAccountServiceSettings clientSettings(Settings.ServiceControlEndpoint, "ydb-iam-delegation");
@@ -113,16 +126,18 @@ private:
                 request.add_folder_ids(folderId);
             });
         for (const auto& folder : response->Get()->Response.resolved_folders()) {
-            if ((folder.id().empty() || folder.id() == folderId) && !folder.cloud_id().empty()) {
+            if (folder.id() == folderId && !folder.cloud_id().empty()) {
                 co_return folder.cloud_id();
             }
         }
         throw TIamCallError(Ydb::StatusIds::NOT_FOUND) << "ResolveFolders did not resolve folder " << folderId << " of service account " << ServiceAccountId;
     }
 
+private:
     const TString ServiceAccountId;
     const TActorId ReplyTo;
     const ui64 Cookie;
+    const bool HasUserToken;
     TActorId ServiceAccountClient;
     TActorId FolderClient;
 };
@@ -130,7 +145,7 @@ private:
 IActor* CreateCloudResolver(const TIamDelegationSettings& settings, const TString& userToken, const TString& serviceAccountId,
     const TActorId& replyTo, ui64 cookie)
 {
-    Y_ENSURE(settings.CanResolveCloud(), "cloud resolution needs ServiceControlEndpoint and ResourceManagerEndpoint");
+    AFL_ENSURE(settings.CanResolveCloud())("serviceControlEndpoint", settings.ServiceControlEndpoint)("resourceManagerEndpoint", settings.ResourceManagerEndpoint);
     return new TCloudResolver(settings, userToken, serviceAccountId, replyTo, cookie);
 }
 

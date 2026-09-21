@@ -16,12 +16,14 @@ namespace NKikimr::NIamDelegation {
 using namespace NActors;
 
 class TIamDelegatedTokenService : public TIamActorBase<TIamDelegatedTokenService> {
+private:
     using TBase = TIamActorBase<TIamDelegatedTokenService>;
 
     struct TMintResult {
         TString Token;
         TInstant ExpiresAt;
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        grpc::StatusCode GrpcCode = grpc::StatusCode::OK; // of the last IAM answer, when there was one
         TString Error;
 
         bool IsSuccess() const {
@@ -128,7 +130,10 @@ private:
 
         TEntry& entry = EnsureEntry(key);
         if (!entry.HasValidToken(TActivationContext::Now())) {
-            // wait for the result of the next mint attempt of the refresh loop
+            // Wait for the result of the next mint attempt of the refresh loop. A request that arrives while the
+            // loop sleeps between failed attempts waits out that backoff (1 s growing to 1 min) too: it is
+            // answered by the next attempt, not by the failure the loop already knows. This keeps one attempt
+            // per backoff period however many requests arrive, at the price of a slower first answer.
             co_await WithTimeout(MintAttemptTimeout(), &TThis::WaitForNewResult, this, key, entry.Generation + 1);
         }
 
@@ -147,9 +152,9 @@ private:
         Send(replyTo, result.Release(), 0, cookie);
     }
 
-    // Upper bound of one mint attempt: every retry waits for the system token and for the IAM call, plus backoff.
+    // Upper bound of one mint attempt: the IAM call with all its retries and their backoff, plus slack.
     TDuration MintAttemptTimeout() const {
-        return (Settings.RequestTimeout * 2 + TDuration::Seconds(1)) * Settings.MaxRetries + TDuration::Seconds(30);
+        return MaxCallDuration() + TDuration::Seconds(30);
     }
 
     async<void> WaitForNewResult(TTokenKey key, ui64 targetGeneration) {
@@ -211,8 +216,10 @@ private:
                 ++entry->ConsecutiveFailures;
                 entry->LastStatus = mint.Status;
                 entry->LastError = mint.Error;
-                if (!entry->Token.empty() && (now >= entry->ExpiresAt || mint.Status == Ydb::StatusIds::UNAUTHORIZED)) {
-                    // expired, or IAM refuses tokens for the key (the delegation was revoked): stop serving it
+                if (!entry->Token.empty() && (now >= entry->ExpiresAt || mint.GrpcCode == grpc::StatusCode::PERMISSION_DENIED)) {
+                    // expired, or IAM refuses tokens for the key (the delegation was revoked): stop serving it.
+                    // A rejected system token (UNAUTHENTICATED) is a problem of this node, not of the delegation:
+                    // the cached token stays valid and is served while the loop retries.
                     entry->Token.clear();
                 }
                 delay = errorBackoff.Next();
@@ -236,7 +243,8 @@ private:
             if (!entry) {
                 co_return;
             }
-            if (TActivationContext::Now() - entry->LastUse >= Settings.IdleKeyTtl) {
+            if (TActivationContext::Now() - entry->LastUse >= Settings.IdleKeyTtl && !entry->Updated.HasAwaiters()) {
+                // a request parked on the entry keeps it: it is answered by the next attempt, not by an eviction
                 YDB_LOG_DEBUG("Dropping idle token entry", {"key", key.ToString()});
                 Entries.erase(key);
                 *CachedKeys = Entries.size();
@@ -264,13 +272,18 @@ private:
                 result.Error = "IamTokenService returned an empty token";
                 co_return result;
             }
-            if (proto.has_expires_at() && proto.expires_at().seconds() > 0) {
-                result.ExpiresAt = TInstant::Seconds(proto.expires_at().seconds());
-            } else {
-                result.ExpiresAt = TActivationContext::Now() + Settings.MaxTokenCacheLifetime;
+            if (!proto.has_expires_at() || proto.expires_at().seconds() <= 0) {
+                // IAM always says when a token expires; a token without that is not served, since nothing could
+                // tell when it stops being valid
+                result.Token.clear();
+                result.Status = Ydb::StatusIds::INTERNAL_ERROR;
+                result.Error = "IamTokenService returned a token without expires_at";
+                co_return result;
             }
+            result.ExpiresAt = TInstant::Seconds(proto.expires_at().seconds());
         } catch (const TIamCallError& e) {
             result.Status = e.Status;
+            result.GrpcCode = e.GrpcCode;
             result.Error = e.what();
         } catch (const std::exception& e) {
             result.Status = Ydb::StatusIds::INTERNAL_ERROR;

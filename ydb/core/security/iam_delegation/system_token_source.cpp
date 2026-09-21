@@ -28,13 +28,26 @@ public:
 
     void RequestToken(TActorSystem* actorSystem, const TActorId& recipient, ui64 cookie) override {
         std::shared_ptr<NYdb::ICredentialsProvider> provider;
+        NThreading::TFuture<std::string> future;
         try {
             provider = GetProvider();
+            future = provider->GetAuthInfoAsync();
+            if (future.HasException()) {
+                // The SDK provider stops for good after one non-retryable answer of the metadata service (a 404
+                // while no service account is attached to the VM, say) and keeps returning that failure. Drop it
+                // and create a fresh one, so that the next request asks the metadata service again. This runs on
+                // the caller's thread on purpose: destroying the provider joins its facility thread, which is
+                // the thread the Subscribe callback below runs on.
+                DropProvider(provider);
+                provider.reset();
+                provider = GetProvider();
+                future = provider->GetAuthInfoAsync();
+            }
         } catch (const std::exception& e) {
             Deliver(actorSystem, recipient, cookie, {}, TStringBuilder() << "cannot create system service account credentials provider: " << e.what());
             return;
         }
-        provider->GetAuthInfoAsync().Subscribe([actorSystem, recipient, cookie](const NThreading::TFuture<std::string>& future) {
+        future.Subscribe([actorSystem, recipient, cookie](const NThreading::TFuture<std::string>& future) {
             try {
                 Deliver(actorSystem, recipient, cookie, TString(future.GetValue()), {});
             } catch (const std::exception& e) {
@@ -44,12 +57,23 @@ public:
     }
 
 private:
+    // The SDK caches providers process-wide by endpoint, so a fresh provider is created only once every
+    // holder of the failed one has released it; a client of the same metadata endpoint elsewhere in the
+    // process (AUTH_METHOD = "IAM" data sources, async replication) that still holds it keeps it alive.
     std::shared_ptr<NYdb::ICredentialsProvider> GetProvider() {
         with_lock (Mutex) {
             if (!Provider) {
                 Provider = Factory->CreateProvider();
             }
             return Provider;
+        }
+    }
+
+    void DropProvider(const std::shared_ptr<NYdb::ICredentialsProvider>& failed) {
+        with_lock (Mutex) {
+            if (Provider == failed) {
+                Provider.reset();
+            }
         }
     }
 

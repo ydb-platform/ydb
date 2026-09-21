@@ -14,6 +14,10 @@ PEERDIR(
     library/cpp/testing/unittest
 )
 
+# The IamDelegationLive probes run against a real IAM installation and are compiled only on request:
+#   ya make -tA --cflags=-DIAM_LIVE_TESTS ydb/core/security/iam_delegation/ut -F 'IamDelegationLive::*'
+# with the environment described next to the suite.
+
 YQL_LAST_ABI_VERSION()
 
 SRCS(

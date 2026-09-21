@@ -329,6 +329,10 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         RejectAddHost(ctx, dbgId, "A RemoveHost is already in progress");
         return false;
     }
+    if (VolumeGrowInFlight) {
+        RejectAddHost(ctx, dbgId, "A volume grow is already in progress");
+        return false;
+    }
     // Authoritative AddHost gate: reads the persisted connection count under
     // the single-in-flight guard above, so it cannot overshoot MaxHostCount or
     // race a concurrent add. The DBG's own DDiskConnections lags, so it cannot

@@ -25,6 +25,7 @@
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/mon.h>
 
@@ -147,6 +148,7 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
     StopBscProxy(ctx);
     AddHostInFlight.reset();
     RemoveHostInFlight.reset();
+    VolumeGrowInFlight.reset();
 
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
@@ -435,6 +437,8 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
     SendToBsc(ctx, THolder<IEventBase>(request.release()));
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
 TPartitionActor::MakeAllocateDDiskBlockGroupRequest() const
 {
@@ -679,8 +683,10 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         ev->Get()->Record.DebugString().data());
 
     // The first allocation response sets up the group; any later one is the
-    // result of the single in-flight membership op (add xor remove).
-    if (RemoveHostInFlight.has_value()) {
+    // single in-flight membership op (add xor remove) or a grow claim.
+    if (VolumeGrowInFlight) {
+        HandleGrowAllocateResult(ev, ctx);
+    } else if (RemoveHostInFlight.has_value()) {
         HandleRemoveHostAllocationResult(ev, ctx);
     } else if (DDiskBlockGroupAllocated) {
         HandleAddHostAllocationResult(ev, ctx);
@@ -738,12 +744,14 @@ void TPartitionActor::HandleGetLoadActorAdapterActorId(
 
 void TPartitionActor::ReplyUpdateVolumeConfig(
     const NActors::TActorContext& ctx,
-    const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+    const NActors::TActorId& sender,
+    ui64 cookie,
+    ui64 txId,
     NKikimrBlockStore::EStatus status)
 {
     auto response = std::make_unique<
         NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-    response->Record.SetTxId(ev->Get()->Record.GetTxId());
+    response->Record.SetTxId(txId);
     response->Record.SetOrigin(TabletID());
     response->Record.SetStatus(status);
 
@@ -754,46 +762,32 @@ void TPartitionActor::ReplyUpdateVolumeConfig(
         LogTitle.GetWithTime().c_str(),
         NKikimrBlockStore::EStatus_Name(status).c_str());
 
-    ctx.Send(ev->Sender, response.release());
+    ctx.Send(sender, response.release(), 0, cookie);
 }
 
 void TPartitionActor::HandleUpdateVolumeConfig(
     const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    const auto* msg = ev->Get();
-
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "%s Handle UpdateVolumeConfig request. Version: %d",
         LogTitle.GetWithTime().c_str(),
-        msg->Record.GetVolumeConfig().GetVersion());
+        ev->Get()->Record.GetVolumeConfig().GetVersion());
 
     if (DDiskBlockGroupAllocated) {
-        // The config is already applied. SchemeShard aborts on any status
-        // other than OK or ERROR_UPDATE_IN_PROGRESS. Answer a repeated
-        // delivery of the applied config and a newer alter (resize) with OK.
-        // Capacity is not grown yet: do not persist or reallocate, so IO
-        // bounds stay at the original size until grow is implemented.
-        const ui64 appliedVersion = VolumeConfig.GetVersion();
-        const ui64 requestedVersion =
-            msg->Record.GetVolumeConfig().GetVersion();
-
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Already has ddisk connections, applied version %lu, "
-            "requested version %lu, status OK",
-            LogTitle.GetWithTime().c_str(),
-            appliedVersion,
-            requestedVersion);
-
-        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
+        HandleGrowUpdateVolumeConfig(ev, ctx);
         return;
     }
+    HandleInitialUpdateVolumeConfig(ev, ctx);
+}
 
-    const auto& volumeConfig = msg->Record.GetVolumeConfig();
+void TPartitionActor::HandleInitialUpdateVolumeConfig(
+    const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const auto& volumeConfig = ev->Get()->Record.GetVolumeConfig();
     Y_ABORT_UNLESS(volumeConfig.PartitionsSize() == 1);
 
     if (!IsSupportedBlockSize(volumeConfig.GetBlockSize())) {
@@ -804,7 +798,12 @@ void TPartitionActor::HandleUpdateVolumeConfig(
             LogTitle.GetWithTime().c_str(),
             volumeConfig.GetBlockSize());
 
-        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::ERROR);
+        ReplyUpdateVolumeConfig(
+            ctx,
+            ev->Sender,
+            ev->Cookie,
+            ev->Get()->Record.GetTxId(),
+            NKikimrBlockStore::ERROR);
         return;
     }
 
@@ -817,7 +816,12 @@ void TPartitionActor::HandleUpdateVolumeConfig(
 
     ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(volumeConfig));
 
-    ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
+    ReplyUpdateVolumeConfig(
+        ctx,
+        ev->Sender,
+        ev->Cookie,
+        ev->Get()->Record.GetTxId(),
+        NKikimrBlockStore::OK);
 }
 
 void TPartitionActor::HandleUpdateVChunkConfig(

@@ -8,11 +8,14 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_cleanup_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -41,6 +44,11 @@ constexpr ui64 DefaultVChunkSize = MaxVChunkSize;
 const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
 const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
+
+[[nodiscard]] ui64 BlocksPerRegion(ui32 blockSize = DefaultBlockSize)
+{
+    return GetRegionBlockCount(blockSize, DefaultVChunkSize);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -125,16 +133,75 @@ struct TScopedNbsService: TDisableCopyMove
 
 NKikimrBlockStore::TVolumeConfig CreateVolumeConfig(
     ui64 blockCount,
-    ui32 blockSize = DefaultBlockSize)
+    ui32 blockSize = DefaultBlockSize,
+    ui32 version = 0)
 {
     NKikimrBlockStore::TVolumeConfig volumeConfig;
     volumeConfig.SetDiskId("test-volume");
     volumeConfig.SetBlockSize(blockSize);
     volumeConfig.SetStoragePoolName(DDiskPoolName);
+    volumeConfig.SetVersion(version);
     auto* partition = volumeConfig.AddPartitions();
     partition->SetBlockCount(blockCount);
     return volumeConfig;
 }
+
+class TRecordingVhostServer final: public NVhost::IServer
+{
+public:
+    explicit TRecordingVhostServer(NVhost::IServerPtr inner)
+        : Inner(std::move(inner))
+    {}
+
+    void Start() override
+    {
+        Inner->Start();
+    }
+
+    void Stop() override
+    {
+        Inner->Stop();
+    }
+
+    NThreading::TFuture<NProto::TError> StartEndpoint(
+        TString socketPath,
+        ITraceServicePtr traceService,
+        IStoragePtr storage,
+        const NVhost::TStorageOptions& options) override
+    {
+        StartEndpointBlocksCounts.push_back(options.BlocksCount);
+        return Inner->StartEndpoint(
+            std::move(socketPath),
+            std::move(traceService),
+            std::move(storage),
+            options);
+    }
+
+    NThreading::TFuture<NProto::TError> StopEndpoint(
+        const TString& socketPath) override
+    {
+        return Inner->StopEndpoint(socketPath);
+    }
+
+    void DetachStorage(const TString& socketPath) override
+    {
+        ++DetachStorageCalls;
+        Inner->DetachStorage(socketPath);
+    }
+
+    NProto::TError UpdateEndpoint(
+        const TString& socketPath,
+        ui64 blocksCount) override
+    {
+        return Inner->UpdateEndpoint(socketPath, blocksCount);
+    }
+
+    TVector<ui64> StartEndpointBlocksCounts;
+    ui32 DetachStorageCalls = 0;
+
+private:
+    NVhost::IServerPtr Inner;
+};
 
 TActorId WaitForTabletBoot(TEnvironmentSetup& env)
 {
@@ -228,6 +295,22 @@ NKikimrBlockStore::TUpdateVolumeConfigResponse SendUpdateVolumeConfig(
         NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>(edge);
     UNIT_ASSERT(response);
     return response->Get()->Record;
+}
+
+NKikimrBlockStore::TUpdateVolumeConfigResponse SendUpdateVolumeConfigUntilDone(
+    TEnvironmentSetup& env,
+    const NKikimrBlockStore::TVolumeConfig& volumeConfig,
+    ui64 txId)
+{
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        const auto record = SendUpdateVolumeConfig(env, volumeConfig, txId);
+        if (record.GetStatus() != NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS) {
+            return record;
+        }
+        env.Sim(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT_C(false, "UpdateVolumeConfig stayed in progress");
+    return {};
 }
 
 TPersistResultFuture SendVChunkConfigUpdate(
@@ -2075,6 +2158,438 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT(response.GetStatus() == NKikimrBlockStore::OK);
         UNIT_ASSERT_VALUES_EQUAL(response.GetTxId(), 2);
         UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
+    }
+
+    Y_UNIT_TEST(ShouldGrowDDiskClaimOnResize)
+    {
+        TVector<ui32> targetNumVChunks;
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.QueriesSize()) {
+                    targetNumVChunks.push_back(
+                        msg->Record.GetQueries(0).GetTargetNumVChunks());
+                }
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env, BlocksPerRegion());
+
+        const auto record = SendUpdateVolumeConfigUntilDone(
+            env,
+            CreateVolumeConfig(
+                2 * BlocksPerRegion(),
+                DefaultBlockSize,
+                /*version=*/1),
+            /*txId=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrBlockStore::OK),
+            static_cast<int>(record.GetStatus()));
+
+        env.Sim(TDuration::Seconds(10));
+
+        UNIT_ASSERT_GE(targetNumVChunks.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(1u, targetNumVChunks.front());
+        UNIT_ASSERT_VALUES_EQUAL(2u, targetNumVChunks.back());
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        StopFastPathService(env, partition, edge);
+    }
+
+    Y_UNIT_TEST(ShouldKeepDDiskClaimWhenResizeStaysInOneRegion)
+    {
+        TVector<ui32> targetNumVChunks;
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.QueriesSize()) {
+                    targetNumVChunks.push_back(
+                        msg->Record.GetQueries(0).GetTargetNumVChunks());
+                }
+            }
+            return true;
+        };
+
+        const ui64 partition =
+            CreatePartitionTablet(env, BlocksPerRegion() / 2);
+
+        const auto record = SendUpdateVolumeConfigUntilDone(
+            env,
+            CreateVolumeConfig(
+                BlocksPerRegion(),
+                DefaultBlockSize,
+                /*version=*/1),
+            /*txId=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrBlockStore::OK),
+            static_cast<int>(record.GetStatus()));
+
+        env.Sim(TDuration::Seconds(10));
+
+        UNIT_ASSERT_GE(targetNumVChunks.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(1u, targetNumVChunks.front());
+        UNIT_ASSERT_VALUES_EQUAL(1u, targetNumVChunks.back());
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        StopFastPathService(env, partition, edge);
+    }
+
+    Y_UNIT_TEST(ShouldIgnoreIdempotentResizeOfSameSize)
+    {
+        TVector<ui32> targetNumVChunks;
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.QueriesSize()) {
+                    targetNumVChunks.push_back(
+                        msg->Record.GetQueries(0).GetTargetNumVChunks());
+                }
+            }
+            return true;
+        };
+
+        const ui64 partition = CreatePartitionTablet(env, BlocksPerRegion());
+        const ui32 before = targetNumVChunks.size();
+        const auto record = SendUpdateVolumeConfig(
+            env,
+            CreateVolumeConfig(
+                BlocksPerRegion(),
+                DefaultBlockSize,
+                /*version=*/0),
+            /*txId=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrBlockStore::OK),
+            static_cast<int>(record.GetStatus()));
+        UNIT_ASSERT_VALUES_EQUAL(before, targetNumVChunks.size());
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        StopFastPathService(env, partition, edge);
+    }
+
+    Y_UNIT_TEST(ShouldReplyOkOnShrinkWithoutAborting)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 partition = CreatePartitionTablet(env, BlocksPerRegion());
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        const auto record = SendUpdateVolumeConfig(
+            env,
+            CreateVolumeConfig(
+                BlocksPerRegion() / 2,
+                DefaultBlockSize,
+                /*version=*/1),
+            /*txId=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrBlockStore::OK),
+            static_cast<int>(record.GetStatus()));
+        UNIT_ASSERT(GetLoadActorAdapterActorId(env, partition, edge));
+
+        StopFastPathService(env, partition, edge);
+    }
+
+    Y_UNIT_TEST(ShouldRetryGrowAfterBscAllocateFailure)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 partition = CreatePartitionTablet(env, BlocksPerRegion());
+
+        bool failNextAllocate = true;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (failNextAllocate &&
+                ev->GetTypeRewrite() ==
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+                        EventType)
+            {
+                failNextAllocate = false;
+                auto* msg =
+                    ev->Get<TEvBlobStorage::
+                                TEvControllerAllocateDDiskBlockGroupResult>();
+                msg->Record.SetStatus(NKikimrProto::ERROR);
+                msg->Record.SetErrorReason("test allocate failure");
+            }
+            return true;
+        };
+
+        const auto failed = SendUpdateVolumeConfig(
+            env,
+            CreateVolumeConfig(
+                2 * BlocksPerRegion(),
+                DefaultBlockSize,
+                /*version=*/1),
+            /*txId=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS),
+            static_cast<int>(failed.GetStatus()));
+
+        const auto record = SendUpdateVolumeConfigUntilDone(
+            env,
+            CreateVolumeConfig(
+                2 * BlocksPerRegion(),
+                DefaultBlockSize,
+                /*version=*/1),
+            /*txId=*/3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrBlockStore::OK),
+            static_cast<int>(record.GetStatus()));
+
+        env.Sim(TDuration::Seconds(10));
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        StopFastPathService(env, partition, edge);
+    }
+
+    Y_UNIT_TEST(ShouldRetryGrowAfterBscPipeConnectFailure)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 partition = CreatePartitionTablet(env, BlocksPerRegion());
+
+        bool failNextBscConnect = true;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (failNextBscConnect &&
+                ev->GetTypeRewrite() ==
+                    TEvTabletPipe::TEvClientConnected::EventType)
+            {
+                auto* msg = ev->Get<TEvTabletPipe::TEvClientConnected>();
+                if (msg->TabletId == MakeBSControllerID()) {
+                    failNextBscConnect = false;
+                    ev = std::make_unique<IEventHandle>(
+                        ev->GetRecipientRewrite(),
+                        ev->Sender,
+                        new TEvTabletPipe::TEvClientConnected(
+                            msg->TabletId,
+                            NKikimrProto::ERROR,
+                            msg->ClientId,
+                            msg->ServerId,
+                            msg->Leader,
+                            msg->Dead,
+                            msg->Generation,
+                            TString(msg->VersionInfo)),
+                        ev->Flags,
+                        ev->Cookie);
+                }
+            }
+            return true;
+        };
+
+        const auto failed = SendUpdateVolumeConfig(
+            env,
+            CreateVolumeConfig(
+                2 * BlocksPerRegion(),
+                DefaultBlockSize,
+                /*version=*/1),
+            /*txId=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS),
+            static_cast<int>(failed.GetStatus()));
+
+        const auto record = SendUpdateVolumeConfigUntilDone(
+            env,
+            CreateVolumeConfig(
+                2 * BlocksPerRegion(),
+                DefaultBlockSize,
+                /*version=*/1),
+            /*txId=*/3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrBlockStore::OK),
+            static_cast<int>(record.GetStatus()));
+
+        env.Sim(TDuration::Seconds(10));
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        StopFastPathService(env, partition, edge);
+    }
+
+    Y_UNIT_TEST(ShouldRestartTabletAndEndpointOnResize)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        auto recording = std::make_shared<TRecordingVhostServer>(
+            GetNbsService()->VhostServer);
+        GetNbsService()->VhostServer = recording;
+
+        const ui64 partition = CreatePartitionTablet(env, BlocksPerRegion());
+        UNIT_ASSERT(!recording->StartEndpointBlocksCounts.empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            BlocksPerRegion(),
+            recording->StartEndpointBlocksCounts.back());
+
+        const auto record = SendUpdateVolumeConfigUntilDone(
+            env,
+            CreateVolumeConfig(
+                2 * BlocksPerRegion(),
+                DefaultBlockSize,
+                /*version=*/1),
+            /*txId=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrBlockStore::OK),
+            static_cast<int>(record.GetStatus()));
+
+        env.Sim(TDuration::Seconds(10));
+
+        UNIT_ASSERT_GE(recording->DetachStorageCalls, 1u);
+        UNIT_ASSERT_GE(recording->StartEndpointBlocksCounts.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            2 * BlocksPerRegion(),
+            recording->StartEndpointBlocksCounts.back());
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        const TString block(DefaultBlockSize, 'a');
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+        WriteBlock(env, loadActorAdapter, edge, BlocksPerRegion() + 16, block);
+
+        StopFastPathService(env, partition, edge);
+    }
+
+    Y_UNIT_TEST(ShouldServeIoAfterResize)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 partition = CreatePartitionTablet(env, BlocksPerRegion());
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+        const TString block(DefaultBlockSize, 'i');
+        WriteBlock(env, loadActorAdapter, edge, 16, block);
+
+        const auto record = SendUpdateVolumeConfigUntilDone(
+            env,
+            CreateVolumeConfig(
+                2 * BlocksPerRegion(),
+                DefaultBlockSize,
+                /*version=*/1),
+            /*txId=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrBlockStore::OK),
+            static_cast<int>(record.GetStatus()));
+
+        env.Sim(TDuration::Seconds(10));
+
+        loadActorAdapter = GetLoadActorAdapterActorId(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL(
+            block,
+            ReadBlock(env, loadActorAdapter, edge, 16));
+        const TString grown(DefaultBlockSize, 'g');
+        WriteBlock(env, loadActorAdapter, edge, BlocksPerRegion() + 16, grown);
+        UNIT_ASSERT_VALUES_EQUAL(
+            grown,
+            ReadBlock(env, loadActorAdapter, edge, BlocksPerRegion() + 16));
+
+        StopFastPathService(env, partition, edge);
     }
 
     // Test implementation for IndirectWrite write mode

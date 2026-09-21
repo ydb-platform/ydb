@@ -62,6 +62,7 @@ void TPartitionActor::StartPartitionTeardown(const NActors::TActorContext& ctx)
     StopBscProxy(ctx);
     AddHostInFlight.reset();
     RemoveHostInFlight.reset();
+    VolumeGrowInFlight.reset();
 
     // Idempotent: no-op when the endpoint was never started.
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
@@ -236,7 +237,9 @@ void TPartitionActor::HandleUpdateVolumeConfigDuringDelete(
     // it is tearing down, so report that the update is still in progress.
     ReplyUpdateVolumeConfig(
         ctx,
-        ev,
+        ev->Sender,
+        ev->Cookie,
+        ev->Get()->Record.GetTxId(),
         NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "part_counters.h"
+#include "volume_grow.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
@@ -96,8 +97,12 @@ private:
     };
 
     // At most one remove-host runs at a time; mutually exclusive with
-    // AddHostInFlight.
+    // AddHostInFlight, VolumeGrowInFlight.
     std::optional<TRemoveHostInFlight> RemoveHostInFlight;
+
+    // At most one grow volume runs at a time; mutually exclusive with
+    // AddHostInFlight, RemoveHostInFlight.
+    std::optional<TVolumeGrowInFlight> VolumeGrowInFlight;
 
     // Batch persisting of vchunk configs.
     bool ExecutingUpdateVChunkConfig = false;
@@ -222,12 +227,31 @@ private:
     // completes the request.
     void ReplyUpdateVolumeConfig(
         const NActors::TActorContext& ctx,
-        const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+        const NActors::TActorId& sender,
+        ui64 cookie,
+        ui64 txId,
         NKikimrBlockStore::EStatus status);
 
+    // Create vs grow: allocated DBGs take HandleGrowUpdateVolumeConfig.
     void HandleUpdateVolumeConfig(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
+    // Create: persist VolumeConfig, reply OK, then allocate DDisks.
+    void HandleInitialUpdateVolumeConfig(
+        const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    // Post-create: grow extra vchunks, persist, reply OK, restart.
+    void HandleGrowUpdateVolumeConfig(
+        const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Grow BSC claim result. Fail replies IN_PROGRESS and drops VolumeGrowInFlight.
+    void HandleGrowAllocateResult(
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    // Replies OK, drops VolumeGrowInFlight, PoisonPill.
+    void FinishVolumeGrow(const NActors::TActorContext& ctx);
 
     void HandleUpdateVChunkConfig(
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,

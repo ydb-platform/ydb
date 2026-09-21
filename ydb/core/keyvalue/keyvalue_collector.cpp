@@ -22,6 +22,11 @@ class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
     struct TCollectInfo {
         TVector<TLogoBlobID> Keep;
         TVector<TLogoBlobID> DoNotKeep;
+        // acked offsets advance only on OK, a retry resends the same slice
+        size_t KeepAcked = 0;
+        size_t DoNotKeepAcked = 0;
+        size_t KeepInFlight = 0;
+        size_t DoNotKeepInFlight = 0;
         ui32 TryCounter = 0;
         bool RequestInFlight = false;
         TMonotonic NextTryTimestamp;
@@ -83,6 +88,15 @@ public:
         Become(&TThis::StateWait);
     }
 
+    static bool InFlightChunkCompletesGroup(const TCollectInfo& info) {
+        return info.KeepAcked + info.KeepInFlight == info.Keep.size() &&
+            info.DoNotKeepAcked + info.DoNotKeepInFlight == info.DoNotKeep.size();
+    }
+
+    static TVector<TLogoBlobID>* MakeChunk(const TVector<TLogoBlobID>& flags, size_t offset, size_t count) {
+        return count ? new TVector<TLogoBlobID>(flags.begin() + offset, flags.begin() + offset + count) : nullptr;
+    }
+
     void Action() {
         const TMonotonic now = TActivationContext::Monotonic();
         TMonotonic nextTryTimestamp = TMonotonic::Max();
@@ -95,11 +109,16 @@ public:
             }
 
             const auto [groupId, channel] = key;
-            const bool advanceBarrier = CollectOperation->AdvanceBarrier;
+            value.KeepInFlight = Min<size_t>(value.Keep.size() - value.KeepAcked, CollectorMaxFlagsPerMessage);
+            value.DoNotKeepInFlight = Min<size_t>(value.DoNotKeep.size() - value.DoNotKeepAcked,
+                CollectorMaxFlagsPerMessage - value.KeepInFlight);
+            // the barrier goes with the last chunk, when every Keep flag is already acked or rides along
+            const bool advanceBarrier = CollectOperation->AdvanceBarrier && InFlightChunkCompletesGroup(value);
+            // every chunk carries the same PerGenerationCounter: only the barrier-bearing command is sequence-checked
             auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletInfo->TabletID, RecordGeneration,
                 PerGenerationCounter, channel, advanceBarrier, CollectOperation->Header.CollectGeneration,
-                CollectOperation->Header.CollectStep, value.Keep ? new TVector<TLogoBlobID>(value.Keep) : nullptr,
-                value.DoNotKeep ? new TVector<TLogoBlobID>(value.DoNotKeep) : nullptr, TInstant::Max(), true,
+                CollectOperation->Header.CollectStep, MakeChunk(value.Keep, value.KeepAcked, value.KeepInFlight),
+                MakeChunk(value.DoNotKeep, value.DoNotKeepAcked, value.DoNotKeepInFlight), TInstant::Max(), true,
                 TWriteSource::KeyValueGC);
             YDB_LOG_DEBUG("Sending TEvCollectGarbage",
                 {"marker", "KVC00"},
@@ -111,8 +130,10 @@ public:
                 {"advanceBarrier", advanceBarrier},
                 {"collectGeneration", CollectOperation->Header.CollectGeneration},
                 {"collectStep", CollectOperation->Header.CollectStep},
-                {"keepSize", value.Keep.size()},
-                {"doNotKeepSize", value.DoNotKeep.size()});
+                {"keepSize", value.KeepInFlight},
+                {"doNotKeepSize", value.DoNotKeepInFlight},
+                {"keepLeft", value.Keep.size() - value.KeepAcked - value.KeepInFlight},
+                {"doNotKeepLeft", value.DoNotKeep.size() - value.DoNotKeepAcked - value.DoNotKeepInFlight});
             SendToBSProxy(SelfId(), groupId, ev.release(), static_cast<ui64>(groupId) << 8 | channel);
             value.RequestInFlight = true;
         }
@@ -145,7 +166,16 @@ public:
         info.RequestInFlight = false;
 
         if (status == NKikimrProto::OK) {
-            Collects.erase(it);
+            const bool groupCompleted = InFlightChunkCompletesGroup(info);
+            info.KeepAcked += info.KeepInFlight;
+            info.DoNotKeepAcked += info.DoNotKeepInFlight;
+            if (groupCompleted) {
+                Collects.erase(it);
+            } else {
+                // the error budget is per chunk
+                info.TryCounter = 0;
+                info.BackoffTimer.Reset();
+            }
         } else if (++info.TryCounter < CollectorMaxErrors) {
             info.NextTryTimestamp = TActivationContext::Monotonic() + info.BackoffTimer.Next();
         } else {

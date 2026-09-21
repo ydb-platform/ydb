@@ -19,7 +19,7 @@ namespace NKikimr::NKqp {
 namespace {
 
 // Text limits exclude JSON/log escaping and metadata.
-constexpr size_t QUERY_TEXT_LIMIT = 6_KB - 32;
+constexpr size_t QUERY_TEXT_LIMIT = 3_KB;
 constexpr size_t SQL_TEXT_MAX_SIZE = QUERY_TEXT_LIMIT;
 constexpr size_t AST_TEXT_MAX_SIZE = 3_KB;
 constexpr size_t ISSUES_CHUNK_WITH_DATA = 1_KB;

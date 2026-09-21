@@ -17,7 +17,29 @@
 
 Конфиг раннеров: `.github/config/runners_footprints.yml` — provisioned maximum (vcpu/ram) по build preset. Фактическое потребление — из `resources_monitor.jsonl`; на дашборде красная линия = monitor, фиолетовая пунктирная = лимит из конфига.
 
-Общие CI-метрики пишет `.github/scripts/analytics/ci_metrics.py` — общий клиент как в веб/мобильной аналитике: `track(name, json)` кладёт событие в локальный пакет и сразу отправляет его в ydb-qa (`analytics/ci_metrics`) через YDBWrapper. Несколько измерений одной операции собираются через `packet()` и уходят одним send. `send` / `flush` только досылает пакет, если предыдущая отправка не подтвердилась. Агрегаты и регрессии — SQL; сравнение PR-check с target branch — следующий этап.
+Общие CI-метрики пишет `.github/scripts/analytics/ci_metrics.py`. Из любого workflow достаточно one-liner — скрипт-сборщик не нужен:
+
+```bash
+python3 .github/scripts/analytics/ci_metrics.py track my_step \
+  --source my_wf --started-epoch "$START" --conclusion success
+
+python3 .github/scripts/analytics/ci_metrics.py track --event wait \
+  --source my_wf --duration-sec 12 --json '{"lock":"schema"}'
+```
+
+Или composite action:
+
+```yaml
+- uses: ./.github/actions/analytics_track
+  with:
+    name: my_step
+    source: my_wf
+    started-epoch: ${{ env.START }}
+    conclusion: success
+    labels: cache_mode=dist_cache
+```
+
+`track` сразу отправляет пакет в ydb-qa (`analytics/ci_metrics`) через YDBWrapper. Пачку узлов собирает `export_ya_nodes.py` (`packet()` + один send). `send` / `flush` только досылает неподтверждённое. Агрегаты — SQL; сравнение PR-check с target — следующий этап.
 
 Что пишется:
 

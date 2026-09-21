@@ -1,0 +1,72 @@
+name: analytics_track
+description: Send one CI analytics event (name + duration/json) through ci_metrics.track
+inputs:
+  name:
+    required: true
+    description: Event or metric name
+  source:
+    required: false
+    default: ""
+    description: Producer id (workflow/script name)
+  kind:
+    required: false
+    default: ""
+    description: duration / gauge / count / event
+  started-epoch:
+    required: false
+    default: ""
+  finished-epoch:
+    required: false
+    default: ""
+  duration-ms:
+    required: false
+    default: ""
+  duration-sec:
+    required: false
+    default: ""
+  value:
+    required: false
+    default: ""
+  unit:
+    required: false
+    default: ""
+  conclusion:
+    required: false
+    default: ""
+  json:
+    required: false
+    default: ""
+    description: Optional measurement JSON object
+  labels:
+    required: false
+    default: ""
+    description: Comma-separated key=value labels
+runs:
+  using: composite
+  steps:
+    - name: Track analytics event
+      continue-on-error: true
+      shell: bash
+      run: |
+        args=(track --name "${{ inputs.name }}")
+        if [ -n "${{ inputs.source }}" ]; then args+=(--source "${{ inputs.source }}"); fi
+        if [ -n "${{ inputs.kind }}" ]; then args+=(--kind "${{ inputs.kind }}"); fi
+        if [ -n "${{ inputs.started-epoch }}" ]; then args+=(--started-epoch "${{ inputs.started-epoch }}"); fi
+        if [ -n "${{ inputs.finished-epoch }}" ]; then args+=(--finished-epoch "${{ inputs.finished-epoch }}"); fi
+        if [ -n "${{ inputs.duration-ms }}" ]; then args+=(--duration-ms "${{ inputs.duration-ms }}"); fi
+        if [ -n "${{ inputs.duration-sec }}" ]; then args+=(--duration-sec "${{ inputs.duration-sec }}"); fi
+        if [ -n "${{ inputs.value }}" ]; then args+=(--value "${{ inputs.value }}"); fi
+        if [ -n "${{ inputs.unit }}" ]; then args+=(--unit "${{ inputs.unit }}"); fi
+        if [ -n "${{ inputs.conclusion }}" ]; then args+=(--conclusion "${{ inputs.conclusion }}"); fi
+        if [ -n "${{ inputs.json }}" ]; then args+=(--json "${{ inputs.json }}"); fi
+        if [ -n "${{ inputs.labels }}" ]; then
+          IFS=',' read -ra pairs <<< "${{ inputs.labels }}"
+          for pair in "${pairs[@]}"; do
+            pair="${pair#"${pair%%[![:space:]]*}"}"
+            pair="${pair%"${pair##*[![:space:]]}"}"
+            if [ -n "$pair" ]; then
+              args+=(--label "$pair")
+            fi
+          done
+        fi
+        python3 .github/scripts/analytics/ci_metrics.py "${args[@]}" || true

@@ -356,6 +356,53 @@ class TrackApiTest(unittest.TestCase):
         self.assertEqual(record["labels"]["cache_mode"], "dist_cache")
         self.assertEqual(record["labels"]["ya_attempt"], 1)
 
+    def test_cli_oneliner_positional_and_duration_sec(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            self.assertEqual(
+                main(
+                    [
+                        "track",
+                        "wait_for_lock",
+                        "--file",
+                        path,
+                        "--source",
+                        "other_wf",
+                        "--duration-sec",
+                        "2.5",
+                        "--conclusion",
+                        "success",
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                main(
+                    [
+                        "track",
+                        "--event",
+                        "graph_compare",
+                        "--file",
+                        path,
+                        "--source",
+                        "ya_phase",
+                        "--started-epoch",
+                        "1000",
+                        "--finished-epoch",
+                        "1002",
+                    ]
+                ),
+                0,
+            )
+            with open(path, encoding="utf-8") as handle:
+                first, second = [json.loads(line) for line in handle if line.strip()]
+            self.assertEqual(first["name"], "wait_for_lock")
+            self.assertEqual(first["kind"], "duration")
+            self.assertEqual(first["value"], 2500.0)
+            self.assertEqual(first["source"], "other_wf")
+            self.assertEqual(second["name"], "graph_compare")
+            self.assertEqual(second["value"], 2000.0)
+
     def test_cli_track_json(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")

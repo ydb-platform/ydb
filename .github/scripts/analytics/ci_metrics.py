@@ -6,14 +6,16 @@ JSON properties object. Events are queued locally and sent as a packet through
 one transport (YDBWrapper bulk upsert). A single `track()` is sent immediately;
 use `packet()` to group many measurements into one send.
 
-From a workflow::
+From a workflow (one-liner — enough for a single event)::
 
-    python3 .github/scripts/analytics/ci_metrics.py track \\
-        --name graph_compare \\
-        --json '{"source":"ya_phase","started_epoch":"'"$START"'","conclusion":"success","cache_mode":"dist_cache"}'
+    python3 .github/scripts/analytics/ci_metrics.py track graph_compare \\
+        --source ya_phase --started-epoch "$START" --conclusion success
 
-    python3 .github/scripts/analytics/ci_metrics.py track \\
-        --name ydbd_size --json '{"kind":"gauge","value":123456,"unit":"bytes","source":"clean_build"}'
+    python3 .github/scripts/analytics/ci_metrics.py track --event wait_for_lock \\
+        --source my_wf --duration-sec 12
+
+    python3 .github/scripts/analytics/ci_metrics.py track ydbd_size \\
+        --kind gauge --value 123456 --unit bytes --source clean_build --json '{"cache_mode":"none"}'
 
 From Python::
 
@@ -815,15 +817,47 @@ def _properties_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     return properties
 
 
+def resolve_track_name(args: argparse.Namespace) -> str:
+    for candidate in (getattr(args, "name", None), getattr(args, "event_flag", None), getattr(args, "positional_name", None)):
+        text = str(candidate).strip() if candidate is not None else ""
+        if text:
+            return text
+    return ""
+
+
+def resolve_track_value(args: argparse.Namespace) -> Optional[float]:
+    if args.value is not None:
+        return args.value
+    duration_ms = getattr(args, "duration_ms", None)
+    if duration_ms is not None:
+        return duration_ms
+    duration_sec = getattr(args, "duration_sec", None)
+    if duration_sec is not None:
+        return duration_sec * 1000.0
+    return None
+
+
+def resolve_track_kind(args: argparse.Namespace) -> Optional[str]:
+    if args.kind:
+        return args.kind
+    if getattr(args, "duration_ms", None) is not None or getattr(args, "duration_sec", None) is not None:
+        return "duration"
+    return None
+
+
 def _cmd_track(args: argparse.Namespace) -> int:
+    name = resolve_track_name(args)
+    if not name:
+        print("Warning: track requires an event name (--name / --event / positional)", file=sys.stderr)
+        return 0
     track(
-        args.name,
+        name,
         _properties_from_args(args),
         file=args.file,
         send=not getattr(args, "no_send", False),
-        kind=args.kind,
+        kind=resolve_track_kind(args),
         source=args.source,
-        value=args.value,
+        value=resolve_track_value(args),
         unit=args.unit,
         started_at=args.started_at,
         started_epoch=args.started_epoch,
@@ -838,41 +872,36 @@ def _cmd_flush(args: argparse.Namespace) -> int:
     return 0
 
 
+def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optional[str] = None) -> None:
+    parser.add_argument("positional_name", nargs="?", default=None, help="Event/metric name")
+    parser.add_argument("--name", default=None, help="Event/metric name")
+    parser.add_argument("--event", dest="event_flag", default=None, help="Alias of --name")
+    parser.add_argument("--json", default=None, help="Optional measurement JSON (merged with flags)")
+    parser.add_argument("--kind", default=kind_default, choices=sorted(KIND_UNITS))
+    parser.add_argument("--source", default=None, help="Producer, e.g. ya_phase / my_workflow")
+    parser.add_argument("--value", type=float, default=None)
+    parser.add_argument("--duration-ms", type=float, default=None, help="Duration shortcut (kind=duration)")
+    parser.add_argument("--duration-sec", type=float, default=None, help="Duration in seconds (stored as ms)")
+    parser.add_argument("--unit", default=None)
+    parser.add_argument("--started-at", default=None, help="ISO-8601 timestamp")
+    parser.add_argument("--started-epoch", default=None, help="epoch seconds or ms")
+    parser.add_argument("--finished-epoch", default=None, help="epoch seconds or ms")
+    parser.add_argument("--conclusion", default=None)
+    parser.add_argument("--label", action="append", default=[], help="key=value (repeatable)")
+    parser.add_argument("--extra", default=None, help="JSON object merged into properties")
+    parser.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
+    parser.add_argument("--no-send", action="store_true", help="Queue only; caller will send()")
+
+
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Track CI analytics events and send packets to ydb-qa")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    track_p = sub.add_parser("track", help="Record one event/metric and send the packet")
-    track_p.add_argument("--name", required=True)
-    track_p.add_argument("--json", default=None, help="measurement JSON object")
-    track_p.add_argument("--kind", default=None, choices=sorted(KIND_UNITS))
-    track_p.add_argument("--source", default=None, help="Producer, e.g. ya_phase / clean_build")
-    track_p.add_argument("--value", type=float, default=None)
-    track_p.add_argument("--unit", default=None)
-    track_p.add_argument("--started-at", default=None, help="ISO-8601 timestamp")
-    track_p.add_argument("--started-epoch", default=None, help="epoch seconds or ms")
-    track_p.add_argument("--finished-epoch", default=None, help="epoch seconds or ms")
-    track_p.add_argument("--conclusion", default=None)
-    track_p.add_argument("--label", action="append", default=[], help="key=value (repeatable)")
-    track_p.add_argument("--extra", default=None, help="JSON object merged into properties")
-    track_p.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
-    track_p.add_argument("--no-send", action="store_true", help="Queue only; caller will send()")
+    track_p = sub.add_parser("track", help="Record one event/metric and send it now")
+    add_track_cli_args(track_p)
 
-    emit_p = sub.add_parser("emit", help="Alias of track (sends on the event)")
-    emit_p.add_argument("--name", required=True)
-    emit_p.add_argument("--json", default=None, help="measurement JSON object")
-    emit_p.add_argument("--kind", default=DEFAULT_KIND, choices=sorted(KIND_UNITS))
-    emit_p.add_argument("--source", default=None, help="Producer, e.g. ya_phase / github_step / clean_build")
-    emit_p.add_argument("--value", type=float, default=None)
-    emit_p.add_argument("--unit", default=None)
-    emit_p.add_argument("--started-at", default=None, help="ISO-8601 timestamp")
-    emit_p.add_argument("--started-epoch", default=None, help="epoch seconds or ms")
-    emit_p.add_argument("--finished-epoch", default=None, help="epoch seconds or ms")
-    emit_p.add_argument("--conclusion", default=None)
-    emit_p.add_argument("--label", action="append", default=[], help="key=value (repeatable)")
-    emit_p.add_argument("--extra", default=None, help="JSON object merged into properties")
-    emit_p.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
-    emit_p.add_argument("--no-send", action="store_true", help="Queue only; caller will send()")
+    emit_p = sub.add_parser("emit", help="Alias of track")
+    add_track_cli_args(emit_p, kind_default=DEFAULT_KIND)
 
     flush_p = sub.add_parser("flush", help="Retry sending any unacknowledged packet")
     flush_p.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")

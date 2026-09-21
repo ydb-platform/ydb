@@ -300,7 +300,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 
-    Y_UNIT_TEST_F(ShouldPassDiskWideInflightWriteCountToOracle, TBaseFixture)
+    Y_UNIT_TEST_F(ShouldTrackDiskWideInflightWriteCount, TBaseFixture)
     {
         Init();
 
@@ -347,9 +347,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             WaitWriteRequests(3, TDuration::Seconds(10)));
         UNIT_ASSERT_VALUES_EQUAL(
             1u,
-            DirectBlockGroup->Oracle.LastInflightWriteCount);
-        UNIT_ASSERT_VALUES_EQUAL(
-            1u,
             PartitionDirectService->InflightWriteCount);
 
         const auto second = startWrite();
@@ -358,18 +355,12 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             WaitWriteRequests(6, TDuration::Seconds(10)));
         UNIT_ASSERT_VALUES_EQUAL(
             2u,
-            DirectBlockGroup->Oracle.LastInflightWriteCount);
-        UNIT_ASSERT_VALUES_EQUAL(
-            2u,
             PartitionDirectService->InflightWriteCount);
 
         const auto third = startWrite();
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             WaitWriteRequests(9, TDuration::Seconds(10)));
-        UNIT_ASSERT_VALUES_EQUAL(
-            3u,
-            DirectBlockGroup->Oracle.LastInflightWriteCount);
         UNIT_ASSERT_VALUES_EQUAL(
             3u,
             PartitionDirectService->InflightWriteCount);

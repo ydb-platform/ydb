@@ -130,6 +130,10 @@ public:
 
     virtual IOraclePtr GetOracle() = 0;
 
+    // Disk-wide in-flight write count of this partition, including writes
+    // started on other DBGs.
+    [[nodiscard]] virtual size_t GetDiskInflightWriteCount() const = 0;
+
     virtual void Schedule(TDuration delay, TCallback callback) = 0;
 
     virtual std::shared_ptr<NWilson::TSpan> CreateChildSpan(

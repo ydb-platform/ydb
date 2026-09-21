@@ -256,6 +256,12 @@ IOraclePtr TDirectBlockGroup::GetOracle()
     return &Oracle;
 }
 
+size_t TDirectBlockGroup::GetDiskInflightWriteCount() const
+{
+    Y_ABORT_UNLESS(Service);
+    return Service->GetInflightWriteCount();
+}
+
 void TDirectBlockGroup::Schedule(TDuration delay, TCallback callback)
 {
     Y_ABORT_UNLESS(Service);

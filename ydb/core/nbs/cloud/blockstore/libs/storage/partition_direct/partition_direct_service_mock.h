@@ -134,17 +134,21 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
             .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration});
     }
 
-    TWriteStartInfo OnWriteStarted() override
+    ui64 OnWriteStarted() override
     {
-        return {
-            .Lsn = ++LsnGenerator,
-            .InflightWriteCount = ++InflightWriteCount};
+        ++InflightWriteCount;
+        return ++LsnGenerator;
     }
 
     void OnWriteFinished() override
     {
         Y_ABORT_UNLESS(InflightWriteCount > 0);
         --InflightWriteCount;
+    }
+
+    [[nodiscard]] size_t GetInflightWriteCount() const override
+    {
+        return InflightWriteCount;
     }
 
     void StopTablet(const TString& reason) override

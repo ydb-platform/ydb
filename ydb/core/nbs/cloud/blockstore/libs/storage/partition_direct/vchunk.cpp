@@ -719,12 +719,11 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
     // Mint the record id and register the write as inflight on the same
     // executor thread, so the cleanup watermark covers it from the moment of
     // minting.
-    const auto writeRequestInfo = PartitionDirectService->OnWriteStarted();
+    const auto lsn = PartitionDirectService->OnWriteStarted();
     const TPBufferKey pBufferKey{
         .Generation = DirectBlockGroup->GetTabletGeneration(),
-        .Lsn = writeRequestInfo.Lsn};
+        .Lsn = lsn};
     bundle->SetPBufferKey(pBufferKey);
-    bundle->SetInflightWriteCount(writeRequestInfo.InflightWriteCount);
     BlocksDirtyMap->RegisterInflightWrite(pBufferKey, bundle->GetVChunkRange());
 
     LOG_DEBUG(

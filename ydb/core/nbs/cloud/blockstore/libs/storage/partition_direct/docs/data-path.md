@@ -85,15 +85,16 @@ registers a pending write, and creates a
 vChunk configuration and obtains its write mode and timing from the oracle.
 It requires at least three desired PB hosts before starting.
 
-The oracle chooses the mode from the disk-wide in-flight write count captured
-at `OnWriteStarted` (including this write). When
+The oracle chooses the mode from the disk-wide in-flight write count.
+The executor reads that count from
+[IDirectBlockGroup::GetDiskInflightWriteCount](../direct_block_group.h),
+which forwards to [TFastPathService](../fast_path_service.cpp). The current
+write is already included because `OnWriteStarted` ran first. When
 `MaxInflightWritesForDirectWrite` is unset the default is 16, so adaptive
 mode is on. Explicit 0 keeps the configured static `WriteMode`; `WriteMode`
 applies only when the threshold is 0. Otherwise a count at or below the
 threshold selects `DirectWrite` for low-load latency, and a higher count
-selects `IndirectWrite`. Each DBG has its own oracle, so the count is stored
-on `TWriteRequestBundle` and read by the executor rather than shared between
-oracles.
+selects `IndirectWrite`.
 
 - `DirectWrite` sends individual writes from the partition to desired PBs.
 - `IndirectWrite` selects a coordinator with `SelectBestPBufferHost` and

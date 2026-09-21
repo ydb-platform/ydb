@@ -35,7 +35,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     std::shared_ptr<TWriteRequestBundle> bundle)
     : ActorSystem(actorSystem)
     , WriteMode(directBlockGroup->GetOracle()->GetWriteMode(
-          bundle->GetInflightWriteCount()))
+          directBlockGroup->GetDiskInflightWriteCount()))
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", ToString(WriteMode)},
@@ -48,9 +48,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetWriteRequestTimeout())
     , IndirectWriteReplyTimeout(
           DirectBlockGroup->GetOracle()->GetIndirectWriteReplyTimeout())
-{
-    Y_ABORT_UNLESS(Bundle->GetInflightWriteCount() > 0);
-}
+{}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
 {

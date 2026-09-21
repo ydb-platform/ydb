@@ -161,6 +161,7 @@ public:
 
     TExecutorPtr Executor;
     TOracleMock Oracle;
+    size_t InflightWriteCount = 0;
     TScheduleHandler ScheduleHandler;
     TReadBlocksFromDDiskHandler ReadBlocksFromDDiskHandler;
     TReadBlocksFromPBufferHandler ReadBlocksFromPBufferHandler;
@@ -191,6 +192,8 @@ public:
     ui32 GetTabletGeneration() const override;
 
     IOraclePtr GetOracle() override;
+
+    size_t GetDiskInflightWriteCount() const override;
 
     void Schedule(TDuration delay, TCallback callback) override;
 

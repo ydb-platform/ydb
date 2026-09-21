@@ -272,20 +272,22 @@ Y_UNIT_TEST_SUITE(TFastPathServiceTest)
     {
         auto service = MakeService(0);
 
-        const auto first = service->OnWriteStarted();
-        UNIT_ASSERT_VALUES_EQUAL(1u, first.Lsn);
-        UNIT_ASSERT_VALUES_EQUAL(1u, first.InflightWriteCount);
+        const ui64 first = service->OnWriteStarted();
+        UNIT_ASSERT_VALUES_EQUAL(1u, first);
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetInflightWriteCount());
         UNIT_ASSERT_VALUES_EQUAL(1u, service->GetMonInfo().InflightWriteCount);
 
-        const auto second = service->OnWriteStarted();
-        UNIT_ASSERT_VALUES_EQUAL(2u, second.Lsn);
-        UNIT_ASSERT_VALUES_EQUAL(2u, second.InflightWriteCount);
+        const ui64 second = service->OnWriteStarted();
+        UNIT_ASSERT_VALUES_EQUAL(2u, second);
+        UNIT_ASSERT_VALUES_EQUAL(2u, service->GetInflightWriteCount());
         UNIT_ASSERT_VALUES_EQUAL(2u, service->GetMonInfo().InflightWriteCount);
 
         service->OnWriteFinished();
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetInflightWriteCount());
         UNIT_ASSERT_VALUES_EQUAL(1u, service->GetMonInfo().InflightWriteCount);
 
         service->OnWriteFinished();
+        UNIT_ASSERT_VALUES_EQUAL(0u, service->GetInflightWriteCount());
         UNIT_ASSERT_VALUES_EQUAL(0u, service->GetMonInfo().InflightWriteCount);
     }
 }

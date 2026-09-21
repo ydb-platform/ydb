@@ -490,17 +490,21 @@ void TFastPathService::QueryRemoveHost(
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
-TWriteStartInfo TFastPathService::OnWriteStarted()
+ui64 TFastPathService::OnWriteStarted()
 {
-    const ui64 lsn = ++SequenceGenerator;
-    const size_t inflightWriteCount = ++InflightWriteCount;
-    return {.Lsn = lsn, .InflightWriteCount = inflightWriteCount};
+    ++InflightWriteCount;
+    return ++SequenceGenerator;
 }
 
 void TFastPathService::OnWriteFinished()
 {
     const size_t previous = InflightWriteCount.fetch_sub(1);
     Y_ABORT_UNLESS(previous > 0);
+}
+
+size_t TFastPathService::GetInflightWriteCount() const
+{
+    return InflightWriteCount.load();
 }
 
 void TFastPathService::StopTablet(const TString& reason)

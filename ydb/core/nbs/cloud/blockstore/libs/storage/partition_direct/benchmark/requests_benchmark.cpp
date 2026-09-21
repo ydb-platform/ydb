@@ -50,7 +50,6 @@ std::shared_ptr<TWriteRequestBundle> MakeWriteBundle(
         MakeIntrusive<TCallContext>(),
         f.Range);
     bundle->SetPBufferKey(f.UserPBufferKey);
-    bundle->SetInflightWriteCount(1);
     return bundle;
 }
 

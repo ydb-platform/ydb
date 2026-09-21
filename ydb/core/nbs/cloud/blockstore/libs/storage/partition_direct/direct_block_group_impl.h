@@ -67,6 +67,8 @@ public:
 
     IOraclePtr GetOracle() override;
 
+    size_t GetDiskInflightWriteCount() const override;
+
     void Schedule(TDuration delay, TCallback callback) override;
 
     std::shared_ptr<NWilson::TSpan> CreateChildSpan(

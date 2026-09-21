@@ -252,6 +252,11 @@ IOraclePtr TDirectBlockGroupMock::GetOracle()
     return &Oracle;
 }
 
+size_t TDirectBlockGroupMock::GetDiskInflightWriteCount() const
+{
+    return InflightWriteCount;
+}
+
 void TDirectBlockGroupMock::Schedule(TDuration delay, TCallback callback)
 {
     ScheduleHandler(delay, std::move(callback));

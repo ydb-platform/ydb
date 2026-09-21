@@ -135,9 +135,11 @@ public:
         size_t hostIndex,
         ui32 dbgConnectionsConfigGeneration) override;
 
-    TWriteStartInfo OnWriteStarted() override;
+    ui64 OnWriteStarted() override;
 
     void OnWriteFinished() override;
+
+    size_t GetInflightWriteCount() const override;
 
     void StopTablet(const TString& reason) override;
 

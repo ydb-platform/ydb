@@ -314,7 +314,7 @@ private:
         return true;
     }
 
-    bool ValidateAlterConfig(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const NKikimrReplication::TReplicationConfig& newConf) {
+    bool ValidateAlterConfig(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const NKikimrReplication::TReplicationConfig&) {
         switch (desc.GetState().GetStateCase()) {
         using TState = NKikimrReplication::TReplicationState;
         case TState::kStandBy:
@@ -329,17 +329,6 @@ private:
             return false;
         }
 
-        const auto isUserSet = [](const auto& conf) -> bool {
-            return conf.HasSrcConnectionParams() && conf.GetSrcConnectionParams().HasStaticCredentials() &&
-                conf.GetSrcConnectionParams().GetStaticCredentials().HasUser();
-        };
-
-        if (newConf.HasSrcConnectionParams() && newConf.GetSrcConnectionParams().HasStaticCredentials()) {
-            if (!isUserSet(newConf) && !(desc.HasConfig() && isUserSet(desc.GetConfig()))) {
-                result.SetError(NKikimrScheme::StatusInvalidParameter, "User is not set");
-                return false;
-            }
-        }
         return true;
     }
 

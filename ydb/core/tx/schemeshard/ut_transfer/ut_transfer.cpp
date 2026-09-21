@@ -414,4 +414,101 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
       )");
   }
 
+    // Transfer without StaticCredentials.User (TOKEN / local).
+    // Pause and a password-only alter must succeed; "User is not set" is a bug.
+    Y_UNIT_TEST(AlterPauseWithoutUser) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        CreateTable(runtime, env, txId);
+
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
+            Name: "Transfer"
+            Config {
+              SrcConnectionParams {
+                OAuthToken {
+                  Token: "root@builtin"
+                }
+              }
+              TransferSpecific {
+                Target {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(
+            Name: "Transfer"
+            State {
+              Paused {
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(
+            Name: "Transfer"
+            Config {
+              SrcConnectionParams {
+                StaticCredentials {
+                  Password: "pwd"
+                }
+              }
+            }
+        )");
+    }
+
+    // Same as AlterPauseWithoutUser, but credentials come from schema secret path, not a raw password.
+    Y_UNIT_TEST(AlterPauseWithoutUserSecret) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        CreateTable(runtime, env, txId);
+
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
+            Name: "Transfer"
+            Config {
+              SrcConnectionParams {
+                OAuthToken {
+                  Token: "root@builtin"
+                }
+              }
+              TransferSpecific {
+                Target {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot/Table"
+                }
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(
+            Name: "Transfer"
+            State {
+              Paused {
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(
+            Name: "Transfer"
+            Config {
+              SrcConnectionParams {
+                StaticCredentials {
+                  PasswordSecretName: "/MyRoot/password_secret"
+                }
+              }
+            }
+        )");
+    }
+
 } // TTransferTests

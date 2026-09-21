@@ -6,7 +6,7 @@ Release date: TBD.
 
 ### Functionality
 
-* [Backup export and import are available for column-oriented tables, including S3-compatible storage](./recipes/backup/backup-collections/exporting-to-external-storage.md?version=main).
+* [Backup export and import are available for column-oriented tables, including S3-compatible storage](./recipes/backup-collections/exporting-to-external-storage.md?version=main).
 * Column-oriented table columns support [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.3#encoding). Use `ENCODING(DICT)` for low-cardinality values.
 * [Local min_max indexes](./dev/min_max-skip-index.md?version=v26.3) are enabled for column-oriented tables. They skip data fragments outside a query range, reducing the amount of data read.
 * Added [storage group decommissioning through virtual storage groups](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data moves to virtual groups in the background while applications continue reading and writing data.

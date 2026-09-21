@@ -14,7 +14,7 @@
 
 ## Core (Arcadia / LLM / любой CI)
 
-Нет GitHub-контекста. `run_id` — из `--run-id` или `$ANALYTICS_RUN_ID`. Свой контекст можно передать `--json` / `--attr` или `attach=` в Python.
+Нет GitHub-контекста. `run_id` — только из `--run-id` или `$ANALYTICS_RUN_ID` (не `$GITHUB_RUN_ID`). Файл — `$ANALYTICS_FILE`. Свой контекст можно передать `--json` / `--attr` или `attach=` в Python.
 
 ```bash
 python3 .github/scripts/utils/analytics/core.py start llm_call \

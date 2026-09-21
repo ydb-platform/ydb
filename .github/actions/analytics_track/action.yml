@@ -64,26 +64,46 @@ runs:
     - name: Analytics ${{ inputs.command }}
       continue-on-error: true
       shell: bash
+      env:
+        ANALYTICS_COMMAND: ${{ inputs.command }}
+        ANALYTICS_NAME: ${{ inputs.name }}
+        ANALYTICS_SOURCE: ${{ inputs.source }}
+        ANALYTICS_KIND: ${{ inputs.kind }}
+        ANALYTICS_STARTED_EPOCH: ${{ inputs.started-epoch }}
+        ANALYTICS_FINISHED_EPOCH: ${{ inputs.finished-epoch }}
+        ANALYTICS_DURATION_MS: ${{ inputs.duration-ms }}
+        ANALYTICS_DURATION_SEC: ${{ inputs.duration-sec }}
+        ANALYTICS_VALUE: ${{ inputs.value }}
+        ANALYTICS_UNIT: ${{ inputs.unit }}
+        ANALYTICS_CONCLUSION: ${{ inputs.conclusion }}
+        ANALYTICS_JSON: ${{ inputs.json }}
+        ANALYTICS_JSON_FILE: ${{ inputs.json-file }}
+        ANALYTICS_RUNNER: ${{ inputs.runner }}
+        ANALYTICS_USAGE: ${{ inputs.usage }}
+        ANALYTICS_LABELS: ${{ inputs.labels }}
       run: |
-        cmd="${{ inputs.command }}"
-        cmd="${cmd:-track}"
+        cmd="${ANALYTICS_COMMAND:-track}"
+        case "$cmd" in
+          start|end|track|send|flush) ;;
+          *) echo "Unknown analytics command: $cmd" >&2; exit 0 ;;
+        esac
         args=("$cmd")
-        if [ -n "${{ inputs.name }}" ]; then args+=(--name "${{ inputs.name }}"); fi
-        if [ -n "${{ inputs.source }}" ]; then args+=(--source "${{ inputs.source }}"); fi
-        if [ -n "${{ inputs.kind }}" ]; then args+=(--kind "${{ inputs.kind }}"); fi
-        if [ -n "${{ inputs.started-epoch }}" ]; then args+=(--started-epoch "${{ inputs.started-epoch }}"); fi
-        if [ -n "${{ inputs.finished-epoch }}" ]; then args+=(--finished-epoch "${{ inputs.finished-epoch }}"); fi
-        if [ -n "${{ inputs.duration-ms }}" ]; then args+=(--duration-ms "${{ inputs.duration-ms }}"); fi
-        if [ -n "${{ inputs.duration-sec }}" ]; then args+=(--duration-sec "${{ inputs.duration-sec }}"); fi
-        if [ -n "${{ inputs.value }}" ]; then args+=(--value "${{ inputs.value }}"); fi
-        if [ -n "${{ inputs.unit }}" ]; then args+=(--unit "${{ inputs.unit }}"); fi
-        if [ -n "${{ inputs.conclusion }}" ]; then args+=(--conclusion "${{ inputs.conclusion }}"); fi
-        if [ -n "${{ inputs.json }}" ]; then args+=(--json "${{ inputs.json }}"); fi
-        if [ -n "${{ inputs.json-file }}" ]; then args+=(--json-file "${{ inputs.json-file }}"); fi
-        case "${{ inputs.runner }}" in true|TRUE|yes|YES|1) args+=(--runner);; esac
-        case "${{ inputs.usage }}" in true|TRUE|yes|YES|1) args+=(--usage);; esac
-        if [ -n "${{ inputs.labels }}" ]; then
-          IFS=',' read -ra pairs <<< "${{ inputs.labels }}"
+        if [ -n "$ANALYTICS_NAME" ]; then args+=(--name "$ANALYTICS_NAME"); fi
+        if [ -n "$ANALYTICS_SOURCE" ]; then args+=(--source "$ANALYTICS_SOURCE"); fi
+        if [ -n "$ANALYTICS_KIND" ]; then args+=(--kind "$ANALYTICS_KIND"); fi
+        if [ -n "$ANALYTICS_STARTED_EPOCH" ]; then args+=(--started-epoch "$ANALYTICS_STARTED_EPOCH"); fi
+        if [ -n "$ANALYTICS_FINISHED_EPOCH" ]; then args+=(--finished-epoch "$ANALYTICS_FINISHED_EPOCH"); fi
+        if [ -n "$ANALYTICS_DURATION_MS" ]; then args+=(--duration-ms "$ANALYTICS_DURATION_MS"); fi
+        if [ -n "$ANALYTICS_DURATION_SEC" ]; then args+=(--duration-sec "$ANALYTICS_DURATION_SEC"); fi
+        if [ -n "$ANALYTICS_VALUE" ]; then args+=(--value "$ANALYTICS_VALUE"); fi
+        if [ -n "$ANALYTICS_UNIT" ]; then args+=(--unit "$ANALYTICS_UNIT"); fi
+        if [ -n "$ANALYTICS_CONCLUSION" ]; then args+=(--conclusion "$ANALYTICS_CONCLUSION"); fi
+        if [ -n "$ANALYTICS_JSON" ]; then args+=(--json "$ANALYTICS_JSON"); fi
+        if [ -n "$ANALYTICS_JSON_FILE" ]; then args+=(--json-file "$ANALYTICS_JSON_FILE"); fi
+        case "$ANALYTICS_RUNNER" in true|TRUE|yes|YES|1) args+=(--runner);; esac
+        case "$ANALYTICS_USAGE" in true|TRUE|yes|YES|1) args+=(--usage);; esac
+        if [ -n "$ANALYTICS_LABELS" ]; then
+          IFS=',' read -ra pairs <<< "$ANALYTICS_LABELS"
           for pair in "${pairs[@]}"; do
             pair="${pair#"${pair%%[![:space:]]*}"}"
             pair="${pair%"${pair##*[![:space:]]}"}"

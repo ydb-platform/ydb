@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as html_lib
 import json
 import re
 from collections import defaultdict
@@ -16,7 +17,13 @@ PART_SUFFIX_RE = re.compile(r"/part\d+$")
 
 def js_script_json(value: Any) -> str:
     """JSON text safe to embed in a <script> tag. Keep out of f-strings (Py<3.12)."""
-    return json.dumps(value, ensure_ascii=False).replace("</", "<\\/")
+    text = json.dumps(value, ensure_ascii=False)
+    text = text.replace("<", "\\u003c")
+    text = text.replace(">", "\\u003e")
+    text = text.replace("&", "\\u0026")
+    text = text.replace("\u2028", "\\u2028")
+    text = text.replace("\u2029", "\\u2029")
+    return text
 
 
 def normalize_suite_path(path: str) -> str:
@@ -47,8 +54,6 @@ def cpu_seconds(metrics: dict[str, Any]) -> float:
             fv = float(v)
         except (TypeError, ValueError):
             continue
-        if fv > 1000:
-            fv /= 1_000_000.0
         vals.append(fv)
     return sum(vals)
 
@@ -139,6 +144,7 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
         "rows": rows,
     }
     payload_js = js_script_json(payload)
+    suite_filter_html = html_lib.escape(suite_filter or "ALL SUITES", quote=True)
     html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -174,7 +180,7 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
 </head>
 <body>
   <h2>Report table: suite/chunk/test</h2>
-  <div class="muted">suite filter: {suite_filter or 'ALL SUITES'} | rows: <span id="rowsCount"></span> | <span id="suiteSummary"></span></div>
+  <div class="muted">suite filter: {suite_filter_html} | rows: <span id="rowsCount"></span> | <span id="suiteSummary"></span></div>
   <div class="toolbar">
     <label>Search:</label>
     <input id="q" type="text" placeholder="suite/test/subtest/status/tags" style="min-width: 360px;" />

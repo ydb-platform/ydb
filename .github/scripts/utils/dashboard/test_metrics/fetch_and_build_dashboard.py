@@ -223,7 +223,7 @@ def main() -> None:
     ap.add_argument(
         "--dry-run",
         action="store_true",
-        help="Only print what would be downloaded and run, do not fetch or run.",
+        help="Print the static plan from the URL only; do not fetch or run.",
     )
     args = ap.parse_args()
 
@@ -284,6 +284,8 @@ def main() -> None:
         print(f"Base URL: {base_url}")
         print(f"Output base: {out_base}")
         print(f"Repo root: {repo_root}")
+        print("Dry-run: not fetching index or artifacts.")
+        return
 
     # Fetch main index and find try_* dirs
     try:

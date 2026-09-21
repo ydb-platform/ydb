@@ -123,16 +123,38 @@ jobs:
       - name: Run clean build (no caches)
         id: build
         shell: bash
+        env:
+          BUILD_PRESET: ${{ inputs.build_preset || 'relwithdebinfo' }}
+          BUILD_TARGET: ${{ inputs.build_target || 'ydb/apps/ydbd' }}
+          LINK_THREADS: ${{ inputs.link_threads || '12' }}
+          BUILD_THREADS_INPUT: ${{ inputs.build_threads }}
+          HOST_NPROC: ${{ steps.host.outputs.nproc }}
+          HOST_CPU_MODEL: ${{ steps.host.outputs.cpu_model }}
         run: |
           set -o pipefail
-          BUILD_PRESET="${{ inputs.build_preset || 'relwithdebinfo' }}"
-          BUILD_TARGET="${{ inputs.build_target || 'ydb/apps/ydbd' }}"
-          LINK_THREADS="${{ inputs.link_threads || '12' }}"
-          BUILD_THREADS_INPUT="${{ inputs.build_threads }}"
+          case "$BUILD_PRESET" in
+            debug|release|relwithdebinfo|release-asan|release-tsan|release-msan) ;;
+            *)
+              echo "Unknown build preset: $BUILD_PRESET"
+              exit 1
+              ;;
+          esac
+          if [[ ! "$BUILD_TARGET" =~ ^[A-Za-z0-9_./-]+$ ]]; then
+            echo "Invalid build_target: $BUILD_TARGET"
+            exit 1
+          fi
+          if [[ ! "$LINK_THREADS" =~ ^[0-9]+$ ]]; then
+            echo "Invalid link_threads: $LINK_THREADS"
+            exit 1
+          fi
           if [ -n "$BUILD_THREADS_INPUT" ]; then
+            if [[ ! "$BUILD_THREADS_INPUT" =~ ^[0-9]+$ ]]; then
+              echo "Invalid build_threads: $BUILD_THREADS_INPUT"
+              exit 1
+            fi
             BUILD_THREADS="$BUILD_THREADS_INPUT"
           else
-            BUILD_THREADS="${{ steps.host.outputs.nproc }}"
+            BUILD_THREADS="$HOST_NPROC"
           fi
 
           params=(
@@ -208,7 +230,7 @@ jobs:
             BINARY_PATH="not found"
           fi
 
-          EXTRA=$(LINK_THREADS="$LINK_THREADS" BUILD_THREADS="$BUILD_THREADS" NPROC="${{ steps.host.outputs.nproc }}" CPU_MODEL="${{ steps.host.outputs.cpu_model }}" BINARY_SIZE_BYTES="$BINARY_SIZE_BYTES" REAL_SECONDS="$REAL_SECONDS" BUILD_TARGET="$BUILD_TARGET" python3 -c 'import json,os; print(json.dumps({"link_threads": int(os.environ["LINK_THREADS"]), "build_threads": int(os.environ["BUILD_THREADS"]), "nproc": int(os.environ["NPROC"]), "cpu_model": os.environ.get("CPU_MODEL") or "", "binary_size_bytes": os.environ.get("BINARY_SIZE_BYTES") or "", "real_seconds": os.environ.get("REAL_SECONDS") or "", "build_target": os.environ.get("BUILD_TARGET") or ""}))')
+          EXTRA=$(LINK_THREADS="$LINK_THREADS" BUILD_THREADS="$BUILD_THREADS" NPROC="$HOST_NPROC" CPU_MODEL="$HOST_CPU_MODEL" BINARY_SIZE_BYTES="$BINARY_SIZE_BYTES" REAL_SECONDS="$REAL_SECONDS" BUILD_TARGET="$BUILD_TARGET" python3 -c 'import json,os; print(json.dumps({"link_threads": int(os.environ["LINK_THREADS"]), "build_threads": int(os.environ["BUILD_THREADS"]), "nproc": int(os.environ["NPROC"]), "cpu_model": os.environ.get("CPU_MODEL") or "", "binary_size_bytes": os.environ.get("BINARY_SIZE_BYTES") or "", "real_seconds": os.environ.get("REAL_SECONDS") or "", "build_target": os.environ.get("BUILD_TARGET") or ""}))')
           CONCLUSION=success
           if [ "$RC" -ne 0 ]; then
             CONCLUSION=failure

@@ -16,8 +16,17 @@ class JsScriptJsonTest(unittest.TestCase):
     def test_escapes_script_close(self):
         raw = js_script_json({"x": "</script><script>alert(1)</script>"})
         self.assertNotIn("</script>", raw)
-        self.assertIn("<\\/script>", raw)
+        self.assertNotIn("</SCRIPT>", raw)
+        self.assertIn("\\u003c/script\\u003e", raw)
         self.assertEqual(raw, table_js_script_json({"x": "</script><script>alert(1)</script>"}))
+        upper = js_script_json({"x": "</SCRIPT>"})
+        self.assertNotIn("</SCRIPT>", upper)
+        self.assertIn("\\u003c/SCRIPT\\u003e", upper)
+
+    def test_cpu_seconds_keeps_seconds(self):
+        from dashboard_report_table import cpu_seconds
+
+        self.assertEqual(cpu_seconds({"ru_utime": 1500.0, "ru_stime": 500.0}), 2000.0)
 
     def test_html_templates_parse_without_backslash_in_fstring_expr(self):
         """CI runners still use Python 3.10/3.11; this is the smoke failure mode."""

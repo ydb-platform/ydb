@@ -6,12 +6,15 @@ PY_SRCS(
     cli.py
     cluster_templates.py
     cluster_templates_ui.py
+    cluster_config.py
+    cluster_config_ui.py
     common.py
     config.py
     distributed_sessions.py
     distributed_plan.py
     distributed_builder_ui.py
     distributed_worker.py
+    distributed_disks.py
     distributed_workload.py
     distributed_artifacts.py
     distributed_runtime.py
@@ -26,18 +29,26 @@ PY_SRCS(
     local_ydb_workloads.py
     linux_telemetry.py
     ydb_telemetry.py
+    monitoring_settings.py
+    monitoring_settings_ui.py
+    metrics_export.py
+    grafana.py
     runner.py
     process_recovery.py
     results.py
+    run_index.py
     system_info.py
     topology.py
     web.py
 )
 
 PEERDIR(
+    library/python/resource
     contrib/python/grpcio
     contrib/python/PyYAML
     ydb/core/protos
+    ydb/library/yaml_config/protos
+    ydb/deploy/helm/ydb-prometheus/dashboards
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/tools/ydb_bench/benchmarks

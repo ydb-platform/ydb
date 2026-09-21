@@ -65,9 +65,22 @@ def request_operation(record, operation, value):
 
 
 class DistributedCluster:
-    def __init__(self, coordinator_id, run_id, template, tenant, actor_system, directory, call, cancelled, progress):
+    def __init__(
+        self,
+        coordinator_id,
+        run_id,
+        template,
+        tenant,
+        actor_system,
+        directory,
+        call,
+        cancelled,
+        progress,
+        reset_disks=False,
+    ):
         self.reference = {"session_id": str(uuid.uuid4()), "coordinator_id": coordinator_id, "run_id": run_id}
         self.template, self.tenant, self.actor_system = template, tenant, actor_system
+        self.reset_disks = reset_disks
         self.directory, self.call, self.cancelled, self.progress = directory, call, cancelled, progress
         self.host_ids = list(dict.fromkeys(node["host_id"] for node in template["nodes"]))
         self.cli_host = next(node["host_id"] for node in template["nodes"] if node["role"] == "cli")
@@ -209,11 +222,39 @@ class DistributedCluster:
         prepared = self.operation(
             self.host_ids,
             "prepare",
-            {"template": self.template, "tenant": self.tenant, "actor_system": self.actor_system},
+            {
+                "template": self.template,
+                "tenant": self.tenant,
+                "actor_system": self.actor_system,
+                "reset_disks": self.reset_disks,
+            },
         )
         self.hosts.extend(prepared[host] for host in self.host_ids)
         atomic_write_json(self.directory / "execution-plan.json", self.metadata)
-        self.operation(self.host_ids, "configure", {"hosts": self.hosts})
+        configured = self.operation(self.host_ids, "configure", {"hosts": self.hosts})
+        configuration = None
+        for host in self.host_ids:
+            artifacts = configured[host].get("artifacts")
+            if (
+                not isinstance(artifacts, list)
+                or len(artifacts) != 1
+                or not isinstance(artifacts[0], dict)
+                or artifacts[0].get("path") != "configuration/cluster.yaml"
+            ):
+                raise BenchmarkError("Missing saved YDB configuration for host " + host)
+            if configuration is not None and artifacts[0] != configuration:
+                raise BenchmarkError("YDB cluster configuration differs between hosts")
+            configuration = artifacts[0]
+        host = self.host_ids[0]
+        copy_results(
+            lambda operation, value: self.call(host, operation, value),
+            self.reference,
+            "configure",
+            [configuration],
+            "configuration",
+            self.directory / "configuration",
+        )
+        atomic_write_json(self.directory / "execution-plan.json", self.metadata)
         self.progress("starting-static-nodes")
         self.operation(self.host_ids, "start-static")
         self.progress("bootstrapping-cluster")

@@ -168,17 +168,16 @@ public:
 
 private:
     void EmitLog(const TString& breakerQueryText) {
-        TString breakerQueryTexts;
+        TVector<NDataIntegrity::TTliLogParams::TQueryInfo> breakerQueries;
         if (!breakerQueryText.empty()) {
-            breakerQueryTexts = TStringBuilder() << "[QuerySpanId=" << BreakerQuerySpanId
-                << " QueryText=" << breakerQueryText << "]";
+            breakerQueries.push_back(NDataIntegrity::TTliLogParams::TQueryInfo{BreakerQuerySpanId, breakerQueryText});
         }
 
         NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
             .Component = "SessionActor",
             .Message = IsCommitAction ? "Commit had broken other locks (deferred)" : "Query had broken other locks (deferred)",
             .QueryText = breakerQueryText,
-            .QueryTexts = breakerQueryTexts,
+            .AllQueries = breakerQueries,
             .TraceId = TraceId,
             .BreakerQuerySpanId = BreakerQuerySpanId,
             .IsCommitAction = IsCommitAction,
@@ -1572,6 +1571,45 @@ public:
             AFL_ENSURE(checkSchemeTx());
         }
 
+        // Only modes that promise repeatable reads are aborted: the rest are documented to
+        // observe newer data between statements.
+        if (QueryState->TxCtx->EffectiveIsolationLevel
+                && GuaranteesRepeatableReads(*QueryState->TxCtx->EffectiveIsolationLevel)) {
+            const NKqpProto::TKqpTableInfo* changed = nullptr;
+
+            auto rememberOrCompare = [&](const auto& infos) {
+                for (const auto& info : infos) {
+                    if (!info.GetSchemaVersion()) {
+                        continue;
+                    }
+
+                    const TKqpTransactionContext::TSchemaIdentity identity{
+                        .PathId = NYql::TKikimrPathId(
+                            info.GetTableId().GetOwnerId(), info.GetTableId().GetTableId()),
+                        .SchemaVersion = info.GetSchemaVersion(),
+                    };
+
+                    const auto [it, inserted] =
+                        QueryState->TxCtx->SchemaObjects.emplace(info.GetTableName(), identity);
+                    if (!inserted && it->second != identity) {
+                        changed = &info;
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            // Views carry their own version and their own path, so a view redefined over an
+            // untouched table has to be caught here as well.
+            if (!rememberOrCompare(phyQuery.GetTableInfos()) || !rememberOrCompare(phyQuery.GetViewInfos())) {
+                std::vector<TIssue> issues{YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                    TStringBuilder() << "Scheme changed for '" << changed->GetTableName()
+                        << "' during transaction execution.")};
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "", MessageFromIssues(issues));
+                return false;
+            }
+        }
+
         const bool hasOlapWrite = ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
         const bool hasOltpWrite = ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
         const bool hasOlapRead = ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery);
@@ -1703,6 +1741,8 @@ public:
                 ui64 resultSetsCount = queryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize();
                 request.AllowTrailingResults = (resultSetsCount == 1 && queryState->Statements.size() <= 1);
                 request.AllowTrailingResults &= (QueryState->RequestEv->GetSupportsStreamTrailingResult());
+                request.DisablePessimisticLocks =
+                    queryState->PreparedQuery->GetPhysicalQuery().GetDisablePessimisticLocks();
             }
         }
 
@@ -2605,7 +2645,8 @@ public:
                                    QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
 
         if (!ev->BreakerQuerySpanIds.empty()) {
-            TString combinedQueryTexts = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TString();
+            TVector<NDataIntegrity::TTliLogParams::TQueryInfo> combinedQueries;
+            combinedQueries = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TVector<NKikimr::NDataIntegrity::TTliLogParams::TQueryInfo>();
             for (ui64 breakerQuerySpanId : ev->BreakerQuerySpanIds) {
                 TString breakerQueryText;
                 if (QueryState->TxCtx) {
@@ -2619,7 +2660,7 @@ public:
                     .Component = "SessionActor",
                     .Message = isCommitAction ? "Commit had broken other locks" : "Query had broken other locks",
                     .QueryText = breakerQueryText,
-                    .QueryTexts = combinedQueryTexts,
+                    .AllQueries = combinedQueries,
                     .TraceId = TraceId(),
                     .BreakerQuerySpanId = breakerQuerySpanId,
                     .IsCommitAction = isCommitAction,
@@ -2631,7 +2672,7 @@ public:
                 .Component = "SessionActor",
                 .Message = isCommitAction ? "Commit had broken other locks" : "Query had broken other locks",
                 .QueryText = QueryState->ExtractQueryText(),
-                .QueryTexts = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TString(),
+                .AllQueries = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TVector<NKikimr::NDataIntegrity::TTliLogParams::TQueryInfo>(),
                 .TraceId = TraceId(),
                 .BreakerQuerySpanId = QueryState->GetQuerySpanId(),
                 .IsCommitAction = isCommitAction,
@@ -2653,17 +2694,16 @@ public:
             TString breakerQueryText = NDataIntegrity::TNodeQueryTextCache::Instance().Get(breaker.QuerySpanId);
 
             if (!breakerQueryText.empty() || breaker.NodeId == 0 || breaker.NodeId == localNodeId) {
-                TString breakerQueryTexts;
+                TVector<NDataIntegrity::TTliLogParams::TQueryInfo> breakerQueries;
                 if (!breakerQueryText.empty()) {
-                    breakerQueryTexts = TStringBuilder() << "[QuerySpanId=" << breaker.QuerySpanId
-                        << " QueryText=" << breakerQueryText << "]";
+                    breakerQueries.push_back(NDataIntegrity::TTliLogParams::TQueryInfo{breaker.QuerySpanId, breakerQueryText});
                 }
 
                 NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
                     .Component = "SessionActor",
                     .Message = isCommitAction ? "Commit had broken other locks (deferred)" : "Query had broken other locks (deferred)",
                     .QueryText = breakerQueryText,
-                    .QueryTexts = breakerQueryTexts,
+                    .AllQueries = breakerQueries,
                     .TraceId = TraceId(),
                     .BreakerQuerySpanId = breaker.QuerySpanId,
                     .IsCommitAction = isCommitAction,
@@ -2731,14 +2771,24 @@ public:
             const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
                                        QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
 
+            auto allQueries = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
+            if (isCommitAction) {
+                const auto currentQuerySpanId = QueryState->GetQuerySpanId();
+                auto it = std::find_if(begin(allQueries), end(allQueries),
+                    [currentQuerySpanId](const auto& item) {
+                        return item.Id == currentQuerySpanId;
+                    });
+                if (it == end(allQueries)) {
+                    allQueries.push_back({currentQuerySpanId, "COMMIT"});
+                }
+            }
             NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
                 .Component = "SessionActor",
                 .Message = isCommitAction ? "Commit was a victim of broken locks" : "Query was a victim of broken locks",
                 .QueryText = QueryState->ExtractQueryText(),
-                .QueryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts(),
+                .AllQueries = allQueries,
                 .TraceId = TraceId(),
                 .VictimQuerySpanId = victimQuerySpanId,
-                .CurrentQuerySpanId = QueryState->GetQuerySpanId(),
                 .VictimQueryText = victimQueryText,
                 .IsCommitAction = isCommitAction,
             }, TlsActivationContext->AsActorContext());

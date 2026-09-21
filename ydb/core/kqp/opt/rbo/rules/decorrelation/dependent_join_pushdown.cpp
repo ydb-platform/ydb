@@ -35,7 +35,7 @@ TIntrusivePtr<TOpDependentJoin> PushInto(const TIntrusivePtr<TOpDependentJoin>& 
 }
 
 TIntrusivePtr<IOperator> MakeCrossJoinWithDomain(const TIntrusivePtr<TOpDependentJoin>& dependentJoin, const TIntrusivePtr<IOperator>& input) {
-    return MakeIntrusive<TOpJoin>(dependentJoin->GetDomain(), input, dependentJoin->Pos, "Cross", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+    return MakeIntrusive<TOpJoin>(dependentJoin->GetDomain(), input, dependentJoin->Pos, "Cross", TVector<TJoinKey>{});
 }
 
 TVector<TInfoUnit> MissingDomainColumns(const TVector<TInfoUnit>& dependencies, const TVector<TInfoUnit>& present) {
@@ -46,6 +46,28 @@ TVector<TInfoUnit> MissingDomainColumns(const TVector<TInfoUnit>& dependencies, 
         }
     }
     return result;
+}
+
+bool NeedsNullSafeEncoding(const TIntrusivePtr<IOperator>& leftInput, const TInfoUnit& leftKey,
+                           const TIntrusivePtr<IOperator>& rightInput, const TInfoUnit& rightKey) {
+    // Only ok if the keys are domain keys, which are always the same.
+    Y_ENSURE(leftKey == rightKey, "Null-safe join keys must name the same column, got "
+                                      << leftKey.GetFullName() << " and " << rightKey.GetFullName());
+    const auto* leftInputType = leftInput->Type;
+    const auto* rightInputType = rightInput->Type;
+
+    if (leftInputType && rightInputType) {
+        return IsNullableIU(leftInput, leftKey) || IsNullableIU(rightInput, rightKey);
+    }
+    if (leftInputType) {
+        return IsNullableIU(leftInput, leftKey);
+    }
+    if (rightInputType) {
+        return IsNullableIU(rightInput, rightKey);
+    }
+
+    // If types are unknown it's safe to keep null, because for non optional column there are no nulls.
+    return true;
 }
 
 // Here is a special case for count(*). count(*) with empty keys returns 0 on empty input, but with group by keys we can lost those values.
@@ -62,7 +84,7 @@ TIntrusivePtr<IOperator> RestoreEmptyGroupCounts(const TIntrusivePtr<TOpDependen
     NMapRenames::AddUsedIUs(usedIUs, leftInput->GetOutputIUs());
     NMapRenames::AddUsedIUs(usedIUs, rightInput->GetOutputIUs());
 
-    TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+    TVector<TJoinKey> joinKeys;
     for (const auto& iu : dependencies) {
         joinKeys.emplace_back(iu, iu);
     }
@@ -93,9 +115,7 @@ TIntrusivePtr<IOperator> RestoreEmptyGroupCounts(const TIntrusivePtr<TOpDependen
 
     return MakeIntrusive<TOpMap>(join, pos, resultElements);
 }
-
 } // anonymous namespace
-
 
 // Domain projection is a distinct on free variables.
 TIntrusivePtr<TOpAggregate> MakeDomainProjection(const TIntrusivePtr<IOperator>& input, const TVector<TInfoUnit>& columns, TPositionHandle pos) {
@@ -117,11 +137,14 @@ bool IsNullableIU(const TIntrusivePtr<IOperator>& input, const TInfoUnit& iu) {
     return !columnType || columnType->IsOptionalOrNull();
 }
 
-TVector<std::pair<TInfoUnit, TInfoUnit>> MakeNullSafeJoinKeys(TIntrusivePtr<IOperator>& leftInput, TIntrusivePtr<IOperator>& rightInput,
-                                                              const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, TPositionHandle pos, TRBOContext& ctx,
-                                                              TPlanProps& props, TInfoUnitSet& usedIUs) {
-    TVector<std::pair<TInfoUnit, TInfoUnit>> result;
+TVector<TJoinKey> MakeNullSafeJoinKeys(TIntrusivePtr<IOperator>& leftInput, TIntrusivePtr<IOperator>& rightInput,
+                                       const TVector<TJoinKey>& joinKeys, TPositionHandle pos, TRBOContext& ctx,
+                                       TPlanProps& props, TInfoUnitSet& usedIUs) {
+    TVector<TJoinKey> result;
     result.reserve(joinKeys.size());
+
+    const bool nativeEqualNulls =
+        ctx.KqpCtx.Config->GetUseBlockHashJoin() && ctx.KqpCtx.Config->GetEnableBlockHashJoinEqualNulls();
 
     TVector<TMapElement> leftElements;
     TVector<TMapElement> rightElements;
@@ -133,13 +156,19 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> MakeNullSafeJoinKeys(TIntrusivePtr<IOpe
         return encodedIU;
     };
 
-    for (const auto& [leftKey, rightKey] : joinKeys) {
-        if (!IsNullableIU(leftInput, leftKey) && !IsNullableIU(rightInput, rightKey)) {
+    for (const auto& joinKey : joinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
+        if (!NeedsNullSafeEncoding(leftInput, leftKey, rightInput, rightKey)) {
             result.emplace_back(leftKey, rightKey);
             continue;
         }
 
-        result.emplace_back(encode(leftKey, leftElements), encode(rightKey, rightElements));
+        if (nativeEqualNulls) {
+            result.emplace_back(leftKey, rightKey, /*equalNulls=*/true);
+        } else {
+            result.emplace_back(encode(leftKey, leftElements), encode(rightKey, rightElements));
+        }
     }
 
     if (!leftElements.empty()) {
@@ -472,29 +501,26 @@ TIntrusivePtr<IOperator> TPushDependentJoinThroughJoinRule::SimpleMatchAndApply(
 
     const auto joinKind = GetValidJoinKind(join->JoinKind);
     const bool innerLike = joinKind == "Inner" || joinKind == "Cross";
+    const bool leftPreserving = innerLike || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly";
 
     // Here we want to push the dependent join on the side where we have a free variables.
-    if (leftCorrelated && !rightCorrelated) {
-        if (!JoinOutputsLeft(joinKind)) {
-            return input;
-        }
+    if (leftCorrelated && !rightCorrelated && leftPreserving) {
         auto newLeft = PushInto(dependentJoin, join->GetLeftInput());
         return MakeIntrusive<TOpJoin>(newLeft, join->GetRightInput(), join->Pos, join->JoinKind, join->JoinKeys, join->JoinFilters);
     }
 
-    if (!leftCorrelated && rightCorrelated) {
-        if (!innerLike) {
-            return input;
-        }
+    // Inner or cross.
+    if (!leftCorrelated && rightCorrelated && innerLike) {
         auto newRight = PushInto(dependentJoin, join->GetRightInput());
         return MakeIntrusive<TOpJoin>(join->GetLeftInput(), newRight, join->Pos, join->JoinKind, join->JoinKeys, join->JoinFilters);
     }
 
-    // I dont know about other kinds.
-    if (!innerLike && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly") {
+    // All right joins must be rewritten before to left joins.
+    if (!leftPreserving) {
         return input;
     }
 
+    // Otherwise push a dependet join on both sides.
     TIntrusivePtr<IOperator> newLeft = PushInto(dependentJoin, join->GetLeftInput());
     TIntrusivePtr<IOperator> newRight = PushInto(dependentJoin, join->GetRightInput());
 
@@ -504,7 +530,7 @@ TIntrusivePtr<IOperator> TPushDependentJoinThroughJoinRule::SimpleMatchAndApply(
     const auto rightRenames = NMapRenames::MakeRenameMap(dependencies, props.InternalVarIdx, usedIUs);
 
     // Add a domain keys if both side a correlated.
-    TVector<std::pair<TInfoUnit, TInfoUnit>> domainKeys;
+    TVector<TJoinKey> domainKeys;
     for (const auto& iu : dependencies) {
         domainKeys.emplace_back(iu, iu);
     }

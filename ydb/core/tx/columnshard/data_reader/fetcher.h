@@ -2,6 +2,7 @@
 #include "contexts.h"
 #include "fetching_executor.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
@@ -173,7 +174,10 @@ public:
         if (IsFinishedFlag) {
             return false;
         }
-        NConveyorComposite::TServiceOperator::SendTaskToExecute(std::make_shared<TFetchingExecutor>(selfPtr), ConveyorCategory, 0);
+        const bool useBatchPool = ConveyorCategory == NConveyorComposite::ESpecialTaskCategory::Compaction && HasAppData() &&
+                                  AppDataVerified().ColumnShardConfig.HasCompactionDefaultPool() &&
+                                  AppDataVerified().ColumnShardConfig.GetCompactionDefaultPool() == "Batch";
+        NConveyorComposite::TServiceOperator::SendTaskToExecute(std::make_shared<TFetchingExecutor>(selfPtr), ConveyorCategory, 0, useBatchPool);
         return true;
     }
 };

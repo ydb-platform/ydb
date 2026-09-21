@@ -278,6 +278,14 @@ inline TBlockRange64 ConvertRangeSafe(const TBlockRange32& range)
     return TBlockRange64::MakeClosedInterval(range.Start, range.End);
 }
 
+template <typename TRangeTo, typename TRangeFrom>
+TRangeTo ConvertRangeSafe(const TRangeFrom& range)
+{
+    return TRangeTo::MakeClosedInterval(
+        IntegerCast<typename TRangeTo::TBlockIndex>(range.Start),
+        IntegerCast<typename TRangeTo::TBlockIndex>(range.End));
+}
+
 struct TBlockRangeComparator
 {
     template <typename TBlockIndex>

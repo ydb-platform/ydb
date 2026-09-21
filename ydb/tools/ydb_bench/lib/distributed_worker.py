@@ -16,12 +16,13 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import grpc
-import yaml
 
 from ydb.core.protos import grpc_pb2_grpc, msgbus_pb2
 from ydb.public.api.grpc import ydb_cms_v1_pb2_grpc, ydb_config_v1_pb2_grpc
 from ydb.public.api.protos import ydb_status_codes_pb2
 from ydb.tools.ydb_bench.lib import process_recovery
+from ydb.tools.ydb_bench.lib import cluster_config
+from ydb.tools.ydb_bench.lib.distributed_disks import DiskAdmission
 from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
     BenchmarkInterrupted,
@@ -32,7 +33,7 @@ from ydb.tools.ydb_bench.lib.common import (
 )
 from ydb.tools.ydb_bench.lib.distributed_plan import execution_template, resolve_host_placement
 from ydb.tools.ydb_bench.lib.distributed_workload import MultiWorkerWorkload, result_path
-from ydb.tools.ydb_bench.lib.distributed_artifacts import RESULT_CHUNK_BYTES, snapshot_diagnostics
+from ydb.tools.ydb_bench.lib.distributed_artifacts import RESULT_CHUNK_BYTES, snapshot_diagnostics, snapshot_results
 from ydb.tools.ydb_bench.lib.distributed_telemetry import WorkerTelemetry
 from ydb.tools.ydb_bench.lib.distributed_sessions import PROTOCOL_VERSION
 from ydb.tools.ydb_bench.lib.local_ydb import (
@@ -89,6 +90,7 @@ class DistributedWorker:
     def __init__(self, host_id, output, sessions, binaries_dir, resource_loader=None):
         self.host_id = host_id
         self.root = Path(output) / ".distributed-sessions" / "data"
+        self.file_disks = Path(output) / "file-disks"
         self.sessions = sessions
         self.binaries_dir = Path(binaries_dir)
         self.resource_loader = resource_loader
@@ -180,7 +182,15 @@ class DistributedWorker:
             if not local:
                 raise BenchmarkError("This host has no nodes in the execution template")
             actor_system = _actor_system(value.get("actor_system", {}))
-            payload = {"template": template, "tenant": value["tenant"], "actor_system": actor_system}
+            reset = value.get("reset_disks", False)
+            if type(reset) is not bool:
+                raise BenchmarkError("reset_disks must be boolean")
+            payload = {
+                "template": template,
+                "tenant": value["tenant"],
+                "actor_system": actor_system,
+                "reset_disks": reset,
+            }
             if self.state is None:
                 root = self.root / reference["session_id"]
                 self.state = {
@@ -189,6 +199,8 @@ class DistributedWorker:
                     "template": template,
                     "tenant": value["tenant"],
                     "actor_system": actor_system,
+                    "reset_disks": reset,
+                    "disk_admission": DiskAdmission(self.file_disks),
                     "cancel": threading.Event(),
                     "thread": None,
                     "tasks": queue.Queue(maxsize=1),
@@ -229,6 +241,7 @@ class DistributedWorker:
         guard = self._binary(state, "process_guard", "bundled")
         hostname = socket.getfqdn()
         nodes = []
+        reset_disks = []
         for index, node in enumerate(state["template"]["nodes"], 1):
             if node["host_id"] != self.host_id:
                 continue
@@ -259,12 +272,56 @@ class DistributedWorker:
                     "executable": {**binary.manifest_record(), "path": str(binary.path)},
                 }
             )
+            if node["role"] == "static":
+                paths = []
+                for disk_index, disk in enumerate(node["disks"]):
+                    self._check(state)
+                    path, reset = state["disk_admission"].prepare(
+                        disk, state["reference"]["session_id"], index, disk_index, state["reset_disks"]
+                    )
+                    paths.append(path)
+                    if reset:
+                        reset_disks.append((binary.path, path))
+                nodes[-1]["disk_paths"] = paths
+        state["disk_admission"].verify()
+        for index, (binary, path) in enumerate(reset_disks):
+            self._reset_disk(state, binary, path, index, guard)
         prepared = {"host_id": self.host_id, "nodes": nodes, "topology": topology_record(topology)}
         with self.sessions.lock:
             self._check(state)
             state["guard"] = guard
             state["prepared"] = prepared
         return prepared
+
+    def _reset_disk(self, state, binary, path, index, guard):
+        self._check(state)
+        state["disk_admission"].verify()
+        name = "reset-disk-{}".format(index)
+        directory = state["root"] / name
+        directory.mkdir(parents=True, exist_ok=True)
+        with self.sessions.lock:
+            self._check(state)
+            process = start_managed_process(
+                [binary, "admin", "bs", "disk", "obliterate", path],
+                directory / "stdout.txt",
+                directory / "stderr.txt",
+                cwd=directory,
+                parent_death_wrapper=guard.path,
+            )
+            state["processes"][name] = process
+        try:
+            deadline = time.monotonic() + 60
+            while process.poll() is None:
+                self._check(state)
+                if time.monotonic() >= deadline:
+                    raise BenchmarkError("Disk initialization timed out")
+                state["cancel"].wait(0.1)
+            if process.poll() != 0:
+                raise BenchmarkError("Disk initialization failed; see worker reset-disk logs")
+        finally:
+            with self.sessions.lock:
+                process.stop()
+                state["processes"].pop(name, None)
 
     def status(self, value):
         with self.sessions.lock:
@@ -347,34 +404,70 @@ class DistributedWorker:
             disks.append(
                 {
                     "host_config_id": index,
-                    "ssd": [
-                        "SectorMap:map_{}_{}:{}:NONE".format(index, disk, node["sector_map"]["size_gib"])
-                        for disk in range(node["sector_map"]["count"])
+                    "drive": [
+                        {"path": path, "type": "SSD" if disk["media"] == "ssd" else "ROT"}
+                        for disk, path in zip(node["disks"], node["disk_paths"])
                     ],
                 }
             )
         config["config"].update(hosts=hosts, host_configs=disks)
-        for node in state["prepared"]["nodes"]:
-            if node["role"] == "cli":
-                continue
-            current = copy.deepcopy(config)
-            actor_system = state["actor_system"]
-            if node["role"] == "dynamic":
-                actor_system = actor_system.get("tenants", {}).get(node["tenant"], actor_system)
-            current["config"]["actor_system_config"] = _cluster_config(
-                [item["ports"] for item in static], 1, actor_system=actor_system
-            )["config"]["actor_system_config"]
-            cpu_count = actor_system.get(node["role"] + "_nodes", {}).get("cpu_count")
+        overrides = cluster_config.execution_config(state['template'].get('ydb_config', {}))
+        config['config']['domains_config']['domain'][0]['name'] = cluster_config.domain_name(overrides)
+        erasure = cluster_config.erasure_name(overrides)
+        config['config']['erasure'] = erasure
+        media = sorted({disk["media"] for node in static for disk in node["disks"]})
+        config["config"]["default_disk_type"] = "SSD" if "ssd" in media else "ROT"
+        config["config"]["storage_pool_types"] = [
+            {
+                "kind": kind,
+                "pool_config": {
+                    "box_id": 1,
+                    "kind": kind,
+                    "erasure_species": erasure,
+                    "vdisk_kind": "Default",
+                    "pdisk_filter": [{"property": [{"type": "SSD" if kind == "ssd" else "ROT"}]}],
+                },
+            }
+            for kind in media
+        ]
+        domain = overrides.get('domains_config', {}).get('domain', [{}])[0]
+        if domain.get('storage_pool_types'):
+            del config['config']['storage_pool_types']
+
+        def actor_config(actor_system, role):
+            result = _cluster_config([item["ports"] for item in static], 1, actor_system=actor_system)["config"][
+                "actor_system_config"
+            ]
+            cpu_count = actor_system.get(role + "_nodes", {}).get("cpu_count")
             if cpu_count is not None:
-                current["config"]["actor_system_config"]["cpu_count"] = cpu_count
-            directory = state["root"] / "nodes" / str(node["node_id"])
-            directory.mkdir(parents=True, exist_ok=True)
-            atomic_write_text(directory / "cluster.yaml", yaml.safe_dump(current, sort_keys=False))
-            self._check(state)
+                result["cpu_count"] = cpu_count
+            return result
+
+        config["config"]["actor_system_config"] = actor_config(state["actor_system"], "static")
+        config["config"] = cluster_config.merge(config["config"], overrides)
+        tenant_paths = [tenant["path"] for tenant in state["template"]["tenants"]]
+        selectors = cluster_config.tenant_configs(
+            state["template"].get("ydb_tenant_configs", {}), tenant_paths, execution=True
+        )
+        replacements = copy.deepcopy(state["template"].get("ydb_tenant_replacements", {}))
+        for tenant in tenant_paths:
+            actor_system = state["actor_system"].get("tenants", {}).get(tenant, state["actor_system"])
+            selectors.setdefault(tenant, {})["actor_system_config"] = actor_config(actor_system, "dynamic")
+            # Replace, rather than inherit storage-only settings such as cpu_count.
+            replacements.setdefault(tenant, []).append(["actor_system_config"])
+        config = cluster_config.document(
+            config["config"], selectors, tenant_paths, state["reference"]["session_id"], replacements=replacements
+        )
+        atomic_write_text(
+            state["root"] / "results" / "configuration" / "cluster.yaml", cluster_config.dump_document(config)
+        )
         with self.sessions.lock:
             self._check(state)
             state["cluster_nodes"] = nodes
-        return {"configured": True}
+        return {
+            "configured": True,
+            "artifacts": snapshot_results(state["root"] / "results", state["root"] / "results" / "configuration"),
+        }
 
     def start_nodes(self, value, role):
         if role not in ("static", "dynamic"):
@@ -387,14 +480,16 @@ class DistributedWorker:
             return self._start_job(state, "start-" + role, {}, lambda: self._start_nodes(state, role))
 
     def _start_nodes(self, state, role):
+        state["disk_admission"].verify()
         local = [node for node in state["prepared"]["nodes"] if node["role"] == role]
         for node in local:
             directory = state["root"] / "nodes" / str(node["node_id"])
+            directory.mkdir(parents=True, exist_ok=True)
             command = [
                 node["executable"]["path"],
                 "server",
                 "--yaml-config",
-                directory / "cluster.yaml",
+                state["root"] / "results" / "configuration" / "cluster.yaml",
                 "--grpc-port",
                 node["ports"]["grpc_port"],
                 "--ic-port",
@@ -787,6 +882,7 @@ class DistributedWorker:
         # final publication also takes that lock. The lease watcher retries.
         if record.get("recovery_required"):
             process_recovery.cleanup(self.root / record["session_id"])
+            self._cleanup_file_disks(record["session_id"])
             return
         state = self.state
         if state is None:
@@ -807,6 +903,8 @@ class DistributedWorker:
         state["sockets"].clear()
         if any(job["state"] == "running" for job in state["jobs"].values()):
             raise BenchmarkError("Distributed operation is still stopping")
+        self._cleanup_file_disks(record["session_id"])
+        state["disk_admission"].close()
         self._save(state)
         # Only this generation's frozen copies are temporary. Original catalog
         # binaries are never removed; their hashes remain in the saved plan.
@@ -818,3 +916,19 @@ class DistributedWorker:
         snapshot_diagnostics(state["root"])
         state["tasks"].put_nowait(None)
         self.state = None
+
+    def _cleanup_file_disks(self, session_id):
+        directory = self.file_disks / session_id
+        if self.file_disks.is_symlink() or directory.is_symlink():
+            raise BenchmarkError("Refusing symlinked file disk directory")
+        if not directory.exists():
+            return
+        files = list(directory.iterdir())
+        if any(
+            not re.fullmatch(r"[0-9]+-[0-9]+\.img", path.name) or path.is_symlink() or not path.is_file()
+            for path in files
+        ):
+            raise BenchmarkError("Unexpected contents in temporary file disk directory")
+        for path in files:
+            path.unlink()
+        directory.rmdir()

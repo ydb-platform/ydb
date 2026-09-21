@@ -2032,6 +2032,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         ctx.SendPDiskResponse(disk, *pending, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
     }
 
+#if defined(__linux__)
     Y_UNIT_TEST(FallbackCancellationRepliesPrecedeGoneForEveryOperation) {
         for (ui32 mode = 0; mode != 5; ++mode) {
             const bool pb = mode >= 2;
@@ -2123,6 +2124,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             ctx.Runtime.FilterEnqueue = {};
         }
     }
+#endif
 
     Y_UNIT_TEST(ConcurrentPersistentBufferBarriersRetainInFlightSectors) {
         for (bool registration : {false, true}) {

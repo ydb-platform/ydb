@@ -4,6 +4,7 @@
 #include "direct_block_group.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator_pool.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/dbg_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -25,6 +26,8 @@
 
 #include <ydb/core/mind/bscontroller/types.h>
 
+#include <array>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,6 +39,7 @@ class TDirectBlockGroup
 {
 public:
     TDirectBlockGroup(
+        IArenaAllocatorPtr arenaAllocator,
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
@@ -57,6 +61,7 @@ public:
     void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;
+    TArenaAllocatorPoolPtr GetArenaAllocatorPool() override;
 
     ui32 GetTabletGeneration() const override;
 
@@ -75,7 +80,7 @@ public:
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
@@ -83,14 +88,14 @@ public:
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
@@ -98,7 +103,7 @@ public:
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
@@ -107,7 +112,7 @@ public:
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId,
@@ -124,11 +129,6 @@ public:
         THostIndex hostIndex,
         const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) override;
-
-    void BarrierEraseFromPBuffer(ui64 lsn) override;
-
-    NThreading::TFuture<std::optional<TPBufferKey>>
-    GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
@@ -229,6 +229,10 @@ private:
         const TEvSyncResult& response,
         size_t segmentCount);
 
+    void OnNewPBufferKey(TPBufferKey pBufferKey);
+    [[nodiscard]] std::optional<TPBufferKey> ComputeSafeBarrierForErase() const;
+    void PBufferCleanup();
+
     void DoBarrierEraseFromPBuffer(
         THostIndex hostIndex,
         ui64 lsn,
@@ -271,6 +275,7 @@ private:
 
     [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
 
+    const TArenaAllocatorPoolPtr ArenaAllocatorPool;
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
     const TExecutorPtr Executor;
@@ -287,6 +292,8 @@ private:
 
     TDBGConnections Connections;
     TVector<TVChunkWeakPtr> VChunks;
+
+    std::array<ui64, MaxHostCount> LastSentBarrierByPBufferHost{};
     TOracle Oracle;
     TDirectBlockGroupCounters Counters;
 

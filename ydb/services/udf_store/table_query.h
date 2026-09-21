@@ -18,6 +18,7 @@ struct TModuleSourceRow {
     ui64 Size = 0;
     ui64 ChunkCount = 0;
     TString Body;
+    TString Manifest;
     ECompileStatus CompileStatus = ECompileStatus::Pending;
     TString CompileError;
 };
@@ -50,9 +51,14 @@ void SetSelectModuleByNameParams(
 
 bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TModuleSourceRow& row);
 
+// Four 8 MiB chunks leave room for result metadata below the 48 MiB query limit.
+constexpr ui64 ChunksPerRead = 4;
+
 TString BuildSelectSourceChunksQuery(const TString& tablePath);
-void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey);
-bool ParseSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
+void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey, ui64 firstChunk);
+//! Append a page, rejecting truncated results, gaps and duplicate indices.
+//! The next page starts at chunks.size(); a short page ends the read.
+bool AppendSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
 
 //! Artifacts are keyed by the upload they were built from, so a lookup that
 //! finds nothing means this upload has not been compiled here yet, not that
@@ -65,14 +71,32 @@ void SetSelectArtifactParams(
     const TString& uid);
 bool ParseArtifactResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TWasmArtifactRow& row);
 
+//! Identity of an artifact without any of its payload. The compile controller
+//! only needs to know which `(id, kind, uid)` are already covered on a
+//! platform, so it never reads object code.
+struct TArtifactKeyRow {
+    TString Id;
+    TString Kind;
+    TString Uid;
+};
+
+//! Lists every finished artifact of one platform in a single read. Rows whose
+//! object code is not written yet are skipped: a half-published artifact does
+//! not close a gap.
+TString BuildSelectArtifactKeysQuery(const TString& tablePath);
+bool ParseArtifactKeysResponse(
+    const Ydb::Table::ExecuteDataQueryResponse& response,
+    TVector<TArtifactKeyRow>& rows);
+
 TString BuildSelectArtifactChunksQuery(const TString& tablePath);
 void SetSelectArtifactChunksParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
     const TString& id,
     const TString& kind,
     const TString& uid,
-    const TString& blobKind);
-bool ParseArtifactChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
+    const TString& blobKind,
+    ui64 firstChunk);
+bool AppendArtifactChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
 
 TString BuildUpsertArtifactQuery(const TString& tablePath);
 void SetUpsertArtifactParams(

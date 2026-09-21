@@ -1,5 +1,102 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 26.3 RC {#26-3-rc}
+
+Release date: TBD.
+
+### Functionality
+
+* [Backup export and import are available for column-oriented tables, including S3-compatible storage](./recipes/backup/backup-collections/exporting-to-external-storage.md?version=main).
+* Column-oriented table columns support [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.3#encoding). Use `ENCODING(DICT)` for low-cardinality values.
+* [Local min_max indexes](./dev/min_max-skip-index.md?version=v26.3) are enabled for column-oriented tables. They skip data fragments outside a query range, reducing the amount of data read.
+* Added [storage group decommissioning through virtual storage groups](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data moves to virtual groups in the background while applications continue reading and writing data.
+* Added [authentication through external OpenID Connect identity providers](./security/authentication.md?version=v26.3#external-idp). {{ ydb-short-name }} validates JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
+* Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier and SASL authentication is not required.
+* Columnar engine optimization: column-oriented tables use an updated compaction strategy that organizes data more efficiently.
+* Authentication and authorization subsystem optimization: bulk authorization requests to AccessService are enabled by default, reducing authorization request overhead.
+* Streaming YQL queries can access system virtual attributes such as `__ydb_create_time`, `__ydb_write_time`, and others, as well as user attributes `__ydb_user_attributes`. [Feature documentation](./concepts/query_execution/topics.md?version=v26.3#system-metadata).
+* Distributed Storage optimization: full VDisk synchronization is faster because processed SyncLog data is removed locally by default.
+* Added transfer metrics and statistics to `DescribeTransfer` for monitoring and diagnostics.
+* Added a configurable limit for stored forced-compaction operations. Completed and cancelled operations can be removed automatically when the limit is reached.
+* Change Data Capture records can include the [OpenTelemetry trace ID](./concepts/cdc.md?version=v26.3#record-structure) of the request that produced the change.
+* [Topic reads that start from a timestamp](./reference/ydb-cli/topic-read.md?version=v26.3) filter out messages with earlier write timestamps, including messages stored in the same blob as newer messages.
+
+### Disabled functionality
+
+The following functionality is not enabled by default.
+
+* For column-oriented tables, `ALTER TABLE ... COMPACT` can start forced compaction.
+* Column-oriented and row-oriented tables now have parity in the set of YQL data types (`Interval`, `Uuid`, and `DyNumber` are supported).
+* Added [hybrid search](./dev/hybrid-search.md?version=v26.3), combining full-text relevance and vector similarity into one ranked result.
+* Topics can be accessed through the [Amazon SQS API](./reference/sqs-api/index.md?version=v26.3), allowing SQS-compatible clients to read and write messages.
+* Added [JSON indexes](./dev/json-indexes.md?version=v26.3) for accelerating `JSON_EXISTS` and `JSON_VALUE` queries.
+* Full-text indexes support [filter columns](./dev/fulltext-indexes.md?version=v26.3#filtered), allowing search within a logical table partition.
+* Full-text indexes can be created for tables with [arbitrary primary-key types](./dev/fulltext-indexes.md?version=v26.3#primary-key).
+
+## Version 26.2 {#26-2}
+
+### Version 26.2.1.14 {#26-2-1-14}
+
+Release date: September 16, 2026.
+
+#### Functionality
+
+* [Full-text indexes](./dev/fulltext-indexes.md?version=v26.2) are enabled by default.
+* [Streaming queries](./dev/streaming-query/index.md?version=v26.2) can read from local topics, write to local topics, read local tables, and contain multiple `INSERT` statements.
+* Streaming queries support [watermarks](./dev/streaming-query/watermarks.md?version=v26.2).
+* Added [Bloom skip indexes](./dev/bloom-skip-indexes.md?version=v26.2): Bloom and Bloom n-gram indexes for column-oriented tables, and prefix Bloom indexes for row-oriented tables.
+* [Column compression](./yql/reference/syntax/create_table/index.md?version=v26.2) settings for column-oriented tables are available by default.
+* The [parallelism level](./yql/reference/syntax/alter_table/indexes.md?version=v26.2) can now be configured for index builds.
+* For row-oriented tables, [`ALTER TABLE`](./yql/reference/syntax/alter_table/columns.md?version=v26.2) statements `ALTER COLUMN SET DEFAULT` and `ALTER COLUMN DROP DEFAULT` are available by default.
+* For row-oriented tables, the YQL statement [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2) is available by default.
+* The YQL statement [`DISCARD SELECT`](./yql/reference/syntax/discard.md?version=v26.2) is available by default.
+* QueryService can return query results in [Apache Arrow format](./reference/ydb-sdk/data-formats/format-arrow.md?version=v26.2); this capability is enabled by default.
+* Added forced [compaction](./yql/reference/syntax/alter_table/compact.md?version=v26.2) for row-oriented tables using `ALTER TABLE ... COMPACT`.
+* Added automatic storage balancing between groups and background validation of disk placement.
+* Table split and merge operations are faster for tables with many partitions: SchemeShard updates only the affected partitions instead of rebuilding the entire partition list.
+* Added [audit logging](./security/audit-log.md?version=v26.2) for topic operations.
+* Added [built-in minidump collection based on Google Breakpad](./devops/observability/minidumps.md?version=v26.2) for Linux nodes.
+* Added the [`ydb-dstool pdisk populate`](./reference/ydb-dstool/pdisk-populate.md?version=v26.2) subcommand for reproducing a PDisk workload on another device.
+
+#### Disabled functionality
+
+This functionality is present in the core to allow rollback from the future 26.3 release, but is not enabled by default. It will be enabled by default in the next major release. It may also be enabled in some managed YDB services.
+
+* Added support for [incremental backups](./concepts/datamodel/backup-collection.md?version=v26.2), which store only changes relative to the preceding backup in a collection.
+* [Column-oriented tables](./recipes/backup/import-export-column-tables.md?version=v26.2) can be exported and imported using S3-compatible storage.
+* Added [export and import of row-oriented tables](./reference/ydb-cli/export-import/export-nfs.md?version=main) using a local file system, including file systems mounted over NFS.
+* Added snapshot retention for long-running analytical queries over column-oriented tables, preventing snapshot data from being removed before a query completes.
+* QueryService can notify SDKs when a node or session is shutting down, allowing clients to stop sending new queries there.
+* Added database-level limits on the count and volume of small blobs for column-oriented tables. New writes are rejected when the hard limit is exceeded.
+* [Watermark](./dev/streaming-query/watermarks.md?version=v26.2) expressions can be evaluated outside the context of an individual message.
+* Added [min-max skip indexes](./yql/reference/syntax/create_table/min_max_index.md?version=v26.2) for column-oriented tables.
+* Added [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.2#encoding) for columns in column-oriented tables.
+* Added online construction of unique secondary indexes.
+* Transactions between topics and tables can use optimized conflict checking.
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46747) incorrect results from some scan queries over column-oriented tables.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/50358) handling of malformed Kafka requests that could cause excessive memory use or out-of-bounds access.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/49929) topic reads hanging after a read balancer restart.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35470) race conditions in the server-side topic read session and in the [Topic SDK](https://github.com/ydb-platform/ydb/pull/42213).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/50897) a crash and a [hang](https://github.com/ydb-platform/ydb/pull/50621) in streaming query checkpointing.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/50379) race conditions when cancelling and planning distributed transactions.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/49469) handling of oversized blocks during encrypted export and a [false data corruption error](https://github.com/ydb-platform/ydb/pull/48986) during encrypted restore.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/49460) a race condition when collecting statistics with `ydb workload topic`.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/48174) a double free during `DqHashCombine` spilling teardown.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/40912) lost `ReadSet` acknowledgements that could prevent a transaction involving topics from completing.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/40801) handling of `NODATA` responses in the KeyValue API: `NOT_FOUND` or `INTERNAL_ERROR` is returned instead of terminating the process.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41895) IAM authentication for external data sources in Generic Provider and [error handling](https://github.com/ydb-platform/ydb/pull/40761) for provider responses.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41411) a memory leak when loading external data source metadata.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46739) parsing of tri-state feature flags in YAML configuration that could cause subsequent settings to be lost.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41009) copying and exporting tables with secondary indexes after index implementation tables were removed.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/45958) object filtering and list operations during file-system export.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/47591) Kafka API Metadata responses that could return an empty broker list or an inconsistent controller ID, causing Kafka AdminClient and Kafka Streams operations to time out.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46033) a leak of script execution records created by streaming queries.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/42277) `local-ydb` overwriting a user-provided `config.yaml` mounted at the default path during the first Docker deployment.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/44011) a Hive crash on restart when a tablet lock and its persisted leader pointed to different nodes.
+
 ## Version 26.1 {#26-1}
 
 ### Version 26.1.1.22 {#26-1-1-22}
@@ -84,7 +181,7 @@ Release date: June 5, 2026.
 * Vector index search is significantly faster across all index types because distances are computed locally on each DataShard before data is sent over the network — see [VIEW (vector index)](./yql/reference/syntax/select/vector_index.md?version=v25.4) and [Vector indexes](./dev/vector-indexes.md?version=v25.4).
 * Full vector search without an ANN index is faster thanks to pushdown (vector search, KNN UDF) — see [Vector search](./concepts/query_execution/vector_search.md?version=v25.4) and the [KNN](./yql/reference/udf/list/knn.md?version=v25.4) module.
 * Database-stored secrets are fully supported (create, alter, drop, and use) — see [Secrets](./concepts/datamodel/secrets.md?version=v25.4). Note that the [legacy syntax](./concepts/datamodel/secrets.md?version=v25.3) is deprecated.
-* [`UNION ALL`](./yql/reference/syntax/select/union.md?version=main#union-all) execution was improved with parallel execution, improving performance of analytical queries.
+* [`UNION ALL`](./yql/reference/syntax/select/union.md?version=v26.2#union-all) execution was improved with parallel execution, improving performance of analytical queries.
 
 #### Bug Fixes
 

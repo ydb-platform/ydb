@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/tx/columnshard/data_accessor/cache_policy
     ydb/core/tx/columnshard/column_fetching
+    ydb/services/udf_store/compile_controller
 )
 
 DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)

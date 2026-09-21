@@ -24,6 +24,11 @@ namespace NKikimr::NDDisk {
 
     static_assert(MinSectorSize == IntegrityUnitSize);
 
+    // DDisk uses the whole physical PDisk chunk and needs no room for PDisk per-sector metadata, so a
+    // PDisk formatted with PhysicalChunkSize gives it exactly this much usable space per chunk. A bigger
+    // physical chunk still works, it only means the space PDisk reserved for metadata is left unused.
+    constexpr ui64 ExpectedPDiskChunkSize = 128_MB;
+
     struct TConnectionToken {
         ui64 Low = 0;
         ui64 High = 0;

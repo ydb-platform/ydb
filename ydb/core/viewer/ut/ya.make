@@ -24,15 +24,16 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/http/misc
+    library/cpp/http/simple
     ydb/core/mon
     ydb/core/mon/ut_utils
     ydb/core/persqueue/ut/common
-    library/cpp/http/misc
-    library/cpp/http/simple
     ydb/core/testlib/default
+    ydb/core/tx/schemeshard/ut_helpers
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
-    ydb/core/tx/schemeshard/ut_helpers
+    ydb/public/sdk/cpp/src/library/kafka
 )
 
 END()

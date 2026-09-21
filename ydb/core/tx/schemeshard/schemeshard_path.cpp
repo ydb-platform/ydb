@@ -7,7 +7,11 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/sys_view/common/path.h>
 
+#include <ydb/library/actors/core/log.h>
+
 #include <util/string/join.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -1517,13 +1521,13 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
                               pathParts.begin()))
         {
             // headOpPath is a prefix of the path
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "ResolveWithInactive: attach to the TargetPath of head operation"
-                         << " path: " << path
-                         << " opId: " << opId
-                         << " head opId: " << headOpId
-                         << " headOpPath: " << headOpPath.PathString()
-                         << " headOpPath id: " << headOpPath->PathId);
+            YDB_LOG_DEBUG("ResolveWithInactive: attach to the TargetPath of head operation",
+                {"path", path},
+                {"opId", opId},
+                {"headOpId", headOpId},
+                {"headOpPath", headOpPath.PathString()},
+                {"headOpPathId", headOpPath->PathId},
+            );
 
             return headOpPath.Child(pathParts.back());
         }
@@ -1531,10 +1535,10 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
         --headSubTxId;
     }
 
-    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "ResolveWithInactive: NO attach to the TargetPath of head operation"
-                 << " path: " << path
-                 << " opId: " << opId);
+    YDB_LOG_DEBUG("ResolveWithInactive: NO attach to the TargetPath of head operation",
+        {"path", path},
+        {"opId", opId},
+    );
 
     return Resolve(nullPrefix, std::move(pathParts));
 }
@@ -2185,3 +2189,5 @@ TPathId TPath::GetPathIdSafe() const {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

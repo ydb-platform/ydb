@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/library/aclib
     ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/library/kafka
     yql/essentials/sql/pg_dummy
 )
 

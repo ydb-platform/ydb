@@ -319,6 +319,12 @@ protected:
                 // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.IsDatashard() && !stageInfo.Meta.IsOlap());
                 // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.ShardKey);
             }
+
+            if (stageInfo.Meta.IsCsWriteAffinitySink()) {
+                for (const auto& shardId : stageInfo.Meta.GetColumnShardIds()) {
+                    shardIds.insert(shardId);
+                }
+            }
         }
 
         if (shardIds.size() > 0) {
@@ -1204,6 +1210,8 @@ protected:
                 TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC);
                 break;
         }
+
+        TasksGraph.GetMeta().SetDisablePessimisticLocks(Request.DisablePessimisticLocks);
 
         if (IsDebugLogEnabled()) {
             for (auto& tx : Request.Transactions) {

@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import tempfile
 import threading
 import unittest
@@ -70,7 +72,23 @@ class DistributedCoordinatorTest(unittest.TestCase):
             }
         if operation == "diagnostics":
             return {"artifacts": []}
-        return {"state": "completed", "result": {"host_id": host, "nodes": []}}
+        content = b"config: {}\n"
+        if operation == "configure":
+            return {
+                "state": "completed",
+                "result": {
+                    "artifacts": [
+                        {
+                            "path": "configuration/cluster.yaml",
+                            "size": len(content),
+                            "sha256": hashlib.sha256(content).hexdigest(),
+                        }
+                    ]
+                },
+            }
+        if operation == "read-result":
+            return {"data": base64.b64encode(content[value["offset"] :]).decode()}
+        return {"state": "completed", "result": {"host_id": host, "nodes": [], "artifacts": []}}
 
     def test_one_cluster_orders_all_host_phases(self):
         self.cluster.start()
@@ -85,6 +103,7 @@ class DistributedCoordinatorTest(unittest.TestCase):
                 "prepare",
                 "configure",
                 "configure",
+                "read-result",
                 "start-static",
                 "start-static",
                 "bootstrap",
@@ -111,6 +130,34 @@ class DistributedCoordinatorTest(unittest.TestCase):
         self.cluster.stop()
         self.assertIn(("a", "release"), self.calls)
         self.assertIn(("b", "release"), self.calls)
+        self.assertNotIn(("a", "start-static"), self.calls)
+
+    def test_missing_configuration_prevents_node_start(self):
+        original = self.cluster.call
+
+        def call(host, operation, value):
+            result = original(host, operation, value)
+            if operation == "configure":
+                result["result"]["artifacts"] = []
+            return result
+
+        self.cluster.call = call
+        with self.assertRaisesRegex(BenchmarkError, "Missing saved YDB configuration"):
+            self.cluster.start()
+        self.assertNotIn(("a", "start-static"), self.calls)
+
+    def test_different_host_configurations_prevent_node_start(self):
+        original = self.cluster.call
+
+        def call(host, operation, value):
+            result = original(host, operation, value)
+            if host == "b" and operation == "configure":
+                result["result"]["artifacts"][0]["sha256"] = "0" * 64
+            return result
+
+        self.cluster.call = call
+        with self.assertRaisesRegex(BenchmarkError, "configuration differs between hosts"):
+            self.cluster.start()
         self.assertNotIn(("a", "start-static"), self.calls)
 
     def test_incompatible_last_host_does_not_reserve_any_host(self):

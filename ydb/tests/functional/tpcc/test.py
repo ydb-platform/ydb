@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import os
 import json
+import pytest
 from json import encoder
+from concurrent.futures import ThreadPoolExecutor
 import yatest.common
 from hamcrest import assert_that, is_
 encoder.FLOAT_REPR = lambda o: format(o, '{:e}')
@@ -29,12 +31,18 @@ def run_cli(argv):
     )
 
 
-def test_run_benchmark():
+@pytest.mark.parametrize('import_processes', [1, 4])
+def test_run_benchmark(import_processes: int):
     ret = run_cli(["workload", "tpcc", "init", "-w", WH_COUNT])
     assert_that(ret.exit_code, is_(0))
 
-    ret = run_cli(["workload", "tpcc", "import", "-w", WH_COUNT])
-    assert_that(ret.exit_code, is_(0))
+    pool = ThreadPoolExecutor(import_processes)
+    futures = []
+    for p in range(import_processes):
+        futures.append(pool.submit(run_cli, ["workload", "tpcc", "import", "-w", WH_COUNT, "-i", str(p), "-C", str(import_processes)]))
+    pool.shutdown()
+    for f in futures:
+        assert_that(f.result().exit_code, is_(0))
 
     # this actually checks that import has imported the data
     ret = run_cli(["workload", "tpcc", "check", "-w", WH_COUNT, "--just-imported"])

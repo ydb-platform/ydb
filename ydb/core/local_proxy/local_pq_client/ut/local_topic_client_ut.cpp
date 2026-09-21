@@ -4,6 +4,9 @@
 #include <ydb/core/local_proxy/local_pq_client/local_topic_client.h>
 
 namespace NKikimr::NKqp::NLocalTopicTests {
+
+using NYdb::NTopic::TDeferredCommit;
+
 namespace {
 
 class TPathAliasingLocalTopicClientFixture : public TLocalTopicClientFixture {
@@ -85,6 +88,11 @@ Y_UNIT_TEST_SUITE(TLocalTopicClient) {
         auto readSession = client->CreateReadSession(ReadSettings(TOPIC_PATH));
         const auto messages = ReadMessages(*readSession, 1);
         UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "path alias bypass");
+        TDeferredCommit deferred;
+        deferred.Add(messages[0]);
+        deferred.Commit();
+        const auto ack = WaitForReadEvent<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(*readSession);
+        UNIT_ASSERT_VALUES_EQUAL(ack.GetCommittedOffset(), 1);
         CloseSession(*readSession);
     }
 }

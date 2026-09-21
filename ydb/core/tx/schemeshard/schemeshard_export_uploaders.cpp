@@ -33,8 +33,6 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
-constexpr TStringBuf CreateTableFileName = "create_table.sql";
-
 template <typename TSettings>
 TString GetDestinationPrefix(const TSettings& settings, ui32 itemIdx) {
     if (itemIdx < ui32(settings.items_size())) {
@@ -425,18 +423,20 @@ public:
             return Finish(false, error);
         }
 
+        const TString createTableFileName = NYdb::NDump::NFiles::CreateTable().FileName;
+
         TMaybe<NBackup::TEncryptionIV> schemeIV;
         if (IV) {
             schemeIV = NBackup::TEncryptionIV::Combine(*IV, NBackup::EBackupFileType::TableCreate, 0 /* backupItemNumber */, 0 /* shardNumber */);
         }
 
-        if (!this->AddFile(TString(CreateTableFileName), Scheme, schemeIV)) {
+        if (!this->AddFile(createTableFileName, Scheme, schemeIV)) {
             return;
         }
 
         if (EnableChecksums) {
-            const TString checksum = TStringBuilder() << NBackup::ComputeChecksum(Scheme) << ' ' << CreateTableFileName;
-            if (!this->AddFile(NBackup::ChecksumKey(TString(CreateTableFileName)), checksum)) {
+            const TString checksum = TStringBuilder() << NBackup::ComputeChecksum(Scheme) << ' ' << createTableFileName;
+            if (!this->AddFile(NBackup::ChecksumKey(createTableFileName), checksum)) {
                 return;
             }
         }

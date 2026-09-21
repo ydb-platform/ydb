@@ -1703,32 +1703,31 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         }
     }
 
-    Y_UNIT_TEST(TableBackupAsSqlBackupSettingsSurviveSchemeShardReboot) {
+    Y_UNIT_TEST(TableBackupAsSqlUploadPrecedesBackupAndSurvivesSchemeShardReboot) {
         ui64 txId = 100;
         CreateTableForSqlBackup(txId, false);
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
         const auto expected = DescribeTableAsSql();
-        TBlockEvents<TEvDataShard::TEvProposeTransaction> proposals(Runtime(), [](const auto& ev) {
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(Runtime(), [](const auto& ev) {
             const auto& record = ev->Get()->Record;
-            if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
-                return false;
-            }
-            NKikimrTxDataShard::TFlatSchemeTransaction tx;
-            UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
-            return tx.HasBackup();
+            return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup();
         });
         TBlockEvents<NWrappers::NExternalStorage::TEvPutObjectRequest> uploads(Runtime(), [](const auto& ev) {
             return ev->Get()->Request.GetKey() == "sql/create_table.sql";
         });
         const auto exportId = StartTableSqlExport(txId, "sql");
-        Runtime().WaitFor("blocked shard backup proposal", [&] { return !proposals.empty(); });
         Runtime().WaitFor("blocked SQL upload", [&] { return !uploads.empty(); });
+        Runtime().SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_C(proposals.empty(), "backup must not start before create_table.sql is uploaded");
+
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(false);
-        proposals.Stop();
-        proposals.clear();
         uploads.Stop();
         uploads.clear();
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+
+        Runtime().WaitFor("blocked backup proposal after SQL upload", [&] { return !proposals.empty(); });
+        proposals.Stop();
+        proposals.Unblock();
         WaitTableSqlExport(exportId);
         CheckSqlBackup("/sql", expected);
     }
@@ -1791,11 +1790,18 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         ui64 txId = 100;
         CreateTableForSqlBackup(txId, false);
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> proposals(Runtime(), [](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup();
+        });
         TBlockEvents<NWrappers::NExternalStorage::TEvPutObjectRequest> uploads(Runtime(), [](const auto& ev) {
             return ev->Get()->Request.GetKey() == "sql/create_table.sql";
         });
         const auto exportId = StartTableSqlExport(txId, "sql", "number_of_retries: 0");
         Runtime().WaitFor("blocked SQL upload", [&] { return !uploads.empty(); });
+        Runtime().SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_C(proposals.empty(), "backup must not start before create_table.sql is uploaded");
+
         const auto& request = uploads.front();
         auto response = MakeHolder<NWrappers::NExternalStorage::TEvPutObjectResponse>(
             TString("sql/create_table.sql"), Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>(
@@ -1806,8 +1812,12 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         uploads.clear();
         Runtime().Send(failure.Release(), 0, true);
         WaitTableSqlExport(exportId, Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT(proposals.empty());
         UNIT_ASSERT(!HasS3File("/sql/create_table.sql"));
         UNIT_ASSERT(!HasS3File("/sql/create_table.sql.sha256"));
+        UNIT_ASSERT(!HasS3File("/sql/scheme.pb"));
+        UNIT_ASSERT(!HasS3File("/sql/scheme.pb.sha256"));
+        UNIT_ASSERT(!HasS3File("/sql/data_00.csv"));
     }
 
     Y_UNIT_TEST(TableBackupAsSqlWithSequenceAndChangefeed) {

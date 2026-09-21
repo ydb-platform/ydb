@@ -586,7 +586,7 @@ private:
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         const auto& item = exportInfo.Items[itemIdx];
 
-        if (!NeedsTableSchemeUpload(exportInfo, item) || item.CreateTableUploaded || item.SchemeUploader) {
+        if (!NeedsTableSchemeUpload(exportInfo, item) || item.State != EState::UploadingCreateTable || item.SchemeUploader) {
             return;
         }
 
@@ -943,6 +943,10 @@ private:
 
         for (ui32 i : xrange(exportInfo.Items.size())) {
             KillChildActors(exportInfo.Items[i]);
+            if (i == itemIdx) {
+                continue;
+            }
+
             if (exportInfo.Items.at(i).State != EState::Transferring) {
                 continue;
             }
@@ -1044,8 +1048,6 @@ private:
                     UploadTableScheme(*exportInfo, itemIdx, ctx);
                     continue;
                 }
-
-                UploadTableScheme(*exportInfo, itemIdx, ctx);
 
                 if (item.WaitTxId == InvalidTxId) {
                     if (IsPathTypeTransferrable(item) && item.State <= EState::Transferring) {
@@ -1437,9 +1439,7 @@ private:
         Self->RunningExportSchemeUploaders.erase(std::exchange(item.SchemeUploader, {}));
 
         if (!result.Success) {
-            if (!NeedsTableSchemeUpload(*exportInfo, item)) {
-                item.State = EState::Cancelled;
-            }
+            item.State = EState::Cancelled;
             item.Issue = result.Error;
             Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
@@ -1455,23 +1455,22 @@ private:
         }
 
         if (NeedsTableSchemeUpload(*exportInfo, item)) {
-            item.CreateTableUploaded = true;
-
-            if (exportInfo->State == EState::Transferring) {
-                if (item.State == EState::UploadingCreateTable) {
-                    item.State = EState::Done;
-                }
+            if (exportInfo->State == EState::Transferring && item.State == EState::UploadingCreateTable) {
+                item.State = EState::Transferring;
                 Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
-                if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                    if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
-                        EndExport(exportInfo, EState::Done, db);
-                    } else {
-                        PrepareAutoDropping(Self, *exportInfo, db);
-                    }
-                }
+                exportInfo->PendingItems.emplace_back(itemIdx);
+                AllocateTxId(*exportInfo, itemIdx);
             } else if (exportInfo->State == EState::Cancellation) {
+                item.State = EState::Cancelled;
                 Self->PersistExportItemState(db, *exportInfo, itemIdx);
+
+                if (AllOf(exportInfo->Items, [](const TExportInfo::TItem& item) {
+                    // on cancellation we wait only for transferring items
+                    return item.State != EState::Transferring;
+                })) {
+                    EndExport(exportInfo, EState::Cancelled, db);
+                }
             }
             return;
         }
@@ -1656,11 +1655,18 @@ private:
             TDeque<ui32> tables;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 auto& item = exportInfo->Items[itemIdx];
+
+                if (NeedsTableSchemeUpload(*exportInfo, item)) {
+                    item.State = EState::UploadingCreateTable;
+                    Self->PersistExportItemState(db, *exportInfo, itemIdx);
+                    UploadTableScheme(*exportInfo, itemIdx, ctx);
+                    continue;
+                }
+
                 item.State = EState::Transferring;
                 Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
                 if (IsPathTypeTransferrable(item)) {
-                    UploadTableScheme(*exportInfo, itemIdx, ctx);
                     tables.emplace_back(itemIdx);
                 } else {
                     UploadScheme(*exportInfo, itemIdx, ctx);
@@ -1688,11 +1694,6 @@ private:
                     Self->EraseEncryptionKey(db, *exportInfo);
                     itemHasIssues = true;
                 }
-            }
-
-            if (!itemHasIssues && NeedsTableSchemeUpload(*exportInfo, item) && !item.CreateTableUploaded) {
-                item.State = EState::UploadingCreateTable;
-                UploadTableScheme(*exportInfo, itemIdx, ctx);
             }
 
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {

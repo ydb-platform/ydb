@@ -3437,11 +3437,6 @@
                 "ColumnId": 10,
                 "ColumnName": "ParentIndex",
                 "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 11,
-                "ColumnName": "CreateTableUploaded",
-                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -3457,8 +3452,7 @@
                     7,
                     8,
                     9,
-                    10,
-                    11
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,

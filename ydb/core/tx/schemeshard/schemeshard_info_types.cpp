@@ -2983,7 +2983,6 @@ TString TExportInfo::TItem::ToString(ui32 idx) const {
         << " State: " << State
         << " SubState: " << SubState
         << " WaitTxId: " << WaitTxId
-        << " CreateTableUploaded: " << CreateTableUploaded
         << " Issue: '" << Issue << "'"
     << " }";
 }

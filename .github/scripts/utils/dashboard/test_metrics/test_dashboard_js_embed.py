@@ -6,8 +6,7 @@ import ast
 import unittest
 from pathlib import Path
 
-from dashboard_html_main import js_script_json
-from dashboard_report_table import js_script_json as table_js_script_json
+from html_embed import js_script_json
 
 _DIR = Path(__file__).resolve().parent
 
@@ -18,7 +17,6 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertNotIn("</script>", raw)
         self.assertNotIn("</SCRIPT>", raw)
         self.assertIn("\\u003c/script\\u003e", raw)
-        self.assertEqual(raw, table_js_script_json({"x": "</script><script>alert(1)</script>"}))
         upper = js_script_json({"x": "</SCRIPT>"})
         self.assertNotIn("</SCRIPT>", upper)
         self.assertIn("\\u003c/SCRIPT\\u003e", upper)

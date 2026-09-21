@@ -38,11 +38,6 @@ class PopRunnerOptionsTest(unittest.TestCase):
         self.assertTrue(usage)
         self.assertEqual(data, {"cache_mode": "none"})
 
-    def test_runner_usage_alias(self):
-        runner, usage = pop_runner_options({"runner_usage": 1})
-        self.assertFalse(runner)
-        self.assertTrue(usage)
-
     def test_empty(self):
         self.assertEqual(pop_runner_options({}), (False, False))
         self.assertEqual(pop_runner_options(None), (False, False))

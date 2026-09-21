@@ -27,10 +27,10 @@ namespace NKikimr::NGRpcService {
         using TKeyValue = Ydb::KeyValue::V1::KeyValueService::Stub;
         using TTable = Ydb::Table::V1::TableService::Stub;
 
-        void AddRule(NKikimrConfig::TAppConfig& config, const char* pattern, const char* replacement) {
+        void AddRule(NKikimrConfig::TAppConfig& config, const char* src, const char* dst) {
             auto* rule = config.MutablePathRewriteConfig()->AddRules();
-            rule->SetPattern(pattern);
-            rule->SetReplacement(replacement);
+            rule->SetSrc(src);
+            rule->SetDst(dst);
         }
 
         NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true) {
@@ -39,11 +39,13 @@ namespace NKikimr::NGRpcService {
             if (!enablePathAliasing) {
                 return config;
             }
-            AddRule(config, "^/alias$", "/Root/kfront");
-            AddRule(config, "^/discovery-alias$", "/Root/kfront");
-            AddRule(config, "^/Root/kfront$", "/Root/missing");
-            AddRule(config, "^/volume-(alias|inspect)$", "/Root/kfront/Volume");
-            AddRule(config, "^/Root/kfront/Volume$", "/Root/kfront/Wrong");
+            AddRule(config, "/alias/", "/Root/kfront/");
+            AddRule(config, "/discovery-alias", "/Root/kfront");
+            AddRule(config, "/discovery-boundary", "/Root/k");
+            AddRule(config, "/volume-alias", "/Root/kfront/Volume");
+            AddRule(config, "/volume-inspect", "/Root/kfront/Volume");
+            AddRule(config, "/Root/kfront/Volume", "/Root/kfront/Wrong");
+            AddRule(config, "/Root/kfront", "/Root/missing");
             return config;
         }
 
@@ -137,7 +139,7 @@ namespace NKikimr::NGRpcService {
             // is fetched, then re-enters ingress. The physical-name decoy rule must
             // not see the cached result on replay.
             const auto session = Result<Ydb::Table::CreateSessionResult>(
-                Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, "/alias"));
+                Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, "/alias/"));
             UNIT_ASSERT(!session.session_id().empty());
 
             Ydb::Table::KeepAliveRequest keepAlive;
@@ -176,12 +178,17 @@ namespace NKikimr::NGRpcService {
             const auto expected = EndpointIdentities(list("/alias", "/discovery-alias"));
             UNIT_ASSERT(!expected.empty());
             UNIT_ASSERT(EndpointIdentities(list("/alias", "/alias")) == expected);
+            UNIT_ASSERT(EndpointIdentities(list("/alias/", "/discovery-alias/")) == expected);
 
             Ydb::Discovery::ListEndpointsRequest missing;
             missing.set_database("/Root/missing");
             UNIT_ASSERT_VALUES_EQUAL(
                 Status(Call(*stub, &TDiscovery::ListEndpoints, missing, "/alias")), Ydb::StatusIds::NOT_FOUND);
             UNIT_ASSERT(EndpointIdentities(list("/discovery-alias", "/alias")) == expected);
+
+            // A byte-prefix-only match would incorrectly resolve this to the existing tenant.
+            missing.set_database("/discovery-boundaryfront");
+            UNIT_ASSERT(Status(Call(*stub, &TDiscovery::ListEndpoints, missing, "/alias")) != Ydb::StatusIds::SUCCESS);
         }
 
         Y_UNIT_TEST(UnmatchedInputsPreserveDisabledIngressBehavior) {
@@ -233,7 +240,7 @@ namespace NKikimr::NGRpcService {
             auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(fixture.Channel);
 
             Ydb::KeyValue::CreateVolumeRequest create;
-            create.set_path("/volume-alias");
+            create.set_path("/volume-alias/");
             create.set_partition_count(1);
             for (ui32 index = 0; index < 3; ++index) {
                 create.mutable_storage_config()->add_channel()->set_media("hdd");

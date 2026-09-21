@@ -10,8 +10,8 @@ namespace NKikimr::NGRpcService {
         std::shared_ptr<const NPathAliasing::TPathNormalizer> MakeNormalizer() {
             NKikimrConfig::TPathRewriteConfig config;
             auto* rule = config.AddRules();
-            rule->SetPattern("^/raw$");
-            rule->SetReplacement("/rewritten");
+            rule->SetSrc("/raw");
+            rule->SetDst("/rewritten");
             return std::make_shared<const NPathAliasing::TPathNormalizer>(config);
         }
 

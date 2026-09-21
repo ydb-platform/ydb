@@ -5,7 +5,6 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/re2
     ydb/core/protos
 )
 

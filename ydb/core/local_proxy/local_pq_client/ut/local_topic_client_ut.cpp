@@ -14,8 +14,8 @@ public:
             .SetAuthToken(BUILTIN_ACL_ROOT)
             .SetEnableTopicDeferredPublish(true);
         auto* rule = settings.AppConfig.MutablePathRewriteConfig()->AddRules();
-        rule->SetPattern(R"(^/Root/topic$)");
-        rule->SetReplacement("/Root/missing-topic");
+        rule->SetSrc("/Root/topic");
+        rule->SetDst("/Root/missing-topic");
 
         Kikimr = std::make_unique<TKikimrRunner>(settings);
         TopicClient = std::make_unique<TTopicClient>(Kikimr->GetDriver());

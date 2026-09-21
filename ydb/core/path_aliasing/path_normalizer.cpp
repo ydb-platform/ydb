@@ -2,12 +2,9 @@
 
 #include <ydb/core/protos/config.pb.h>
 
-#include <contrib/libs/re2/re2/re2.h>
-
 #include <util/generic/yexception.h>
 
 #include <memory>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -15,8 +12,8 @@ namespace NKikimr::NPathAliasing {
 
     struct TPathNormalizer::TImpl {
         struct TRule {
-            std::unique_ptr<const re2::RE2> Pattern;
-            std::string Replacement;
+            TString Src;
+            TString Dst;
         };
 
         std::vector<TRule> Rules;
@@ -33,36 +30,33 @@ namespace NKikimr::NPathAliasing {
         size_t index = 0;
         for (const auto& rule : config.GetRules()) {
             ++index;
-            Y_ENSURE(rule.HasPattern(), "path_rewrite_config rule " << index << ": missing pattern");
-            Y_ENSURE(rule.HasReplacement(), "path_rewrite_config rule " << index << ": missing replacement");
+            TStringBuf src(rule.GetSrc());
+            TStringBuf dst(rule.GetDst());
+            Y_ENSURE(src.StartsWith("/"), "path_rewrite_config rule " << index << ": src must be a nonempty absolute path");
+            Y_ENSURE(dst.StartsWith("/"), "path_rewrite_config rule " << index << ": dst must be a nonempty absolute path");
 
-            const auto& pattern = rule.GetPattern();
-            auto compiled = std::make_unique<re2::RE2>(
-                re2::StringPiece(pattern.data(), pattern.size()), re2::RE2::Quiet);
-            Y_ENSURE(compiled->ok(),
-                     "path_rewrite_config rule " << index << ": invalid pattern: " << compiled->error());
-
-            const auto& replacement = rule.GetReplacement();
-            std::string error;
-            Y_ENSURE(compiled->CheckRewriteString(
-                         re2::StringPiece(replacement.data(), replacement.size()), &error),
-                     "path_rewrite_config rule " << index << ": invalid replacement: " << error);
-
-            impl->Rules.push_back({std::move(compiled), replacement});
+            // Ignore one trailing slash. Root becomes empty so joins need no extra separator.
+            src.ChopSuffix("/");
+            dst.ChopSuffix("/");
+            impl->Rules.push_back({TString(src), TString(dst)});
         }
 
         Impl = std::move(impl);
     }
 
     TString TPathNormalizer::NormalizePath(TStringBuf path) const {
-        if (path.empty() || !Impl) {
+        if (!Impl || !path.StartsWith("/")) {
             return TString(path);
         }
 
-        std::string result(path.data(), path.size());
+        auto candidate = path;
+        candidate.ChopSuffix("/");
         for (const auto& rule : Impl->Rules) {
-            if (re2::RE2::Replace(&result, *rule.Pattern, rule.Replacement)) {
-                return TString(result);
+            if (candidate.StartsWith(rule.Src)
+                && (candidate.size() == rule.Src.size() || candidate[rule.Src.size()] == '/')) {
+                TString result(rule.Dst);
+                result.append(candidate.data() + rule.Src.size(), candidate.size() - rule.Src.size());
+                return result.empty() ? TString("/") : result;
             }
         }
 

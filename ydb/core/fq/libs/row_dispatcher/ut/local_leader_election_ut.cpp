@@ -28,9 +28,9 @@ public:
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->NodeCount = 1;
         auto* rule = ServerSettings->AppConfig->MutablePathRewriteConfig()->AddRules();
-        rule->SetPattern(TStringBuilder() << "^/" << ServerSettings->DomainName
-            << R"(/\.metadata/streaming/coordination_node$)");
-        rule->SetReplacement("/Root/missing-coordination-node");
+        rule->SetSrc(TStringBuilder() << "/" << ServerSettings->DomainName
+            << "/.metadata/streaming/coordination_node");
+        rule->SetDst("/Root/missing-coordination-node");
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
         Server->GetRuntime()->SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NActors::NLog::PRI_DEBUG);

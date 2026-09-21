@@ -159,8 +159,13 @@ namespace NYdb::inline Dev::NPathAliasingTests {
 
             NScheme::TSchemeClient alias(*Alias);
             NScheme::TSchemeClient canonical(*Canonical);
-            Check(Await(alias.MakeDirectory(A("directory"))));
+            Check(Await(alias.MakeDirectory(A("directory") + "/")));
             Check(Await(canonical.DescribePath(P("directory"))));
+            Check(Await(alias.DescribePath(A("directory") + "/")));
+
+            auto trailingSlashDriver = MakeDriver(AliasDatabase + "/");
+            NDiscovery::TDiscoveryClient trailingSlashDiscovery(*trailingSlashDriver);
+            Check(Await(trailingSlashDiscovery.ListEndpoints()));
 
             const auto aliasedRelative = Await(alias.MakeDirectory(Name + "/relative"));
             const auto canonicalRelative = Await(canonical.MakeDirectory(Name + "/relative"));
@@ -168,6 +173,8 @@ namespace NYdb::inline Dev::NPathAliasingTests {
             EXPECT_EQ(aliasedRelative.GetStatus(), canonicalRelative.GetStatus());
 
             EXPECT_FALSE(Await(alias.DescribePath("/kfrontend/" + Name)).IsSuccess());
+            // A byte-prefix-only match would incorrectly describe the existing database.
+            EXPECT_FALSE(Await(alias.DescribePath("/boundaryfront")).IsSuccess());
         }
 
         TEST_F(TPathAliasing, TableResourcesAndRepeatedSourceDestinationOperands) {

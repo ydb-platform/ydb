@@ -3537,16 +3537,17 @@ message TUdfStoreConfig {
     optional uint32 WasmCompileWorkerRetentionSeconds = 16 [default = 86400];
 }
 
-// Local schema-path aliases. Rules are ordered and take effect on node restart.
+// Local path-prefix aliases. Rules are ordered and take effect on node restart.
 message TPathRewriteConfig {
     message TRule {
-        // RE2 expression. Use ^ to anchor a prefix and (/|$) for a path boundary.
-        optional string Pattern = 1;
-        // RE2 replacement syntax: \\0 is the whole match, \\1..\\9 are captures.
-        optional string Replacement = 2;
+        // Nonempty absolute prefixes, matched literally at a path-component boundary.
+        // Exactly one trailing slash is ignored in each prefix and matched input.
+        optional string Src = 1;
+        optional string Dst = 2;
     }
 
-    // First matching rule replaces its first match once; results are not rematched.
+    // First matching prefix wins; results are not rematched.
+    // Relative and unmatched inputs remain unchanged.
     repeated TRule Rules = 1;
 }
 

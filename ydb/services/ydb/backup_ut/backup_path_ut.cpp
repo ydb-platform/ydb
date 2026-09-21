@@ -22,11 +22,11 @@ public:
     TPathAliasExplicitExportFixture() {
         AppConfig().MutableFeatureFlags()->SetEnableFsBackups(true);
         auto* alias = AppConfig().MutablePathRewriteConfig()->AddRules();
-        alias->SetPattern("^/export-alias$");
-        alias->SetReplacement("/Root/RecursiveFolderProcessing/Table0");
+        alias->SetSrc("/export-alias");
+        alias->SetDst("/Root/RecursiveFolderProcessing/Table0");
         auto* decoy = AppConfig().MutablePathRewriteConfig()->AddRules();
-        decoy->SetPattern("^/Root/RecursiveFolderProcessing/Table0$");
-        decoy->SetReplacement("/Root/DoesNotExist");
+        decoy->SetSrc("/Root/RecursiveFolderProcessing/Table0");
+        decoy->SetDst("/Root/DoesNotExist");
     }
 };
 

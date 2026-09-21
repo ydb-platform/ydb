@@ -91,8 +91,8 @@ public:
     // overlay under the connection canvas, then the derivative curve over it.
     void PrintDataFlowTimeline(TStringBuilder& builder, const TString& title, const std::shared_ptr<TSingleMetric>& bytes, ui32 x, ui32 y, ui32 w, const TColorTriple& colors, bool backgroundRect = false);
     // The per-node task profile down the task gutter: the nodes along the
-    // height, the task count of each across the width, as two areas - all
-    // tasks behind, the ones still running in front.
+    // height, the task count of each across the width, as two translucent
+    // areas - all tasks, and over it the ones still running.
     void PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes, ui32 height);
     // The same for a stage that only reports its totals, drawn as one node.
     void PrintTasks(TStringBuilder& builder, ui32 tasks, ui32 finishedTasks, ui32 height);

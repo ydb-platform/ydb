@@ -339,52 +339,60 @@ void TPlan::PrintDataFlowTimeline(TStringBuilder& builder, const TString& title,
 
 // PrintSeries turned on its side: the nodes run down the Y axis, each owning
 // an equal band of the height, and the value of a node is the X extent at the
-// centre of its band. The area is curved between the bands the way the series
-// is curved between its samples, and closed against the left edge.
-static void PrintNodeTasksArea(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes, ui32 (*value)(const TStageNodeTasks&),
-    ui32 maxValue, ui32 width, ui32 height, TStringBuf color)
-{
-    ui32 count = nodes.size();
-    auto px = [&](const TStageNodeTasks& node) -> i32 {
-        auto v = value(node);
-        return v ? std::max<ui32>(v * width / maxValue, 1) : 0;
-    };
-    i32 px0 = px(nodes.front());
+// centre of its band, given here in pixels. The area is curved between the
+// bands and closed against the left edge. Both control points of a curve sit
+// at the mid height, so the area steps from one band to the next rather than
+// ramping between them.
+static void PrintNodeTasksArea(TStringBuilder& builder, const std::vector<i32>& extents, ui32 height, TStringBuf color) {
+    ui32 count = extents.size();
+    i32 px0 = extents.front();
     i32 py0 = height / (2 * count);
     builder << "<path d='M0,0L" << px0 << ",0L" << px0 << ',' << py0;
     for (ui32 i = 1; i < count; i++) {
-        i32 pxi = px(nodes[i]);
+        i32 pxi = extents[i];
         i32 pyi = (2 * i + 1) * height / (2 * count);
+        i32 dym = (py0 + pyi) / 2 - py0;
         builder
-            << 'c' << 0 << ',' << (py0 * 2 + pyi) / 3 - py0 << ',' << pxi - px0 << ',' << (py0 + pyi * 2) / 3 - py0 << ',' << pxi - px0 << ',' << pyi - py0;
+            << 'c' << 0 << ',' << dym << ',' << pxi - px0 << ',' << dym << ',' << pxi - px0 << ',' << pyi - py0;
         px0 = pxi;
         py0 = pyi;
     }
-    builder << 'L' << px0 << ',' << height << "L0," << height << "z' stroke='none' fill='" << color << "'/>" << Endl;
+    builder << 'L' << px0 << ',' << height << "L0," << height << "z' stroke='none' fill='" << color << "' opacity='0.5'/>" << Endl;
 }
 
 void TPlan::PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes, ui32 height) {
-    ui32 maxTasks = 0;
-    ui32 running = 0;
+    ui64 total = 0;
     for (const auto& node : nodes) {
-        maxTasks = std::max(maxTasks, node.Tasks);
-        running += node.Tasks - std::min(node.Finished, node.Tasks);
+        total += node.Tasks;
     }
-    if (maxTasks == 0) {
+    if (total == 0) {
         return;
     }
-    // The left third of the column, the rest is left to the task count. Its own
-    // viewport, so that the plot follows the stage box when the script slims
-    // it, as the percent-based overlays do.
-    auto width = Config.TaskWidth / 3;
+    // A node with the average task count takes a third of the column, busier
+    // ones grow past it up to the column width; the count text sits at the
+    // right. Anything non-zero keeps at least a pixel.
+    ui64 count = nodes.size();
+    ui64 unit = Config.TaskWidth / 3;
+    auto extent = [&](ui32 value) -> i32 {
+        return value ? std::clamp<ui64>(value * unit * count / total, 1, Config.TaskWidth) : 0;
+    };
+    std::vector<i32> all;
+    std::vector<i32> running;
+    bool anyRunning = false;
+    for (const auto& node : nodes) {
+        all.push_back(extent(node.Tasks));
+        running.push_back(extent(node.Tasks - std::min(node.Finished, node.Tasks)));
+        anyRunning |= running.back() > 0;
+    }
+    // Its own viewport, so that the plot follows the stage box when the script
+    // slims it, as the percent-based overlays do. The two areas share one
+    // translucent colour: the running share is where they overlap.
     builder
-        << "<svg x='" << Config.TaskLeft << "' y='0' width='" << width << "' height='100%' viewBox='0 0 "
-        << width << ' ' << height << "' preserveAspectRatio='none'>" << Endl;
-    PrintNodeTasksArea(builder, nodes, [](const TStageNodeTasks& node) -> ui32 { return node.Tasks; },
-        maxTasks, width, height, Config.Palette.Cpu.Medium);
-    if (running) {
-        PrintNodeTasksArea(builder, nodes, [](const TStageNodeTasks& node) -> ui32 { return node.Tasks - std::min(node.Finished, node.Tasks); },
-            maxTasks, width, height, Config.Palette.Cpu.Light);
+        << "<svg x='" << Config.TaskLeft << "' y='0' width='" << Config.TaskWidth << "' height='100%' viewBox='0 0 "
+        << Config.TaskWidth << ' ' << height << "' preserveAspectRatio='none'>" << Endl;
+    PrintNodeTasksArea(builder, all, height, Config.Palette.Cpu.Medium);
+    if (anyRunning) {
+        PrintNodeTasksArea(builder, running, height, Config.Palette.Cpu.Medium);
     }
     builder << "</svg>" << Endl;
 }

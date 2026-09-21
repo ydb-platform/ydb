@@ -170,21 +170,29 @@ Y_UNIT_TEST_SUITE(TPlan2SvgStageNodes) {
             << stats << "}}]}]}}";
     }
 
-    // The plot takes the left third of the column, the count text the rest.
-    ui32 PlotWidth() {
+    // The extent of a node with the average task count: a third of the column.
+    ui32 PlotUnit() {
         return TPlanViewConfig().TaskWidth / 3;
     }
 
-    // The plot's own viewport in the task column, sized by the stage height.
+    // The plot's own viewport over the task column, sized by the stage height.
     TString PlotViewport(ui32 height) {
         TPlanViewConfig config;
         return TStringBuilder()
-            << "<svg x='" << config.TaskLeft << "' y='0' width='" << PlotWidth() << "' height='100%' viewBox='0 0 "
-            << PlotWidth() << ' ' << height << "' preserveAspectRatio='none'>";
+            << "<svg x='" << config.TaskLeft << "' y='0' width='" << config.TaskWidth << "' height='100%' viewBox='0 0 "
+            << config.TaskWidth << ' ' << height << "' preserveAspectRatio='none'>";
     }
 
-    TString AreaEnd(TStringBuf color) {
-        return TStringBuilder() << "z' stroke='none' fill='" << color << "'/>";
+    // Both areas end the same way: same colour, half transparent.
+    TString AreaEnd() {
+        return TStringBuilder() << "z' stroke='none' fill='" << TPlanViewConfig().Palette.Cpu.Medium << "' opacity='0.5'/>";
+    }
+
+    // The curve between two band centres: a step, both control points at the
+    // mid height.
+    TString Step(i32 dx, i32 y0, i32 y1) {
+        i32 dym = (y0 + y1) / 2 - y0;
+        return TStringBuilder() << "c0," << dym << ',' << dx << ',' << dym << ',' << dx << ',' << y1 - y0;
     }
 
     // Loads a single-stage plan and returns its rendering plus the stage height
@@ -197,51 +205,56 @@ Y_UNIT_TEST_SUITE(TPlan2SvgStageNodes) {
         return {viz.PrintSvg(), viz.Plans[0]->Stages[0]->Height};
     }
 
+    size_t CountAreas(const TString& svg) {
+        size_t count = 0;
+        for (size_t pos = svg.find(AreaEnd()); pos != TString::npos; pos = svg.find(AreaEnd(), pos + 1)) {
+            count++;
+        }
+        return count;
+    }
+
     Y_UNIT_TEST(TwoNodesAreTwoBands) {
         auto [svg, height] = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":16,"FinishedTasks":9,
             "Nodes":[{"NodeId":7,"Tasks":6,"Finished":3},{"NodeId":3,"Tasks":6,"Finished":6}])"));
         AssertWellFormed(svg, "stage with Nodes");
 
-        TPlanViewConfig config;
         UNIT_ASSERT_C(svg.Contains("<title>Stage 5 tasks: finished 9 of 16; node 3: 6/6; node 7: 3/6; not started: 4</title>"), svg);
         UNIT_ASSERT_C(svg.Contains(PlotViewport(height)), svg);
 
-        // Two bands: node 3 centred at H/4, node 7 at 3H/4. Both have 6 tasks,
-        // the maximum, so the background area spans the whole plot width and
-        // the curve between the bands is vertical.
-        ui32 w = PlotWidth();
-        ui32 y0 = height / 4;
-        ui32 y1 = 3 * height / 4;
+        // Two bands: node 3 centred at H/4, node 7 at 3H/4. Both have the
+        // average count, so the all-tasks area is one unit wide throughout.
+        i32 w = PlotUnit();
+        i32 y0 = height / 4;
+        i32 y1 = 3 * height / 4;
         UNIT_ASSERT_C(svg.Contains(TStringBuilder()
-            << "<path d='M0,0L" << w << ",0L" << w << ',' << y0
-            << "c0," << (2 * y0 + y1) / 3 - y0 << ",0," << (y0 + 2 * y1) / 3 - y0 << ",0," << y1 - y0
-            << 'L' << w << ',' << height << "L0," << height << AreaEnd(config.Palette.Cpu.Medium)), svg);
-        // Running: node 3 has none, node 7 has 3 of the 6 (half the width); the
-        // curve goes from the left edge to the half width between the band centres.
-        ui32 running = w * 3 / 6;
+            << "<path d='M0,0L" << w << ",0L" << w << ',' << y0 << Step(0, y0, y1)
+            << 'L' << w << ',' << height << "L0," << height << AreaEnd()), svg);
+        // Running: node 3 has none, node 7 has 3 of the 6 (half a unit); the
+        // area steps from the left edge to the half unit between the bands.
+        i32 running = w * 3 / 6;
         UNIT_ASSERT_C(svg.Contains(TStringBuilder()
-            << "<path d='M0,0L0,0L0," << y0
-            << "c0," << (2 * y0 + y1) / 3 - y0 << ',' << running << ',' << (y0 + 2 * y1) / 3 - y0 << ',' << running << ',' << y1 - y0
-            << 'L' << running << ',' << height << "L0," << height << AreaEnd(config.Palette.Cpu.Light)), svg);
+            << "<path d='M0,0L0,0L0," << y0 << Step(running, y0, y1)
+            << 'L' << running << ',' << height << "L0," << height << AreaEnd()), svg);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountAreas(svg), 2, svg);
     }
 
     // A stage that only reports its totals is drawn as a single node: the
-    // all-tasks area is the full plot width, the running one its share.
+    // all-tasks area is one unit wide, the running one its share of it.
     Y_UNIT_TEST(NoNodesIsASingleNode) {
         auto [svg, height] = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":16,"FinishedTasks":12)"));
         AssertWellFormed(svg, "stage without Nodes");
 
-        TPlanViewConfig config;
         UNIT_ASSERT_C(svg.Contains("<title>Stage 5 tasks: finished 12 of 16</title>"), svg);
         UNIT_ASSERT_C(svg.Contains(PlotViewport(height)), svg);
-        ui32 w = PlotWidth();
-        ui32 running = w * 4 / 16;
+        i32 w = PlotUnit();
+        i32 running = w * 4 / 16;
         UNIT_ASSERT_C(svg.Contains(TStringBuilder()
             << "<path d='M0,0L" << w << ",0L" << w << ',' << height / 2
-            << 'L' << w << ',' << height << "L0," << height << AreaEnd(config.Palette.Cpu.Medium)), svg);
+            << 'L' << w << ',' << height << "L0," << height << AreaEnd()), svg);
         UNIT_ASSERT_C(svg.Contains(TStringBuilder()
             << "<path d='M0,0L" << running << ",0L" << running << ',' << height / 2
-            << 'L' << running << ',' << height << "L0," << height << AreaEnd(config.Palette.Cpu.Light)), svg);
+            << 'L' << running << ',' << height << "L0," << height << AreaEnd()), svg);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountAreas(svg), 2, svg);
     }
 
     // A single node has no bands to curve between: the area is a rectangle,
@@ -249,26 +262,42 @@ Y_UNIT_TEST_SUITE(TPlan2SvgStageNodes) {
     Y_UNIT_TEST(SingleFinishedNodeIsARectangle) {
         auto [svg, height] = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":4,"FinishedTasks":4,
             "Nodes":[{"NodeId":1,"Tasks":4,"Finished":4}])"));
-        TPlanViewConfig config;
+        i32 w = PlotUnit();
         UNIT_ASSERT_C(svg.Contains(TStringBuilder()
-            << "<path d='M0,0L" << PlotWidth() << ",0L" << PlotWidth() << ',' << height / 2
-            << 'L' << PlotWidth() << ',' << height << "L0," << height << AreaEnd(config.Palette.Cpu.Medium)), svg);
-        UNIT_ASSERT_C(!svg.Contains(AreaEnd(config.Palette.Cpu.Light)), svg);
+            << "<path d='M0,0L" << w << ",0L" << w << ',' << height / 2
+            << 'L' << w << ',' << height << "L0," << height << AreaEnd()), svg);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountAreas(svg), 1, svg);
     }
 
-    // The widest node sets the scale; a node too small for a pixel still gets one.
-    Y_UNIT_TEST(WidestNodeSpansTheColumn) {
+    // The average node is one unit wide; a busier node grows past it and a
+    // node too small for a pixel still gets one.
+    Y_UNIT_TEST(AverageNodeIsOneUnit) {
         auto [svg, height] = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":101,"FinishedTasks":100,
             "Nodes":[{"NodeId":1,"Tasks":100,"Finished":100},{"NodeId":2,"Tasks":1,"Finished":0}])"));
-        TPlanViewConfig config;
-        i32 w = PlotWidth();
-        i32 dy = 3 * height / 4 - height / 4;
-        // All tasks: from the full width down to 1px (a relative step of 1 - w).
-        UNIT_ASSERT_C(svg.Contains(TStringBuilder() << "<path d='M0,0L" << w << ",0L" << w << ',' << height / 4 << "c0,"), svg);
-        UNIT_ASSERT_C(svg.Contains(TStringBuilder() << ',' << 1 - w << ',' << dy << "L1," << height << "L0," << height << AreaEnd(config.Palette.Cpu.Medium)), svg);
+        i32 w = PlotUnit();
+        i32 y0 = height / 4;
+        i32 y1 = 3 * height / 4;
+        // Average 50.5: the wide node is 100 / 50.5 units, the small one 1px.
+        i32 wide = 100 * w * 2 / 101;
+        UNIT_ASSERT_C(wide > w, svg);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<path d='M0,0L" << wide << ",0L" << wide << ',' << y0 << Step(1 - wide, y0, y1)
+            << "L1," << height << "L0," << height << AreaEnd()), svg);
         // Running: none on the wide node, the one task of the small node.
-        UNIT_ASSERT_C(svg.Contains(TStringBuilder() << "<path d='M0,0L0,0L0," << height / 4 << "c0,"), svg);
-        UNIT_ASSERT_C(svg.Contains(TStringBuilder() << ",1," << dy << "L1," << height << "L0," << height << AreaEnd(config.Palette.Cpu.Light)), svg);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<path d='M0,0L0,0L0," << y0 << Step(1, y0, y1)
+            << "L1," << height << "L0," << height << AreaEnd()), svg);
+    }
+
+    // A node far above the average is cut at the column width.
+    Y_UNIT_TEST(BusyNodeIsCutAtTheColumn) {
+        auto [svg, height] = RenderStage(StagePlan(R"("PhysicalStageId":5,"Tasks":103,"FinishedTasks":103,
+            "Nodes":[{"NodeId":1,"Tasks":100,"Finished":100},{"NodeId":2,"Tasks":1,"Finished":1},{"NodeId":3,"Tasks":1,"Finished":1},{"NodeId":4,"Tasks":1,"Finished":1}])"));
+        TPlanViewConfig config;
+        ui32 w = config.TaskWidth;
+        UNIT_ASSERT_C(100 * PlotUnit() * 4 / 103 > w, svg);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder() << "<path d='M0,0L" << w << ",0L" << w << ',' << height / 8 << "c0,"), svg);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountAreas(svg), 1, svg);
     }
 
     // The profile is one path however many nodes there are: one curve segment
@@ -281,16 +310,15 @@ Y_UNIT_TEST_SUITE(TPlan2SvgStageNodes) {
         auto [svg, height] = RenderStage(StagePlan(TStringBuilder() << R"("PhysicalStageId":5,"Tasks":200,"FinishedTasks":50,"Nodes":[)" << nodes << "]"));
         AssertWellFormed(svg, "stage with 100 nodes");
 
-        TPlanViewConfig config;
-        auto begin = svg.find("<path d='M0,0L" + ToString(PlotWidth()) + ",0L");
+        auto begin = svg.find("<path d='M0,0L" + ToString(PlotUnit()) + ",0L");
         UNIT_ASSERT_C(begin != TString::npos, svg);
-        auto end = svg.find(AreaEnd(config.Palette.Cpu.Medium), begin);
+        auto end = svg.find(AreaEnd(), begin);
         UNIT_ASSERT_C(end != TString::npos, svg);
         auto path = svg.substr(begin, end - begin);
         UNIT_ASSERT_VALUES_EQUAL_C(std::count(path.cbegin(), path.cend(), 'c'), 99, path);
         // The last curve ends at the centre of band 100, then the area closes.
         UNIT_ASSERT_C(path.EndsWith(TStringBuilder()
-            << ',' << 199 * height / 200 - 197 * height / 200 << 'L' << PlotWidth() << ',' << height << "L0," << height), path);
+            << ',' << 199 * height / 200 - 197 * height / 200 << 'L' << PlotUnit() << ',' << height << "L0," << height), path);
     }
 
     // A stage with a nested table read is loaded twice over the same Stats
@@ -317,7 +345,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgStageNodes) {
         // would have halved the bands and added a curve.
         TPlanViewConfig config;
         UNIT_ASSERT_C(svg.Contains(TStringBuilder()
-            << "<path d='M0,0L" << PlotWidth() << ",0L" << PlotWidth() << ',' << viz.Plans[0]->Stages[0]->Height / 4 << "c0,"), svg);
+            << "<path d='M0,0L" << PlotUnit() << ",0L" << PlotUnit() << ',' << viz.Plans[0]->Stages[0]->Height / 4 << "c0,"), svg);
     }
 
     Y_UNIT_TEST(LoaderSortsAndDropsEmptyNodes) {

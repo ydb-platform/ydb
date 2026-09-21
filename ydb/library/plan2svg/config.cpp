@@ -9,7 +9,7 @@ TPlanViewConfig::TPlanViewConfig() {
     OperatorLeft = HeaderLeft + HeaderWidth + GAP_X;
     OperatorWidth = 54;
     TaskLeft = OperatorLeft + OperatorWidth + GAP_X;
-    // The left third is the task plot, the rest holds the task count.
+    // A third of it is the task plot of an average node, the count sits at the right.
     TaskWidth = 40;
     SummaryLeft = TaskLeft + TaskWidth + GAP_X;
     SummaryWidth = 200;

@@ -117,6 +117,7 @@ namespace NActors {
                 ActorAlive,
                 ActorDead,
                 ActorLivenessUnsure,
+                MailboxProcessingStarted,
                 End,
 
                 // Compatibility section
@@ -147,6 +148,9 @@ namespace NActors {
                 TimeLimitReached,
                 SoftDeadlineReached,
                 TailSend,
+                // The actor passed away during mailbox processing. The
+                // notification is delivered before physical destruction.
+                ActorDied,
             };
 
             const EReason Reason;
@@ -158,6 +162,10 @@ namespace NActors {
                 , ExecutedEvents(executedEvents)
                 , ElapsedCycles(elapsedCycles)
             {}
+        };
+
+        struct TEvMailboxProcessingStarted
+            : public TEventLocal<TEvMailboxProcessingStarted, TSystem::MailboxProcessingStarted> {
         };
 
         struct TEvSubscribe: public TEventLocal<TEvSubscribe, TSystem::Subscribe> {

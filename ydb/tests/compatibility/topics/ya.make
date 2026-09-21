@@ -10,6 +10,7 @@ SPLIT_FACTOR(16)
 TEST_SRCS(
     test_topic.py
     test_direct_read.py
+    test_cluster_discovery.py
     test_sqs_topic_boto.py
     test_kafka_topic.py
 )

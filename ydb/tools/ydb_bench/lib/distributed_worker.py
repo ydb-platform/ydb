@@ -16,12 +16,12 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import grpc
-import yaml
 
 from ydb.core.protos import grpc_pb2_grpc, msgbus_pb2
 from ydb.public.api.grpc import ydb_cms_v1_pb2_grpc, ydb_config_v1_pb2_grpc
 from ydb.public.api.protos import ydb_status_codes_pb2
 from ydb.tools.ydb_bench.lib import process_recovery
+from ydb.tools.ydb_bench.lib import cluster_config
 from ydb.tools.ydb_bench.lib.distributed_disks import DiskAdmission
 from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
@@ -33,7 +33,7 @@ from ydb.tools.ydb_bench.lib.common import (
 )
 from ydb.tools.ydb_bench.lib.distributed_plan import execution_template, resolve_host_placement
 from ydb.tools.ydb_bench.lib.distributed_workload import MultiWorkerWorkload, result_path
-from ydb.tools.ydb_bench.lib.distributed_artifacts import RESULT_CHUNK_BYTES, snapshot_diagnostics
+from ydb.tools.ydb_bench.lib.distributed_artifacts import RESULT_CHUNK_BYTES, snapshot_diagnostics, snapshot_results
 from ydb.tools.ydb_bench.lib.distributed_telemetry import WorkerTelemetry
 from ydb.tools.ydb_bench.lib.distributed_sessions import PROTOCOL_VERSION
 from ydb.tools.ydb_bench.lib.local_ydb import (
@@ -411,6 +411,10 @@ class DistributedWorker:
                 }
             )
         config["config"].update(hosts=hosts, host_configs=disks)
+        overrides = cluster_config.execution_config(state['template'].get('ydb_config', {}))
+        config['config']['domains_config']['domain'][0]['name'] = cluster_config.domain_name(overrides)
+        erasure = cluster_config.erasure_name(overrides)
+        config['config']['erasure'] = erasure
         media = sorted({disk["media"] for node in static for disk in node["disks"]})
         config["config"]["default_disk_type"] = "SSD" if "ssd" in media else "ROT"
         config["config"]["storage_pool_types"] = [
@@ -419,34 +423,51 @@ class DistributedWorker:
                 "pool_config": {
                     "box_id": 1,
                     "kind": kind,
-                    "erasure_species": "none",
+                    "erasure_species": erasure,
                     "vdisk_kind": "Default",
                     "pdisk_filter": [{"property": [{"type": "SSD" if kind == "ssd" else "ROT"}]}],
                 },
             }
             for kind in media
         ]
-        for node in state["prepared"]["nodes"]:
-            if node["role"] == "cli":
-                continue
-            current = copy.deepcopy(config)
-            actor_system = state["actor_system"]
-            if node["role"] == "dynamic":
-                actor_system = actor_system.get("tenants", {}).get(node["tenant"], actor_system)
-            current["config"]["actor_system_config"] = _cluster_config(
-                [item["ports"] for item in static], 1, actor_system=actor_system
-            )["config"]["actor_system_config"]
-            cpu_count = actor_system.get(node["role"] + "_nodes", {}).get("cpu_count")
+        domain = overrides.get('domains_config', {}).get('domain', [{}])[0]
+        if domain.get('storage_pool_types'):
+            del config['config']['storage_pool_types']
+
+        def actor_config(actor_system, role):
+            result = _cluster_config([item["ports"] for item in static], 1, actor_system=actor_system)["config"][
+                "actor_system_config"
+            ]
+            cpu_count = actor_system.get(role + "_nodes", {}).get("cpu_count")
             if cpu_count is not None:
-                current["config"]["actor_system_config"]["cpu_count"] = cpu_count
-            directory = state["root"] / "nodes" / str(node["node_id"])
-            directory.mkdir(parents=True, exist_ok=True)
-            atomic_write_text(directory / "cluster.yaml", yaml.safe_dump(current, sort_keys=False))
-            self._check(state)
+                result["cpu_count"] = cpu_count
+            return result
+
+        config["config"]["actor_system_config"] = actor_config(state["actor_system"], "static")
+        config["config"] = cluster_config.merge(config["config"], overrides)
+        tenant_paths = [tenant["path"] for tenant in state["template"]["tenants"]]
+        selectors = cluster_config.tenant_configs(
+            state["template"].get("ydb_tenant_configs", {}), tenant_paths, execution=True
+        )
+        replacements = copy.deepcopy(state["template"].get("ydb_tenant_replacements", {}))
+        for tenant in tenant_paths:
+            actor_system = state["actor_system"].get("tenants", {}).get(tenant, state["actor_system"])
+            selectors.setdefault(tenant, {})["actor_system_config"] = actor_config(actor_system, "dynamic")
+            # Replace, rather than inherit storage-only settings such as cpu_count.
+            replacements.setdefault(tenant, []).append(["actor_system_config"])
+        config = cluster_config.document(
+            config["config"], selectors, tenant_paths, state["reference"]["session_id"], replacements=replacements
+        )
+        atomic_write_text(
+            state["root"] / "results" / "configuration" / "cluster.yaml", cluster_config.dump_document(config)
+        )
         with self.sessions.lock:
             self._check(state)
             state["cluster_nodes"] = nodes
-        return {"configured": True}
+        return {
+            "configured": True,
+            "artifacts": snapshot_results(state["root"] / "results", state["root"] / "results" / "configuration"),
+        }
 
     def start_nodes(self, value, role):
         if role not in ("static", "dynamic"):
@@ -463,11 +484,12 @@ class DistributedWorker:
         local = [node for node in state["prepared"]["nodes"] if node["role"] == role]
         for node in local:
             directory = state["root"] / "nodes" / str(node["node_id"])
+            directory.mkdir(parents=True, exist_ok=True)
             command = [
                 node["executable"]["path"],
                 "server",
                 "--yaml-config",
-                directory / "cluster.yaml",
+                state["root"] / "results" / "configuration" / "cluster.yaml",
                 "--grpc-port",
                 node["ports"]["grpc_port"],
                 "--ic-port",

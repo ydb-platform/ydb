@@ -438,6 +438,20 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     TCgiParameters queryParams;
     queryParams.ScanAddAll(uriStr);
 
+    if (Parent->Settings.ErrorResponse) {
+        if (const TString response = Parent->Settings.ErrorResponse(methodStr, pathStr)) {
+            MaybeContinue(params);
+            if (params.Input.HasContent()) {
+                params.Input.ReadAll();
+            }
+
+            params.Output.EnableKeepAlive(false);
+            params.Output << response;
+            params.Output.Flush();
+            return true;
+        }
+    }
+
     switch (method) {
     case EMethod::NotImplemented:
         return HttpNotImplemented(params);

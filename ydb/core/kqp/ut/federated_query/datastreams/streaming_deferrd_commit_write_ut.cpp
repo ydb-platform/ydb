@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
     }
 
-    Y_UNIT_TEST_TWIN_F(PqGatewayApiForDeferredCommits, LocalTopics, TStreamingTestFixture) {
+    Y_UNIT_TEST_QUAD_F(PqGatewayApiForDeferredCommits, LocalTopics, Cancel, TStreamingTestFixture) {
         LogSettings.AddLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
         SetupAppConfig().MutableFeatureFlags()->SetEnableTopicDeferredPublish(true);
 
@@ -64,12 +64,45 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const NYql::ITopicClient::TPtr topicClient = pqGateway->GetTopicClient(*PqGatewayDriver, settings);
         const NYql::IDeferredPublishClient::TPtr publishClient = pqGateway->GetDeferredPublishClient(*PqGatewayDriver, settings);
 
+        {
+            const auto result = publishClient->ListPublications().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT(result.GetPublications().empty());
+        }
+
         constexpr char publicationExtId[] = "publicationId";
         constexpr char publicationWriter[] = "testWriter";
         TDeferredPublication publication = CreatePublication(publicationExtId, publicationWriter, *publishClient);
 
         // Validate creation via sdk client
         const std::shared_ptr<TDeferredPublishClient> sdkClient = GetDeferredPublishClient(LocalTopics, testUser);
+        const auto otherPublication = CreatePublication("otherPublication", "otherWriter", *sdkClient);
+        {
+            const auto result = publishClient->ListPublications().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPublications().size(), 2);
+            for (const auto& summary : result.GetPublications()) {
+                if (summary.IntPublicationId == publication.IntPublicationId) {
+                    UNIT_ASSERT_VALUES_EQUAL(summary.ExtPublicationId, publicationExtId);
+                    UNIT_ASSERT_VALUES_EQUAL(summary.WriterIdentity, publicationWriter);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(summary.IntPublicationId, otherPublication.IntPublicationId);
+                    UNIT_ASSERT_VALUES_EQUAL(summary.ExtPublicationId, "otherPublication");
+                    UNIT_ASSERT_VALUES_EQUAL(summary.WriterIdentity, "otherWriter");
+                }
+            }
+        }
+        {
+            const auto result = publishClient->ListPublications(TListPublicationsSettings().WriterIdentity(publicationWriter)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPublications().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPublications()[0].IntPublicationId, publication.IntPublicationId);
+        }
+        {
+            const auto result = publishClient->ListPublications(TListPublicationsSettings().WriterIdentity("unknownWriter")).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT(result.GetPublications().empty());
+        }
         {
             const auto result = sdkClient->DescribePublication(publication).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
@@ -129,15 +162,41 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         Sleep(TDuration::Seconds(1));
 
         EnsureTopicEndOffset(outputTopicName, /* endOffset */ 0, LocalTopics);
-        CommitPublication(publication.IntPublicationId, *publishClient);
-
-        // Validate messages are published
-        ReadTopicMessage(outputTopicName, "test_data", disposition, LocalTopics);
+        if constexpr (Cancel) {
+            const auto result = publishClient->CancelPublication(publication).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            EnsureTopicEndOffset(outputTopicName, /* endOffset */ 0, LocalTopics);
+            WriteTopicMessage(outputTopicName, "visible_data", /* partition */ 0, LocalTopics);
+            ReadTopicMessage(outputTopicName, "visible_data", disposition, LocalTopics);
+        } else {
+            CommitPublication(publication.IntPublicationId, *publishClient);
+            ReadTopicMessage(outputTopicName, "test_data", disposition, LocalTopics);
+        }
+        EnsureTopicEndOffset(outputTopicName, /* endOffset */ 1, LocalTopics);
 
         // Validate that next publish returns NOT_FOUND
         {
             const auto result = publishClient->Publish(publication).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToOneLineString());
+        }
+        {
+            const auto result = publishClient->CancelPublication(publication).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToOneLineString());
+        }
+        {
+            const auto result = publishClient->ListPublications().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPublications().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPublications()[0].IntPublicationId, otherPublication.IntPublicationId);
+        }
+        {
+            const auto result = publishClient->CancelPublication(otherPublication).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+        {
+            const auto result = publishClient->ListPublications().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT(result.GetPublications().empty());
         }
 
         DropTopic(outputTopicName, LocalTopics);

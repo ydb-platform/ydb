@@ -195,6 +195,8 @@ function ctRemoveTenant(record,path){
   if(!record.tenants.some(t=>t.path===path))throw Error('Tenant no longer exists');
   record.nodes.forEach(n=>{if(n.tenant===path)n.tenant=''});
   record.tenants=record.tenants.filter(t=>t.path!==path);
+  if(record.ydb_tenant_configs)delete record.ydb_tenant_configs[path];
+  if(record.ydb_tenant_replacements)delete record.ydb_tenant_replacements[path];
 }
 function ctRemoveHost(record,host,target){
   if(!record.host_ids.includes(host))throw Error('Host no longer exists');
@@ -273,7 +275,7 @@ async function renderClusterTemplates(id){
       const dc=record.data_centers.find(dc=>dc.name===n.location.data_center);
       if(dc&&!n.location.rack){if(!dc.racks.length)dc.racks.push(ctNextRack(dc));n.location.rack=dc.racks[0];ctNormalizeNodePlacement(n)}
     });
-    let selected=0,saving=false,view='physical',dragged=null,draggedDisk=null;
+    let selected=0,saving=false,view='cluster',dragged=null,draggedDisk=null;
     let previewVersion=0;
     const topology=async(host,affinity,excluded=[])=>{
       const query=affinity?.kind==='strategy'?'?mode='+enc(affinity.mode)+'&cpus='+enc(affinity.count)+'&exclude='+enc(excluded.join(',')):'';
@@ -310,6 +312,11 @@ async function renderClusterTemplates(id){
     }
     function draw(){
       if(!active())return;
+      if(['cluster','configuration','yaml'].includes(view)){
+        previewVersion++;
+        const currentView=view;
+        renderClusterConfig(record,v=>{view=v;draw()},()=>active()&&view===currentView,view);return;
+      }
       if(view!=='physical'&&record.nodes[selected]?.role==='cli')selected=record.nodes.findIndex(n=>n.role!=='cli');
       if(view==='physical'&&selected<0&&record.nodes.length)selected=0;
       const n=record.nodes[selected];
@@ -361,8 +368,8 @@ async function renderClusterTemplates(id){
         '<button id=ct-save class=primary>Save template</button></div></div><div id=ct-error></div>'+
         '<div class=ct-fields><label>Template name<input id=ct-name maxlength=200 value="'+esc(record.name)+'"></label></div>'+
         '<p class=muted>Placement only · does not start a cluster</p><div class="profile-tabs ct-placement-tabs">'+
-        ['physical','logical','tenants'].map(v=>'<button data-ct-view="'+v+'" class="'+(view===v?'active':'')+'" aria-pressed="'+(view===v)+'">'+
-          v[0].toUpperCase()+v.slice(1)+'</button>').join('')+'</div><div class="runs-toolbar ct-create-actions">'+
+        ['cluster','physical','logical','tenants','configuration','yaml'].map(v=>'<button data-ct-view="'+v+'" class="'+(view===v?'active':'')+'" aria-pressed="'+(view===v)+'">'+
+          (v==='yaml'?'YAML':v[0].toUpperCase()+v.slice(1))+'</button>').join('')+'</div><div class="runs-toolbar ct-create-actions">'+
         (view==='physical'?'<button id=ct-add '+(!record.host_ids.length?'disabled':'')+'>Add node</button>':'')+'<button id=ct-group>'+
         (view==='physical'?'Add host':view==='logical'?'Add DC':'Add tenant')+'</button></div><div class=ct-hosts>'+layout+'</div>'+
         (n?'<section class=ct-editor><div class=runs-toolbar><strong>'+esc(n.name)+'</strong><div class=runs-actions>'+
@@ -475,16 +482,20 @@ async function renderClusterTemplates(id){
         if(existing.length>=64)throw Error('At most 64 entries');submit(name);
       });
       const editTenant=index=>{
-        const t=record.tenants[index]||{path:'/Root/',storage_kind:'ssd',storage_groups:1};
+        const prefix='/'+ccDomain(record)+'/';
+        const t=record.tenants[index]||{path:prefix,storage_kind:'ssd',storage_groups:1};
         dialog(index===undefined?'Add tenant':'Edit tenant','<label>Database path<input name=path required maxlength=80 value="'+esc(t.path)+'"></label>'+
           '<label>Storage kind<select name=kind>'+['ssd','hdd'].map(k=>'<option '+(t.storage_kind===k?'selected':'')+'>'+k+'</option>').join('')+'</select></label>'+
           '<label>Storage groups<input name=groups type=number min=1 max=64 required value="'+t.storage_groups+'"></label>',data=>{
             const path=data.get('path').trim();
-            if(!/^\/Root\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(path))throw Error('Use /Root/name with valid path components');
+            if(!path.startsWith(prefix)||!/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(path.slice(prefix.length)))
+              throw Error('Use '+prefix+'name with valid path components');
             if(record.tenants.some((v,i)=>i!==index&&v.path===path))throw Error('Tenant already exists');
             const value={path,storage_kind:data.get('kind'),storage_groups:Number(data.get('groups'))};
             if(index===undefined){if(record.tenants.length>=64)throw Error('At most 64 tenants');record.tenants.push(value)}
-            else{record.tenants[index]=value;record.nodes.forEach(n=>{if(n.tenant===t.path)n.tenant=path})}
+            else{record.tenants[index]=value;record.nodes.forEach(n=>{if(n.tenant===t.path)n.tenant=path});
+              for(const key of ['ydb_tenant_configs','ydb_tenant_replacements'])if(path!==t.path&&record[key]?.[t.path]){
+                record[key][path]=record[key][t.path];delete record[key][t.path]}}
           });
       };
       app.querySelectorAll('[data-ct-tenant]').forEach(b=>b.onclick=()=>editTenant(+b.dataset.ctTenant));

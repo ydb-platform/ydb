@@ -23,8 +23,11 @@ namespace NSc {
         struct TPool: public TAtomicRefCount<TPool> {
             TMemoryPool Pool;
 
-            TPool(size_t blsz = POOL_BLOCK_SIZE, TMemoryPool::IGrowPolicy* grow = TMemoryPool::TExpGrow::Instance())
-                : Pool(blsz, grow)
+            TPool(
+                size_t blsz = POOL_BLOCK_SIZE,
+                TMemoryPool::IGrowPolicy* grow = TMemoryPool::TExpGrow::Instance(),
+                IAllocator* allocator = TDefaultAllocator::Instance())
+                : Pool(blsz, grow, allocator)
             {
             }
 

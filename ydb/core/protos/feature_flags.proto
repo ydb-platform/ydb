@@ -401,4 +401,5 @@ message TFeatureFlags {
     // still overrides the cyan permille; floors stay on while this flag is on.
     optional bool EnableTightPDiskSpaceColors = 333 [default = false, (RequireRestart) = true];
     optional bool CollectHourMetric = 334 [default = false];
+    optional bool EnableStreamingQueryReadFrom = 335 [default = false];
 }

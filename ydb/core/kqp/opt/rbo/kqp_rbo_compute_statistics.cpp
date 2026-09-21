@@ -71,7 +71,9 @@ TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
     TVector<TInfoUnit> leftJoinKeys;
     TVector<TInfoUnit> rightJoinKeys;
 
-    for (const auto & [l, r] : join->JoinKeys) {
+    for (const auto& joinKey : join->JoinKeys) {
+        const auto& l = joinKey.Left;
+        const auto& r = joinKey.Right;
         leftJoinKeys.push_back(l);
         rightJoinKeys.push_back(r);
     }
@@ -561,7 +563,9 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
 
-    for (const auto& [leftKey, rightKey] : JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         leftJoinKeys.push_back(TJoinColumn(leftKey.GetAlias(), leftKey.GetColumnName()));
         rightJoinKeys.push_back(TJoinColumn(rightKey.GetAlias(), rightKey.GetColumnName()));
     }
@@ -625,7 +629,9 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         // the equal columns is dropped by a projection later.
 
         bool rightSided = (JoinKind == "Right" || JoinKind == "RightSemi" || JoinKind == "RightOnly");
-        for (const auto& [leftKey, rightKey] : JoinKeys) {
+        for (const auto& joinKey : JoinKeys) {
+            const auto& leftKey = joinKey.Left;
+            const auto& rightKey = joinKey.Right;
             Props.Metadata->ShuffledByColumns.push_back(rightSided ? rightKey : leftKey);
         }
     }
@@ -648,7 +654,9 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
 
-    for (const auto& [leftKey, rightKey] : JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         leftJoinKeys.push_back(TJoinColumn(leftKey.GetAlias(), leftKey.GetColumnName()));
         rightJoinKeys.push_back(TJoinColumn(rightKey.GetAlias(), rightKey.GetColumnName()));
     }

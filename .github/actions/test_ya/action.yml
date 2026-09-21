@@ -139,8 +139,12 @@ runs:
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
-        echo "CI_METRICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl" >> $GITHUB_ENV
-        : > "$PUBLIC_DIR/ci_metrics.jsonl"
+        if [ -z "${CI_METRICS_FILE:-}" ]; then
+          echo "CI_METRICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl" >> $GITHUB_ENV
+          CI_METRICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl
+        fi
+        mkdir -p "$(dirname "$CI_METRICS_FILE")"
+        touch "$CI_METRICS_FILE"
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml
 
@@ -191,13 +195,17 @@ runs:
         record_ci_start() {
           local name="$1"
           local ya_attempt="${2:-}"
+          local source="${3:-ya_phase}"
           local extra_args=()
           if [ -n "$ya_attempt" ]; then
             extra_args+=(--label "ya_attempt=${ya_attempt}")
           fi
+          if [ -n "${CI_BUILD_TARGET:-}" ]; then
+            extra_args+=(--label "build_target=${CI_BUILD_TARGET}")
+          fi
           python3 .github/scripts/analytics/ci_metrics.py start \
             --name "$name" \
-            --source ya_phase \
+            --source "$source" \
             --label "cache_mode=${CI_CACHE_MODE:-unknown}" \
             "${extra_args[@]}" || true
         }
@@ -495,6 +503,9 @@ runs:
 
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+          if [ -n "${CI_BUILD_SPAN:-}" ]; then
+            record_ci_start "$CI_BUILD_SPAN" "$RETRY" "${CI_BUILD_SPAN_SOURCE:-ya_phase}"
+          fi
           record_ci_start "ya_make_try_${RETRY}" "$RETRY"
 
           set +e
@@ -511,8 +522,14 @@ runs:
           RC=`cat exit_code`
           if [ $RC -ne 0 ]; then
             record_ci_end "ya_make_try_${RETRY}" failure
+            if [ -n "${CI_BUILD_SPAN:-}" ]; then
+              record_ci_end "$CI_BUILD_SPAN" failure
+            fi
           else
             record_ci_end "ya_make_try_${RETRY}" success
+            if [ -n "${CI_BUILD_SPAN:-}" ]; then
+              record_ci_end "$CI_BUILD_SPAN" success
+            fi
           fi
 
           # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).

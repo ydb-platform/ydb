@@ -4,7 +4,7 @@ inputs:
   command:
     required: false
     default: track
-    description: start / end / track / send / emit
+    description: start / end / track / send
   name:
     required: false
     default: ""

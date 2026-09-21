@@ -17,16 +17,13 @@ from ci_metrics import (
     Analytics,
     append_record,
     build_create_table_sql,
-    build_emit_record,
     build_track_record,
-    emit,
     github_env_defaults,
     guess_build_preset,
     load_unsent_lines,
     main,
     metrics_from_workflow_run,
     normalize_metric,
-    packet,
     parse_datetime,
     parse_labels,
     read_pending_spans,
@@ -66,17 +63,16 @@ class NormalizeMetricTest(unittest.TestCase):
             )
         )
 
-    def test_duration_from_epoch_and_legacy_stage_fields(self):
+    def test_duration_from_epoch_and_labels(self):
         row = normalize_metric(
             {
-                "stage_name": "ya_make_try_1",
-                "stage_kind": "ya_phase",
+                "name": "ya_make_try_1",
+                "source": "ya_phase",
                 "started_at": 1726900000,
                 "run_id": 123,
                 "duration_ms": 45000,
                 "conclusion": "success",
-                "cache_mode": "dist_cache",
-                "ya_attempt": 1,
+                "labels": {"cache_mode": "dist_cache", "ya_attempt": 1},
             }
         )
         self.assertIsNotNone(row)
@@ -90,7 +86,6 @@ class NormalizeMetricTest(unittest.TestCase):
         labels = json.loads(row["labels"])
         self.assertEqual(labels["cache_mode"], "dist_cache")
         self.assertEqual(labels["ya_attempt"], 1)
-        self.assertEqual(labels["stage_kind"], "ya_phase")
         self.assertEqual(row["source"], "ya_phase")
 
     def test_finished_epoch_and_unknown_source(self):
@@ -277,25 +272,27 @@ class ParseDatetimeTest(unittest.TestCase):
         )
 
 
-class EmitApiTest(unittest.TestCase):
+class RecordApiTest(unittest.TestCase):
     def test_build_record_duration_from_epochs(self):
-        record = build_emit_record(
-            name="ya_make_try_1",
-            source="ya_phase",
-            started_epoch="1000",
-            finished_epoch="1010.5",
-            conclusion="success",
-            labels={"ya_attempt": 1},
+        record = build_track_record(
+            "ya_make_try_1",
+            {
+                "source": "ya_phase",
+                "started_epoch": "1000",
+                "finished_epoch": "1010.5",
+                "conclusion": "success",
+                "ya_attempt": 1,
+            },
         )
         self.assertEqual(record["name"], "ya_make_try_1")
         self.assertEqual(record["value"], 10500.0)
         self.assertEqual(record["unit"], "ms")
         self.assertEqual(record["labels"]["ya_attempt"], 1)
 
-    def test_emit_and_cli_append_jsonl(self):
+    def test_track_and_cli_append_jsonl(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
-            emit(
+            track(
                 "graph_compare",
                 file=path,
                 source="ya_phase",
@@ -307,7 +304,7 @@ class EmitApiTest(unittest.TestCase):
             self.assertEqual(
                 main(
                     [
-                        "emit",
+                        "track",
                         "--file",
                         path,
                         "--name",
@@ -398,7 +395,7 @@ class TrackApiTest(unittest.TestCase):
                 main(
                     [
                         "track",
-                        "--event",
+                        "--name",
                         "graph_compare",
                         "--file",
                         path,
@@ -445,7 +442,7 @@ class TrackApiTest(unittest.TestCase):
             self.assertEqual(row["value"], 42.0)
             self.assertEqual(row["labels"]["cache_mode"], "none")
 
-    def test_packet_sends_once(self):
+    def test_track_does_not_flush(self):
         sends = []
 
         def fake_flush(path=None, table_path=None, defaults=None):
@@ -459,10 +456,9 @@ class TrackApiTest(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 path = os.path.join(tmp, "ci_metrics.jsonl")
-                with packet(path):
-                    track("a", {"value": 1, "source": "test"}, file=path)
-                    track("b", {"value": 2, "source": "test"}, file=path)
-                self.assertEqual(sends, [path])
+                track("a", {"value": 1, "source": "test"}, file=path)
+                track("b", {"value": 2, "source": "test"}, file=path)
+                self.assertEqual(sends, [])
                 with open(path, encoding="utf-8") as handle:
                     self.assertEqual(len([line for line in handle if line.strip()]), 2)
         finally:
@@ -484,7 +480,7 @@ class TrackApiTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
             analytics = Analytics(file=path, source="ya_phase")
-            analytics.track("graph_compare", {"value": 5, "conclusion": "success"}, send=False)
+            analytics.track("graph_compare", {"value": 5, "conclusion": "success"})
             with open(path, encoding="utf-8") as handle:
                 row = json.loads(handle.readline())
             self.assertEqual(row["name"], "graph_compare")
@@ -635,32 +631,17 @@ class TrackApiTest(unittest.TestCase):
         finally:
             client.flush_file = original
 
-    def test_packet_does_not_end_open_spans(self):
-        sends = []
-
-        def fake_flush(path=None, table_path=None, defaults=None):
-            sends.append(path)
-            return 0
-
-        import ci_metrics as client
-
-        original = client.flush_file
-        client.flush_file = fake_flush
-        try:
-            with tempfile.TemporaryDirectory() as tmp:
-                path = os.path.join(tmp, "ci_metrics.jsonl")
-                start("ydbd_cached_build", file=path, source="nightly_build")
-                with packet(path):
-                    track("ydb/foo.cpp", {"node_kind": "Compile"}, file=path, kind="duration", value=1, source="nightly_build")
-                pending = read_pending_spans(path)
-                self.assertEqual(len(pending), 1)
-                self.assertEqual(pending[0]["name"], "ydbd_cached_build")
-                with open(path, encoding="utf-8") as handle:
-                    rows = [json.loads(line) for line in handle if line.strip()]
-                self.assertEqual([row["name"] for row in rows], ["ydb/foo.cpp"])
-                self.assertEqual(sends, [path])
-        finally:
-            client.flush_file = original
+    def test_track_does_not_end_open_spans(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            start("ydbd_cached_build", file=path, source="nightly_build")
+            track("ydb/foo.cpp", {"node_kind": "Compile"}, file=path, kind="duration", value=1, source="nightly_build")
+            pending = read_pending_spans(path)
+            self.assertEqual(len(pending), 1)
+            self.assertEqual(pending[0]["name"], "ydbd_cached_build")
+            with open(path, encoding="utf-8") as handle:
+                rows = [json.loads(line) for line in handle if line.strip()]
+            self.assertEqual([row["name"] for row in rows], ["ydb/foo.cpp"])
 
     def test_send_json_file_without_start(self):
         sends = []

@@ -448,7 +448,8 @@ THttpAuthCheckResponse RunHttpAuthCheck(
     TTestSetup& setup,
     const TString& requestDatabase,
     TSchemeBoardEvents::TDescribeSchemeResult& describeSchemeResult,
-    TIntrusivePtr<TSecurityObject> securityObject)
+    TIntrusivePtr<TSecurityObject> securityObject
+)
 {
     TTestActorRuntime* runtime = setup.GetRuntime();
     runtime->GetAppData().FeatureFlags.SetCheckDatabaseAccessPermission(false);
@@ -491,6 +492,17 @@ THttpAuthCheckResponse RunHttpAuthCheck(
     response.Result = runtime->GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(response.Handle);
     UNIT_ASSERT_C(response.Result, "Expected TEvRequestAuthAndCheckResult");
     return response;
+}
+
+THttpAuthCheckResponse RunHttpAuthCheckWithDatabaseAccessEnforce(
+    TTestSetup& setup,
+    const TString& requestDatabase,
+    TSchemeBoardEvents::TDescribeSchemeResult& describeSchemeResult,
+    TIntrusivePtr<TSecurityObject> securityObject
+)
+{
+    setup.GetRuntime()->GetAppData().FeatureFlags.SetEnableDatabaseAccessCheckForHttpMonitoring(true);
+    return RunHttpAuthCheck(setup, requestDatabase, describeSchemeResult, std::move(securityObject));
 }
 
 } // namespace
@@ -537,7 +549,10 @@ Y_UNIT_TEST(NoSecurityObject) {
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
     const auto response = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, nullptr);
     UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoSecurityObject);
+    UNIT_ASSERT_EQUAL(
+        response.Result->DatabaseAccessVerdict,
+        NGRpcService::EHttpDatabaseAccessVerdict::NoSecurityObject
+    );
 }
 
 Y_UNIT_TEST(ServerlessOwnDbOk) {
@@ -558,7 +573,9 @@ Y_UNIT_TEST(ServerlessForeignNoConnectRight) {
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/foreign", 3);
     describeSchemeResult.MutablePathDescription()->MutableSelf()->SetPathType(NKikimrSchemeOp::EPathTypeExtSubDomain);
-    const auto response = RunHttpAuthCheck(setup, "/Root/foreign", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+    const auto response = RunHttpAuthCheck(
+        setup, "/Root/foreign", describeSchemeResult, MakeSecurityObjectWithoutConnect()
+    );
     UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
 }
@@ -607,4 +624,88 @@ Y_UNIT_TEST(ViewerTokenSkipsVerdict) {
 }
 
 } // HttpDatabaseAccessObserveMode
+
+Y_UNIT_TEST_SUITE(HttpDatabaseAccessEnforceMode) {
+
+Y_UNIT_TEST(DedicatedOwnDbOk) {
+    TTestSetup setup("database-only", "/Root/db", {});
+    ConfigureSecurityConfig(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    const auto response = RunHttpAuthCheckWithDatabaseAccessEnforce(
+        setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithConnect(TString{DatabaseOnlySid}));
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
+}
+
+Y_UNIT_TEST(DedicatedNoConnectRightUnauthorized) {
+    TTestSetup setup("database-only", "/Root/db", {});
+    ConfigureSecurityConfig(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    const auto response = RunHttpAuthCheckWithDatabaseAccessEnforce(
+        setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
+}
+
+Y_UNIT_TEST(EmptyDatabaseUnauthorized) {
+    TTestSetup setup("database-only", "/Root/db", {});
+    ConfigureSecurityConfig(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    const auto response = RunHttpAuthCheckWithDatabaseAccessEnforce(
+        setup, "", describeSchemeResult, MakeSecurityObjectWithConnect(TString{DatabaseOnlySid}));
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::EmptyDatabase);
+}
+
+Y_UNIT_TEST(TopicPathNotADatabaseUnauthorized) {
+    TTestSetup setup("database-only", "/Root/db", {});
+    ConfigureSecurityConfig(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupTopicInDedicatedSubDomain(describeSchemeResult, "/Root/db", "mytopic");
+    const auto response = RunHttpAuthCheckWithDatabaseAccessEnforce(
+        setup, "/Root/db/mytopic", describeSchemeResult, MakeSecurityObjectWithConnect(TString{DatabaseOnlySid}));
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NotADatabase);
+}
+
+Y_UNIT_TEST(NoSecurityObjectUnauthorized) {
+    TTestSetup setup("database-only", "/Root/db", {});
+    ConfigureSecurityConfig(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    const auto response = RunHttpAuthCheckWithDatabaseAccessEnforce(setup, "/Root/db", describeSchemeResult, nullptr);
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT_EQUAL(
+        response.Result->DatabaseAccessVerdict,
+        NGRpcService::EHttpDatabaseAccessVerdict::NoSecurityObject
+    );
+}
+
+Y_UNIT_TEST(ViewerTokenStillAllowedWithoutConnect) {
+    TTestSetup setup("viewer-only", "/Root/db", {});
+    ConfigureSecurityConfig(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    const auto response = RunHttpAuthCheckWithDatabaseAccessEnforce(
+        setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
+}
+
+Y_UNIT_TEST(ServerlessNoConnectRightUnauthorized) {
+    TTestSetup setup("database-only", "/Root/foreign", {});
+    ConfigureSecurityConfig(setup.GetRuntime());
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/foreign", 3);
+    describeSchemeResult.MutablePathDescription()->MutableSelf()->SetPathType(NKikimrSchemeOp::EPathTypeExtSubDomain);
+    const auto response = RunHttpAuthCheckWithDatabaseAccessEnforce(
+        setup, "/Root/foreign", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
+}
+
+} // HttpDatabaseAccessEnforceMode
 

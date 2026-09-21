@@ -283,6 +283,18 @@ public:
                         << ", verdict: " << ToString(HttpDatabaseAccessVerdict_)
                         << ", user: " << TBase::GetUserSID()
                         << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+                    if (AppData()->FeatureFlags.GetEnableDatabaseAccessCheckForHttpMonitoring()) {
+                        if (HttpDatabaseAccessVerdict_ == EHttpDatabaseAccessVerdict::NoConnectRight) {
+                            AuditLogConnectDbAccessDenied(
+                                GrpcRequestBaseCtx_,
+                                CheckedDatabaseName_,
+                                TBase::GetUserSID(),
+                                TBase::GetSanitizedToken());
+                        }
+                        Request_->Get()->DatabaseAccessVerdict = HttpDatabaseAccessVerdict_;
+                        ReplyUnauthorizedAndDie(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, "Access denied"));
+                        return;
+                    }
                 }
             }
         }

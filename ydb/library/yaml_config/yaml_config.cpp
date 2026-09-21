@@ -266,15 +266,9 @@ void ValidateConfig(
             ythrow yexception() << (errors.empty() ? TString("Config validation failed") : errors.front());
         }
     };
-    try {
-        const auto dependencies = validator ? validator->GetValidationDependencies() : TVector<TVector<TString>>{};
-        for (const auto& group : ValidationGroups(doc, dependencies)) {
-            EnumerateDistinctProjections(doc, group, validate);
-        }
-    } catch (const std::exception&) {
-        // Preserve the legacy rejection and first error when a projection fails.
-        errors.clear();
-        ResolveUniqueDocs(doc, [&](TDocumentConfig&& config) { validate(config.second); });
+    const auto dependencies = validator ? validator->GetValidationDependencies() : TVector<TVector<TString>>{};
+    for (const auto& group : ValidationGroups(doc, dependencies)) {
+        EnumerateDistinctProjections(doc, group, validate);
     }
 }
 

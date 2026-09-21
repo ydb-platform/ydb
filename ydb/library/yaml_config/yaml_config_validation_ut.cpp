@@ -5,6 +5,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/builder.h>
 
+#include <stdexcept>
+
 using namespace NKikimr;
 using namespace NKikimr::NYamlConfig;
 
@@ -584,7 +586,7 @@ selector_config:
         CheckValidation(doc, false, CreateDefaultConfigSwissKnife().get());
     }
 
-    Y_UNIT_TEST(RejectionUsesLegacyErrorOrder) {
+    Y_UNIT_TEST(ValidationErrorsDoNotRetryFullResolution) {
         class TValidator : public IConfigSwissKnife {
         public:
             bool VerifyReplaceRequest(const Ydb::Config::ReplaceConfigRequest&, Ydb::StatusIds::StatusCode&, NYql::TIssues&) const override { return true; }
@@ -594,6 +596,10 @@ selector_config:
                 return {{"/auth_config"}, {"/log_config"}};
             }
             EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& errors) const override {
+                ++Calls;
+                if (ThrowUnexpected) {
+                    throw std::runtime_error("unexpected validator failure");
+                }
                 if (config.GetLogConfig().GetClusterName() == "invalid") {
                     errors.push_back("logging failure");
                 } else if (config.GetAuthConfig().GetPasswordComplexity().GetMinLength() == 1) {
@@ -603,15 +609,23 @@ selector_config:
                 }
                 return EValidationResult::Error;
             }
+            mutable size_t Calls = 0;
+            bool ThrowUnexpected = false;
         } validator;
         auto doc = NFyaml::TDocument::Parse(R"(
 config:
   log_config: {cluster_name: invalid}
   auth_config: {password_complexity: {min_length: 1}}
 )");
-        const auto error = CheckValidation(doc, true, &validator);
-        UNIT_ASSERT_C(error.Contains("logging failure"), error);
-        UNIT_ASSERT_C(!error.Contains("authentication failure"), error);
+        UNIT_ASSERT(ValidationError(doc, &validator, true).Contains("logging failure"));
+        validator.Calls = 0;
+        UNIT_ASSERT(ValidationError(doc, &validator, false).Contains("authentication failure"));
+        UNIT_ASSERT_VALUES_EQUAL(validator.Calls, 1);
+
+        validator.ThrowUnexpected = true;
+        validator.Calls = 0;
+        UNIT_ASSERT(ValidationError(doc, &validator, false).Contains("unexpected validator failure"));
+        UNIT_ASSERT_VALUES_EQUAL(validator.Calls, 1);
     }
 
     Y_UNIT_TEST(IndependentSectionsHaveAdditiveValidationWork) {

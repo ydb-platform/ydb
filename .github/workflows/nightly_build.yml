@@ -62,7 +62,8 @@ jobs:
         git checkout "$workflow_sha" -- \
           .github/scripts/utils/analytics \
           .github/scripts/analytics \
-          .github/actions/test_ya
+          .github/actions/test_ya \
+          .github/actions/build_and_test_ya
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:

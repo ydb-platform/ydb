@@ -66,7 +66,7 @@ component=SessionActor message="Query had broken other locks" breakerTxSpanId=22
 component=DataShard tabletId=<tablet-id> message="Write transaction was a victim of broken locks" victimQuerySpanId=1111111111111111
 ```
 
-**Лог жертвы (SessionActor)** 
+**Лог жертвы (SessionActor)**
 
 Для одной транзакции в лог пишется две записи:
 
@@ -94,7 +94,7 @@ component=SessionActor message="Query was a victim of broken locks" victimTxSpan
 
 По `VictimQuerySpanId` из сообщения об ошибке SDK можно найти все связанные события:
 
-1. **Поиск идентификатора запроса-жертвы**: в логе жертвы поле `victimQuerySpanId` содержит идентификатор SELECT-запроса, который установил сломанные блокировки. 
+1. **Поиск идентификатора запроса-жертвы**: в логе жертвы поле `victimQuerySpanId` содержит идентификатор SELECT-запроса, который установил сломанные блокировки.
 
 2. **Поиск текста запроса-жертвы**: в логе жертвы есть запись, у которой `victimTxSpanId` совпадает с `querySpanId`. Поле `queryText` этой записи содержит текст SELECT-запроса, который установил сломанные блокировки.
 
@@ -102,7 +102,7 @@ component=SessionActor message="Query was a victim of broken locks" victimTxSpan
 
 4. **Поиск текста запроса-нарушителя**: в логе нарушителя есть запись, у которой `breakerTxSpanId` содержит идентификатор запроса-нарушителя и в то же время совпадает с `querySpanId`. Поле `queryText` этой записи содержит текст запроса-нарушителя.
 
-5. **Получение полного контекста транзакций**: все записи SessionActor с одним и тем же `victimTxSpanId` содержат сведения о запросах транзакции-жертвы в порядке выполнения. Аналогично, все записи SessionActor с одним и тем же `breakerTxSpanId` содержат сведения о запросах транзакции-нарушителя.
+5. **Получение полного контекста транзакций**: все записи SessionActor с одним и тем же `victimTxSpanId` содержат сведения о запросах транзакции-жертвы (в порядке их выполнения). Аналогично, все записи SessionActor с одним и тем же `breakerTxSpanId` содержат сведения о запросах транзакции-нарушителя.
 
 ## Утилита find_tli_chain
 

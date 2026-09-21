@@ -92,7 +92,7 @@ To estimate the required equipment, perform the following steps.
 
    About 28.08 GB of PDisk capacity is reserved for system needs; the remaining space is evenly distributed among slots.
 
-   This formula is applicable for disks with a capacity of ~839 GB (800 GiB) or more. Using smaller disks is not recommended if optimal performance is required. For more details on disk subsystem requirements, see the [{#T}](system-requirements.md) section.
+   This formula is applicable for disks with a capacity of ~859 GB (800 GiB) or more. Using smaller disks is not recommended if optimal performance is required. For more details on disk subsystem requirements, see the [{#T}](system-requirements.md) section.
 
 3. Estimate the number of storage groups:
 

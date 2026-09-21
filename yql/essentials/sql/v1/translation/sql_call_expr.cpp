@@ -134,20 +134,20 @@ TNodeResult TSqlCallExpr::BuildCall() {
     return result;
 }
 
-bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
+TSQLStatus TSqlCallExpr::Init(const TRule_value_constructor& node) {
     switch (node.Alt_case()) {
         case TRule_value_constructor::kAltValueConstructor1: {
             auto& ctor = node.GetAlt_value_constructor1();
             Func_ = "Variant";
             TSqlExpression expr(*this);
-            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr3()))) {
-                return false;
+            if (auto status = Expr(expr, Args_, ctor.GetRule_expr3()); !status) {
+                return std::unexpected(status.error());
             }
-            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr5()))) {
-                return false;
+            if (auto status = Expr(expr, Args_, ctor.GetRule_expr5()); !status) {
+                return std::unexpected(status.error());
             }
-            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr7()))) {
-                return false;
+            if (auto status = Expr(expr, Args_, ctor.GetRule_expr7()); !status) {
+                return std::unexpected(status.error());
             }
             break;
         }
@@ -155,11 +155,11 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
             auto& ctor = node.GetAlt_value_constructor2();
             Func_ = "Enum";
             TSqlExpression expr(*this);
-            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr3()))) {
-                return false;
+            if (auto status = Expr(expr, Args_, ctor.GetRule_expr3()); !status) {
+                return std::unexpected(status.error());
             }
-            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr5()))) {
-                return false;
+            if (auto status = Expr(expr, Args_, ctor.GetRule_expr5()); !status) {
+                return std::unexpected(status.error());
             }
             break;
         }
@@ -167,11 +167,11 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
             auto& ctor = node.GetAlt_value_constructor3();
             Func_ = "Callable";
             TSqlExpression expr(*this);
-            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr3()))) {
-                return false;
+            if (auto status = Expr(expr, Args_, ctor.GetRule_expr3()); !status) {
+                return std::unexpected(status.error());
             }
-            if (!Unwrap(Expr(expr, Args_, ctor.GetRule_expr5()))) {
-                return false;
+            if (auto status = Expr(expr, Args_, ctor.GetRule_expr5()); !status) {
+                return std::unexpected(status.error());
             }
             break;
         }
@@ -179,17 +179,17 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
             YQL_ENSURE(false, "Unreachable");
     }
     PositionalArgs_ = Args_;
-    return true;
+    return std::monostate();
 }
 
-bool TSqlCallExpr::ExtractCallParam(const TRule_external_call_param& node) {
+TSQLStatus TSqlCallExpr::ExtractCallParam(const TRule_external_call_param& node) {
     TString paramName = Id(node.GetRule_an_id1(), *this);
     paramName = to_lower(paramName);
 
     if (CallConfig_.contains(paramName)) {
         Ctx_.Error() << "WITH " << to_upper(paramName).Quote()
                      << " clause should be specified only once";
-        return false;
+        return std::unexpected(ESQLError::Basic);
     }
 
     const bool optimizeForParam = paramName == "optimize_for";
@@ -201,7 +201,11 @@ bool TSqlCallExpr::ExtractCallParam(const TRule_external_call_param& node) {
     }
 
     TSqlExpression expression(*this);
-    TNodePtr value = Unwrap(expression.Build(node.GetRule_expr3()));
+    auto valueResult = expression.Build(node.GetRule_expr3());
+    if (!valueResult) {
+        return std::unexpected(valueResult.error());
+    }
+    TNodePtr value = std::move(*valueResult);
     if (value && optimizeForParam) {
         TDeferredAtom atom;
         MakeTableFromExpression(Ctx_.Pos(), Ctx_, value, atom);
@@ -209,23 +213,24 @@ bool TSqlCallExpr::ExtractCallParam(const TRule_external_call_param& node) {
     }
 
     if (!value) {
-        return false;
+        return std::unexpected(ESQLError::Basic);
     }
 
     CallConfig_[paramName] = value;
-    return true;
+    return std::monostate();
 }
 
-bool TSqlCallExpr::ConfigureExternalCall(const TRule_external_call_settings& node) {
-    bool success = ExtractCallParam(node.GetRule_external_call_param1());
+TSQLStatus TSqlCallExpr::ConfigureExternalCall(const TRule_external_call_settings& node) {
+    auto status = ExtractCallParam(node.GetRule_external_call_param1());
     for (auto& block : node.GetBlock2()) {
-        success = ExtractCallParam(block.GetRule_external_call_param2()) && success;
+        auto current = ExtractCallParam(block.GetRule_external_call_param2());
+        status = std::move(status) | std::move(current);
     }
 
-    return success;
+    return status;
 }
 
-bool TSqlCallExpr::Init(const TRule_using_call_expr& node) {
+TSQLStatus TSqlCallExpr::Init(const TRule_using_call_expr& node) {
     // using_call_expr: ((an_id_or_type NAMESPACE an_id_or_type) | an_id_expr | bind_parameter | (EXTERNAL FUNCTION)) invoke_expr;
     const auto& block = node.GetBlock1();
     switch (block.Alt_case()) {
@@ -242,11 +247,11 @@ bool TSqlCallExpr::Init(const TRule_using_call_expr& node) {
         case TRule_using_call_expr::TBlock1::kAlt3: {
             TString bindName;
             if (!NamedNodeImpl(block.GetAlt3().GetRule_bind_parameter1(), bindName, *this)) {
-                return false;
+                return std::unexpected(ESQLError::Basic);
             }
             Node_ = GetNamedNode(bindName);
             if (!Node_) {
-                return false;
+                return std::unexpected(ESQLError::Basic);
             }
             break;
         }
@@ -324,7 +329,7 @@ TSQLStatus TSqlCallExpr::FillArgs(const TRule_named_expr_list& node) {
     return std::monostate();
 }
 
-bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
+TSQLStatus TSqlCallExpr::Init(const TRule_invoke_expr& node) {
     // invoke_expr: LPAREN (opt_set_quantifier named_expr_list COMMA? | ASTERISK)? RPAREN invoke_expr_tail;
     // invoke_expr_tail:
     //     (null_treatment | filter_clause)? (OVER window_name_or_specification)?
@@ -342,14 +347,14 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
                         } else {
                             Ctx_.Error(distinctPos) << "DISTINCT can only be used in aggregation functions";
                         }
-                        return false;
+                        return std::unexpected(ESQLError::Basic);
                     }
                     YQL_ENSURE(AggMode_ == EAggregateMode::Normal);
                     AggMode_ = EAggregateMode::Distinct;
                     Ctx_.IncrementMonCounter("sql_features", "DistinctInCallExpr");
                 }
-                if (!FillArgs(alt.GetRule_named_expr_list2())) {
-                    return false;
+                if (auto status = FillArgs(alt.GetRule_named_expr_list2()); !status) {
+                    return std::unexpected(status.error());
                 }
                 for (const auto& arg : Args_) {
                     if (arg->GetLabel()) {
@@ -358,7 +363,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
                         PositionalArgs_.push_back(arg);
                         if (!NamedArgs_.empty()) {
                             Ctx_.Error(arg->GetPos()) << "Unnamed arguments can not follow after named one";
-                            return false;
+                            return std::unexpected(ESQLError::Basic);
                         }
                     }
                 }
@@ -381,14 +386,14 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
     if (tail.HasBlock1()) {
         if (IsExternalCall_) {
             Ctx_.Error() << "Additional clause after EXTERNAL FUNCTION(...) is not supported";
-            return false;
+            return std::unexpected(ESQLError::Basic);
         }
 
         switch (tail.GetBlock1().Alt_case()) {
             case TRule_invoke_expr_tail::TBlock1::kAlt1: {
                 if (!tail.HasBlock2()) {
                     Ctx_.Error() << "RESPECT/IGNORE NULLS can only be used with window functions";
-                    return false;
+                    return std::unexpected(ESQLError::Basic);
                 }
                 const auto& alt = tail.GetBlock1().GetAlt1();
                 if (alt.GetRule_null_treatment1().Alt_case() == TRule_null_treatment::kAltNullTreatment2) {
@@ -398,7 +403,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
             }
             case TRule_invoke_expr_tail::TBlock1::kAlt2: {
                 Ctx_.Error() << "FILTER clause is not supported yet";
-                return false;
+                return std::unexpected(ESQLError::Basic);
             }
             case TRule_invoke_expr_tail::TBlock1::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
@@ -411,7 +416,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
         } else {
             if (AggMode_ == EAggregateMode::Distinct) {
                 Ctx_.Error() << "DISTINCT is not yet supported in window functions";
-                return false;
+                return std::unexpected(ESQLError::Basic);
             }
             SetOverWindow();
         }
@@ -425,13 +430,13 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
                 if (!Ctx_.WinSpecsScopes) {
                     auto pos = Ctx_.TokenPosition(tail.GetBlock2().GetToken1());
                     Ctx_.Error(pos) << "Window and aggregation functions are not allowed in this context";
-                    return false;
+                    return std::unexpected(ESQLError::Basic);
                 }
 
                 TWindowSpecificationPtr spec = WindowSpecification(
                     winRule.GetAlt_window_name_or_specification2().GetRule_window_specification1().GetRule_window_specification_details2());
                 if (!spec) {
-                    return false;
+                    return std::unexpected(ESQLError::Basic);
                 }
 
                 WindowName_ = Ctx_.MakeName("_yql_anonymous_window");
@@ -446,7 +451,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
         Ctx_.IncrementMonCounter("sql_features", "WindowFunctionOver");
     }
 
-    return true;
+    return std::monostate();
 }
 
 void TSqlCallExpr::IncCounters() {

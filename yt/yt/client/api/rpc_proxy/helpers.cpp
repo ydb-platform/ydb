@@ -777,7 +777,7 @@ void FromProto(
     statistics->IncompleteInput = protoStatistics.incomplete_input();
     statistics->IncompleteOutput = protoStatistics.incomplete_output();
     statistics->QueryCount = protoStatistics.query_count();
-    statistics->ScanOrder = static_cast<NQueryClient::EReportedScanOrder>(protoStatistics.scan_order());
+    statistics->ScanOrder = FromProto<NQueryClient::EReportedScanOrder>(protoStatistics.scan_order());
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }

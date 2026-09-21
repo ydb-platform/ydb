@@ -1,0 +1,69 @@
+diff --git a/tcmalloc/internal/logging.cc b/tcmalloc/internal/logging.cc
+index 13aa0e1..2c1e3eb 100644
+--- a/tcmalloc/internal/logging.cc
++++ b/tcmalloc/internal/logging.cc
+@@ -38,6 +38,7 @@
+ #include "tcmalloc/internal/config.h"
+ #include "tcmalloc/internal/environment.h"
+ #include "tcmalloc/internal/parameter_accessors.h"
++#include "tcmalloc/malloc_extension.h"
+ 
+ GOOGLE_MALLOC_SECTION_BEGIN
+ namespace tcmalloc {
+@@ -173,6 +174,12 @@ static void Crash(const char* filename, int line, const char* msg,
+ #endif  // __APPLE__
+   }
+ 
++  if (oom) {
++    if (auto exit_code = MallocExtension::GetFailFastOnOomExitCode()) {
++      _exit(*exit_code);
++    }
++  }
++
+   abort();
+ }
+ 
+diff --git a/tcmalloc/malloc_extension.cc b/tcmalloc/malloc_extension.cc
+index 40f2351..74bcdc3 100644
+--- a/tcmalloc/malloc_extension.cc
++++ b/tcmalloc/malloc_extension.cc
+@@ -818,6 +818,23 @@ MallocExtension::SoftMemoryLimitCallback* MallocExtension::GetSoftMemoryLimitHan
+ #endif
+ }
+ 
++// Widened past int so that every exit code stays representable alongside the sentinel.
++static constexpr int64_t kFailFastOnOomDisabled = std::numeric_limits<int64_t>::min();
++
++ABSL_CONST_INIT static std::atomic<int64_t> FailFastOnOomExitCode_{kFailFastOnOomDisabled};
++
++void MallocExtension::SetFailFastOnOomExitCode(int exit_code) {
++  FailFastOnOomExitCode_.store(exit_code, std::memory_order_relaxed);
++}
++
++std::optional<int> MallocExtension::GetFailFastOnOomExitCode() {
++  int64_t exit_code = FailFastOnOomExitCode_.load(std::memory_order_relaxed);
++  if (exit_code == kFailFastOnOomDisabled) {
++    return std::nullopt;
++  }
++  return static_cast<int>(exit_code);
++}
++
+ void MallocExtension::SetSampleUserDataCallbacks(
+     CreateSampleUserDataCallback create,
+     CopySampleUserDataCallback copy,
+diff --git a/tcmalloc/malloc_extension.h b/tcmalloc/malloc_extension.h
+index 345bf6a..3d218c5 100644
+--- a/tcmalloc/malloc_extension.h
++++ b/tcmalloc/malloc_extension.h
+@@ -671,6 +671,11 @@ class MallocExtension final {
+   static void SetSoftMemoryLimitHandler(SoftMemoryLimitCallback* handler);
+   static SoftMemoryLimitCallback* GetSoftMemoryLimitHandler();
+ 
++  // Terminate an OOM via _exit(exit_code) rather than abort(), leaving no
++  // coredump; diagnostics are still logged. Disabled by default.
++  static void SetFailFastOnOomExitCode(int exit_code);
++  static std::optional<int> GetFailFastOnOomExitCode();
++
+   using CreateSampleUserDataCallback = void*();
+   using CopySampleUserDataCallback = void*(void*);
+   using DestroySampleUserDataCallback = void(void*);

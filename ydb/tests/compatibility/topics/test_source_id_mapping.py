@@ -26,7 +26,6 @@ FED_TOPIC_ALIASES = (
     FED_TOPIC_PATH,
     "account/topic",
     "account--topic",
-    "rt3.dc1--account--topic",
 )
 SOURCE_ID_META2_PATH = "/Root/PQ/SourceIdMeta2"
 CLUSTER_TABLE_PATH = "/Root/PQ/Config/V2/Cluster"

@@ -17,6 +17,8 @@ constexpr ui32 INTERNAL_WIDTH = 16;
 constexpr ui32 INTERNAL_TEXT_HEIGHT = 8;
 constexpr ui32 TIME_SERIES_RANGES = 32;
 constexpr ui32 CONN_ARROW = 4;
+// Width of one task in the per-node task bars of the "Tasks" column.
+constexpr ui32 NODE_TASK_WIDTH = 3;
 // The column-title strip at the very top of the document. It is drawn once for
 // the whole document, however many plans it holds, and the plans start below it.
 constexpr ui32 COLUMN_HEADER_HEIGHT = INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;

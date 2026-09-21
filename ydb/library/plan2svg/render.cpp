@@ -347,6 +347,37 @@ void TPlan::PrintUnfinishedTasks(TStringBuilder& builder, ui32 tasks, ui32 finis
     }
 }
 
+void TPlan::PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes) {
+    // The rows tile the stage height, in hundredths of a percent so that they
+    // still add up to exactly 100% when there are more nodes than pixels.
+    auto percent = [](ui32 hundredths) {
+        return Sprintf("%u.%02u%%", hundredths / 100, hundredths % 100);
+    };
+    ui32 count = nodes.size();
+    for (ui32 i = 0; i < count; i++) {
+        const auto& node = nodes[i];
+        if (node.Tasks == 0) {
+            continue;
+        }
+        auto y0 = i * 10000 / count;
+        auto y1 = (i + 1) * 10000 / count;
+        auto width = std::min(NODE_TASK_WIDTH * node.Tasks, Config.TaskWidth);
+        auto finishedWidth = width * std::min(node.Finished, node.Tasks) / node.Tasks;
+        if (finishedWidth) {
+            builder
+            << "<rect x='" << Config.TaskLeft << "' y='" << percent(y0)
+            << "' width='" << finishedWidth << "' height='" << percent(y1 - y0)
+            << "' stroke-width='0' fill='url(#tasks_finished)'/>" << Endl;
+        }
+        if (width > finishedWidth) {
+            builder
+            << "<rect x='" << Config.TaskLeft + finishedWidth << "' y='" << percent(y0)
+            << "' width='" << width - finishedWidth << "' height='" << percent(y1 - y0)
+            << "' stroke-width='0' fill='url(#tasks_running)'/>" << Endl;
+        }
+    }
+}
+
 void TPlan::PrintWarningBadge(TStringBuilder& builder, ui32 cx, ui32 bottom, const TString& title, TStringBuf label) {
     builder
     << "<g><title>" << title << "</title>" << Endl
@@ -1044,12 +1075,27 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
     if (s->Tasks) {
         s->Svg << "<g><title>";
         if (s->External) {
-            s->Svg << "External Source, partitions: " << s->Tasks;
+            s->Svg << "External Source partitions: ";
         } else {
-            s->Svg << "Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks;
+            s->Svg << "Stage " << s->PhysicalStageId << " tasks: ";
         }
-        s->Svg << ", finished: " << s->FinishedTasks << "</title>" << Endl;
-        PrintUnfinishedTasks(s->Svg, s->Tasks, s->FinishedTasks);
+        s->Svg << "finished " << s->FinishedTasks << " of " << s->Tasks;
+        if (!s->Nodes.empty()) {
+            ui32 nodeTasks = 0;
+            for (const auto& node : s->Nodes) {
+                s->Svg << "; node " << node.NodeId << ": " << node.Finished << "/" << node.Tasks;
+                nodeTasks += node.Tasks;
+            }
+            if (nodeTasks < s->Tasks) {
+                s->Svg << "; not started: " << s->Tasks - nodeTasks;
+            }
+        }
+        s->Svg << "</title>" << Endl;
+        if (s->Nodes.empty()) {
+            PrintUnfinishedTasks(s->Svg, s->Tasks, s->FinishedTasks);
+        } else {
+            PrintNodeTasks(s->Svg, s->Nodes);
+        }
         s->Svg
         << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
         << "</g>" << Endl;
@@ -1410,6 +1456,16 @@ TString TVisualizer::PrintSvg() {
         << "' y='0' width='" << Config.HeaderWidth << "' height='" << offsetY << "'/>"
         << "</clipPath>" << Endl;
     svg << Endl << NResource::Find(TStringBuf("plan2svg/icons.svg"));
+    // Fills of the per-node task bars: 1px horizontal stripes, the finished
+    // ones in the text colour over the stage background, the running ones in
+    // the two stage shades. Palette-driven like the styles below.
+    svg << "<defs>" << Endl
+        << "  <pattern id='tasks_finished' patternUnits='userSpaceOnUse' width='2' height='2'>"
+        << "<rect x='0' y='0' width='2' height='1' fill='" << Config.Palette.StageText << "'/></pattern>" << Endl
+        << "  <pattern id='tasks_running' patternUnits='userSpaceOnUse' width='2' height='2'>"
+        << "<rect x='0' y='0' width='2' height='2' fill='" << Config.Palette.StageMain << "'/>"
+        << "<rect x='0' y='0' width='2' height='1' fill='" << Config.Palette.StageClone << "'/></pattern>" << Endl
+        << "</defs>" << Endl;
     svg << "<style type='text/css'>" << Endl
         << "  rect.stage { stroke-width:0; fill:" << Config.Palette.StageMain << "; }" << Endl
         << "  rect.clone { stroke-width:0; fill:" << Config.Palette.StageClone << "; }" << Endl

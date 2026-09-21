@@ -149,6 +149,140 @@ Y_UNIT_TEST_SUITE(TPlan2SvgGolden) {
     Y_UNIT_TEST(MultiQueryHot) {
         CheckGolden("multi_query_hot");
     }
+
+    // cluster_nodes with per-node task counts (Stats.Nodes) on most stages: the
+    // task column draws one bar per node instead of the dashed line. Covers a
+    // partially finished node, a node with nothing finished, tasks not started
+    // yet, a bar wider than the column, unsorted input, and two stages plus the
+    // external sources that keep the dashed line.
+    Y_UNIT_TEST(StageNodes) {
+        CheckGolden("stage_nodes");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TPlan2SvgStageNodes) {
+
+    TString StagePlan(TStringBuf stats) {
+        return TStringBuilder() << R"({"Plan":{"Plans":[{"Node Type":"ResultSet","PlanNodeId":2,"Plans":[
+            {"Node Type":"Stage","PlanNodeId":1,"Operators":[{"Name":"Filter","Predicate":"x"}],"Stats":{)"
+            << stats << "}}]}]}}";
+    }
+
+    // The task line is recognised by its full shape: the dash pattern alone is
+    // shared with the timeline min/max and chunk size lines, only the stroke
+    // colour is unique to it.
+    TString TaskLineEnd() {
+        TPlanViewConfig config;
+        return TStringBuilder() << "stroke='" << config.Palette.StageText << "' stroke-dasharray='1,1' />";
+    }
+
+    TString TaskLine(ui32 unfinishedPercent) {
+        TPlanViewConfig config;
+        return TStringBuilder()
+            << "<line x1='" << config.TaskLeft + config.TaskWidth / 8 << "' y1='" << unfinishedPercent << "%' x2='" << config.TaskLeft + config.TaskWidth / 8
+            << "' y2='100%' stroke-width='" << config.TaskWidth / 4 << "' " << TaskLineEnd();
+    }
+
+    Y_UNIT_TEST(BarsReplaceTheDashedLine) {
+        TPlanVisualizer viz;
+        viz.LoadPlans(StagePlan(R"("PhysicalStageId":5,"Tasks":16,"FinishedTasks":9,
+            "Nodes":[{"NodeId":7,"Tasks":6,"Finished":3},{"NodeId":3,"Tasks":6,"Finished":6}])"));
+        auto svg = viz.PrintSvg();
+        AssertWellFormed(svg, "stage with Nodes");
+
+        TPlanViewConfig config;
+        UNIT_ASSERT_C(svg.Contains("<pattern id='tasks_finished'"), svg);
+        UNIT_ASSERT_C(svg.Contains("<pattern id='tasks_running'"), svg);
+        UNIT_ASSERT_C(!svg.Contains(TaskLineEnd()), svg);
+        UNIT_ASSERT_C(svg.Contains("<title>Stage 5 tasks: finished 9 of 16; node 3: 6/6; node 7: 3/6; not started: 4</title>"), svg);
+        // Node 3 (sorted first): 6 tasks = 18px, all finished, the top half.
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<rect x='" << config.TaskLeft << "' y='0.00%' width='18' height='50.00%' stroke-width='0' fill='url(#tasks_finished)'/>"), svg);
+        // Node 7: 3 finished (9px) then 3 running (9px), the bottom half.
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<rect x='" << config.TaskLeft << "' y='50.00%' width='9' height='50.00%' stroke-width='0' fill='url(#tasks_finished)'/>"), svg);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<rect x='" << config.TaskLeft + 9 << "' y='50.00%' width='9' height='50.00%' stroke-width='0' fill='url(#tasks_running)'/>"), svg);
+    }
+
+    Y_UNIT_TEST(NoNodesKeepsTheDashedLine) {
+        TPlanVisualizer viz;
+        viz.LoadPlans(StagePlan(R"("PhysicalStageId":5,"Tasks":16,"FinishedTasks":12)"));
+        auto svg = viz.PrintSvg();
+        AssertWellFormed(svg, "stage without Nodes");
+
+        UNIT_ASSERT_C(svg.Contains(TaskLine(25)), svg);
+        UNIT_ASSERT_C(!svg.Contains("url(#tasks_"), svg);
+        UNIT_ASSERT_C(svg.Contains("<title>Stage 5 tasks: finished 12 of 16</title>"), svg);
+    }
+
+    // A stage with a nested table read is loaded twice over the same Stats
+    // block (LoadSubPlans re-enters LoadStage); the nodes must not double up.
+    Y_UNIT_TEST(NestedTableReadLoadsNodesOnce) {
+        TVisualizer viz;
+        viz.LoadPlans(TString(R"({"Plan":{"Plans":[{"Node Type":"ResultSet","PlanNodeId":3,"Plans":[
+            {"Node Type":"TopSort-Filter","PlanNodeId":2,"Operators":[{"Name":"TopSort","Limit":"10"},{"Name":"Filter","Predicate":"x"}],
+             "Stats":{"PhysicalStageId":1,"Tasks":16,"FinishedTasks":9,"Nodes":[{"NodeId":3,"Tasks":6,"Finished":6},{"NodeId":7,"Tasks":6,"Finished":3}]},
+             "Plans":[{"Node Type":"TableFullScan","PlanNodeId":1,"Operators":[{"Name":"TableFullScan","Table":"t","ReadColumns":["a"]}]}]}
+        ]}]}})"));
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans.size(), 1);
+        // The stage itself plus the External source stage the table read spawns.
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->Stages.size(), 2);
+        UNIT_ASSERT(!viz.Plans[0]->Stages[0]->External);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->Stages[0]->Nodes.size(), 2);
+        UNIT_ASSERT(viz.Plans[0]->Stages[1]->External);
+        UNIT_ASSERT(viz.Plans[0]->Stages[1]->Nodes.empty());
+
+        auto svg = viz.PrintSvg();
+        AssertWellFormed(svg, "stage with a nested table read");
+        UNIT_ASSERT_C(svg.Contains("<title>Stage 1 tasks: finished 9 of 16; node 3: 6/6; node 7: 3/6; not started: 4</title>"), svg);
+        UNIT_ASSERT_C(svg.Contains("y='0.00%' width='18' height='50.00%'"), svg);
+    }
+
+    Y_UNIT_TEST(LoaderSortsAndDropsEmptyNodes) {
+        TVisualizer viz;
+        viz.LoadPlans(StagePlan(R"("PhysicalStageId":5,"Tasks":4,"FinishedTasks":1,
+            "Nodes":[{"NodeId":9,"Tasks":1,"Finished":1},{"NodeId":2,"Tasks":0,"Finished":0},{"NodeId":4,"Tasks":3}])"));
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->Stages.size(), 1);
+        const auto& nodes = viz.Plans[0]->Stages[0]->Nodes;
+        UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[0].NodeId, 4);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[0].Tasks, 3);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[0].Finished, 0);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[1].NodeId, 9);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[1].Tasks, 1);
+        UNIT_ASSERT_VALUES_EQUAL(nodes[1].Finished, 1);
+    }
+
+    // A node with more tasks than the column can show is cut at the column width,
+    // and its finished share is scaled with it.
+    Y_UNIT_TEST(WideBarIsClampedToTheColumn) {
+        TPlanVisualizer viz;
+        viz.LoadPlans(StagePlan(R"("PhysicalStageId":5,"Tasks":40,"FinishedTasks":20,
+            "Nodes":[{"NodeId":1,"Tasks":40,"Finished":20}])"));
+        auto svg = viz.PrintSvg();
+
+        TPlanViewConfig config;
+        auto half = config.TaskWidth / 2;
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<rect x='" << config.TaskLeft << "' y='0.00%' width='" << half << "' height='100.00%' stroke-width='0' fill='url(#tasks_finished)'/>"), svg);
+        UNIT_ASSERT_C(svg.Contains(TStringBuilder()
+            << "<rect x='" << config.TaskLeft + half << "' y='0.00%' width='" << config.TaskWidth - half << "' height='100.00%' stroke-width='0' fill='url(#tasks_running)'/>"), svg);
+    }
+
+    // Three rows do not divide 100% evenly; the boundaries still meet and the
+    // last row ends at exactly 100%.
+    Y_UNIT_TEST(RowsTileTheStageHeight) {
+        TPlanVisualizer viz;
+        viz.LoadPlans(StagePlan(R"("PhysicalStageId":5,"Tasks":3,"FinishedTasks":3,
+            "Nodes":[{"NodeId":1,"Tasks":1,"Finished":1},{"NodeId":2,"Tasks":1,"Finished":1},{"NodeId":3,"Tasks":1,"Finished":1}])"));
+        auto svg = viz.PrintSvg();
+
+        UNIT_ASSERT_C(svg.Contains("y='0.00%' width='3' height='33.33%'"), svg);
+        UNIT_ASSERT_C(svg.Contains("y='33.33%' width='3' height='33.33%'"), svg);
+        UNIT_ASSERT_C(svg.Contains("y='66.66%' width='3' height='33.34%'"), svg);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {

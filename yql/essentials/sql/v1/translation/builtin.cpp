@@ -10,6 +10,7 @@
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
+#include <yql/essentials/core/sql_types/spark_functions.h>
 #include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -3893,6 +3894,29 @@ TNodeResult BuildBuiltinFunc(
         moduleResource = ctx.Settings.ModuleMapping.at(ns);
     }
 
+    if (ns == "spark") {
+        if (!ctx.EnsureAvailable(pos, NYql::NFeature::SparkTranslator)) {
+            return std::unexpected(ESQLError::Basic);
+        }
+        const NYql::NSpark::TSparkFunction* functionInfo = NYql::NSpark::FindFunction(lowerName);
+        if (!functionInfo || functionInfo->BindingName.empty()) {
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown Spark function: " << name)));
+        }
+        if (args.size() < functionInfo->MinArgs || args.size() > functionInfo->MaxArgs) {
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << name << " expected from "
+                                                                               << functionInfo->MinArgs << " to " << functionInfo->MaxArgs << " arguments, but got: " << args.size())));
+        }
+        TString bindingName = functionInfo->BindingName;
+        if (functionInfo->MinArgs != functionInfo->MaxArgs) {
+            bindingName += ToString(args.size());
+        }
+        ctx.RequiredModules.emplace("spark_module", "/lib/yql/spark.yqls");
+        TVector<TNodePtr> applyArgs = {
+            new TCallNodeImpl(pos, "bind", {BuildAtom(pos, "spark_module", 0), BuildQuotedAtom(pos, bindingName)})};
+        applyArgs.insert(applyArgs.end(), args.begin(), args.end());
+        return TNonNull(TNodePtr(new TCallNodeImpl(pos, "Apply", applyArgs)));
+    }
+
     if (ns == "js") {
         ns = "javascript";
         nameSpace = "JavaScript";
@@ -4488,20 +4512,27 @@ TNodeResult BuildBuiltinFunc(
         } else {
             TStringBuilder b;
             b << "Unknown builtin: " << name;
-            auto simplePgFunc = simplePgFuncs.find(lowerName);
-            if (simplePgFunc != simplePgFuncs.end()) {
+            const NYql::NSpark::TSparkFunction* sparkFunction = NYql::NSpark::FindFunction(lowerName);
+            const bool hasSparkAlias = sparkFunction && !sparkFunction->BindingName.empty() && ctx.IsAvailable(NYql::NFeature::SparkTranslator);
+            const bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
+            const bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);
+            if (hasSparkAlias) {
+                b << ", consider using Spark::" << lowerName;
+                if (isAggregateFunc) {
+                    b << " or PgAgg::" << name;
+                } else if (isNormalFunc) {
+                    b << " or Pg::" << name;
+                }
+                b << " instead.";
+            } else if (auto simplePgFunc = simplePgFuncs.find(lowerName); simplePgFunc != simplePgFuncs.end()) {
                 b << ", consider using " << simplePgFunc->second.NativeFuncName << " function instead.";
                 b << " It's possible to use SimplePg::" << lowerName << " function as well but with some performance overhead.";
             } else if (auto it = missingFuncs.find(lowerName); it != missingFuncs.end()) {
                 b << ", consider using " << it->second.Suggestion << " function(s) instead.";
-            } else {
-                bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
-                bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);
-                if (isAggregateFunc) {
-                    b << ", consider using PgAgg::" << name;
-                } else if (isNormalFunc) {
-                    b << ", consider using Pg::" << name;
-                }
+            } else if (isAggregateFunc) {
+                b << ", consider using PgAgg::" << name;
+            } else if (isNormalFunc) {
+                b << ", consider using Pg::" << name;
             }
 
             return TNonNull(TNodePtr(new TInvalidBuiltin(pos, b)));
@@ -4674,6 +4705,14 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
             .Kind = "Normal",
         };
     }
+
+    NYql::NSpark::EnumerateFunctions([&map](const TString& name, const TString& bindingName) {
+        if (!bindingName.empty()) {
+            map[TString("Spark::") + name] = {
+                .Kind = "Normal",
+            };
+        }
+    });
 
     for (const auto& [name, info] : map) {
         callback(name, info.Kind, info.MinLangVer, info.MaxLangVer);

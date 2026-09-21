@@ -3,6 +3,9 @@
         "min_langver": "max",
         "is_backport_allowed": true
     },
+    "SparkTranslator": {
+        "min_langver": "max"
+    },
     "IfWithoutEvaluate": {
         "description": "IF without EVALUATE",
         "min_langver": "max",

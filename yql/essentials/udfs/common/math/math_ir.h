@@ -24,7 +24,7 @@ namespace NYql::NUdf {
     XX(Abs, Abs)                \
     XX(Acos, acos)              \
     XX(Asin, asin)              \
-    XX(Asinh, asin)             \
+    XX(Asinh, asinh)            \
     XX(Atan, atan)              \
     XX(Cbrt, cbrt)              \
     XX(Ceil, ceil)              \

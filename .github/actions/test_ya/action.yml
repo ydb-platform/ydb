@@ -139,6 +139,8 @@ runs:
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
+        echo "CI_STAGES_FILE=$PUBLIC_DIR/ci_stages.jsonl" >> $GITHUB_ENV
+        : > "$PUBLIC_DIR/ci_stages.jsonl"
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly
 
@@ -151,6 +153,14 @@ runs:
       run: |
         ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
+        echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
+        jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
+        job_id=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s \
+          -H "Authorization: Bearer ${{ github.token }}" \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "$jobs_url" | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .id' | head -1 || true)
+        echo "GITHUB_NUMERIC_JOB_ID=${job_id:-0}" >> "$GITHUB_ENV"
 
     - name: Setup cache
       shell: bash
@@ -174,6 +184,32 @@ runs:
         GITHUB_EVENT_NAME: ${{ github.event_name }}
       run: |
         set -ex
+
+        record_ci_stage() {
+          local name="$1"
+          local started_epoch="$2"
+          local conclusion="${3:-success}"
+          local ya_attempt="${4:-}"
+          local extra_args=()
+          if [ -n "$ya_attempt" ]; then
+            extra_args+=(--ya-attempt "$ya_attempt")
+          fi
+          python3 .github/scripts/analytics/ci_stage_timer.py append \
+            --file "${CI_STAGES_FILE}" \
+            --stage-kind ya_phase \
+            --stage-name "$name" \
+            --started-epoch "$started_epoch" \
+            --conclusion "$conclusion" \
+            --cache-mode "${CI_CACHE_MODE:-unknown}" \
+            "${extra_args[@]}" || true
+        }
+
+        if [ -n "${{ inputs.bazel_remote_uri }}" ]; then
+          CI_CACHE_MODE=dist_cache
+        else
+          CI_CACHE_MODE=none
+        fi
+        echo "CI_CACHE_MODE=$CI_CACHE_MODE" >> "$GITHUB_ENV"
         
         if [ "$COLLECT_COREDUMPS" = "true" ]; then
           sudo mkdir -p /coredumps
@@ -207,6 +243,7 @@ runs:
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
         IS_TEST_RESULT_IGNORED=0
+        DASHBOARD_SANITIZER=""
 
         case "$BUILD_PRESET" in
           debug)
@@ -222,11 +259,13 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
+            DASHBOARD_SANITIZER="address"
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
             )
+            DASHBOARD_SANITIZER="thread"
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
@@ -236,6 +275,7 @@ runs:
             params+=(
               --build "release" --sanitize="memory"
             )
+            DASHBOARD_SANITIZER="memory"
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
@@ -306,10 +346,16 @@ runs:
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
+          GRAPH_COMPARE_START=$(date +%s)
           set +e
           ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
+          if [ $RC -ne 0 ]; then
+            record_ci_stage graph_compare "$GRAPH_COMPARE_START" failure
+          else
+            record_ci_stage graph_compare "$GRAPH_COMPARE_START" success
+          fi
 
           if [ $RC -ne 0 ]; then
             echo "graph_compare.py returned $RC, build failed"
@@ -342,6 +388,11 @@ runs:
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           params+=(--bazel-remote-store)
           params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+          echo "CI_CACHE_MODE=dist_cache" >> "$GITHUB_ENV"
+          CI_CACHE_MODE=dist_cache
+        else
+          echo "CI_CACHE_MODE=none" >> "$GITHUB_ENV"
+          CI_CACHE_MODE=none
         fi
 
         if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
@@ -412,6 +463,14 @@ runs:
 
           monitor_memory &
           MONITOR_PID=$!
+
+          RESOURCES_JSONL="$CURRENT_PUBLIC_DIR/resources_monitor.jsonl"
+          rm -f "$RESOURCES_JSONL"
+          python3 .github/scripts/utils/metrics/monitor_resources.py \
+            --output "$RESOURCES_JSONL" \
+            --interval 1 &
+          MONITOR_RESOURCES_PID=$!
+
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
             GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
           else
@@ -435,6 +494,7 @@ runs:
 
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+          YA_MAKE_START=$(date +%s)
 
           set +e
           # sudo -u restores supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
@@ -448,6 +508,11 @@ runs:
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
+          if [ $RC -ne 0 ]; then
+            record_ci_stage "ya_make_try_${RETRY}" "$YA_MAKE_START" failure "$RETRY"
+          else
+            record_ci_stage "ya_make_try_${RETRY}" "$YA_MAKE_START" success "$RETRY"
+          fi
 
           # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
           OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"
@@ -457,7 +522,14 @@ runs:
             echo "35 [OOM dmesg (try $RETRY)]($OOM_DMESG_LOG_URL)" >> $SUMMARY_LINKS
           fi
 
-          kill $MONITOR_PID
+          if [ -n "$MONITOR_PID" ] && kill -0 "$MONITOR_PID" 2>/dev/null; then
+            kill "$MONITOR_PID" 2>/dev/null || true
+            wait "$MONITOR_PID" 2>/dev/null || true
+          fi
+          if [ -n "$MONITOR_RESOURCES_PID" ] && kill -0 "$MONITOR_RESOURCES_PID" 2>/dev/null; then
+            kill "$MONITOR_RESOURCES_PID" 2>/dev/null || true
+            wait "$MONITOR_RESOURCES_PID" 2>/dev/null || true
+          fi
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
 
@@ -475,6 +547,50 @@ runs:
           # seems analyze-make don't have simple "output" parameter, so change cwd
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
+
+          # build tests resource dashboard with metrics overlay (CPU/RAM/disk)
+          TESTS_METRICS_DIR="$CURRENT_PUBLIC_DIR/tests_metrics"
+          mkdir -p "$TESTS_METRICS_DIR"
+          DASHBOARD_ARGS=()
+          if [ -n "$DASHBOARD_SANITIZER" ]; then
+            DASHBOARD_ARGS+=(--sanitizer "$DASHBOARD_SANITIZER")
+          fi
+          TRY_LINKS=""
+          for i in $(seq 1 $RETRY); do TRY_LINKS="${TRY_LINKS}try_$i/tests_metrics/dashboard.html,"; done
+          TRY_LINKS="${TRY_LINKS%,}"
+          DASHBOARD_OK=0
+          DASHBOARD_START=$(date +%s)
+          if ! python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \
+            --report "$CURRENT_REPORT" \
+            --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
+            --top-n 500 \
+            --out-html "$TESTS_METRICS_DIR/dashboard.html" \
+            --out-trace "$TESTS_METRICS_DIR/trace.json" \
+            --out-stats "$TESTS_METRICS_DIR/stats.json" \
+            --resources-jsonl "$RESOURCES_JSONL" \
+            --build-preset "$BUILD_PRESET" \
+            --runner "${{ runner.name }}" \
+            --pr "${{ github.event.number }}" \
+            --branch "${BRANCH_NAME}" \
+            --commit "${ORIGINAL_HEAD}" \
+            --artifacts-url "${PUBLIC_DIR_URL}" \
+            --try-links "$TRY_LINKS" \
+            --repo "${{ github.repository }}" \
+            --repo-root . \
+            "${DASHBOARD_ARGS[@]}" > "$TESTS_METRICS_DIR/dashboard_build.log" 2>&1; then
+            mv "$TESTS_METRICS_DIR/dashboard_build.log" "$TESTS_METRICS_DIR/dashboard_error.log"
+            echo "Dashboard generation failed (see dashboard_error.log in artifacts)"
+            record_ci_stage dashboard "$DASHBOARD_START" failure "$RETRY"
+          else
+            rm -f "$TESTS_METRICS_DIR/dashboard_build.log"
+            DASHBOARD_OK=1
+            record_ci_stage dashboard "$DASHBOARD_START" success "$RETRY"
+          fi
+          cp -f "$RESOURCES_JSONL" "$TESTS_METRICS_DIR/resources_monitor.jsonl" 2>/dev/null || true
+          cp -f ram_usage.txt "$TESTS_METRICS_DIR/ram_usage_legacy.txt" 2>/dev/null || true
+          if [ "$DASHBOARD_OK" -eq 1 ]; then
+            echo "21 [Dashboard try $RETRY](${CURRENT_PUBLIC_DIR_URL}/tests_metrics/dashboard.html)" >> $SUMMARY_LINKS
+          fi
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
@@ -553,7 +669,9 @@ runs:
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
           fi
 
+          S3_SYNC_START=$(date +%s)
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+          record_ci_stage s3_sync_try "$S3_SYNC_START" success "$RETRY"
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
@@ -584,7 +702,9 @@ runs:
               ;;
           esac
           run_name="${run_name}_attempt_${RETRY}"
+          UPLOAD_RESULTS_START=$(date +%s)
           result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          record_ci_stage upload_tests_results "$UPLOAD_RESULTS_START" success "$RETRY"
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
@@ -599,6 +719,12 @@ runs:
           echo "status=true" >> $GITHUB_OUTPUT
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
         fi
+
+    - name: Upload CI stage timings
+      if: always()
+      continue-on-error: true
+      shell: bash
+      run: python3 .github/scripts/analytics/upload_ci_stages.py --file "${CI_STAGES_FILE:-}"
 
     - name: resolve-status-sha
       shell: bash

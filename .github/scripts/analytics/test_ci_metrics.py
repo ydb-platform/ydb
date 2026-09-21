@@ -16,8 +16,10 @@ from ci_metrics import (
     PRIMARY_KEYS,
     Analytics,
     append_record,
+    attach_context,
     build_create_table_sql,
     build_track_record,
+    github_context_labels,
     github_env_defaults,
     guess_build_preset,
     load_unsent_lines,
@@ -290,6 +292,96 @@ class GithubEnvDefaultsTest(unittest.TestCase):
             self.assertEqual(defaults["commit"], "abc123def")
             self.assertEqual(defaults["branch"], "main")
             self.assertEqual(defaults["build_preset"], "relwithdebinfo")
+        finally:
+            for key, value in old.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def test_attaches_github_event_entities(self):
+        old = {key: os.environ.get(key) for key in (
+            "GITHUB_EVENT_PATH",
+            "GITHUB_EVENT_NAME",
+            "GITHUB_WORKFLOW",
+            "GITHUB_RUN_ID",
+            "GITHUB_RUN_ATTEMPT",
+            "GITHUB_SHA",
+            "GITHUB_REF",
+            "GITHUB_REF_NAME",
+            "GITHUB_BASE_REF",
+            "GITHUB_HEAD_REF",
+            "GITHUB_JOB",
+            "GITHUB_REPOSITORY",
+            "GITHUB_ACTOR",
+            "PR_NUMBER",
+            "GITHUB_PR_NUMBER",
+            "ORIGINAL_HEAD",
+            "BRANCH_NAME",
+            "CI_JOB_TITLE",
+        )}
+        try:
+            for key in old:
+                os.environ.pop(key, None)
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "event.json")
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(
+                        {
+                            "action": "synchronize",
+                            "number": 53660,
+                            "pull_request": {
+                                "number": 53660,
+                                "html_url": "https://github.com/ydb-platform/ydb/pull/53660",
+                                "state": "open",
+                                "draft": False,
+                                "merged": False,
+                                "user": {"login": "naspirato"},
+                                "head": {
+                                    "ref": "cursor/ci-pr-check-observability-7839",
+                                    "sha": "abc123def",
+                                    "repo": {"full_name": "naspirato/ydb"},
+                                },
+                                "base": {
+                                    "ref": "main",
+                                    "sha": "def456",
+                                    "repo": {"full_name": "ydb-platform/ydb"},
+                                },
+                                "labels": [{"name": "ci"}],
+                                "body": "should-not-be-copied",
+                            },
+                            "repository": {"full_name": "ydb-platform/ydb", "default_branch": "main"},
+                            "sender": {"login": "naspirato"},
+                        },
+                        handle,
+                    )
+                os.environ["GITHUB_EVENT_PATH"] = path
+                os.environ["GITHUB_EVENT_NAME"] = "pull_request_target"
+                os.environ["GITHUB_WORKFLOW"] = "PR-check"
+                os.environ["GITHUB_RUN_ID"] = "99"
+                os.environ["GITHUB_RUN_ATTEMPT"] = "2"
+                os.environ["GITHUB_SHA"] = "mergecommit"
+                os.environ["GITHUB_REF"] = "refs/heads/main"
+                os.environ["GITHUB_JOB"] = "build_and_test"
+                os.environ["GITHUB_REPOSITORY"] = "ydb-platform/ydb"
+                os.environ["GITHUB_ACTOR"] = "naspirato"
+                labels = github_context_labels()
+                record = attach_context({"name": "ya_make_try_1", "source": "ya_phase"})
+            self.assertEqual(labels["github.event_name"], "pull_request_target")
+            self.assertEqual(labels["github.event.number"], 53660)
+            self.assertEqual(labels["github.event.action"], "synchronize")
+            self.assertEqual(labels["github.event.pull_request.number"], 53660)
+            self.assertEqual(labels["github.event.pull_request.head.sha"], "abc123def")
+            self.assertEqual(labels["github.event.pull_request.base.ref"], "main")
+            self.assertEqual(labels["github.event.pull_request.labels"], ["ci"])
+            self.assertEqual(labels["github.workflow"], "PR-check")
+            self.assertEqual(labels["github.job"], "build_and_test")
+            self.assertEqual(labels["github.run_attempt"], 2)
+            self.assertNotIn("github.event.pull_request.body", labels)
+            self.assertEqual(record["pr_number"], 53660)
+            self.assertEqual(record["event_name"], "pull_request_target")
+            self.assertEqual(record["commit"], "abc123def")
+            self.assertEqual(record["labels"]["github.event.number"], 53660)
         finally:
             for key, value in old.items():
                 if value is None:

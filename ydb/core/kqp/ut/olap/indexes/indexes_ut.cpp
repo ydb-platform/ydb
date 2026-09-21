@@ -3868,40 +3868,6 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             SELECT COUNT(*) FROM `/Root/olapTableBloomWithDict` WHERE resource_id LIKE "alp%";
         )"), "[[2u]]");
     }
-<<<<<<< HEAD
-=======
-
-    Y_UNIT_TEST(DataAndIndexBytesCounters) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
-        TKikimrRunner kikimr(settings);
-
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-
-        auto helper = TLocalHelper(kikimr);
-        helper.CreateTestOlapTable();
-
-        // A MIN_MAX index gives compacted portions index blobs, so IndexBytes becomes non-zero.
-        ExecQuery(kikimr, false, R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=MIN_MAX,
-            FEATURES=`{"column_name" : "uid"}`);)");
-
-        for (ui32 i = 0; i < 5; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000 + i * 100000, 300000000 + i * 100000, 10000);
-        }
-
-        auto* runtime = kikimr.GetTestServer().GetRuntime();
-        auto appCounters = GetServiceCounters(runtime->GetAppData().Counters, "tablets")
-                               ->GetSubgroup("type", "ColumnShard")
-                               ->GetSubgroup("category", "app");
-        auto dataBytes = appCounters->GetCounter("SUM(ColumnShard/DataBytes)", false);
-        auto indexBytes = appCounters->GetCounter("SUM(ColumnShard/IndexBytes)", false);
-
-        // Index blobs are produced by async background compaction, and each shard's counters roll up into
-        // the SUM(...) aggregate sensor only periodically, so poll until both surface.
-        csController->WaitCondition(TDuration::Seconds(30), [&]() { return dataBytes->Val() > 0 && indexBytes->Val() > 0; });
-        UNIT_ASSERT_GT(dataBytes->Val(), 0);
-        UNIT_ASSERT_GT(indexBytes->Val(), 0);
-    }
 
     Y_UNIT_TEST(DropColumnTableWithLocalIndexesViaDropTable, ELocalIndexAsSchemeObject) {
         const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
@@ -3941,7 +3907,6 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             "idx_bloom should not exist after DROP TABLE, but got status: "
                 << static_cast<int>(bloomDesc->Record.GetSchemeStatus()));
     }
->>>>>>> c1b0521bc56 (Fix delete column table with indexes (#52200))
 }
 
 }   // namespace NKikimr::NKqp

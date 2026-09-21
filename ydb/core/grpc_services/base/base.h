@@ -1889,10 +1889,16 @@ private:
 
 class TEvRequestAuthAndCheckResult : public TEventLocal<TEvRequestAuthAndCheckResult, TRpcServices::EvRequestAuthAndCheckResult> {
 public:
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TAuditLogParts& auditLogParts)
+    TEvRequestAuthAndCheckResult(
+        Ydb::StatusIds::StatusCode status,
+        const NYql::TIssues& issues,
+        const TAuditLogParts& auditLogParts,
+        EHttpDatabaseAccessVerdict databaseAccessVerdict
+    )
         : Status(status)
         , Issues(issues)
         , AuditLogParts(auditLogParts)
+        , DatabaseAccessVerdict(databaseAccessVerdict)
     {}
 
     TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue, const TAuditLogParts& auditLogParts)
@@ -1942,7 +1948,8 @@ public:
         NActors::TActorId sender,
         TAuditMode auditMode,
         TString peerName,
-        TString requestId)
+        TString requestId
+    )
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
@@ -1994,7 +2001,8 @@ public:
                 new TEvRequestAuthAndCheckResult(
                     status,
                     IssueManager.GetIssues(),
-                    GetAuditLogParts()
+                    GetAuditLogParts(),
+                    DatabaseAccessVerdict
                 )
             );
         }

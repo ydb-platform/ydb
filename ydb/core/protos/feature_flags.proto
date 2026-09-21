@@ -430,4 +430,5 @@ message TFeatureFlags {
     optional bool EnableCsIndexReadMemoryTracking = 350 [default = false];
     // Creates asynchronous indexes on newly created asynchronous replication destinations.
     optional bool EnableAsyncIndexReplication = 351 [default = false];
+    optional bool EnableDatabaseAccessCheckForHttpMonitoring = 352 [default = false];
 }

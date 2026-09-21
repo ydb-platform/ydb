@@ -21,12 +21,12 @@ FCC_TOPIC = "srcid_compat_topic"
 
 FED_DC = "dc1"
 FED_ACCOUNT = "account"
-FED_TOPIC_PATH = "/Root/PQ/rt3.dc1--account--topic"
+FED_TOPIC_PATH = "/Root/account/topic"
 FED_TOPIC_ALIASES = (
     FED_TOPIC_PATH,
-    "rt3.dc1--account--topic",
     "account/topic",
     "account--topic",
+    "rt3.dc1--account--topic",
 )
 SOURCE_ID_META2_PATH = "/Root/PQ/SourceIdMeta2"
 CLUSTER_TABLE_PATH = "/Root/PQ/Config/V2/Cluster"
@@ -110,7 +110,7 @@ def write_after_init(driver, topic, expected_init_seqno, seqno):
 
 def init_federation_tables(driver):
     scheme = ydb.SchemeClient(driver)
-    for path in ("/Root/PQ", "/Root/PQ/Config", "/Root/PQ/Config/V2"):
+    for path in ("/Root/account", "/Root/PQ", "/Root/PQ/Config", "/Root/PQ/Config/V2"):
         try:
             scheme.make_directory(path)
         except Exception as exc:

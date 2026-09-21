@@ -53,6 +53,20 @@ bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& ite
     }
 }
 
+bool SupportsTableBackupAsSql(NKikimr::NSchemeShard::TExportInfo::EKind kind) {
+    return kind == NKikimr::NSchemeShard::TExportInfo::EKind::S3
+        || kind == NKikimr::NSchemeShard::TExportInfo::EKind::FS;
+}
+
+bool NeedsTableSchemeUpload(
+    const NKikimr::NSchemeShard::TExportInfo& exportInfo,
+    const NKikimr::NSchemeShard::TExportInfo::TItem& item)
+{
+    auto isMainTable = item.ParentIdx == Max<ui32>() && NKikimr::NSchemeShard::IsPathTypeTable(item);
+    auto isEnabledFlag = exportInfo.EnableTableBackupAsSql;
+    return SupportsTableBackupAsSql(exportInfo.Kind) && isEnabledFlag && isMainTable;
+}
+
 template <typename T>
 concept HasIncludeIndexData = requires(const T& t) {
     { t.include_index_data() } -> std::same_as<bool>;
@@ -222,7 +236,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             if (enableFeatureFlags) {
                 exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
                 exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
-                exportInfo->EnableTableBackupAsSql = AppData()->FeatureFlags.GetEnableTableBackupAsSql();
+                exportInfo->EnableTableBackupAsSql = SupportsTableBackupAsSql(kind) && AppData()->FeatureFlags.GetEnableTableBackupAsSql();
             }
             TString explain;
             if (!FillItems(*exportInfo, settings, explain)) {
@@ -520,6 +534,70 @@ private:
         DispatchByExportKind([&]<typename TSettings>() {
             return UploadScheme<TSettings>(exportInfo, itemIdx, ctx);
         }, exportInfo);
+    }
+
+    template <typename TSettings>
+    void UploadTableSchemeWithSettings(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+        auto& item = exportInfo.Items[itemIdx];
+
+        TSettings exportSettings;
+        Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
+
+        const TPath sourcePath = TPath::Init(item.SourcePathId, Self);
+        const TPath exportItemPath = TPath::Resolve(ExportItemPathName(Self, exportInfo, itemIdx), Self);
+
+        TExportTableSchemeContext context;
+        TString error;
+
+        const NKikimrSchemeOp::TBackupTask* backupTask = nullptr;
+        if (exportItemPath.IsResolved()) {
+            const TPathId pathId = exportItemPath.Base()->PathId;
+            if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+                if (Self->ColumnTables.contains(pathId)) {
+                    backupTask = &Self->ColumnTables.at(pathId).GetPtr()->BackupSettings;
+                }
+            } else if (Self->Tables.contains(pathId)) {
+                backupTask = &Self->Tables.at(pathId)->BackupSettings;
+            }
+        }
+
+        const bool prepared = backupTask && backupTask->HasTable()
+            ? PrepareExportTableSchemeContext(item.SourcePathName, *backupTask, context, error)
+            : PrepareExportTableSchemeContext(Self, item.SourcePathName, sourcePath, exportItemPath, context, error);
+
+        if (!prepared) {
+            Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(exportInfo.Id, itemIdx, false, error));
+            return;
+        }
+
+        TMaybe<NBackup::TEncryptionIV> iv;
+        if (exportSettings.has_encryption_settings()) {
+            Y_ABORT_UNLESS(itemIdx < ui32(exportInfo.ExportMetadata.SchemaMappingSize()));
+            iv = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+        }
+
+        item.SchemeUploader = ctx.Register(CreateTableSchemeUploader(Self->SelfId(), exportInfo.Id, itemIdx, exportSettings,
+            std::move(context), exportInfo.EnableChecksums, iv));
+        Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
+    }
+
+    void UploadTableScheme(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+        const auto& item = exportInfo.Items[itemIdx];
+
+        if (!NeedsTableSchemeUpload(exportInfo, item) || item.CreateTableUploaded || item.SchemeUploader) {
+            return;
+        }
+
+        switch (exportInfo.Kind) {
+        case TExportInfo::EKind::S3:
+            return UploadTableSchemeWithSettings<Ydb::Export::ExportToS3Settings>(exportInfo, itemIdx, ctx);
+        case TExportInfo::EKind::FS:
+            return UploadTableSchemeWithSettings<Ydb::Export::ExportToFsSettings>(exportInfo, itemIdx, ctx);
+        default:
+            Y_ABORT("Unsupported export kind for CREATE TABLE upload");
+        }
     }
 
     bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) {
@@ -865,10 +943,6 @@ private:
 
         for (ui32 i : xrange(exportInfo.Items.size())) {
             KillChildActors(exportInfo.Items[i]);
-            if (i == itemIdx) {
-                continue;
-            }
-
             if (exportInfo.Items.at(i).State != EState::Transferring) {
                 continue;
             }
@@ -965,6 +1039,13 @@ private:
             TDeque<ui32> pendingTables;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 const auto& item = exportInfo->Items.at(itemIdx);
+
+                if (item.State == EState::UploadingCreateTable) {
+                    UploadTableScheme(*exportInfo, itemIdx, ctx);
+                    continue;
+                }
+
+                UploadTableScheme(*exportInfo, itemIdx, ctx);
 
                 if (item.WaitTxId == InvalidTxId) {
                     if (IsPathTypeTransferrable(item) && item.State <= EState::Transferring) {
@@ -1356,7 +1437,9 @@ private:
         Self->RunningExportSchemeUploaders.erase(std::exchange(item.SchemeUploader, {}));
 
         if (!result.Success) {
-            item.State = EState::Cancelled;
+            if (!NeedsTableSchemeUpload(*exportInfo, item)) {
+                item.State = EState::Cancelled;
+            }
             item.Issue = result.Error;
             Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
@@ -1369,6 +1452,28 @@ private:
             Self->PersistExportState(db, *exportInfo);
             Self->EraseEncryptionKey(db, *exportInfo);
             return SendNotificationsIfFinished(exportInfo);
+        }
+
+        if (NeedsTableSchemeUpload(*exportInfo, item)) {
+            item.CreateTableUploaded = true;
+
+            if (exportInfo->State == EState::Transferring) {
+                if (item.State == EState::UploadingCreateTable) {
+                    item.State = EState::Done;
+                }
+                Self->PersistExportItemState(db, *exportInfo, itemIdx);
+
+                if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
+                    if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
+                        EndExport(exportInfo, EState::Done, db);
+                    } else {
+                        PrepareAutoDropping(Self, *exportInfo, db);
+                    }
+                }
+            } else if (exportInfo->State == EState::Cancellation) {
+                Self->PersistExportItemState(db, *exportInfo, itemIdx);
+            }
+            return;
         }
 
         if (exportInfo->State == EState::Transferring) {
@@ -1555,6 +1660,7 @@ private:
                 Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
                 if (IsPathTypeTransferrable(item)) {
+                    UploadTableScheme(*exportInfo, itemIdx, ctx);
                     tables.emplace_back(itemIdx);
                 } else {
                     UploadScheme(*exportInfo, itemIdx, ctx);
@@ -1583,6 +1689,12 @@ private:
                     itemHasIssues = true;
                 }
             }
+
+            if (!itemHasIssues && NeedsTableSchemeUpload(*exportInfo, item) && !item.CreateTableUploaded) {
+                item.State = EState::UploadingCreateTable;
+                UploadTableScheme(*exportInfo, itemIdx, ctx);
+            }
+
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
                 if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
                     exportInfo->State = EState::Done;

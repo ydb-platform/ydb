@@ -240,6 +240,34 @@ bool PrepareExportTableSchemeContext(
     return true;
 }
 
+bool PrepareExportTableSchemeContext(
+    const TString& sourcePathName,
+    const NKikimrSchemeOp::TBackupTask& task,
+    TExportTableSchemeContext& context,
+    TString& error
+) {
+    error.clear();
+    context.SourcePath.clear();
+    context.PathDescription.Clear();
+    context.ChangefeedUnderlyingTopics.Clear();
+
+    if (!sourcePathName) {
+        error = "Source table path is empty";
+        return false;
+    }
+    if (!task.HasTable()) {
+        error = "Backup task does not contain a table description";
+        return false;
+    }
+
+    context.SourcePath = sourcePathName;
+    context.PathDescription.CopyFrom(task.GetTable());
+    for (const auto& topic : task.GetChangefeedUnderlyingTopics()) {
+        *context.ChangefeedUnderlyingTopics.AddChangefeedUnderlyingTopics() = topic;
+    }
+    return true;
+}
+
 void FillBackupTaskTableDescription(
     TSchemeShard* ss,
     NKikimrSchemeOp::TBackupTask& task,

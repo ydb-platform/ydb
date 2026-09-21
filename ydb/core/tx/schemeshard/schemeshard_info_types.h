@@ -3552,6 +3552,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         CopyTables = 3,
         Transferring = 4,
         UploadExportMetadata = 5,
+        UploadingCreateTable = 6,
         Done = 240,
         Dropping = 241,
         Dropped = 242,
@@ -3582,6 +3583,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         ESubState SubState = ESubState::AllocateTxId;
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeUploader;
+        bool CreateTableUploaded = false;
         TString Issue;
 
         TItem() = default;

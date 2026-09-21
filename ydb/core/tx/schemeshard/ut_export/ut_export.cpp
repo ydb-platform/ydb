@@ -1465,6 +1465,7 @@ namespace {
         void CheckSqlBackup(const TString& prefix, const TString& expected, bool encrypted = false, bool checksums = true) {
             const TString key = prefix + "/create_table.sql";
             TString content;
+            TMaybe<NBackup::TEncryptionIV> sqlIv;
             if (encrypted) {
                 UNIT_ASSERT(HasS3File(key + ".enc"));
                 UNIT_ASSERT(!HasS3File(key));
@@ -1472,6 +1473,7 @@ namespace {
                 const auto [plain, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
                     NBackup::TEncryptionKey("0123456789012345"), TBuffer(data.data(), data.size()));
                 content.assign(plain.Data(), plain.Size());
+                sqlIv = iv;
             } else {
                 UNIT_ASSERT(HasS3File(key));
                 UNIT_ASSERT(!HasS3File(key + ".enc"));
@@ -1486,9 +1488,31 @@ namespace {
                     NBackup::ComputeChecksum(content) + " create_table.sql");
             }
             UNIT_ASSERT(!HasS3File(key + ".enc.sha256"));
-            for (const TString suffix : {"", ".enc", ".sha256"}) {
-                UNIT_ASSERT(!HasS3File(prefix + "/scheme.pb" + suffix));
+
+            const TString legacyKey = prefix + "/scheme.pb";
+            TString legacyContent;
+            if (encrypted) {
+                UNIT_ASSERT(HasS3File(legacyKey + ".enc"));
+                UNIT_ASSERT(!HasS3File(legacyKey));
+                const TString data = GetS3FileContent(legacyKey + ".enc");
+                const auto [plain, legacyIv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                    NBackup::TEncryptionKey("0123456789012345"), TBuffer(data.data(), data.size()));
+                legacyContent.assign(plain.Data(), plain.Size());
+                UNIT_ASSERT_VALUES_UNEQUAL(sqlIv->GetBinaryString(), legacyIv.GetBinaryString());
+            } else {
+                UNIT_ASSERT(HasS3File(legacyKey));
+                UNIT_ASSERT(!HasS3File(legacyKey + ".enc"));
+                legacyContent = GetS3FileContent(legacyKey);
             }
+
+            Ydb::Table::CreateTableRequest legacyScheme;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(legacyContent, &legacyScheme));
+            UNIT_ASSERT_VALUES_EQUAL(HasS3File(legacyKey + ".sha256"), checksums);
+            if (checksums) {
+                UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent(legacyKey + ".sha256"),
+                    NBackup::ComputeChecksum(legacyContent) + " scheme.pb");
+            }
+            UNIT_ASSERT(!HasS3File(legacyKey + ".enc.sha256"));
         }
 
     private:
@@ -1693,11 +1717,17 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
             UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
             return tx.HasBackup();
         });
+        TBlockEvents<NWrappers::NExternalStorage::TEvPutObjectRequest> uploads(Runtime(), [](const auto& ev) {
+            return ev->Get()->Request.GetKey() == "sql/create_table.sql";
+        });
         const auto exportId = StartTableSqlExport(txId, "sql");
         Runtime().WaitFor("blocked shard backup proposal", [&] { return !proposals.empty(); });
+        Runtime().WaitFor("blocked SQL upload", [&] { return !uploads.empty(); });
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(false);
         proposals.Stop();
         proposals.clear();
+        uploads.Stop();
+        uploads.clear();
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
         WaitTableSqlExport(exportId);
         CheckSqlBackup("/sql", expected);
@@ -1778,7 +1808,6 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         WaitTableSqlExport(exportId, Ydb::StatusIds::CANCELLED);
         UNIT_ASSERT(!HasS3File("/sql/create_table.sql"));
         UNIT_ASSERT(!HasS3File("/sql/create_table.sql.sha256"));
-        UNIT_ASSERT(!HasS3File("/sql/scheme.pb"));
     }
 
     Y_UNIT_TEST(TableBackupAsSqlWithSequenceAndChangefeed) {

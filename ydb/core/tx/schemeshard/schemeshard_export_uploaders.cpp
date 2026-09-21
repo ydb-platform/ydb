@@ -31,6 +31,24 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace {
+
+constexpr TStringBuf CreateTableFileName = "create_table.sql";
+
+template <typename TSettings>
+TString GetDestinationPrefix(const TSettings& settings, ui32 itemIdx) {
+    if (itemIdx < ui32(settings.items_size())) {
+        const TString itemDest = NBackup::NFieldsWrappers::GetItemDestination(settings.items(itemIdx));
+        if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+            return CanonizePath(TStringBuilder() << settings.base_path() << "/" << itemDest);
+        }
+        return itemDest;
+    }
+    return NBackup::NFieldsWrappers::GetCommonDestination(settings);
+}
+
+} // namespace
+
 template <class TDerived, class TSettings>
 class TExportFilesUploader: public TActorBootstrapped<TDerived> {
 protected:
@@ -320,17 +338,6 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         Finish(success, error);
     }
 
-    static TString GetDestinationPrefix(const TSettings& settings, ui32 itemIdx) {
-        if (itemIdx < ui32(settings.items_size())) {
-            const TString itemDest = NBackup::NFieldsWrappers::GetItemDestination(settings.items(itemIdx));
-            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
-                return CanonizePath(TStringBuilder() << settings.base_path() << "/" << itemDest);
-            }
-            return itemDest;
-        }
-        return NBackup::NFieldsWrappers::GetCommonDestination(settings);
-    }
-
 public:
     TSchemeUploader(
         TActorId schemeShard,
@@ -387,6 +394,82 @@ private:
     TString Permissions;
     TString Metadata;
 }; // TSchemeUploader
+
+template <typename TSettings>
+class TTableSchemeUploader : public TExportFilesUploader<TTableSchemeUploader<TSettings>, TSettings> {
+    using TBase = TExportFilesUploader<TTableSchemeUploader<TSettings>, TSettings>;
+
+public:
+    TTableSchemeUploader(
+        TActorId schemeShard,
+        ui64 exportId,
+        ui32 itemIdx,
+        const TSettings& settings,
+        TExportTableSchemeContext&& context,
+        bool enableChecksums,
+        const TMaybe<NBackup::TEncryptionIV>& iv
+    )
+        : TBase(settings, GetDestinationPrefix(settings, itemIdx))
+        , SchemeShard(schemeShard)
+        , ExportId(exportId)
+        , ItemIdx(itemIdx)
+        , Context(std::move(context))
+        , EnableChecksums(enableChecksums)
+        , IV(iv)
+    {
+    }
+
+    void Bootstrap() {
+        TString error;
+        if (!BuildCreateTableScheme(Context, Scheme, error)) {
+            return Finish(false, error);
+        }
+
+        TMaybe<NBackup::TEncryptionIV> schemeIV;
+        if (IV) {
+            schemeIV = NBackup::TEncryptionIV::Combine(*IV, NBackup::EBackupFileType::TableCreate, 0 /* backupItemNumber */, 0 /* shardNumber */);
+        }
+
+        if (!this->AddFile(TString(CreateTableFileName), Scheme, schemeIV)) {
+            return;
+        }
+
+        if (EnableChecksums) {
+            const TString checksum = TStringBuilder() << NBackup::ComputeChecksum(Scheme) << ' ' << CreateTableFileName;
+            if (!this->AddFile(NBackup::ChecksumKey(TString(CreateTableFileName)), checksum)) {
+                return;
+            }
+        }
+
+        this->UploadFiles();
+    }
+
+private:
+    void Finish(bool success, const TString& error) {
+        LOG_I("Finish uploading CREATE TABLE"
+            << ", self: " << this->SelfId()
+            << ", success: " << success
+            << ", error: " << error
+        );
+
+        this->Send(SchemeShard,
+            new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, success, error));
+        this->PassAway();
+    }
+
+    void OnFilesUploaded(bool success, const TString& error) override {
+        Finish(success, error);
+    }
+
+private:
+    TActorId SchemeShard;
+    ui64 ExportId;
+    ui32 ItemIdx;
+    TExportTableSchemeContext Context;
+    const bool EnableChecksums;
+    TMaybe<NBackup::TEncryptionIV> IV;
+    TString Scheme;
+};
 
 template <typename TSettings>
 class TExportMetadataUploader: public TExportFilesUploader<TExportMetadataUploader<TSettings>, TSettings> {
@@ -511,6 +594,19 @@ IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, 
 }
 
 template <typename TSettings>
+IActor* CreateTableSchemeUploader(
+    TActorId schemeShard,
+    ui64 exportId,
+    ui32 itemIdx,
+    const TSettings& settings,
+    TExportTableSchemeContext&& context,
+    bool enableChecksums,
+    const TMaybe<NBackup::TEncryptionIV>& iv
+) {
+    return new TTableSchemeUploader<TSettings>(schemeShard, exportId, itemIdx, settings, std::move(context), enableChecksums, iv);
+}
+
+template <typename TSettings>
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
     const TSettings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
     bool enableChecksums
@@ -528,6 +624,18 @@ template IActor* CreateSchemeUploader<Ydb::Export::ExportToFsSettings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToFsSettings& settings, const TString& databaseRoot, const TString& metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
+);
+
+template IActor* CreateTableSchemeUploader<Ydb::Export::ExportToS3Settings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx,
+    const Ydb::Export::ExportToS3Settings& settings, TExportTableSchemeContext&& context,
+    bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
+);
+
+template IActor* CreateTableSchemeUploader<Ydb::Export::ExportToFsSettings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx,
+    const Ydb::Export::ExportToFsSettings& settings, TExportTableSchemeContext&& context,
+    bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
 template NActors::IActor* CreateExportMetadataUploader<Ydb::Export::ExportToS3Settings>(

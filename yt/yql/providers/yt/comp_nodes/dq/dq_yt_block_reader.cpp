@@ -583,7 +583,8 @@ public:
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
         TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
-        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets,
+        const TString& optLLVM)
         : TBaseComputation(ctx.Mutables, EValueRepresentation::Boxed)
         , Width_(AS_TYPE(TStructType, itemType)->GetMembersCount())
         , CodecCtx_(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory)
@@ -597,7 +598,7 @@ public:
         , JobStats_(jobStats)
     {
         // TODO() Enable range indexes + row indexes
-        Specs_.SetUseSkiff("", 0);
+        Specs_.SetUseSkiff(optLLVM, 0);
         Specs_.Init(CodecCtx_, inputSpec, inputGroups, tableNames, itemType, {}, {}, jobStats);
         Specs_.SetTableOffsets(tableOffsets);
         Specs_.SetDatumValidationMode(ctx.RuntimeSettings->DatumValidation.Get());
@@ -643,9 +644,10 @@ IComputationNode* CreateDqYtReadBlockWrapper(const TComputationNodeFactoryContex
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
         TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
-        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets,
+        const TString& optLLVM)
 {
     return new TDqYtReadBlockWrapper(ctx, clusterName, token, inputSpec, samplingSpec, inputGroups, itemType,
-                                                tableNames, std::move(tables), jobStats, inflight, timeout, tableOffsets);
+                                                tableNames, std::move(tables), jobStats, inflight, timeout, tableOffsets, optLLVM);
 }
 }

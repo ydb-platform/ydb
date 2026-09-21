@@ -1361,9 +1361,9 @@ void ResolveUniqueDocs(
 
 namespace {
 
-// Reduced ordered multi-valued decision diagram. Each node branches on one
-// label's domain; 0 and 1 are false and true. Sharing equivalent suffixes lets
-// us union the label regions of equal configs without enumerating their tuples.
+// Reduced ordered multi-valued decision diagram with a default child and sparse
+// exceptions per label; 0 and 1 are false and true. Shared suffixes let us union
+// label regions of equal configs without enumerating their tuples.
 class TLabelRegions {
 public:
     using TId = size_t;
@@ -1371,8 +1371,8 @@ public:
     explicit TLabelRegions(const TVector<std::pair<TString, TSet<TLabel>>>& labels)
         : Labels(labels)
     {
-        Nodes.push_back({labels.size(), {}});
-        Nodes.push_back({labels.size(), {}});
+        Nodes.push_back({labels.size(), 0, {}});
+        Nodes.push_back({labels.size(), 1, {}});
     }
 
     template <class TPredicate>
@@ -1387,7 +1387,7 @@ public:
                     }
                     ++branch;
                 }
-                return Intern(i, std::move(children));
+                return Intern(i, 0, std::move(children));
             }
         }
         return 0; // Mirrors IsCompatible: a pattern cannot match a missing label.
@@ -1403,15 +1403,12 @@ public:
         // Recursion can reallocate Nodes.
         auto node = Nodes[value];
         TMap<size_t, TId> children;
-        for (size_t i = 0; i < Labels[node.Label].second.size(); ++i) {
-            auto it = node.Children.find(i);
-            auto child = Not(it == node.Children.end() ? 0 : it->second);
-            if (child != 0) {
-                children[i] = child;
-            }
+        for (const auto& [branch, child] : node.Children) {
+            children[branch] = Not(child);
         }
-        auto result = Intern(node.Label, std::move(children));
+        auto result = Intern(node.Label, Not(node.Default), std::move(children));
         Negations[value] = result;
+        Negations[result] = value;
         return result;
     }
 
@@ -1430,27 +1427,26 @@ public:
             return it->second;
         }
         const size_t label = Min(Nodes[lhs].Label, Nodes[rhs].Label);
-        // Missing branches are false. Intersect only the smaller sparse node,
-        // especially important for high-cardinality labels with equality tests.
-        auto first = lhs;
-        auto second = rhs;
-        if (Nodes[first].Label != label || (Nodes[second].Label == label
-            && Nodes[first].Children.size() > Nodes[second].Children.size())) {
-            std::swap(first, second);
-        }
-        const auto branches = Nodes[first].Children;
+        // Copy before recursing: interning can reallocate Nodes.
+        const auto left = Nodes[lhs].Label == label ? Nodes[lhs] : TNode{label, lhs, {}};
+        const auto right = Nodes[rhs].Label == label ? Nodes[rhs] : TNode{label, rhs, {}};
+        const auto defaultChild = And(left.Default, right.Default);
         TMap<size_t, TId> children;
-        for (const auto& [i, l] : branches) {
-            TId r = second;
-            if (Nodes[second].Label == label) {
-                auto it = Nodes[second].Children.find(i);
-                r = it == Nodes[second].Children.end() ? 0 : it->second;
+        auto add = [&](size_t branch, TId l, TId r) {
+            if (auto child = And(l, r); child != defaultChild) {
+                children[branch] = child;
             }
-            if (auto child = And(l, r); child != 0) {
-                children[i] = child;
+        };
+        for (const auto& [branch, child] : left.Children) {
+            const auto it = right.Children.find(branch);
+            add(branch, child, it == right.Children.end() ? right.Default : it->second);
+        }
+        for (const auto& [branch, child] : right.Children) {
+            if (!left.Children.contains(branch)) {
+                add(branch, left.Default, child);
             }
         }
-        auto result = Intern(label, std::move(children));
+        auto result = Intern(label, defaultChild, std::move(children));
         Intersections[key] = result;
         return result;
     }
@@ -1462,28 +1458,55 @@ public:
 private:
     struct TNode {
         size_t Label;
+        TId Default;
         TMap<size_t, TId> Children;
     };
 
-    TId Intern(size_t label, TMap<size_t, TId> children) {
+    TId Intern(size_t label, TId defaultChild, TMap<size_t, TId> children) {
         if (children.empty()) {
-            return 0;
+            return defaultChild;
         }
-        if (children.size() == Labels[label].second.size()
-            && AllOf(children, [&](const auto& child) { return child.second == children.begin()->second; })) {
-            return children.begin()->second;
+        const auto width = Labels[label].second.size();
+        TMap<TId, size_t> counts;
+        counts[defaultChild] = width - children.size();
+        for (const auto& [branch, child] : children) {
+            ++counts[child];
         }
-        auto key = std::pair{label, children};
+        auto canonicalDefault = defaultChild;
+        for (const auto& [child, count] : counts) {
+            if (count > counts.at(canonicalDefault)
+                || (count == counts.at(canonicalDefault) && child < canonicalDefault)) {
+                canonicalDefault = child;
+            }
+        }
+        if (counts.at(canonicalDefault) == width) {
+            return canonicalDefault;
+        }
+        // A modal default makes the representation canonical and sparse. Changing
+        // it requires at least half the domain to be explicit already.
+        if (canonicalDefault != defaultChild) {
+            TMap<size_t, TId> exceptions;
+            auto it = children.begin();
+            for (size_t branch = 0; branch < width; ++branch) {
+                const auto child = it != children.end() && it->first == branch ? (it++)->second : defaultChild;
+                if (child != canonicalDefault) {
+                    exceptions[branch] = child;
+                }
+            }
+            children = std::move(exceptions);
+            defaultChild = canonicalDefault;
+        }
+        auto key = std::tuple{label, defaultChild, children};
         auto [it, inserted] = Unique.emplace(std::move(key), Nodes.size());
         if (inserted) {
-            Nodes.push_back({label, std::move(children)});
+            Nodes.push_back({label, defaultChild, std::move(children)});
         }
         return it->second;
     }
 
     const TVector<std::pair<TString, TSet<TLabel>>>& Labels;
     TVector<TNode> Nodes;
-    TMap<std::pair<size_t, TMap<size_t, TId>>, TId> Unique;
+    TMap<std::tuple<size_t, TId, TMap<size_t, TId>>, TId> Unique;
     TMap<std::pair<TId, TId>, TId> Intersections;
     TMap<TId, TId> Negations;
 };

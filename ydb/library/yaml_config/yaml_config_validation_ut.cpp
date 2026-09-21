@@ -247,6 +247,23 @@ selector_config:
         UNIT_ASSERT_VALUES_EQUAL(count, 2);
     }
 
+    Y_UNIT_TEST(ManyValuesOfOneLabelWithRedundantSelectors) {
+        TStringBuilder yaml;
+        yaml << "config:\n  log_config: {cluster_name: base}\n"
+             << "allowed_labels:\n  deployment: {type: string}\nselector_config:\n";
+        for (size_t i = 0; i < 10000; ++i) {
+            yaml << "- description: redundant\n  selector: {deployment: v" << i << "}\n"
+                 << "  config: {log_config: {cluster_name: base}}\n";
+        }
+        auto doc = NFyaml::TDocument::Parse(yaml);
+        size_t count = 0;
+        EnumerateDistinctProjections(doc, {"/log_config"}, [&](NFyaml::TNodeRef config) {
+            ++count;
+            UNIT_ASSERT_VALUES_EQUAL(config.Map().at("log_config").Map().at("cluster_name").Scalar(), "base");
+        });
+        UNIT_ASSERT_VALUES_EQUAL(count, 1);
+    }
+
     Y_UNIT_TEST(CustomSwissKnifeReceivesCompleteConfigurations) {
         class TSwissKnife : public NYamlConfig::IConfigSwissKnife {
         public:
@@ -297,7 +314,7 @@ config:
   other: base
 allowed_labels:
   a: {type: string}
-  b: {type: enum, values: {x: {}, y: {}}}
+  b: {type: enum, values: {x: {}, y: {}, z: {}, w: {}}}
   c: {type: string}
 incompatibility_overrides:
   custom_rules:
@@ -328,6 +345,12 @@ selector_config:
   selector: {a: {not_in: [x]}, b: x}
   config:
     log_config: {cluster_name: replaced}
+- description: match most values of a closed domain
+  selector: {b: {in: [x, y, z, w]}}
+  config: {other: majority}
+- description: match the complementary minority
+  selector: {b: {not_in: [x, y, z, w]}}
+  config: {other: minority}
 - description: rule-only outside dependency
   selector: {c: y}
   config: {other: selected}

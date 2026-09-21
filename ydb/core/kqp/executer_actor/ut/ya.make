@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp/executer_actor)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:4)
 
 SRCS(
     kqp_executer_ut.cpp

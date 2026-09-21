@@ -7,7 +7,7 @@
 - **metrics/** — сбор метрик во время ya make
   - `monitor_resources.py` — CPU, RAM, disk I/O (JSONL; optionally appends `ram_usage.txt` with `--ram-usage-file`)
 
-- **analytics/** — клиент отправки CI-метрик в ydb-qa (`start` / `end` / `track` / `send`). Документация: `analytics/README.md`
+- **analytics/** — ядро отправки метрик (`core.py`, копируется в Arcadia) и CI-обёртка (`ci_metrics.py`). Документация: `analytics/README.md`
 
 - **dashboard/** — построение дашбордов
   - `runner_footprint.py` — загрузка provisioned лимитов из `.github/config/runners_footprints.yml`

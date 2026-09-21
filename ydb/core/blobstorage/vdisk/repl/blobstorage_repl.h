@@ -11,18 +11,74 @@ namespace NKikimr {
         struct TProxyStat;
     };
 
-    struct TBlobIdQueue {
+    class TBlobIdQueue {
         std::deque<TLogoBlobID> Queue;
+        std::optional<TMemoryConsumer> Consumer;
+        size_t LastBytes = 0;
         ui64 WorkUnits = 0;
+
+        static size_t CalcBytes(const std::deque<TLogoBlobID>& queue) {
+            return queue.size() * sizeof(TLogoBlobID);
+        }
+
+        void Sync() {
+            const size_t bytes = CalcBytes(Queue);
+            if (Consumer) {
+                if (bytes > LastBytes) {
+                    Consumer->Add(bytes - LastBytes);
+                } else {
+                    Consumer->Subtract(LastBytes - bytes);
+                }
+            }
+            LastBytes = bytes;
+        }
+
+    public:
+        using const_iterator = std::deque<TLogoBlobID>::const_iterator;
+
+        TBlobIdQueue() = default;
+        TBlobIdQueue(const TBlobIdQueue&) = delete;
+        TBlobIdQueue& operator=(const TBlobIdQueue&) = delete;
+        ~TBlobIdQueue() {
+            if (Consumer && LastBytes) {
+                Consumer->Subtract(LastBytes);
+            }
+        }
+
+        explicit TBlobIdQueue(TMemoryConsumer consumer)
+            : Consumer(std::move(consumer))
+        {}
+
+        TBlobIdQueue(TBlobIdQueue&& other) noexcept
+            : Queue(std::move(other.Queue))
+            , Consumer(std::move(other.Consumer))
+            , LastBytes(std::exchange(other.LastBytes, 0))
+            , WorkUnits(std::exchange(other.WorkUnits, 0))
+        {}
+
+        TBlobIdQueue& operator=(TBlobIdQueue&& other) noexcept {
+            if (this != &other) {
+                if (Consumer && LastBytes) {
+                    Consumer->Subtract(LastBytes);
+                }
+                Queue = std::move(other.Queue);
+                Consumer = std::move(other.Consumer);
+                LastBytes = std::exchange(other.LastBytes, 0);
+                WorkUnits = std::exchange(other.WorkUnits, 0);
+            }
+            return *this;
+        }
 
         void Push(const TLogoBlobID& id) {
             WorkUnits += id.BlobSize();
             Queue.push_back(id);
+            Sync();
         }
 
         void PopFront() {
             WorkUnits -= Queue.front().BlobSize();
             Queue.pop_front();
+            Sync();
         }
 
         bool IsEmpty() const {
@@ -45,6 +101,14 @@ namespace NKikimr {
             if (!std::is_sorted(Queue.begin(), Queue.end())) {
                 std::sort(Queue.begin(), Queue.end());
             }
+        }
+
+        const_iterator begin() const {
+            return Queue.begin();
+        }
+
+        const_iterator end() const {
+            return Queue.end();
         }
     };
 
@@ -103,7 +167,114 @@ namespace NKikimr {
         bool LooksLikePhantom = false;
     };
 
-    using TUnreplicatedBlobRecords = std::unordered_map<TLogoBlobID, TUnreplicatedBlobRecord>;
+    using TUnreplicatedBlobRecordsMap = std::unordered_map<TLogoBlobID, TUnreplicatedBlobRecord>;
+
+    class TUnreplicatedBlobRecords {
+        TUnreplicatedBlobRecordsMap Records;
+        std::optional<TMemoryConsumer> Consumer;
+        size_t LastBytes = 0;
+
+        static size_t CalcBytes(const TUnreplicatedBlobRecordsMap& records) {
+            return records.bucket_count() * sizeof(void*) +
+                records.size() * sizeof(TUnreplicatedBlobRecordsMap::value_type);
+        }
+
+        void Sync() {
+            const size_t bytes = CalcBytes(Records);
+            if (Consumer) {
+                if (bytes > LastBytes) {
+                    Consumer->Add(bytes - LastBytes);
+                } else {
+                    Consumer->Subtract(LastBytes - bytes);
+                }
+            }
+            LastBytes = bytes;
+        }
+
+    public:
+        using value_type = TUnreplicatedBlobRecordsMap::value_type;
+        using iterator = TUnreplicatedBlobRecordsMap::iterator;
+        using const_iterator = TUnreplicatedBlobRecordsMap::const_iterator;
+
+        TUnreplicatedBlobRecords() = default;
+        TUnreplicatedBlobRecords(const TUnreplicatedBlobRecords&) = delete;
+        TUnreplicatedBlobRecords& operator=(const TUnreplicatedBlobRecords&) = delete;
+        ~TUnreplicatedBlobRecords() {
+            if (Consumer && LastBytes) {
+                Consumer->Subtract(LastBytes);
+            }
+        }
+
+        explicit TUnreplicatedBlobRecords(TMemoryConsumer consumer)
+            : Consumer(std::move(consumer))
+        {}
+
+        TUnreplicatedBlobRecords(TUnreplicatedBlobRecords&& other) noexcept
+            : Records(std::move(other.Records))
+            , Consumer(std::move(other.Consumer))
+            , LastBytes(std::exchange(other.LastBytes, 0))
+        {}
+
+        TUnreplicatedBlobRecords& operator=(TUnreplicatedBlobRecords&& other) noexcept {
+            if (this != &other) {
+                if (Consumer && LastBytes) {
+                    Consumer->Subtract(LastBytes);
+                }
+                Records = std::move(other.Records);
+                Consumer = std::move(other.Consumer);
+                LastBytes = std::exchange(other.LastBytes, 0);
+            }
+            return *this;
+        }
+
+        std::pair<iterator, bool> try_emplace(const TLogoBlobID& id, const TUnreplicatedBlobRecord& record) {
+            auto res = Records.try_emplace(id, record);
+            Sync();
+            return res;
+        }
+
+        iterator find(const TLogoBlobID& id) {
+            return Records.find(id);
+        }
+
+        const_iterator find(const TLogoBlobID& id) const {
+            return Records.find(id);
+        }
+
+        bool contains(const TLogoBlobID& id) const {
+            return Records.contains(id);
+        }
+
+        iterator erase(iterator it) {
+            auto res = Records.erase(it);
+            Sync();
+            return res;
+        }
+
+        size_t size() const {
+            return Records.size();
+        }
+
+        bool empty() const {
+            return Records.empty();
+        }
+
+        iterator begin() {
+            return Records.begin();
+        }
+
+        const_iterator begin() const {
+            return Records.begin();
+        }
+
+        iterator end() {
+            return Records.end();
+        }
+
+        const_iterator end() const {
+            return Records.end();
+        }
+    };
 
     struct TEvReplInvoke : TEventLocal<TEvReplInvoke, TEvBlobStorage::EvReplInvoke> {
         std::function<void(const TUnreplicatedBlobRecords&, TString)> Callback;

@@ -1,9 +1,11 @@
 #include "blobstorage_replrecoverymachine.h"
+#include "blobstorage_replproxy.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/stream/output.h>
 #include <util/random/fast.h>
 
 namespace NKikimr {
@@ -81,6 +83,25 @@ namespace NKikimr {
                 std::make_unique<std::atomic_uint64_t>());
 
             return replCtx;
+        }
+
+        ui64 GetReplicationMem(const std::shared_ptr<TReplCtx>& replCtx) {
+            return replCtx->VCtx->Replication.GetCounter()->Val();
+        }
+
+        void PrintAccountingCheck(TStringBuf name, bool counted, ui64 before, ui64 after) {
+            Cerr << "checking " << name << ": "
+                << (counted ? "counted" : "not counted")
+                << " before# " << before
+                << " after# " << after
+                << Endl;
+        }
+
+        void PrintDeallocationCheck(TStringBuf name, ui64 before, ui64 after) {
+            Cerr << "deallocating " << name
+                << ": before# " << before
+                << " after# " << after
+                << Endl;
         }
 
         Y_UNIT_TEST(BasicFunctionality) {
@@ -180,6 +201,67 @@ namespace NKikimr {
 
                 UNIT_ASSERT_EQUAL(item.Data, buf);
             }
+        }
+
+        Y_UNIT_TEST(MemTotalReplicationAccountingBoundaries) {
+            Cerr << "running test: MemTotalReplicationAccountingBoundaries" << Endl;
+            TVector<TVDiskID> vdisks;
+            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
+            auto replCtx = CreateReplCtx(vdisks, groupInfo);
+            const TLogoBlobID id(1, 1, 1, 0, 100, 0);
+
+            const ui64 base = GetReplicationMem(replCtx);
+
+            {
+                auto info = MakeIntrusive<TEvReplFinished::TInfo>();
+                NRepl::TRecoveryMachine recoveryMachine(replCtx, info);
+
+                TIngress ingress;
+                ingress = ingress.CopyWithoutLocal(groupInfo->Type);
+                const auto partsToRecover = NMatrix::TVectorType::MakeOneHot(0, groupInfo->Type.TotalPartCount());
+
+                recoveryMachine.AddTask(id, partsToRecover, false, ingress);
+                PrintAccountingCheck("TRecoveryMachine::LostVec", true, base, GetReplicationMem(replCtx));
+                UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
+            }
+            PrintDeallocationCheck("TRecoveryMachine::LostVec", base, GetReplicationMem(replCtx));
+            UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
+
+            {
+                NRepl::TVDiskProxy proxy(replCtx, vdisks[1], TActorId());
+                proxy.Put(TLogoBlobID(id, 1), groupInfo->Type.PartSize(TLogoBlobID(id, 1)));
+                PrintAccountingCheck("TVDiskProxy::Ids", true, base, GetReplicationMem(replCtx));
+                UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
+            }
+            PrintDeallocationCheck("TVDiskProxy::Ids", base, GetReplicationMem(replCtx));
+            UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
+
+            {
+                NRepl::TDataPortion portion(TMemoryConsumer(replCtx->VCtx->Replication));
+                portion.AddError(TLogoBlobID(id, 1), NKikimrProto::ERROR);
+                PrintAccountingCheck("TDataPortion::Items", true, base, GetReplicationMem(replCtx));
+                UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
+            }
+            PrintDeallocationCheck("TDataPortion::Items", base, GetReplicationMem(replCtx));
+            UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
+
+            {
+                TBlobIdQueue queue(TMemoryConsumer(replCtx->VCtx->Replication.GetCounter()));
+                queue.Push(id);
+                PrintAccountingCheck("TBlobIdQueue", true, base, GetReplicationMem(replCtx));
+                UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
+            }
+            PrintDeallocationCheck("TBlobIdQueue", base, GetReplicationMem(replCtx));
+            UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
+
+            {
+                TUnreplicatedBlobRecords records(TMemoryConsumer(replCtx->VCtx->Replication.GetCounter()));
+                records.try_emplace(id, TUnreplicatedBlobRecord{});
+                PrintAccountingCheck("TUnreplicatedBlobRecords", true, base, GetReplicationMem(replCtx));
+                UNIT_ASSERT_GT(GetReplicationMem(replCtx), base);
+            }
+            PrintDeallocationCheck("TUnreplicatedBlobRecords", base, GetReplicationMem(replCtx));
+            UNIT_ASSERT_VALUES_EQUAL(GetReplicationMem(replCtx), base);
         }
     }
 

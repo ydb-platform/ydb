@@ -1,12 +1,15 @@
+#include <ydb/library/testlib/helpers.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_control_plane_actor.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/overloaded.h>
 
-#include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NDq {
 
@@ -40,6 +43,9 @@ public:
                 nullptr
             );
 
+            const auto gateway = CreatePqNativeGateway(std::move(pqServices));
+            const auto controlPlaneId = CaSetup->Runtime->Register(
+                CreateDqPqControlPlaneActor(Driver, CredentialsFactory, gateway, {}));
             i64 freeSpace = 1_MB;
 
             auto [dqAsyncInput, dqAsyncInputAsActor] = CreateDqPqReadActor(
@@ -57,12 +63,13 @@ public:
                 actor.TypeEnv,
                 nullptr,
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
-                CreatePqNativeGateway(std::move(pqServices)),
+                gateway,
                 1,
                 true,
                 freeSpace,
                 {},
-                TDuration::Seconds(1)
+                TDuration::Seconds(1),
+                controlPlaneId
             );
 
             actor.InitAsyncInput(dqAsyncInput, dqAsyncInputAsActor);
@@ -84,6 +91,13 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
         UNIT_ASSERT(partitions[0].GetPartitionConsumerStats());
         return *partitions[0].GetPartitionConsumerStats();
+    }
+
+    void CommitConsumerOffset(const TString& topic, ui64 offset) const {
+        NYdb::NTopic::TTopicClient client(Driver, NYdb::NTopic::TTopicClientSettings()
+            .Database(GetDefaultPqDatabase()).DiscoveryEndpoint(GetDefaultPqEndpoint()));
+        const auto result = client.CommitOffset(topic, 0, DefaultPqConsumer, offset).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
     void CommitSourceState(const NDqProto::TCheckpoint& checkpoint) const {
@@ -172,14 +186,203 @@ public:
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
-    Y_UNIT_TEST_F(CommitAfterExplicitReadOffset, TFixture) {
-        const TString topicName = "CommitAfterExplicitReadOffset";
+    Y_UNIT_TEST_F(RewindConsumerToOldest, TFixture) {
+        const TString topicName = "RewindConsumerToOldest";
         PQCreateStream(topicName);
         PQWrite({Message0, Message1, Message2}, topicName);
+        CommitConsumerOffset(topicName, 3);
+        InitSource(topicName);
+
+        PQRead<TString>({Message0, Message1, Message2});
+        UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 0);
+    }
+
+    Y_UNIT_TEST_TWIN_F(SkipConsumerRewindForCurrentData, Fresh, TFixture) {
+        const TString topicName = TStringBuilder() << "SkipConsumerRewindForCurrentData" << Fresh;
+        PQCreateStream(topicName);
+        PQWrite({Message0, Message1, Message2}, topicName);
+        CommitConsumerOffset(topicName, 3);
+
         auto settings = BuildPqTopicSourceSettings(topicName);
+        settings.ClearDisposition();
+        if (Fresh) {
+            settings.MutableDisposition()->mutable_fresh();
+        }
+        InitSource(std::move(settings));
+
+        PQWrite({Message3}, topicName);
+        PQRead<TString>({Message3});
+        UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 3);
+    }
+
+    Y_UNIT_TEST_F(SkipConsumerRewindForFutureTimestamp, TFixture) {
+        const TString topicName = "SkipConsumerRewindForFutureTimestamp";
+        PQCreateStream(topicName);
+        PQWrite({Message0, Message1, Message2}, topicName);
+        CommitConsumerOffset(topicName, 3);
+
+        auto settings = BuildPqTopicSourceSettings(topicName);
+        settings.mutable_disposition()->mutable_from_time()->mutable_timestamp()
+            ->set_seconds((TInstant::Now() + TDuration::Hours(1)).Seconds());
+        InitSource(std::move(settings));
+
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        do {
+            UNIT_ASSERT(SourceRead<TString>(UVParser).empty());
+            const auto stats = DescribeConsumer(topicName);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetCommittedOffset(), 3);
+            if (!stats.GetReadSessionId().empty()) {
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(20));
+        } while (TInstant::Now() < deadline);
+        UNIT_FAIL("Read session did not start with the future timestamp");
+    }
+
+    Y_UNIT_TEST_QUAD_F(TableReadOffsetDoesNotRewindConsumer, ZeroOffset, CommittedAhead, TFixture) {
+        const TString topicName = TStringBuilder() << "TableReadOffsetDoesNotRewindConsumer" << ZeroOffset << CommittedAhead;
+        PQCreateStream(topicName);
+        PQWrite({Message0, Message1, Message2}, topicName);
+        const ui64 committedOffset = CommittedAhead ? 3 : 0;
+        CommitConsumerOffset(topicName, committedOffset);
+        auto settings = BuildPqTopicSourceSettings(topicName);
+        settings.SetStopAtCurrentEndOffsets(true);
+        settings.SetAllowConsumerRewindForDisposition(false);
+        settings.MutableDisposition()->mutable_oldest();
+        const ui64 beginOffset = ZeroOffset ? 0 : 1;
+        settings.MutableOffsetPredicate()->AddItem()->SetBegin(beginOffset);
+        InitSource(std::move(settings));
+
+        if constexpr (CommittedAhead) {
+            const auto error = CaSetup->AsyncInputPromises->FatalError.GetFuture();
+            const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+            while (!error.HasValue() && TInstant::Now() < deadline) {
+                UNIT_ASSERT(SourceRead<TString>(UVParser).empty());
+                Sleep(TDuration::MilliSeconds(20));
+            }
+            UNIT_ASSERT_C(error.HasValue(), "Table read offset below the committed offset was not rejected");
+            UNIT_ASSERT_STRING_CONTAINS(error.GetValue().ToOneLineString(),
+                TStringBuilder() << "trying to read from position that is less than committed: read " << beginOffset << " committed 3");
+        } else if constexpr (ZeroOffset) {
+            PQRead<TString>({Message0, Message1, Message2});
+        } else {
+            PQRead<TString>({Message1, Message2});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), committedOffset);
+    }
+
+    Y_UNIT_TEST_TWIN_F(ExplicitDispositionRewindsBeforeReadOffset, TableMode, TFixture) {
+        const TString topicName = TStringBuilder() << "ExplicitDispositionRewindsBeforeReadOffset" << TableMode;
+        PQCreateStream(topicName);
+        PQWrite({Message0, Message1, Message2}, topicName);
+        CommitConsumerOffset(topicName, 3);
+
+        auto settings = BuildPqTopicSourceSettings(topicName);
+        settings.SetStopAtCurrentEndOffsets(TableMode);
+        settings.SetAllowConsumerRewindForDisposition(true);
+        settings.MutableDisposition()->mutable_oldest();
         settings.MutableOffsetPredicate()->AddItem()->SetBegin(1);
         InitSource(std::move(settings));
+
         PQRead<TString>({Message1, Message2});
+        UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 0);
+    }
+
+    Y_UNIT_TEST_QUAD_F(CheckpointOffsetKeepsStrictRead, CommittedAhead, FromLastCheckpoint, TFixture) {
+        const TString topicName = TStringBuilder() << "CheckpointOffsetKeepsStrictRead" << CommittedAhead << FromLastCheckpoint;
+        PQCreateStream(topicName);
+        PQWrite({Message0, Message1, Message2}, topicName);
+        const ui64 committedOffset = CommittedAhead ? 3 : 1;
+        CommitConsumerOffset(topicName, committedOffset);
+
+        auto settings = BuildPqTopicSourceSettings(topicName);
+        if (FromLastCheckpoint) {
+            settings.MutableDisposition()->mutable_from_last_checkpoint();
+        }
+        InitSource(std::move(settings));
+
+        NPq::NProto::TDqPqTopicSourceState proto;
+        proto.AddTopics()->SetTopicPath(topicName);
+        auto* partition = proto.AddPartitions();
+        partition->SetPartition(0);
+        partition->SetOffset(1);
+        TSourceState state;
+        state.Data.emplace_back(proto.SerializeAsString(), 1);
+        CaSetup->LoadSource(state);
+
+        if (CommittedAhead) {
+            const auto error = CaSetup->AsyncInputPromises->FatalError.GetFuture();
+            const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+            while (!error.HasValue() && TInstant::Now() < deadline) {
+                UNIT_ASSERT(SourceRead<TString>(UVParser).empty());
+                Sleep(TDuration::MilliSeconds(20));
+            }
+            UNIT_ASSERT_C(error.HasValue(), "Checkpoint offset below the committed offset was not rejected");
+            UNIT_ASSERT_STRING_CONTAINS(error.GetValue().ToOneLineString(),
+                "trying to read from position that is less than committed: read 1 committed 3");
+        } else {
+            PQRead<TString>({Message1, Message2});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), committedOffset);
+    }
+
+    Y_UNIT_TEST_TWIN_F(SkipConsumerRewindFromLastCheckpointWithoutOffsets, RestoreTimestamp, TFixture) {
+        const TString topicName = TStringBuilder() << "SkipConsumerRewindFromLastCheckpointWithoutOffsets" << RestoreTimestamp;
+        PQCreateStream(topicName);
+        PQWrite({Message0, Message1, Message2}, topicName);
+        CommitConsumerOffset(topicName, 3);
+
+        auto settings = BuildPqTopicSourceSettings(topicName);
+        settings.MutableDisposition()->mutable_from_last_checkpoint();
+        InitSource(std::move(settings));
+        if (RestoreTimestamp) {
+            NPq::NProto::TDqPqTopicSourceState proto;
+            proto.AddTopics()->SetTopicPath(topicName);
+            proto.SetStartingMessageTimestampMs(0);
+            TSourceState state;
+            state.Data.emplace_back(proto.SerializeAsString(), 1);
+            CaSetup->LoadSource(state);
+        }
+
+        PQWrite({Message3}, topicName);
+        PQRead<TString>({Message3});
+        UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 3);
+    }
+
+    Y_UNIT_TEST_TWIN_F(SkipConsumerRewindForCheckpointWithoutOffsets, Fresh, TFixture) {
+        const TString topicName = TStringBuilder() << "SkipConsumerRewindForCheckpointWithoutOffsets" << Fresh;
+        PQCreateStream(topicName);
+        PQWrite({Message0, Message1, Message2}, topicName);
+        CommitConsumerOffset(topicName, 3);
+
+        auto settings = BuildPqTopicSourceSettings(topicName);
+        settings.ClearDisposition();
+        if (Fresh) {
+            settings.MutableDisposition()->mutable_fresh();
+        }
+        InitSource(std::move(settings));
+
+        NPq::NProto::TDqPqTopicSourceState proto;
+        proto.AddTopics()->SetTopicPath(topicName);
+        proto.SetStartingMessageTimestampMs(0);
+        TSourceState state;
+        state.Data.emplace_back(proto.SerializeAsString(), 1);
+        CaSetup->LoadSource(state);
+
+        PQWrite({Message3}, topicName);
+        PQRead<TString>({Message3});
+        UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 3);
+    }
+
+    Y_UNIT_TEST_F(CommitAfterConsumerRewind, TFixture) {
+        const TString topicName = "CommitAfterConsumerRewind";
+        PQCreateStream(topicName);
+        PQWrite({Message0, Message1, Message2}, topicName);
+        CommitConsumerOffset(topicName, 3);
+        auto settings = BuildPqTopicSourceSettings(topicName);
+        settings.MutableDisposition()->mutable_oldest();
+        InitSource(std::move(settings));
+        PQRead<TString>({Message0, Message1, Message2});
 
         UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 0);
         const auto checkpoint = CreateCheckpoint(1);

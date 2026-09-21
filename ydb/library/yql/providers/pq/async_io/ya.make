@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    dq_pq_control_plane_actor.cpp
     dq_pq_info_aggregation_actor.cpp
     dq_pq_meta_extractor.cpp
     dq_pq_rd_read_actor.cpp
@@ -25,8 +26,8 @@ PEERDIR(
     ydb/library/yql/providers/pq/proto
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/adapters/issue
-    ydb/public/sdk/cpp/src/client/federated_topic
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/federated_topic
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types/credentials
     yql/essentials/minikql/computation

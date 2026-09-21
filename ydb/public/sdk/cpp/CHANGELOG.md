@@ -1,4 +1,4 @@
-* Updated the draft UDF API (`client/draft/ydb_udf.h`) to manifest-based uploads and separate module type/code kind; added incremental `UploadModuleFromFile`.
+* Added a draft UDF client (`client/draft/ydb_udf.h`) with manifest-based uploads, separate module type/code kind, and incremental `UploadModuleFromFile`.
 * Added `Float16` and `BFloat16` vector index types.
 
 ## v3.23.0

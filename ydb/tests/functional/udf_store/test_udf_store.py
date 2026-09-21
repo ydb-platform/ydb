@@ -884,7 +884,7 @@ def test_ydb_udf_cli_pagination_and_streaming():
 
             data = udf.UploadModuleChunk(data=body)
             first = upload([header(manifest()), data], StatusIds.SUCCESS)
-            for command in [("list", "--kind", "native"), ("delete", "--name", first.name, "--kind", "native")]:
+            for command in [("list", "--kind", "NATIVE"), ("delete", "--name", first.name, "--kind", "NATIVE")]:
                 assert "PRECONDITION_FAILED" in _run_ydb_udf_expect_failure(endpoint, database, *command)
             for kind in ("module", "library"):
                 path = _write_manifest("native_" + kind, kind, "native")
@@ -895,7 +895,8 @@ def test_ydb_udf_cli_pagination_and_streaming():
             # Exceed the default RPC page size and ensure CLI retrieves all pages.
             for index in range(101):
                 upload([header(manifest("page_%03d" % index)), data], StatusIds.SUCCESS)
-            listed = json.loads(_run_ydb_udf(endpoint, database, "list", "--type", "library", "--format", "json"))
+            listed = json.loads(_run_ydb_udf(
+                endpoint, database, "list", "--type", "library", "--kind", "WASM", "--format", "json"))
             assert {"page_%03d" % index for index in range(101)} <= {m["name"] for m in listed["modules"]}
             native = stub.ListModules(udf.ListModulesRequest(kind_filter=udf.NATIVE), metadata=metadata, timeout=30)
             assert native.operation.status == StatusIds.PRECONDITION_FAILED

@@ -46,7 +46,6 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/yaml-cpp
     contrib/libs/fmt
     contrib/restricted/patched/replxx
     library/cpp/histogram/hdr
@@ -93,8 +92,6 @@ PEERDIR(
 
 IF (NOT OS_WINDOWS)
 PEERDIR(
-    contrib/libs/yaml-cpp
-    ydb/public/lib/udf/manifest
     ydb/core/base
     ydb/public/lib/ydb_cli/commands/sqs_workload
 )

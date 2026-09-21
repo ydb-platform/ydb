@@ -26,10 +26,11 @@ NUdf::EModuleType ParseType(const TString& value) {
 }
 
 NUdf::EModuleKind ParseKind(const TString& value) {
-    if (value == "wasm") {
+    const TString lower = to_lower(value);
+    if (lower == "wasm") {
         return NUdf::EModuleKind::Wasm;
     }
-    if (value == "native") {
+    if (lower == "native") {
         return NUdf::EModuleKind::Native;
     }
     throw TMisuseException() << "Unknown module kind '" << value << "'. Expected: wasm, native";
@@ -425,23 +426,23 @@ int TCommandUdfDescribe::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     const auto& module = result.GetModule();
-        NJson::TJsonValue json(NJson::JSON_MAP);
-        json["module"] = ModuleToJson(module);
-        json["manifest_json"] = result.GetManifestJson();
-        NJson::TJsonValue platforms(NJson::JSON_ARRAY);
-        for (const auto& platform : result.GetPlatforms()) {
-            NJson::TJsonValue item(NJson::JSON_MAP);
-            item["cpu_spec"] = platform.CpuSpec;
-            item["status"] = TString(StatusToString(platform.Status));
-            if (!platform.CompileError.empty()) {
-                item["compile_error"] = platform.CompileError;
-            }
-            platforms.AppendValue(std::move(item));
+    NJson::TJsonValue json(NJson::JSON_MAP);
+    json["module"] = ModuleToJson(module);
+    json["manifest_json"] = result.GetManifestJson();
+    NJson::TJsonValue platforms(NJson::JSON_ARRAY);
+    for (const auto& platform : result.GetPlatforms()) {
+        NJson::TJsonValue item(NJson::JSON_MAP);
+        item["cpu_spec"] = platform.CpuSpec;
+        item["status"] = TString(StatusToString(platform.Status));
+        if (!platform.CompileError.empty()) {
+            item["compile_error"] = platform.CompileError;
         }
-        json["platforms"] = std::move(platforms);
-        PrintStructured(json, Format);
+        platforms.AppendValue(std::move(item));
+    }
+    json["platforms"] = std::move(platforms);
+    PrintStructured(json, Format);
 
-        return EXIT_SUCCESS;
+    return EXIT_SUCCESS;
 }
 
 } // namespace NConsoleClient

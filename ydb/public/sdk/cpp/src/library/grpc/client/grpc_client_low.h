@@ -939,8 +939,9 @@ public:
     using TConnectedCallback = TStreamConnectedCallback<TRequest, TResponse>;
     using TReadCallback = typename TBase::TReadCallback;
     using TWriteCallback = typename TBase::TWriteCallback;
-    using TAsyncReaderWriterPtr = std::unique_ptr<grpc::ClientAsyncReaderWriter<TRequest, TResponse>>;
-    using TAsyncRequest = TAsyncReaderWriterPtr (TStub::*)(grpc::ClientContext*, grpc::CompletionQueue*, void*);
+    using TAsyncReaderWriter = grpc::ClientAsyncReaderWriter<TRequest, TResponse>;
+    using TAsyncReaderWriterPtr = std::unique_ptr<grpc::ClientAsyncReaderWriterInterface<TRequest, TResponse>>;
+    using TAsyncRequest = std::unique_ptr<TAsyncReaderWriter> (TStub::*)(grpc::ClientContext*, grpc::CompletionQueue*, void*);
 
     explicit TStreamRequestReadWriteProcessor(TConnectedCallback&& callback)
         : ConnectedCallback(std::move(callback))
@@ -973,7 +974,11 @@ public:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            if (Cancelled || ReadFinished || WriteFinished) {
+            if (Cancelled) {
+                status = TGrpcStatus(grpc::StatusCode::CANCELLED, "Write request dropped");
+            } else if (HalfCloseRequested) {
+                status = TGrpcStatus(grpc::StatusCode::FAILED_PRECONDITION, "Client write side is already half-closed");
+            } else if (ReadFinished || WriteFinished) {
                 status = TGrpcStatus(grpc::StatusCode::CANCELLED, "Write request dropped");
             } else if (WriteActive) {
                 auto& item = WriteQueue.emplace_back();
@@ -998,13 +1003,19 @@ public:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            if (Cancelled || WriteFinished) {
+            if (Cancelled) {
+                status = TGrpcStatus(grpc::StatusCode::CANCELLED, "WritesDone dropped");
+            } else if (HalfCloseRequested) {
+                status = TGrpcStatus(grpc::StatusCode::FAILED_PRECONDITION, "Client write side is already half-closed");
+            } else if (WriteFinished) {
                 status = TGrpcStatus(grpc::StatusCode::CANCELLED, "WritesDone dropped");
             } else if (WriteActive) {
+                HalfCloseRequested = true;
                 auto& item = WriteQueue.emplace_back();
                 item.Callback.swap(callback);
                 item.IsWritesDone = true;
             } else {
+                HalfCloseRequested = true;
                 WriteActive = true;
                 WriteDonePending = true;
                 WriteCallback.swap(callback);
@@ -1140,6 +1151,7 @@ public:
 
 private:
     template<typename> friend class TServiceConnection;
+    friend struct TStreamRequestReadWriteProcessorTestAccess;
 
     void Start(TStub& stub, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider) {
         InitCallbackGuard(provider);
@@ -1405,6 +1417,7 @@ private:
     bool ReadFinished = false;
     bool WriteActive = false;
     bool WriteFinished = false;
+    bool HalfCloseRequested = false;
     bool WriteDonePending = false;
     bool Finished = false;
     bool Cancelled = false;

@@ -26,7 +26,6 @@ from core import (
     add_track_cli_args as add_core_cli_args,
     _as_uint,
     _ydb_wrapper_cls,
-    build_column_types as core_build_column_types,
     build_create_table_sql as core_build_create_table_sql,
     duration_ms_between,
     end as core_end,
@@ -137,10 +136,6 @@ def default_metrics_file() -> str:
 
 def resolve_table_path(ydb_wrapper=None) -> str:
     return core_resolve_table_path(ydb_wrapper, table_config_key=TABLE_CONFIG_KEY, default=DEFAULT_TABLE_PATH)
-
-
-def build_column_types():
-    return core_build_column_types(COLUMNS_SCHEMA)
 
 
 def build_create_table_sql(table_path: str) -> str:

@@ -30,7 +30,7 @@ To exclude tables with expected conflicts from TLI diagnostics, use the [`tli_co
 
 ## Log structure
 
-When TLI occurs, the server writes structured `TLI` records from DataShard and SessionActor for each side of the conflict. SessionActor writes **one record per query** in the transaction (`querySpanId` + `queryText`). The breaker DataShard writes **one record per victim** (`victimQuerySpanId`).
+When TLI occurs, the server writes four entries — one from each component for each side of the conflict.
 
 **Example scenario:**
 
@@ -45,52 +45,60 @@ Two sessions are established: victim and breaker.
 **Breaker log (DataShard):**
 
 ```text
-component=DataShard tabletId=<tablet-id> message="Write transaction broke other locks" breakerQuerySpanId=2222222222222222 victimQuerySpanId=1111111111111111
+Component: DataShard, TabletId: <tablet-id>,
+BreakerQuerySpanId: 2222222222222222, VictimQuerySpanIds: [1111111111111111],
+Message: Write transaction broke other locks
 ```
 
 **Breaker log (SessionActor):**
 
 ```text
-component=SessionActor message="Query had broken other locks" breakerTxSpanId=2222222222222222 querySpanId=2222222222222222 queryText="UPDATE Orders SET Status = 'done' WHERE OrderId = 42"
+Component: SessionActor, Message: Query had broken other locks,
+BreakerQuerySpanId: 2222222222222222,
+BreakerQueryText: UPDATE Orders SET Status = 'done' WHERE OrderId = 42,
+BreakerQueryTexts: [QuerySpanId=2222222222222222 QueryText=UPDATE Orders SET Status = 'done' WHERE OrderId = 42]
 ```
 
 **Victim log (DataShard):**
 
 ```text
-component=DataShard tabletId=<tablet-id> message="Write transaction was a victim of broken locks" victimQuerySpanId=1111111111111111 currentQuerySpanId=3333333333333333
+Component: DataShard, TabletId: <tablet-id>,
+VictimQuerySpanId: 1111111111111111, CurrentQuerySpanId: 3333333333333333,
+Message: Write transaction was a victim of broken locks
 ```
 
-**Victim log (SessionActor)** — two records of the same transaction:
+**Victim log (SessionActor):**
 
 ```text
-component=SessionActor message="Query was a victim of broken locks" victimTxSpanId=1111111111111111 querySpanId=1111111111111111 queryText="SELECT * FROM Orders WHERE OrderId = 42"
-component=SessionActor message="Query was a victim of broken locks" victimTxSpanId=1111111111111111 querySpanId=3333333333333333 queryText="UPDATE Orders SET Amount = 100 WHERE OrderId = 42"
+Component: SessionActor, Message: Query was a victim of broken locks,
+VictimQuerySpanId: 1111111111111111, CurrentQuerySpanId: 3333333333333333,
+VictimQueryText: SELECT * FROM Orders WHERE OrderId = 42,
+VictimQueryTexts: [QuerySpanId=1111111111111111 QueryText=SELECT * FROM Orders WHERE OrderId = 42 |
+                   QuerySpanId=3333333333333333 QueryText=UPDATE Orders SET Amount = 100 WHERE OrderId = 42]
 ```
 
 ## Log fields
 
 | Field | Description | Where it appears |
 |:------|:------------|:-----------------|
-| `component` | Record source: `DataShard` or `SessionActor` | All TLI logs |
-| `message` | Event type (see the samples above) | All TLI logs |
-| `tabletId` | DataShard tablet identifier | DataShard logs |
-| `victimQuerySpanId` | Identifier of the query whose locks were broken | Victim DataShard logs, breaker DataShard logs |
-| `breakerQuerySpanId` | Identifier of the query that broke the locks | Breaker DataShard logs |
-| `currentQuerySpanId` | Identifier of the query at the time of the error (may differ from the victim) | Victim DataShard logs |
-| `victimTxSpanId` | Identifier of the victim transaction (the query that acquired the broken locks) | Victim SessionActor logs |
-| `breakerTxSpanId` | Identifier of the breaker transaction | Breaker SessionActor logs |
-| `querySpanId` | Identifier of the specific query in a SessionActor record | SessionActor logs |
-| `queryText` | SQL of that query | SessionActor logs |
+| `VictimQuerySpanId` | Identifier of the query whose locks were broken | Victim logs |
+| `BreakerQuerySpanId` | Identifier of the query that broke the locks | Breaker logs |
+| `CurrentQuerySpanId` | Identifier of the query at the time of the error (may differ from the victim) | Victim logs |
+| `VictimQuerySpanIds` | Array of identifiers of all victim queries | Breaker DataShard logs |
+| `VictimQueryText` | SQL of the victim query that acquired the locks | Victim SessionActor logs |
+| `BreakerQueryText` | SQL of the breaker query | Breaker SessionActor logs |
+| `VictimQueryTexts` | All queries of the victim transaction | Victim SessionActor logs |
+| `BreakerQueryTexts` | All queries of the breaker transaction | Breaker SessionActor logs |
 
 ## Log analysis
 
 Using the `VictimQuerySpanId` from the SDK error message, you can find all related events:
 
-1. **Find the victim query**: in victim DataShard logs, `victimQuerySpanId` shows which SELECT acquired the broken locks. In victim SessionActor logs the same id is `victimTxSpanId`; the SQL is `queryText` on the record whose `querySpanId` matches `victimTxSpanId`.
+1. **Find the victim query**: search for `VictimQuerySpanId: <value from the error>` in the logs — this shows which SELECT acquired the broken locks, with the query text in the `VictimQueryText` field.
 
-2. **Find the breaker query**: the breaker DataShard record's `victimQuerySpanId` field contains the same value. Take `breakerQuerySpanId` from that record and find the breaker's SessionActor log (`breakerTxSpanId`). The breaker SQL is `queryText` on the record whose `querySpanId` matches `breakerTxSpanId`.
+2. **Find the breaker query**: the breaker DataShard log's `VictimQuerySpanIds` field contains the same value. From this log, take `BreakerQuerySpanId` and find the breaker's SessionActor log — it contains `BreakerQueryText` with the full query text.
 
-3. **Get full transaction context**: all SessionActor records that share the same `victimTxSpanId` or `breakerTxSpanId` list the queries of that transaction (`querySpanId` + `queryText`) in execution order.
+3. **Get full transaction context**: `VictimQueryTexts` and `BreakerQueryTexts` contain all queries of the respective transactions in execution order.
 
 ## find_tli_chain utility
 

@@ -4,6 +4,8 @@
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 class TTabletMigrator : public TActorBootstrapped<TTabletMigrator> {
@@ -32,18 +34,19 @@ public:
             IgnoreFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTabletMigrator StateWork unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT("TTabletMigrator StateWork unexpected event",
+                    {"eventType", ev->GetTypeRewrite()},
+                );
         }
     }
 
 private:
     void RequestTxId() {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TabletMigrator - send TEvAllocateTxId"
-            << ", working dir " << Current.WorkingDir
-            << ", db name: " << Current.DbName
-            << ", at schemeshard: " << SSTabletId);
+        YDB_LOG_DEBUG("TabletMigrator - send TEvAllocateTxId",
+            {"workingDir", Current.WorkingDir},
+            {"dbName", Current.DbName},
+            {"schemeshard", SSTabletId},
+        );
 
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
     }
@@ -74,11 +77,11 @@ private:
             modifySubDomain.SetExternalWasmCompileController(true);
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TabletMigrator - send TEvModifySchemeTransaction"
-            << ", working dir " << Current.WorkingDir
-            << ", db name: " << Current.DbName
-            << ", at schemeshard: " << SSTabletId);
+        YDB_LOG_DEBUG("TabletMigrator - send TEvModifySchemeTransaction",
+            {"workingDir", Current.WorkingDir},
+            {"dbName", Current.DbName},
+            {"schemeshard", SSTabletId},
+        );
 
         Send(SSActorId, request.Release());
     }
@@ -87,10 +90,10 @@ private:
         auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TabletMigrator - send TEvNotifyTxCompletion"
-            << ", txId " << txId
-            << ", at schemeshard: " << SSTabletId);
+        YDB_LOG_DEBUG("TabletMigrator - send TEvNotifyTxCompletion",
+            {"txId", txId},
+            {"schemeshard", SSTabletId},
+        );
 
         Send(SSActorId, request.Release());
     }
@@ -107,10 +110,10 @@ private:
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TabletMigrator - start processing migrations"
-            << ", queue size: " << Queue.size()
-            << ", at schemeshard: " << SSTabletId);
+        YDB_LOG_DEBUG("TabletMigrator - start processing migrations",
+            {"queueSize", Queue.size()},
+            {"schemeshard", SSTabletId},
+        );
 
         StartNextMigration();
     }
@@ -118,10 +121,10 @@ private:
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         auto txId = ev->Get()->TxId;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TabletMigrator - handle TEvAllocateTxIdResult"
-            << ", txId: " << txId
-            << ", at schemeshard: " << SSTabletId);
+        YDB_LOG_DEBUG("TabletMigrator - handle TEvAllocateTxIdResult",
+            {"txId", txId},
+            {"schemeshard", SSTabletId},
+        );
 
         SendModifyScheme(txId);
     }
@@ -131,11 +134,11 @@ private:
         auto status = record.GetStatus();
         auto txId = record.GetTxId();
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TabletMigrator - handle TEvModifySchemeTransactionResult"
-            << ", status: " << status
-            << ", txId: " << txId
-            << ", at schemeshard: " << SSTabletId);
+        YDB_LOG_DEBUG("TabletMigrator - handle TEvModifySchemeTransactionResult",
+            {"status", status},
+            {"txId", txId},
+            {"schemeshard", SSTabletId},
+        );
 
         switch (status) {
         case NKikimrScheme::StatusSuccess:
@@ -145,12 +148,12 @@ private:
             SubscribeToCompletion(record.GetTxId());
             break;
         default:
-            LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TabletMigrator - migration failed"
-                << ", status: " << status
-                << ", reason: " << record.GetReason()
-                << ", txId: " << txId
-                << ", at schemeshard: " << SSTabletId);
+            YDB_LOG_ERROR("TabletMigrator - migration failed",
+                {"status", status},
+                {"reason", record.GetReason()},
+                {"txId", txId},
+                {"schemeshard", SSTabletId},
+            );
 
             StartNextMigration();
             break;
@@ -158,10 +161,10 @@ private:
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TabletMigrator - handle TEvNotifyTxCompletionResult"
-            << ", txId: " << ev->Get()->Record.GetTxId()
-            << ", at schemeshard: " << SSTabletId);
+        YDB_LOG_DEBUG("TabletMigrator - handle TEvNotifyTxCompletionResult",
+            {"txId", ev->Get()->Record.GetTxId()},
+            {"schemeshard", SSTabletId},
+        );
 
         StartNextMigration();
     }
@@ -180,3 +183,5 @@ THolder<IActor> CreateTabletMigrator(ui64 ssTabletId, TActorId ssActorId,
 }
 
 } // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

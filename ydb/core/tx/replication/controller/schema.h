@@ -27,6 +27,9 @@ struct TControllerSchema: NIceDb::Schema {
         struct NextTargetId: Column<7, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 1; };
         struct DesiredState: Column<8, NScheme::NTypeIds::Uint8> { using Type = TReplication::EState; };
         struct Database: Column<9, NScheme::NTypeIds::Utf8> {};
+        struct DeferredAlter: Column<10, NScheme::NTypeIds::Bool> {
+            static constexpr bool Default = false;
+        };
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -38,7 +41,8 @@ struct TControllerSchema: NIceDb::Schema {
             Issue,
             NextTargetId,
             DesiredState,
-            Database
+            Database,
+            DeferredAlter
         >;
     };
 
@@ -67,6 +71,15 @@ struct TControllerSchema: NIceDb::Schema {
         struct WorkerSetComplete: Column<13, NScheme::NTypeIds::Bool> {
             static constexpr bool Default = false;
         };
+        struct SchemaBarrierPhase: Column<14, NScheme::NTypeIds::Uint8> {
+            static constexpr ui8 Default = 0; // No schema barrier.
+        };
+        struct SchemaBarrierChange: Column<15, NScheme::NTypeIds::String> {};
+        // Only the DDL transaction for the active schema barrier is tracked
+        // here; ordinary destination alters do not use this column.
+        struct DstAlterTxId: Column<16, NScheme::NTypeIds::Uint64> {
+            static constexpr ui64 Default = 0;
+        };
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -82,7 +95,10 @@ struct TControllerSchema: NIceDb::Schema {
             TransformLambda,
             RunAsUser,
             DirectoryPath,
-            WorkerSetComplete
+            WorkerSetComplete,
+            SchemaBarrierPhase,
+            SchemaBarrierChange,
+            DstAlterTxId
         >;
     };
 
@@ -117,13 +133,29 @@ struct TControllerSchema: NIceDb::Schema {
         using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, HeartbeatVersionStep, HeartbeatVersionTxId>;
     };
 
+    // Freeze membership at the first schema report until every partition has
+    // crossed the same record. These rows outlive the live Workers rows.
+    struct SchemaBarrierWorkers: Table<8> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Reported: Column<4, NScheme::NTypeIds::Bool> {};
+        struct Applied: Column<5, NScheme::NTypeIds::Bool> {};
+        struct Completed: Column<6, NScheme::NTypeIds::Bool> {};
+        struct Offset: Column<7, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset>;
+    };
+
     using TTables = SchemaTables<
         SysParams,
         Replications,
         Targets,
         SrcStreams,
         TxIds,
-        Workers
+        Workers,
+        SchemaBarrierWorkers
     >;
 
 }; // TControllerSchema

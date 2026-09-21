@@ -4,6 +4,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/protos/sys_view.pb.h>
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -36,11 +39,11 @@ bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQ
     newStats.UsedReserveSize = rec.GetUsedReserveSize();
 
     if (newStats.DataSize < newStats.UsedReserveSize) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Got wrong periodic topic stats at partition " << pathId
-                        << ". DataSize must be greater than or equal to UsedReserveSize but "
-                        << " DataSize " << rec.GetDataSize()
-                        << " UsedReserveSize " << rec.GetUsedReserveSize());
+        YDB_LOG_WARN_CTX(ctx, "Got wrong periodic topic stats at partition",
+            {"pathId", pathId},
+            {"dataSize", rec.GetDataSize()},
+            {"usedReserveSize", rec.GetUsedReserveSize()},
+        );
         return true;
     }
 
@@ -94,10 +97,11 @@ void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const T
 
     const TPathId pathId = TPathId(TabletID(), rec.GetPathId());
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Got periodic topic stats at partition " << pathId
-                                                        << " DataSize " << rec.GetDataSize()
-                                                        << " UsedReserveSize " << rec.GetUsedReserveSize());
+    YDB_LOG_INFO_CTX(ctx, "Got periodic topic stats at partition",
+        {"pathId", pathId},
+        {"dataSize", rec.GetDataSize()},
+        {"usedReserveSize", rec.GetUsedReserveSize()},
+    );
 
     TStatsId statsId(pathId);
     switch(TopicStatsQueue.Add(statsId, ev.Release())) {
@@ -115,8 +119,10 @@ void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const T
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvPersistTopicStats::TPtr&, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-           "Started TEvPersistStats at tablet " << TabletID() << ", queue size# " << TopicStatsQueue.Size());
+    YDB_LOG_DEBUG_CTX(ctx, "Started TEvPersistStats at tablet",
+        {"tabletId", TabletID()},
+        {"queueSize", TopicStatsQueue.Size()},
+    );
 
     TopicStatsBatchScheduled = false;
     ExecuteTopicStatsBatch(ctx);
@@ -124,8 +130,9 @@ void TSchemeShard::Handle(TEvPrivate::TEvPersistTopicStats::TPtr&, const TActorC
 
 void TSchemeShard::ExecuteTopicStatsBatch(const TActorContext& ctx) {
     if (!TopicPersistStatsPending && !TopicStatsQueue.Empty()) {
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Will execute TTxStoreStats, queue# " << TopicStatsQueue.Size());
+        YDB_LOG_TRACE_CTX(ctx, "Will execute TTxStoreStats",
+            {"queueSize", TopicStatsQueue.Size()},
+        );
 
         TopicPersistStatsPending = true;
         EnqueueExecute(new TTxStoreTopicStats(this, TopicStatsQueue, TopicPersistStatsPending));
@@ -137,8 +144,10 @@ void TSchemeShard::ExecuteTopicStatsBatch(const TActorContext& ctx) {
 void TSchemeShard::ScheduleTopicStatsBatch(const TActorContext& ctx) {
     if (!TopicStatsBatchScheduled && !TopicStatsQueue.Empty()) {
         TDuration delay = TopicStatsQueue.Delay();
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Will delay TTxStoreTopicStats on# " << delay << ", queue# " << TopicStatsQueue.Size());
+        YDB_LOG_TRACE_CTX(ctx, "Will delay TTxStoreTopicStats",
+            {"delay", delay},
+            {"queueSize", TopicStatsQueue.Size()},
+        );
 
         ctx.Schedule(delay, new TEvPrivate::TEvPersistTopicStats());
         TopicStatsBatchScheduled = true;
@@ -147,3 +156,5 @@ void TSchemeShard::ScheduleTopicStatsBatch(const TActorContext& ctx) {
 
 } // NSchemeShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

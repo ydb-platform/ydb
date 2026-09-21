@@ -42,6 +42,7 @@ public:
         IPartitionDirectService* partitionDirectService,
         const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
+        bool touched,
         const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
@@ -114,6 +115,16 @@ public:
 private:
     friend struct TBaseFixture;
 
+    enum class ETouchedState
+    {
+        // No writes to the VChunk's DDisks have been observed.
+        NotTouched,
+        // A write was observed and the touched marker is being persisted.
+        Persisting,
+        // The touched marker was successfully persisted.
+        Persisted
+    };
+
     using TPrepareConfigFunc = std::function<TVChunkConfig()>;
 
     struct TPendingVChunkConfig
@@ -148,6 +159,12 @@ private:
 
     void DoPersistDirtyMap();
     void OnDirtyMapPersisted(ui32 stateGeneration);
+
+    // VDisk touch state.
+    void Touch();
+    [[nodiscard]] bool IsTouched() const;
+    void DoPersistTouched();
+    void OnTouchedPersisted();
 
     void ScheduleCleaningUp();
     void CleaningUp();
@@ -193,6 +210,7 @@ private:
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
     bool DirtyMapStatePersisting = false;
+    ETouchedState TouchedState = ETouchedState::NotTouched;
     TBlocksDirtyMapPtr BlocksDirtyMap;
     // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
     NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();

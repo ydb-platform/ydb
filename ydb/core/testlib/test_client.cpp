@@ -31,6 +31,7 @@
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
+#include <ydb/services/ydb/ydb_udf.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
 #include <ydb/services/ydb/ydb_logstore.h>
@@ -740,12 +741,11 @@ namespace Tests {
             Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
         }
 
-        for (IActor* configurator : NConsole::CreateJaegerTracingConfigurators(
-                appData.TracingConfigurator,
-                appData.UserFacingTracingConfigurator,
-                *Settings->AppConfig)) {
-            system->Register(configurator, TMailboxType::ReadAsFilled, appData.UserPoolId);
-        }
+        system->Register(
+            NConsole::CreateJaegerTracingConfigurator(appData.TracingConfigurator, Settings->AppConfig->GetTracingConfig()),
+            TMailboxType::ReadAsFilled,
+            appData.UserPoolId
+        );
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData.UserPoolId);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
@@ -829,6 +829,7 @@ namespace Tests {
         grpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcReplicationService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcViewService(system, counters, grpcRequestProxies[0], true));
+        grpcServer->AddService(new NGRpcService::TGRpcYdbUdfService(system, counters, grpcRequestProxies[0], true));
         grpcServer->Start();
     }
 

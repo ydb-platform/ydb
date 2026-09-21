@@ -7,6 +7,10 @@
 
 #include <utility>
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -15,13 +19,9 @@ class TPropose: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterExternalDataSource TPropose"
-            << ", operationId: " << OperationId;
-    }
-
 public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
     explicit TPropose(TOperationId id)
         : OperationId(std::move(id))
     {
@@ -30,8 +30,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -53,7 +54,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -65,6 +66,10 @@ public:
 };
 
 class TAlterExternalDataSource : public TSubOperation {
+public:
+    virtual const char* Name() const override final { return "TAlterExternalDataSource"; }
+
+private:
     static TTxState::ETxState NextState() { return TTxState::Propose; }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
@@ -157,8 +162,9 @@ public:
         const auto& externalDataSourceDescription = Transaction.GetCreateExternalDataSource();
         const TString& name = externalDataSourceDescription.GetName();
 
-        LOG_N("TAlterExternalDataSource Propose"
-              << ": opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", parentPathStr + "/" + name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -246,13 +252,15 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TAlterExternalDataSource AbortPropose"
-              << ": opId# " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TAlterExternalDataSource AbortUnsafe"
-              << ": opId# " << OperationId << ", txId# " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterExternalDataSource AbortUnsafe",
+            {"operationId", OperationId},
+            {"txId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -269,3 +277,5 @@ ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, TTxState::ETx
 }
 
 } // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

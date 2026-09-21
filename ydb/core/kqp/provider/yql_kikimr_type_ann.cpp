@@ -245,7 +245,7 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
             continue;
         }
 
-        const TString generatedQuery = AssembleGeneratedQuery(col.DefaultExpression->Context, col.DefaultExpression->ExprText);
+        const TString generatedQuery = AssembleGeneratedQuery(col.DefaultExpression->ExprText);
         NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
             sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
         settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -762,7 +762,7 @@ namespace {
             }
 
             // Recompile the stored SQL text into (lambda '(row) <expr>)
-            const TString generatedQuery = AssembleGeneratedQuery(columnMeta.DefaultExpression->Context, columnMeta.DefaultExpression->ExprText);
+            const TString generatedQuery = AssembleGeneratedQuery(columnMeta.DefaultExpression->ExprText);
             NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                 sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
             settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -919,7 +919,6 @@ namespace {
             YQL_ENSURE(generatedValue.ChildrenSize() >= 3);
 
             columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
-            columnMeta.DefaultExpression->Context = TString(generatedValue.Child(0)->Content());
             columnMeta.DefaultExpression->ExprText = TString(generatedValue.Child(1)->Content());
             columnMeta.DefaultExpression->Stored = generatedValue.Child(2)->Content() == "stored";
             columnMeta.SetDefaultFromExpression();
@@ -2664,36 +2663,43 @@ private:
         for (const auto& setting : settings) {
             auto name = setting.Name().Value();
             if (name == "setMeteringMode") {
-                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
-                    return false;
-                }
-                auto val = to_lower(TString(setting.Value().template Cast<TCoAtom>().Value()));
+                const auto val = to_lower(TString(
+                    setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()));
                 Ydb::Topic::MeteringMode meteringMode;
-                auto result = GetTopicMeteringModeFromString(val, meteringMode);
-                if (!result) {
+                if (!GetTopicMeteringModeFromString(val, meteringMode)) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
                                         TStringBuilder() << "unknown metering_mode: " << val));
-                }
-
-            } else if (name == "setMinPartitions") {
-                ui32 value = FromString<ui32>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
-                );
-                minParts = value;
-                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
-            } else if (name == "setMaxPartitions") {
-                ui32 value = FromString<ui32>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
-                );
-                maxPartitions = value;
-                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
-            } else if (name == "setContentBasedDeduplication") {
-                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
                     return false;
                 }
+            } else if (name == "setMinPartitions" || name == "setMaxPartitions") {
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value();
+                ui32 value = 0;
+                if (!TryFromString<ui32>(literal, value)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                        TStringBuilder() << (name == "setMinPartitions" ? "min_active_partitions" : "max_active_partitions")
+                            << " value is out of Uint32 range: " << literal));
+                    return false;
+                }
+                if (name == "setMinPartitions") {
+                    minParts = value;
+                } else {
+                    maxPartitions = value;
+                }
+                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
+            } else if (name == "resetMetricsLevel"
+                    || name == "resetRetentionPeriod"
+                    || name == "resetRetentionStorage"
+                    || name == "resetPartitionWriteSpeed"
+                    || name == "resetPartitionWriteBurstSpeed"
+                    || name == "resetSupportedCodecs"
+                    || name == "resetContentBasedDeduplication"
+                    || name == "resetAutoPartitioningStabilizationWindow"
+                    || name == "resetAutoPartitioningUpUtilizationPercent"
+                    || name == "resetAutoPartitioningDownUtilizationPercent") {
+                // Applied in execution: native Topic API reset or SET of the default value.
             } else if (name.StartsWith("reset")) {
                 ctx.AddError(TIssue(
-                        errorPos,
+                        ctx.GetPosition(setting.Name().Pos()),
                         TStringBuilder() << "RESET is currently not supported for topic options")
                 );
                 return false;
@@ -2739,7 +2745,7 @@ private:
     }
 
     virtual TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
-        if (!CheckTopicSettings(node.Settings(), ctx)) {
+        if (!CheckTopicSettings(node.TopicSettings(), ctx) || !CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
         }
 
@@ -2815,7 +2821,7 @@ private:
     }
 
     virtual TStatus HandleAlterTopic(TKiAlterTopic node, TExprContext& ctx) override {
-        if (!CheckTopicSettings(node.Settings(), ctx)) {
+        if (!CheckTopicSettings(node.TopicSettings(), ctx) || !CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
         }
        THashSet<TString> allConsumers;
@@ -3449,6 +3455,12 @@ private:
     }
 
     virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) override {
+        if (auto sampleRate = node.SampleRate(); sampleRate && !sampleRate.Maybe<TCoDouble>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                "ANALYZE SAMPLE rate must evaluate to Double"));
+            return TStatus::Error;
+        }
+
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);
         if (!table) {
             return TStatus::Error;

@@ -1,13 +1,17 @@
 """Saved placement specifications; deliberately does not launch cluster processes."""
 
+import copy
 import json
+import posixpath
 import re
 import threading
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_json
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
+from ydb.tools.ydb_bench.lib import cluster_config
 
 
 def _text(value, label, limit=200):
@@ -61,6 +65,53 @@ def _names(value, label):
     return result
 
 
+def validate_disks(node):
+    disks = node.get("disks")
+    if disks is None:
+        legacy = node.get("sector_map")
+        if not isinstance(legacy, dict):
+            raise BenchmarkError("Static nodes require disks")
+        count = _integer(legacy.get("count"), "SectorMap count", 64)
+        size = _integer(legacy.get("size_gib"), "SectorMap size", 1048576)
+        disks = [{"source": "sector_map", "media": "ssd", "size_gib": size} for _ in range(count)]
+    if not isinstance(disks, list) or len(disks) > 64:
+        raise BenchmarkError("Disks must be a list of at most 64 entries")
+    result = []
+    for disk in disks:
+        if not isinstance(disk, dict) or disk.get("source") not in ("sector_map", "file", "block_device", "partlabel"):
+            raise BenchmarkError("Unknown disk source")
+        source = disk["source"]
+        if disk.get("media") not in ("ssd", "hdd"):
+            raise BenchmarkError("Disk media must be ssd or hdd")
+        item = {"source": source, "media": disk["media"]}
+        if source in ("sector_map", "file"):
+            item["size_gib"] = _integer(disk.get("size_gib"), "Disk size", 1048576)
+        if source == "file" and "temporary" in disk:
+            if type(disk["temporary"]) is not bool:
+                raise BenchmarkError("Temporary disk flag must be boolean")
+            item["temporary"] = disk["temporary"]
+        if source == "partlabel":
+            label = _text(disk.get("label"), "Partition label", 255)
+            if label in (".", "..") or any(c in label for c in ("/", "\\", "\x00", "\n", "\r")):
+                raise BenchmarkError("Partition label must be a single path component")
+            item["label"] = label
+        elif source == "file" and not item.get("temporary") and "name" in disk:
+            name = _text(disk["name"], "File disk name", 200)
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", name):
+                raise BenchmarkError("File disk name must contain only letters, digits, dots, underscores and hyphens")
+            item["name"] = name
+        elif source in ("file", "block_device") and not item.get("temporary"):
+            path = _text(disk.get("path"), "Disk path", 4096)
+            if not path.startswith("/") or any(c in path for c in ("\x00", "\n", "\r")):
+                raise BenchmarkError("Disk path must be absolute")
+            path = posixpath.normpath(path)
+            if path == "/":
+                raise BenchmarkError("Disk path must not be the root directory")
+            item["path"] = path
+        result.append(item)
+    return result
+
+
 def validate_template(value, host_ids):
     if not isinstance(value, dict):
         raise BenchmarkError("Template must be an object")
@@ -91,9 +142,10 @@ def validate_template(value, host_ids):
         raise BenchmarkError("Tenants must be a list of at most 64 objects")
     paths = _names([t.get("path") for t in tenants], "Tenant paths")
     normalized_tenants = []
+    domain = cluster_config.domain_name(cluster_config.validate(value.get('ydb_config', {}))[0])
     for path, tenant in zip(paths, tenants):
-        if not re.fullmatch(r"/Root/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", path):
-            raise BenchmarkError("Tenant path must start with /Root/ and contain valid path components")
+        if not re.fullmatch('/' + re.escape(domain) + r'/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*', path):
+            raise BenchmarkError('Tenant path must start with /' + domain + '/ and contain valid path components')
         if tenant.get("storage_kind") not in ("ssd", "hdd"):
             raise BenchmarkError("Tenant storage kind must be ssd or hdd")
         normalized_tenants.append(
@@ -103,7 +155,7 @@ def validate_template(value, host_ids):
                 "storage_groups": _integer(tenant.get("storage_groups"), "Storage groups", 64),
             }
         )
-    result, names = [], set()
+    result, names, disk_paths = [], set(), set()
     for node in nodes:
         if not isinstance(node, dict):
             raise BenchmarkError("Node must be an object")
@@ -143,22 +195,120 @@ def validate_template(value, host_ids):
             raise BenchmarkError("Only dynamic nodes can be assigned to an existing tenant")
         item["tenant"] = tenant
         if role == "static":
-            disk = node.get("sector_map")
-            if not isinstance(disk, dict):
-                raise BenchmarkError("Static nodes require SectorMap settings")
-            item["sector_map"] = {
-                "count": _integer(disk.get("count"), "SectorMap count", 64),
-                "size_gib": _integer(disk.get("size_gib"), "SectorMap size", 1048576),
-            }
+            item["disks"] = validate_disks(node)
+            for disk in item["disks"]:
+                path = disk.get("path")
+                if disk["source"] == "file" and "name" in disk:
+                    path = "file-disks/" + disk["name"]
+                if disk["source"] == "partlabel":
+                    path = "/dev/disk/by-partlabel/" + disk["label"]
+                if path:
+                    key = (host, path)
+                    if key in disk_paths:
+                        raise BenchmarkError("A disk path can only be assigned once per host")
+                    disk_paths.add(key)
         result.append(item)
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "name": name,
         "nodes": result,
         "host_ids": selected_hosts,
         "data_centers": centers,
         "tenants": normalized_tenants,
+        **({"ydb_config": cluster_config.validate(value["ydb_config"])[0]} if "ydb_config" in value else {}),
+        **(
+            {'ydb_tenant_configs': cluster_config.tenant_configs(value['ydb_tenant_configs'], paths)}
+            if 'ydb_tenant_configs' in value
+            else {}
+        ),
+        **(
+            {
+                'ydb_tenant_replacements': cluster_config.tenant_replacements(
+                    value['ydb_tenant_replacements'], value.get('ydb_tenant_configs', {})
+                )
+            }
+            if 'ydb_tenant_replacements' in value
+            else {}
+        ),
     }
+
+
+def apply_configuration_yaml(template, text, hosts):
+    """Reconcile referenced entities in a detached draft; never register hosts."""
+    if not isinstance(template, dict):
+        raise BenchmarkError("Expected a cluster template")
+    result = cluster_config.parse_document(text)
+    draft = copy.deepcopy(template)
+    draft.update(
+        ydb_config=result['config'],
+        ydb_tenant_configs=result['tenant_configs'],
+        ydb_tenant_replacements=result['tenant_replacements'],
+    )
+    selected = draft.setdefault('host_ids', list(dict.fromkeys(n['host_id'] for n in draft.get('nodes', []))))
+    centers = draft.setdefault('data_centers', [])
+    tenants = draft.setdefault('tenants', [])
+    additions = {'hosts': [], 'data_centers': [], 'racks': [], 'tenants': []}
+    aliases = {}
+    for host in hosts:
+        for alias in (host['id'], host.get('name'), urlparse(host.get('endpoint', '')).hostname):
+            if alias:
+                aliases.setdefault(alias.lower().rstrip('.'), set()).add(host['id'])
+    config = result['config']
+    locations = config.get('hosts', [])
+    nameservice = config.get('nameservice_config', {}).get('node', [])
+    if not isinstance(locations, list) or any(not isinstance(item, dict) for item in locations):
+        raise BenchmarkError('hosts must be a list of objects')
+    missing, ambiguous = [], []
+    for item in [*locations, *nameservice]:
+        name = item.get('host') or item.get('interconnect_host')
+        if not isinstance(name, str) or not name.strip():
+            raise BenchmarkError('Every YAML host must have a host name')
+        matches = aliases.get(name.lower().rstrip('.'), set())
+        if not matches:
+            missing.append(name)
+        elif len(matches) != 1:
+            ambiguous.append(name)
+        else:
+            host_id = next(iter(matches))
+            if host_id not in selected:
+                selected.append(host_id)
+                additions['hosts'].append(name)
+        location = item.get('location', {})
+        if not isinstance(location, dict):
+            raise BenchmarkError('Host location must be an object')
+        dc, rack = location.get('data_center', ''), location.get('rack', '')
+        if not isinstance(dc, str) or not isinstance(rack, str):
+            raise BenchmarkError('Data center and rack names must be strings')
+        if rack and not dc:
+            raise BenchmarkError('Rack requires a data center: ' + rack)
+        if dc:
+            center = next((item for item in centers if item['name'] == dc), None)
+            if center is None:
+                center = {'name': dc, 'racks': []}
+                centers.append(center)
+                additions['data_centers'].append(dc)
+            rack = rack or (center['racks'][0] if center['racks'] else dc + '-R1')
+            if rack not in center['racks']:
+                center['racks'].append(rack)
+                additions['racks'].append(dc + ' / ' + rack)
+    if missing or ambiguous:
+        problems = []
+        if missing:
+            problems.append('Unregistered hosts: ' + ', '.join(dict.fromkeys(missing)))
+        if ambiguous:
+            problems.append('Ambiguous hosts: ' + ', '.join(dict.fromkeys(ambiguous)))
+        raise BenchmarkError('; '.join(problems) + '. Register hosts or use their exact names/IDs. Template unchanged.')
+    paths = list(result['tenant_configs'])
+    paths.extend(
+        slot['tenant_name'] for slot in config.get('tenant_pool_config', {}).get('slots', []) if slot.get('tenant_name')
+    )
+    for path in dict.fromkeys(paths):
+        if not any(tenant['path'] == path for tenant in tenants):
+            tenants.append({'path': path, 'storage_kind': 'ssd', 'storage_groups': 1})
+            additions['tenants'].append(path)
+    normalized = validate_template(draft, {host['id'] for host in hosts})
+    draft.update(normalized)
+    return {**result, 'template': draft, 'added': additions}
 
 
 class ClusterTemplateStore:

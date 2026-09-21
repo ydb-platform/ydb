@@ -111,6 +111,7 @@ def _profile_schema(benchmark):
             "description": "Immutable cluster placement snapshot, including hosts, DC/racks and tenants.",
         }
         schema["properties"]["tenant"] = {"type": "string", "pattern": "^/Root/"}
+        schema["properties"]["reset-disks"] = {"type": "boolean", "default": False}
         schema["required"] = ["cluster-template"]
         schema["anyOf"] = [{"required": ["tenant", "workload", "load"]}, {"required": ["cli-nodes"]}]
         actor = {
@@ -966,7 +967,17 @@ def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled,
     value = _mapping(
         value,
         location,
-        ("cluster-template", "tenant", "workload", "actor-system", "client", "load", "measurement", "timeout"),
+        (
+            "cluster-template",
+            "tenant",
+            "workload",
+            "actor-system",
+            "client",
+            "load",
+            "measurement",
+            "timeout",
+            "reset-disks",
+        ),
     )
     snapshot = value.get("cluster-template")
     if not isinstance(snapshot, dict):
@@ -979,7 +990,7 @@ def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled,
     except BenchmarkError as error:
         _config_error(location + ".cluster-template", str(error))
     dynamics = sum(node["role"] == "dynamic" and node["tenant"] == value["tenant"] for node in template["nodes"])
-    common = {key: item for key, item in value.items() if key not in ("cluster-template", "tenant")}
+    common = {key: item for key, item in value.items() if key not in ("cluster-template", "tenant", "reset-disks")}
     common["geometry"] = {
         "preset": "custom",
         "static-nodes": sum(node["role"] == "static" for node in template["nodes"]),
@@ -989,7 +1000,11 @@ def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled,
     common["affinity"] = {role: {"mode": "none"} for role in ("static-nodes", "dynamic-nodes", "ydb-cli")}
     configuration = _parse_local_ydb_profile(benchmark, profile_name, common, perf_enabled, perf_frequency)
     profile = configuration.parameters["local_ydb"]
-    profile["distributed"] = {"template": template, "tenant": value["tenant"]}
+    profile["distributed"] = {
+        "template": template,
+        "tenant": value["tenant"],
+        "reset_disks": _boolean(value.get("reset-disks", False), location + ".reset-disks"),
+    }
     # These values come from individual template nodes/tenants, not the local
     # executor's defaults. Do not publish fictitious 64 GiB disks or no affinity.
     profile.pop("affinity")
@@ -1000,7 +1015,11 @@ def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled,
 
 def _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
     location = "{}.{}".format(benchmark.name, profile_name)
-    value = _mapping(value, location, ("cluster-template", "storage", "tenants", "cli-nodes", "measurement", "timeout"))
+    value = _mapping(
+        value,
+        location,
+        ("cluster-template", "storage", "tenants", "cli-nodes", "measurement", "timeout", "reset-disks"),
+    )
     snapshot = value.get("cluster-template")
     if (
         not isinstance(snapshot, dict)
@@ -1119,6 +1138,7 @@ def _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enab
         "tenant": normalized[selected]["tenant"],
         "cli_nodes": normalized,
         "search_cli": search_clients[0] if search_clients else None,
+        "reset_disks": _boolean(value.get("reset-disks", False), location + ".reset-disks"),
     }
     if not search_clients:
         profile["load"] = {

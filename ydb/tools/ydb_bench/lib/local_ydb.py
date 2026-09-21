@@ -2049,6 +2049,10 @@ def run_local_ydb(
             ]
             if (output_directory / "ydb-metrics.jsonl").is_file():
                 artifacts.append("ydb-metrics.jsonl")
+            artifacts.extend(
+                path.relative_to(output_directory).as_posix()
+                for path in sorted((output_directory / "ydb-counters").glob("*.jsonl.gz"))
+            )
             if verification["status"] == "completed":
                 artifacts += ["verification-summary.csv", "verification-repetitions.csv"]
                 if verification.get("cluster") == "fresh":

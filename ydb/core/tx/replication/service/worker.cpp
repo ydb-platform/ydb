@@ -331,7 +331,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
         const auto offset = ev->Get()->Offset;
         if (PendingSchemaChange) {
             if (PendingSchemaChange->Offset != offset
-                || PendingSchemaChange->Schema.SerializeAsString() != ev->Get()->Schema.SerializeAsString()) {
+                || PendingSchemaChange->Schema.SerializeAsString() != ev->Get()->Schema.SerializeAsString())
+            {
                 YDB_LOG_WARN("Conflicting schema change from writer",
                     {"offset", offset});
                 return;
@@ -391,6 +392,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             if (!SchemaApplied) {
                 return;
             }
+
             auto report = MakeHolder<TEvService::TEvSchemaChangeReport>();
             report->Record.MutableSchema()->CopyFrom(PendingSchemaChange->Schema);
             report->Record.SetOffset(PendingSchemaChange->Offset);
@@ -431,14 +433,13 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
         const bool matchesPendingSchemaChange = PendingSchemaChange
             && PendingSchemaChange->Offset == ev->Get()->Record.GetOffset()
-            && PendingSchemaChange->Schema.SerializeAsString()
-                == ev->Get()->Record.GetSchema().SerializeAsString();
+            && PendingSchemaChange->Schema.SerializeAsString() == ev->Get()->Record.GetSchema().SerializeAsString();
 
         if (ev->Get()->Record.GetCompleted()
             && RecoveredCompletionSchema
             && RecoveredCompletionOffset == ev->Get()->Record.GetOffset()
-            && RecoveredCompletionSchema->SerializeAsString()
-                == ev->Get()->Record.GetSchema().SerializeAsString()) {
+            && RecoveredCompletionSchema->SerializeAsString() == ev->Get()->Record.GetSchema().SerializeAsString())
+        {
             RecoveredCompletionSchema.Reset();
             RecoveredCompletionReported = false;
             return;
@@ -452,11 +453,13 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (ev->Get()->Record.GetApplied()
             && ReaderCommittedOffset
             && *ReaderCommittedOffset > ev->Get()->Record.GetOffset()
-            && !matchesPendingSchemaChange) {
+            && !matchesPendingSchemaChange)
+        {
             if (RecoveredCompletionSchema
                 && (RecoveredCompletionOffset != ev->Get()->Record.GetOffset()
                     || RecoveredCompletionSchema->SerializeAsString()
-                        != ev->Get()->Record.GetSchema().SerializeAsString())) {
+                        != ev->Get()->Record.GetSchema().SerializeAsString()))
+            {
                 YDB_LOG_WARN("Conflicting recovered schema change result",
                     {"sender", ev->Sender});
                 return;
@@ -488,10 +491,16 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        if (ev->Get()->Record.GetSchema().SerializeAsString() != PendingSchemaChange->Schema.SerializeAsString()) {
+        if (!matchesPendingSchemaChange) {
             YDB_LOG_WARN("Unexpected schema change result",
                 {"sender", ev->Sender});
             return;
+        }
+
+        if (ev->Get()->Record.GetApplied()) {
+            // The acknowledgement may race with a writer restart. Remember
+            // it until the replacement writer has applied the same barrier.
+            SchemaApplyAcknowledged = true;
         }
 
         if (SchemaAdvanceCommitted) {
@@ -543,7 +552,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
             {"ev", ev->Get()->ToString()});
 
         if (ev->Sender != Writer || !PendingSchemaChange
-            || ev->Get()->Schema.SerializeAsString() != PendingSchemaChange->Schema.SerializeAsString()) {
+            || ev->Get()->Schema.SerializeAsString() != PendingSchemaChange->Schema.SerializeAsString())
+        {
             YDB_LOG_WARN("Unexpected schema change applied",
                 {"sender", ev->Sender});
             return;
@@ -555,11 +565,13 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (SchemaApplied) {
             return;
         }
+
         SchemaApplied = true;
         if (SchemaAdvanceCommitted) {
             if (SchemaCompletionReceived) {
                 return FinishSchemaChange();
             }
+
             auto report = MakeHolder<TEvService::TEvSchemaChangeReport>();
             report->Record.MutableSchema()->CopyFrom(PendingSchemaChange->Schema);
             report->Record.SetOffset(PendingSchemaChange->Offset);
@@ -567,6 +579,15 @@ class TWorker: public TActorBootstrapped<TWorker> {
             Send(Parent, report.Release());
             return;
         }
+
+        if (SchemaApplyAcknowledged) {
+            if (!SchemaAdvanceInFlight) {
+                SchemaAdvanceInFlight = true;
+                Send(Reader, new TEvWorker::TEvCommit(PendingSchemaChange->Offset + 1));
+            }
+            return;
+        }
+
         auto report = MakeHolder<TEvService::TEvSchemaChangeReport>();
         report->Record.MutableSchema()->CopyFrom(PendingSchemaChange->Schema);
         report->Record.SetOffset(PendingSchemaChange->Offset);
@@ -583,6 +604,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         SchemaReleaseReceived = false;
         WriterHasSchemaBarrier = false;
         SchemaApplied = false;
+        SchemaApplyAcknowledged = false;
         SchemaAdvanceInFlight = false;
         SchemaAdvanceCommitted = false;
         SchemaCompletionReceived = false;
@@ -788,6 +810,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             report->Record.SetCompleted(SchemaApplied && SchemaAdvanceCommitted);
             Send(Parent, report.Release());
         }
+
         if (RecoveredCompletionSchema && RecoveredCompletionReported) {
             ReportRecoveredCompletion();
         }
@@ -874,6 +897,7 @@ private:
     bool SchemaReleaseReceived = false;
     bool WriterHasSchemaBarrier = false;
     bool SchemaApplied = false;
+    bool SchemaApplyAcknowledged = false;
     bool SchemaAdvanceInFlight = false;
     bool SchemaAdvanceCommitted = false;
     bool SchemaCompletionReceived = false;

@@ -837,6 +837,40 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT(chunkTracker.EstimateSpaceColor(owner, 1, &occupancy) >= TColor::PRE_ORANGE);
     }
 
+    Y_UNIT_TEST(TightSpaceColorFloorsHonorIcbCyanPermille) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 10'205,
+            .ExpectedOwnerCount = 1,
+            .SysLogSize = 0,
+            .CommonLogSize = 0,
+            .MaxCommonLogChunks = 0,
+            .SeparateCommonLog = true,
+            .ChunkBaseLimit = 50,
+            .TightSpaceColorFloors = true,
+        };
+        TString errorReason;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
+
+        const TOwner owner = 101;
+        chunkTracker.AddOwner(owner, DynamicVDiskId());
+
+        const i64 hard = chunkTracker.GetTotalHardLimit();
+        UNIT_ASSERT_VALUES_EQUAL(hard, 10'200);
+        const i64 cyanQuota = TColorLimits::MakeChunkLimits(params.ChunkBaseLimit, true)
+            .GetQuotaForColor(TColor::CYAN, hard);
+        UNIT_ASSERT_VALUES_EQUAL(cyanQuota, 510);
+
+        double occupancy = 0;
+        UNIT_ASSERT_VALUES_EQUAL(
+            chunkTracker.EstimateSpaceColor(owner, hard - cyanQuota, &occupancy), TColor::CYAN);
+        UNIT_ASSERT_VALUES_EQUAL(
+            chunkTracker.EstimateSpaceColor(owner, hard - cyanQuota - 1, &occupancy), TColor::GREEN);
+    }
+
 }
 
 #undef UNIT_ASSERT_EQUAL_X

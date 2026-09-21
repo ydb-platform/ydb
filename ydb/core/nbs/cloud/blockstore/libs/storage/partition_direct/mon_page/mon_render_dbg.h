@@ -8,7 +8,10 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 //////////////////////////////////////////////////////////////////////////////////
 
-void RenderDbg(IOutputStream& str, const TMonPageData& data);
+void RenderDbg(
+    IOutputStream& str,
+    const TMonPageData& data,
+    const TVChunkConfigs& vChunkConfigs);
 
 //////////////////////////////////////////////////////////////////////////////////
 

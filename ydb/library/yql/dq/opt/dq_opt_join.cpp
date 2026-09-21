@@ -1374,6 +1374,35 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
         .Seal().Build();
 }
 
+} // namespace
+
+TVector<TCoNameValueTuple> BuildBlockHashJoinSettings(
+    TPositionHandle pos,
+    EJoinAlgoType joinAlgo,
+    ui32 keyCount,
+    TExprContext& ctx,
+    bool enableEqualNulls)
+{
+    TVector<TCoNameValueTuple> joinSettings;
+    if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
+        joinSettings.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build("BuildSide")
+                .Value<TCoAtom>().Build("Left")
+                .Done());
+    }
+    if (enableEqualNulls) {
+        for (ui32 keyIndex = 0; keyIndex < keyCount; ++keyIndex) {
+            joinSettings.push_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name().Build("EqualNulls")
+                    .Value<TCoUint32>()
+                        .Literal().Build(ToString(keyIndex))
+                        .Build()
+                    .Done());
+        }
+    }
+    return joinSettings;
 }
 
 TExprBase DqBuildHashJoin(
@@ -1385,7 +1414,8 @@ TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
-    bool blockHashJoinBuildSideLeft
+    bool blockHashJoinBuildSideLeft,
+    bool enableBlockHashJoinEqualNulls
 ) {
 
     Y_UNUSED(blockHashJoinBuildSideLeft);
@@ -1757,14 +1787,8 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                TVector<TCoNameValueTuple> joinSettings;
-                if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
-                    joinSettings.push_back(
-                        Build<TCoNameValueTuple>(ctx, join.Pos())
-                            .Name().Build("BuildSide")
-                            .Value<TCoAtom>().Build("Left")
-                            .Done());
-                }
+                const auto joinSettings = BuildBlockHashJoinSettings(
+                    join.Pos(), joinAlgo, leftKeys.size(), ctx, enableBlockHashJoinEqualNulls);
 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)

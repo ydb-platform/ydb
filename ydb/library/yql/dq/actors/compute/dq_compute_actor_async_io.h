@@ -324,6 +324,7 @@ public:
         const THashMap<TString, TString>& SecureParams;
         size_t MaxKeysInRequest;
         const bool IsMultiMatches;
+        const TCollectStatsLevel StatsLevel;
     };
 
     struct TSinkArguments {

@@ -504,14 +504,14 @@ public:
     };
     TTablePartitionsFormatSweepState TablePartitionsFormatSweep;
 
-    THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
+    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TOperationContext& context);
     bool ProcessOperationParts(
         const TVector<ISubOperation::TPtr>& parts,
         const TTxId& txId,
         const NKikimrScheme::TEvModifySchemeTransaction& record,
         bool prevProposeUndoSafe,
         TOperation::TPtr& operation,
-        THolder<TProposeResponse>& response,
+        THolder<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
         TOperationContext& context);
     void AbortOperationPropose(const TTxId txId, TOperationContext& context);
 

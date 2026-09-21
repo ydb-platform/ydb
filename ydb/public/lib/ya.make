@@ -10,6 +10,7 @@ RECURSE(
     protobuf
     scheme_types
     stat_visualization
+    udf
     validation
     value
     ydb_cli

@@ -1074,7 +1074,7 @@ public:
     struct THasMsg: std::false_type
     {};
     template<typename T>
-    struct THasMsg<T, std::enable_if_t<std::is_same<decltype(std::declval<T>().msg()), void>::value>>: std::true_type
+    struct THasMsg<T, std::void_t<decltype(std::declval<T>().msg())>>: std::true_type
     {};
     template<typename T>
     static constexpr bool HasMsgV = THasMsg<T>::value;
@@ -1161,6 +1161,7 @@ protected:
         if constexpr (HasMsgV<decltype(ev->Get()->Record)>) {
             if (status != Ydb::StatusIds::SUCCESS) {
                 this->Reply(status, ev->Get()->Record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
+                return;
             }
         }
         if constexpr (IsOperational) {

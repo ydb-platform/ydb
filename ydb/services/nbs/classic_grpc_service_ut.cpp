@@ -1,4 +1,5 @@
-#include <ydb/services/nbs/classic_grpc_service.h>
+#include <ydb/services/nbs/classic_grpc_service_adapter.h>
+#include <ydb/services/nbs/classic_grpc_service_factory.h>
 
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/grpc/service.pb.h>
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
@@ -79,7 +80,7 @@ namespace NKikimr::NGRpcService {
 
                 Server = std::make_unique<NYdbGrpc::TGRpcServer>(options);
                 Server->AddService(
-                    new TClassicNbsGrpcService(std::move(blockStore)));
+                    CreateClassicNbsGrpcService(std::move(blockStore)));
                 Server->Start();
 
                 Channel = grpc::CreateChannel(

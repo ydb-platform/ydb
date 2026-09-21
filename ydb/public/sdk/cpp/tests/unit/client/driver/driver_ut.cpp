@@ -9,6 +9,7 @@
 #include <ydb/public/sdk/cpp/tests/common/fake_trace_provider.h>
 
 #define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/sdk_runtime/runtime.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
@@ -25,8 +26,10 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <future>
+#include <limits>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -188,96 +191,138 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
         std::shared_ptr<TDeferredAuthProvider> Provider_;
     };
 
+    TDriverScope::TPtr CreateDriverScope() {
+        auto& runtime = GetSdkRuntime();
+        auto& resources = runtime.Configure({});
+        return runtime.CreateDriverScope(resources);
+    }
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
     Y_UNIT_TEST(RuntimeIsProcessSingleton) {
         constexpr size_t ThreadCount = 8;
-        std::array<TSdkRuntime*, ThreadCount> runtimes{};
+        std::array<TSdkRuntime::TResources*, ThreadCount> resources{};
         std::array<std::thread, ThreadCount> threads;
+        std::promise<void> start;
+        auto startFuture = start.get_future().share();
 
         for (size_t i = 0; i < ThreadCount; ++i) {
             threads[i] = std::thread([&, i] {
-                runtimes[i] = &GetSdkRuntime();
+                startFuture.wait();
+                resources[i] = &GetSdkRuntime().Configure({});
             });
         }
+        start.set_value();
         for (auto& thread : threads) {
             thread.join();
         }
 
-        for (auto* runtime : runtimes) {
-            UNIT_ASSERT_VALUES_EQUAL(runtime, &GetSdkRuntime());
+        for (auto* resource : resources) {
+            UNIT_ASSERT_VALUES_EQUAL(resource, resources.front());
         }
     }
 
-    Y_UNIT_TEST(DriverScopesCancelIndependently) {
-        NYdbGrpc::TGRpcClientLow client(1);
-        auto scopeA = GetSdkRuntime().CreateDriverScope(client);
-        auto scopeB = GetSdkRuntime().CreateDriverScope(client);
-        auto contextA = scopeA->CreateContext();
-        auto contextB = scopeB->CreateContext();
+    Y_UNIT_TEST(ContextCopiesShareOneAdmission) {
+        auto scope = CreateDriverScope();
+        auto context = scope->TryAdmitContext();
+        auto contextCopy = context;
+        auto stop = scope->RequestStop();
 
-        UNIT_ASSERT(contextA);
-        UNIT_ASSERT(contextB);
-        UNIT_ASSERT(!contextA->IsCancelled());
-        UNIT_ASSERT(!contextB->IsCancelled());
+        UNIT_ASSERT(context);
+        UNIT_ASSERT(contextCopy);
+        UNIT_ASSERT(stop);
 
-        scopeA->Cancel();
+        scope->Close();
+        stop = {};
 
-        UNIT_ASSERT(contextA->IsCancelled());
-        UNIT_ASSERT(!scopeA->CreateContext());
-        auto childContextA = contextA->CreateContext();
-        UNIT_ASSERT(childContextA);
-        UNIT_ASSERT(childContextA->IsCancelled());
-        UNIT_ASSERT(!contextB->IsCancelled());
-        auto secondContextB = scopeB->CreateContext();
-        UNIT_ASSERT(secondContextB);
-
-        childContextA.reset();
-        contextA.reset();
-        contextB.reset();
-        secondContextB.reset();
-        scopeB->Cancel();
-        scopeA->CloseCallbacksAndWait();
-        scopeB->CloseCallbacksAndWait();
-        client.Stop(true);
-    }
-
-    Y_UNIT_TEST(DriverScopeWaitsForCallbacks) {
-        NYdbGrpc::TGRpcClientLow client(1);
-        auto scope = GetSdkRuntime().CreateDriverScope(client);
-        auto guard = scope->GetCallbackGuardFactory()();
-        UNIT_ASSERT(guard->IsEntered());
-
-        std::promise<void> waiterStarted;
-        auto waiterStartedFuture = waiterStarted.get_future();
-        std::atomic_bool waiterFinished = false;
+        std::atomic_bool waitFinished = false;
         std::thread waiter([&] {
-            waiterStarted.set_value();
-            scope->WaitCallbacksDrained();
-            waiterFinished.store(true);
+            scope->Wait();
+            waitFinished.store(true);
         });
 
-        waiterStartedFuture.wait();
-        UNIT_ASSERT(!waiterFinished.load());
-        guard.reset();
+        context = {};
+        UNIT_ASSERT(!waitFinished.load());
+        contextCopy = {};
         waiter.join();
-        UNIT_ASSERT(waiterFinished.load());
-
-        scope->CloseCallbacksAndWait();
-        auto rejectedGuard = scope->GetCallbackGuardFactory()();
-        UNIT_ASSERT(!rejectedGuard->IsEntered());
-
-        rejectedGuard.reset();
-        scope->Cancel();
-        client.Stop(true);
+        UNIT_ASSERT(waitFinished.load());
     }
 
-    Y_UNIT_TEST(DriverScopeCancelCreateRace) {
+    Y_UNIT_TEST(StopWaitsForAdmittedWorkAndClosesAdmission) {
+        auto scope = CreateDriverScope();
+        auto context = scope->TryAdmitContext();
+        auto stop = scope->RequestStop();
+
+        UNIT_ASSERT(context);
+        UNIT_ASSERT(stop);
+        UNIT_ASSERT(scope->TryAdmitContext());
+
+        scope->Close();
+        UNIT_ASSERT(scope->IsClosed());
+        UNIT_ASSERT(!scope->TryAdmitContext());
+        stop = {};
+
+        std::atomic_bool waitFinished = false;
+        std::thread waiter([&] {
+            scope->Wait();
+            waitFinished.store(true);
+        });
+
+        UNIT_ASSERT(!waitFinished.load());
+        context = {};
+        waiter.join();
+        UNIT_ASSERT(waitFinished.load());
+    }
+
+    Y_UNIT_TEST(PassiveContextsDoNotBlockStop) {
+        auto scope = CreateDriverScope();
+        auto context = scope->CreateContext();
+        auto childContext = context->CreateContext();
+        auto stop = scope->RequestStop();
+
+        UNIT_ASSERT(context);
+        UNIT_ASSERT(childContext);
+        UNIT_ASSERT(stop);
+
+        scope->Close();
+        stop = {};
+        scope->Wait();
+
+        UNIT_ASSERT(context->IsCancelled());
+        UNIT_ASSERT(childContext->IsCancelled());
+        auto cancelledChild = context->CreateContext();
+        UNIT_ASSERT(cancelledChild);
+        UNIT_ASSERT(cancelledChild->IsCancelled());
+    }
+
+    Y_UNIT_TEST(DriverScopesStopIndependently) {
+        auto scopeA = CreateDriverScope();
+        auto scopeB = CreateDriverScope();
+        auto contextA = scopeA->CreateContext();
+        auto contextB = scopeB->CreateContext();
+        auto stopA = scopeA->RequestStop();
+
+        scopeA->Close();
+        stopA = {};
+        scopeA->Wait();
+
+        UNIT_ASSERT(contextA->IsCancelled());
+        UNIT_ASSERT(!contextB->IsCancelled());
+        UNIT_ASSERT(!scopeA->TryAdmitContext());
+        UNIT_ASSERT(scopeB->TryAdmitContext());
+
+        auto stopB = scopeB->RequestStop();
+        scopeB->Close();
+        stopB = {};
+        scopeB->Wait();
+    }
+
+    Y_UNIT_TEST(DriverScopeStopCreateContextRace) {
         constexpr size_t Iterations = 32;
+
         for (size_t i = 0; i < Iterations; ++i) {
-            NYdbGrpc::TGRpcClientLow client(1);
-            auto scope = GetSdkRuntime().CreateDriverScope(client);
+            auto scope = CreateDriverScope();
             NYdbGrpc::IQueueClientContextPtr context;
             std::promise<void> start;
             auto startFuture = start.get_future().share();
@@ -286,31 +331,30 @@ Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
                 startFuture.wait();
                 context = scope->CreateContext();
             });
-            std::thread canceller([&] {
+            std::thread stopper([&] {
                 startFuture.wait();
-                scope->Cancel();
+                auto stop = scope->RequestStop();
+                scope->Close();
+                stop = {};
             });
 
             start.set_value();
             creator.join();
-            canceller.join();
+            stopper.join();
 
             if (context) {
                 UNIT_ASSERT(context->IsCancelled());
             }
             UNIT_ASSERT(!scope->CreateContext());
-
-            context.reset();
-            scope->CloseCallbacksAndWait();
-            client.Stop(true);
+            scope->Wait();
         }
     }
 
-    Y_UNIT_TEST(DriverScopeCancelCreateChildRace) {
+    Y_UNIT_TEST(DriverScopeStopCreateChildRace) {
         constexpr size_t Iterations = 32;
+
         for (size_t i = 0; i < Iterations; ++i) {
-            NYdbGrpc::TGRpcClientLow client(1);
-            auto scope = GetSdkRuntime().CreateDriverScope(client);
+            auto scope = CreateDriverScope();
             auto parentContext = scope->CreateContext();
             NYdbGrpc::IQueueClientContextPtr childContext;
             std::promise<void> start;
@@ -320,24 +364,209 @@ Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
                 startFuture.wait();
                 childContext = parentContext->CreateContext();
             });
-            std::thread canceller([&] {
+            std::thread stopper([&] {
                 startFuture.wait();
-                scope->Cancel();
+                auto stop = scope->RequestStop();
+                scope->Close();
+                stop = {};
             });
 
             start.set_value();
             creator.join();
-            canceller.join();
+            stopper.join();
 
             UNIT_ASSERT(childContext);
             UNIT_ASSERT(childContext->IsCancelled());
             UNIT_ASSERT(!scope->CreateContext());
-
-            childContext.reset();
-            parentContext.reset();
-            scope->CloseCallbacksAndWait();
-            client.Stop(true);
+            scope->Wait();
         }
+    }
+
+    Y_UNIT_TEST(OnlyOneConcurrentStopRequestWins) {
+        constexpr size_t ThreadCount = 8;
+        auto scope = CreateDriverScope();
+        std::array<std::thread, ThreadCount> threads;
+        std::atomic_size_t winners = 0;
+        std::promise<void> start;
+        auto startFuture = start.get_future().share();
+
+        for (auto& thread : threads) {
+            thread = std::thread([&] {
+                startFuture.wait();
+                if (scope->RequestStop()) {
+                    ++winners;
+                }
+            });
+        }
+        start.set_value();
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(winners.load(), 1);
+        scope->Close();
+        scope->Wait();
+    }
+
+    Y_UNIT_TEST(RetireRacesLastOperationRelease) {
+        struct TTrackedObject {
+            explicit TTrackedObject(std::atomic_size_t& destructions)
+                : Destructions(destructions)
+            {}
+
+            ~TTrackedObject() {
+                ++Destructions;
+            }
+
+            std::atomic_size_t& Destructions;
+        };
+
+        auto scope = CreateDriverScope();
+        auto context = scope->TryAdmitContext();
+        auto stop = scope->RequestStop();
+        scope->Close();
+        stop = {};
+
+        std::atomic_size_t destructions = 0;
+        std::promise<void> start;
+        auto startFuture = start.get_future().share();
+        std::thread releaser([context = std::move(context), startFuture]() mutable {
+            startFuture.wait();
+            context = {};
+        });
+        std::thread retirer([scope, &destructions, startFuture] {
+            startFuture.wait();
+            scope->Retire(new TTrackedObject(destructions));
+        });
+
+        start.set_value();
+        releaser.join();
+        retirer.join();
+        UNIT_ASSERT_VALUES_EQUAL(destructions.load(), 1);
+    }
+
+    Y_UNIT_TEST(ConcurrentStopWaitsForRootCancellation) {
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:1")
+            .SetDiscoveryMode(EDiscoveryMode::Off));
+        auto connections = CreateInternalInterface(driver);
+        auto context = connections->CreateContext();
+        UNIT_ASSERT(context);
+
+        std::promise<void> cancelEntered;
+        auto cancelEnteredFuture = cancelEntered.get_future();
+        std::promise<void> releaseCancel;
+        auto releaseCancelFuture = releaseCancel.get_future().share();
+        context->SubscribeCancel([&] {
+            cancelEntered.set_value();
+            releaseCancelFuture.wait();
+        });
+
+        std::thread firstStop([&] {
+            driver.Stop(false);
+        });
+        cancelEnteredFuture.wait();
+
+        std::atomic_bool secondStopFinished = false;
+        std::thread secondStop([&] {
+            driver.Stop(true);
+            secondStopFinished.store(true);
+        });
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        const bool returnedBeforeCancellation = secondStopFinished.load();
+        releaseCancel.set_value();
+        firstStop.join();
+        secondStop.join();
+
+        UNIT_ASSERT(!returnedBeforeCancellation);
+        UNIT_ASSERT(secondStopFinished.load());
+    }
+
+    Y_UNIT_TEST(RuntimeConfigurationIsSticky) {
+        auto& configured = GetSdkRuntime().Configure({});
+        TSdkRuntime::TConfig config{
+            configured.NetworkThreads,
+            configured.ClientThreads,
+            configured.MaxQueueSize,
+            {},
+        };
+        auto& resources = GetSdkRuntime().Configure(config);
+
+        UNIT_ASSERT_VALUES_EQUAL(&GetSdkRuntime().Configure(config), &resources);
+
+        auto incompatible = config;
+        ++incompatible.NetworkThreads;
+        UNIT_ASSERT_EXCEPTION(
+            GetSdkRuntime().Configure(std::move(incompatible)),
+            TContractViolation);
+    }
+
+    Y_UNIT_TEST(DriverConfigurationAttachesToRuntime) {
+        auto& runtime = GetSdkRuntime();
+        auto& configured = runtime.Configure({});
+        TSdkRuntime::TConfig config{
+            configured.NetworkThreads + 1,
+            configured.ClientThreads + 1,
+            configured.MaxQueueSize + 1,
+            {},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(&runtime.GetOrCreateForDriver(config), &configured);
+
+        config.Executor = configured.Executor;
+        UNIT_ASSERT_VALUES_EQUAL(&runtime.GetOrCreateForDriver(config), &configured);
+
+        config.Executor = CreateThreadPoolExecutor(1);
+        UNIT_ASSERT_EXCEPTION(
+            runtime.GetOrCreateForDriver(std::move(config)),
+            TContractViolation);
+    }
+
+    Y_UNIT_TEST(DriversWithDifferentDiscoveryQueueLimitsShareRuntime) {
+        auto fqDriver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:1")
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetMaxQueuedRequests(std::numeric_limits<i64>::max()));
+        auto defaultDriver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:1")
+            .SetDiscoveryMode(EDiscoveryMode::Off));
+
+        fqDriver.Stop(true);
+        defaultDriver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ResponseCallbackMarkerIsProcessWide) {
+        auto scopeA = CreateDriverScope();
+        auto scopeB = CreateDriverScope();
+        bool markerVisibleFromOtherScope = false;
+
+        scopeA->RunCallback([&] {
+            markerVisibleFromOtherScope = scopeB->IsCurrentThread();
+        });
+
+        UNIT_ASSERT(markerVisibleFromOtherScope);
+        UNIT_ASSERT(!scopeA->IsCurrentThread());
+    }
+
+    Y_UNIT_TEST(StopFromCompletionQueueCallbackDoesNotWaitForItself) {
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint("localhost:1")
+            .SetDiscoveryMode(EDiscoveryMode::Off));
+        auto callbackFinished = std::make_shared<std::promise<void>>();
+        auto callbackFinishedFuture = callbackFinished->get_future();
+
+        CreateInternalInterface(driver)->ScheduleCallback(
+            TDuration::Zero(),
+            [driver, callbackFinished](bool) mutable {
+                driver.Stop(true);
+                callbackFinished->set_value();
+            });
+
+        UNIT_ASSERT(
+            callbackFinishedFuture.wait_for(std::chrono::seconds(10)) ==
+            std::future_status::ready);
+        driver.Stop(true);
     }
 }
 

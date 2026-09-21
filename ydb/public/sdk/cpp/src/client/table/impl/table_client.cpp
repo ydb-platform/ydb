@@ -81,11 +81,7 @@ std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryAt
 
 TTableClient::TImpl::~TImpl() {
     if (Connections_->GetDrainOnDtors()) {
-        const bool waitForDrain = !TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback();
-        auto drainFuture = Drain();
-        if (waitForDrain) {
-            drainFuture.Wait(DRAIN_TIMEOUT);
-        }
+        Drain();
     }
 }
 

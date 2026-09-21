@@ -41,7 +41,9 @@ analytics.send(conclusion="success", properties={"tokens": 12})
 ```bash
 python3 .github/scripts/utils/analytics/ci_metrics.py start my_step \
   --source my_wf --attr cache_mode=dist_cache --runner
-python3 .github/scripts/utils/analytics/ci_metrics.py send --conclusion success --usage
+# ... work ...
+python3 .github/scripts/utils/analytics/ci_metrics.py end my_step --conclusion success --usage
+python3 .github/scripts/utils/analytics/ci_metrics.py send
 ```
 
 `--runner` / `--usage` — только в обёртке (инвентарь хоста и свежий usage). Nightly `ydbd_cached_build` и clean `ydbd_clean_build` передают `--runner` на `start` и `--usage` на `end`.

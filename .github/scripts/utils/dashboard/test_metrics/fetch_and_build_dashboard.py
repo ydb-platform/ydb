@@ -22,10 +22,7 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote, urljoin, urlparse
 
-if sys.version_info >= (3, 9):
-    from urllib.request import Request, urlopen
-else:
-    from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen
 
 # Try to use certifi for HTTPS on older Pythons; optional
 try:
@@ -310,10 +307,6 @@ def main() -> None:
     for try_n, try_base in try_dirs:
         try_name = f"try_{try_n}"
         try_index_url = urljoin(try_base + "/", "index.html")
-        if args.dry_run:
-            print(f"\nWould process {try_name}: {try_index_url}")
-            continue
-
         try:
             try_html = fetch_text(try_index_url)
         except Exception as e:
@@ -366,8 +359,7 @@ def main() -> None:
             continue
         print(f"Done: {out_html}")
 
-    if not args.dry_run:
-        print(f"\nOutputs under: {out_base}")
+    print(f"\nOutputs under: {out_base}")
 
 
 if __name__ == "__main__":

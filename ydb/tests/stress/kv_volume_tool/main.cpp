@@ -1041,8 +1041,6 @@ struct TOptions {
     bool Verbose = false;
 };
 
-// Pin each worker to one tablet so slow S3 PUTs cannot convoy every partition.
-// Extra threads (threads > partitions) pipeline a second RPC into the same tablet.
 ui64 StickyPartitionId(ui32 threadIndex, ui32 partitionCount) {
     return threadIndex % partitionCount;
 }

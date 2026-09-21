@@ -222,10 +222,10 @@ TExecutor::TExecutor(
 
 TExecutor::~TExecutor() {
     while (!StickyPreloadsByIndex.empty()) {
-        DropBTreePreloadState(StickyPreloadsByIndex.begin()->second);
+        DropBTreePreloadState(StickyPreloadsByIndex.begin()->second.Get());
     }
     while (!TryKeepInMemoryPreloadsByIndex.empty()) {
-        DropBTreePreloadState(TryKeepInMemoryPreloadsByIndex.begin()->second);
+        DropBTreePreloadState(TryKeepInMemoryPreloadsByIndex.begin()->second.Get());
     }
 }
 
@@ -918,10 +918,10 @@ void TExecutor::UpdateCachePagesForDatabase(bool pendingOnly) {
 
 TExecutorCaches TExecutor::CleanupState() {
     while (!StickyPreloadsByIndex.empty()) {
-        DropBTreePreloadState(StickyPreloadsByIndex.begin()->second);
+        DropBTreePreloadState(StickyPreloadsByIndex.begin()->second.Get());
     }
     while (!TryKeepInMemoryPreloadsByIndex.empty()) {
-        DropBTreePreloadState(TryKeepInMemoryPreloadsByIndex.begin()->second);
+        DropBTreePreloadState(TryKeepInMemoryPreloadsByIndex.begin()->second.Get());
     }
 
     TExecutorCaches caches;
@@ -1656,7 +1656,7 @@ void TExecutor::RequestTryKeepInMemoryPagesForPartStore(const NTable::TPartView&
     auto indexCollectionId = partStore->PageCollections[0]->Id;
     if (auto it = TryKeepInMemoryPreloadsByIndex.find(indexCollectionId);
             it != TryKeepInMemoryPreloadsByIndex.end()) {
-        DropBTreePreloadState(it->second);
+        DropBTreePreloadState(it->second.Get());
     }
 
     if (!partStore->IndexPages.HasBTree()) {
@@ -1705,7 +1705,7 @@ void TExecutor::StartBTreePreload(const NTable::TPartStore& partStore,
     auto indexCollectionId = partStore.PageCollections[0]->Id;
     auto& states = sticky ? StickyPreloadsByIndex : TryKeepInMemoryPreloadsByIndex;
     if (auto it = states.find(indexCollectionId); it != states.end()) {
-        DropBTreePreloadState(it->second);
+        DropBTreePreloadState(it->second.Get());
     }
 
     THolder<TBTreePreloadState> state(new TBTreePreloadState);
@@ -1724,22 +1724,29 @@ void TExecutor::StartBTreePreload(const NTable::TPartStore& partStore,
         state->Walkers.emplace_back(std::move(walker));
         state->DataGroupIds.emplace_back(groupId);
         state->SkipDataPages.emplace_back(skipDataPages);
-
-        // For non-main groups, replies on the data collection must re-drive this state
-        if (groupId.Index != 0) {
-            auto& preload = sticky
-                ? partStore.PageCollections[groupId.Index]->StickyPreloadByIndex
-                : partStore.PageCollections[groupId.Index]->TryKeepInMemoryPreloadByIndex;
-            preload = state.Get();
-        }
     }
 
-    auto* rawState = state.Release();
-    states[indexCollectionId] = rawState;
+    // From this point the registry owns the state.
+    TBTreePreloadState* rawState = state.Get();
+    states[indexCollectionId] = std::move(state);
+
+    // Now it is safe to publish non-owning back-references: if anything above
+    // throws, the local THolder cleans the half-built state up and no page
+    // collection is left dangling.
     auto& indexPreload = sticky
         ? partStore.PageCollections[0]->StickyPreloadByIndex
         : partStore.PageCollections[0]->TryKeepInMemoryPreloadByIndex;
     indexPreload = rawState;
+
+    // For non-main groups, replies on the data collection must re-drive this state
+    for (const auto& dataGroupId : rawState->DataGroupIds) {
+        if (dataGroupId.Index != 0) {
+            auto& preload = sticky
+                ? partStore.PageCollections[dataGroupId.Index]->StickyPreloadByIndex
+                : partStore.PageCollections[dataGroupId.Index]->TryKeepInMemoryPreloadByIndex;
+            preload = rawState;
+        }
+    }
 
     // Drive the first round now (steps every walker).
     DriveBTreePreload(rawState);
@@ -1794,7 +1801,11 @@ void TExecutor::DropBTreePreloadState(TBTreePreloadState* state) {
     if (!state) return;
 
     auto& states = state->Sticky ? StickyPreloadsByIndex : TryKeepInMemoryPreloadsByIndex;
-    states.erase(state->IndexCollectionId);
+    auto it = states.find(state->IndexCollectionId);
+    Y_DEBUG_ABORT_UNLESS(it != states.end() && it->second.Get() == state, "B-tree preload registry is out of sync");
+    if (it == states.end() || it->second.Get() != state) {
+        return;
+    }
 
     auto clearPreload = [&](NTabletFlatExecutor::TPrivatePageCache::TPageCollection& pageCollection) {
         auto& preload = state->Sticky
@@ -1812,7 +1823,7 @@ void TExecutor::DropBTreePreloadState(TBTreePreloadState* state) {
         }
     }
 
-    delete state;
+    states.erase(it); // THolder releases the state
 }
 
 THashMap<NTable::TTag, ECacheMode> TExecutor::GetCacheModes(ui32 tableId) {

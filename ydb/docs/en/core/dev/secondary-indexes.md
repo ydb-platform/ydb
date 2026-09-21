@@ -8,7 +8,104 @@ To use similar capabilities for any fields or combinations of fields in a table,
 
 In transactional systems, using indexes helps reduce or eliminate performance degradation and increased query execution costs as the volume of stored data grows.
 
-This article describes the basic operations for working with secondary indexes and provides links to detailed materials for each operation. Information about different types of secondary indexes and their features is in the Secondary indexes article in the "Concepts" section.
+This article describes the basic operations for working with secondary indexes and provides links to detailed materials for each operation. Information about different types of secondary indexes and their features is in the [Secondary indexes](../concepts/query_execution/secondary_indexes.md) article in the "Concepts" section.
+
+## Speeding up queries with secondary indexes {#speeding-up-queries}
+
+When running queries on fields that are not part of the primary key, {{ ydb-short-name }} has to scan the entire table (FullScan). The system must read all table rows and check the condition for each of them. As data volume grows, FullScan becomes extremely slow and resource-intensive, which leads to:
+
+- High query latency (queries may take seconds or minutes).
+- Excessive CPU and memory usage.
+- Reduced system throughput.
+- Poor user experience.
+
+**Recommendations:**
+
+- Create indexes on columns often used in `WHERE`, `JOIN`, and `ORDER BY`.
+- Consider the balance between read performance and index maintenance cost (indexes slow down writes).
+- Use composite indexes for queries with several conditions.
+- Consider a [covering index](../concepts/query_execution/secondary_indexes.md#covering) for queries that read only indexed columns.
+
+{% list tabs %}
+
+- YQL
+
+  {% cut "Bad example" %}
+
+  ```yql
+  -- Bad example: query with no index on email
+  -- YDB has to FullScan the entire table
+  CREATE TABLE users (
+      id Uint64,
+      email Utf8,
+      name Utf8,
+      PRIMARY KEY (id)
+  );
+
+  SELECT * FROM users WHERE email = 'user@example.com';
+  -- Very slow on large data volumes
+  ```
+
+  {% endcut %}
+
+  {% cut "Good example" %}
+
+  ```yql
+  -- Good example: using a global index
+  CREATE TABLE users (
+      id Uint64,
+      email Utf8,
+      name Utf8,
+      PRIMARY KEY (id),
+      INDEX idx_email GLOBAL ON (email)
+  );
+
+  -- The query uses the index automatically
+  SELECT * FROM users WHERE email = 'user@example.com';
+  ```
+
+  {% endcut %}
+
+- Go
+
+  {% cut "Bad example" %}
+
+  ```go
+  // Bad example: query with no index
+  // FullScan on large data volumes
+  result, err := session.Execute(ctx, `
+      SELECT * FROM users WHERE email = $email
+  `, table.NewQueryParameters(
+      table.ValueParam("$email", types.UTF8Value("user@example.com")),
+  ))
+  // Slow on large tables!
+  ```
+
+  {% endcut %}
+
+  {% cut "Good example" %}
+
+  ```go
+  // Good example: query using an index
+  // Create the index first:
+  // CREATE TABLE index_users_by_email (
+  //     email Utf8,
+  //     id Uint64,
+  //     PRIMARY KEY (email)
+  // );
+
+  result, err := session.Execute(ctx, `
+      SELECT u.* FROM users AS u VIEW idx_users_by_email
+      WHERE email = $email
+  `, table.NewQueryParameters(
+      table.ValueParam("$email", types.UTF8Value("user@example.com")),
+  ))
+  // Fast thanks to index usage
+  ```
+
+  {% endcut %}
+
+{% endlist %}
 
 ## Creating secondary indexes {#create}
 

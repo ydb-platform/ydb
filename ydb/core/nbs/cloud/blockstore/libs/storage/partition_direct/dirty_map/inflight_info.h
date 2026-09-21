@@ -130,6 +130,13 @@ public:
         // The data is erased from the PBuffers.
         // Read from DDisk.
         PBufferErased,
+
+        // The record is not tracked as data anymore: either the write got no
+        // quorum and the client was answered with an error, or the data is
+        // already on DDisk and erased. The only thing left is to erase the
+        // copies from the PBuffers of the hosts that did write them.
+        // Read from DDisk.
+        PBufferOrphaned,
     };
 
     TInflightInfo(
@@ -150,6 +157,19 @@ public:
     // Transitions a pending write (see the byteCount-only constructor) to the
     // written state once a quorum of PBuffers confirmed it.
     void OnWritten(THostMask writeRequested, THostMask writeConfirmed);
+
+    // Transitions a pending write to the orphaned state: the quorum was not
+    // reached and the client got an error, but the copies that did land have
+    // to be erased.
+    void OnWriteWithoutQuorum(
+        THostMask writeRequested,
+        THostMask writeConfirmed,
+        THostMask writeFailed);
+
+    // An answer that came after the client had been replied to. A copy that
+    // landed has to be erased again even if an erase for this host has already
+    // been confirmed.
+    void OnBelatedWrite(THostIndex host, bool completed);
 
     [[nodiscard]] EState GetState() const;
 
@@ -177,6 +197,11 @@ public:
 
     // Update state according to the changed configuration.
     void UpdateHosts(THostMask added, THostMask removed, THostMask disabled);
+
+    // The slot of this host is marked removed in the local database: the host
+    // is out of the group and its copies are invisible to the restore, so the
+    // record stops waiting for it.
+    void OnHostSlotRemoved(THostIndex host);
 
     // Sets a lock that prohibits erasing the PBuffer.
     void LockPBuffer();
@@ -206,15 +231,20 @@ private:
 
     void MaybeAdvanceToFlushed();
     void MaybeAdvanceToErased();
+    void MaybeSettleOrphan();
     void MaybeQueryErase();
+
+    // True when every host that was asked to write has answered and every
+    // copy has been erased, so the record can leave the map.
+    [[nodiscard]] bool CanForget() const;
 
     [[nodiscard]] TPBufferKey GetPBufferKey() const;
 
-    // EState has 7 values, so 3 bits are enough to store it. The rest of the
+    // EState has 8 values, so 3 bits are enough to store it. The rest of the
     // ui32 word is given to PBuffersLockCount to maximize its capacity.
     static constexpr ui32 StateBits = 3;
     static_assert(
-        static_cast<ui32>(EState::PBufferErased) < (1U << StateBits),
+        static_cast<ui32>(EState::PBufferOrphaned) < (1U << StateBits),
         "EState values do not fit into the State bit width");
 
     IReadyQueue* ReadyQueue = nullptr;
@@ -226,8 +256,10 @@ private:
 
     THostMask DesiredDDisks;
     THostMask Disabled;
+    THostMask DeadSlots;
     THostMask WriteRequested;
     THostMask WriteConfirmed;
+    THostMask WriteFailed;
     THostMask FlushRequested;
     THostMask FlushConfirmed;
     THostMask EraseRequested;

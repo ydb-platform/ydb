@@ -72,7 +72,8 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
             MakeKey(100),
             TBlockRange16::WithLength(20, 10),
             VChunkConfig.GetDesiredPBuffers(),
-            VChunkConfig.GetDesiredPBuffers());
+            VChunkConfig.GetDesiredPBuffers(),
+            THostMask{});
         auto readHint = DirtyMap->MakeReadHint(range);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
@@ -141,7 +142,8 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
             MakeKey(100),
             TBlockRange16::WithLength(20, 10),
             VChunkConfig.GetDesiredPBuffers(),
-            VChunkConfig.GetDesiredPBuffers());
+            VChunkConfig.GetDesiredPBuffers(),
+            THostMask{});
 
         DirtyMap->RegisterInflightWrite(
             MakeKey(200),
@@ -150,7 +152,8 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
             MakeKey(200),
             TBlockRange16::WithLength(40, 10),
             VChunkConfig.GetDesiredPBuffers(),
-            VChunkConfig.GetDesiredPBuffers());
+            VChunkConfig.GetDesiredPBuffers(),
+            THostMask{});
 
         const TBlockRange16 range = TBlockRange16::WithLength(10, 100);
         ExpectedRange = range;

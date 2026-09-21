@@ -417,6 +417,9 @@ void TPDisk::Stop() {
         TRequestBase::AbortDelete(req, PCtx->ActorSystem);
     }
 
+    for (auto& req : JointChunkForgets) {
+        TRequestBase::AbortDelete(req.release(), PCtx->ActorSystem);
+    }
     JointChunkForgets.clear();
     for (auto& req : FastOperationsQueue) {
         TRequestBase::AbortDelete(req.release(), PCtx->ActorSystem);
@@ -1569,7 +1572,7 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
 
 }
 
-bool TPDisk::ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason) {
+bool TPDisk::ValidateForgetChunk(ui32 chunkIdx, TOwner owner, bool isDDisk, TStringStream& outErrorReason) {
     TGuard<TMutex> guard(StateMutex);
     if (chunkIdx >= ChunkState.size()) {
         outErrorReason << PCtx->PDiskLogPrefix
@@ -1602,8 +1605,17 @@ bool TPDisk::ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
             << "Can't forget chunkIdx# " << chunkIdx
             << " in CommitState# " << ChunkState[chunkIdx].CommitState
             << " ownerId# " << owner << " Marker# BPD91";
-        YDB_LOG_P_LOG(PRI_ERROR, outErrorReason.Str(),
-            {"marker", "BPD91"});
+        const auto state = ChunkState[chunkIdx].CommitState;
+        const bool transitional = state == TChunkState::DATA_ON_QUARANTINE
+            || state == TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS
+            || state == TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS
+            || state == TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE
+            || state == TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE;
+        if (isDDisk && transitional) {
+            YDB_LOG_P_LOG(PRI_WARN, outErrorReason.Str(), {"marker", "BPD91"});
+        } else {
+            YDB_LOG_P_LOG(PRI_ERROR, outErrorReason.Str(), {"marker", "BPD91"});
+        }
         return false;
     }
     return true;
@@ -1613,12 +1625,26 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
     TStringStream errorReason;
     TGuard<TMutex> guard(StateMutex);
 
+    if (evChunkForget.IsDDisk) {
+        // Preprocessing can precede owner reinitialization. Revalidate at execution so
+        // a delayed forget from an older incarnation cannot free current reservations.
+        auto status = CheckOwnerAndRound(&evChunkForget, errorReason);
+        if (!IsOwnerUser(evChunkForget.Owner)) {
+            status = NKikimrProto::INVALID_OWNER;
+        }
+        if (status != NKikimrProto::OK) {
+            PCtx->ActorSystem->Send(evChunkForget.Sender,
+                new NPDisk::TEvChunkForgetResult(status, 0, errorReason.Str()), 0, evChunkForget.Cookie);
+            Mon.ChunkForget.CountResponse();
+            return;
+        }
+    }
     THolder<NPDisk::TEvChunkForgetResult> result;
 
     bool isOk = true;
 
     for (ui32 chunkIdx : evChunkForget.ForgetChunks) {
-        if (!ValidateForgetChunk(chunkIdx, evChunkForget.Owner, errorReason)) {
+        if (!ValidateForgetChunk(chunkIdx, evChunkForget.Owner, evChunkForget.IsDDisk, errorReason)) {
             result = MakeHolder<NPDisk::TEvChunkForgetResult>(NKikimrProto::ERROR,
                     NotEnoughDiskSpaceStatusFlags(evChunkForget.Owner, evChunkForget.OwnerGroupType),
                     errorReason.Str());
@@ -1725,7 +1751,7 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
     result->Headroom = Keeper.GetSpaceHeadroom(evChunkForget.Owner);
 
     guard.Release();
-    PCtx->ActorSystem->Send(evChunkForget.Sender, result.Release());
+    PCtx->ActorSystem->Send(evChunkForget.Sender, result.Release(), 0, evChunkForget.IsDDisk ? evChunkForget.Cookie : 0);
     Mon.ChunkForget.CountResponse();
 }
 
@@ -3738,7 +3764,15 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 errorPrefix() << "incorrect commit state";
             } else {
                 NWilson::TTraceId traceId = ev.Span.GetTraceId();
-                auto completion = std::make_unique<TCompletionChunkReadRaw>(ev.Size, ev.Sender, ev.Cookie, std::move(ev.Span));
+                auto inFlight = OwnerData[ev.Owner].InFlight;
+                ++state.OperationsInProgress;
+                ++inFlight->ChunkReads;
+                auto onDestroy = [&state, inFlight = std::move(inFlight)] {
+                    --state.OperationsInProgress;
+                    --inFlight->ChunkReads;
+                };
+                auto completion = std::make_unique<TCompletionChunkReadRaw>(ev.Size, ev.Sender, ev.Cookie,
+                    std::move(onDestroy), std::move(ev.Span));
                 const ui64 diskOffset = Format.Offset(ev.ChunkIdx, 0, ev.Offset);
                 void *buffer = completion->GetBuffer();
                 BlockDevice->PreadAsync(buffer, ev.Size, diskOffset, completion.release(), ev.ReqId, &traceId);
@@ -3790,7 +3824,15 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 NWilson::TTraceId traceId = ev.Span.GetTraceId();
                 const ui64 diskOffset = Format.Offset(ev.ChunkIdx, 0, ev.Offset);
 
-                auto completion = std::make_unique<TCompletionChunkWriteRaw>(std::move(buffer), ev.Sender, ev.Cookie, std::move(ev.Span));
+                auto inFlight = OwnerData[ev.Owner].InFlight;
+                ++state.OperationsInProgress;
+                ++inFlight->ChunkWrites;
+                auto onDestroy = [&state, inFlight = std::move(inFlight)] {
+                    --state.OperationsInProgress;
+                    --inFlight->ChunkWrites;
+                };
+                auto completion = std::make_unique<TCompletionChunkWriteRaw>(std::move(buffer), ev.Sender, ev.Cookie,
+                    std::move(onDestroy), std::move(ev.Span));
                 BlockDevice->PwriteAsync(span.data(), span.size(), diskOffset, completion.release(), ev.ReqId, &traceId);
                 delete request;
                 return false;
@@ -4665,7 +4707,8 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
             PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkUnlockResult(NKikimrProto::CORRUPTED, 0, errorReason));
             return true;
         case ERequestType::RequestChunkForget:
-            PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, errorReason));
+            PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, errorReason),
+                0, static_cast<TChunkForget*>(request)->IsDDisk ? request->Cookie : 0);
             return true;
         case ERequestType::RequestHarakiri:
             PCtx->ActorSystem->Send(sender, new NPDisk::TEvHarakiriResult(NKikimrProto::CORRUPTED, 0, errorReason));

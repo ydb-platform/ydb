@@ -679,9 +679,6 @@ namespace NActors {
             if (logicalState == EThreadState::None) {
                 if (isWaker) {
                     wakerState = EThreadState::None;
-                    if (SharedPool && budget > 0) {
-                        --budget;
-                    }
                     continue;
                 }
                 EThreadState expected = state;
@@ -698,9 +695,6 @@ namespace NActors {
                     : EThreadState::None;
                 if (isWaker) {
                     wakerState = targetState;
-                    if (SharedPool && targetState == EThreadState::None) {
-                        --budget;
-                    }
                     if (targetState == EThreadState::Sleep) {
                         Waker->SleepingStack.push_back(workerId);
                         if (consumeReduction) {
@@ -767,9 +761,6 @@ namespace NActors {
                 --Waker->TakenTokensToSleep;
             }
             if (targetState == EThreadState::None) {
-                if (isWaker && SharedPool && budget > 0) {
-                    --budget;
-                }
                 if (!isWaker) {
                     --budget;
                     Threads[workerId].WaitingPad.Unpark();
@@ -801,9 +792,6 @@ namespace NActors {
                         continue;
                     }
                     wakerState = EThreadState::None;
-                    if (SharedPool) {
-                        --budget;
-                    }
                 } else {
                     EThreadState state = Threads[workerId].GetState<EThreadState>();
                     const EThreadState logicalState = getLogicalState(state);

@@ -2058,7 +2058,7 @@ private:
                 state->StreamingTopicsReadByDefault = true;
 
                 if (Config->FeatureFlags.GetEnableExactlyOnceTopicsWriting()) {
-                    state->DeferredPublicationExtIdPrefix = TStringBuilder() << "__ydb_streaming:" << requestContext->CheckpointId;
+                    state->DeferredPublicationExtIdPrefix = TStringBuilder() << "__ydb_streaming:" << requestContext->StreamingQueryPath << ":" << requestContext->CurrentExecutionId;
                 }
             }
 

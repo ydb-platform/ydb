@@ -888,7 +888,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto& checkpointId = GetStreamingQueryCheckpointId(queryName);
 
         // Write and read first message
-        const TString publicationPrefix = TStringBuilder() << "__ydb_streaming:" << checkpointId << ':';
+        const TString publicationPrefix = TStringBuilder() << "__ydb_streaming:/Root/" << queryName << ':';
         std::optional<std::string> writerIdentity;
         i64 publicationGeneration = 0;
         {

@@ -1400,6 +1400,10 @@ public:
         return Ctx_->GetPeer();
     }
 
+    TString GetAuthority() const override {
+        return Ctx_->GetAuthority();
+    }
+
     bool SslServer() const {
         return Ctx_->SslServer();
     }

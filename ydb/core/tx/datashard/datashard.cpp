@@ -872,7 +872,7 @@ void TDataShard::SendResult(const TActorContext &ctx,
 
 void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result,
         const TActorId& target, ui64 step, ui64 txId,
-        NWilson::TTraceId traceId)
+        NWilson::TTraceId traceId, ui64 cookie)
 {
     Y_ENSURE(txId == result->Record.GetTxId(), " Result for txId " << txId << " has txId " << result->Record.GetTxId());
 
@@ -895,7 +895,7 @@ void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEven
         {"target", target});
 
     LWTRACK(ProposeTransactionSendResult, result->GetOrbit());
-    ctx.Send(target, result.release(), 0, 0, span.GetTraceId());
+    ctx.Send(target, result.release(), 0, cookie, span.GetTraceId());
 }
 
 void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const {
@@ -3294,7 +3294,7 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
             SetOverloadSubscribed(overloadSubscribe, ev->Recipient, ev->Sender, rejectReasons, result->Record);
         }
 
-        ctx.Send(ev->Sender, result.release());
+        ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
         IncCounter(COUNTER_WRITE_OVERLOADED);
         IncCounter(COUNTER_WRITE_COMPLETE);
         return true;

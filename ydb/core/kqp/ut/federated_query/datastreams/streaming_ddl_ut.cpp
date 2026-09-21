@@ -4212,10 +4212,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     class TConsumerRewindFixture : public TStreamingWithSchemaSecretsTestFixture {
     public:
-        void InitConsumerRewind(bool sharedReading) {
+        void InitConsumerRewind(bool sharedReading, bool enableReadFrom = true) {
             UsesSharedReading = sharedReading;
             auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
             featureFlags->SetEnableStreamingQueryDisposition(true);
+            featureFlags->SetEnableStreamingQueryReadFrom(enableReadFrom);
             featureFlags->SetEnableSharedReadingInStreamingQueries(true);
             ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
             CreateTopic("rewindInput");
@@ -4314,6 +4315,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     private:
         bool UsesSharedReading = false;
     };
+
+    Y_UNIT_TEST_TWIN_F(StreamingQueryConsumerRewindDisabled, SharedReading, TConsumerRewindFixture) {
+        InitConsumerRewind(SharedReading, /* enableReadFrom */ false);
+        WriteTopicMessage("rewindInput", "committed");
+        CommitConsumer(1);
+
+        CreateConsumerQuery("OLDEST");
+        CheckReadingMode(SharedReading);
+        UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 1);
+        WriteTopicMessage("rewindInput", "live");
+        ReadTopicMessages("rewindOutput", {"live"});
+        StopConsumerQuery();
+        EnsureTopicEndOffset("rewindOutput", 1);
+    }
 
     Y_UNIT_TEST_TWIN_F(StreamingQueryConsumerRewindDispositions, SharedReading, TConsumerRewindFixture) {
         InitConsumerRewind(SharedReading);

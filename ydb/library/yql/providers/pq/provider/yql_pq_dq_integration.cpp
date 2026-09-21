@@ -620,7 +620,8 @@ public:
                     srcDesc.SetUsedPartitionPredicate(true);
                 }
 
-                const bool allowConsumerRewindForDisposition = State_->Disposition.GetDispositionCase() != NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET;
+                const bool allowConsumerRewindForDisposition = State_->EnableConsumerRewindForDisposition
+                    && State_->Disposition.GetDispositionCase() != NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET;
                 srcDesc.SetAllowConsumerRewindForDisposition(allowConsumerRewindForDisposition);
 
                 if (!streamingTopicRead && !allowConsumerRewindForDisposition) {
@@ -649,7 +650,7 @@ public:
                     }
                 }
 
-                if (!srcDesc.GetConsumerName().empty()) {
+                if (allowConsumerRewindForDisposition && !srcDesc.GetConsumerName().empty()) {
                     if (!commonSettings) {
                         commonSettings.emplace();
                     }

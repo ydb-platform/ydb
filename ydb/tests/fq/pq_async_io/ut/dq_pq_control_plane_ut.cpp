@@ -214,7 +214,7 @@ protected:
 // Exercises the shared startup implementation without a data-plane session.
 class TReader final : public TActorBootstrapped<TReader>, public NInternal::TDqPqReadActorBase {
 public:
-    TReader(TActorId compute, TActorId controlPlane, ITopicClient::TPtr topicClient = {})
+    TReader(TActorId compute, TActorId controlPlane, ITopicClient::TPtr topicClient)
         : TDqPqReadActorBase(0, 0, {}, "test", Source(), ReadTaskParams(), compute, controlPlane)
         , TopicClient(std::move(topicClient))
     {}
@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         InitializeRuntime(runtime);
         const auto compute = runtime.AllocateEdgeActor();
         const TActorId missing(runtime.GetNodeId(0), "missing-cp");
-        runtime.Register(new TReader(compute, missing));
+        runtime.Register(new TReader(compute, missing, MakeIntrusive<TTopicClient>()));
         const auto error = runtime.GrabEdgeEvent<IDqComputeActorAsyncInput::TEvAsyncInputError>(compute);
         UNIT_ASSERT(error);
         UNIT_ASSERT_STRING_CONTAINS(error->Get()->Issues.ToString(), "Failed to deliver consumer description request");
@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         const auto controlPlane = runtime.Register(CreateDqPqControlPlaneActor(
             driver, credentialsFactory, MakeIntrusive<TGateway>(client), {{"token-name", "secret-token"}}), 1);
         const auto compute = runtime.AllocateEdgeActor();
-        runtime.Register(new TReader(compute, controlPlane));
+        runtime.Register(new TReader(compute, controlPlane, client));
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(compute));
         UNIT_ASSERT_VALUES_EQUAL(client->Calls.load(), 1);
         UNIT_ASSERT_VALUES_EQUAL(credentialsFactory->LastToken, "secret-token");
@@ -532,7 +532,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         InitializeRuntime(runtime);
         const auto compute = runtime.AllocateEdgeActor();
         const auto controlPlane = runtime.AllocateEdgeActor(1);
-        const auto reader = runtime.Register(new TReader(compute, controlPlane));
+        const auto reader = runtime.Register(new TReader(compute, controlPlane, MakeIntrusive<TTopicClient>()));
         const auto request = runtime.GrabEdgeEvent<TPqControlPlaneEvents::TEvDescribeConsumer>(controlPlane);
         UNIT_ASSERT(request);
         UNIT_ASSERT(request->InterconnectSession);

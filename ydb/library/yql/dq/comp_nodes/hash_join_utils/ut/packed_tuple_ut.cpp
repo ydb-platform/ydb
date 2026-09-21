@@ -1166,6 +1166,50 @@ Y_UNIT_TEST(EqualNullsSupportsMoreThan64KeyColumns) {
     UNIT_ASSERT_VALUES_EQUAL(Hash(lhs), Hash(rhs));
 }
 
+Y_UNIT_TEST(EqualNullsSupportsVariableKeyAfter64FixedKeys) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    constexpr ui32 fixedKeyColumns = 64;
+    constexpr ui32 variableKeyColumn = fixedKeyColumns;
+    std::vector<TColumnDesc> columns(fixedKeyColumns + 1);
+    std::vector<std::array<ui64, 2>> fixedValues(fixedKeyColumns);
+    std::vector<const ui8*> columnPtrs(fixedKeyColumns + 2);
+    std::vector<const ui8*> validityPtrs(fixedKeyColumns + 2);
+
+    for (ui32 i = 0; i < fixedKeyColumns; ++i) {
+        columns[i].Role = EColumnRole::Key;
+        columns[i].DataSize = sizeof(ui64);
+        fixedValues[i] = {i, i};
+        columnPtrs[i] = reinterpret_cast<const ui8*>(fixedValues[i].data());
+    }
+
+    columns[variableKeyColumn].Role = EColumnRole::Key;
+    columns[variableKeyColumn].DataSize = 16;
+    columns[variableKeyColumn].SizeType = EColumnSizeType::Variable;
+
+    const std::array<ui32, 3> offsets = {0, 4, 13};
+    const TString variableData = "leftdifferent";
+    ui8 variableValidity = 0;
+    columnPtrs[variableKeyColumn] = reinterpret_cast<const ui8*>(offsets.data());
+    columnPtrs[variableKeyColumn + 1] = reinterpret_cast<const ui8*>(variableData.data());
+    validityPtrs[variableKeyColumn] = &variableValidity;
+
+    auto tl = TTupleLayout::Create(columns);
+    UNIT_ASSERT_VALUES_EQUAL(tl->KeyColumnsFixedNum, fixedKeyColumns);
+    tl->ApplyEqualNulls({variableKeyColumn});
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> packed(tl->TotalRowSize * 2, 0);
+    tl->Pack(columnPtrs.data(), validityPtrs.data(), packed.data(), overflow, 0, 2);
+
+    const ui8* lhs = packed.data();
+    const ui8* rhs = lhs + tl->TotalRowSize;
+    const auto& variableKey = tl->KeyColumns.back();
+    UNIT_ASSERT_VALUES_UNEQUAL(lhs[variableKey.Offset], rhs[variableKey.Offset]);
+    UNIT_ASSERT(tl->KeysEqual(lhs, overflow.data(), rhs, overflow.data()));
+    UNIT_ASSERT_VALUES_EQUAL(Hash(lhs), Hash(rhs));
+}
+
 }
 
 

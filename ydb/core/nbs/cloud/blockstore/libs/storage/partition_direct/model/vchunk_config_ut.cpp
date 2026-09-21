@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(3u, cfg.GetEnabledDDisks().Count());
 
         const auto before = cfg.GetDDisks();
-        const TString result = cfg.PromoteHostIfNeeded();
+        const TString result = cfg.PromoteHostIfNeeded(true);
 
         UNIT_ASSERT_STRING_CONTAINS(result, "Enabled DDisks already enough");
         UNIT_ASSERT_VALUES_EQUAL(before.Print(), cfg.GetDDisks().Print());
@@ -158,13 +158,37 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
         cfg.DisableHost(0);
         UNIT_ASSERT_VALUES_EQUAL(2u, cfg.GetEnabledDDisks().Count());
 
-        const TString result = cfg.PromoteHostIfNeeded();
+        const TString result = cfg.PromoteHostIfNeeded(true);
 
         // Host 3 (first enabled non-DDisk host) is promoted to Primary.
         UNIT_ASSERT_STRING_CONTAINS(result, "Promote");
         UNIT_ASSERT(cfg.GetDDiskRole(3) == EHostRole::Primary);
         UNIT_ASSERT(cfg.GetEnabledDDisks().Get(3));
         UNIT_ASSERT_VALUES_EQUAL(3u, cfg.GetEnabledDDisks().Count());
+    }
+
+    Y_UNIT_TEST(ShouldPromoteOperationalHostWhenDDiskUntouched)
+    {
+        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
+        cfg.DisableHost(0);
+
+        const TString result = cfg.PromoteHostIfNeeded(false);
+
+        UNIT_ASSERT_STRING_CONTAINS(result, "Promote");
+        UNIT_ASSERT(cfg.GetDDiskRole(3) == EHostRole::Primary);
+        UNIT_ASSERT(!cfg.GetWatermark(3).has_value());
+    }
+
+    Y_UNIT_TEST(ShouldEvacuateToOperationalHostWhenDDiskUntouched)
+    {
+        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
+
+        const TString result = cfg.EvacuateHost(0, false);
+
+        UNIT_ASSERT_STRING_CONTAINS(result, "H0 demoted, H3 promoted");
+        UNIT_ASSERT(cfg.GetDDiskRole(0) == EHostRole::None);
+        UNIT_ASSERT(cfg.GetDDiskRole(3) == EHostRole::Primary);
+        UNIT_ASSERT(!cfg.GetWatermark(3).has_value());
     }
 
     Y_UNIT_TEST(ShouldNotPromoteWhenNoCandidate)
@@ -175,10 +199,41 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(2u, cfg.GetEnabledDDisks().Count());
 
         const auto before = cfg.GetDDisks();
-        const TString result = cfg.PromoteHostIfNeeded();
+        const TString result = cfg.PromoteHostIfNeeded(true);
 
         UNIT_ASSERT_STRING_CONTAINS(result, "Can't find primary candidate");
         UNIT_ASSERT_VALUES_EQUAL(before.Print(), cfg.GetDDisks().Print());
+    }
+
+    Y_UNIT_TEST(ShouldPromoteHostFreshResetsWatermark)
+    {
+        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
+        // Host 3 starts as HandOff with no watermark (nullopt).
+        UNIT_ASSERT(!cfg.GetWatermark(3).has_value());
+
+        // Set a non-zero watermark to simulate a partially-filled disk.
+        cfg.SetWatermark(3, 4096);
+        UNIT_ASSERT_VALUES_EQUAL(4096u, *cfg.GetWatermark(3));
+
+        // Promote with fresh=true: watermark must be reset to 0.
+        cfg.PromoteHost(3, true);
+        UNIT_ASSERT(cfg.GetDDiskRole(3) == EHostRole::Primary);
+        UNIT_ASSERT(cfg.GetPBufferRole(3) == EHostRole::Primary);
+        UNIT_ASSERT_VALUES_EQUAL(0u, *cfg.GetWatermark(3));
+    }
+
+    Y_UNIT_TEST(ShouldPromoteHostNotFreshPreservesWatermark)
+    {
+        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
+        // Set a non-zero watermark to simulate a partially-filled disk.
+        cfg.SetWatermark(3, 4096);
+        UNIT_ASSERT_VALUES_EQUAL(4096u, *cfg.GetWatermark(3));
+
+        // Promote with fresh=false: watermark must be preserved.
+        cfg.PromoteHost(3, false);
+        UNIT_ASSERT(cfg.GetDDiskRole(3) == EHostRole::Primary);
+        UNIT_ASSERT(cfg.GetPBufferRole(3) == EHostRole::Primary);
+        UNIT_ASSERT_VALUES_EQUAL(4096u, *cfg.GetWatermark(3));
     }
 }
 

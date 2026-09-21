@@ -86,86 +86,6 @@ namespace NKikimr::NUdfStore::NWasm {
 
 using namespace NYdb::NWasm;
 
-EUdfValueType ParseValueType(TStringBuf type) {
-    if (type == "int64") {
-        return EUdfValueType::Int64;
-    }
-    if (type == "uint64") {
-        return EUdfValueType::Uint64;
-    }
-    if (type == "double") {
-        return EUdfValueType::Double;
-    }
-    if (type == "boolean" || type == "bool") {
-        return EUdfValueType::Boolean;
-    }
-    if (type == "string") {
-        return EUdfValueType::String;
-    }
-    if (type == "null") {
-        return EUdfValueType::Null;
-    }
-    if (type == "int32") {
-        return EUdfValueType::Int32;
-    }
-    if (type == "uint32") {
-        return EUdfValueType::Uint32;
-    }
-    if (type == "float") {
-        return EUdfValueType::Float;
-    }
-    if (type == "utf8") {
-        return EUdfValueType::Utf8;
-    }
-    if (type == "date") {
-        return EUdfValueType::Date;
-    }
-    if (type == "datetime") {
-        return EUdfValueType::Datetime;
-    }
-    if (type == "timestamp") {
-        return EUdfValueType::Timestamp;
-    }
-    if (type == "decimal") {
-        return EUdfValueType::Decimal;
-    }
-    ythrow yexception() << "Unsupported wasm UDF descriptor type: " << type;
-}
-
-const char* ValueTypeToString(EUdfValueType type) {
-    switch (type) {
-        case EUdfValueType::Null:
-            return "null";
-        case EUdfValueType::Int64:
-            return "int64";
-        case EUdfValueType::Uint64:
-            return "uint64";
-        case EUdfValueType::Double:
-            return "double";
-        case EUdfValueType::Boolean:
-            return "boolean";
-        case EUdfValueType::String:
-            return "string";
-        case EUdfValueType::Int32:
-            return "int32";
-        case EUdfValueType::Uint32:
-            return "uint32";
-        case EUdfValueType::Float:
-            return "float";
-        case EUdfValueType::Utf8:
-            return "utf8";
-        case EUdfValueType::Date:
-            return "date";
-        case EUdfValueType::Datetime:
-            return "datetime";
-        case EUdfValueType::Timestamp:
-            return "timestamp";
-        case EUdfValueType::Decimal:
-            return "decimal";
-    }
-    return "unknown";
-}
-
 NYdb::NWasm::TModuleBytecode MakeModuleBytecode(
     TStringBuf wasmData,
     TStringBuf objectCode,
@@ -225,13 +145,6 @@ std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(
     return compartment;
 }
 
-TUnversionedValue MakeEmptyValue() {
-    TUnversionedValue value{};
-    value.Type = EAbiValueType::Null;
-    value.Flags = EAbiValueFlags::None;
-    return value;
-}
-
 ui32 CheckedAbiLength(size_t size, TStringBuf what) {
     if (size > std::numeric_limits<ui32>::max()) {
         ythrow yexception()
@@ -239,11 +152,6 @@ ui32 CheckedAbiLength(size_t size, TStringBuf what) {
             << " exceeds ABI ui32 limit (" << std::numeric_limits<ui32>::max() << ")";
     }
     return static_cast<ui32>(size);
-}
-
-void StoreValue(IWebAssemblyCompartment* compartment, uintptr_t offset, const TUnversionedValue& value) {
-    auto* destination = PtrFromVM(compartment, std::bit_cast<TUnversionedValue*>(offset));
-    *destination = value;
 }
 
 TCurrentCompartmentGuard::TCurrentCompartmentGuard(IWebAssemblyCompartment* compartment)

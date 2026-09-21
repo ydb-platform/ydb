@@ -642,8 +642,9 @@ TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const 
     , FilterExpr(filterExpr) {
 }
 
-TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr)
+TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr, bool partiallyPushedDown)
     : IUnaryOperator(EOperator::Filter, pos, props, input)
+    , PartiallyPushedDown(partiallyPushedDown)
     , FilterExpr(filterExpr) {
 }
 
@@ -700,14 +701,14 @@ NJson::TJsonValue TOpFilter::ToJson(ui32 explainFlags) {
  */
 
 TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, TString joinKind,
-                 const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys)
+                 const TVector<TJoinKey>& joinKeys)
     : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys) {
     // Join-local references are renamed by IU name, without a side tag. Rules
     // that rename join-local references assume each renamed name identifies one side.
 }
 
 TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, TString joinKind,
-                 const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters)
+                 const TVector<TJoinKey>& joinKeys, const TVector<TExpression>& joinFilters)
     : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys), JoinFilters(joinFilters) {
     // Join-local references are renamed by IU name, without a side tag. Rules
     // that rename join-local references assume each renamed name identifies one side.
@@ -716,7 +717,8 @@ TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> ri
 TVector<TInfoUnit> TOpJoin::GetLHSKeys() const {
     TVector<TInfoUnit> lhsKeys;
     lhsKeys.reserve(JoinKeys.size());
-    for (const auto& [lhsKey, _] : JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& lhsKey = joinKey.Left;
         lhsKeys.push_back(lhsKey);
     }
     return lhsKeys;
@@ -725,7 +727,8 @@ TVector<TInfoUnit> TOpJoin::GetLHSKeys() const {
 TVector<TInfoUnit> TOpJoin::GetRHSKeys() const {
     TVector<TInfoUnit> rhsKeys;
     rhsKeys.reserve(JoinKeys.size());
-    for (const auto& [_, rhsKey] : JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& rhsKey = joinKey.Right;
         rhsKeys.push_back(rhsKey);
     }
     return rhsKeys;
@@ -753,7 +756,9 @@ void TOpJoin::ComputeOutputIUs() {
 TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
     TVector<TInfoUnit> result;
-    for (const auto& [leftKey, rightKey]: JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         result.push_back(leftKey);
         result.push_back(rightKey);
     }
@@ -821,8 +826,9 @@ TString TOpJoin::ToString(TExprContext& ctx) {
     }
     res << " [";
     for (size_t i = 0; i < JoinKeys.size(); i++) {
-        auto [x,y] = JoinKeys[i];
-        res << x.GetFullName() + "=" + y.GetFullName();
+        const auto& x = JoinKeys[i].Left;
+        const auto& y = JoinKeys[i].Right;
+        res << x.GetFullName() << (JoinKeys[i].EqualNulls ? " IS NOT DISTINCT FROM " : "=") << y.GetFullName();
         if (i != JoinKeys.size() - 1) {
             res << ", ";
         }
@@ -838,15 +844,16 @@ TString TOpJoin::ToString(TExprContext& ctx) {
     return res;
 }
 
-static TString FormatJoinKeys(const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys) {
+static TString FormatJoinKeys(const TVector<TJoinKey>& joinKeys) {
     TStringBuilder result;
     for (size_t i = 0; i < joinKeys.size(); ++i) {
         if (i != 0) {
             result << ", ";
         }
 
-        const auto& [leftKey, rightKey] = joinKeys[i];
-        result << leftKey.GetFullName() << " = " << rightKey.GetFullName();
+        const auto& leftKey = joinKeys[i].Left;
+        const auto& rightKey = joinKeys[i].Right;
+        result << leftKey.GetFullName() << (joinKeys[i].EqualNulls ? " IS NOT DISTINCT FROM " : " = ") << rightKey.GetFullName();
     }
     return result;
 }
@@ -1113,7 +1120,7 @@ TOpTableLookup::TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle p
                                const TVector<TInfoUnit>& lookupKeys, const TVector<TString>& lookupKeyColumns,
                                const TString& joinKind, const std::optional<TExpression>& fetchedRowFilter,
                                const std::optional<TLookupKeyPrefix>& prefix,
-                               const TVector<std::pair<TInfoUnit, TInfoUnit>>& residualJoinKeys)
+                               const TVector<TJoinKey>& residualJoinKeys)
     : IUnaryOperator(EOperator::TableLookup, pos, input)
     , Table(table)
     , FetchColumns(fetchColumns)
@@ -1199,7 +1206,9 @@ TString TOpTableLookup::ToString(TExprContext& ctx) {
     if (FetchedRowFilter) {
         res << ", filter: " << FetchedRowFilter->ToString();
     }
-    for (const auto& [leftKey, rightKey] : ResidualJoinKeys) {
+    for (const auto& joinKey : ResidualJoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         res << ", residual: " << leftKey.GetFullName() << " = " << rightKey.GetFullName();
     }
     return res;
@@ -1223,7 +1232,9 @@ NJson::TJsonValue TOpTableLookup::ToJson(ui32 explainFlags) {
             }
             res["LookupKeyPrefix"] = JoinSeq(", ", Prefix->Columns);
         }
-        for (const auto& [leftKey, rightKey] : ResidualJoinKeys) {
+        for (const auto& joinKey : ResidualJoinKeys) {
+            const auto& leftKey = joinKey.Left;
+            const auto& rightKey = joinKey.Right;
             if (!condition.empty()) {
                 condition << ", ";
             }
@@ -1242,7 +1253,7 @@ NJson::TJsonValue TOpTableLookup::ToJson(ui32 explainFlags) {
  */
 
 TOpIndexLookupJoin::TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind,
-                                       const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys)
+                                       const TVector<TJoinKey>& joinKeys)
     : IUnaryOperator(EOperator::IndexLookupJoin, pos, input)
     , JoinKind(joinKind)
     , JoinKeys(joinKeys) {
@@ -1422,14 +1433,21 @@ NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags) {
 /**
  * OpGroupingSets operator. Logical representation of grouping sets.
  */
-TOpGroupingSets::TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos)
+TOpGroupingSets::TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets,
+                                 TGroupingIndicators groupingIndicators, TPositionHandle pos)
     : IUnaryOperator(EOperator::GroupingSets, pos, input)
-    , GroupingSets(std::move(groupingSets)) {
+    , GroupingSets(std::move(groupingSets))
+    , GroupingIndicators(std::move(groupingIndicators)) {
     Y_ENSURE(!GroupingSets.empty(), "Grouping sets list must not be empty");
 }
 
 void TOpGroupingSets::ComputeOutputIUs() {
-    Props.OutputIUs = GetInput()->GetOutputIUs();
+    TVector<TInfoUnit> outputIUs = GetInput()->GetOutputIUs();
+    for (const auto& [key, indicator] : GroupingIndicators) {
+        Y_UNUSED(key);
+        outputIUs.push_back(indicator);
+    }
+    Props.OutputIUs = std::move(outputIUs);
 }
 
 TString TOpGroupingSets::ToString(TExprContext& ctx) {
@@ -1443,7 +1461,21 @@ TString TOpGroupingSets::ToString(TExprContext& ctx) {
         }
         result << "(" << FormatInfoUnits(GroupingSets[setIndex]) << ")";
     }
-    return result << "]";
+    result << "]";
+
+    if (!GroupingIndicators.empty()) {
+        result << ", grouping indicators [";
+        for (size_t indicatorIndex = 0; indicatorIndex < GroupingIndicators.size(); ++indicatorIndex) {
+            if (indicatorIndex != 0) {
+                result << ", ";
+            }
+            const auto& [key, indicator] = GroupingIndicators[indicatorIndex];
+            result << key.GetFullName() << " -> " << indicator.GetFullName();
+        }
+        result << "]";
+    }
+
+    return result;
 }
 
 /***

@@ -44,11 +44,13 @@ Other overheads can vary significantly depending on the nature of the stored dat
 
 These quantities can be approximately related by the ratio:
 
-
 ```text
 Database Storage = Tablet Storage × RF × Overhead
 ```
 
+In all calculations:
+1 KB = 1000 bytes, 1 MB = 1000 KB, 1 GB = 1000 MB, 1 TB = 1000 GB;
+1 KiB = 1024 bytes, 1 MiB = 1024 KiB, 1 GiB = 1024 MiB, 1 TiB = 1024 GiB.
 
 ## Estimating Required Equipment {#hardware-estimation}
 
@@ -75,41 +77,36 @@ To estimate the required equipment, perform the following steps.
 
 1. Estimate the required Database Storage volume:
 
-
    ```text
    Database Storage = Tablet Storage × RF × Overhead
    ```
 
 2. Determine the slot size:
 
-
    ```text
-   SlotSize = (DriveSize - 27.65 GB) / ExpectedSlotCount
+   SlotSize = (DriveSize - 28.08 GB) / ExpectedSlotCount
    ```
 
-
     <!-- 1 (SysLog) + 5 (SysReserveSize) + 200 (MaxCommonLogChunks) = -->
+    <!-- 206 chunks (130 MiB each: 128 MiB payload + 2 MiB overhead) ≈ 28.08 GB -->
 
-    <!-- 206 chunks (128 MiB each) ≈ 27.65 GB -->
+   About 28.08 GB of PDisk capacity is reserved for system needs; the remaining space is evenly distributed among slots.
 
-   About 27.65 GB of PDisk capacity is reserved for system needs; the remaining space is evenly distributed among slots.
+   This formula is applicable for disks with a capacity of ~839 GB (800 GiB) or more. Using smaller disks is not recommended if optimal performance is required. For more details on disk subsystem requirements, see the [{#T}](system-requirements.md) section.
 
-   This formula is applicable for disks with a capacity of 800 GB or more. Using smaller disks is not recommended if optimal performance is required. For more details on disk subsystem requirements, see the [{#T}](system-requirements.md) section.
 3. Estimate the number of storage groups:
-
 
    ```text
    TotalGroups = ceil( Database Storage / (SlotSize × VDisksInGroup × 0.85) )
    ```
-
 
    The coefficient 0.85 reflects the recommended VDisk fill percentage (VDisk Raw Usage = 85%).
 
    When monitoring, it is recommended to focus on the VDisk Slot Usage and Capacity Alert values. For existing groups, the VDisk Raw Usage, VDisk Slot Usage, and Capacity Alert values can be viewed in the {{ ydb-short-name }} UI on the **Info → Storage** tab of the database page.
 
    The threshold at which a group is considered full corresponds to the values VDisk Slot Usage = 100%, Capacity Alert = LightYellow, VDisk Raw Usage ≈ 90% — whereas the formula above leaves a margin up to this threshold.
-4. Estimate the number of occupied slots:
 
+4. Estimate the number of occupied slots:
 
    ```text
    UsedSlots = TotalGroups × VDisksInGroup
@@ -117,32 +114,28 @@ To estimate the required equipment, perform the following steps.
 
 5. Obtain a lower estimate of the required number of physical disks (without considering the fault tolerance reserve):
 
-
    ```text
    TotalPDisks ≥ ceil( UsedSlots / ExpectedSlotCount )
    ```
 
 6. Select the cluster configuration — parameters `NumRacks`, `DisksPerRack`, and determine the minimum required total reserve of empty slots in the cluster:
 
-
    ```text
    TotalSlots    = NumRacks × DisksPerRack × ExpectedSlotCount
    MinEmptySlots = ceil( MaxSlotsInRack + 0.027 × TotalSlots )
    ```
-
 
    The reserve of empty slots is necessary for the normal operation of the [SelfHeal](../../maintenance/manual/selfheal.md) mechanism, which performs automatic reconfiguration of storage groups to replace failed or long-unavailable disks.
 
    The first term `MaxSlotsInRack` is the maximum number of slots in one failure domain. For a homogeneous cluster `MaxSlotsInRack = DisksPerRack × ExpectedSlotCount`, for a heterogeneous one — `MaxSlotsInRack = max_i(DisksPerRack_i × ExpectedSlotCount)`. This reserve is necessary so that when the most capacious domain fails, its VDisks can fit on the remaining equipment.
 
    The second term `0.027 × TotalSlots` is an empirically selected operational reserve (~1 disk per 37), covering unscheduled replacement of individual disks.
-7. Evaluate the configuration's compliance with the minimum requirements:
 
+7. Evaluate the configuration's compliance with the minimum requirements:
 
    ```text
    EmptySlots = TotalSlots - UsedSlots
    ```
-
 
    The condition `EmptySlots ≥ MinEmptySlots` must be met. If the condition is not met, increase `NumRacks` or `DisksPerRack` and return to step 6. See [{#T}](#example).
 
@@ -154,23 +147,20 @@ Suppose there are `TotalPDisks` physical disks with a capacity of `DriveSize` ea
 
 1. Total number of slots:
 
-
    ```text
    TotalSlots = TotalPDisks × ExpectedSlotCount
    ```
 
 2. Some slots remain empty for the SelfHeal reserve, the rest are available for storage groups:
 
-
    ```text
    MinEmptySlots = ceil( MaxSlotsInRack + 0.027 × TotalSlots )
    UsableSlots = TotalSlots - MinEmptySlots
    ```
 
-
    Here `MaxSlotsInRack` is the maximum number of slots in one failure domain (rack or server): for a homogeneous cluster `DisksPerRack × ExpectedSlotCount`, for a heterogeneous one — `max_i(DisksPerRack_i × ExpectedSlotCount)`.
-3. Number of storage groups:
 
+3. Number of storage groups:
 
    ```text
    TotalGroups = floor( UsableSlots / VDisksInGroup )
@@ -178,13 +168,11 @@ Suppose there are `TotalPDisks` physical disks with a capacity of `DriveSize` ea
 
 4. Useful capacity of the distributed storage considering the 85% fill threshold:
 
-
    ```text
    Database Storage = TotalGroups × VDisksInGroup × SlotSize × 0.85
    ```
 
 5. Estimation of useful data volume:
-
 
    ```text
    Tablet Storage = Database Storage / (RF × Overhead)
@@ -209,13 +197,14 @@ Suppose you need to place 100 TB of data (Tablet Storage) in a cluster with faul
 **Calculation:**
 
 1. Database Storage = 100 000 × 1.5 × 2 = **300 000 GB**
-2. SlotSize = (3 200 − 27.65) / 16 ≈ **198.27 GB**
-3. TotalGroups = ⌈300 000 / (198.27 × 8 × 0.85)⌉ = **223 storage groups**
+2. SlotSize = (3 200 − 28.08) / 16 ≈ **198.25 GB**
+3. TotalGroups = ⌈300 000 / (198.25 × 8 × 0.85)⌉ = **223 storage groups**
 4. UsedSlots = 223 × 8 = **1 784 slots**
 5. TotalPDisks (without reserve) = ⌈1 784 / 16⌉ = **112 disks**
 6. Next, we will select a specific cluster configuration, providing a reserve of empty slots to ensure fault tolerance. To do this, we will consider various equipment options and evaluate compliance with the minimum requirements, taking into account that for mode `block-4-2` at least 8 failure domains (servers or racks) are required, and for stable practical operation 10 or more are recommended:
 
    - Let's take 10 racks with 12 disks each. In one rack, 12 × 16 = 192 slots, TotalSlots = 1 920. MinEmptySlots = ⌈192 + 0.027 × 1 920⌉ = 244. EmptySlots = 1 920 − 1 784 = 136. 136 < 244 — the minimum requirements are not met. It is easy to verify that 10 racks with 14 disks each are sufficient: TotalSlots = 2 240, MinEmptySlots = ⌈224 + 0.027 × 2 240⌉ = 285, EmptySlots = 2 240 − 1 784 = 456 > 285.
+
    - You can choose a server as the failure domain and consider 30 servers with 4 disks each. In one failure domain, 4 × 16 = 64 slots, TotalSlots = 1 920. MinEmptySlots = ⌈64 + 0.027 × 1 920⌉ = 116. EmptySlots = 1 920 − 1 784 = 136 > 116 — the minimum requirements are met.
 
 Thus, to store 100 TB of data in mode `block-4-2` on SSD disks with a capacity of 3.2 TB, you will need 10 racks with 14 disks each (140 disks) or 30 servers with 4 disks each (120 disks).
@@ -228,9 +217,9 @@ Next, let's take the configuration from the previous example — 30 servers with
 2. MinEmptySlots = ⌈MaxSlotsInRack + 0.027 × TotalSlots⌉ = ⌈4 × 16 + 0.027 × 1,920⌉ = ⌈115.84⌉ = **116 slots**
 3. UsableSlots = 1,920 − 116 = **1,804 slots**
 4. TotalGroups = ⌊1,804 / 8⌋ = **225 storage groups**
-5. SlotSize = (3,200 − 27.65) / 16 ≈ **198.27 GB**
-6. Database Storage = 225 × 8 × 198.27 × 0.85 ≈ **303,353 GB**
-7. Tablet Storage = 303,353 / (1.5 × 2) ≈ **101,118 GB**
+5. SlotSize = (3,200 − 28.08) / 16 ≈ **198.25 GB**
+6. Database Storage = 225 × 8 × 198.25 × 0.85 ≈ **303,323 GB**
+7. Tablet Storage = 303,323 / (1.5 × 2) ≈ **101,108 GB**
 
 Thus, a cluster of 30 servers and 120 SSD disks of 3.2 TB each in `block-4-2` mode can store about 101.1 TB of data (Tablet Storage).
 

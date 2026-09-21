@@ -65,6 +65,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TDuration CopyRangeBudgetDelay;
     TVector<TUpdateConfigRequest> UpdateConfigRequests;
     TVector<TUpdateDirtyMapStateRequest> UpdateDirtyMapStateRequests;
+    TVector<ui32> TouchedVChunkIndices;
     TVector<TPersistHostHealthRequest> PersistHostHealthRequests;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
@@ -104,6 +105,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         return UpdateDirtyMapStateRequests.back().Promise.GetFuture();
     }
 
+    TPersistResultFuture SetVChunkTouched(ui32 vChunkIndex) override
+    {
+        TouchedVChunkIndices.push_back(vChunkIndex);
+        auto promise = NThreading::NewPromise<EPersistResult>();
+        promise.SetValue(EPersistResult::Success);
+        return promise.GetFuture();
+    }
+
     void QueryAddHost(
         size_t directBlockGroupId,
         ui32 dbgConnectionsConfigGeneration) override
@@ -133,15 +142,6 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     {
         ++BlockedGenerationCount;
         LastBlockedReason = reason;
-    }
-
-    bool TryAdvancePBufferBarrier(
-        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
-        ui64 lsn) override
-    {
-        Y_UNUSED(pbufferDDiskId);
-        Y_UNUSED(lsn);
-        return true;
     }
 
     TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override

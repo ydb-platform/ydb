@@ -9,6 +9,7 @@ class TController::TTxDropReplication: public TTxBase {
     TEvPrivate::TEvDropReplication::TPtr PrivEv;
     THolder<IEventHandle> Result; // TEvController::TEvDropReplicationResult
     TReplication::TPtr Replication;
+    TVector<std::pair<ui64, ui64>> AlterersToStop;
 
 public:
     explicit TTxDropReplication(TController* self, TEvController::TEvDropReplication::TPtr& ev)
@@ -67,9 +68,33 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
+        Self->DeferredAlters.erase(Replication->GetId());
+        for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
+            if (it->first.first != Replication->GetId()) {
+                ++it;
+                continue;
+            }
+            const auto key = it->first;
+            for (const auto& workerId : it->second.ExpectedWorkers) {
+                db.Table<Schema::SchemaBarrierWorkers>()
+                    .Key(workerId.ReplicationId(), workerId.TargetId(), workerId.WorkerId()).Delete();
+            }
+            if (Self->SchemaChangeDstAlterers.contains(key)) {
+                AlterersToStop.push_back(key);
+            }
+            if (Replication->FindTarget(key.second)) {
+                db.Table<Schema::Targets>().Key(key.first, key.second).Update(
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(0),
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(TString()),
+                    NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0));
+            }
+            it = Self->SchemaBarriers.erase(it);
+        }
+
         Replication->SetState(TReplication::EState::Removing);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState())
+            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::DeferredAlter>(false)
         );
 
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
@@ -146,6 +171,10 @@ public:
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
+
+        for (const auto& key : AlterersToStop) {
+            Self->StopSchemaChangeDstAlter(key, ctx);
+        }
 
         if (Result) {
             ctx.Send(Result.Release());

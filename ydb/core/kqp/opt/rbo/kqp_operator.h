@@ -623,10 +623,17 @@ protected:
 
 class TOpGroupingSets: public IUnaryOperator {
 public:
-    TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos);
+    using TGroupingIndicators = TVector<std::pair<TInfoUnit, TInfoUnit>>;
+
+    TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TGroupingIndicators groupingIndicators,
+                    TPositionHandle pos);
 
     const TVector<TVector<TInfoUnit>>& GetGroupingSets() const {
         return GroupingSets;
+    }
+
+    const TGroupingIndicators& GetGroupingIndicators() const {
+        return GroupingIndicators;
     }
 
     virtual TString ToString(TExprContext& ctx) override;
@@ -638,6 +645,7 @@ protected:
 
 private:
     TVector<TVector<TInfoUnit>> GroupingSets;
+    TGroupingIndicators GroupingIndicators;
 };
 
 enum class EWindowFuncKind : ui32 {
@@ -746,7 +754,7 @@ protected:
 class TOpFilter: public IUnaryOperator {
 public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr);
-    TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr);
+    TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr, bool partiallyPushedDown = false);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual const TVector<TInfoUnit>& GetUniqueRawInputIUs() const override;
@@ -767,6 +775,8 @@ public:
     const TExpression& GetFilterExpression() const { return FilterExpr; }
     void SetFilterExpression(TExpression filterExpr);
 
+    bool PartiallyPushedDown = false;
+
 protected:
     void ComputeOutputIUs() override;
 
@@ -781,10 +791,10 @@ bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& left
 class TOpJoin: public IBinaryOperator {
 public:
     TOpJoin(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
-            const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys);
+            const TVector<TJoinKey>& joinKeys);
 
     TOpJoin(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
-            const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters);
+            const TVector<TJoinKey>& joinKeys, const TVector<TExpression>& joinFilters);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
@@ -804,7 +814,7 @@ public:
     TVector<TInfoUnit> GetRHSKeys() const;
 
     TString JoinKind;
-    TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
+    TVector<TJoinKey> JoinKeys;
     TVector<TExpression> JoinFilters;
 
 protected:
@@ -966,7 +976,7 @@ public:
                    const TVector<TString>& lookupKeyColumns, const TString& joinKind,
                    const std::optional<TExpression>& fetchedRowFilter,
                    const std::optional<TLookupKeyPrefix>& prefix = std::nullopt,
-                   const TVector<std::pair<TInfoUnit, TInfoUnit>>& residualJoinKeys = {});
+                   const TVector<TJoinKey>& residualJoinKeys = {});
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
@@ -990,7 +1000,7 @@ public:
     std::optional<TExpression> FetchedRowFilter;
     std::optional<TLookupKeyPrefix> Prefix;
     ELookupStrategy Strategy{ELookupStrategy::LookupRows};
-    TVector<std::pair<TInfoUnit, TInfoUnit>> ResidualJoinKeys;
+    TVector<TJoinKey> ResidualJoinKeys;
 
 protected:
     void ComputeOutputIUs() override;
@@ -1002,7 +1012,7 @@ protected:
  ***/
 class TOpIndexLookupJoin: public IUnaryOperator {
 public:
-    TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind, const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys);
+    TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind, const TVector<TJoinKey>& joinKeys);
 
     virtual TString ToString(TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
@@ -1011,7 +1021,7 @@ public:
     TIntrusivePtr<TOpTableLookup> GetTableLookup();
 
     TString JoinKind;
-    TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
+    TVector<TJoinKey> JoinKeys;
 
 protected:
     void ComputeOutputIUs() override;

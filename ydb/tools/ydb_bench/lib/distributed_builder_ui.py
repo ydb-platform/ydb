@@ -76,6 +76,7 @@ function distributedReplaceTemplate(raw,template){
   const removed=Object.keys(previous).filter(name=>!Object.hasOwn(next['cli-nodes'],name));
   const targets=distributedTargetTenants(template),retargeted=[];
   next.storage=JSON.parse(JSON.stringify(raw.storage||next.storage));
+  next['reset-disks']=false;
   next.measurement=JSON.parse(JSON.stringify(raw.measurement||next.measurement));
   if(Object.hasOwn(raw,'timeout'))next.timeout=raw.timeout;
   for(const name of Object.keys(next.tenants))if(Object.hasOwn(raw.tenants||{},name))next.tenants[name]=JSON.parse(JSON.stringify(raw.tenants[name]));
@@ -177,6 +178,10 @@ function distributedProfileEditor(profile){
       .map(n=>esc(n.name)).join(' · ')+'</div><div class=actor-settings>'+input('vCPU per node',[...path,'cpu-count'],object['cpu-count']??4,'number')+
       '<div class=actor-flags>'+['use-shared-threads','use-united-pool','use-ring-queue'].map(k=>'<label><input type=checkbox data-distributed-path="'+
         esc(JSON.stringify([...path,k]))+'" '+((object[k]??(k==='use-ring-queue'))?'checked':'')+'> '+esc(k)+'</label>').join('')+'</div></div>';
+    if(view.tab==='Storage')content+='<p><label><input type=checkbox data-distributed-path="'+esc(JSON.stringify(['reset-disks']))+'" '+
+      (raw['reset-disks']?'checked':'')+'> Reset existing disks before each cluster start</label></p>'+
+      '<p class=muted>Destructive: clears YDB metadata on all configured persistent files and block devices. '+
+      'Use dedicated benchmark disks only. Existing data is lost. New temporary files do not need this permission.</p>';
   }else if(view.tab==='Load generators'){
     const node=template.nodes.find(n=>n.name===view.item),peers=Object.entries(clients).filter(([name,c])=>c.tenant===object.tenant&&c.dataset===object.dataset);
     const definition=localYdbWorkloadDefinition(object.workload.type),load=object.load,mode=load.search?load.objective.type:'fixed';

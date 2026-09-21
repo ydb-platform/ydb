@@ -398,7 +398,7 @@ void TWasmCompileActor::ValidateExports() {
                 // of the method arguments, so the export takes three fixed
                 // slots plus one per declared argument.
                 requireArity(*callSignature, descriptor.CallExport,
-                    3 + descriptor.Args.size(),
+                    3 + descriptor.ArgTypes.size(),
                     "context, result pointer, object handle, one slot per argument");
             }
             if (const auto* destroySignature = requireExport(descriptor.DestroyExport)) {
@@ -415,21 +415,16 @@ void TWasmCompileActor::ValidateExports() {
             continue;
         }
         requireAbiTypes(*signature, exportName);
-        if (descriptor.CallingConvention != NWasm::EWasmCallingConvention::Bridge) {
-            continue;
-        }
         // A bridge export is called as (ctx, resultPtr, arg handles...) and
         // writes its result through resultPtr, so a mismatch here means the
         // manifest and the module disagree about the argument list. Catching
         // it at registration beats a WAVM type error on the first row.
-        const size_t expectedParams = descriptor.ArgTypes.size() + 2;
+        const size_t expectedParams = descriptor.ArgTypes.size() + 2 + (descriptor.IsObjectConstructor ? 1 : 0);
         if (signature->ParamCount != expectedParams || signature->ResultCount != 0) {
             ythrow yexception()
                 << "Wasm export '" << exportName << "' for UDF '" << Name_
                 << "' has " << signature->ParamCount << " parameters and "
-                << signature->ResultCount << " results, but calling_convention="
-                << NWasm::CallingConventionAsStr(descriptor.CallingConvention)
-                << " with " << descriptor.ArgTypes.size()
+                << signature->ResultCount << " results, but bridge with " << descriptor.ArgTypes.size()
                 << " declared arguments needs " << expectedParams
                 << " parameters (context, result pointer, one per argument)"
                    " and no results";

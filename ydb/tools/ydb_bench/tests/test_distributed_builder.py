@@ -185,7 +185,12 @@ for(const tab of ['Cluster','Storage','Tenants','Load generators','Run policy'])
   assert(!html.includes('class=view-tabs'));
   if(tab==='Storage'||tab==='Tenants'){
     assert(html.includes('class=actor-settings'));
-    assert.equal((html.match(/type=checkbox/g)||[]).length,3);
+    const actorFlags=html.split('<div class=actor-flags>')[1].split('</div>')[0];
+    assert.equal((actorFlags.match(/type=checkbox/g)||[]).length,3);
+    for(const flag of ['use-shared-threads','use-united-pool','use-ring-queue'])assert(actorFlags.includes(flag));
+    const resetDisks=html.split('<input type=checkbox data-distributed-path="["reset-disks"]" ')[1];
+    assert.equal(Boolean(resetDisks),tab==='Storage');
+    if(resetDisks)assert(!resetDisks.split('>')[0].includes('checked'));
     assert.equal((html.match(/<select/g)||[]).length,2); // Benchmark and template; actor flags remain checkboxes.
   }
   if(tab==='Load generators'){assert(html.includes('Dataset'));assert(html.includes('c1'));assert(html.includes('c2'))}

@@ -62,6 +62,9 @@ struct TTabletInfo
     ui64 BlockCount = 0;
     ui64 VChunkSize = 0;
     ui32 VolumeDirectBlockGroupCount = 0;
+    size_t TouchedVChunkCount = 0;
+    size_t TouchedEnabledDDiskCount = 0;
+    size_t TouchedDisabledDDiskCount = 0;
     TString DiskId;
     TString State;   // "INIT" / "WORK"
 };
@@ -74,10 +77,6 @@ struct TArenaMemoryUsage
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
-    // Minimum safe barrier across all DBGs from the last finished cleanup
-    // round; 0 until the first round finishes.
-    ui64 LastSafeBarrier = 0;
-
     TArenaMemoryUsage ArenaMemoryUsage;
 };
 
@@ -97,10 +96,10 @@ struct TDbgSnapshot
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
-    TVChunkConfigs VChunkConfigs;
     TArenaPoolStats MemoryStats;
     TArenaAllocatorStats DetailedMemoryStats;
     TDirtyMapStats DirtyMapStats;
+    TCountAndSize PBuffersUsage;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;
 };
@@ -143,8 +142,6 @@ struct TLocalDbContents
     std::optional<TString> VolumeConfig;
     std::optional<TString> DirectBlockGroupsConnections;
     std::optional<TString> AddHostInProgress;
-    // Persisted per-vchunk overrides.
-    TVChunkConfigs VChunkConfigs;
 };
 
 struct TMonPageData

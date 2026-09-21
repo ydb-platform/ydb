@@ -117,7 +117,7 @@ public:
     void Authenticate();
     void Authorize();
     void RequestFolderService();
-    void RetrieveCachedFolderId();
+    void RequestQueueFolderId();
 
     template<typename TProto>
     void ProposeStaticCreds(TProto& req);

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "ydb_command.h"
-#include "ydb_common.h"
+#include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/udf/udf.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_udf.h>
 
 namespace NYdb {
 namespace NConsoleClient {

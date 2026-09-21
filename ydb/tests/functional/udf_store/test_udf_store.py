@@ -398,22 +398,23 @@ def _run_ydb_udf(endpoint, database, *args):
         _ydb_cli_binary(),
         "-e", endpoint,
         "-d", database,
+        "experimental",
         "udf",
         *args,
     ]
-    logger.info("Running ydb udf: %s", " ".join(cmd))
+    logger.info("Running ydb experimental udf: %s", " ".join(cmd))
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if result.stderr:
-        logger.info("ydb udf stderr:\n%s", result.stderr.strip())
+        logger.info("ydb experimental udf stderr:\n%s", result.stderr.strip())
     if result.returncode != 0:
         raise RuntimeError(
-            f"ydb udf failed (rc={result.returncode}): stdout={result.stdout} stderr={result.stderr}"
+            f"ydb experimental udf failed (rc={result.returncode}): stdout={result.stdout} stderr={result.stderr}"
         )
     return result.stdout
 
 
 def _run_ydb_udf_expect_failure(endpoint, database, *args):
-    """Run `ydb udf` expecting a refusal; returns the combined output to match on."""
+    """Run `ydb experimental udf` expecting a refusal; returns the combined output to match on."""
     with pytest.raises(RuntimeError) as failure:
         _run_ydb_udf(endpoint, database, *args)
     return str(failure.value)
@@ -421,7 +422,7 @@ def _run_ydb_udf_expect_failure(endpoint, database, *args):
 
 def test_ydb_udf_cli_library_roundtrip():
     """
-    Smoke-test the public UdfService path used by `ydb udf`:
+    Smoke-test the experimental UdfService CLI path used by `ydb experimental udf`:
     upload a LIBRARY → list → describe → delete.
     Does not wait for AOT compile; mutation only needs the store enabled.
     """
@@ -1002,7 +1003,7 @@ def test_ydb_udf_cli_large_upload():
             with open(path, "wb") as output:
                 output.write(body)
             manifest = _write_manifest("large_%d" % size_mib, module_extension="wasm")
-            args = [_ydb_cli_binary(), "-e", endpoint, "-d", database, "udf", "upload",
+            args = [_ydb_cli_binary(), "-e", endpoint, "-d", database, "experimental", "udf", "upload",
                     "--file", path, "--manifest", manifest, "--format", "json"]
             started = time.monotonic()
             peak_rss_kib = 0

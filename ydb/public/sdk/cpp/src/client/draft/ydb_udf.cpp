@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/udf/udf.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_udf.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>

@@ -1,15 +1,16 @@
 # UDF service (P0/P1)
 
-The experimental `Ydb.Udf.V1.UdfService` and `ydb udf` manage WASM modules and libraries.
+The experimental `Ydb.Udf.V1.UdfService` and `ydb experimental udf` manage WASM modules and libraries.
+Build and invoke the experimental CLI binary at `ydb/apps/ydb/experimental/ydb/ydb`.
 All commands require a cluster or database administrator and the endpoint serving that database.
 This development API is updated in place; recreate test databases and regenerate clients.
 
 ```sh
-ydb -e grpc://localhost:31011 -d /Root/test udf upload --file libwasm-sdk.so --manifest sdk.manifest.json
-ydb -e grpc://localhost:31011 -d /Root/test udf upload --file libwasm-md5.so --manifest md5.manifest.json --create-only
-ydb -e grpc://localhost:31011 -d /Root/test udf list --type library --kind wasm --format yaml
-ydb -e grpc://localhost:31011 -d /Root/test udf describe --name Md5 --format json
-ydb -e grpc://localhost:31011 -d /Root/test udf delete --name Md5 --expected-uid UPLOAD_UID
+ydb -e grpc://localhost:31011 -d /Root/test experimental udf upload --file libwasm-sdk.so --manifest sdk.manifest.json
+ydb -e grpc://localhost:31011 -d /Root/test experimental udf upload --file libwasm-md5.so --manifest md5.manifest.json --create-only
+ydb -e grpc://localhost:31011 -d /Root/test experimental udf list --type library --kind wasm --format yaml
+ydb -e grpc://localhost:31011 -d /Root/test experimental udf describe --name Md5 --format json
+ydb -e grpc://localhost:31011 -d /Root/test experimental udf delete --name Md5 --expected-uid UPLOAD_UID
 ```
 
 Every manifest must contain `module_name`, `module_type` (`module` or `library`),

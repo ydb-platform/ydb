@@ -34,7 +34,6 @@ SRCS(
     ydb_service_scripting.cpp
     ydb_service_topic.cpp
     ydb_service_table.cpp
-    ydb_service_udf.cpp
     ydb_sql.cpp
     ydb_storage_config.cpp
     ydb_tools_infer.cpp
@@ -48,7 +47,6 @@ SRCS(
 
 PEERDIR(
     contrib/libs/yaml-cpp
-    ydb/public/lib/udf/manifest
     contrib/libs/fmt
     contrib/restricted/patched/replxx
     library/cpp/histogram/hdr
@@ -89,7 +87,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/test_shard
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types/credentials/login
-    ydb/public/sdk/cpp/src/client/udf
     ydb/public/sdk/cpp/src/library/operation_id
     yql/essentials/public/decimal
 )

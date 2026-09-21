@@ -5,6 +5,7 @@ SRCS(
     ydb_root.cpp
     ydb_service_experimental_fq.cpp
     ydb_service_experimental.cpp
+    ydb_service_udf.cpp
     ydb_sql.cpp
     ydb_topic_deferred_publish.cpp
 )
@@ -12,6 +13,7 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/protobuf
+    contrib/libs/yaml-cpp
     library/cpp/json
     library/cpp/protobuf/json
     library/cpp/protobuf/util
@@ -23,6 +25,7 @@ PEERDIR(
     ydb/public/lib/operation_id
     ydb/public/lib/ydb_cli/commands
     ydb/public/lib/ydb_cli/common
+    ydb/public/lib/udf/manifest
     ydb/public/lib/ydb_cli/dump
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic

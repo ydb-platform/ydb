@@ -1,5 +1,3 @@
-* Updated `ydb udf`: required manifests for WASM modules and libraries, separate type/kind filters, text/table/JSON/YAML output preserving scalar types, complete catalog pagination, streamed file uploads and per-platform compilation diagnostics. Native uploads return an explicit unsupported error.
-
 * Added support for column-oriented (OLAP) tables to the `ydb tools dump` and `ydb tools restore` commands. `--import-data` is not supported for column tables and automatically falls back to `--bulk-upsert`.
 * Fixed `ydb tools restore` failing on `Float` and `Double` NaN/infinity values in local backups, and added file, line, column, and value context to parsing errors.
 * Added support for `--format svg` plan format to `ydb sql` command when used with `--explain` or `--explain-analyze` options

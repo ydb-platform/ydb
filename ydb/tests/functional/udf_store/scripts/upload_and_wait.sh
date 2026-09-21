@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Upload a WASM UDF/LIBRARY via `ydb udf` and poll until compile is ready.
+# Upload a WASM UDF/LIBRARY via `ydb experimental udf` and poll until compile is ready.
 #
 # Usage:
 #   upload_and_wait.sh --file path/to/libwasm-sdk.so --manifest path/to/sdk.manifest.json
@@ -41,11 +41,11 @@ resolve_ydb_bin() {
         echo "$YDB_BIN"
         return
     fi
-    if command -v ydb >/dev/null 2>&1 && ydb udf --help >/dev/null 2>&1; then
+    if command -v ydb >/dev/null 2>&1 && ydb experimental udf --help >/dev/null 2>&1; then
         command -v ydb
         return
     fi
-    die "no ydb CLI with 'udf' subcommand found; set YDB_BIN to the built ydb/apps/ydb/ydb"
+    die "no ydb CLI with 'experimental udf' subcommand found; set YDB_BIN to the built ydb/apps/ydb/experimental/ydb/ydb"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -78,7 +78,7 @@ need_jq
 upload_module() {
     [[ -n "$MANIFEST" ]] || die "--manifest is required"
     [[ -f "$MANIFEST" ]] || die "manifest not found: $MANIFEST"
-    local -a args=(udf upload --file "$FILE" --manifest "$MANIFEST" --format json)
+    local -a args=(experimental udf upload --file "$FILE" --manifest "$MANIFEST" --format json)
     [[ -f "$FILE" ]] || die "file not found: $FILE"
     args+=("${EXTRA_UPLOAD_ARGS[@]}")
 
@@ -117,7 +117,7 @@ wait_ready() {
     local deadline=$((SECONDS + TIMEOUT_SEC))
     local desc rc
     while (( SECONDS < deadline )); do
-        desc=$("${YDB[@]}" udf describe --name "$NAME" --format json)
+        desc=$("${YDB[@]}" experimental udf describe --name "$NAME" --format json)
         set +e
         module_ready "$desc"
         rc=$?

@@ -71,7 +71,7 @@ COLUMNS_SCHEMA = [
     ("run_url", "Utf8", True),
     ("exported_at", "Timestamp", True),
 ]
-PRIMARY_KEYS = ("date", "run_id", "github_job_id", "source", "name", "kind", "event_ts")
+PRIMARY_KEYS = ("event_ts", "date", "run_id", "github_job_id", "source", "name", "kind")
 BUILD_PRESET_RE = re.compile(
     r"(relwithdebinfo|release-asan|release-tsan|release-msan|release|debug)"
 )

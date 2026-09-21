@@ -66,7 +66,7 @@ COLUMNS_SCHEMA = [
     ("labels", "Json", True),
     ("exported_at", "Timestamp", True),
 ]
-PRIMARY_KEYS = ("date", "run_id", "source", "name", "kind", "event_ts")
+PRIMARY_KEYS = ("event_ts", "date", "run_id", "source", "name", "kind")
 EPOCH_STRING_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 CREDENTIAL_ENVS = (
     "ANALYTICS_YDB_CREDENTIALS",

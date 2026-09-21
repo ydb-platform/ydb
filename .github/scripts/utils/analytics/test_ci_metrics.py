@@ -257,6 +257,7 @@ class SchemaTest(unittest.TestCase):
         self.assertIn("STORE = COLUMN", sql)
         self.assertIn("TTL = Interval", sql)
         self.assertIn("ON event_ts", sql)
+        self.assertIn("PRIMARY KEY (`event_ts`", sql)
         for key in PRIMARY_KEYS:
             self.assertIn(f"`{key}`", sql)
         self.assertIn("`source` Utf8 NOT NULL", sql)

@@ -32,7 +32,7 @@ analytics.start("llm_call", {"model": "foo"})
 analytics.send(conclusion="success", properties={"tokens": 12})
 ```
 
-Таблица ядра: `analytics/events`, PK `(date, run_id, source, name, kind, event_ts)`. Жирные дампы — `kind=info`, имя по умолчанию `info`, тело в `labels.payload`.
+Таблица ядра: `analytics/events`, PK `(event_ts, date, run_id, source, name, kind)` — `event_ts` первым, иначе column-store не даёт TTL. Жирные дампы — `kind=info`, имя по умолчанию `info`, тело в `labels.payload`.
 
 ## CI wrapper (этот репозиторий)
 

@@ -882,7 +882,7 @@ void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex) {
     UNIT_ASSERT_C(response, "Timed out waiting for resource pool classifier snapshot refresh");
 
     runtime.Send(
-        NKqp::MakeKqpProxyID(nodeId), edgeActor, new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()), nodeIndex);
+        MakeServiceId(nodeId), edgeActor, new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()), nodeIndex);
 }
 
 }   // namespace NKikimr::NWorkloadManager

@@ -56,30 +56,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         return true;
     };
 
-    bool LoadMetricsOneHour(NIceDb::TNiceDb& db) {
-        Self->MetricsOneHour.clear();
-
-        auto rowset = db.Table<Schema::MetricsOneHour>().Range().Select();
-        if (!rowset.IsReady()) {
-            return false;
-        }
-        while (!rowset.EndOfSet()) {
-            const ui64 intervalEnd = rowset.GetValue<Schema::MetricsOneHour::IntervalEnd>();
-            const ui32 rank = rowset.GetValue<Schema::MetricsOneHour::Rank>();
-            TQueryToMetrics result;
-            result.Text = rowset.GetValue<Schema::MetricsOneHour::Text>();
-            const TString data = rowset.GetValue<Schema::MetricsOneHour::Data>();
-            if (data) {
-                Y_PROTOBUF_SUPPRESS_NODISCARD result.Metrics.ParseFromString(data);
-            }
-            Self->MetricsOneHour.emplace(std::make_pair(intervalEnd, rank), std::move(result));
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     template <typename S>
     bool LoadPartitionResults(NIceDb::TNiceDb& db, TSelf::TResultPartitionsMap& results) {
         results.clear();
@@ -507,7 +483,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         // Metrics...
         if (!LoadQueryResults<Schema::MetricsOneMinute>(db, Self->MetricsOneMinute))
             return false;
-        if (!LoadMetricsOneHour(db))
+        if (!LoadQueryResults<Schema::MetricsOneHour>(db, Self->MetricsOneHour))
             return false;
 
         // TopBy...

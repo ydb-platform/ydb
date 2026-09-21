@@ -2,6 +2,7 @@
 #include "yaml_config_impl.h"
 
 #include <util/digest/sequence.h>
+#include <util/generic/algorithm.h>
 #include <functional>
 #include <stack>
 
@@ -1356,6 +1357,283 @@ void ResolveUniqueDocs(
 
             seenPaths.insert(currentPath);
         });
+}
+
+namespace {
+
+// Reduced ordered multi-valued decision diagram. Each node branches on one
+// label's domain; 0 and 1 are false and true. Sharing equivalent suffixes lets
+// us union the label regions of equal configs without enumerating their tuples.
+class TLabelRegions {
+public:
+    using TId = size_t;
+
+    explicit TLabelRegions(const TVector<std::pair<TString, TSet<TLabel>>>& labels)
+        : Labels(labels)
+    {
+        Nodes.push_back({labels.size(), {}});
+        Nodes.push_back({labels.size(), {}});
+    }
+
+    template <class TPredicate>
+    TId Match(const TString& name, TPredicate predicate) {
+        for (size_t i = 0; i < Labels.size(); ++i) {
+            if (Labels[i].first == name) {
+                TMap<size_t, TId> children;
+                size_t branch = 0;
+                for (const auto& value : Labels[i].second) {
+                    if (predicate(value)) {
+                        children[branch] = 1;
+                    }
+                    ++branch;
+                }
+                return Intern(i, std::move(children));
+            }
+        }
+        return 0; // Mirrors IsCompatible: a pattern cannot match a missing label.
+    }
+
+    TId Not(TId value) {
+        if (value < 2) {
+            return 1 - value;
+        }
+        if (auto it = Negations.find(value); it != Negations.end()) {
+            return it->second;
+        }
+        // Recursion can reallocate Nodes.
+        auto node = Nodes[value];
+        TMap<size_t, TId> children;
+        for (size_t i = 0; i < Labels[node.Label].second.size(); ++i) {
+            auto it = node.Children.find(i);
+            auto child = Not(it == node.Children.end() ? 0 : it->second);
+            if (child != 0) {
+                children[i] = child;
+            }
+        }
+        auto result = Intern(node.Label, std::move(children));
+        Negations[value] = result;
+        return result;
+    }
+
+    TId And(TId lhs, TId rhs) {
+        if (lhs > rhs) {
+            std::swap(lhs, rhs);
+        }
+        if (lhs == 0 || lhs == rhs) {
+            return lhs;
+        }
+        if (lhs == 1) {
+            return rhs;
+        }
+        const auto key = std::pair{lhs, rhs};
+        if (auto it = Intersections.find(key); it != Intersections.end()) {
+            return it->second;
+        }
+        const size_t label = Min(Nodes[lhs].Label, Nodes[rhs].Label);
+        // Missing branches are false. Intersect only the smaller sparse node,
+        // especially important for high-cardinality labels with equality tests.
+        auto first = lhs;
+        auto second = rhs;
+        if (Nodes[first].Label != label || (Nodes[second].Label == label
+            && Nodes[first].Children.size() > Nodes[second].Children.size())) {
+            std::swap(first, second);
+        }
+        const auto branches = Nodes[first].Children;
+        TMap<size_t, TId> children;
+        for (const auto& [i, l] : branches) {
+            TId r = second;
+            if (Nodes[second].Label == label) {
+                auto it = Nodes[second].Children.find(i);
+                r = it == Nodes[second].Children.end() ? 0 : it->second;
+            }
+            if (auto child = And(l, r); child != 0) {
+                children[i] = child;
+            }
+        }
+        auto result = Intern(label, std::move(children));
+        Intersections[key] = result;
+        return result;
+    }
+
+    TId Or(TId lhs, TId rhs) {
+        return Not(And(Not(lhs), Not(rhs)));
+    }
+
+private:
+    struct TNode {
+        size_t Label;
+        TMap<size_t, TId> Children;
+    };
+
+    TId Intern(size_t label, TMap<size_t, TId> children) {
+        if (children.empty()) {
+            return 0;
+        }
+        if (children.size() == Labels[label].second.size()
+            && AllOf(children, [&](const auto& child) { return child.second == children.begin()->second; })) {
+            return children.begin()->second;
+        }
+        auto key = std::pair{label, children};
+        auto [it, inserted] = Unique.emplace(std::move(key), Nodes.size());
+        if (inserted) {
+            Nodes.push_back({label, std::move(children)});
+        }
+        return it->second;
+    }
+
+    const TVector<std::pair<TString, TSet<TLabel>>>& Labels;
+    TVector<TNode> Nodes;
+    TMap<std::pair<size_t, TMap<size_t, TId>>, TId> Unique;
+    TMap<std::pair<TId, TId>, TId> Intersections;
+    TMap<TId, TId> Negations;
+};
+
+// Map order and presentation whitespace do not affect merging. Keep scalar
+// styles, tags and aliases in the key: their YAML semantics can differ.
+TString ProjectionStateKey(NFyaml::TNodeRef node) {
+    TStringStream out;
+    out << static_cast<int>(node.Type()) << ':';
+    if (auto tag = node.Tag()) {
+        out << tag->size() << ':' << *tag;
+    }
+    out << ';';
+    if (node.Type() == NFyaml::ENodeType::Mapping) {
+        TMap<TString, TString> entries;
+        for (auto pair : node.Map()) {
+            entries[pair.Key().Scalar()] = ProjectionStateKey(pair.Value());
+        }
+        for (const auto& [key, value] : entries) {
+            out << key.size() << ':' << key << value.size() << ':' << value;
+        }
+    } else if (node.Type() == NFyaml::ENodeType::Sequence) {
+        for (auto child : node.Sequence()) {
+            const auto value = ProjectionStateKey(child);
+            out << value.size() << ':' << value;
+        }
+    } else {
+        const auto value = node.Scalar();
+        out << static_cast<int>(node.Style()) << ':' << value.size() << ':' << value;
+    }
+    return out.Str();
+}
+
+NFyaml::TDocument ProjectSections(NFyaml::TNodeRef config, const TVector<TString>& sections) {
+    auto result = NFyaml::TDocument::Parse("{}");
+    auto map = result.Root().Map();
+    for (auto pair : config.Map()) {
+        const auto path = TString("/") + pair.Key().Scalar();
+        if (AnyOf(sections, [&](const TString& section) {
+            return section == "/" || section == path;
+        })) {
+            map.Append(pair.Key().Copy(result).Ref(), pair.Value().Copy(result).Ref());
+        }
+    }
+    return result;
+}
+
+} // namespace
+
+void TIncompatibilityRules::ForEachActiveRule(
+    const std::function<void(const TIncompatibilityRule&)>& callback) const
+{
+    for (const auto& [name, rule] : RulesByName) {
+        if (!DisabledRules.contains(name)) {
+            callback(rule);
+        }
+    }
+}
+
+void EnumerateDistinctProjections(
+    NFyaml::TDocument& doc,
+    const TVector<TString>& sectionPrefixes,
+    const std::function<void(NFyaml::TNodeRef)>& onProjection)
+{
+    auto model = ParseConfig(doc);
+    TVector<TString> names;
+    TVector<std::pair<TString, TSet<TLabel>>> labels;
+    BuildLabelDomain(doc, ComputeUsedNames(model), names, labels);
+    TLabelRegions regions(labels);
+    TLabelRegions::TId compatible = 1;
+    model.IncompatibilityRules.ForEachActiveRule([&](const TIncompatibilityRule& rule) {
+        TLabelRegions::TId forbidden = 1;
+        for (const auto& pattern : rule.Patterns) {
+            forbidden = regions.And(forbidden, regions.Match(pattern.Name, [&](const TLabel& label) {
+                return pattern.Matches(label, pattern.Name);
+            }));
+        }
+        compatible = regions.And(compatible, regions.Not(forbidden));
+    });
+
+    struct TOverlay {
+        NFyaml::TDocument Config;
+        const TSelector* Selector;
+    };
+    TVector<TOverlay> overlays;
+    for (const auto& selector : model.Selectors) {
+        auto overlay = ProjectSections(selector.Config, sectionPrefixes);
+        if (overlay.Root().Map().size() == 0) {
+            continue;
+        }
+        overlays.push_back({std::move(overlay), &selector.Selector});
+    }
+
+    struct TState {
+        NFyaml::TDocument Config;
+        TLabelRegions::TId Region;
+    };
+    TMap<TString, TState> states;
+    auto insert = [&](auto& into, NFyaml::TDocument config, TLabelRegions::TId region) {
+        if (region == 0) {
+            return;
+        }
+        // Tags on the destination do not affect Apply; only overlay tags do.
+        RemoveTags(config);
+        auto key = ProjectionStateKey(config.Root());
+        if (auto it = into.find(key); it != into.end()) {
+            it->second.Region = regions.Or(it->second.Region, region);
+        } else {
+            into.emplace(std::move(key), TState{std::move(config), region});
+        }
+    };
+    insert(states, ProjectSections(model.Config, sectionPrefixes), compatible);
+
+    for (auto& overlay : overlays) {
+        TLabelRegions::TId matches = 1;
+        for (const auto& [name, values] : overlay.Selector->In) {
+            matches = regions.And(matches, regions.Match(name, [&](const TLabel& label) {
+                return label.Type != TLabel::EType::Negative && values.Values.contains(label.Value);
+            }));
+        }
+        for (const auto& [name, values] : overlay.Selector->NotIn) {
+            matches = regions.And(matches, regions.Not(regions.Match(name, [&](const TLabel& label) {
+                return label.Type != TLabel::EType::Negative && values.Values.contains(label.Value);
+            })));
+        }
+        const auto misses = regions.Not(matches);
+        TMap<TString, TState> next;
+        for (auto& [key, state] : states) {
+            const auto hit = regions.And(state.Region, matches);
+            const auto miss = regions.And(state.Region, misses);
+            if (hit != 0) {
+                auto config = state.Config.Clone();
+                auto root = config.Root();
+                auto patch = overlay.Config.Root().Copy(config);
+                Apply(root, patch.Ref());
+                insert(next, std::move(config), hit);
+            }
+            if (miss != 0) {
+                if (auto it = next.find(key); it != next.end()) {
+                    it->second.Region = regions.Or(it->second.Region, miss);
+                } else {
+                    next.emplace(key, TState{std::move(state.Config), miss});
+                }
+            }
+        }
+        states = std::move(next);
+    }
+    for (auto& [key, state] : states) {
+        onProjection(state.Config.Root());
+    }
 }
 
 size_t Hash(const TResolvedConfig& config)

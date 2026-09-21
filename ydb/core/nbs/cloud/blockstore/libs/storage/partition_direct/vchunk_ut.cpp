@@ -1131,7 +1131,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             [&]() -> bool
             {
                 auto& dirtyMap = AccessBlocksDirtyMap(*vchunk);
-                dirtyMap.UpdateWatermarkDebugOnly(3, BlockSize * 5);
+                dirtyMap.SetReadablePrefixDebugOnly(3, BlockSize * 5);
                 MakeDirtyMapNeedPersist(dirtyMap);
                 UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap.NeedPersist());
 
@@ -1201,7 +1201,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             [&]() -> bool
             {
                 auto& dirtyMap = AccessBlocksDirtyMap(*vchunk);
-                dirtyMap.UpdateWatermarkDebugOnly(3, BlockSize * 5);
+                dirtyMap.SetReadablePrefixDebugOnly(3, BlockSize * 5);
                 MakeDirtyMapNeedPersist(dirtyMap);
 
                 // First call starts a persist; second call must be ignored

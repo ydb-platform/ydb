@@ -468,13 +468,13 @@ void TBlocksDirtyMap::UpdateBelatedEraseQueue(
     }
 }
 
-void TBlocksDirtyMap::UpdateWatermarkDebugOnly(
+void TBlocksDirtyMap::SetReadablePrefixDebugOnly(
     THostIndex host,
     ui64 bytesOffset)
 {
     Y_ABORT_UNLESS(bytesOffset / BlockSize < Max<ui16>());
 
-    DDiskStates[host].UpdateWatermarkDebugOnly(
+    DDiskStates[host].SetReadablePrefixDebugOnly(
         IntegerCast<ui16>(bytesOffset / BlockSize));
 }
 
@@ -797,7 +797,18 @@ bool TBlocksDirtyMap::NeedPersist() const
 
 TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
 {
+    bool hasFreshDDisk = false;
+    for (const auto& ddiskState: DDiskStates) {
+        if (ddiskState.GetState() == TDDiskState::EState::Fresh) {
+            hasFreshDDisk = true;
+            break;
+        }
+    }
+
     TDirtyMapStateProto result;
+    if (!hasFreshDDisk) {
+        return result;
+    }
 
     for (const auto& ddiskState: DDiskStates) {
         ddiskState.Save(result.AddDDiskStates());

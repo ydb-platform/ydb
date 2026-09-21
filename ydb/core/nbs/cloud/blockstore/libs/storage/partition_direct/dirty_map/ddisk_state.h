@@ -98,7 +98,7 @@ public:
     // Memory usage.
     [[nodiscard]] TArenaPoolStats GetMemoryStats() const;
 
-    void UpdateWatermarkDebugOnly(ui16 blockCount);
+    void SetReadablePrefixDebugOnly(ui16 readableBlockCount);
     [[nodiscard]] TString DebugPrint() const;
     [[nodiscard]] TString DebugPrintBehind() const;
     [[nodiscard]] TString DebugPrintBehindBrief() const;

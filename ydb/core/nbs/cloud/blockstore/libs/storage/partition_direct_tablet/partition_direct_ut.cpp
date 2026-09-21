@@ -1961,6 +1961,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         bool dropNextAllocationResult = false;
         // The replayed add lands at slot 5 of a six-host group; the copy to
         // it is finished once vchunk 0 reports the slot as a full ddisk.
+        bool copyToSlot5Started = false;
         bool copyToSlot5Finished = false;
         runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
         {
@@ -1994,14 +1995,19 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             {
                 const auto* msg = ev->Get<
                     TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>();
-                if (msg->VChunkIndex == 0 &&
-                    msg->State.DDiskStatesSize() == 6 &&
-                    msg->State.GetDDiskStates(5)
-                            .GetBehind()
-                            .GetEncodingCase() ==
-                        TBlockFieldProto::ENCODING_NOT_SET)
-                {
-                    copyToSlot5Finished = true;
+                if (msg->VChunkIndex == 0) {
+                    if (msg->State.DDiskStatesSize() == 6 &&
+                        msg->State.GetDDiskStates(5)
+                                .GetBehind()
+                                .GetEncodingCase() !=
+                            TBlockFieldProto::ENCODING_NOT_SET)
+                    {
+                        copyToSlot5Started = true;
+                    }
+                    if (copyToSlot5Started && msg->State.DDiskStatesSize() == 0)
+                    {
+                        copyToSlot5Finished = true;
+                    }
                 }
             }
             return true;

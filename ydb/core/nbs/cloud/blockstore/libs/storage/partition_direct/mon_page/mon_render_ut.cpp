@@ -301,6 +301,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         config.PromoteHost(3);
         config.DisableHost(0);
         const TVChunkConfigs configs{{0, std::move(config)}};
+        data.Dbgs[0].FreshDDisks[0].Set(3);
 
         TTestTouchedProvider touchedProvider;
         touchedProvider.Touched = {0};
@@ -313,13 +314,16 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             4,
             CountOccurrences(
                 html,
-                "DDisk:&#10;Primary:3&#10;Rotten:1&#10;PBuffer: 4"));
+                "DDisk:&#10;Primary:2&#10;Fresh:1&#10;Rotten:1&#10;PBuffer: "
+                "4"));
         UNIT_ASSERT_STRING_CONTAINS(
             html,
-            "class=\"dbg-config-cell dbg-config-both dbg-config-rotten\"");
+            "class=\"dbg-config-cell dbg-config-both dbg-config-fresh "
+            "dbg-config-rotten\"");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
-            "class=\"dbg-config-cell dbg-config-total dbg-config-rotten\"");
+            "class=\"dbg-config-cell dbg-config-total dbg-config-fresh "
+            "dbg-config-rotten\"");
     }
 
     Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)

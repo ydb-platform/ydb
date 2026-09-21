@@ -111,8 +111,9 @@ first Behind range can be read. Successful flush and copy operations remove
 their ranges from Behind, while a flush missed by a lagging DDisk adds its
 range.
 
-The configuration watermark initializes a fresh DDisk. A configuration change
-and the corresponding Behind state are committed atomically. Flush results
+For a touched vChunk, adding a DDisk initializes its Behind field to the full
+range; for an untouched vChunk, it starts empty. A configuration change and
+the corresponding Behind state are committed atomically. Flush results
 update the Behind field, incrementing the dirty-map state generation.
 `DoPersistDirtyMap` sends standalone state updates through the same ordered
 transaction queue in
@@ -139,7 +140,7 @@ one peer-to-peer DDisk wire sync.
 
 Host health and vChunk configuration are separate: temporary unavailability
 does not itself remove a host's DDisk role. Promotion, demotion and evacuation
-update masks and watermarks; new/fresh destinations need repair before they
+update host roles; new/fresh destinations need repair before they
 can serve their full range.
 
 [part_add_host_to_dbg.cpp](../../partition_direct_tablet/part_add_host_to_dbg.cpp)

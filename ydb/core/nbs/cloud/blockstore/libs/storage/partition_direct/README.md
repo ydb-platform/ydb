@@ -28,7 +28,7 @@ it is a separate client and does not reproduce every partition policy.
 | [TFastPathService](fast_path_service.h) | `IStorage` entry point; regions, LSN generation, volume-wide cleanup and copy budget |
 | [TRegion](region.cpp), [region geometry](model/region_geometry.cpp) | Stripe-to-vChunk address translation and vChunk-to-DBG mapping |
 | [TVChunk](vchunk.cpp) | Per-vChunk requests, dirty map, flush/erase, host configuration and data copiers |
-| [TVChunkConfig](model/vchunk_config.cpp), [THostRoles](model/host_roles.cpp) | Primary/handoff roles, availability, promotion, evacuation and watermarks |
+| [TVChunkConfig](model/vchunk_config.cpp), [THostRoles](model/host_roles.cpp) | Primary/handoff roles, availability, promotion and evacuation |
 | [TBlocksDirtyMap](dirty_map/dirty_map.cpp), [TInflightInfo](dirty_map/inflight_info.cpp) | Versioned PB records, read hints, locks and cleanup readiness |
 | [TDDiskState](dirty_map/ddisk_state.cpp) | Behind ranges and the readable prefix of recovering or lagging DDisks |
 | [TWriteRequestExecutor](write_request.cpp) | Direct/indirect PB writes, quorum, timeout, hedging and late completions |

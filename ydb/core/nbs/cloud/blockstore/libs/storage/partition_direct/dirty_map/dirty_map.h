@@ -48,7 +48,8 @@ public:
         ui16 blockCount);
     ~TBlocksDirtyMap() override;
 
-    // Note. Fresh watermarks are not applying for exists DDisks.
+    // Existing DDisks retain their Behind state; newly added DDisks start
+    // with full Behind only when the VChunk is touched.
     void UpdateConfig(const TVChunkConfig& vChunkConfig, bool isTouched);
 
     void RestorePBuffer(
@@ -85,8 +86,8 @@ public:
         THostMask completedWrites,
         TPBufferKey pBufferKey);
 
-    // Sets the mark up to which the disk can be read.
-    void UpdateWatermarkDebugOnly(THostIndex host, ui64 bytesOffset);
+    // Sets the readable prefix of one DDisk for tests.
+    void SetReadablePrefixDebugOnly(THostIndex host, ui64 bytesOffset);
     // Returns the first "fresh" range to be synced with data from another
     // replicas. Nullopt means that the disk is completely full of data. And you
     // can read it from anywhere.
@@ -147,6 +148,7 @@ public:
 
     // Persist
     [[nodiscard]] bool NeedPersist() const;
+    // Returns an empty proto when no DDisk needs repair.
     [[nodiscard]] TDirtyMapStateProto GetStateForPersist() const;
     // Predicts the future state after applying vChunkConfig without changing
     // the current in-memory state.

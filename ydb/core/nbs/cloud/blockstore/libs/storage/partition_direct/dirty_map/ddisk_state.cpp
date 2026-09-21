@@ -22,7 +22,7 @@ void TDDiskState::Init(
     BehindMonitor = behindMonitor;
     TotalBlockCount = totalBlockCount;
 
-    // Mark all blocks over watermark as behind.
+    // Mark all blocks after the readable prefix as behind.
     if (operationalBlockCount < TotalBlockCount) {
         BehindField.Add(TBlockRange16::MakeClosedInterval(
             operationalBlockCount,
@@ -155,14 +155,15 @@ TArenaPoolStats TDDiskState::GetMemoryStats() const
     return BehindField.GetMemoryStats();
 }
 
-void TDDiskState::UpdateWatermarkDebugOnly(ui16 blockCount)
+void TDDiskState::SetReadablePrefixDebugOnly(ui16 readableBlockCount)
 {
-    Y_ABORT_UNLESS(blockCount <= TotalBlockCount);
+    Y_ABORT_UNLESS(readableBlockCount <= TotalBlockCount);
 
     BehindField.Clear();
-    if (blockCount < TotalBlockCount) {
-        BehindField.Add(
-            TBlockRange16::MakeClosedInterval(blockCount, TotalBlockCount - 1));
+    if (readableBlockCount < TotalBlockCount) {
+        BehindField.Add(TBlockRange16::MakeClosedInterval(
+            readableBlockCount,
+            TotalBlockCount - 1));
     }
     UpdateState(false);
 }

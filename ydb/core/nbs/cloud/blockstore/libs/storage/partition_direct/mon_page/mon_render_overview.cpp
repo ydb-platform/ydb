@@ -236,6 +236,7 @@ void TDbgConfigTableData::ApplyRealConfigs(
 
         Y_ABORT_UNLESS(dbgId < dbgs.size() && dbgs[dbgId].Index == dbgId);
         const auto& dbg = dbgs[dbgId];
+        const auto* freshDDisks = dbg.FreshDDisks.FindPtr(vChunkId);
         const size_t columnIndex = dbg.Index % VChunkPerRegionCount;
         const auto disabledHosts = config.GetDisabledHosts();
         for (THostIndex host = 0;
@@ -244,8 +245,10 @@ void TDbgConfigTableData::ApplyRealConfigs(
         {
             const auto& connection = dbg.Connections[host];
             if (config.GetDDiskRole(host) != EHostRole::None) {
+                const bool fresh =
+                    (freshDDisks != nullptr) && freshDDisks->Get(host);
                 const auto state =
-                    config.GetHostHumanReadableState(host, false);
+                    config.GetHostHumanReadableState(host, fresh);
                 ++Table[connection.DDiskId.NodeId][columnIndex]
                       .DDiskStates[state];
             }

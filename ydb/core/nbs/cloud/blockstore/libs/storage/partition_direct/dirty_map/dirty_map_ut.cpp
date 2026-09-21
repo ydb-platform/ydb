@@ -193,6 +193,22 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintDDiskState());
     }
 
+    Y_UNIT_TEST(ShouldOmitPersistedStateWithoutFreshDDisks)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            dirtyMap->GetStateForPersist().DDiskStatesSize());
+
+        vchunkConfig.PromoteHost(3);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            vchunkConfig.GetHostCount(),
+            dirtyMap->GetStateForPersist().DDiskStatesSize());
+    }
+
     Y_UNIT_TEST(ShouldStartAddedDDiskFullWhenUntouched)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
@@ -325,8 +341,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
-        dirtyMap->UpdateWatermarkDebugOnly(0, 30 * DefaultBlockSize);
-        dirtyMap->UpdateWatermarkDebugOnly(2, 40 * DefaultBlockSize);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 30 * DefaultBlockSize);
+        dirtyMap->SetReadablePrefixDebugOnly(2, 40 * DefaultBlockSize);
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh+,30};"
@@ -336,26 +352,26 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H4+{Disabled,0};",
             dirtyMap->DebugPrintDDiskState());
 
-        // Read below fresh watermark
+        // Read below the first Behind range
         auto readHint =
             dirtyMap->MakeReadHint(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
 
-        // Read crossed fresh watermark
+        // Read crosses the first Behind range
         readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(25, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2][25..34][0..9]};",
             readHint.DebugPrint());
 
-        // Read above fresh watermark
+        // Read above the readable prefix
         readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(30, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2][30..39][0..9]};",
             readHint.DebugPrint());
 
-        // Read above fresh watermark
+        // Read above the readable prefix
         readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(40, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1][40..49][0..9]};",
@@ -796,7 +812,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Promote hand-off H3 to primary.
         vchunkConfig.PromoteHost(3);
         dirtyMap->UpdateConfig(vchunkConfig, true);
-        dirtyMap->UpdateWatermarkDebugOnly(3, DefaultBlockSize * 1024);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
             "H1*{Operational,32768};"
@@ -850,7 +866,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // prefix.
         vchunkConfig.PromoteHost(3);
         dirtyMap->UpdateConfig(vchunkConfig, true);
-        dirtyMap->UpdateWatermarkDebugOnly(3, DefaultBlockSize * 5);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 5);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
             "H1*{Operational,32768};"
@@ -864,7 +880,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "  H3: [5..32767]\n",
             dirtyMap->DebugPrintBehind());
 
-        // Write above the fresh watermark to all four DDisks.
+        // Write above the readable prefix to all four DDisks.
         const THostMask requested = MakeHostMask(true, true, true, true, false);
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
@@ -902,7 +918,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.EvacuateHost(0);
         UNIT_ASSERT_VALUES_EQUAL("", error);
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
-        dirtyMap->UpdateWatermarkDebugOnly(3, DefaultBlockSize * 1024);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
 
         // Written to two primary and one hand-off
         const THostMask requested =
@@ -948,8 +964,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.EvacuateHost(1);
         UNIT_ASSERT_VALUES_EQUAL("", error);
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
-        dirtyMap->UpdateWatermarkDebugOnly(3, DefaultBlockSize * 1024);
-        dirtyMap->UpdateWatermarkDebugOnly(4, DefaultBlockSize * 1024);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
+        dirtyMap->SetReadablePrefixDebugOnly(4, DefaultBlockSize * 1024);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
             "H1-{Disabled,0};"
@@ -997,7 +1013,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.EvacuateHost(0);
 
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
-        dirtyMap->UpdateWatermarkDebugOnly(3, DefaultBlockSize * 1024);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
             "H1*{Operational,32768};"
@@ -1040,7 +1056,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
     }
 
-    Y_UNIT_TEST(ShouldFlushOverWriteWatermark)
+    Y_UNIT_TEST(ShouldFlushAcrossReadablePrefix)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         // Disable DDisks H2
@@ -1049,13 +1065,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.DisableHost(2);
         vchunkConfig.PromoteHost(3);
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
-        dirtyMap->UpdateWatermarkDebugOnly(3, 100);
+        dirtyMap->SetReadablePrefixDebugOnly(3, 100);
 
         const THostMask requested =
             MakeHostMask(true, true, false, true, false);
         const THostMask confirmed = requested;
 
-        // Range below write watermark. Should be flushed to 3 enabled ddisks.
+        // Range below readable prefix. Should be flushed to 3 enabled ddisks.
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
             TBlockRange16::WithLength(10, 10));
@@ -1064,7 +1080,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
-        // Range cross write watermark. Should be flushed to 3 enabled ddisks.
+        // Range crosses readable prefix. Should be flushed to 3 enabled ddisks.
         dirtyMap->RegisterInflightWrite(
             MakeKey(124),
             TBlockRange16::WithLength(95, 10));
@@ -1073,7 +1089,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange16::WithLength(95, 10),
             requested,
             confirmed);
-        // Range over write watermark. Should be flushed to 3 enabled ddisks.
+        // Range beyond readable prefix. Should be flushed to 3 enabled ddisks.
         // Because it overlaps 124, this record must be flushed after 124.
         dirtyMap->RegisterInflightWrite(
             MakeKey(125),
@@ -2413,7 +2429,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
 
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
-        dirtyMap->UpdateWatermarkDebugOnly(0, 30 * DefaultBlockSize);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 30 * DefaultBlockSize);
 
         const ui64 totalBlocks =
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize);
@@ -2450,7 +2466,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
 
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
-        dirtyMap->UpdateWatermarkDebugOnly(0, 0);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 0);
 
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
@@ -2505,7 +2521,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
 
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
-        dirtyMap->UpdateWatermarkDebugOnly(0, 0);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 0);
 
         const auto range = TBlockRange16::MakeClosedInterval(0, 255);
 
@@ -2532,7 +2548,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
 
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
-        dirtyMap->UpdateWatermarkDebugOnly(0, 0);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 0);
 
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
@@ -2576,7 +2592,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.DisableHost(1);
 
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
-        dirtyMap->UpdateWatermarkDebugOnly(3, DefaultBlockSize * 5);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 5);
 
         // Initially no changes.
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
@@ -2638,7 +2654,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.DisableHost(1);
 
         auto source = MakeDirtyMap(vchunkConfig);
-        source->UpdateWatermarkDebugOnly(3, DefaultBlockSize * 5);
+        source->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 5);
 
         const THostMask requested = MakeHostMask(true, true, true, true, false);
         source->RegisterInflightWrite(

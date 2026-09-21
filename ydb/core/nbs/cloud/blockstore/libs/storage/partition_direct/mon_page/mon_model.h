@@ -12,6 +12,7 @@
 
 #include <ydb/core/mind/bscontroller/types.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
@@ -96,6 +97,8 @@ struct TDbgSnapshot
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
+    // Current Fresh DDisks for vchunks that have any.
+    THashMap<ui32, THostMask> FreshDDisks;
     TArenaPoolStats MemoryStats;
     TArenaAllocatorStats DetailedMemoryStats;
     TDirtyMapStats DirtyMapStats;

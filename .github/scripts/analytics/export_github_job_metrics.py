@@ -152,8 +152,8 @@ def main() -> int:
 
         with YDBWrapper() as wrapper:
             if not wrapper.check_credentials():
-                print("Error: YDB credentials check failed")
-                return 1
+                print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+                return 0
             table_path = args.table_path or resolve_table_path(wrapper)
             uploaded = upsert_metrics(wrapper, rows, table_path=table_path)
             print(f"Uploaded {uploaded} metric rows to {table_path}")

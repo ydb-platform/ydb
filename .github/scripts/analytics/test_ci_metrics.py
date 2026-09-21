@@ -82,6 +82,19 @@ class NormalizeMetricTest(unittest.TestCase):
         self.assertEqual(labels["cache_mode"], "dist_cache")
         self.assertEqual(labels["ya_attempt"], 1)
         self.assertEqual(labels["stage_kind"], "ya_phase")
+        self.assertEqual(row["source"], "ya_phase")
+
+    def test_finished_epoch_and_unknown_source(self):
+        row = normalize_metric(
+            {
+                "name": "s3_sync_try",
+                "run_id": 7,
+                "started_at": "1000",
+                "finished_epoch": "1010",
+            }
+        )
+        self.assertEqual(row["value"], 10000.0)
+        self.assertEqual(row["source"], "unknown")
 
     def test_gauge(self):
         row = normalize_metric(
@@ -167,6 +180,8 @@ class WorkflowRunMetricsTest(unittest.TestCase):
         self.assertIn(("github_job", "job"), keys)
         self.assertIn(("github_job", "queue"), keys)
         self.assertIn(("github_step", "Checkout"), keys)
+        job_sources = {row["source"] for row in rows if row["name"] == "job"}
+        self.assertEqual(job_sources, {"github_job"})
         self.assertIn(("github_step", "ya build and test"), keys)
         self.assertNotIn(("github_step", "skipped step"), keys)
 
@@ -193,6 +208,7 @@ class SchemaTest(unittest.TestCase):
         self.assertIn("ON event_ts", sql)
         for key in PRIMARY_KEYS:
             self.assertIn(f"`{key}`", sql)
+        self.assertIn("`source` Utf8 NOT NULL", sql)
 
 
 class GithubEnvDefaultsTest(unittest.TestCase):

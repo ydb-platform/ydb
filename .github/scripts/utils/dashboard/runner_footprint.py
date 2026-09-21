@@ -124,7 +124,7 @@ def resolve_runner_footprint(
     path = config_path or default_config_path()
     try:
         config = _load_yaml(path) if path.is_file() else {}
-    except OSError:
+    except (OSError, RuntimeError):
         config = {}
 
     fp_entry, fp_key, source = _pick_footprint_entry(config, build_preset)

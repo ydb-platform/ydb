@@ -163,11 +163,14 @@ class EmitSmokeTest(unittest.TestCase):
                 )
             self.assertEqual(main(["--evlog", evlog, "--file", out, "--source", "nightly_build"]), 0)
             with open(out, encoding="utf-8") as handle:
-                row = json.loads(handle.readline())
-            self.assertEqual(row["name"], "ydb/x.cpp")
-            self.assertEqual(row["source"], "nightly_build")
-            self.assertEqual(row["value"], 1000.0)
-            self.assertEqual(row["labels"]["node_kind"], "Compile")
+                rows = [json.loads(line) for line in handle if line.strip()]
+            names = {row["name"]: row for row in rows}
+            self.assertEqual(names["ydb/x.cpp"]["source"], "nightly_build")
+            self.assertEqual(names["ydb/x.cpp"]["value"], 1000.0)
+            self.assertEqual(names["ydb/x.cpp"]["labels"]["node_kind"], "Compile")
+            self.assertEqual(names["build_info"]["kind"], "info")
+            self.assertEqual(names["build_info"]["labels"]["payload"]["schema"], "ya_nodes")
+            self.assertEqual(names["build_info"]["labels"]["payload"]["nodes"][0]["name"], "ydb/x.cpp")
 
     def test_cpp_and_headers_cli(self):
         from export_ya_nodes import main
@@ -216,6 +219,35 @@ class EmitSmokeTest(unittest.TestCase):
             self.assertEqual(names["src/ydb/a.h"]["value"], 1000.0)
             self.assertEqual(names["src/ydb/a.h"]["labels"]["node_kind"], "Header")
             self.assertEqual(names["src/ydb/a.h"]["labels"]["inclusion_count"], 2)
+            info_rows = [row for row in rows if row["name"] == "build_info"]
+            self.assertEqual(len(info_rows), 2)
+            origins = {row["labels"]["payload"]["origin"] for row in info_rows}
+            self.assertEqual(origins, {cpp, headers})
+
+    def test_no_build_info_flag(self):
+        from export_ya_nodes import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            evlog = f"{tmp}/evlog.jsonl"
+            out = f"{tmp}/metrics.jsonl"
+            with open(evlog, "w", encoding="utf-8") as handle:
+                handle.write(
+                    json.dumps(
+                        {
+                            "namespace": "worker_threads",
+                            "event": "node-finished",
+                            "value": {"name": "Compile($B/ydb/x.cpp)", "time": [1.0, 2.0]},
+                        }
+                    )
+                    + "\n"
+                )
+            self.assertEqual(
+                main(["--evlog", evlog, "--file", out, "--source", "nightly_build", "--no-build-info"]),
+                0,
+            )
+            with open(out, encoding="utf-8") as handle:
+                rows = [json.loads(line) for line in handle if line.strip()]
+            self.assertEqual([row["name"] for row in rows], ["ydb/x.cpp"])
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ TPlanViewConfig::TPlanViewConfig() {
     OperatorLeft = HeaderLeft + HeaderWidth + GAP_X;
     OperatorWidth = 54;
     TaskLeft = OperatorLeft + OperatorWidth + GAP_X;
-    // Room for the per-node task bars (NODE_TASK_WIDTH per task) next to the task count.
+    // Room for the per-node task plot behind the task count.
     TaskWidth = 40;
     SummaryLeft = TaskLeft + TaskWidth + GAP_X;
     SummaryWidth = 200;

@@ -57,10 +57,6 @@
   </g>
 
 </defs>
-<defs>
-  <pattern id='tasks_finished' patternUnits='userSpaceOnUse' width='2' height='2'><rect x='0' y='0' width='2' height='1' fill='var(--stage-text, #262626)'/></pattern>
-  <pattern id='tasks_running' patternUnits='userSpaceOnUse' width='2' height='2'><rect x='0' y='0' width='2' height='2' fill='var(--stage-main, #F2F2F2)'/><rect x='0' y='0' width='2' height='1' fill='var(--stage-clone, #D9D9D9)'/></pattern>
-</defs>
 <style type='text/css'>
   rect.stage { stroke-width:0; fill:var(--stage-main, #F2F2F2); }
   rect.clone { stroke-width:0; fill:var(--stage-clone, #D9D9D9); }

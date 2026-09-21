@@ -93,9 +93,10 @@ public:
     // The dashed line down the task gutter, covering the share of the stage's
     // tasks that have not finished yet. Draws nothing until at least one task has.
     void PrintUnfinishedTasks(TStringBuilder& builder, ui32 tasks, ui32 finishedTasks);
-    // One bar per node stacked down the task gutter, NODE_TASK_WIDTH per task:
-    // the finished tasks on the left, the running ones on the right.
-    void PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes);
+    // The per-node task profile down the task gutter: the nodes along the
+    // height, the task count of each across the width, as two areas - all
+    // tasks behind, the ones still running in front.
+    void PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes, ui32 height);
     // A red circle with one letter in it, hung at the bottom of a strip and
     // explained by its tooltip.
     void PrintWarningBadge(TStringBuilder& builder, ui32 cx, ui32 bottom, const TString& title, TStringBuf label);

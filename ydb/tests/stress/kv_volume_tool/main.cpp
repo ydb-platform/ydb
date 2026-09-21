@@ -1041,7 +1041,7 @@ struct TOptions {
     bool Verbose = false;
 };
 
-ui64 StickyPartitionId(ui32 threadIndex, ui32 partitionCount) {
+ui32 StickyPartitionId(ui32 threadIndex, ui32 partitionCount) {
     return threadIndex % partitionCount;
 }
 
@@ -1206,7 +1206,7 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
 
             const ui64 written = ctx.WrittenPerThread[t].load(std::memory_order_relaxed);
             const ui32 globalThread = t + ctx.Options.PartitionOffset;
-            const ui64 partitionId = StickyPartitionId(globalThread, ctx.Options.PartitionCount);
+            const ui32 partitionId = StickyPartitionId(globalThread, ctx.Options.PartitionCount);
 
             TVector<TString> keys;
             keys.reserve(ctx.Options.BatchSize);
@@ -1266,7 +1266,7 @@ std::thread BuildReadWorker(TLoadContext& ctx, ui32 t) {
             std::uniform_int_distribution<ui64> keyDist(0, usable - 1);
             const ui64 keyIndex = keyDist(rng);
             const ui32 globalWriter = writer + ctx.Options.PartitionOffset;
-            const ui64 partitionId = StickyPartitionId(globalWriter, ctx.Options.PartitionCount);
+            const ui32 partitionId = StickyPartitionId(globalWriter, ctx.Options.PartitionCount);
             const TString key = TStringBuilder() << "load_" << ctx.RunId << "_" << globalWriter << "_" << keyIndex;
 
             TString error;
@@ -1596,7 +1596,7 @@ int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const T
 
             ui64 i = 0;
             while (!stop.load(std::memory_order_relaxed) && std::chrono::steady_clock::now() < deadline) {
-                const ui64 partitionId = StickyPartitionId(config.ThreadIndex, options.PartitionCount);
+                const ui32 partitionId = StickyPartitionId(config.ThreadIndex, options.PartitionCount);
                 const TString key = TStringBuilder() << config.KeyPrefix << "_" << i;
 
                 TString error;

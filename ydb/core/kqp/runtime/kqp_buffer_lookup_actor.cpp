@@ -98,8 +98,7 @@ public:
     static constexpr char ActorName[] = "KQP_BUFFER_LOOKUP_ACTOR";
 
     void PassAway() final {
-        ShardReadTrace.Finish(LookupActorSpan);
-        EndQueryTraceSpan(LookupActorSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+        FinishLookupTrace(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Settings.Counters->StreamLookupActorsCount->Dec();
 
         ClearAllWorkerResults();
@@ -123,8 +122,6 @@ public:
 
     void Unlink() override {
         AFL_ENSURE(ReadIdToState.empty());
-        ShardReadTrace.Finish(LookupActorSpan);
-        EndQueryTraceSpan(LookupActorSpan, Ydb::StatusIds::SUCCESS);
 
         for (auto& [_, state] : ShardToState) {
             state.HasPipe = false;
@@ -830,11 +827,20 @@ public:
             NYql::EYqlIssueCode id,
             const TString& message,
             const NYql::TIssues& subIssues = {}) {
-        ShardReadTrace.Finish(LookupActorSpan);
-        if (LookupActorSpan) {
-            LookupActorSpan.EndError(message);
-        }
+        FinishLookupTrace(Ydb::StatusIds::GENERIC_ERROR, &message);
         Settings.Callbacks->OnLookupError(statusCode, id, message, subIssues);
+    }
+
+    void FinishLookupTrace(Ydb::StatusIds::StatusCode status, const TString* errorMessage = nullptr) {
+        if (!LookupActorSpan) {
+            return;
+        }
+        ShardReadTrace.Finish(LookupActorSpan);
+        if (errorMessage) {
+            LookupActorSpan.EndError(*errorMessage);
+        } else {
+            EndQueryTraceSpan(LookupActorSpan, status);
+        }
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats) override {

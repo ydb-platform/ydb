@@ -151,9 +151,11 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     }
     AFL_ENSURE(state->State == EShardState::Running)("state", state->State)("actor_id", state->ActorId)("ev_sender", ev->Sender);
 
-    InFlightShards.GetShardScannerVerified(state->TabletId)->Trace.OnData(
-        ev->Sender.NodeId(), ev->Get()->GetRowsCount(),
-        ev->Get()->CpuTime, ev->Get()->WaitTime, ev->Get()->Finished);
+    if (auto scanner = InFlightShards.GetShardScanner(state->TabletId)) {
+        scanner->Trace.OnData(
+            ev->Sender.NodeId(), ev->Get()->GetRowsCount(),
+            ev->Get()->CpuTime, ev->Get()->WaitTime, ev->Get()->Finished);
+    }
 
     TStringBuilder locks;
     for (const auto& lock : ev->Get()->LocksInfo.Locks) {

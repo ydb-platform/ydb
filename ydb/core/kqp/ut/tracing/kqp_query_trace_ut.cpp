@@ -1286,6 +1286,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     << "UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (1u, " << (10 + step) << "u); "
                     << "SELECT * FROM `/Root/UniqueValues` WHERE Key = 1u;");
                 auto& query = *request->Record.MutableRequest();
+                const TString queryText = query.GetQuery();
                 query.SetType(type);
                 query.SetSessionId(sessionId);
                 auto& tx = *query.MutableTxControl();
@@ -1300,21 +1301,21 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     UNIT_ASSERT(uploader->Spans.empty());
                     continue;
                 }
-                UNIT_ASSERT(uploader->BuildTraceTrees());
-                UNIT_ASSERT(std::ranges::any_of(uploader->Spans, [](const auto& span) {
+                const auto snapshot = WaitForQueryTrace(runtime, queryText, type, {"Check rows"});
+                UNIT_ASSERT(std::ranges::any_of(snapshot.Spans, [](const auto& span) {
                     const auto* purpose = FindAttribute(span, "ydb.compile_dependency.purpose");
                     return purpose && purpose->value().string_value() == "index_implementation";
                 }));
-                const auto* lookup = FindSpan(*uploader, "Check rows");
-                UNIT_ASSERT_C(lookup, uploader->PrintTraces());
-                UNIT_ASSERT_C(std::ranges::any_of(uploader->Spans, [](const auto& span) {
+                const auto* lookup = FindSpan(snapshot, "Check rows");
+                UNIT_ASSERT(lookup);
+                UNIT_ASSERT_C(std::ranges::any_of(snapshot.Spans, [](const auto& span) {
                     return span.name() == "Check rows" && std::ranges::any_of(span.events(), [](const auto& event) {
                         return event.name() == "Shard read statistics";
                     });
-                }), "type=" << static_cast<int>(type) << " step=" << step << " " << uploader->PrintTraces());
-                UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1);
-                AssertDescendant(*uploader, "Check rows", "Query session");
-                AssertStatus(*uploader, "Buffer rows", NTraceProto::Status::STATUS_CODE_OK);
+                }), "type=" << static_cast<int>(type) << " step=" << step << " " << snapshot.PrintTraces());
+                UNIT_ASSERT_VALUES_EQUAL(snapshot.Traces.size(), 1);
+                AssertDescendant(snapshot, "Check rows", "Query session");
+                AssertStatus(snapshot, "Buffer rows", NTraceProto::Status::STATUS_CODE_OK);
             }
         }
     }

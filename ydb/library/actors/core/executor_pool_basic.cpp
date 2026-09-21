@@ -626,7 +626,6 @@ namespace NActors {
 
         i16 previousSleepingCount = SleepingCount.exchange(0, std::memory_order_acq_rel);
         WakerPending.store(false, std::memory_order_release);
-        const ui64 writeEpoch = ActivationWriteEpoch.load(std::memory_order_acquire);
         ui64 remainingReductions = CheckToSleepWorkers.exchange(0, std::memory_order_acq_rel) & WakerReductionMask;
         Y_ABORT_UNLESS(Waker->PreviousReductions >= remainingReductions);
         const ui64 claimedReductions = Waker->PreviousReductions - remainingReductions;
@@ -837,8 +836,7 @@ namespace NActors {
 
         // A producer publishes its credit before the corresponding queue item.
         // If the credit appeared while SleepingCount was hidden, repeat the pass.
-        if (ActivationCredits.load(std::memory_order_acquire) > previousActivationCredits ||
-                ActivationWriteEpoch.load(std::memory_order_acquire) != writeEpoch) {
+        if (ActivationCredits.load(std::memory_order_acquire) > previousActivationCredits) {
             WakerPending.store(true, std::memory_order_release);
         }
         *resumeState = wakerState;
@@ -929,7 +927,6 @@ namespace NActors {
     void TBasicExecutorPool::ScheduleActivationExWaker(TMailbox* mailbox, ui64 revolvingCounter) {
         ActivationCredits.fetch_add(1, std::memory_order_acq_rel);
         Activations.Push(mailbox->Hint, revolvingCounter);
-        ActivationWriteEpoch.fetch_add(1, std::memory_order_release);
         if (SharedPool || SleepingCount.load(std::memory_order_acquire) > 0) {
             RequestWaker(false);
         }

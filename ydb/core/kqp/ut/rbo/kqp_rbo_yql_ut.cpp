@@ -1676,7 +1676,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 MakeIntrusive<TOpEmptySource>(pos),
                 pos,
                 "Cross",
-                TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+                TVector<TJoinKey>{});
         }
         TOpRoot root(op, pos, TVector<TString>{});
 
@@ -1938,7 +1938,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             shared,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+            TVector<TJoinKey>{});
         TOpRoot root(join, pos, TVector<TString>{});
 
         auto inactiveChild = MakeIntrusive<TOpEmptySource>(pos);
@@ -1947,7 +1947,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             MakeIntrusive<TOpEmptySource>(pos),
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+            TVector<TJoinKey>{});
         const TInfoUnit inactiveIU("inactive_subplan", true);
         root.PlanProps.Subplans.Add(inactiveIU, inactiveSubplan, ESubplanType::EXPR);
 
@@ -1976,7 +1976,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto filter = MakeIntrusive<TOpFilter>(leftRead, pos, MakeColumnAccess(TInfoUnit("b"), pos, &exprCtx, &planProps));
         auto limit = MakeIntrusive<TOpLimit>(filter, pos, MakeConstant("Uint64", "10", pos, &exprCtx), EOpPhase::Undefined);
         auto rightRead = MakeTestRead({TInfoUnit("a")}, pos);
-        auto join = MakeIntrusive<TOpJoin>(limit, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(limit, rightRead, pos, "Inner", TVector<TJoinKey>{});
         TOpRoot root(join, pos, {"b", "a"});
 
         ComputeLogicalTestProps(root);
@@ -1994,7 +1994,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto leftRead = MakeTestRead({TInfoUnit("b")}, pos);
         auto filter = MakeIntrusive<TOpFilter>(leftRead, pos, MakeColumnAccess(TInfoUnit("b"), pos, &exprCtx, &planProps));
         auto rightRead = MakeTestRead({TInfoUnit("a")}, pos);
-        auto join = MakeIntrusive<TOpJoin>(filter, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(filter, rightRead, pos, "Inner", TVector<TJoinKey>{});
         TOpRoot root(join, pos, {"b", "a"});
 
         ComputeLogicalTestProps(root);
@@ -2011,7 +2011,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto leftRead = MakeTestRead({TInfoUnit("a")}, pos);
         auto leftMap = MakeIntrusive<TOpMap>(leftRead, pos, TVector<TMapElement>{MakeTestRename("b", "a", pos, exprCtx, planProps)});
         auto rightRead = MakeTestRead({TInfoUnit("a")}, pos);
-        auto join = MakeIntrusive<TOpJoin>(leftMap, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(leftMap, rightRead, pos, "Inner", TVector<TJoinKey>{});
         TOpRoot root(join, pos, {"a"});
 
         ComputeLogicalTestProps(root);
@@ -2033,7 +2033,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto limit = MakeIntrusive<TOpLimit>(hiddenMap, pos, MakeConstant("Uint64", "10", pos, &exprCtx), EOpPhase::Undefined);
         auto leftMap = MakeIntrusive<TOpMap>(limit, pos, TVector<TMapElement>{MakeTestRename("left_id", ignore.GetFullName(), pos, exprCtx, planProps)});
         auto rightMap = MakeIntrusive<TOpMap>(limit, pos, TVector<TMapElement>{MakeTestRename("right_id", ignore.GetFullName(), pos, exprCtx, planProps)});
-        auto join = MakeIntrusive<TOpJoin>(leftMap, rightMap, pos, "Cross", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(leftMap, rightMap, pos, "Cross", TVector<TJoinKey>{});
         TOpRoot root(join, pos, {"left_id", "right_id"});
 
         ComputeLogicalTestProps(root);
@@ -2058,7 +2058,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto rightMap = MakeIntrusive<TOpMap>(rightRead, pos, TVector<TMapElement>{
             MakeTestRename("right_id", hidden.GetFullName(), pos, exprCtx, planProps),
         });
-        auto join = MakeIntrusive<TOpJoin>(leftMap, rightMap, pos, "Cross", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(leftMap, rightMap, pos, "Cross", TVector<TJoinKey>{});
         TOpRoot root(join, pos, {"left_id", "right_id"});
 
         ComputeLogicalTestProps(root);
@@ -2092,9 +2092,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         auto leftRead = MakeTestRead({TInfoUnit("l")}, pos);
         auto rightRead = MakeTestRead({TInfoUnit("r")}, pos);
-        auto join = MakeIntrusive<TOpJoin>(leftRead, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(leftRead, rightRead, pos, "Inner", TVector<TJoinKey>{});
         auto parentRightRead = MakeTestRead({TInfoUnit("z")}, pos);
-        auto parentJoin = MakeIntrusive<TOpJoin>(join, parentRightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto parentJoin = MakeIntrusive<TOpJoin>(join, parentRightRead, pos, "Inner", TVector<TJoinKey>{});
         TOpRoot root(parentJoin, pos, {"l", "r", "z"});
 
         ComputeLogicalTestProps(root);
@@ -2241,8 +2241,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(replacement != TInfoUnit("a"));
         UNIT_ASSERT(!IsGeneratedIgnoreIU(replacement));
         UNIT_ASSERT_VALUES_EQUAL(converted->JoinKeys.size(), 1);
-        UNIT_ASSERT(converted->JoinKeys.front().first == TInfoUnit("a"));
-        UNIT_ASSERT(converted->JoinKeys.front().second == replacement);
+        UNIT_ASSERT(converted->JoinKeys.front().Left == TInfoUnit("a"));
+        UNIT_ASSERT(converted->JoinKeys.front().Right == replacement);
 
         const auto output = converted->GetOutputIUs();
         UNIT_ASSERT_VALUES_EQUAL(MakeInfoUnitSet(output).size(), output.size());
@@ -5416,6 +5416,101 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST(JoinFiltersOnClauseOuterJoins) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto tableSession = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows1;
+        rows1.BeginList();
+        for (size_t i = 0; i < 4; ++i) {
+            rows1.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows1.EndList();
+        auto resultUpsert = db.BulkUpsert("/Root/t1", rows1.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows2;
+        rows2.BeginList();
+        for (size_t i = 0; i < 3; ++i) {
+            rows2.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows2.EndList();
+        resultUpsert = db.BulkUpsert("/Root/t2", rows2.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+        std::vector<std::pair<std::string, std::string>> cases = {
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b, t2.a, t2.b FROM `/Root/t1` AS t1
+                LEFT JOIN `/Root/t2` AS t2 ON t1.a = t2.a AND t1.b > 2 ORDER BY t1.a, t2.a;
+            )", R"([[0;[1];#;#];[1;[2];#;#];[2;[3];[2];[3]];[3;[4];#;#]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b, t2.a, t2.b FROM `/Root/t1` AS t1
+                LEFT JOIN `/Root/t2` AS t2 ON t1.a = t2.a AND t2.b > 2 ORDER BY t1.a, t2.a;
+            )", R"([[0;[1];#;#];[1;[2];#;#];[2;[3];[2];[3]];[3;[4];#;#]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t1.b > 2) ORDER BY t1.a;
+            )", R"([[2;[3]]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t2.b > 2) ORDER BY t1.a;
+            )", R"([[2;[3]]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t1.b > 2) ORDER BY t1.a;
+            )", R"([[0;[1]];[1;[2]];[3;[4]]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t2.b > 2) ORDER BY t1.a;
+            )", R"([[0;[1]];[1;[2]];[3;[4]]])"},
+        };
+
+        for (ui32 i = 0; i < cases.size(); ++i) {
+            const auto& [query, expected] = cases[i];
+            auto result = session.ExecuteQuery(TString(query), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "case " << i << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, "case " << i);
+        }
+    }
+
     Y_UNIT_TEST(JoinFiltersAdvanced) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -6444,6 +6539,76 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(DecorrelationEqualNullsJoinKeys, EqualNullsJoinKeys) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetEnableBlockHashJoinEqualNulls(EqualNullsJoinKeys);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (a Int64 NOT NULL, e Int64, primary key(a)) WITH (STORE = column);
+            CREATE TABLE `/Root/t2` (a Int64 NOT NULL, b Int64 NOT NULL, c Int64 NOT NULL, primary key(a)) WITH (STORE = column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder t1Rows;
+        t1Rows.BeginList();
+        for (i64 a = 1; a <= 4; ++a) {
+            t1Rows.AddListItem().BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("e").OptionalInt64(a == 1 ? std::nullopt : std::make_optional(a % 4))
+                .EndStruct();
+        }
+        t1Rows.EndList();
+        auto upsertResult = db.BulkUpsert("/Root/t1", t1Rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder t2Rows;
+        t2Rows.BeginList();
+        for (i64 a = 1; a <= 4; ++a) {
+            t2Rows.AddListItem().BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("b").Int64(a % 3)
+                .AddMember("c").Int64(a * a)
+                .EndStruct();
+        }
+        t2Rows.EndList();
+        upsertResult = db.BulkUpsert("/Root/t2", t2Rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        const TString query = R"(
+            SELECT t1.a FROM `/Root/t1` as t1
+            WHERE (SELECT max(t2.c) FROM `/Root/t2` as t2 WHERE t1.e IS NULL OR t2.b == t1.e) == 16
+            ORDER BY t1.a;
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        auto explainResult = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+        const auto ast = TString{*explainResult.GetStats()->GetAst()};
+
+        if (EqualNullsJoinKeys) {
+            UNIT_ASSERT_C(ast.Contains("EqualNulls"), "expected the join to carry EqualNulls settings, ast:\n" << ast);
+            UNIT_ASSERT_C(!ast.Contains("StablePickle"), "expected no StablePickle encoding, ast:\n" << ast);
+        } else {
+            UNIT_ASSERT_C(ast.Contains("StablePickle"), "expected StablePickle encoded join keys, ast:\n" << ast);
+            UNIT_ASSERT_C(!ast.Contains("EqualNulls"), "expected no EqualNulls settings, ast:\n" << ast);
+        }
+
+        auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[1]])");
+    }
+
     NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
         NKikimrKqp::TKqpSetting statsSetting;
         statsSetting.SetName("OptOverrideStatistics");
@@ -6944,7 +7109,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Inner",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("l_a"), TInfoUnit("a")}}
+            TVector<TJoinKey>{{TInfoUnit("l_a"), TInfoUnit("a")}}
         );
 
         auto bothSidesExpression = MakeBinaryPredicate(
@@ -7160,7 +7325,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             staleRightRead,
             pos,
             "Inner",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
 
         // Cache the join output, then change its input before packaging it.
@@ -7225,7 +7390,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Inner",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"t1.a"});
 
@@ -7257,7 +7422,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Left",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         TOpRoot root(join, pos, {"a", "payload"});
 
@@ -7527,7 +7692,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         SetTestListType(right, right->GetOutputIUs(), testContext.ExprCtx);
 
         auto join = MakeIntrusive<TOpJoin>(
-            left, right, pos, "Cross", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+            left, right, pos, "Cross", TVector<TJoinKey>{});
         TOpRoot root(join, pos, {"a", "b"});
         ComputeLogicalTestProps(root);
 
@@ -7559,7 +7724,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             read,
             pos,
             "LeftSemi",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("a")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("a")}}
         );
         join->Props.JoinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
         TOpRoot root(join, pos, {"a", "b"});
@@ -7802,7 +7967,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightAliasMap,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"left_sum", "right_sum"});
 
@@ -7853,7 +8018,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightMap,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"left_sum", "right_sum"});
 
@@ -8618,7 +8783,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Inner",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto renameMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
             MakeTestRename("l_a", "a", pos, testContext.ExprCtx, expressionProps),
@@ -8641,8 +8806,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(rewrittenRightRead->OutputIUs.front() == TInfoUnit("b"));
 
         UNIT_ASSERT_VALUES_EQUAL(rewrittenJoin->JoinKeys.size(), 1);
-        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().first == TInfoUnit("l_a"));
-        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().second == TInfoUnit("b"));
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().Left == TInfoUnit("l_a"));
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().Right == TInfoUnit("b"));
 
         const auto joinOutput = rewrittenJoin->GetOutputIUs();
         UNIT_ASSERT(std::find(joinOutput.begin(), joinOutput.end(), TInfoUnit("l_a")) != joinOutput.end());
@@ -8858,7 +9023,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             filterMap,
             pos,
             "LeftSemi",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {alias.GetFullName()});
 
@@ -8897,7 +9062,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightMap,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"left_alias", "right_alias"});
 
@@ -8937,7 +9102,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightMap,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"left_id", "right_id"});
 
@@ -8969,7 +9134,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightMap,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"left_id", "right_id"});
 
@@ -9005,7 +9170,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Inner",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("r")}},
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("r")}},
             TVector<TExpression>{joinFilter}
         );
         TOpRoot root(join, pos, {"r"});
@@ -9017,8 +9182,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
         UNIT_ASSERT_VALUES_EQUAL(join->JoinKeys.size(), 1);
-        UNIT_ASSERT(join->JoinKeys.front().first == TInfoUnit("b"));
-        UNIT_ASSERT(join->JoinKeys.front().second == TInfoUnit("r"));
+        UNIT_ASSERT(join->JoinKeys.front().Left == TInfoUnit("b"));
+        UNIT_ASSERT(join->JoinKeys.front().Right == TInfoUnit("r"));
 
         UNIT_ASSERT_VALUES_EQUAL(join->JoinFilters.size(), 1);
         const auto joinFilterInputs = join->JoinFilters.front().GetInputIUs(false, true);
@@ -9737,7 +9902,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Full",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto aliasMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
             MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
@@ -9806,7 +9971,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Left",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto appendMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
             MakeTestConstantAppend("one", pos, testContext.ExprCtx),
@@ -9841,7 +10006,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Left",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto map = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
             MakeTestConstantAppend("a", pos, testContext.ExprCtx),
@@ -9868,8 +10033,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(leftMap->GetMapElements()[1].GetRename() == TInfoUnit("a"));
 
         UNIT_ASSERT_VALUES_EQUAL(rewrittenJoin->JoinKeys.size(), 1);
-        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().first == TInfoUnit("x"));
-        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().second == TInfoUnit("b"));
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().Left == TInfoUnit("x"));
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().Right == TInfoUnit("b"));
     }
 
     Y_UNIT_TEST(PushAppendExpressionConstantStaysAboveFullJoin) {
@@ -9883,7 +10048,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Full",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto appendMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
             MakeTestConstantAppend("one", pos, testContext.ExprCtx),
@@ -10190,13 +10355,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    void TestDecorrelation(bool columnTables) {
+    void TestDecorrelation(bool columnTables, bool equalNullsJoinKeys = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetEnableBlockHashJoinEqualNulls(equalNullsJoinKeys);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -10478,6 +10644,34 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
             {R"(
                 SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 0) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 0) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[3];[7];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b IN (SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 1) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b NOT IN (SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 1) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[3];[7];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
                 WHERE (SELECT max(t2.c) FROM `/Root/t2` as t2 WHERE t2.e == t1.e) IS NULL
                 ORDER BY t1.a;
              )",
@@ -10525,6 +10719,37 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY t1.a;
              )",
              R"([[11];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.c > (SELECT min(t2.c) FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 0))
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 RIGHT JOIN `/Root/t3` as t3 ON t2.a == t3.a
+                              WHERE t3.c == t1.a)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5];[6]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 RIGHT JOIN `/Root/t3` as t3 ON t2.b == t3.b
+                              WHERE t3.a == t1.e)
+                ORDER BY t1.a;
+             )",
+             R"([[2];[3];[5];[6];[7];[9];[10];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` as t2 RIGHT JOIN `/Root/t3` as t3 ON t2.a == t3.a
+                                  WHERE t2.c == t1.a)
+                ORDER BY t1.a;
+             )",
+             R"([[2];[3];[5];[6];[7];[8];[10];[11];[12]])"},
         };
 
         for (ui32 i = 0; i < cases.size(); ++i) {
@@ -10557,8 +10782,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(Decorrelation, ColumnStore) {
-        TestDecorrelation(ColumnStore);
+    Y_UNIT_TEST_QUAD(Decorrelation, ColumnStore, EqualNullsJoinKeys) {
+        TestDecorrelation(ColumnStore, EqualNullsJoinKeys);
     }
 
     Y_UNIT_TEST(OrderBy) {

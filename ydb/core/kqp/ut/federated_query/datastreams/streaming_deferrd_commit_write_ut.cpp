@@ -888,6 +888,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto& checkpointId = GetStreamingQueryCheckpointId(queryName);
 
         // Write and read first message
+        const TString publicationPrefix = TStringBuilder() << "__ydb_streaming:/Root/" << queryName << ':';
+        std::optional<std::string> writerIdentity;
+        i64 publicationGeneration = 0;
         {
             WriteTopicMessages(inputTopicName, {
                 R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
@@ -897,7 +900,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             dispositionSecond = TInstant::Now();
 
             CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2);
-            ValidatePublicationsCount(/* count */ 1, queryName, *sdkClient);
+            const auto publications = ValidatePublicationsCount(/* count */ 1, queryName, *sdkClient);
+            writerIdentity = publications[0].WriterIdentity;
+            UNIT_ASSERT(writerIdentity);
+            UNIT_ASSERT(TStringBuf(*writerIdentity).StartsWith(publicationPrefix));
+            UNIT_ASSERT(TStringBuf(publications[0].ExtPublicationId).StartsWith(*writerIdentity + ':'));
+            publicationGeneration = FromString<i64>(TStringBuf(publications[0].ExtPublicationId).RBefore(':').RAfter(':'));
             EnsureTopicEndOffset(firstOutputTopicName, /* endOffset */ 0, LocalTopics);
 
             WaitCheckpointUpdate(checkpointId);
@@ -942,6 +950,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         Sleep(TDuration::Seconds(1));
 
         // Write and read third message
+        UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryCheckpointId(queryName), checkpointId);
         {
             WriteTopicMessage(inputTopicName, R"({"time": "2025-08-27T00:00:00.000000Z", "event": "A"})", /* partition */ 0, LocalTopics);
             ReadTopicMessages(secondOutputTopicName, {
@@ -951,11 +960,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             }, dispositionSecond, /* sort */ true, LocalTopics);
 
             CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2);
-            ValidatePublicationsCount(/* count */ 2, queryName, *sdkClient);
+            const auto publications = ValidatePublicationsCount(/* count */ 1, queryName, *sdkClient);
+            UNIT_ASSERT_VALUES_EQUAL(publications[0].WriterIdentity, writerIdentity);
+            UNIT_ASSERT(TStringBuf(publications[0].ExtPublicationId).StartsWith(*writerIdentity + ':'));
+            const auto newGeneration = FromString<i64>(TStringBuf(publications[0].ExtPublicationId).RBefore(':').RAfter(':'));
+            UNIT_ASSERT_GT(newGeneration, publicationGeneration);
             EnsureTopicEndOffset(firstOutputTopicName, /* endOffset */ 1, LocalTopics);
 
             WaitCheckpointUpdate(checkpointId);
-            ValidatePublicationsCount(/* count */ 1, queryName, *sdkClient);
+            ValidatePublicationsCount(/* count */ 0, queryName, *sdkClient);
             ReadTopicMessages(firstOutputTopicName, {
                 "A-2025-08-25T00:00:00.000000Z-1",
                 "A-2025-08-26T00:00:00.000000Z-1",
@@ -1025,11 +1038,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         pqGateway->WaitReadSession(inputTopic)->AddDataReceivedEvent(0, "test_message3");
         writeSession = pqGateway->WaitWriteSession(outputTopic);
         CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2);
-        publicationController.EnsureOpenedPublications(/* count */ 2, queryName);
+        publicationController.EnsureOpenedPublications(/* count */ 1, queryName);
         writeSession->EnsureEmpty();
 
         WaitCheckpointUpdate(checkpointId);
-        publicationController.EnsureOpenedPublications(/* count */ 1, queryName);
+        publicationController.EnsureOpenedPublications(/* count */ 0, queryName);
         writeSession->ExpectMessage("test_message3");
 
         DropTopic(inputTopic);
@@ -1437,11 +1450,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         auto newWriteSession = pqGateway->WaitWriteSession(outputTopicName);
         newWriteSession->Unlock();
         CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 4);
-        publicationController.EnsureOpenedPublications(/* count */ 2, queryName);
+        publicationController.EnsureOpenedPublications(/* count */ 1, queryName);
         newWriteSession->EnsureEmpty();
 
         WaitCheckpointUpdate(checkpointId);
-        publicationController.EnsureOpenedPublications(/* count */ 1, queryName);
+        publicationController.EnsureOpenedPublications(/* count */ 0, queryName);
         newWriteSession->ExpectMessage("message2");
         writeSession->EnsureEmpty(); // There is no commits on failed publication
 

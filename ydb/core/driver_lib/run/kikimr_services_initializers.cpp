@@ -2764,7 +2764,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
-            protoWorkersPool.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             protoLink.SetWeight(1);
@@ -2781,7 +2781,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
-            protoWorkersPool.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             protoLink.SetWeight(1);
@@ -2793,7 +2793,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
-            protoWorkersPool.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             protoLink.SetWeight(1);
@@ -2810,7 +2810,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
-            protoWorkersPool.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             protoLink.SetWeight(1);
@@ -2821,7 +2821,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
-            protoWorkersPool.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             protoLink.SetWeight(1);
@@ -2838,7 +2838,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
-            protoWorkersPool.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             protoLink.SetWeight(1);
@@ -2849,7 +2849,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
-            protoWorkersPool.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
             protoLink.SetWeight(1);
@@ -2860,7 +2860,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Normalizer));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
-            protoWorkersPool.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Normalizer));
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Normalizer));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Normalizer));
             protoLink.SetWeight(1);

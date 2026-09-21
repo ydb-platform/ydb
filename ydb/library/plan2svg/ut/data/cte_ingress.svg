@@ -378,6 +378,10 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>1ms</text>
 </g>
 <g><title>Stage 0 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='13' height='100%' viewBox='0 0 13 50' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-light, #B78C98)'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='arup button'><rect x='2' y='34' width='14' height='14' class='transparent'/>
@@ -460,6 +464,10 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>521us</text>
 </g>
 <g><title>Stage 1 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='13' height='100%' viewBox='0 0 13 50' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-light, #B78C98)'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='arup button'><rect x='2' y='34' width='14' height='14' class='transparent'/>
@@ -542,6 +550,10 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>469us</text>
 </g>
 <g><title>Stage 2 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='13' height='100%' viewBox='0 0 13 50' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-light, #B78C98)'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='arup button'><rect x='2' y='34' width='14' height='14' class='transparent'/>
@@ -636,6 +648,10 @@
   <rect x='358' y='1%' width='40' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <g><title>Stage 2 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='13' height='100%' viewBox='0 0 13 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-light, #B78C98)'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>
@@ -789,6 +805,10 @@
 <path d='M1272,47c0,0,0,-13,0,-13c0,0,0,13,1,13c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 1 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='13' height='100%' viewBox='0 0 13 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-light, #B78C98)'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>
@@ -878,6 +898,10 @@
 <path d='M665,47c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,18,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,-13,19,-13c6,0,12,13,19,13c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
 <g><title>Stage 0 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='13' height='100%' viewBox='0 0 13 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-light, #B78C98)'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='arup button'><rect x='2' y='50' width='14' height='14' class='transparent'/>
@@ -987,6 +1011,10 @@
   <rect x='358' y='1%' width='40' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <g><title>Stage 3 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='13' height='100%' viewBox='0 0 13 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)'/>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-light, #B78C98)'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>

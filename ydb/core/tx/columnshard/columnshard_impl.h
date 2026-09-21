@@ -598,10 +598,10 @@ private:
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     struct TCutHistoryInterval {
-        ui32 Channel;
-        ui32 From;
-        ui32 To;
-        ui32 Group;
+        ui32 Channel = 0;
+        ui32 From = 0;
+        ui32 To = 0;
+        ui32 Group = 0;
         ui64 BlobReferences = 0;
         bool Sent = false;
     };
@@ -619,14 +619,14 @@ private:
     static constexpr ui64 CutHistoryRequestLimit = 64;
 
     struct TCutHistoryRequest {
-        ui64 TabletID;
-        ui32 Channel;
-        ui32 FromGeneration;
-        ui32 GroupID;
+        ui64 TabletID = 0;
+        ui32 Channel = 0;
+        ui32 FromGeneration = 0;
+        ui32 GroupID = 0;
         TInstant Timestamp;
         TActorId Recipient;
-        ui32 ToGeneration;
-        ui32 SendingGeneration;
+        ui32 ToGeneration = 0;
+        ui32 SendingGeneration = 0;
     };
     class TTxSaveCutHistoryRequests;
     class TCutHistoryResultProcessor;

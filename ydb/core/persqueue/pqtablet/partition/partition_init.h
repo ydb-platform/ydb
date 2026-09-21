@@ -199,4 +199,14 @@ public:
     void Execute(const TActorContext& ctx) override;
 };
 
+class TNotifyWriteSessionsQuoterStep: public TInitializerStep {
+public:
+    TNotifyWriteSessionsQuoterStep(TInitializer* initializer);
+
+    void QuoterInitialized(const TActorContext& ctx);
+
+    void Execute(const TActorContext& ctx) override;
+    bool Handle(STFUNC_SIG) override;
+};
+
 } // NKikimr::NPQ

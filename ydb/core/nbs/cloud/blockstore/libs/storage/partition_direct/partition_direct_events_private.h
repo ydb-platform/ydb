@@ -1,6 +1,14 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+<<<<<<< HEAD
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+>>>>>>> 7af514ad642 ([NBS-7516] Extend the partition direct overview page with actual storage placement for touched VChunks (#53472))
 
 #include <ydb/core/base/events.h>
 
@@ -35,6 +43,7 @@ struct TEvPartitionDirectPrivate
         EvSetVChunkTouched,
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         EvFastPathServiceReady,
+        EvRenderMonPage,
 
         EvFastPathServiceShutdown,
         EvFastPathServiceStopped,
@@ -96,6 +105,18 @@ struct TEvPartitionDirectPrivate
         : public NActors::
               TEventLocal<TEvFastPathServiceReady, EvFastPathServiceReady>
     {
+    };
+
+    struct TEvRenderMonPage
+        : public NActors::TEventLocal<TEvRenderMonPage, EvRenderMonPage>
+    {
+        NActors::TActorId Requester;
+        TMonPageData Data;
+
+        TEvRenderMonPage(NActors::TActorId requester, TMonPageData data)
+            : Requester(requester)
+            , Data(std::move(data))
+        {}
     };
 
     // Triggers the shutdown of the fast path service

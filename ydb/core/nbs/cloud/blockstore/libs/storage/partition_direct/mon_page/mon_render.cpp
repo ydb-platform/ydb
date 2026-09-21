@@ -1528,7 +1528,10 @@ void RenderLatency(IOutputStream& str, const TMonPageData& data)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString RenderMonPage(const TMonPageData& data)
+TString RenderMonPage(
+    const TMonPageData& data,
+    const TVChunkConfigs& vChunkConfigs,
+    const ITouchedProvider& touchedProvider)
 {
     TStringStream str;
 
@@ -1550,16 +1553,20 @@ TString RenderMonPage(const TMonPageData& data)
 
     switch (data.Page) {
         case EMonPage::Overview:
+<<<<<<< HEAD
             if (data.FastPathServiceInfo) {
                 RenderOverview(str, *data.FastPathServiceInfo);
             }
+=======
+            RenderOverview(str, data, vChunkConfigs, touchedProvider);
+>>>>>>> 7af514ad642 ([NBS-7516] Extend the partition direct overview page with actual storage placement for touched VChunks (#53472))
             break;
         case EMonPage::Dbg:
-            RenderDbg(str, data);
+            RenderDbg(str, data, vChunkConfigs);
             break;
         case EMonPage::LocalDb:
             if (data.LocalDb) {
-                RenderLocalDb(str, *data.LocalDb);
+                RenderLocalDb(str, *data.LocalDb, vChunkConfigs);
             }
             break;
 <<<<<<< HEAD

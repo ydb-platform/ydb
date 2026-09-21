@@ -413,10 +413,15 @@ void TPartitionActor::Start(
         "%s Starting",
         LogTitle.GetWithTime().c_str());
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
     auto nbsService = GetNbsService();
     Y_ABORT_UNLESS(nbsService);
     Y_ABORT_UNLESS(nbsService->Scheduler);
     Y_ABORT_UNLESS(nbsService->Timer);
+=======
+    DirectBlockGroupsConnections = std::move(directBlockGroupsConnections);
+    VChunkConfigs = vChunkConfigs;
+>>>>>>> 7af514ad642 ([NBS-7516] Extend the partition direct overview page with actual storage placement for touched VChunks (#53472)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
 
     TVChunkConfigByIndex vChunkConfigsByIndex;
     vChunkConfigsByIndex.reserve(vChunkConfigs.size());
@@ -926,6 +931,7 @@ STFUNC(TPartitionActor::StateWork)
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
+        HFunc(TEvPartitionDirectPrivate::TEvRenderMonPage, HandleRenderMonPage);
         HFunc(TEvPartitionDirectPrivate::TEvAddHostToDBG, HandleAddHostToDBG);
         HFunc(
             TEvPartitionDirectPrivate::TEvPersistHostHealth,

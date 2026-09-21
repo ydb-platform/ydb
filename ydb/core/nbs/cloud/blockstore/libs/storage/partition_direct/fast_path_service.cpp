@@ -143,8 +143,12 @@ TVector<TRegionPtr> CreateRegions(
             directBlockGroups,
             vChunkConfigs,
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
             touchedProvider->GetTouchedVChunks(i * VChunkPerRegionCount),
+=======
+            touchedProvider->GetTouchedVChunks(i),
+>>>>>>> 7af514ad642 ([NBS-7516] Extend the partition direct overview page with actual storage placement for touched VChunks (#53472))
             dirtyMapStates,
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
             storageConfig.GetSyncRequestsBatchSize(),

@@ -63,7 +63,12 @@ struct TTabletInfo
 >>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
 =======
     size_t TouchedVChunkCount = 0;
+<<<<<<< HEAD
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
+=======
+    size_t TouchedEnabledDDiskCount = 0;
+    size_t TouchedDisabledDDiskCount = 0;
+>>>>>>> 7af514ad642 ([NBS-7516] Extend the partition direct overview page with actual storage placement for touched VChunks (#53472))
     TString DiskId;
     TString State;   // "INIT" / "WORK"
 };
@@ -109,10 +114,10 @@ struct TDbgSnapshot
 <<<<<<< HEAD
 =======
     TVector<TConnectionSnapshot> Connections;
-    TVChunkConfigs VChunkConfigs;
     TArenaPoolStats MemoryStats;
     TArenaAllocatorStats DetailedMemoryStats;
     TDirtyMapStats DirtyMapStats;
+    TCountAndSize PBuffersUsage;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;
 };
@@ -156,8 +161,11 @@ struct TLocalDbContents
     std::optional<TString> VolumeConfig;
     std::optional<TString> DirectBlockGroupsConnections;
     std::optional<TString> AddHostInProgress;
+<<<<<<< HEAD
     // Persisted per-vchunk overrides.
     TVector<TVChunkConfig> VChunkConfigs;
+=======
+>>>>>>> 7af514ad642 ([NBS-7516] Extend the partition direct overview page with actual storage placement for touched VChunks (#53472))
 };
 
 struct TMonPageData

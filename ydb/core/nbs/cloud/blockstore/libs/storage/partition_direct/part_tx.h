@@ -277,7 +277,10 @@ struct TTxPartition
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TMaybe<TAddHostInProgress> AddHostInProgress;
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_tx.h
         TVector<TVChunkConfig> VChunkConfigs;
+=======
+>>>>>>> 7af514ad642 ([NBS-7516] Extend the partition direct overview page with actual storage placement for touched VChunks (#53472)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_tx.h
 
         explicit TMonitoring(NActors::TActorId requester)
             : Requester(requester)
@@ -288,7 +291,6 @@ struct TTxPartition
             VolumeConfig.Clear();
             DirectBlockGroupsConnections.Clear();
             AddHostInProgress.Clear();
-            VChunkConfigs.clear();
         }
     };
 };

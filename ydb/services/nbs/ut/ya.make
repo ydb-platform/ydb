@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/actors/testlib
     ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/grpc
     ydb/core/nbs/cloud/blockstore/libs/nbs_frontend
     yql/essentials/public/udf/service/exception_policy

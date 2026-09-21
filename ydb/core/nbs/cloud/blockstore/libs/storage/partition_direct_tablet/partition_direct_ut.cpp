@@ -1002,9 +1002,13 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 NNbs1CompatApi::NBlockStore::NProto::TMountVolumeRequest>();
             request->SetDiskId(volumeConfig.GetDiskId());
             request->MutableHeaders()->SetClientId(FrontendTestClientId);
-            return blockStore
-                ->MountVolume(MakeIntrusive<TCallContext>(), std::move(request))
-                .GetValueSync();
+            auto future = blockStore->MountVolume(
+                MakeIntrusive<TCallContext>(),
+                std::move(request));
+            if (!future.HasValue()) {
+                env->Runtime->Sim([&] { return !future.HasValue(); });
+            }
+            return future.GetValueSync();
         };
 
         WaitForTabletBoot(*env);
@@ -1044,9 +1048,13 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 NNbs1CompatApi::NBlockStore::NProto::TMountVolumeRequest>();
             request->SetDiskId(volumeConfig.GetDiskId());
             request->MutableHeaders()->SetClientId(FrontendTestClientId);
-            return blockStore
-                ->MountVolume(MakeIntrusive<TCallContext>(), std::move(request))
-                .GetValueSync();
+            auto future = blockStore->MountVolume(
+                MakeIntrusive<TCallContext>(),
+                std::move(request));
+            if (!future.HasValue()) {
+                env.Runtime->Sim([&] { return !future.HasValue(); });
+            }
+            return future.GetValueSync();
         };
         UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
 

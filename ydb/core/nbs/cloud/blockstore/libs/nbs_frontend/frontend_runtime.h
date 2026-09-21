@@ -8,19 +8,22 @@
 
 #include <library/cpp/logger/log.h>
 
-namespace NKikimrBlockStore {
-class TVolumeConfig;
-}
+namespace NActors {
+class TActorSystem;
+struct TActorId;
+}   // namespace NActors
 
 namespace NYdb::NBS::NBlockStore {
 
-class TFrontendState;
+class TNbsFrontendBlockStore;
+
+namespace NStorage::NPartitionDirect {
+class TPartitionSessionState;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
 // Owns and controls the classic-compatible facade of the NBS2 frontend.
-// With the next steps it will grow and take new functionality
-// like a sessions components and RDMA target.
 class TNbsFrontendRuntime final
 {
 public:
@@ -29,7 +32,7 @@ public:
     // Opens the frontend admission gate.
     void Start();
 
-    // Closes the frontend admission gate and revokes the active session.
+    // Closes request admission without revoking partition-owned sessions.
     void Stop();
 
     // Returns the shared classic-compatible facade.
@@ -38,16 +41,16 @@ public:
 
     // Publishes partition metadata/backend and returns the token to revoke it.
     TResultOrError<TString> RegisterVolume(
-        const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
-        IStoragePtr storage,
-        TVolumeConfigPtr ioGeometry);
+        NActors::TActorSystem* actorSystem,
+        const NActors::TActorId& actorId,
+        std::shared_ptr<NStorage::NPartitionDirect::TPartitionSessionState>
+            sessionState);
 
     // Revokes a matching registration without affecting a newer instance.
-    void UnregisterVolume(const TString& registrationId);
+    void UnregisterVolume(const TString& diskId, const TString& registrationId);
 
 private:
-    const std::shared_ptr<TFrontendState> FrontendState;
-    NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr BlockStore;
+    const std::shared_ptr<TNbsFrontendBlockStore> BlockStore;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

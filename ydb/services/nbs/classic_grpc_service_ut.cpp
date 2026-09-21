@@ -5,7 +5,6 @@
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_test.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
@@ -202,10 +201,10 @@ namespace NKikimr::NGRpcService {
                         Data.size());
                     return NThreading::MakeFuture<NNative::TReadBlocksLocalResponse>();
                 };
-                UNIT_ASSERT(!NYdb::NBS::HasError(Runtime.RegisterVolume(
+                UNIT_ASSERT(!NYdb::NBS::HasError(FrontendEnv.RegisterVolume(
                     Config, Storage, NNative::NTests::MakeTestIoConfig(Config))));
-                Runtime.Start();
-                Server = std::make_unique<TClassicNbsGrpcTestServer>(Runtime.GetBlockStore());
+                FrontendEnv.Frontend.Start();
+                Server = std::make_unique<TClassicNbsGrpcTestServer>(FrontendEnv.Frontend.GetBlockStore());
                 Stub = Server->CreateControlStub();
             }
 
@@ -279,7 +278,7 @@ namespace NKikimr::NGRpcService {
         private:
             TString Data = TString(Config.GetBlockSize(), '\0');
             std::shared_ptr<NNative::TTestStorage> Storage = std::make_shared<NNative::TTestStorage>();
-            NNative::TNbsFrontendRuntime Runtime{TLog{}};
+            NNative::NTests::TFrontendTestEnv FrontendEnv;
             std::unique_ptr<TClassicNbsGrpcTestServer> Server;
             std::unique_ptr<TClassicNbsTestClient> Stub;
         };
@@ -378,7 +377,6 @@ namespace NKikimr::NGRpcService {
 
             Y_UNIT_TEST(ShouldReflectFacadeLifecycleThroughTransport) {
                 auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore(
-                    std::make_shared<NYdb::NBS::NBlockStore::TFrontendState>(),
                     TLog{});
                 TClassicNbsGrpcTestServer server(blockStore);
                 auto stub = server.CreateControlStub();
@@ -414,7 +412,6 @@ namespace NKikimr::NGRpcService {
 
             Y_UNIT_TEST(ShouldRegisterEverySupportedMethod) {
                 auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore(
-                    std::make_shared<NYdb::NBS::NBlockStore::TFrontendState>(),
                     TLog{});
                 blockStore->Start();
                 TClassicNbsGrpcTestServer server(blockStore);
@@ -493,7 +490,6 @@ namespace NKikimr::NGRpcService {
 
             Y_UNIT_TEST(ShouldRejectUnknownAndPrivateMethodPaths) {
                 auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore(
-                    std::make_shared<NYdb::NBS::NBlockStore::TFrontendState>(),
                     TLog{});
                 blockStore->Start();
                 TClassicNbsGrpcTestServer server(blockStore);

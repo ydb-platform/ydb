@@ -1,24 +1,80 @@
 #include "blockstore_facade.h"
 
-#include "frontend_state.h"
-
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/events.h>
 
-#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
-#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
 
+#include <ydb/library/actors/core/actorsystem.h>
+
+#include <util/generic/hash.h>
 #include <util/generic/size_literals.h>
-#include <util/system/yassert.h>
 
 #include <limits>
 
 namespace NYdb::NBS::NBlockStore {
 
+namespace NCompatProto = NNbs1CompatApi::NBlockStore::NProto;
+using namespace NStorage::NPartitionDirect;
+
 namespace {
 
-namespace NCompatProto = NNbs1CompatApi::NBlockStore::NProto;
+NProto::TError ValidateMountParameters(
+    const NCompatProto::TMountVolumeRequest& request)
+{
+    if (request.GetVolumeAccessMode() !=
+            NCompatProto::VOLUME_ACCESS_READ_WRITE ||
+        (request.GetVolumeMountMode() != NCompatProto::VOLUME_MOUNT_LOCAL &&
+         request.GetVolumeMountMode() != NCompatProto::VOLUME_MOUNT_REMOTE))
+    {
+        return MakeError(E_NOT_IMPLEMENTED, "Unsupported NBS2 mount mode");
+    }
+
+    // TODO: Implement mount/writer generation and fencing, as well as disk fill
+    // sequence/generation checks, before accepting nonzero generation values.
+    if (request.GetMountSeqNumber() || request.GetFillSeqNumber() ||
+        request.GetFillGeneration())
+    {
+        return MakeError(
+            E_NOT_IMPLEMENTED,
+            "NBS2 mount generations are not implemented");
+    }
+
+    const auto& encryption = request.GetEncryptionSpec();
+    if (request.GetMountFlags() || request.GetThrottlingDisabled() ||
+        !request.GetToken().empty() || request.GetForceDisableEncryption() ||
+        encryption.GetMode() != NCompatProto::NO_ENCRYPTION ||
+        encryption.HasKeyPath() || encryption.HasKeyHash())
+    {
+        return MakeError(
+            E_NOT_IMPLEMENTED,
+            "Unsupported NBS2 mount parameters");
+    }
+    // MVP simplification: for a given disk, only ClientId identifies the
+    // session owner. InstanceId, IPC/version information and ForceRemoteBinding
+    // are ignored; revisit their role with the full session/access contract.
+    // RequestId and tracing headers describe individual requests, not sessions.
+    return {};
+}
+
+NNbs1CompatApi::NBlockStore::NProto::TVolume MakeClassicVolume(
+    const NKikimrBlockStore::TVolumeConfig& config)
+{
+    NNbs1CompatApi::NBlockStore::NProto::TVolume volume;
+    volume.SetDiskId(config.GetDiskId());
+    volume.SetBlockSize(config.GetBlockSize());
+    volume.SetBlocksCount(config.GetPartitions(0).GetBlockCount());
+    volume.SetPartitionsCount(config.PartitionsSize());
+    // Registration accepts only native SSD; map explicitly to the wire enum.
+    volume.SetStorageMediaKind(NNbs1CompatApi::NProto::STORAGE_MEDIA_SSD);
+    volume.SetConfigVersion(config.GetVersion());
+    volume.SetProjectId(config.GetProjectId());
+    volume.SetFolderId(config.GetFolderId());
+    volume.SetCloudId(config.GetCloudId());
+    return volume;
+}
 
 // Payload limit, excluding protobuf overhead. GRpcConfig.MaxMessageSize and
 // client message limits must allow the serialized request/response. Smaller
@@ -62,6 +118,19 @@ NProto::TError ValidateIoRange(
     return {};
 }
 
+// Keeps frontend rejection and backend failure diagnostics in the same format.
+template <typename TMethod>
+void LogRequestError(
+    TLog& Log,
+    const typename TMethod::TRequest& request,
+    const NProto::TError& error)
+{
+    STORAGE_WARN(
+        TMethod::Name << " RequestId=" << request.GetHeaders().GetRequestId()
+                      << " DiskId=" << request.GetDiskId()
+                      << " Error=" << FormatError(error));
+}
+
 template <typename TResponse>
 NThreading::TFuture<TResponse> ErrorResponse(NProto::TError error)
 {
@@ -70,77 +139,134 @@ NThreading::TFuture<TResponse> ErrorResponse(NProto::TError error)
     return NThreading::MakeFuture(std::move(response));
 }
 
-////////////////////////////////////////////////////////////////////////////////
+}   // namespace
 
-// Adapts classic control and block I/O requests to the NBS2 frontend/backend.
-class TNbsFrontendBlockStore final
-    : public NYdb::NBS::NNbs1CompatApi::NBlockStore::TBlockStoreImpl<
-          TNbsFrontendBlockStore,
-          NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStore>
+// Control and data references must always come from the same registration.
+struct TNbsFrontendBlockStore::TPartitionRegistration
 {
-public:
-    // Shares metadata, admission and session state with the frontend runtime.
-    explicit TNbsFrontendBlockStore(
-        std::shared_ptr<TFrontendState> frontendState,
-        TLog log);
-
-    // Opens the admission gate for requests.
-    void Start() override;
-
-    // Closes the admission gate and revokes the active session.
-    void Stop() override;
-
-    // Classic callers allocate their protobuf buffers; no external buffer pool.
-    NYdb::NBS::NNbs1CompatApi::NBlockStore::TStorageBuffer AllocateBuffer(
-        size_t bytesCount) override;
-
-    // Dispatches classic requests through shared admission and session state.
-    template <typename TMethod>
-    NThreading::TFuture<typename TMethod::TResponse> Execute(
-        TCallContextPtr callContext,
-        std::shared_ptr<typename TMethod::TRequest> request);
-
-private:
-    NThreading::TFuture<NCompatProto::TReadBlocksResponse> ExecuteReadBlocks(
-        TCallContextPtr callContext,
-        std::shared_ptr<NCompatProto::TReadBlocksRequest> request,
-        TFrontendIoBackend backend);
-
-    NThreading::TFuture<NCompatProto::TWriteBlocksResponse> ExecuteWriteBlocks(
-        TCallContextPtr callContext,
-        std::shared_ptr<NCompatProto::TWriteBlocksRequest> request,
-        TFrontendIoBackend backend);
-
-    const std::shared_ptr<TFrontendState> FrontendState;
-    TLog Log;
+    NActors::TActorSystem* ActorSystem;
+    NActors::TActorId ActorId;
+    std::shared_ptr<TPartitionSessionState> SessionState;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
-TNbsFrontendBlockStore::TNbsFrontendBlockStore(
-    std::shared_ptr<TFrontendState> frontendState,
-    TLog log)
-    : FrontendState(std::move(frontendState))
-    , Log(std::move(log))
+// Registry updates are rare; I/O reads a single immutable map snapshot.
+struct TNbsFrontendBlockStore::TSnapshot
 {
-    Y_ABORT_UNLESS(FrontendState);
-}
+    bool AcceptingRequests = false;
+    THashMap<TString, std::shared_ptr<const TPartitionRegistration>> Partitions;
+};
+
+TNbsFrontendBlockStore::TNbsFrontendBlockStore(TLog log)
+    : Snapshot(new TSnapshot())
+    , Log(std::move(log))
+{}
+
+TNbsFrontendBlockStore::~TNbsFrontendBlockStore() noexcept = default;
 
 void TNbsFrontendBlockStore::Start()
 {
-    FrontendState->Start();
+    with_lock (Mutex) {
+        auto next = std::make_unique<TSnapshot>(*Snapshot);
+        next->AcceptingRequests = true;
+        Snapshot.atomic_store(TTrueAtomicSharedPtr<TSnapshot>(next.release()));
+    }
 }
 
 void TNbsFrontendBlockStore::Stop()
 {
-    FrontendState->Stop();
+    with_lock (Mutex) {
+        auto next = std::make_unique<TSnapshot>(*Snapshot);
+        next->AcceptingRequests = false;
+        Snapshot.atomic_store(TTrueAtomicSharedPtr<TSnapshot>(next.release()));
+    }
 }
 
-NYdb::NBS::NNbs1CompatApi::NBlockStore::TStorageBuffer
+NNbs1CompatApi::NBlockStore::TStorageBuffer
 TNbsFrontendBlockStore::AllocateBuffer(size_t bytesCount)
 {
     Y_UNUSED(bytesCount);
     return nullptr;
+}
+
+TResultOrError<TString> TNbsFrontendBlockStore::RegisterVolume(
+    NActors::TActorSystem* actorSystem,
+    const NActors::TActorId& actorId,
+    std::shared_ptr<TPartitionSessionState> sessionState)
+{
+    if (!actorSystem || !actorId || !sessionState) {
+        return MakeError(
+            E_ARGUMENT,
+            "Missing partition control or session target");
+    }
+    const auto& diskId = sessionState->GetVolumeMetadata().GetDiskId();
+    const TString registrationId = sessionState->GetRegistrationId();
+    with_lock (Mutex) {
+        auto next = std::make_unique<TSnapshot>(*Snapshot);
+        next->Partitions[diskId] =
+            std::make_shared<TPartitionRegistration>(TPartitionRegistration{
+                actorSystem,
+                actorId,
+                std::move(sessionState)});
+        Snapshot.atomic_store(TTrueAtomicSharedPtr<TSnapshot>(next.release()));
+    }
+    return registrationId;
+}
+
+void TNbsFrontendBlockStore::UnregisterVolume(
+    const TString& diskId,
+    const TString& registrationId)
+{
+    with_lock (Mutex) {
+        const auto it = Snapshot->Partitions.find(diskId);
+        if (it == Snapshot->Partitions.end() ||
+            it->second->SessionState->GetRegistrationId() != registrationId)
+        {
+            return;
+        }
+        auto next = std::make_unique<TSnapshot>(*Snapshot);
+        next->Partitions.erase(diskId);
+        Snapshot.atomic_store(TTrueAtomicSharedPtr<TSnapshot>(next.release()));
+    }
+}
+
+TResultOrError<
+    std::shared_ptr<const TNbsFrontendBlockStore::TPartitionRegistration>>
+TNbsFrontendBlockStore::FindPartition(const TString& diskId) const
+{
+    const auto snapshot = Snapshot.atomic_load();
+    if (!snapshot->AcceptingRequests) {
+        return MakeError(E_REJECTED, "NBS2 frontend is not accepting requests");
+    }
+    const auto it = snapshot->Partitions.find(diskId);
+    if (it == snapshot->Partitions.end()) {
+        return MakeError(
+            E_NOT_FOUND,
+            "Disk is not registered on this NBS2 host");
+    }
+    return it->second;
+}
+
+template <typename TEvent>
+auto TNbsFrontendBlockStore::SendSessionRequest(
+    const std::shared_ptr<const TPartitionRegistration>& partition,
+    std::unique_ptr<TEvent> event)
+{
+    const auto future = event->Result.GetFuture();
+    // Serialize sending with unregister, so actor-system cleanup cannot leave
+    // a sender using the ActorSystem pointer from an already removed entry.
+    with_lock (Mutex) {
+        const auto current = FindPartition(
+            partition->SessionState->GetVolumeMetadata().GetDiskId());
+        if (HasError(current)) {
+            event->Result.TrySetValue(current.GetError());
+        } else if (current.GetResult() != partition) {
+            event->Result.TrySetValue(
+                MakeError(E_REJECTED, "Partition registration changed"));
+        } else {
+            partition->ActorSystem->Send(partition->ActorId, event.release());
+        }
+    }
+    return future;
 }
 
 template <typename TMethod>
@@ -151,82 +277,139 @@ TNbsFrontendBlockStore::Execute(
 {
     STORAGE_DEBUG(
         TMethod::Name << " RequestId=" << request->GetHeaders().GetRequestId());
-
     using TResponse = typename TMethod::TResponse;
 
-    TResponse response;
-    if constexpr (
-        std::is_same_v<
-            TMethod,
-            NNbs1CompatApi::NBlockStore::TBlockStoreMountVolumeMethod>)
+    if constexpr (std::is_same_v<
+                      TMethod,
+                      NNbs1CompatApi::NBlockStore::TBlockStorePingMethod>)
     {
-        response = FrontendState->MountVolume(*request);
-    } else if constexpr (
-        std::is_same_v<
-            TMethod,
-            NNbs1CompatApi::NBlockStore::TBlockStoreUnmountVolumeMethod>)
-    {
-        *response.MutableError() = FrontendState->UnmountVolume(
-            request->GetDiskId(),
-            request->GetHeaders().GetClientId(),
-            request->GetSessionId());
-    } else if constexpr (
-        std::is_same_v<
-            TMethod,
-            NYdb::NBS::NNbs1CompatApi::NBlockStore::TBlockStorePingMethod>)
-    {
-        *response.MutableError() = FrontendState->CheckAcceptingRequests();
-        if (HasError(response)) {
-            STORAGE_DEBUG(
-                "Ping RequestId=" << request->GetHeaders().GetRequestId()
-                                  << " Error="
-                                  << FormatError(response.GetError()));
+        TResponse response;
+        if (!Snapshot.atomic_load()->AcceptingRequests) {
+            *response.MutableError() = MakeError(
+                E_REJECTED,
+                "NBS2 frontend is not accepting requests");
         }
+        return NThreading::MakeFuture(std::move(response));
     } else {
-        auto backend = FrontendState->AcquireIoBackend(
-            request->GetDiskId(),
-            request->GetHeaders().GetClientId(),
-            request->GetSessionId());
-        if (HasError(backend)) {
-            return ErrorResponse<TResponse>(backend.GetError());
+        auto found = FindPartition(request->GetDiskId());
+        if (HasError(found)) {
+            LogRequestError<TMethod>(Log, *request, found.GetError());
+            return ErrorResponse<TResponse>(found.GetError());
         }
+        auto partition = found.ExtractResult();
         if constexpr (
             std::is_same_v<
                 TMethod,
-                NNbs1CompatApi::NBlockStore::TBlockStoreReadBlocksMethod>)
+                NNbs1CompatApi::NBlockStore::TBlockStoreMountVolumeMethod>)
         {
-            return ExecuteReadBlocks(
-                std::move(callContext),
-                std::move(request),
-                backend.ExtractResult());
+            return ExecuteMountVolume(*request, std::move(partition));
+        } else if constexpr (
+            std::is_same_v<
+                TMethod,
+                NNbs1CompatApi::NBlockStore::TBlockStoreUnmountVolumeMethod>)
+        {
+            return ExecuteUnmountVolume(*request, std::move(partition));
         } else {
-            return ExecuteWriteBlocks(
-                std::move(callContext),
-                std::move(request),
-                backend.ExtractResult());
+            auto backend = partition->SessionState->AcquireIoBackend(
+                request->GetHeaders().GetClientId(),
+                request->GetSessionId());
+            if (HasError(backend)) {
+                LogRequestError<TMethod>(Log, *request, backend.GetError());
+                return ErrorResponse<TResponse>(backend.GetError());
+            }
+            if constexpr (
+                std::is_same_v<
+                    TMethod,
+                    NNbs1CompatApi::NBlockStore::TBlockStoreReadBlocksMethod>)
+            {
+                return ExecuteReadBlocks(
+                    std::move(callContext),
+                    std::move(request),
+                    backend.ExtractResult());
+            } else {
+                return ExecuteWriteBlocks(
+                    std::move(callContext),
+                    std::move(request),
+                    backend.ExtractResult());
+            }
         }
     }
+}
 
-    return NThreading::MakeFuture(std::move(response));
+NThreading::TFuture<NCompatProto::TMountVolumeResponse>
+TNbsFrontendBlockStore::ExecuteMountVolume(
+    const NCompatProto::TMountVolumeRequest& request,
+    std::shared_ptr<const TPartitionRegistration> partition)
+{
+    if (request.GetHeaders().GetClientId().empty()) {
+        return ErrorResponse<NCompatProto::TMountVolumeResponse>(
+            MakeError(E_ARGUMENT, "MountVolume requires ClientId"));
+    }
+    if (const auto error = ValidateMountParameters(request); HasError(error)) {
+        return ErrorResponse<NCompatProto::TMountVolumeResponse>(error);
+    }
+    auto event = std::make_unique<TEvPartitionSession::TEvMount>(
+        partition->SessionState->GetRegistrationId(),
+        request.GetHeaders().GetClientId());
+    return SendSessionRequest(partition, std::move(event))
+        .Apply(
+            [partition = std::move(partition)](const auto& future)
+            {
+                NCompatProto::TMountVolumeResponse response;
+                const auto& result = future.GetValue();
+                if (HasError(result)) {
+                    *response.MutableError() = result.GetError();
+                } else {
+                    response.SetSessionId(result.GetResult());
+                    *response.MutableVolume() = MakeClassicVolume(
+                        partition->SessionState->GetVolumeMetadata());
+                    // No inactivity expiry in MVP.
+                    response.SetInactiveClientsTimeout(0);
+                }
+                return response;
+            });
+}
+
+NThreading::TFuture<NCompatProto::TUnmountVolumeResponse>
+TNbsFrontendBlockStore::ExecuteUnmountVolume(
+    const NCompatProto::TUnmountVolumeRequest& request,
+    std::shared_ptr<const TPartitionRegistration> partition)
+{
+    auto event = std::make_unique<TEvPartitionSession::TEvUnmount>(
+        partition->SessionState->GetRegistrationId(),
+        request.GetHeaders().GetClientId(),
+        request.GetSessionId());
+    return SendSessionRequest(partition, std::move(event))
+        .Apply(
+            [](const auto& future)
+            {
+                NCompatProto::TUnmountVolumeResponse response;
+                *response.MutableError() = future.GetValue();
+                return response;
+            });
 }
 
 NThreading::TFuture<NCompatProto::TReadBlocksResponse>
 TNbsFrontendBlockStore::ExecuteReadBlocks(
     TCallContextPtr callContext,
     std::shared_ptr<NCompatProto::TReadBlocksRequest> request,
-    TFrontendIoBackend backend)
+    TPartitionIoBackend backend)
 {
-    using TResponse = NCompatProto::TReadBlocksResponse;
+    using TMethod = NNbs1CompatApi::NBlockStore::TBlockStoreReadBlocksMethod;
+    using TResponse = TMethod::TResponse;
     if (const auto error =
             ValidateIoMode(request->GetFlags(), request->GetHeaders());
         HasError(error))
     {
+        LogRequestError<TMethod>(Log, *request, error);
         return ErrorResponse<TResponse>(error);
     }
     if (!request->GetCheckpointId().empty()) {
-        return ErrorResponse<TResponse>(MakeError(
+        const auto error = MakeError(
             E_NOT_IMPLEMENTED,
-            "NBS2 checkpoints are not implemented"));
+            "NBS2 checkpoints are not implemented");
+        LogRequestError<TMethod>(Log, *request, error);
+        return ErrorResponse<TResponse>(error);
     }
     const auto& config = *backend.IoGeometry;
     if (const auto error = ValidateIoRange(
@@ -236,6 +419,7 @@ TNbsFrontendBlockStore::ExecuteReadBlocks(
             request->GetBlocksCount());
         HasError(error))
     {
+        LogRequestError<TMethod>(Log, *request, error);
         return ErrorResponse<TResponse>(error);
     }
 
@@ -253,8 +437,11 @@ TNbsFrontendBlockStore::ExecuteReadBlocks(
     return backend.Handler
         ->Read(std::move(callContext), from, length, sglist, {})
         .Apply(
-            [owner = std::move(owner), sglist, handler = backend.Handler](
-                const auto& future) mutable
+            [owner = std::move(owner),
+             request = std::move(request),
+             sglist,
+             handler = backend.Handler,
+             Log = Log](const auto& future) mutable
             {
                 Y_UNUSED(handler);
                 // Close memory access before moving the protobuf or clearing
@@ -264,6 +451,7 @@ TNbsFrontendBlockStore::ExecuteReadBlocks(
                 auto response = owner.Extract();
                 *response->MutableError() = result.Error;
                 if (HasError(result.Error)) {
+                    LogRequestError<TMethod>(Log, *request, result.Error);
                     response->ClearBlocks();
                 }
                 return std::move(*response);
@@ -274,34 +462,42 @@ NThreading::TFuture<NCompatProto::TWriteBlocksResponse>
 TNbsFrontendBlockStore::ExecuteWriteBlocks(
     TCallContextPtr callContext,
     std::shared_ptr<NCompatProto::TWriteBlocksRequest> request,
-    TFrontendIoBackend backend)
+    TPartitionIoBackend backend)
 {
-    using TResponse = NCompatProto::TWriteBlocksResponse;
+    using TMethod = NNbs1CompatApi::NBlockStore::TBlockStoreWriteBlocksMethod;
+    using TResponse = TMethod::TResponse;
     if (const auto error =
             ValidateIoMode(request->GetFlags(), request->GetHeaders());
         HasError(error))
     {
+        LogRequestError<TMethod>(Log, *request, error);
         return ErrorResponse<TResponse>(error);
     }
     if (request->ChecksumsSize()) {
-        return ErrorResponse<TResponse>(MakeError(
+        const auto error = MakeError(
             E_NOT_IMPLEMENTED,
-            "NBS2 write checksums are not implemented"));
+            "NBS2 write checksums are not implemented");
+        LogRequestError<TMethod>(Log, *request, error);
+        return ErrorResponse<TResponse>(error);
     }
     const auto& config = *backend.IoGeometry;
     ui64 length = 0;
     for (const auto& buffer: request->GetBlocks().GetBuffers()) {
         if (buffer.empty() || buffer.size() > MaxIoBytes - length) {
-            return ErrorResponse<TResponse>(MakeError(
+            const auto error = MakeError(
                 E_ARGUMENT,
-                "Empty write buffer or payload exceeds 32 MiB"));
+                "Empty write buffer or payload exceeds 32 MiB");
+            LogRequestError<TMethod>(Log, *request, error);
+            return ErrorResponse<TResponse>(error);
         }
         length += buffer.size();
     }
     if (length % config.BlockSize) {
-        return ErrorResponse<TResponse>(MakeError(
+        const auto error = MakeError(
             E_ARGUMENT,
-            "Write payload must contain whole partition blocks"));
+            "Write payload must contain whole partition blocks");
+        LogRequestError<TMethod>(Log, *request, error);
+        return ErrorResponse<TResponse>(error);
     }
     if (const auto error = ValidateIoRange(
             config,
@@ -310,6 +506,7 @@ TNbsFrontendBlockStore::ExecuteWriteBlocks(
             length / config.BlockSize);
         HasError(error))
     {
+        LogRequestError<TMethod>(Log, *request, error);
         return ErrorResponse<TResponse>(error);
     }
 
@@ -322,35 +519,28 @@ TNbsFrontendBlockStore::ExecuteWriteBlocks(
     auto sglist = owner.CreateGuardedSgList(std::move(buffers));
     return backend.Handler->Write(std::move(callContext), from, length, sglist)
         .Apply(
-            [owner = std::move(owner), sglist, handler = backend.Handler](
-                const auto& future) mutable
+            [owner = std::move(owner),
+             sglist,
+             handler = backend.Handler,
+             Log = Log](const auto& future) mutable
             {
-                Y_UNUSED(owner);
                 Y_UNUSED(handler);
                 // The input protobuf owns the payload until all guards are
                 // closed.
                 sglist.Close();
                 const auto& result = future.GetValue();
+                if (HasError(result.Error)) {
+                    LogRequestError<TMethod>(Log, *owner.Get(), result.Error);
+                }
                 TResponse response;
                 *response.MutableError() = result.Error;
                 return response;
             });
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-}   // namespace
-
-NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
-CreateNbsFrontendBlockStore(
-    std::shared_ptr<TFrontendState> frontendState,
-    TLog log)
+std::shared_ptr<TNbsFrontendBlockStore> CreateNbsFrontendBlockStore(TLog log)
 {
-    return std::make_shared<TNbsFrontendBlockStore>(
-        std::move(frontendState),
-        std::move(log));
+    return std::make_shared<TNbsFrontendBlockStore>(std::move(log));
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore

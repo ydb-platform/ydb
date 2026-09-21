@@ -1,18 +1,158 @@
 #include "frontend_test.h"
 
-#include "frontend_runtime.h"
-#include "frontend_state.h"
-
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/events.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_state.h>
 
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NYdb::NBS::NBlockStore::NTests {
 
+namespace {
+
+using namespace NStorage::NPartitionDirect;
+
+struct TEvStopSession final
+    : NActors::TEventLocal<
+          TEvStopSession,
+          EventSpaceBegin(NActors::TEvents::ES_PRIVATE) + 1>
+{
+    NThreading::TPromise<void> Done = NThreading::NewPromise<void>();
+};
+
+// Keeps session mutations on the owner actor, including teardown.
+class TTestPartitionSessionActor final
+    : public NActors::TActorBootstrapped<TTestPartitionSessionActor>
+{
+public:
+    explicit TTestPartitionSessionActor(
+        std::shared_ptr<TPartitionSessionState> state)
+        : State(std::move(state))
+    {}
+
+    ~TTestPartitionSessionActor() override
+    {
+        State->Stop();
+    }
+
+    void Bootstrap()
+    {
+        Become(&TThis::StateWork);
+    }
+
+    STFUNC(StateWork)
+    {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPartitionSession::TEvMount, HandleMount);
+            hFunc(TEvPartitionSession::TEvUnmount, HandleUnmount);
+            hFunc(TEvStopSession, HandleStop);
+        }
+    }
+
+private:
+    void HandleMount(TEvPartitionSession::TEvMount::TPtr& ev)
+    {
+        auto* request = ev->Get();
+        request->Result.SetValue(
+            request->RegistrationId == State->GetRegistrationId()
+                ? State->Mount(request->ClientId)
+                : TResultOrError<TString>(MakeError(E_REJECTED)));
+    }
+
+    void HandleUnmount(TEvPartitionSession::TEvUnmount::TPtr& ev)
+    {
+        auto* request = ev->Get();
+        request->Result.SetValue(
+            request->RegistrationId == State->GetRegistrationId()
+                ? State->Unmount(request->ClientId, request->SessionId)
+                : MakeError(E_REJECTED));
+    }
+
+    void HandleStop(TEvStopSession::TPtr& ev)
+    {
+        State->Stop();
+        ev->Get()->Done.SetValue();
+        PassAway();
+    }
+
+    const std::shared_ptr<TPartitionSessionState> State;
+};
+
+}   // namespace
+
 const TString TestDiskId = "disk1";
 const TString TestClientId = "client1";
+
+// Retains the identity needed to simulate teardown of any incarnation.
+struct TFrontendTestEnv::TRegistration
+{
+    TString DiskId;
+    TString Token;
+    NActors::TActorId ActorId;
+};
+
+TFrontendTestEnv::TFrontendTestEnv()
+    : Actors(std::make_unique<NActors::TTestActorRuntimeBase>(1, true))
+{
+    Actors->Initialize();
+}
+
+TFrontendTestEnv::~TFrontendTestEnv()
+{
+    Frontend.Stop();
+    for (const auto& registration: Registrations) {
+        Frontend.UnregisterVolume(registration.DiskId, registration.Token);
+    }
+    Actors.reset();
+}
+
+TResultOrError<TString> TFrontendTestEnv::RegisterVolume(
+    const NKikimrBlockStore::TVolumeConfig& metadata,
+    IStoragePtr storage,
+    TVolumeConfigPtr geometry)
+{
+    auto created = TPartitionSessionState::Create(
+        metadata,
+        std::move(storage),
+        std::move(geometry));
+    if (HasError(created)) {
+        return created.GetError();
+    }
+    auto state = created.ExtractResult();
+    const auto actorId =
+        Actors->Register(new TTestPartitionSessionActor(state));
+    auto registration =
+        Frontend.RegisterVolume(Actors->GetActorSystem(0), actorId, state);
+    Registrations.push_back(
+        {metadata.GetDiskId(), state->GetRegistrationId(), actorId});
+    return registration;
+}
+
+void TFrontendTestEnv::UnregisterVolume(
+    const TString& diskId,
+    const TString& registrationId)
+{
+    Frontend.UnregisterVolume(diskId, registrationId);
+    for (auto it = Registrations.begin(); it != Registrations.end(); ++it) {
+        if (it->DiskId == diskId && it->Token == registrationId) {
+            auto event = std::make_unique<TEvStopSession>();
+            auto done = event->Done.GetFuture();
+            Actors->GetActorSystem(0)->Send(it->ActorId, event.release());
+            Y_ABORT_UNLESS(done.Wait(TDuration::Seconds(10)));
+            done.GetValueSync();
+            Registrations.erase(it);
+            break;
+        }
+    }
+}
 
 NKikimrBlockStore::TVolumeConfig MakeTestVolumeConfig(
     ui32 blockSize,
@@ -56,22 +196,30 @@ TVolumeConfigPtr MakeTestIoConfig(
 }
 
 TResultOrError<TString> RegisterTestVolume(
-    TFrontendState& frontend,
-    const NKikimrBlockStore::TVolumeConfig& volumeMetadata)
+    TFrontendTestEnv& env,
+    const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
+    ui32* readCalls)
 {
-    return frontend.RegisterVolume(
+    auto storage = std::make_shared<TTestStorage>();
+    const ui32 blockSize = volumeMetadata.GetBlockSize();
+    storage->ReadBlocksLocalHandler =
+        [readCalls, blockSize](TCallContextPtr context, auto request)
+    {
+        Y_UNUSED(context);
+        if (readCalls) {
+            ++*readCalls;
+        }
+        const auto guard = request->Sglist.Acquire();
+        UNIT_ASSERT(guard);
+        const TString data(request->Headers.Range.Size() * blockSize, 'x');
+        UNIT_ASSERT_VALUES_EQUAL(
+            SgListCopy(TBlockDataRef(data.data(), data.size()), guard.Get()),
+            data.size());
+        return NThreading::MakeFuture<TReadBlocksLocalResponse>();
+    };
+    return env.RegisterVolume(
         volumeMetadata,
-        std::make_shared<TTestStorage>(),
-        MakeTestIoConfig(volumeMetadata));
-}
-
-TResultOrError<TString> RegisterTestVolume(
-    TNbsFrontendRuntime& frontend,
-    const NKikimrBlockStore::TVolumeConfig& volumeMetadata)
-{
-    return frontend.RegisterVolume(
-        volumeMetadata,
-        std::make_shared<TTestStorage>(),
+        std::move(storage),
         MakeTestIoConfig(volumeMetadata));
 }
 

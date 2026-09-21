@@ -71,6 +71,22 @@ def mounted_volume(request, nbs_cluster, grpc_client):
         yield mounted
     finally:
         # All RPCs are synchronous; deletion also revokes any remaining session.
-        # Wait for revocation before another case registers its single MVP disk.
+        # Wait for revocation before the next case reuses cluster resources.
+        helper.delete_disk(disk_id)
+        wait_for_registration(grpc_client, disk_id, present=False)
+
+
+@pytest.fixture
+def two_mounted_volumes(nbs_cluster, grpc_client, mounted_volume):
+    helper = NbsTestBase()
+    helper.cluster = nbs_cluster.cluster
+    helper.ddisk_pool_name = nbs_cluster.ddisk_pool_name
+    disk_id = helper.generate_disk_id()
+    block_size = mounted_volume.Volume.BlockSize * 2
+    helper.create_disk(disk_id, blocks_count=REGION_SIZE // block_size, block_size=block_size)
+    try:
+        second = wait_for_registration(grpc_client, disk_id, present=True)
+        yield mounted_volume, second
+    finally:
         helper.delete_disk(disk_id)
         wait_for_registration(grpc_client, disk_id, present=False)

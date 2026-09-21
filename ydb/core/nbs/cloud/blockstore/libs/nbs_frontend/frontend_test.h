@@ -1,9 +1,17 @@
 #pragma once
 
+#include "frontend_runtime.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+
+#include <vector>
+
+namespace NActors {
+class TTestActorRuntimeBase;
+}
 
 namespace NKikimrBlockStore {
 class TVolumeConfig;
@@ -15,9 +23,6 @@ class TMountVolumeRequest;
 
 namespace NYdb::NBS::NBlockStore {
 
-class TFrontendState;
-class TNbsFrontendRuntime;
-
 namespace NTests {
 
 extern const TString TestDiskId;
@@ -25,6 +30,32 @@ extern const TString TestClientId;
 constexpr ui64 TestBlocksCount = 33554432;
 constexpr ui64 TestStripeBytes = 512_KB;
 constexpr ui64 TestVChunkSize = 128_MB;
+
+// Owns test partition actors and their registrations around a real frontend.
+class TFrontendTestEnv final
+{
+public:
+    // Starts the actor system for test partition owners.
+    TFrontendTestEnv();
+    ~TFrontendTestEnv();
+
+    // Creates a session owner actor and publishes it to the real registry.
+    TResultOrError<TString> RegisterVolume(
+        const NKikimrBlockStore::TVolumeConfig& metadata,
+        IStoragePtr storage,
+        TVolumeConfigPtr geometry);
+
+    // Simulates partition teardown; an old token cannot remove a replacement.
+    void UnregisterVolume(const TString& diskId, const TString& registrationId);
+
+    // Tests exercise the production runtime directly.
+    TNbsFrontendRuntime Frontend{TLog{}};
+
+private:
+    struct TRegistration;
+    std::unique_ptr<NActors::TTestActorRuntimeBase> Actors;
+    std::vector<TRegistration> Registrations;
+};
 
 // Supplies common metadata for frontend tests.
 NKikimrBlockStore::TVolumeConfig MakeTestVolumeConfig(
@@ -39,15 +70,12 @@ TVolumeConfigPtr MakeTestIoConfig(
     const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
     ui64 stripeBytes = TestStripeBytes);
 
-// Control-only tests need a backend registration but must not issue native I/O.
+// Creates a test partition whose backend returns 'x' for any read range.
+// The optional read counter must outlive the partition registration.
 TResultOrError<TString> RegisterTestVolume(
-    TFrontendState& frontend,
-    const NKikimrBlockStore::TVolumeConfig& volumeMetadata);
-
-// Registers the same control-only backend through the runtime boundary.
-TResultOrError<TString> RegisterTestVolume(
-    TNbsFrontendRuntime& frontend,
-    const NKikimrBlockStore::TVolumeConfig& volumeMetadata);
+    TFrontendTestEnv& env,
+    const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
+    ui32* readCalls = nullptr);
 
 }   // namespace NTests
 

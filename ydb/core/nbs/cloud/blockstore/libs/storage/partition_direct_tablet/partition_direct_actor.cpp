@@ -59,11 +59,16 @@ TPartitionActor::TPartitionActor(
 
 TPartitionActor::~TPartitionActor()
 {
+    if (SessionState) {
+        SessionState->Stop();
+    }
     // Actor-system cleanup can destroy a partition without PassAway(). Its
     // frontend registration must not retain FastPath beyond the actor system.
     if (!FrontendRegistrationId.empty()) {
         if (auto service = GetNbsService(); service && service->Frontend) {
-            service->Frontend->UnregisterVolume(FrontendRegistrationId);
+            service->Frontend->UnregisterVolume(
+                VolumeConfig.GetDiskId(),
+                FrontendRegistrationId);
         }
     }
 }
@@ -208,11 +213,16 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
 void TPartitionActor::UnregisterFrontendVolume(const TActorContext& ctx)
 {
     FrontendRegistrationClosed = true;
+    if (SessionState) {
+        SessionState->Stop();
+    }
     if (FrontendRegistrationId.empty()) {
         return;
     }
     if (auto& frontend = GetNbsService()->Frontend; frontend) {
-        frontend->UnregisterVolume(FrontendRegistrationId);
+        frontend->UnregisterVolume(
+            VolumeConfig.GetDiskId(),
+            FrontendRegistrationId);
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
@@ -541,13 +551,22 @@ void TPartitionActor::HandleFastPathServiceReady(
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
 
+    // MVP: use either classic gRPC or the local NBS2 vhost endpoint for a disk,
+    // never both concurrently.
     if (auto& frontend = GetNbsService()->Frontend;
         frontend && !FrontendRegistrationClosed)
     {
-        auto registration = frontend->RegisterVolume(
+        auto sessionState = TPartitionSessionState::Create(
             VolumeConfig,
             FastPathService,
             FastPathService->GetVolumeConfig());
+        Y_ABORT_UNLESS(
+            !HasError(sessionState),
+            "%s",
+            FormatError(sessionState.GetError()).c_str());
+        SessionState = sessionState.ExtractResult();
+        auto registration =
+            frontend->RegisterVolume(ctx.ActorSystem(), SelfId(), SessionState);
         Y_ABORT_UNLESS(
             !HasError(registration),
             "%s Could not publish frontend backend: %s",
@@ -837,6 +856,39 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
 }
 
+void TPartitionActor::HandleMountSession(
+    const TEvPartitionSession::TEvMount::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    auto* request = ev->Get();
+    if (!SessionState || FrontendRegistrationClosed ||
+        request->RegistrationId != FrontendRegistrationId)
+    {
+        request->Result.TrySetValue(
+            MakeError(E_REJECTED, "Partition registration is unavailable"));
+        return;
+    }
+    request->Result.TrySetValue(SessionState->Mount(request->ClientId));
+}
+
+void TPartitionActor::HandleUnmountSession(
+    const TEvPartitionSession::TEvUnmount::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    auto* request = ev->Get();
+    if (!SessionState || FrontendRegistrationClosed ||
+        request->RegistrationId != FrontendRegistrationId)
+    {
+        request->Result.TrySetValue(
+            MakeError(E_REJECTED, "Partition registration is unavailable"));
+        return;
+    }
+    request->Result.TrySetValue(
+        SessionState->Unmount(request->ClientId, request->SessionId));
+}
+
 void TPartitionActor::HandleUpdateVChunkConfig(
     const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -947,6 +999,8 @@ void TPartitionActor::StopBscProxy(const TActorContext& ctx)
 void TPartitionActor::HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev)
 {
     switch (ev->GetTypeRewrite()) {
+        HFunc(TEvPartitionSession::TEvMount, HandleMountSession);
+        HFunc(TEvPartitionSession::TEvUnmount, HandleUnmountSession);
         HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
         HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
         HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);

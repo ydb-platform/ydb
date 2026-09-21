@@ -1,6 +1,5 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_test.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
@@ -81,11 +80,11 @@ public:
                 data.size());
             return NThreading::MakeFuture<TReadBlocksLocalResponse>();
         };
-        UNIT_ASSERT(!HasError(Runtime.RegisterVolume(
+        UNIT_ASSERT(!HasError(FrontendEnv.RegisterVolume(
             Config,
             Storage,
             MakeTestIoConfig(Config, stripeBytes))));
-        Runtime.Start();
+        FrontendEnv.Frontend.Start();
         auto mount = std::make_shared<NCompatProto::TMountVolumeRequest>();
         mount->SetDiskId(TestDiskId);
         mount->MutableHeaders()->SetClientId(TestClientId);
@@ -137,9 +136,9 @@ public:
             BlockStore->UnmountVolume(Context, request).GetValueSync()));
     }
 
-    TNbsFrontendRuntime Runtime{TLog{}};
+    TFrontendTestEnv FrontendEnv;
     NNbs1CompatApi::NBlockStore::IBlockStorePtr BlockStore =
-        Runtime.GetBlockStore();
+        FrontendEnv.Frontend.GetBlockStore();
     std::shared_ptr<TTestStorage> Storage = std::make_shared<TTestStorage>();
     TCallContextPtr Context = MakeIntrusive<TCallContext>(ui64{42});
     NKikimrBlockStore::TVolumeConfig Config;
@@ -149,15 +148,44 @@ public:
     TVector<TCallContextPtr> Contexts;
 };
 
+// Keeps both parts of a read pending so tests can control buffer lifetime.
+NThreading::TFuture<NCompatProto::TReadBlocksResponse> StartPendingSplitRead(
+    TIoTestEnv& env,
+    TVector<NThreading::TPromise<TReadBlocksLocalResponse>>* completions,
+    TVector<TGuardedSgList>* sglists)
+{
+    env.Storage->ReadBlocksLocalHandler =
+        [completions, sglists](TCallContextPtr context, auto request)
+    {
+        Y_UNUSED(context);
+        sglists->push_back(request->Sglist);
+        completions->push_back(
+            NThreading::NewPromise<TReadBlocksLocalResponse>());
+        return completions->back().GetFuture();
+    };
+    const auto response = env.BlockStore->ReadBlocks(
+        env.Context,
+        env.ReadRequest(TestStripeBytes / env.Config.GetBlockSize() - 1, 2));
+    UNIT_ASSERT_VALUES_EQUAL(completions->size(), 2);
+    UNIT_ASSERT(!response.HasValue());
+    for (const auto& sglist: *sglists) {
+        const auto guard = sglist.Acquire();
+        UNIT_ASSERT(guard);
+        const TString data(DefaultBlockSize, 'r');
+        UNIT_ASSERT_VALUES_EQUAL(
+            SgListCopy(TBlockDataRef(data.data(), data.size()), guard.Get()),
+            DefaultBlockSize);
+    }
+    return response;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
 {
     Y_UNIT_TEST(ShouldRejectEveryMethodOutsideAcceptingState)
     {
-        auto blockStore = CreateNbsFrontendBlockStore(
-            std::make_shared<TFrontendState>(),
-            TLog{});
+        auto blockStore = CreateNbsFrontendBlockStore(TLog{});
 
         // A newly created facade must keep every method behind the closed
         // admission gate until Start() is called.
@@ -196,149 +224,90 @@ Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
 
     Y_UNIT_TEST(ShouldServePingAndRejectDiskRequestsWithoutRegistration)
     {
-        auto blockStore = CreateNbsFrontendBlockStore(
-            std::make_shared<TFrontendState>(),
-            TLog{});
+        auto blockStore = CreateNbsFrontendBlockStore(TLog{});
 
-#define TEST_METHOD(name, ...)                                                 \
-    {                                                                          \
-        auto response =                                                        \
-            blockStore                                                         \
-                ->name(                                                        \
-                    MakeIntrusive<TCallContext>(),                             \
-                    std::make_shared<NYdb::NBS::NNbs1CompatApi::NBlockStore::  \
-                                         NProto::T##name##Request>())          \
-                .GetValueSync();                                               \
-        if (TStringBuf(#name) == "Ping") {                                     \
-            UNIT_ASSERT(!HasError(response));                                  \
-        } else {                                                               \
-            UNIT_ASSERT_VALUES_EQUAL(                                          \
-                response.GetError().GetCode(),                                 \
-                E_NOT_FOUND);                                                  \
-        }                                                                      \
-    }
+        const auto checkStarted = [&]
+        {
+            UNIT_ASSERT(!HasError(
+                blockStore
+                    ->Ping(
+                        MakeIntrusive<TCallContext>(),
+                        std::make_shared<NCompatProto::TPingRequest>())
+                    .GetValueSync()));
+            UNIT_ASSERT_VALUES_EQUAL(
+                blockStore
+                    ->MountVolume(
+                        MakeIntrusive<TCallContext>(),
+                        std::make_shared<NCompatProto::TMountVolumeRequest>())
+                    .GetValueSync()
+                    .GetError()
+                    .GetCode(),
+                E_NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(
+                blockStore
+                    ->UnmountVolume(
+                        MakeIntrusive<TCallContext>(),
+                        std::make_shared<NCompatProto::TUnmountVolumeRequest>())
+                    .GetValueSync()
+                    .GetError()
+                    .GetCode(),
+                E_NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(
+                blockStore
+                    ->ReadBlocks(
+                        MakeIntrusive<TCallContext>(),
+                        std::make_shared<NCompatProto::TReadBlocksRequest>())
+                    .GetValueSync()
+                    .GetError()
+                    .GetCode(),
+                E_NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(
+                blockStore
+                    ->WriteBlocks(
+                        MakeIntrusive<TCallContext>(),
+                        std::make_shared<NCompatProto::TWriteBlocksRequest>())
+                    .GetValueSync()
+                    .GetError()
+                    .GetCode(),
+                E_NOT_FOUND);
+        };
 
         blockStore->Start();
 
         // The first Start() must open the admission gate and expose the
         // implemented-method behavior.
-        NBS1_COMPAT_SERVICE(TEST_METHOD)
+        checkStarted();
 
         blockStore->Start();
 
         // A repeated Start() must preserve the same open state.
-        NBS1_COMPAT_SERVICE(TEST_METHOD)
-
-#undef TEST_METHOD
+        checkStarted();
 
         // Classic requests own protobuf data; no separate allocation API.
         UNIT_ASSERT(!blockStore->AllocateBuffer(DefaultBlockSize));
     }
 
-    Y_UNIT_TEST(ShouldSharePublishedMetadataWithRuntime)
+    Y_UNIT_TEST(ShouldRejectBothIoMethodsAfterUnmount)
     {
-        TNbsFrontendRuntime runtime(TLog{});
-        auto blockStore = runtime.GetBlockStore();
-        auto request = std::make_shared<
-            NNbs1CompatApi::NBlockStore::NProto::TMountVolumeRequest>();
-        request->SetDiskId(TestDiskId);
-        request->MutableHeaders()->SetClientId(TestClientId);
-        auto mount = [&]
-        {
-            return blockStore
-                ->MountVolume(MakeIntrusive<TCallContext>(), request)
-                .GetValueSync();
-        };
-
-        UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_REJECTED);
-        runtime.Start();
-        UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
-        const auto config = MakeTestVolumeConfig();
-        const auto registration = RegisterTestVolume(runtime, config);
-        UNIT_ASSERT(!HasError(registration));
-
-        const auto response = mount();
-        UNIT_ASSERT(!HasError(response));
-        UNIT_ASSERT_VALUES_EQUAL(response.GetVolume().GetDiskId(), TestDiskId);
+        TIoTestEnv env;
+        env.Unmount();
         UNIT_ASSERT_VALUES_EQUAL(
-            response.GetVolume().GetBlocksCount(),
-            TestBlocksCount);
-        UNIT_ASSERT(!response.GetSessionId().empty());
-        UNIT_ASSERT_VALUES_EQUAL(response.GetInactiveClientsTimeout(), 0);
-
-        runtime.Stop();
-        UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_REJECTED);
-        runtime.Start();
-        UNIT_ASSERT_VALUES_EQUAL(
-            mount().GetVolume().GetBlocksCount(),
-            TestBlocksCount);
-        runtime.UnregisterVolume(registration.GetResult());
-        UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
-    }
-
-    Y_UNIT_TEST(ShouldValidateBothIoMethodsAndRevokeSessionThroughFacade)
-    {
-        TNbsFrontendRuntime runtime(TLog{});
-        auto blockStore = runtime.GetBlockStore();
-        const auto config = MakeTestVolumeConfig();
-        UNIT_ASSERT(!HasError(RegisterTestVolume(runtime, config)));
-        runtime.Start();
-        auto mount = std::make_shared<
-            NNbs1CompatApi::NBlockStore::NProto::TMountVolumeRequest>();
-        mount->SetDiskId(TestDiskId);
-        mount->MutableHeaders()->SetClientId(TestClientId);
-        const auto mounted =
-            blockStore->MountVolume(MakeIntrusive<TCallContext>(), mount)
-                .GetValueSync();
-        UNIT_ASSERT(!HasError(mounted));
-
-        auto checkIo = [&](const TString& clientId,
-                           const TString& sessionId,
-                           ui32 expected)
-        {
-#define CHECK_IO(name)                                                         \
-    {                                                                          \
-        auto request = std::make_shared<                                       \
-            NNbs1CompatApi::NBlockStore::NProto::T##name##Request>();          \
-        request->SetDiskId(TestDiskId);                                        \
-        request->MutableHeaders()->SetClientId(clientId);                      \
-        request->SetSessionId(sessionId);                                      \
-        const auto response =                                                  \
-            blockStore->name(MakeIntrusive<TCallContext>(), request)           \
-                .GetValueSync();                                               \
-        UNIT_ASSERT_VALUES_EQUAL(response.GetError().GetCode(), expected);     \
-    }
-            CHECK_IO(ReadBlocks)
-            CHECK_IO(WriteBlocks)
-#undef CHECK_IO
-        };
-        checkIo(TestClientId, "", E_BS_INVALID_SESSION);
-        checkIo("client2", mounted.GetSessionId(), E_BS_INVALID_SESSION);
-        // An otherwise valid session reaches payload validation for empty I/O.
-        checkIo(TestClientId, mounted.GetSessionId(), E_ARGUMENT);
-        auto unmount = std::make_shared<
-            NNbs1CompatApi::NBlockStore::NProto::TUnmountVolumeRequest>();
-        unmount->SetDiskId(TestDiskId);
-        unmount->MutableHeaders()->SetClientId(TestClientId);
-        unmount->SetSessionId(mounted.GetSessionId());
-        UNIT_ASSERT_VALUES_EQUAL(
-            blockStore->UnmountVolume(MakeIntrusive<TCallContext>(), unmount)
+            env.BlockStore->ReadBlocks(env.Context, env.ReadRequest())
                 .GetValueSync()
                 .GetError()
                 .GetCode(),
-            S_OK);
-        checkIo(TestClientId, mounted.GetSessionId(), E_BS_INVALID_SESSION);
+            E_BS_INVALID_SESSION);
         UNIT_ASSERT_VALUES_EQUAL(
-            blockStore->UnmountVolume(MakeIntrusive<TCallContext>(), unmount)
+            env.BlockStore->WriteBlocks(env.Context, env.WriteRequest())
                 .GetValueSync()
                 .GetError()
                 .GetCode(),
-            S_ALREADY);
-        runtime.Stop();
-        checkIo(TestClientId, mounted.GetSessionId(), E_REJECTED);
+            E_BS_INVALID_SESSION);
+        UNIT_ASSERT(env.Headers.empty());
+        UNIT_ASSERT(env.Blocks.empty());
     }
 
-    Y_UNIT_TEST(ShouldReadWriteNativeBlockSizesAndAdaptHeaders)
+    Y_UNIT_TEST(ShouldReadWriteNativeBlockSizes)
     {
         for (ui32 blockSize = DefaultBlockSize; blockSize <= MaxBlockSize;
              blockSize *= 2)
@@ -346,49 +315,62 @@ Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
             TIoTestEnv env(blockSize);
             auto write = env.WriteRequest(1, 2);
             write->SetBlockSize(blockSize);
-            write->MutableHeaders()->SetTimestamp(1);
             UNIT_ASSERT(
                 !HasError(env.BlockStore->WriteBlocks(env.Context, write)
                               .GetValueSync()));
-            auto read = env.ReadRequest(1, 2);
-            read->MutableHeaders()->SetOptimizeNetworkTransfer(
-                NCompatProto::SKIP_VOID_BLOCKS);
             const auto response =
-                env.BlockStore->ReadBlocks(env.Context, read).GetValueSync();
+                env.BlockStore->ReadBlocks(env.Context, env.ReadRequest(1, 2))
+                    .GetValueSync();
             UNIT_ASSERT(!HasError(response));
             UNIT_ASSERT_VALUES_EQUAL(response.GetBlocks().BuffersSize(), 2);
             for (const auto& buffer: response.GetBlocks().GetBuffers()) {
                 UNIT_ASSERT_VALUES_EQUAL(buffer, TString(blockSize, 'x'));
             }
-            UNIT_ASSERT(!response.HasChecksum());
-            UNIT_ASSERT(!response.GetAllZeroes());
             UNIT_ASSERT_VALUES_EQUAL(env.Headers.size(), 2);
-            for (size_t i = 0; i != env.Headers.size(); ++i) {
-                const auto& headers = env.Headers[i];
-                UNIT_ASSERT_VALUES_EQUAL(headers.ClientId, TestClientId);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    headers.RequestId,
-                    env.Context->RequestId);
-                UNIT_ASSERT(headers.Timestamp > TInstant::MicroSeconds(1));
-                UNIT_ASSERT_VALUES_EQUAL(headers.Range.Start, 1);
-                UNIT_ASSERT_VALUES_EQUAL(headers.Range.Size(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    headers.VolumeConfig->DiskId,
-                    TestDiskId);
+            for (const auto& headers: env.Headers) {
                 UNIT_ASSERT_VALUES_EQUAL(
                     headers.VolumeConfig->BlockSize,
                     blockSize);
                 UNIT_ASSERT_VALUES_EQUAL(
-                    headers.VolumeConfig->BlockCount,
-                    TestBlocksCount);
-                UNIT_ASSERT_VALUES_EQUAL(
                     headers.VolumeConfig->BlocksPerStripe,
                     TestStripeBytes / blockSize);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    headers.VolumeConfig->VChunkSize,
-                    TestVChunkSize);
-                UNIT_ASSERT(env.Contexts[i] == env.Context);
             }
+        }
+    }
+
+    Y_UNIT_TEST(ShouldAdaptIoHeaders)
+    {
+        TIoTestEnv env;
+        auto write = env.WriteRequest(1, 2);
+        write->MutableHeaders()->SetTimestamp(1);
+        UNIT_ASSERT(!HasError(
+            env.BlockStore->WriteBlocks(env.Context, write).GetValueSync()));
+        auto read = env.ReadRequest(1, 2);
+        read->MutableHeaders()->SetOptimizeNetworkTransfer(
+            NCompatProto::SKIP_VOID_BLOCKS);
+        const auto response =
+            env.BlockStore->ReadBlocks(env.Context, read).GetValueSync();
+        UNIT_ASSERT(!HasError(response));
+        UNIT_ASSERT(!response.HasChecksum());
+        UNIT_ASSERT(!response.GetAllZeroes());
+        UNIT_ASSERT_VALUES_EQUAL(env.Headers.size(), 2);
+        for (const auto& headers: env.Headers) {
+            UNIT_ASSERT_VALUES_EQUAL(headers.ClientId, TestClientId);
+            UNIT_ASSERT_VALUES_EQUAL(headers.RequestId, env.Context->RequestId);
+            UNIT_ASSERT(headers.Timestamp > TInstant::MicroSeconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(headers.Range.Start, 1);
+            UNIT_ASSERT_VALUES_EQUAL(headers.Range.Size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(headers.VolumeConfig->DiskId, TestDiskId);
+            UNIT_ASSERT_VALUES_EQUAL(
+                headers.VolumeConfig->BlockCount,
+                TestBlocksCount);
+            UNIT_ASSERT_VALUES_EQUAL(
+                headers.VolumeConfig->VChunkSize,
+                TestVChunkSize);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Contexts.size(), 2);
+        for (const auto& context: env.Contexts) {
+            UNIT_ASSERT(context == env.Context);
         }
     }
 
@@ -453,149 +435,166 @@ Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
     Y_UNIT_TEST(ShouldRejectInvalidIoBeforeBackend)
     {
         TIoTestEnv env;
-        for (ui32 i = 0; i != 12; ++i) {
-            auto read = env.ReadRequest();
-            switch (i) {
-                case 0:
-                    read->SetBlockSize(env.Config.GetBlockSize() * 2);
-                    break;
-                case 1:
-                    read->SetBlocksCount(0);
-                    break;
-                case 2:
-                    read->SetBlocksCount(32_MB / DefaultBlockSize + 1);
-                    break;
-                case 3:
-                    read->SetStartIndex(TestBlocksCount);
-                    break;
-                case 4:
-                    read->SetStartIndex(TestBlocksCount - 1);
-                    read->SetBlocksCount(2);
-                    break;
-                case 5:
-                    read->SetStartIndex(std::numeric_limits<ui64>::max());
-                    break;
-                case 6:
-                    read->SetFlags(1);
-                    break;
-                case 7:
-                    read->SetCheckpointId("checkpoint");
-                    break;
-                case 8:
-                    read->MutableHeaders()->SetReplicaIndex(1);
-                    break;
-                case 9:
-                    read->MutableHeaders()->SetReplicaCount(1);
-                    break;
-                case 10:
-                    read->ClearSessionId();
-                    break;
-                case 11:
-                    read->SetDiskId("other");
-                    break;
-            }
-            const ui32 expected = i < 6     ? E_ARGUMENT
-                                  : i < 10  ? E_NOT_IMPLEMENTED
-                                  : i == 10 ? E_BS_INVALID_SESSION
-                                            : E_NOT_FOUND;
+        const auto checkRead =
+            [&](TStringBuf name,
+                const std::shared_ptr<NCompatProto::TReadBlocksRequest>&
+                    request,
+                ui32 expected)
+        {
             const auto response =
-                env.BlockStore->ReadBlocks(env.Context, read).GetValueSync();
+                env.BlockStore->ReadBlocks(env.Context, request).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(
                 response.GetError().GetCode(),
                 expected,
-                i);
-            UNIT_ASSERT(!response.HasBlocks());
-        }
-        for (ui32 i = 0; i != 15; ++i) {
-            auto write = env.WriteRequest();
-            switch (i) {
-                case 0:
-                    write->SetBlockSize(env.Config.GetBlockSize() * 2);
-                    break;
-                case 1:
-                    write->ClearBlocks();
-                    break;
-                case 2:
-                    write->MutableBlocks()->AddBuffers("");
-                    break;
-                case 3:
-                    write->MutableBlocks()->MutableBuffers(0)->resize(
-                        env.Config.GetBlockSize() / 2);
-                    break;
-                case 4:
-                    write->MutableBlocks()->MutableBuffers(0)->resize(
-                        32_MB + 1);
-                    break;
-                case 5:
-                    write->SetStartIndex(TestBlocksCount);
-                    break;
-                case 6:
-                    write->SetStartIndex(TestBlocksCount - 1);
-                    write->MutableBlocks()->AddBuffers(
-                        TString(DefaultBlockSize, 'x'));
-                    break;
-                case 7:
-                    write->SetStartIndex(std::numeric_limits<ui64>::max());
-                    break;
-                case 8:
-                    write->SetFlags(1);
-                    break;
-                case 9:
-                    write->AddChecksums();
-                    break;
-                case 10:
-                    write->MutableHeaders()->SetReplicaIndex(1);
-                    break;
-                case 11:
-                    write->MutableHeaders()->SetReplicaCount(1);
-                    break;
-                case 12:
-                    write->ClearSessionId();
-                    break;
-                case 13:
-                    write->MutableHeaders()->SetClientId("other");
-                    break;
-                case 14:
-                    write->SetDiskId("other");
-                    break;
-            }
-            const ui32 expected = i < 8    ? E_ARGUMENT
-                                  : i < 12 ? E_NOT_IMPLEMENTED
-                                  : i < 14 ? E_BS_INVALID_SESSION
-                                           : E_NOT_FOUND;
+                name);
+            UNIT_ASSERT_C(!response.HasBlocks(), name);
+            UNIT_ASSERT_C(env.Headers.empty(), name);
+            UNIT_ASSERT_C(env.Blocks.empty(), name);
+        };
+        const auto checkWrite =
+            [&](TStringBuf name,
+                const std::shared_ptr<NCompatProto::TWriteBlocksRequest>&
+                    request,
+                ui32 expected)
+        {
             UNIT_ASSERT_VALUES_EQUAL_C(
-                env.BlockStore->WriteBlocks(env.Context, write)
+                env.BlockStore->WriteBlocks(env.Context, request)
                     .GetValueSync()
                     .GetError()
                     .GetCode(),
                 expected,
-                i);
-        }
-        UNIT_ASSERT(env.Headers.empty());
-        UNIT_ASSERT(env.Blocks.empty());
+                name);
+            UNIT_ASSERT_C(env.Headers.empty(), name);
+            UNIT_ASSERT_C(env.Blocks.empty(), name);
+        };
+
+        auto read = env.ReadRequest();
+        read->SetBlockSize(env.Config.GetBlockSize() * 2);
+        checkRead("block size mismatch", read, E_ARGUMENT);
+        checkRead("empty range", env.ReadRequest(0, 0), E_ARGUMENT);
+        checkRead(
+            "payload exceeds 32 MiB",
+            env.ReadRequest(0, 32_MB / DefaultBlockSize + 1),
+            E_ARGUMENT);
+        checkRead(
+            "range starts outside disk",
+            env.ReadRequest(TestBlocksCount),
+            E_ARGUMENT);
+        checkRead(
+            "range ends outside disk",
+            env.ReadRequest(TestBlocksCount - 1, 2),
+            E_ARGUMENT);
+        checkRead(
+            "maximum start index",
+            env.ReadRequest(std::numeric_limits<ui64>::max()),
+            E_ARGUMENT);
+
+        read = env.ReadRequest();
+        read->SetFlags(1);
+        checkRead("unsupported flags", read, E_NOT_IMPLEMENTED);
+        read = env.ReadRequest();
+        read->SetCheckpointId("checkpoint");
+        checkRead("unsupported checkpoint", read, E_NOT_IMPLEMENTED);
+        read = env.ReadRequest();
+        read->MutableHeaders()->SetReplicaIndex(1);
+        checkRead("unsupported replica index", read, E_NOT_IMPLEMENTED);
+        read = env.ReadRequest();
+        read->MutableHeaders()->SetReplicaCount(1);
+        checkRead("unsupported replica count", read, E_NOT_IMPLEMENTED);
+
+        read = env.ReadRequest();
+        read->ClearSessionId();
+        checkRead("missing session", read, E_BS_INVALID_SESSION);
+        read = env.ReadRequest();
+        read->MutableHeaders()->SetClientId("other");
+        checkRead("wrong client", read, E_BS_INVALID_SESSION);
+        read = env.ReadRequest();
+        read->SetDiskId("other");
+        checkRead("unknown disk", read, E_NOT_FOUND);
+
+        auto write = env.WriteRequest();
+        write->SetBlockSize(env.Config.GetBlockSize() * 2);
+        checkWrite("block size mismatch", write, E_ARGUMENT);
+        write = env.WriteRequest();
+        write->ClearBlocks();
+        checkWrite("missing payload", write, E_ARGUMENT);
+        write = env.WriteRequest();
+        write->MutableBlocks()->AddBuffers("");
+        checkWrite("empty buffer", write, E_ARGUMENT);
+        write = env.WriteRequest();
+        write->MutableBlocks()->MutableBuffers(0)->resize(
+            env.Config.GetBlockSize() / 2);
+        checkWrite("incomplete block", write, E_ARGUMENT);
+        write = env.WriteRequest();
+        write->MutableBlocks()->MutableBuffers(0)->resize(32_MB + 1);
+        checkWrite("payload exceeds 32 MiB", write, E_ARGUMENT);
+        checkWrite(
+            "range starts outside disk",
+            env.WriteRequest(TestBlocksCount),
+            E_ARGUMENT);
+        write = env.WriteRequest(TestBlocksCount - 1);
+        write->MutableBlocks()->AddBuffers(TString(DefaultBlockSize, 'x'));
+        checkWrite("range ends outside disk", write, E_ARGUMENT);
+        checkWrite(
+            "maximum start index",
+            env.WriteRequest(std::numeric_limits<ui64>::max()),
+            E_ARGUMENT);
+
+        write = env.WriteRequest();
+        write->SetFlags(1);
+        checkWrite("unsupported flags", write, E_NOT_IMPLEMENTED);
+        write = env.WriteRequest();
+        write->AddChecksums();
+        checkWrite("unsupported checksums", write, E_NOT_IMPLEMENTED);
+        write = env.WriteRequest();
+        write->MutableHeaders()->SetReplicaIndex(1);
+        checkWrite("unsupported replica index", write, E_NOT_IMPLEMENTED);
+        write = env.WriteRequest();
+        write->MutableHeaders()->SetReplicaCount(1);
+        checkWrite("unsupported replica count", write, E_NOT_IMPLEMENTED);
+
+        write = env.WriteRequest();
+        write->ClearSessionId();
+        checkWrite("missing session", write, E_BS_INVALID_SESSION);
+        write = env.WriteRequest();
+        write->MutableHeaders()->SetClientId("other");
+        checkWrite("wrong client", write, E_BS_INVALID_SESSION);
+        write = env.WriteRequest();
+        write->SetDiskId("other");
+        checkWrite("unknown disk", write, E_NOT_FOUND);
     }
 
-    Y_UNIT_TEST(ShouldRejectByteOverflowAndPreserveValidationPriority)
+    Y_UNIT_TEST(ShouldRejectByteOverflow)
     {
         TIoTestEnv env(DefaultBlockSize, std::numeric_limits<ui64>::max());
-        for (ui64 start:
-             {std::numeric_limits<ui64>::max() / DefaultBlockSize,
-              std::numeric_limits<ui64>::max() / DefaultBlockSize + 1})
+        const auto checkOverflow = [&](TStringBuf name, ui64 start)
         {
-            UNIT_ASSERT_VALUES_EQUAL(
+            UNIT_ASSERT_VALUES_EQUAL_C(
                 env.BlockStore->ReadBlocks(env.Context, env.ReadRequest(start))
                     .GetValueSync()
                     .GetError()
                     .GetCode(),
-                E_ARGUMENT);
-            UNIT_ASSERT_VALUES_EQUAL(
+                E_ARGUMENT,
+                name);
+            UNIT_ASSERT_VALUES_EQUAL_C(
                 env.BlockStore
                     ->WriteBlocks(env.Context, env.WriteRequest(start))
                     .GetValueSync()
                     .GetError()
                     .GetCode(),
-                E_ARGUMENT);
-        }
+                E_ARGUMENT,
+                name);
+            UNIT_ASSERT_C(env.Headers.empty(), name);
+        };
+        constexpr ui64 maxByteBlocks =
+            std::numeric_limits<ui64>::max() / DefaultBlockSize;
+        checkOverflow("byte range end overflows", maxByteBlocks);
+        checkOverflow("byte range start overflows", maxByteBlocks + 1);
+    }
+
+    Y_UNIT_TEST(ShouldPreserveIoValidationPriority)
+    {
+        TIoTestEnv env;
         auto read = env.ReadRequest(0, 0);
         read->SetFlags(1);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -618,7 +617,7 @@ Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
                 .GetError()
                 .GetCode(),
             E_NOT_FOUND);
-        env.Runtime.Stop();
+        env.FrontendEnv.Frontend.Stop();
         UNIT_ASSERT_VALUES_EQUAL(
             env.BlockStore->ReadBlocks(env.Context, read)
                 .GetValueSync()
@@ -715,67 +714,52 @@ Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
         UNIT_ASSERT(!sglist.Acquire());
     }
 
-    Y_UNIT_TEST(ShouldKeepReadBuffersAndClosePendingSplitRequestsOnError)
+    Y_UNIT_TEST(ShouldCompleteSplitReadAfterFrontendStop)
     {
-        for (const bool fail: {false, true}) {
-            TIoTestEnv env;
-            TVector<NThreading::TPromise<TReadBlocksLocalResponse>> completions;
-            TVector<TGuardedSgList> sglists;
-            env.Storage->ReadBlocksLocalHandler =
-                [&completions, &sglists](TCallContextPtr context, auto request)
-            {
-                Y_UNUSED(context);
-                sglists.push_back(request->Sglist);
-                completions.push_back(
-                    NThreading::NewPromise<TReadBlocksLocalResponse>());
-                return completions.back().GetFuture();
-            };
-            const auto response = env.BlockStore->ReadBlocks(
-                env.Context,
-                env.ReadRequest(
-                    TestStripeBytes / env.Config.GetBlockSize() - 1,
-                    2));
-            UNIT_ASSERT_VALUES_EQUAL(completions.size(), 2);
-            UNIT_ASSERT(!response.HasValue());
-            for (const auto& sglist: sglists) {
-                const auto guard = sglist.Acquire();
-                UNIT_ASSERT(guard);
-                const TString data(DefaultBlockSize, 'r');
-                UNIT_ASSERT_VALUES_EQUAL(
-                    SgListCopy(
-                        TBlockDataRef(data.data(), data.size()),
-                        guard.Get()),
-                    DefaultBlockSize);
-            }
-            env.Runtime.Stop();
-            if (fail) {
-                completions[0].SetValue(
-                    {MakeError(E_IO, "first stripe failed")});
-                UNIT_ASSERT_VALUES_EQUAL(
-                    response.GetValueSync().GetError().GetCode(),
-                    E_IO);
-                UNIT_ASSERT(!response.GetValueSync().HasBlocks());
-                // The other backend future is pending, but its frontend memory
-                // is closed.
-                UNIT_ASSERT(!sglists[1].Acquire());
-                completions[1].SetValue({});
-            } else {
-                completions[0].SetValue({});
-                UNIT_ASSERT(!response.HasValue());
-                completions[1].SetValue({});
-                const auto& result = response.GetValueSync();
-                UNIT_ASSERT(!HasError(result));
-                UNIT_ASSERT_VALUES_EQUAL(result.GetBlocks().BuffersSize(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    result.GetBlocks().GetBuffers(0),
-                    TString(DefaultBlockSize, 'r'));
-                UNIT_ASSERT_VALUES_EQUAL(
-                    result.GetBlocks().GetBuffers(1),
-                    TString(DefaultBlockSize, 'r'));
-            }
-            for (const auto& sglist: sglists) {
-                UNIT_ASSERT(!sglist.Acquire());
-            }
+        TVector<NThreading::TPromise<TReadBlocksLocalResponse>> completions;
+        TVector<TGuardedSgList> sglists;
+        TIoTestEnv env;
+        const auto response =
+            StartPendingSplitRead(env, &completions, &sglists);
+        env.FrontendEnv.Frontend.Stop();
+
+        completions[0].SetValue({});
+        UNIT_ASSERT(!response.HasValue());
+        completions[1].SetValue({});
+        const auto& result = response.GetValueSync();
+        UNIT_ASSERT(!HasError(result));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetBlocks().BuffersSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            result.GetBlocks().GetBuffers(0),
+            TString(DefaultBlockSize, 'r'));
+        UNIT_ASSERT_VALUES_EQUAL(
+            result.GetBlocks().GetBuffers(1),
+            TString(DefaultBlockSize, 'r'));
+        for (const auto& sglist: sglists) {
+            UNIT_ASSERT(!sglist.Acquire());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldClosePendingSplitReadBuffersOnError)
+    {
+        TVector<NThreading::TPromise<TReadBlocksLocalResponse>> completions;
+        TVector<TGuardedSgList> sglists;
+        TIoTestEnv env;
+        const auto response =
+            StartPendingSplitRead(env, &completions, &sglists);
+        env.FrontendEnv.Frontend.Stop();
+
+        completions[0].SetValue({MakeError(E_IO, "first stripe failed")});
+        UNIT_ASSERT_VALUES_EQUAL(
+            response.GetValueSync().GetError().GetCode(),
+            E_IO);
+        UNIT_ASSERT(!response.GetValueSync().HasBlocks());
+        // The other backend future is pending, but its frontend memory is
+        // closed.
+        UNIT_ASSERT(!sglists[1].Acquire());
+        completions[1].SetValue({});
+        for (const auto& sglist: sglists) {
+            UNIT_ASSERT(!sglist.Acquire());
         }
     }
 }

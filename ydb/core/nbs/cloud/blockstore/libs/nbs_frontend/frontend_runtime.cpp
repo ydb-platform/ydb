@@ -1,7 +1,6 @@
 #include "frontend_runtime.h"
 
 #include "blockstore_facade.h"
-#include "frontend_state.h"
 
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
 
@@ -10,8 +9,7 @@ namespace NYdb::NBS::NBlockStore {
 ////////////////////////////////////////////////////////////////////////////////
 
 TNbsFrontendRuntime::TNbsFrontendRuntime(TLog log)
-    : FrontendState(std::make_shared<TFrontendState>())
-    , BlockStore(CreateNbsFrontendBlockStore(FrontendState, std::move(log)))
+    : BlockStore(CreateNbsFrontendBlockStore(std::move(log)))
 {}
 
 void TNbsFrontendRuntime::Start()
@@ -31,19 +29,22 @@ TNbsFrontendRuntime::GetBlockStore() const
 }
 
 TResultOrError<TString> TNbsFrontendRuntime::RegisterVolume(
-    const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
-    IStoragePtr storage,
-    TVolumeConfigPtr ioGeometry)
+    NActors::TActorSystem* actorSystem,
+    const NActors::TActorId& actorId,
+    std::shared_ptr<NStorage::NPartitionDirect::TPartitionSessionState>
+        sessionState)
 {
-    return FrontendState->RegisterVolume(
-        volumeMetadata,
-        std::move(storage),
-        std::move(ioGeometry));
+    return BlockStore->RegisterVolume(
+        actorSystem,
+        actorId,
+        std::move(sessionState));
 }
 
-void TNbsFrontendRuntime::UnregisterVolume(const TString& registrationId)
+void TNbsFrontendRuntime::UnregisterVolume(
+    const TString& diskId,
+    const TString& registrationId)
 {
-    FrontendState->UnregisterVolume(registrationId);
+    BlockStore->UnregisterVolume(diskId, registrationId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,13 +1,14 @@
 LIBRARY()
 
 SRCS(
-    frontend_state.cpp
     blockstore_facade.cpp
     frontend_runtime.cpp
 )
 
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/service
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session
+    ydb/library/actors/core
     library/cpp/logger
     library/cpp/threading/atomic_shared_ptr
     ydb/core/protos

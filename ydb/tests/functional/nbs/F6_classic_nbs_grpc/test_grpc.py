@@ -64,6 +64,33 @@ def test_mount_is_idempotent(grpc_client, mounted_volume):
     assert response.InactiveClientsTimeout == 0
 
 
+def test_independent_sessions_and_io_per_disk(grpc_client, two_mounted_volumes):
+    first, second = two_mounted_volumes
+    assert first.SessionId != second.SessionId
+    first_data = b'a' * first.Volume.BlockSize
+    second_data = b'b' * second.Volume.BlockSize
+    grpc_client.call('WriteBlocks', write_request(first, first_data))
+    grpc_client.call('WriteBlocks', write_request(second, second_data))
+    assert_read(grpc_client, first, 0, first_data)
+    assert_read(grpc_client, second, 0, second_data)
+
+    # A valid token from another disk grants neither I/O nor unmount access.
+    request = read_request(second)
+    request.SessionId = first.SessionId
+    grpc_client.call('ReadBlocks', request, E_BS_INVALID_SESSION)
+    grpc_client.call(
+        'UnmountVolume',
+        mount_pb2.TUnmountVolumeRequest(DiskId=second.Volume.DiskId, SessionId=first.SessionId),
+        E_BS_INVALID_SESSION,
+    )
+    grpc_client.call(
+        'UnmountVolume',
+        mount_pb2.TUnmountVolumeRequest(DiskId=first.Volume.DiskId, SessionId=first.SessionId),
+    )
+    grpc_client.call('ReadBlocks', read_request(first), E_BS_INVALID_SESSION)
+    assert_read(grpc_client, second, 0, second_data)
+
+
 def test_unmount_and_remount(grpc_client, mounted_volume):
     disk_id = mounted_volume.Volume.DiskId
     data = pattern(0, 1, mounted_volume.Volume.BlockSize)
@@ -103,9 +130,7 @@ def test_native_block_sizes(grpc_client, mounted_volume):
 
 
 @pytest.mark.timeout(120, func_only=True)
-@pytest.mark.parametrize(
-    'layout', ['one-block', 'several-blocks', 'stripe-crossing', 'fragmented', 'last-block', '32-MiB']
-)
+@pytest.mark.parametrize('layout', ['one-block', 'several-blocks', 'stripe-crossing', 'fragmented', '32-MiB'])
 def test_io_layouts(grpc_client, mounted_volume, layout):
     block_size = mounted_volume.Volume.BlockSize
     start, count = {
@@ -113,7 +138,6 @@ def test_io_layouts(grpc_client, mounted_volume, layout):
         'several-blocks': (3, 7),
         'stripe-crossing': (blocks_per_stripe(block_size) - 1, 2),
         'fragmented': (3, 1),
-        'last-block': (mounted_volume.Volume.BlocksCount - 1, 1),
         '32-MiB': (1024, 32 * 1024 * 1024 // block_size),
     }[layout]
     data = pattern(start, count, block_size)

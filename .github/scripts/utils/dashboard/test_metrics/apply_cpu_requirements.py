@@ -1,31 +1,16 @@
-"""
-Apply CPU REQUIREMENTS to ya.make content.
-
-Used by:
-- tests_resource_dashboard: tests (apply_cpu_requirements_to_content)
-- dashboard HTML: generated script inlines equivalent logic
-
-Rules:
-- When adding for default (no sanitizer): insert REQUIREMENTS(cpu:X) at top,
-  before first IF (WITH_VALGRIND) or IF (SANITIZER_TYPE), so it applies to all branches.
-- When adding for sanitizer and file has IF (WITH_VALGRIND) ... ELSE(): add
-  REQUIREMENTS(cpu:X) to the Valgrind block and ELSEIF(SANITIZER_TYPE) with same
-  REQUIREMENTS before ELSE(), instead of nesting IF (SANITIZER_TYPE) inside ELSE().
-"""
+"""Insert or update REQUIREMENTS(cpu:N) in ya.make content."""
 
 from __future__ import annotations
 
-import ast
 import re
 from pathlib import Path
 from typing import Optional
 
 try:
-    from .ya_make_requirements import requirements_span
+    from .ya_make_requirements import eval_ya_make_condition, normalize_suite_path, requirements_span
 except ImportError:
-    from ya_make_requirements import requirements_span
+    from ya_make_requirements import eval_ya_make_condition, normalize_suite_path, requirements_span
 
-PART_SUFFIX_RE = re.compile(r"/part\d+$")
 RE_REQ_LINE = re.compile(r"^(\s*REQUIREMENTS\s*\()(.*?)(\)\s*)$", re.DOTALL)
 RE_REQ_OPEN = re.compile(r"^\s*REQUIREMENTS\s*\(", re.IGNORECASE)
 RE_CPU = re.compile(r"\bcpu\s*:\s*([^\s)]+(?:\([^)]*\))?)", re.IGNORECASE)
@@ -33,12 +18,6 @@ RE_IF = re.compile(r"^\s*IF\s*\((.*)\)\s*$")
 RE_ELSEIF = re.compile(r"^\s*ELSEIF\s*\((.*)\)\s*$")
 RE_ELSE = re.compile(r"^\s*ELSE\s*\(\s*\)\s*$")
 RE_ENDIF = re.compile(r"^\s*ENDIF\s*\(\s*\)\s*$")
-RE_SAN_EQ = re.compile(r'SANITIZER_TYPE\s*==\s*"([^"]*)"')
-RE_SAN_NE = re.compile(r'SANITIZER_TYPE\s*!=\s*"([^"]*)"')
-
-
-def normalize_suite_path(path: str) -> str:
-    return PART_SUFFIX_RE.sub("", path or "")
 
 
 def normalize_cpu_req(value: object) -> str:
@@ -49,10 +28,6 @@ def normalize_cpu_req(value: object) -> str:
         return str(int(float(s)))
     except Exception:
         return s or "1"
-
-
-def update_requirements_line(line: str, cpu: str) -> str:
-    return update_requirements_text(line, cpu)
 
 
 def update_requirements_text(text: str, cpu: str) -> str:
@@ -74,48 +49,6 @@ def update_requirements_text(text: str, cpu: str) -> str:
     else:
         body = (body.strip() + " " if body.strip() else "") + "cpu:" + str(cpu)
     return prefix + body + suffix
-
-
-def _safe_eval_bool(expr: str) -> bool:
-    tree = ast.parse(expr, mode="eval")
-    return _eval_ast_bool(tree.body)
-
-
-def _eval_ast_bool(node: ast.AST) -> bool:
-    if isinstance(node, ast.Constant):
-        return bool(node.value)
-    if isinstance(node, ast.BoolOp):
-        if isinstance(node.op, ast.And):
-            return all(_eval_ast_bool(v) for v in node.values)
-        if isinstance(node.op, ast.Or):
-            return any(_eval_ast_bool(v) for v in node.values)
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-        return not _eval_ast_bool(node.operand)
-    raise ValueError("Unsupported AST node: " + str(type(node)))
-
-
-def _eval_condition_for_sanitizer(cond: str, sanitizer: Optional[str]) -> bool:
-    expr = (cond or "").strip()
-    has_san = bool(
-        sanitizer
-        and str(sanitizer).strip()
-        and str(sanitizer).strip().lower() not in ("none", "off", "false", "0")
-    )
-    san = (sanitizer or "").strip().lower()
-    expr = RE_SAN_EQ.sub(lambda m: "True" if san == m.group(1).strip().lower() else "False", expr)
-    expr = RE_SAN_NE.sub(lambda m: "True" if san != m.group(1).strip().lower() else "False", expr)
-    expr = re.sub(r"\bSANITIZER_TYPE\b", "True" if has_san else "False", expr)
-    expr = re.sub(r"\bOS_WINDOWS\b", "False", expr)
-    expr = re.sub(r"\bOS_LINUX\b", "True", expr)
-    expr = re.sub(r"\bOS_DARWIN\b", "False", expr)
-    expr = re.sub(r"\bWITH_VALGRIND\b", "False", expr)
-    expr = re.sub(r"\bOR\b", "or", expr)
-    expr = re.sub(r"\bAND\b", "and", expr)
-    expr = re.sub(r"\bNOT\b", "not", expr)
-    try:
-        return _safe_eval_bool(expr)
-    except Exception:
-        return has_san if "SANITIZER_TYPE" in cond else False
 
 
 def _cond_mentions_sanitizer(cond: str) -> bool:
@@ -147,8 +80,6 @@ def _find_with_valgrind_else_span(lines: list[str]) -> Optional[tuple[int, int]]
             if depth == 1 and re.search(r"\bWITH_VALGRIND\b", m_if.group(1) or ""):
                 first_valgrind_idx = i
             continue
-        if RE_ELSEIF.match(line):
-            continue
         if RE_ELSE.match(line):
             if depth == 1 and first_valgrind_idx is not None:
                 return (first_valgrind_idx, i)
@@ -173,7 +104,7 @@ def _find_requirements_line(lines: list[str], sanitizer: Optional[str]) -> Optio
                 stack.pop()
             parent_active = current_active
             parent_scope = current_sanitizer_scope
-            if_res = _eval_condition_for_sanitizer(cond, sanitizer)
+            if_res = eval_ya_make_condition(cond, sanitizer)
             current_active = parent_active and if_res
             current_sanitizer_scope = parent_scope or _cond_mentions_sanitizer(cond)
             if _cond_mentions_valgrind_or_sanitizer(cond):
@@ -217,7 +148,7 @@ def _find_sanitizer_block_insert_index(lines: list[str], sanitizer: Optional[str
             if m_elseif and stack:
                 stack.pop()
             parent_active = current_active
-            if_res = _eval_condition_for_sanitizer(cond, sanitizer)
+            if_res = eval_ya_make_condition(cond, sanitizer)
             current_active = parent_active and if_res
             has_sanitizer = _cond_mentions_sanitizer(cond)
             stack.append((i, parent_active, if_res, bool(m_elseif), has_sanitizer))
@@ -262,7 +193,7 @@ def _find_default_insert_index(lines: list[str]) -> int:
             if m_elseif and stack:
                 stack.pop()
             parent_active = current_active
-            if_res = _eval_condition_for_sanitizer(cond, None)
+            if_res = eval_ya_make_condition(cond, None)
             current_active = parent_active and if_res
             stack.append((parent_active, if_res, current_active, bool(m_elseif)))
             continue
@@ -324,10 +255,7 @@ def _has_module_block(lines: list[str]) -> bool:
 def apply_cpu_requirements_to_content(
     content: str, cpu: str, sanitizer: Optional[str] = None
 ) -> tuple[str, str]:
-    """
-    Apply CPU requirement to ya.make file content.
-    Returns (new_content, status) where status is 'updated', 'no change', or 'skip (no module block)'.
-    """
+    """Return (new_content, status): updated / no change / skip (no module block)."""
     cpu = normalize_cpu_req(cpu)
     lines = content.splitlines()
     changed = False
@@ -336,7 +264,7 @@ def apply_cpu_requirements_to_content(
     if req_idx is not None:
         span = requirements_span(lines, req_idx)
         if span is None:
-            new_line = update_requirements_line(lines[req_idx], cpu)
+            new_line = update_requirements_text(lines[req_idx], cpu)
             if new_line != lines[req_idx]:
                 lines[req_idx] = new_line
                 changed = True
@@ -365,7 +293,6 @@ def apply_cpu_requirements_to_content(
                     else_indent = _line_indent(lines[else_idx])
                     lines.insert(else_idx, block_indent + "REQUIREMENTS(cpu:" + cpu + ")")
                     lines.insert(else_idx + 1, else_indent + "ELSEIF(SANITIZER_TYPE)")
-                    # Body of ELSEIF: same indent as body of IF/ELSE (block_indent + 4 spaces)
                     lines.insert(else_idx + 2, (else_indent + "    ") + "REQUIREMENTS(cpu:" + cpu + ")")
                     changed = True
                 else:
@@ -396,7 +323,7 @@ def apply_cpu_requirements_to_content(
 def apply_one(
     repo_root: Path, suite_path: str, cpu: str, dry_run: bool, sanitizer: Optional[str]
 ) -> tuple[str, str]:
-    """Apply CPU requirement to a ya.make file on disk. Returns (suite_path, status)."""
+    """Write CPU requirement into suite/ya.make. Returns (suite_path, status)."""
     suite = normalize_suite_path(suite_path)
     ya_make = repo_root / suite / "ya.make"
     if not ya_make.exists():

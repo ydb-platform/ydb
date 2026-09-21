@@ -39,6 +39,8 @@ else:
     from dashboard_report_table import build_report_table_html
     from runner_footprint import enrich_resources_overlay, resolve_runner_footprint
 
+normalize_suite_path = ya_make_requirements.normalize_suite_path
+
 # Supports both:
 #   [3/10] chunk
 #   [test_file.py 3/10] chunk
@@ -63,9 +65,6 @@ RUN_SUITE_GROUP_SOLE_RE = re.compile(
 RUN_SUITE_SOLE_RE = re.compile(
     r"\$\(BUILD_ROOT\)/(.+?)/test-results/.+?/(?:meta\.json|ytest\.report\.trace|run_test\.log|testing_out_stuff\.tar(?:\.zstd)?)"
 )
-PART_SUFFIX_RE = re.compile(r"/part\d+$")
-
-
 def _shell_escape(s: str) -> str:
     """Escape for use inside double-quoted shell argument (e.g. jq --arg x \"...\")."""
     return s.replace("\\", "\\\\").replace('"', '\\"')
@@ -191,11 +190,6 @@ def ram_kb(metrics: dict[str, Any]) -> float:
         except (TypeError, ValueError):
             pass
     return 0.0
-
-
-def normalize_suite_path(path: str) -> str:
-    """Merge partitioned suites like .../part7 into one suite ..."""
-    return PART_SUFFIX_RE.sub("", path)
 
 
 def normalize_chunk_group(group: Optional[str]) -> Optional[str]:
@@ -601,84 +595,6 @@ def parse_report_chunks(
             "affected_chunks": int(len(affected_chunk_labels)),
         },
     )
-
-
-def build_test_event_times_by_suite(
-    enriched_runs: list[dict[str, Any]],
-    report_test_fail_chunk_hids_by_suite: dict[str, dict[str, set[Any]]],
-    hid_to_chunk_idx_by_suite: dict[str, dict[Any, int]],
-) -> dict[str, dict[str, list[float]]]:
-    """Map test-level failures to chart times via report chunk hid -> run end_us."""
-    end_sec_by_suite_hid: dict[tuple[str, Any], float] = {}
-    end_sec_by_hid: dict[Any, float] = {}
-    end_sec_by_suite_chunk: dict[tuple[str, int], float] = {}
-    end_sec_by_suite_uid: dict[tuple[str, str], float] = {}
-    end_sec_by_uid: dict[str, float] = {}
-    for r in enriched_runs:
-        hid = r.get("report_hid")
-        suite = normalize_suite_path(str(r.get("suite_path", "")))
-        if not suite:
-            continue
-        end_sec = float(r.get("end_us", 0.0) or 0.0) / 1_000_000.0
-        uid = r.get("uid")
-        if isinstance(uid, str) and uid:
-            key_su = (suite, uid)
-            prev_su = end_sec_by_suite_uid.get(key_su)
-            if prev_su is None or end_sec > prev_su:
-                end_sec_by_suite_uid[key_su] = end_sec
-            prev_u = end_sec_by_uid.get(uid)
-            if prev_u is None or end_sec > prev_u:
-                end_sec_by_uid[uid] = end_sec
-        if hid is not None:
-            key = (suite, hid)
-            prev = end_sec_by_suite_hid.get(key)
-            if prev is None or end_sec > prev:
-                end_sec_by_suite_hid[key] = end_sec
-            prev_h = end_sec_by_hid.get(hid)
-            if prev_h is None or end_sec > prev_h:
-                end_sec_by_hid[hid] = end_sec
-        try:
-            chunk_idx = int(r.get("chunk"))
-        except (TypeError, ValueError):
-            chunk_idx = None
-        if chunk_idx is not None:
-            key_sc = (suite, chunk_idx)
-            prev_sc = end_sec_by_suite_chunk.get(key_sc)
-            if prev_sc is None or end_sec > prev_sc:
-                end_sec_by_suite_chunk[key_sc] = end_sec
-
-    out: dict[str, dict[str, list[float]]] = {}
-    for suite, by_kind in report_test_fail_chunk_hids_by_suite.items():
-        errs: list[float] = []
-        tos: list[float] = []
-        for hid in by_kind.get("error_hids", set()):
-            t = end_sec_by_suite_hid.get((suite, hid))
-            if t is None:
-                # Fallback for suite-key mismatches (e.g. path normalization drift).
-                t = end_sec_by_hid.get(hid)
-            if t is None:
-                # Deterministic fallback: map failing test chunk_hid -> report chunk idx (e.g. chunk115),
-                # then use evlog end time of that suite/chunk.
-                idx = (hid_to_chunk_idx_by_suite.get(suite) or {}).get(hid)
-                if idx is not None:
-                    t = end_sec_by_suite_chunk.get((suite, idx))
-            if t is not None:
-                errs.append(round(t, 1))
-        for hid in by_kind.get("timeout_hids", set()):
-            t = end_sec_by_suite_hid.get((suite, hid))
-            if t is None:
-                t = end_sec_by_hid.get(hid)
-            if t is None:
-                idx = (hid_to_chunk_idx_by_suite.get(suite) or {}).get(hid)
-                if idx is not None:
-                    t = end_sec_by_suite_chunk.get((suite, idx))
-            if t is not None:
-                tos.append(round(t, 1))
-        out[suite] = {
-            "error_sec": sorted(set(errs)),
-            "timeout_sec": sorted(set(tos)),
-        }
-    return out
 
 
 def build_test_event_times_direct(

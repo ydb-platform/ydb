@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Static runner inventory (cached) and per-snapshot usage for CI analytics.
-
-`--runner` / runner=True collects host inventory once (boot time, CPU, RAM,
-disk totals) and reuses the cache for later calls. `--usage` / usage=True
-always takes a fresh CPU/RAM/disk usage snapshot for that event only.
-"""
+"""Runner inventory (cached) and per-event CPU/RAM/disk usage snapshots."""
 
 from __future__ import annotations
 
@@ -51,12 +46,9 @@ def as_bool(value: Any) -> bool:
 
 
 def pop_runner_options(data: Optional[Dict[str, Any]]) -> Tuple[bool, bool]:
-    """Pull runner/usage control flags out of a properties dict (not labels)."""
     if not data:
         return False, False
-    runner = as_bool(data.pop("runner", False))
-    usage = as_bool(data.pop("usage", False)) or as_bool(data.pop("runner_usage", False))
-    return runner, usage
+    return as_bool(data.pop("runner", False)), as_bool(data.pop("usage", False))
 
 
 def runner_cache_path(metrics_path: Optional[str] = None) -> str:
@@ -94,7 +86,6 @@ def _write_cache(path: str, inventory: Dict[str, Any]) -> None:
 
 
 def collect_inventory() -> Dict[str, Any]:
-    """Boot time + total CPU / RAM / disks. Safe to call outside Actions."""
     try:
         return _collect_inventory()
     except Exception:  # noqa: BLE001 — telemetry must not fail CI
@@ -102,7 +93,6 @@ def collect_inventory() -> Dict[str, Any]:
 
 
 def collect_usage(*, sample_sec: float = USAGE_CPU_SAMPLE_SEC) -> Dict[str, Any]:
-    """Fresh CPU / RAM / disk usage. Not cached."""
     try:
         return _collect_usage(sample_sec=sample_sec)
     except Exception:  # noqa: BLE001 — telemetry must not fail CI
@@ -188,8 +178,6 @@ def _collect_usage(*, sample_sec: float) -> Dict[str, Any]:
         out["mem_available_bytes"] = available
     if total is not None and available is not None:
         out["mem_used_bytes"] = max(total - available, 0)
-    elif mem.get("MemUsed") is not None:
-        out["mem_used_bytes"] = mem["MemUsed"]
     root = _disk_usage("/")
     if root is not None:
         out["disk_used_bytes"] = root["used_bytes"]

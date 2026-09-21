@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 from export_ya_nodes import (
+    main,
     nodes_from_cpp_json,
     nodes_from_evlog,
     nodes_from_headers_json,
@@ -143,10 +144,8 @@ class ResolveFilesTest(unittest.TestCase):
         self.assertIsNone(pick_latest_file([]))
 
 
-class EmitSmokeTest(unittest.TestCase):
+class WriteSmokeTest(unittest.TestCase):
     def test_cli_writes_jsonl(self):
-        from export_ya_nodes import main
-
         with tempfile.TemporaryDirectory() as tmp:
             evlog = f"{tmp}/evlog.jsonl"
             out = f"{tmp}/metrics.jsonl"
@@ -173,8 +172,6 @@ class EmitSmokeTest(unittest.TestCase):
             self.assertEqual(names["build_info"]["labels"]["payload"]["nodes"][0]["name"], "ydb/x.cpp")
 
     def test_cpp_and_headers_cli(self):
-        from export_ya_nodes import main
-
         with tempfile.TemporaryDirectory() as tmp:
             cpp = f"{tmp}/cpp.json"
             headers = f"{tmp}/headers.json"
@@ -225,8 +222,6 @@ class EmitSmokeTest(unittest.TestCase):
             self.assertEqual(origins, {cpp, headers})
 
     def test_no_build_info_flag(self):
-        from export_ya_nodes import main
-
         with tempfile.TemporaryDirectory() as tmp:
             evlog = f"{tmp}/evlog.jsonl"
             out = f"{tmp}/metrics.jsonl"

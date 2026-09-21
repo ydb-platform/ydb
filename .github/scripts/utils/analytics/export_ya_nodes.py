@@ -23,7 +23,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from ci_metrics import BUILD_INFO_NAME, track
 
 NODE_KIND_RE = re.compile(
-    r"^(CompileAndLink|SharedLibrary|Preprocess|Compile|Link|Archive|Opt)\b"
+    r"^(CompileAndLink|SharedLibrary|Preprocess|Compile|Link|Archive)\b"
 )
 KEEP_NODE_KINDS = frozenset(
     {
@@ -250,7 +250,7 @@ def _compact_node(node: Dict[str, Any]) -> Dict[str, Any]:
     return compact
 
 
-def emit_build_info(
+def write_build_info(
     nodes: List[Dict[str, Any]],
     *,
     source: str,
@@ -271,7 +271,7 @@ def emit_build_info(
     track(BUILD_INFO_NAME, properties, file=file, kind="info", source=source)
 
 
-def emit_nodes(
+def write_nodes(
     nodes: List[Dict[str, Any]],
     *,
     source: str,
@@ -298,7 +298,7 @@ def emit_nodes(
         )
         count += 1
     if build_info and nodes:
-        emit_build_info(nodes, source=source, file=file, extra_labels=extra_labels, origin=origin)
+        write_build_info(nodes, source=source, file=file, extra_labels=extra_labels, origin=origin)
         count += 1
     return count
 
@@ -345,7 +345,7 @@ def main(argv=None) -> int:
     try:
         args = parse_args(argv)
         extra = _labels_from_args(args.label)
-        emitted = 0
+        written = 0
         has_input = bool(args.evlog or args.cpp_json or args.headers_json)
         if args.evlog:
             evlog_path = pick_latest_file(resolve_input_files(args.evlog))
@@ -353,7 +353,7 @@ def main(argv=None) -> int:
                 print(f"No evlog at {args.evlog!r}, skipping")
             else:
                 nodes = nodes_from_evlog(load_jsonl_objects(evlog_path))
-                emitted += emit_nodes(
+                written += write_nodes(
                     nodes,
                     source=args.source,
                     file=args.file,
@@ -361,7 +361,7 @@ def main(argv=None) -> int:
                     build_info=args.build_info,
                     origin=evlog_path,
                 )
-                print(f"Emitted {len(nodes)} ya graph nodes from {evlog_path}")
+                print(f"Wrote {len(nodes)} ya graph nodes from {evlog_path}")
         if args.cpp_json:
             if not os.path.exists(args.cpp_json):
                 print(f"No cpp json at {args.cpp_json!r}, skipping")
@@ -369,7 +369,7 @@ def main(argv=None) -> int:
                 with open(args.cpp_json, encoding="utf-8") as handle:
                     payload = json.load(handle)
                 nodes = nodes_from_cpp_json(payload if isinstance(payload, dict) else {})
-                emitted += emit_nodes(
+                written += write_nodes(
                     nodes,
                     source=args.source,
                     file=args.file,
@@ -377,7 +377,7 @@ def main(argv=None) -> int:
                     build_info=args.build_info,
                     origin=args.cpp_json,
                 )
-                print(f"Emitted {len(nodes)} cpp files from {args.cpp_json}")
+                print(f"Wrote {len(nodes)} cpp files from {args.cpp_json}")
         if args.headers_json:
             if not os.path.exists(args.headers_json):
                 print(f"No headers json at {args.headers_json!r}, skipping")
@@ -385,7 +385,7 @@ def main(argv=None) -> int:
                 with open(args.headers_json, encoding="utf-8") as handle:
                     payload = json.load(handle)
                 nodes = nodes_from_headers_json(payload if isinstance(payload, dict) else {})
-                emitted += emit_nodes(
+                written += write_nodes(
                     nodes,
                     source=args.source,
                     file=args.file,
@@ -393,10 +393,10 @@ def main(argv=None) -> int:
                     build_info=args.build_info,
                     origin=args.headers_json,
                 )
-                print(f"Emitted {len(nodes)} headers from {args.headers_json}")
+                print(f"Wrote {len(nodes)} headers from {args.headers_json}")
         if not has_input:
-            print("Nothing to emit: pass --evlog, --cpp-json and/or --headers-json")
-        elif emitted == 0:
+            print("Nothing to write: pass --evlog, --cpp-json and/or --headers-json")
+        elif written == 0:
             print("No raw node timings found")
         return 0
     except Exception as exc:  # noqa: BLE001 — telemetry must not fail CI

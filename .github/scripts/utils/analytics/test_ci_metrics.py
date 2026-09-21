@@ -13,30 +13,32 @@ from datetime import datetime, timezone
 import runner_info
 from runner_info import INVENTORY_LABEL, USAGE_LABEL
 
+from core import (
+    append_record,
+    build_track_record,
+    load_unsent_lines,
+    parse_datetime,
+    parse_labels,
+    read_pending_spans,
+    write_send_offset,
+)
 from ci_metrics import (
     BUILD_INFO_NAME,
     DEFAULT_TABLE_PATH,
     PRIMARY_KEYS,
     Analytics,
-    append_record,
     attach_context,
     build_create_table_sql,
-    build_track_record,
     github_context_labels,
     github_env_defaults,
     guess_build_preset,
-    load_unsent_lines,
     main,
     metrics_from_workflow_run,
     normalize_metric,
-    parse_datetime,
-    parse_labels,
-    read_pending_spans,
     rows_from_jsonl,
     start,
     timed,
     track,
-    write_send_offset,
 )
 
 
@@ -453,6 +455,26 @@ class RecordApiTest(unittest.TestCase):
         self.assertEqual(record["value"], 10500.0)
         self.assertEqual(record["unit"], "ms")
         self.assertEqual(record["labels"]["ya_attempt"], 1)
+        self.assertNotIn("duration_ms", record["labels"])
+
+    def test_duration_ms_not_copied_into_labels(self):
+        record = build_track_record(
+            "ya_make_try_1",
+            {"source": "ya_phase", "duration_ms": 1500, "cache_mode": "none"},
+        )
+        self.assertEqual(record["value"], 1500.0)
+        self.assertEqual(record["labels"], {"cache_mode": "none"})
+
+    def test_finished_at_maps_to_duration(self):
+        record = build_track_record(
+            "ya_make_try_1",
+            {
+                "source": "ya_phase",
+                "started_epoch": "1000",
+                "finished_at": "1970-01-01T00:16:42Z",
+            },
+        )
+        self.assertEqual(record["value"], 2000.0)
 
     def test_track_and_cli_append_jsonl(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -839,11 +861,15 @@ class TrackApiTest(unittest.TestCase):
         finally:
             client.flush_file = original
 
-    def test_track_info_helper(self):
+    def test_track_info_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
             analytics = Analytics(file=path, source="build_bloat")
-            analytics.track_info(BUILD_INFO_NAME, {"cpp_compilation_times": [{"path": "a.cpp", "time_s": 1.5}]})
+            analytics.track(
+                BUILD_INFO_NAME,
+                {"payload": {"cpp_compilation_times": [{"path": "a.cpp", "time_s": 1.5}]}},
+                kind="info",
+            )
             with open(path, encoding="utf-8") as handle:
                 row = json.loads(handle.readline())
             self.assertEqual(row["kind"], "info")

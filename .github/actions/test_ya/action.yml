@@ -513,8 +513,9 @@ runs:
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
           if [ -n "${CI_BUILD_SPAN:-}" ]; then
             record_ci_start "$CI_BUILD_SPAN" "$RETRY" "${CI_BUILD_SPAN_SOURCE:-ya_phase}"
+          else
+            record_ci_start "ya_make_try_${RETRY}" "$RETRY"
           fi
-          record_ci_start "ya_make_try_${RETRY}" "$RETRY"
 
           set +e
           # sudo -u restores supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
@@ -528,16 +529,10 @@ runs:
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
-          if [ $RC -ne 0 ]; then
-            record_ci_end "ya_make_try_${RETRY}" failure
-            if [ -n "${CI_BUILD_SPAN:-}" ]; then
-              record_ci_end "$CI_BUILD_SPAN" failure
-            fi
+          if [ -n "${CI_BUILD_SPAN:-}" ]; then
+            record_ci_end "$CI_BUILD_SPAN" "$([ $RC -eq 0 ] && echo success || echo failure)"
           else
-            record_ci_end "ya_make_try_${RETRY}" success
-            if [ -n "${CI_BUILD_SPAN:-}" ]; then
-              record_ci_end "$CI_BUILD_SPAN" success
-            fi
+            record_ci_end "ya_make_try_${RETRY}" "$([ $RC -eq 0 ] && echo success || echo failure)"
           fi
 
           # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).

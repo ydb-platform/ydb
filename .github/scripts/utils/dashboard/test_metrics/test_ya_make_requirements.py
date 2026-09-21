@@ -97,6 +97,23 @@ END()
     assert _parse_active_attrs(content, sanitizer=None) == {"size": "MEDIUM"}
 
 
+def test_elseif_sanitizer_branch():
+    content = """UNITTEST()
+
+IF (WITH_VALGRIND)
+    REQUIREMENTS(cpu:1 ram:8)
+ELSEIF(SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4 ram:16)
+ELSE()
+    REQUIREMENTS(cpu:2 ram:8)
+ENDIF()
+
+END()
+"""
+    assert _parse_active_attrs(content, sanitizer=None) == {"cpu_cores": 2, "ram_gb": 8}
+    assert _parse_active_attrs(content, sanitizer="address") == {"cpu_cores": 4, "ram_gb": 16}
+
+
 def test_get_requirements_normalizes_partitioned_suite_path():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -127,5 +144,6 @@ if __name__ == "__main__":
     test_sanitizer_conditional_requirements()
     test_fork_test_files_effective_split_counts_active_test_srcs_only()
     test_multiline_requirements_block()
+    test_elseif_sanitizer_branch()
     test_get_requirements_normalizes_partitioned_suite_path()
     print("OK")

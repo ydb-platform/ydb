@@ -33,8 +33,8 @@ COLUMNS_SCHEMA = [
     ("build_preset", "Utf8", True),
     ("pr_number", "Uint64", True),
     ("commit", "Utf8", True),
-    ("run_attempt", "Uint32", True),
-    ("ya_attempt", "Uint32", True),
+    ("run_attempt", "Uint64", True),
+    ("ya_attempt", "Uint64", True),
     ("duration_ms", "Uint64", True),
     ("queued_ms", "Uint64", True),
     ("conclusion", "Utf8", True),
@@ -217,7 +217,12 @@ def github_env_defaults() -> Dict[str, Any]:
         "run_id": run_id,
         "github_job_id": _as_uint(os.environ.get("GITHUB_NUMERIC_JOB_ID")) or 0,
         "workflow": os.environ.get("GITHUB_WORKFLOW") or None,
-        "job_name": os.environ.get("ANALYTICS_JOB_NAME") or os.environ.get("GITHUB_JOB") or None,
+        "job_name": (
+            os.environ.get("CI_JOB_TITLE")
+            or os.environ.get("ANALYTICS_JOB_NAME")
+            or os.environ.get("GITHUB_JOB")
+            or None
+        ),
         "event_name": os.environ.get("GITHUB_EVENT_NAME") or None,
         "branch": (
             os.environ.get("BRANCH_NAME")

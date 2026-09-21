@@ -11,6 +11,10 @@ import unittest
 from datetime import datetime, timezone
 
 from ci_pr_check_stages import (
+    DEFAULT_TABLE_PATH,
+    PRIMARY_KEYS,
+    build_create_table_sql,
+    github_env_defaults,
     guess_build_preset,
     normalize_stage_row,
     rows_from_jsonl,
@@ -145,6 +149,39 @@ class WorkflowRunRowsTest(unittest.TestCase):
 
         queue_row = next(row for row in rows if row["stage_name"] == "queue")
         self.assertEqual(queue_row["duration_ms"], 5 * 60 * 1000)
+
+
+class SchemaTest(unittest.TestCase):
+    def test_create_sql_has_pk_and_ttl(self):
+        sql = build_create_table_sql(DEFAULT_TABLE_PATH)
+        self.assertIn(DEFAULT_TABLE_PATH, sql)
+        self.assertIn("STORE = COLUMN", sql)
+        self.assertIn("TTL = Interval", sql)
+        self.assertIn("ON started_at", sql)
+        for key in PRIMARY_KEYS:
+            self.assertIn(f"`{key}`", sql)
+
+
+class GithubEnvDefaultsTest(unittest.TestCase):
+    def test_prefers_ci_job_title(self):
+        old = {
+            "CI_JOB_TITLE": os.environ.get("CI_JOB_TITLE"),
+            "ANALYTICS_JOB_NAME": os.environ.get("ANALYTICS_JOB_NAME"),
+            "GITHUB_RUN_ID": os.environ.get("GITHUB_RUN_ID"),
+        }
+        try:
+            os.environ["CI_JOB_TITLE"] = "Build and test relwithdebinfo"
+            os.environ["ANALYTICS_JOB_NAME"] = "PR-check"
+            os.environ["GITHUB_RUN_ID"] = "12345"
+            defaults = github_env_defaults()
+            self.assertEqual(defaults["job_name"], "Build and test relwithdebinfo")
+            self.assertEqual(defaults["run_id"], 12345)
+        finally:
+            for key, value in old.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
 
 class StageTimerTest(unittest.TestCase):

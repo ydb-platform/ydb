@@ -5,11 +5,24 @@
 
 #include <ydb/core/persqueue/common/common_app.h>
 
+#include <library/cpp/cgiparam/cgiparam.h>
+
 namespace NKikimr::NPQ {
 
 bool TPersQueueReadBalancer::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
     if (!ev) {
         return true;
+    }
+
+    const auto* request = ev->Get();
+    if (request->GetMethod() == HTTP_METHOD_POST && request->ExtendedQuery) {
+        TCgiParameters postParams;
+        for (const auto& kv : request->ExtendedQuery->GetPostParams()) {
+            postParams.emplace(kv.GetKey(), kv.GetValue());
+        }
+        if (postParams.Get("action") == "kill_session") {
+            Balancer->StopReadingSession(postParams.Get("consumer"), postParams.Get("session"), ctx);
+        }
     }
 
     TString str = GenerateStat();

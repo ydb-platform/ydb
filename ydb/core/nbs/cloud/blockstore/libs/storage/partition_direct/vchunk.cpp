@@ -57,6 +57,7 @@ TVChunk::TVChunk(
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
     const TVChunkConfig& vChunkConfig,
+    bool touched,
     const TDirtyMapStateProto& dirtyMapState,
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
@@ -79,9 +80,13 @@ TVChunk::TVChunk(
         .VChunkIndex = vChunkConfig.GetVChunkIndex()
      }}
     , VChunkConfig(vChunkConfig)
+    , TouchedState(
+          touched ? ETouchedState::Persisted : ETouchedState::NotTouched)
     , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(
           DirectBlockGroup->GetArenaAllocatorPool(),
           VChunkConfig,
+          IsTouched(),
+          dirtyMapState,
           BlockSize,
           BlocksCount))
 {
@@ -92,8 +97,6 @@ TVChunk::TVChunk(
         NKikimrServices::NBS_PARTITION,
         "%s Create",
         LogTitle.GetWithTime().c_str());
-
-    BlocksDirtyMap->Load(dirtyMapState);
 }
 
 TVChunk::~TVChunk()
@@ -748,6 +751,11 @@ void TVChunk::DoFlush(bool force)
         return;
     }
 
+    Touch();
+    if (TouchedState != ETouchedState::Persisted) {
+        return;
+    }
+
     auto flushBatch =
         BlocksDirtyMap->MakeFlushHint(force ? 1 : SyncRequestsBatchSize);
 
@@ -930,7 +938,7 @@ void TVChunk::DoPersistDirtyMap()
     DirtyMapStatePersisting = true;
 
     auto state = BlocksDirtyMap->GetStateForPersist();
-    const ui32 stateGeneration = state.GetStateGeneration();
+    const ui32 stateGeneration = BlocksDirtyMap->GetCurrentGeneration();
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -973,6 +981,64 @@ void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
 
     DirtyMapStatePersisting = false;
     BlocksDirtyMap->StatePersisted(stateGeneration);
+    ScheduleCleaningUp();
+}
+
+void TVChunk::Touch()
+{
+    if (TouchedState == ETouchedState::NotTouched) {
+        TouchedState = ETouchedState::Persisting;
+        DoPersistTouched();
+    }
+}
+
+bool TVChunk::IsTouched() const
+{
+    return TouchedState != ETouchedState::NotTouched;
+}
+
+void TVChunk::DoPersistTouched()
+{
+    Y_ABORT_UNLESS(TouchedState == ETouchedState::Persisting);
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Will persist touched",
+        LogTitle.GetWithTime().c_str());
+
+    auto future =
+        PartitionDirectService->SetVChunkTouched(VChunkConfig.GetVChunkIndex());
+    future.Subscribe(
+        [weakSelf = weak_from_this(),
+         executor = Executor]   //
+        (const TPersistResultFuture& f) mutable
+        {
+            if (f.GetValue() != EPersistResult::Success) {
+                return;
+            }
+            executor->ExecuteSimple(
+                [weakSelf = std::move(weakSelf)]()
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnTouchedPersisted();
+                    }
+                });
+        });
+}
+
+void TVChunk::OnTouchedPersisted()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Touched persisted.",
+        LogTitle.GetWithTime().c_str());
+
+    TouchedState = ETouchedState::Persisted;
+    ScheduleCleaningUp();
 }
 
 void TVChunk::ScheduleCleaningUp()
@@ -1141,7 +1207,7 @@ void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
         newConfig.DebugPrint().c_str());
 
     VChunkConfig = std::move(newConfig);
-    BlocksDirtyMap->UpdateConfig(VChunkConfig);
+    BlocksDirtyMap->UpdateConfig(VChunkConfig, IsTouched());
 
     for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
          ++hostIndex)
@@ -1224,7 +1290,7 @@ TVChunkConfig TVChunk::PrepareNewConfig(
         }
         case EHostState::Offline: {
             newConfig.DisableHost(hostIndex);
-            const TString message = newConfig.PromoteHostIfNeeded();
+            const TString message = newConfig.PromoteHostIfNeeded(IsTouched());
             if (!message.empty()) {
                 LOG_WARN(
                     *ActorSystem,

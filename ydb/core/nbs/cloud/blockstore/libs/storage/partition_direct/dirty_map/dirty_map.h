@@ -42,14 +42,14 @@ public:
     TBlocksDirtyMap(
         TArenaAllocatorPoolPtr arenaAllocatorPool,
         const TVChunkConfig& vChunkConfig,
+        bool isTouched,
+        const TDirtyMapStateProto& state,
         ui32 blockSize,
         ui16 blockCount);
     ~TBlocksDirtyMap() override;
 
-    void Load(const TDirtyMapStateProto& proto);
-
     // Note. Fresh watermarks are not applying for exists DDisks.
-    void UpdateConfig(const TVChunkConfig& vChunkConfig);
+    void UpdateConfig(const TVChunkConfig& vChunkConfig, bool isTouched);
 
     void RestorePBuffer(
         TPBufferKey pBufferKey,
@@ -150,6 +150,7 @@ public:
     void StatePersisted(ui32 persistGeneration);
     [[nodiscard]] ui32 GetCurrentGeneration() const;
 
+    // Memory management
     void Trim();
 
     // Stats
@@ -224,6 +225,10 @@ private:
         TPBufferKey pBufferKey,
         TBlockRange16 range);
 
+    [[nodiscard]] bool HasOlderOverlap(
+        TPBufferKey pBufferKey,
+        TBlockRange16 range);
+
     [[nodiscard]] bool CheckEraseAbility(
         TBlockRange16 range,
         TInflightInfo& inflightInfo);
@@ -267,10 +272,10 @@ private:
 
     // DDisks freshness state.
     TVector<TDDiskState> DDiskStates;
-    // Changed when DDiskState changed his behind or ahead map.
-    ui32 BehindAheadGeneration = 0;
+    // Changes when behind/ahead map changes.
+    ui32 StateGeneration = 0;
     // Last persisted DDisks states generation.
-    ui32 PersistedGeneration = 0;
+    ui32 PersistedStateGeneration = 0;
 
     // PBuffers space usage counters.
     TVector<TPBufferCounters> PBufferCounters;

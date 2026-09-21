@@ -11,6 +11,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
 
 #include <type_traits>
+#include <optional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_HULLCOMP
 
@@ -118,7 +119,10 @@ namespace NKikimr {
         Y_VERIFY_S(freshSegment, hullCtx->VCtx->VDiskLogPrefix);
 
         // prepare snapshots
-        auto barriersSnap = hullDs->Barriers->GetIndexSnapshot();
+        std::optional<TBarriersSnapshot> barriersSnap;
+        if constexpr (!std::is_same_v<TKey, TKeyBlock>) {
+            barriersSnap.emplace(hullDs->Barriers->GetIndexSnapshot());
+        }
         auto levelSnap = rtCtx->LevelIndex->GetIndexSnapshot();
 
         // prepare iterator and first/last lsns
@@ -340,7 +344,10 @@ namespace NKikimr {
             }
 
             // prepare snapshots
-            auto barriersSnap = HullDs->Barriers->GetIndexSnapshot();
+            std::optional<TBarriersSnapshot> barriersSnap;
+            if constexpr (!std::is_same_v<TKey, TKeyBlock>) {
+                barriersSnap.emplace(HullDs->Barriers->GetIndexSnapshot());
+            }
             auto levelSnap = RTCtx->LevelIndex->GetIndexSnapshot();
             // set up iterator
             TLevelSliceForwardIterator it(HullDs->HullCtx, vec);
@@ -901,6 +908,22 @@ namespace NKikimr {
             // put ssts into zero level
             for (auto& seg : msg->LevelSegments) {
                 RTCtx->LevelIndex->InsertSstAtLevel0(seg, HullDs->HullCtx);
+
+                // Blocks and Barriers have in-memory state derived from them (TBlocksCache and
+                // NBarriers::TMemView) which is normally maintained record by record in PutToFresh;
+                // an sst placed into the level index directly bypasses it.
+                if constexpr (std::is_same_v<TKey, TKeyBarrier>) {
+                    HullDs->Barriers->UpdateMemView(*seg);
+                } else if constexpr (std::is_same_v<TKey, TKeyBlock>) {
+                    // TBlocksCache belongs to THull and is not reachable from here. This path is
+                    // currently dead -- the full sync sst scheme is compiled out, see
+                    // USE_MERGE_FULL_SYNC_SCHEME, and every live full sync flow applies data through
+                    // the skeleton -- and it must not be revived before the blocks cache is refreshed
+                    // too, or the disk would serve writes it has to block and would never learn that
+                    // a tablet has been deleted for good.
+                    Y_DEBUG_ABORT_UNLESS(false, "%s blocks cache is not updated for full sync ssts",
+                        HullDs->HullCtx->VCtx->VDiskLogPrefix.data());
+                }
             }
 
             // run full sync sst committer

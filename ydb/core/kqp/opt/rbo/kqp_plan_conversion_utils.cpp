@@ -686,7 +686,14 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpGroupingSets(TExprNode::TPt
         groupingSets.emplace_back(std::move(keys));
     }
 
-    return MakeIntrusive<TOpGroupingSets>(CastOperator<TOpAggregate>(input), std::move(groupingSets), node->Pos());
+    TOpGroupingSets::TGroupingIndicators groupingIndicators;
+    groupingIndicators.reserve(opGroupingSets.GroupingIndicators().Size());
+    for (const auto& indicator : opGroupingSets.GroupingIndicators()) {
+        Y_ENSURE(indicator.Size() == 2, "Grouping indicator must be a pair of a group by key and a column");
+        groupingIndicators.emplace_back(TInfoUnit(indicator.Item(0).StringValue()), TInfoUnit(indicator.Item(1).StringValue()));
+    }
+
+    return MakeIntrusive<TOpGroupingSets>(CastOperator<TOpAggregate>(input), std::move(groupingSets), std::move(groupingIndicators), node->Pos());
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpWindow(TExprNode::TPtr node) {

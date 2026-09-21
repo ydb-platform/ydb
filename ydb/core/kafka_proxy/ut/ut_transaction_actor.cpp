@@ -716,7 +716,7 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(txnActorDiedEvent->ProducerState.Epoch, ProducerEpoch);
         }
 
-        Y_UNIT_TEST(OnDuplicateEndTxnCommitWhileInFlight_shouldReplyToBoth) {
+        Y_UNIT_TEST(OnDuplicateEndTxnCommitWhileInFlight_shouldReturnCONCURRENT_TRANSACTIONS) {
             ui32 endTxnSeen = 0;
             PrepareHeldCommit(endTxnSeen);
 
@@ -724,63 +724,16 @@ namespace {
             WaitUntilCommitHeld();
 
             SendEndTxnRequestAsync(true, 2);
-            WaitUntilEndTxnSeen(endTxnSeen, 2);
-
-            DummyKqpActor->ReleaseHeldCommit(*Ctx->Runtime);
-            auto first = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-            auto second = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-
-            UNIT_ASSERT(first != nullptr);
-            UNIT_ASSERT(second != nullptr);
-            UNIT_ASSERT_VALUES_EQUAL(first->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
-            UNIT_ASSERT_VALUES_EQUAL(second->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
-            UNIT_ASSERT_EQUAL(first->Response->ApiKey(), NKafka::EApiKey::END_TXN);
-            UNIT_ASSERT_EQUAL(second->Response->ApiKey(), NKafka::EApiKey::END_TXN);
-            UNIT_ASSERT(first->CorrelationId != second->CorrelationId);
-            UNIT_ASSERT(first->CorrelationId == 1 || second->CorrelationId == 1);
-            UNIT_ASSERT(first->CorrelationId == 2 || second->CorrelationId == 2);
-        }
-
-        Y_UNIT_TEST(OnEndTxnCommitRetriesOverCap_shouldRejectOldestWithCoordinatorNotAvailable) {
-            ui32 endTxnSeen = 0;
-            PrepareHeldCommit(endTxnSeen);
-
-            const ui64 queuedCount = NKafka::TTransactionActor::MaxPendingEndTxnRequests;
-            SendEndTxnRequestAsync(true, 1);
-            WaitUntilCommitHeld();
-
-            for (ui64 correlationId = 2; correlationId <= queuedCount; ++correlationId) {
-                SendEndTxnRequestAsync(true, correlationId);
-            }
-            WaitUntilEndTxnSeen(endTxnSeen, queuedCount);
-
-            SendEndTxnRequestAsync(true, queuedCount + 1);
-            AssertEndTxnResponse(
-                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
-                1,
-                NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
-
-            SendEndTxnRequestAsync(true, queuedCount + 2);
             AssertEndTxnResponse(
                 Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
                 2,
-                NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+                NKafka::EKafkaErrors::CONCURRENT_TRANSACTIONS);
 
             DummyKqpActor->ReleaseHeldCommit(*Ctx->Runtime);
-            THashSet<ui64> okCorrelationIds;
-            for (ui64 i = 0; i < queuedCount; ++i) {
-                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-                UNIT_ASSERT(response != nullptr);
-                UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
-                UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
-                okCorrelationIds.insert(response->CorrelationId);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(okCorrelationIds.size(), queuedCount);
-            UNIT_ASSERT(!okCorrelationIds.contains(1));
-            UNIT_ASSERT(!okCorrelationIds.contains(2));
-            for (ui64 correlationId = 3; correlationId <= queuedCount + 2; ++correlationId) {
-                UNIT_ASSERT(okCorrelationIds.contains(correlationId));
-            }
+            AssertEndTxnResponse(
+                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
+                1,
+                NKafka::EKafkaErrors::NONE_ERROR);
         }
 
         Y_UNIT_TEST(OnPoisonDuringInFlightEndTxnCommit_shouldFencePending) {
@@ -789,20 +742,12 @@ namespace {
 
             SendEndTxnRequestAsync(true, 1);
             WaitUntilCommitHeld();
-            SendEndTxnRequestAsync(true, 2);
-            WaitUntilEndTxnSeen(endTxnSeen, 2);
 
             SendPoisonPill();
-            THashSet<ui64> fencedCorrelationIds;
-            for (ui64 i = 0; i < 2; ++i) {
-                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-                UNIT_ASSERT(response != nullptr);
-                UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
-                UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
-                fencedCorrelationIds.insert(response->CorrelationId);
-            }
-            UNIT_ASSERT(fencedCorrelationIds.contains(1));
-            UNIT_ASSERT(fencedCorrelationIds.contains(2));
+            AssertEndTxnResponse(
+                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
+                1,
+                NKafka::EKafkaErrors::PRODUCER_FENCED);
 
             auto txnActorDiedEvent = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvTransactionActorDied>();
             UNIT_ASSERT(txnActorDiedEvent != nullptr);

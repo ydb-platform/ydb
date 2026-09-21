@@ -1,5 +1,6 @@
 #include "keyvalue_state.h"
 
+#include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/util/stlog.h>
 
@@ -26,6 +27,7 @@ void TKeyValueState::StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& 
     MoveDataGroups = std::move(moveDataGroups);
     MoveDataRequestSender = moveDataRequestSender;
     MoveDataIsInProgress = true;
+    MoveDataBlobsMoved = 0;
 
     ClearMoveDataBlobMovingStage();
     MoveDataBlobMovingIsInProgress = true;
@@ -125,6 +127,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::AdvanceMo
         }
 
         MoveDataChainIndex = 0;
+        TabletCounters->Cumulative()[COUNTER_MOVE_DATA_RECORDS_SCANNED].Increment(1);
     }
 
     return TryCheckTrash();
@@ -163,6 +166,12 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
             CancelMoveData();
             return TEvKeyValue::TEvAdvanceMoveDataResult::Error();
         }
+    }
+
+    if (result == TEvKeyValue::TEvBlobCopied::EResult::OK) {
+        ++MoveDataBlobsMoved;
+        TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BLOBS_MOVED].Increment(1);
+        TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BYTES_MOVED].Increment(blobId.BlobSize());
     }
 
     if (MoveDataRecordTouched) {
@@ -227,6 +236,8 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
     ++MoveDataChainIndex;
     if (MoveDataChainIndex >= record.Chain.size()) {
         MoveDataChainIndex = 0;
+        TabletCounters->Cumulative()[COUNTER_MOVE_DATA_RECORDS_SCANNED].Increment(1);
+
         ++itIndex;
         if (itIndex == Index.end()) {
             return TryCheckTrash();

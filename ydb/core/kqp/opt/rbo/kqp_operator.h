@@ -623,10 +623,17 @@ protected:
 
 class TOpGroupingSets: public IUnaryOperator {
 public:
-    TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos);
+    using TGroupingIndicators = TVector<std::pair<TInfoUnit, TInfoUnit>>;
+
+    TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TGroupingIndicators groupingIndicators,
+                    TPositionHandle pos);
 
     const TVector<TVector<TInfoUnit>>& GetGroupingSets() const {
         return GroupingSets;
+    }
+
+    const TGroupingIndicators& GetGroupingIndicators() const {
+        return GroupingIndicators;
     }
 
     virtual TString ToString(TExprContext& ctx) override;
@@ -638,6 +645,7 @@ protected:
 
 private:
     TVector<TVector<TInfoUnit>> GroupingSets;
+    TGroupingIndicators GroupingIndicators;
 };
 
 enum class EWindowFuncKind : ui32 {

@@ -231,7 +231,30 @@ class DistributedCluster:
         )
         self.hosts.extend(prepared[host] for host in self.host_ids)
         atomic_write_json(self.directory / "execution-plan.json", self.metadata)
-        self.operation(self.host_ids, "configure", {"hosts": self.hosts})
+        configured = self.operation(self.host_ids, "configure", {"hosts": self.hosts})
+        configuration = None
+        for host in self.host_ids:
+            artifacts = configured[host].get("artifacts")
+            if (
+                not isinstance(artifacts, list)
+                or len(artifacts) != 1
+                or not isinstance(artifacts[0], dict)
+                or artifacts[0].get("path") != "configuration/cluster.yaml"
+            ):
+                raise BenchmarkError("Missing saved YDB configuration for host " + host)
+            if configuration is not None and artifacts[0] != configuration:
+                raise BenchmarkError("YDB cluster configuration differs between hosts")
+            configuration = artifacts[0]
+        host = self.host_ids[0]
+        copy_results(
+            lambda operation, value: self.call(host, operation, value),
+            self.reference,
+            "configure",
+            [configuration],
+            "configuration",
+            self.directory / "configuration",
+        )
+        atomic_write_json(self.directory / "execution-plan.json", self.metadata)
         self.progress("starting-static-nodes")
         self.operation(self.host_ids, "start-static")
         self.progress("bootstrapping-cluster")

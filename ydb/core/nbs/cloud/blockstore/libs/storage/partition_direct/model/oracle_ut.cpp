@@ -73,6 +73,16 @@ void THostStateControllerMock::PersistHostHealth(
     Healths[hostIndex] = newHealth;
 }
 
+struct TDiskStateProviderMock: public IDiskStateProvider
+{
+    size_t InflightWriteCount = 0;
+
+    size_t GetInflightWriteCount() const override
+    {
+        return InflightWriteCount;
+    }
+};
+
 TStorageConfigPtr MakeStorageConfig()
 {
     NProto::TStorageServiceConfig rawConfig;
@@ -1131,20 +1141,27 @@ Y_UNIT_TEST_SUITE(TOracle)
         rawConfig.SetWriteMode(NProto::EWriteMode::IndirectWrite);
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
+        TDiskStateProviderMock diskState;
         TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
+        oracle.SetDiskStateProvider(&diskState);
 
+        diskState.InflightWriteCount = 1;
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::DirectWrite,
-            oracle.GetWriteMode(1));
+            oracle.GetWriteMode());
+        diskState.InflightWriteCount = DefaultMaxInflightWritesForDirectWrite;
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::DirectWrite,
-            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite));
+            oracle.GetWriteMode());
+        diskState.InflightWriteCount =
+            DefaultMaxInflightWritesForDirectWrite + 1;
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::IndirectWrite,
-            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite + 1));
+            oracle.GetWriteMode());
+        diskState.InflightWriteCount = 132;
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::IndirectWrite,
-            oracle.GetWriteMode(132));
+            oracle.GetWriteMode());
     }
 
     Y_UNIT_TEST(GetWriteModeShouldKeepConfiguredModeWhenThresholdZero)
@@ -1158,13 +1175,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::IndirectWrite,
-            oracle.GetWriteMode(1));
-        UNIT_ASSERT_VALUES_EQUAL(
-            EWriteMode::IndirectWrite,
-            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite));
-        UNIT_ASSERT_VALUES_EQUAL(
-            EWriteMode::IndirectWrite,
-            oracle.GetWriteMode(132));
+            oracle.GetWriteMode());
     }
 
     Y_UNIT_TEST(GetWriteModeShouldSelectByInflightWhenThresholdSet)
@@ -1175,20 +1186,27 @@ Y_UNIT_TEST_SUITE(TOracle)
             DefaultMaxInflightWritesForDirectWrite);
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
+        TDiskStateProviderMock diskState;
         TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
+        oracle.SetDiskStateProvider(&diskState);
 
+        diskState.InflightWriteCount = 1;
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::DirectWrite,
-            oracle.GetWriteMode(1));
+            oracle.GetWriteMode());
+        diskState.InflightWriteCount = DefaultMaxInflightWritesForDirectWrite;
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::DirectWrite,
-            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite));
+            oracle.GetWriteMode());
+        diskState.InflightWriteCount =
+            DefaultMaxInflightWritesForDirectWrite + 1;
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::IndirectWrite,
-            oracle.GetWriteMode(DefaultMaxInflightWritesForDirectWrite + 1));
+            oracle.GetWriteMode());
+        diskState.InflightWriteCount = 132;
         UNIT_ASSERT_VALUES_EQUAL(
             EWriteMode::IndirectWrite,
-            oracle.GetWriteMode(132));
+            oracle.GetWriteMode());
     }
 }
 

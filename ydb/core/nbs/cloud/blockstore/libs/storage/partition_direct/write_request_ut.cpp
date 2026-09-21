@@ -71,29 +71,6 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
     }
 
-    Y_UNIT_TEST_F(
-        ShouldPassDiskInflightWriteCountToOracle,
-        TWriteRequestTestFixture)
-    {
-        Init();
-
-        DirectBlockGroup->InflightWriteCount = 7;
-
-        auto writeRequest = CreateRequestExecutor(
-            MakeWriteTestRequestHeaders(Range, BlockSize),
-            EWriteMode::DirectWrite);
-
-        UNIT_ASSERT_VALUES_EQUAL(
-            7u,
-            DirectBlockGroup->Oracle.LastInflightWriteCount);
-
-        writeRequest->Run();
-        DirectWritePromises[0].SetValue({.Error = MakeError(S_OK)});
-        DirectWritePromises[1].SetValue({.Error = MakeError(S_OK)});
-        DirectWritePromises[2].SetValue({.Error = MakeError(S_OK)});
-        UNIT_ASSERT_VALUES_EQUAL(true, WriteClient->Response.has_value());
-    }
-
     Y_UNIT_TEST_F(ShouldReturnErrorAfterTimeout, TWriteRequestTestFixture)
     {
         Init();

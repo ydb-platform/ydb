@@ -290,12 +290,14 @@ TDuration TOracle::GetReadRequestTimeout() const
     return DefaultReadRequestTimeout;
 }
 
-EWriteMode TOracle::GetWriteMode(size_t inflightWriteCount) const
+EWriteMode TOracle::GetWriteMode() const
 {
     if (!MaxInflightWritesForDirectWrite) {
         return DefaultWriteMode;
     }
-    return inflightWriteCount <= MaxInflightWritesForDirectWrite
+    Y_ABORT_UNLESS(DiskStateProvider);
+    return DiskStateProvider->GetInflightWriteCount() <=
+                   MaxInflightWritesForDirectWrite
                ? EWriteMode::DirectWrite
                : EWriteMode::IndirectWrite;
 }
@@ -370,6 +372,11 @@ TString TOracle::Dump() const
         sb << "\n";
     }
     return sb;
+}
+
+void TOracle::SetDiskStateProvider(IDiskStateProvider* diskStateProvider)
+{
+    DiskStateProvider = diskStateProvider;
 }
 
 void TOracle::AddHostIfNeeded(THostIndex hostIndex)

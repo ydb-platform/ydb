@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/disk_state_provider.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
@@ -19,7 +20,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct IPartitionDirectService
+struct IPartitionDirectService: public IDiskStateProvider
 {
     virtual ~IPartitionDirectService() = default;
 
@@ -67,10 +68,6 @@ struct IPartitionDirectService
 
     // Releases the in-flight write registered by OnWriteStarted().
     virtual void OnWriteFinished() = 0;
-
-    // Number of vchunk writes in flight across the whole disk, as maintained
-    // by OnWriteStarted()/OnWriteFinished().
-    [[nodiscard]] virtual size_t GetInflightWriteCount() const = 0;
 
     // Called when DDisk replied BLOCKED, meaning DDisk has already
     // seen a newer tablet generation. The current tablet instance must suicide.

@@ -16,8 +16,6 @@ struct TOracleMock: public IOracle
     TDuration WriteRequestTimeout;
     TDuration PBufferReplyTimeout;
     EWriteMode WriteMode = EWriteMode::DirectWrite;
-    // Last inflightWriteCount passed to GetWriteMode.
-    mutable size_t LastInflightWriteCount = 0;
     TDuration FlushRequestCooldown;
     TDuration FlushRequestTimeout;
     TDuration EraseRequestTimeout;
@@ -57,8 +55,7 @@ struct TOracleMock: public IOracle
         EDataLocation dataLocation) const override;
     [[nodiscard]] TDuration GetReadRequestTimeout() const override;
 
-    [[nodiscard]] EWriteMode GetWriteMode(
-        size_t inflightWriteCount) const override;
+    [[nodiscard]] EWriteMode GetWriteMode() const override;
     [[nodiscard]] TDuration GetWriteHedgingDelay(
         THostMask hosts,
         bool indirect) const override;
@@ -161,7 +158,6 @@ public:
 
     TExecutorPtr Executor;
     TOracleMock Oracle;
-    size_t InflightWriteCount = 0;
     TScheduleHandler ScheduleHandler;
     TReadBlocksFromDDiskHandler ReadBlocksFromDDiskHandler;
     TReadBlocksFromPBufferHandler ReadBlocksFromPBufferHandler;
@@ -192,8 +188,6 @@ public:
     ui32 GetTabletGeneration() const override;
 
     IOraclePtr GetOracle() override;
-
-    size_t GetDiskInflightWriteCount() const override;
 
     void Schedule(TDuration delay, TCallback callback) override;
 

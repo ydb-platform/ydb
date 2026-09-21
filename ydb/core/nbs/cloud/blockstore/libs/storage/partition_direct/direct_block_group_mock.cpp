@@ -91,9 +91,8 @@ TDuration TOracleMock::GetReadRequestTimeout() const
     return ReadRequestTimeout;
 }
 
-EWriteMode TOracleMock::GetWriteMode(size_t inflightWriteCount) const
+EWriteMode TOracleMock::GetWriteMode() const
 {
-    LastInflightWriteCount = inflightWriteCount;
     return WriteMode;
 }
 
@@ -250,11 +249,6 @@ ui32 TDirectBlockGroupMock::GetTabletGeneration() const
 IOraclePtr TDirectBlockGroupMock::GetOracle()
 {
     return &Oracle;
-}
-
-size_t TDirectBlockGroupMock::GetDiskInflightWriteCount() const
-{
-    return InflightWriteCount;
 }
 
 void TDirectBlockGroupMock::Schedule(TDuration delay, TCallback callback)

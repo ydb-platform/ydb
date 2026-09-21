@@ -86,10 +86,10 @@ vChunk configuration and obtains its write mode and timing from the oracle.
 It requires at least three desired PB hosts before starting.
 
 The oracle chooses the mode from the disk-wide in-flight write count.
-The executor reads that count from
-[IDirectBlockGroup::GetDiskInflightWriteCount](../direct_block_group.h),
-which forwards to [TFastPathService](../fast_path_service.cpp). The current
-write is already included because `OnWriteStarted` ran first. When
+It reads that count from
+[IDiskStateProvider](../model/disk_state_provider.h), implemented by
+[TFastPathService](../fast_path_service.cpp). The current write is already
+included because `OnWriteStarted` ran first. When
 `MaxInflightWritesForDirectWrite` is unset the default is 16, so adaptive
 mode is on. Explicit 0 keeps the configured static `WriteMode`; `WriteMode`
 applies only when the threshold is 0. Otherwise a count at or below the

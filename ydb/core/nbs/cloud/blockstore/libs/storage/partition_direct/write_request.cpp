@@ -34,8 +34,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     IDirectBlockGroupPtr directBlockGroup,
     std::shared_ptr<TWriteRequestBundle> bundle)
     : ActorSystem(actorSystem)
-    , WriteMode(directBlockGroup->GetOracle()->GetWriteMode(
-          directBlockGroup->GetDiskInflightWriteCount()))
+    , WriteMode(directBlockGroup->GetOracle()->GetWriteMode())
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", ToString(WriteMode)},

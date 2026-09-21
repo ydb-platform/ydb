@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include "disk_state_provider.h"
 #include "host.h"
 #include "host_health_policy.h"
 #include "host_mask.h"
@@ -64,10 +65,9 @@ public:
     [[nodiscard]] virtual TDuration GetReadRequestTimeout() const = 0;
 
     // Chooses DirectWrite or IndirectWrite for this request.
-    // inflightWriteCount is the number of vchunk writes in flight across the
-    // whole disk, including this one. Low load favours DirectWrite for latency.
-    [[nodiscard]] virtual EWriteMode GetWriteMode(
-        size_t inflightWriteCount) const = 0;
+    // Low load favours DirectWrite for latency. The disk-wide in-flight
+    // write count is read from the disk-state provider.
+    [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
     [[nodiscard]] virtual TDuration GetWriteHedgingDelay(
         THostMask hosts,
         bool indirect) const = 0;
@@ -135,8 +135,7 @@ public:
         EDataLocation dataLocation) const override;
     [[nodiscard]] TDuration GetReadRequestTimeout() const override;
 
-    [[nodiscard]] EWriteMode GetWriteMode(
-        size_t inflightWriteCount) const override;
+    [[nodiscard]] EWriteMode GetWriteMode() const override;
     [[nodiscard]] TDuration GetWriteHedgingDelay(
         THostMask hosts,
         bool indirect) const override;
@@ -152,6 +151,10 @@ public:
     [[nodiscard]] const THostStat& GetHostStatistics(
         THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
+
+    // The FastPath service that owns the disk-wide in-flight write count.
+    // Must be set before GetWriteMode() is used in adaptive mode.
+    void SetDiskStateProvider(IDiskStateProvider* diskStateProvider);
 
     // If necessary, adds hosts to make the hostIndex valid.
     void AddHostIfNeeded(THostIndex hostIndex);
@@ -172,6 +175,7 @@ private:
     const TOracleConfigPtr OracleConfig;
 
     IHostStateController* const HostStateController;
+    IDiskStateProvider* DiskStateProvider = nullptr;
     const TDuration DefaultReadHedgingDelay;
     const TDuration DefaultReadRequestTimeout;
     const TDuration DefaultWriteHedgingDelay;

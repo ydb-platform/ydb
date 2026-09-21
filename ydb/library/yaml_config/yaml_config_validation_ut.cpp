@@ -229,6 +229,31 @@ selector_config:
         CheckValidation(doc, false, validator.get());
     }
 
+    Y_UNIT_TEST(IndependentSelectorsConvergeToSameConfig) {
+        auto doc = NFyaml::TDocument::Parse(R"(
+config: {log_config: {cluster_name: base}}
+allowed_labels:
+  deployment: {type: string}
+  test: {type: string}
+selector_config:
+- description: deployment override
+  selector: {deployment: selected}
+  config: {log_config: {cluster_name: selected}}
+- description: test override
+  selector: {test: selected}
+  config: {log_config: {cluster_name: selected}}
+)");
+        TSet<TString> names;
+        size_t count = 0;
+        EnumerateDistinctProjections(doc, {"/log_config"}, [&](NFyaml::TNodeRef config) {
+            ++count;
+            names.insert(config.Map().at("log_config").Map().at("cluster_name").Scalar());
+        });
+        UNIT_ASSERT_VALUES_EQUAL(count, 2);
+        UNIT_ASSERT(names.contains("base"));
+        UNIT_ASSERT(names.contains("selected"));
+    }
+
     Y_UNIT_TEST(SameSectionScaling) {
         TStringBuilder yaml;
         yaml << "config:\n  log_config: {cluster_name: base}\nallowed_labels:\n";

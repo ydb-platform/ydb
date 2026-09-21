@@ -1640,8 +1640,11 @@ void EnumerateDistinctProjections(
             if (hit != 0) {
                 auto config = state.Config.Clone();
                 auto root = config.Root();
-                auto patch = overlay.Config.Root().Copy(config);
-                Apply(root, patch.Ref());
+                // Destroy the detached patch before deduplication can discard its document.
+                {
+                    auto patch = overlay.Config.Root().Copy(config);
+                    Apply(root, patch.Ref());
+                }
                 insert(next, std::move(config), hit);
             }
             if (miss != 0) {

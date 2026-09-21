@@ -64,6 +64,8 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TBlobRange>, OthersReadData);
     YDB_READONLY_DEF(std::optional<TString>, OthersBlobs);
     YDB_ACCESSOR_DEF(TString, SavedBlob);
+    // True after the data-range InitReading (header-only InitReading leaves this false).
+    YDB_READONLY(bool, ReadingInitialized, false);
 
 public:
     void SetOthersBlob(const TString& blob) {
@@ -175,12 +177,41 @@ public:
         return dictData->DictionaryBlobSize;
     }
 
+    bool HasPartialArray() const {
+        return !!PartialArray;
+    }
+
+    // True when this chunk stores `subColumnName` as a dedicated dictionary-encoded key column whose prefix we can
+    // restore without the row-aligned index. Chunks that keep the key in "others" or as a plain/sparsed column cannot.
+    bool CanRestoreDictionaryOnly(const TString& subColumnName) const {
+        AFL_VERIFY(PartialArray);
+        if (PartialArray->HasSubColumnData(subColumnName)) {
+            return false;
+        }
+        auto pathResult = NArrow::NAccessor::NSubColumns::ResolveBestPath(PartialArray->GetHeader().GetColumnStats(),
+            PartialArray->GetHeader().GetOtherStats(), NArrow::NAccessor::NSubColumns::ToJsonPath(subColumnName));
+        if (pathResult.IsFail()) {
+            return false;
+        }
+        const auto path = pathResult.DetachResult();
+        if (!path || !path->IsColumn) {
+            return false;
+        }
+        const auto dictPrefix = GetDictionaryPrefixSize(path->Path.ColumnIndex);
+        if (!dictPrefix) {
+            return false;
+        }
+        const auto colBlobRange = PartialArray->GetColumnReadRange(path->Path.ColumnIndex);
+        return *dictPrefix <= colBlobRange.GetSize();
+    }
+
     // `dictionaryOnly`: read only the dictionary prefix of the single requested key column when this chunk stores it
     // dictionary encoded (DISTINCT needs the distinct values, not the rows). Chunks that store the key differently
     // (plain/sparsed column, or in "others") fall back to the regular row-aligned read.
     void InitReading(const std::shared_ptr<IBlobsReadingAction>& reading, const std::vector<TString>& subColumns, const bool dictionaryOnly) {
         AFL_VERIFY(!HeaderRange);
         if (!!PartialArray) {
+            ReadingInitialized = true;
             for (auto&& subColumnName : subColumns) {
                 auto pathResult = NArrow::NAccessor::NSubColumns::ResolveBestPath(PartialArray->GetHeader().GetColumnStats(),
                     PartialArray->GetHeader().GetOtherStats(), NArrow::NAccessor::NSubColumns::ToJsonPath(subColumnName));
@@ -296,16 +327,46 @@ private:
         return subColumnsAccessor->GetSettings();
     }
 
+    // Dictionary-only restore is valid only when every real physical chunk of this sub-column is dictionary-encoded.
+    // Mixed encodings would concatenate dictionary-entry rows with portion-aligned rows.
+    bool AllChunksSupportDictionaryOnly() const {
+        if (!DictionaryOnly || SubColumns.size() != 1) {
+            return false;
+        }
+        bool anyRealChunk = false;
+        for (const auto& chunk : ColumnChunks) {
+            if (!chunk.GetFullChunkRange().GetSize()) {
+                continue;
+            }
+            if (!chunk.HasPartialArray()) {
+                return false;
+            }
+            anyRealChunk = true;
+            if (!chunk.CanRestoreDictionaryOnly(SubColumns[0])) {
+                return false;
+            }
+        }
+        return anyRealChunk;
+    }
+
     virtual TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) override {
         if (NeedToAddResource) {
             NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
-            bool usedDictionaryOnly = false;
+            // Mixed encodings across physical chunks of one sub-column cannot share a dictionary-only row space.
+            // Either every restored chunk is dictionary-only, or none is (full row-aligned read).
+            bool usedDictionaryOnly = DictionaryOnly;
             for (auto&& i : ColumnChunks) {
                 auto conclusion = i.Finish(nullptr, context.GetSource());
                 if (conclusion.IsFail()) {
                     return conclusion;
                 }
-                usedDictionaryOnly |= *conclusion;
+                if (!i.GetFullChunkRange().GetSize()) {
+                    AFL_VERIFY(!*conclusion)("entity", GetEntityId());
+                } else if (usedDictionaryOnly) {
+                    AFL_VERIFY(*conclusion)("entity", GetEntityId());
+                } else {
+                    AFL_VERIFY(!*conclusion)("entity", GetEntityId());
+                }
                 compositeBuilder.AddChunk(i.GetPartialArray());
             }
             context.GetAccessors().AddVerified(GetEntityId(), compositeBuilder.Finish(), true);
@@ -362,7 +423,6 @@ private:
                         }
                         return;
                     }
-                    i.InitReading(reading, SubColumns, DictionaryOnly);
                     const auto headerDuration = TInstant::Now() - headerStart;
                     if (auto source = Source.lock()) {
                         auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
@@ -423,6 +483,24 @@ private:
                 }
             }
             ++chunkIndex;
+        }
+        bool headersPending = false;
+        for (const auto& chunk : ColumnChunks) {
+            if (!!chunk.GetHeaderRange()) {
+                headersPending = true;
+                break;
+            }
+        }
+        if (!headersPending) {
+            const bool useDict = AllChunksSupportDictionaryOnly();
+            if (DictionaryOnly && !useDict) {
+                DictionaryOnly = false;
+            }
+            for (auto&& i : ColumnChunks) {
+                if (!i.GetReadingInitialized() && i.GetFullChunkRange().GetSize()) {
+                    i.InitReading(reading, SubColumns, useDict);
+                }
+            }
         }
         nextRead.Add(reading);
     }

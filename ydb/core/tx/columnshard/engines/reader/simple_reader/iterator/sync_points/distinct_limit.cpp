@@ -36,10 +36,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
     }
 
     const auto keyAccessor = batch->GetAccessorByNameOptional(std::string(columnName.data(), columnName.size()));
-    if (!keyAccessor) {
-        // Column may not be materialized yet at this sync point; do not abort the scan.
-        return ESourceAction::ProvideNext;
-    }
+    AFL_VERIFY(keyAccessor)("column", columnName)("key_column_id", KeyColumnId);
 
     const ui32 recordsCount = keyAccessor->GetRecordsCount();
     if (!recordsCount) {

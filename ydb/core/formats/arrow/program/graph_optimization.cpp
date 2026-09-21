@@ -349,7 +349,11 @@ TGraphNode* TGraph::FindSingleSubColumnJsonKeyFetch(TGraphNode* markerNode, cons
     if (!fetchNode || !fetchNode->Is(EProcessorType::FetchOriginalData)) {
         return nullptr;
     }
-    const auto& fetchAddrs = fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses();
+    const auto fetchProc = fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>();
+    if (!fetchProc) {
+        return nullptr;
+    }
+    const auto& fetchAddrs = fetchProc->GetDataAddresses();
     auto itAddr = fetchAddrs.find(dataColumnId);
     if (itAddr == fetchAddrs.end() || itAddr->second.GetSubColumnNames(false) != assembleAddr.GetSubColumnNames(false)) {
         return nullptr;
@@ -360,7 +364,11 @@ TGraphNode* TGraph::FindSingleSubColumnJsonKeyFetch(TGraphNode* markerNode, cons
         if (n.get() == fetchNode || !n->Is(EProcessorType::FetchOriginalData)) {
             continue;
         }
-        if (n->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().contains(dataColumnId)) {
+        const auto otherProc = n->GetProcessorAs<TOriginalColumnDataProcessor>();
+        if (!otherProc) {
+            return nullptr;
+        }
+        if (otherProc->GetDataAddresses().contains(dataColumnId)) {
             return nullptr;
         }
     }
@@ -412,9 +420,13 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
                 return false;
             }
             auto proc = fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>();
+            if (!proc) {
+                return false;
+            }
             const auto& addrs = proc->GetDataAddresses();
             auto it = addrs.find(columnId);
             if (it == addrs.end() || it->second.GetUseDictionaryOnly()) {
+                // Already dictionary-only: report no graph change so the optimizer loop terminates.
                 return false;
             }
             proc->SetDictionaryOnlyForColumn(columnId);

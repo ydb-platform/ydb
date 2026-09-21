@@ -171,6 +171,38 @@ std::vector<TString> MakeJsonPayloadsWithOtherKey(const TString& prefix, const u
     return payloads;
 }
 
+// Mix of missing JSON path, JSON null, and string values for JSON_VALUE NULL DISTINCT tests.
+std::vector<TString> MakeJsonPayloadsWithMissingPathAndJsonNull(const ui32 count, const ui32 valueDistinct) {
+    Y_ABORT_UNLESS(valueDistinct > 0);
+    std::vector<TString> payloads;
+    payloads.reserve(count);
+    for (ui32 i = 0; i < count; ++i) {
+        if (i % 4 == 0) {
+            payloads.emplace_back(R"({"other":"missing"})");
+        } else if (i % 4 == 1) {
+            payloads.emplace_back(R"({"a.b.c":null,"other":"jnull"})");
+        } else {
+            payloads.emplace_back(TStringBuilder() << R"({"a.b.c":"v_)" << (i % valueDistinct) << R"(","other":"val"})");
+        }
+    }
+    return payloads;
+}
+
+// Missing JSON path only (no JSON-null variant in the dictionary): FinishDictionaryOnly must add a NULL row.
+std::vector<TString> MakeJsonPayloadsWithMissingPathOnly(const ui32 count, const ui32 valueDistinct) {
+    Y_ABORT_UNLESS(valueDistinct > 0);
+    std::vector<TString> payloads;
+    payloads.reserve(count);
+    for (ui32 i = 0; i < count; ++i) {
+        if (i % 3 == 0) {
+            payloads.emplace_back(R"({"other":"missing"})");
+        } else {
+            payloads.emplace_back(TStringBuilder() << R"({"a.b.c":"v_)" << (i % valueDistinct) << R"(","other":"val"})");
+        }
+    }
+    return payloads;
+}
+
 std::shared_ptr<arrow::RecordBatch> BuildBatchForRowsWithJsonPayload(
     const std::vector<i64>& timestamps,
     const std::vector<TString>& resourceIds,
@@ -559,6 +591,69 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         UNIT_ASSERT(!sel.IsSuccess());
         const TString issues = sel.GetIssues().ToString();
         UNIT_ASSERT_C(issues.Contains("does not match") || issues.Contains("OptForceOlapPushdownDistinct"), issues);
+    }
+
+    // Force key is the DISTINCT alias of a non-pushable expression: not a stored column, no JSON_VALUE
+    // that a later projection pushdown could still resolve. The optimizer must not inject KqpOlapDistinct
+    // (that would fail later in type annotation). DISTINCT stays in KQP.
+    Y_UNIT_TEST(ForceDistinct_UnresolvableComputedAlias_DoesNotInjectOlapDistinct) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        auto qsRes = queryClient.GetSession().GetValueSync();
+        UNIT_ASSERT_C(qsRes.IsSuccess(), qsRes.GetIssues().ToString());
+        auto querySession = qsRes.GetSession();
+
+        constexpr TStringBuf kTable = "/Root/foo_unresolvable_distinct";
+        auto cre = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `)" << kTable << R"(` (
+                a Int64 NOT NULL,
+                b Int32,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(cre.IsSuccess(), cre.GetIssues().ToString());
+
+        auto ins = querySession.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo_unresolvable_distinct` (a, b)
+            VALUES (1, 1), (2, 1), (3, 2);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(ins.IsSuccess(), ins.GetIssues().ToString());
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "computed";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10";
+
+            SELECT DISTINCT (b + 1) AS computed
+            FROM `/Root/foo_unresolvable_distinct` LIMIT 10
+        )";
+
+        auto explainRes = StreamExplainQuery(query, tableClient);
+        if (!explainRes.IsSuccess()) {
+            const TString issues = explainRes.GetIssues().ToString();
+            UNIT_ASSERT_C(
+                issues.Contains("neither a stored column nor a pushed OLAP projection")
+                    || issues.Contains("OptForceOlapPushdownDistinct"),
+                issues);
+            return;
+        }
+        const auto planRes = CollectStreamResult(explainRes);
+        UNIT_ASSERT(planRes.QueryStats.Defined());
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
+
+        auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto execRes = CollectStreamResult(it);
+        UNIT_ASSERT_VALUES_EQUAL(execRes.RowsCount, 2u);
     }
 
     // JSON_VALUE ERROR ON EMPTY is not kernel-pushable. Alias projection must refuse it instead of
@@ -1406,6 +1501,127 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         UNIT_ASSERT_VALUES_EQUAL(resOnFiltered.RowsCount, 5u);
         CompareYsonUnordered(resOffFiltered.ResultSetYson, resOnFiltered.ResultSetYson,
             "JSON_VALUE DISTINCT over a dense dictionary sub-column + JSON filter: pushdown must match plain");
+    }
+
+    // JSON_VALUE of an absent path and of JSON null both become SQL NULL; DISTINCT must keep a single NULL.
+    Y_UNIT_TEST(OneShard_JsonValueDistinct_MissingPathAndJsonNull_OnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding helper(kikimr);
+        helper.SetWithJsonDocument(true);
+        helper.SetShardingMethod("HASH_FUNCTION_MODULO_N");
+        helper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        const auto ts = PickTimestampsForShard(0, 1, 40, 1);
+        const auto rids = MakeRepeatedResourceIds("rid", 40, 40);
+        const auto jsonPayloads = MakeJsonPayloadsWithMissingPathAndJsonNull(40, 2);
+        helper.SendDataViaActorSystem(
+            "/Root/olapStore/olapTable", BuildBatchForRowsWithJsonPayload(ts, rids, jsonPayloads, "u"));
+
+        auto tableClient = kikimr.GetTableClient();
+        constexpr ui64 kLimit = 100;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "", kLimit);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "", kLimit);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 3u);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+            "JSON_VALUE DISTINCT with missing path and JSON null: force on/off must match (single NULL)");
+    }
+
+    // Dictionary-only SUB_COLUMNS: some rows have no value for the JSON key, so FinishDictionaryOnly adds a NULL row.
+    Y_UNIT_TEST(OneShard_JsonValueDistinct_DictionarySubColumn_MissingPath_OnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding helper(kikimr);
+        helper.SetWithJsonDocument(true);
+        helper.SetShardingMethod("HASH_FUNCTION_MODULO_N");
+        helper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        auto tableClient = kikimr.GetTableClient();
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto res = session.ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=json_payload,
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_UNIQUE_FRACTION`=`1`);
+            )").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        const auto ts = PickTimestampsForShard(0, 1, 60, 1);
+        const auto rids = MakeRepeatedResourceIds("rid", 60, 60);
+        const auto jsonPayloads = MakeJsonPayloadsWithMissingPathOnly(60, 2);
+        helper.SendDataViaActorSystem(
+            "/Root/olapStore/olapTable", BuildBatchForRowsWithJsonPayload(ts, rids, jsonPayloads, "u"));
+
+        constexpr ui64 kLimit = 100;
+        const i64 dictBefore = ReadDictionaryOnlyOptimizations(kikimr);
+        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "", kLimit);
+        const i64 dictAfterOff = ReadDictionaryOnlyOptimizations(kikimr);
+        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "", kLimit);
+        const i64 dictAfterOn = ReadDictionaryOnlyOptimizations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(dictAfterOff, dictBefore);
+        UNIT_ASSERT_C(dictAfterOn > dictAfterOff,
+            TStringBuilder() << "dictionary-only fetch expected for DISTINCT over a sparse dictionary sub-column; before="
+                             << dictBefore << " after_off=" << dictAfterOff << " after_on=" << dictAfterOn);
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 3u);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+            "JSON_VALUE DISTINCT over a dictionary sub-column with missing path: NULL must appear once");
+    }
+
+    // Same missing-path NULL as DictionarySubColumn, with dense dictionary encoding.
+    Y_UNIT_TEST(OneShard_JsonValueDistinct_DenseDictionarySubColumn_MissingPath_OnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding helper(kikimr);
+        helper.SetWithJsonDocument(true);
+        helper.SetShardingMethod("HASH_FUNCTION_MODULO_N");
+        helper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        auto tableClient = kikimr.GetTableClient();
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto res = session.ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=json_payload,
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`,
+                    `DICTIONARY_UNIQUE_FRACTION`=`1`, `DENSE_ENCODING_VERSION`=`1`);
+            )").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        const auto ts = PickTimestampsForShard(0, 1, 60, 1);
+        const auto rids = MakeRepeatedResourceIds("rid", 60, 60);
+        const auto jsonPayloads = MakeJsonPayloadsWithMissingPathOnly(60, 2);
+        helper.SendDataViaActorSystem(
+            "/Root/olapStore/olapTable", BuildBatchForRowsWithJsonPayload(ts, rids, jsonPayloads, "u"));
+
+        constexpr ui64 kLimit = 100;
+        const i64 dictBefore = ReadDictionaryOnlyOptimizations(kikimr);
+        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "", kLimit);
+        const i64 dictAfterOff = ReadDictionaryOnlyOptimizations(kikimr);
+        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "", kLimit);
+        const i64 dictAfterOn = ReadDictionaryOnlyOptimizations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(dictAfterOff, dictBefore);
+        UNIT_ASSERT_C(dictAfterOn > dictAfterOff,
+            TStringBuilder() << "dictionary-only fetch expected for DISTINCT over a dense sparse sub-column; before="
+                             << dictBefore << " after_off=" << dictAfterOff << " after_on=" << dictAfterOn);
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 3u);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+            "JSON_VALUE DISTINCT over a dense dictionary sub-column with missing path: NULL must appear once");
     }
 
     // No matching rows: SYNC_DISTINCT_LIMIT must forward empty stages without breaking the scan pipeline.

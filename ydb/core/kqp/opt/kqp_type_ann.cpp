@@ -1712,9 +1712,10 @@ TStatus AnnotateOlapDistinct(const TExprNode::TPtr& node, TExprContext& ctx) {
             }
         }
         if (!keyItemType) {
-            // Legacy shape: the DISTINCT key is a SELECT alias of a pushed JSON_VALUE projection whose column is named
-            // after the source column. Consider only projection-hosted JSON_VALUE nodes: JSON_VALUE inside pushed
-            // filter conditions (KqpOlapFilter) must not make the key ambiguous.
+            // Fallback when the DISTINCT key is a SELECT alias, but the pushed JSON_VALUE projection is still named
+            // after the source JSON column (the alias-projection rewrite did not run). Use that projection's type
+            // only when exactly one JSON_VALUE lives under KqpOlapProjection; JSON_VALUE inside a pushed filter
+            // (KqpOlapFilter) must not make the key ambiguous.
             TExprNode::TListType projectionJsonVals;
             for (const auto& projNode : FindNodes(inputPtr, [](const TExprNode::TPtr& n) { return TKqpOlapProjection::Match(n.Get()); })) {
                 const auto& op = projNode->ChildRef(TKqpOlapProjection::idx_OlapOperation);

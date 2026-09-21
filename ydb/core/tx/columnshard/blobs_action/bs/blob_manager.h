@@ -249,18 +249,7 @@ public:
     virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
     virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) override;
 
-    // Non-active history entries of data channels whose group is being decommissioned.
-    std::vector<TMoveDataRow> GetDrainedIntervalsForGroups(const THashSet<ui32>& groups) const;
-
-    // True when MoveData persisted a row for exactly this interval and group.
-    bool HasMoveDataRow(const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId) const;
-
-    void AddMoveDataRowOnExecute(
-        IBlobManagerDb& db, const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId);
-    void AddMoveDataRowOnComplete(const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId);
-
 private:
-    std::vector<TMoveDataRow> MoveDataRows;
     std::deque<TGenStep> FindNewGCBarriers();
     void PopGCBarriers(const TGenStep gs);
     void PopGCBarriers(const ui32 count);

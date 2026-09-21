@@ -152,68 +152,10 @@ TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 ge
 void TBlobManager::RegisterControls(NKikimr::TControlBoard& /*icb*/) {
 }
 
-std::vector<TMoveDataRow> TBlobManager::GetDrainedIntervalsForGroups(const THashSet<ui32>& groups) const {
-    std::vector<TMoveDataRow> result;
-    const ui32 channelCount = static_cast<ui32>(TabletInfo->Channels.size());
-    for (ui32 ch = NBlobOperations::TGlobal::FirstDataChannel; ch < channelCount; ++ch) {
-        const auto& hist = TabletInfo->Channels[ch].History;
-        // The last entry is the active one and is never drained by MoveData.
-        for (int i = 0; i + 1 < static_cast<int>(hist.size()); ++i) {
-            if (!groups.contains(hist[i].GroupID)) {
-                continue;
-            }
-            result.emplace_back(TMoveDataRow{ ch, hist[i].FromGeneration, hist[i + 1].FromGeneration, hist[i].GroupID });
-        }
-    }
-    return result;
-}
-
-bool TBlobManager::HasMoveDataRow(const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId) const {
-    return AnyOf(MoveDataRows, [&](const TMoveDataRow& row) {
-        return row.Channel == channel && row.FromGeneration == fromGeneration && row.ToGenerationExclusive == toGenerationExclusive &&
-               row.GroupId == groupId;
-    });
-}
-
-void TBlobManager::AddMoveDataRowOnExecute(
-    IBlobManagerDb& db, const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId) {
-    db.AddMoveDataRow(channel, fromGeneration, toGenerationExclusive, groupId);
-}
-
-void TBlobManager::AddMoveDataRowOnComplete(
-    const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId) {
-    // Execute upserts the row either way, so the hook reports every commit; the dedup below is in-memory only.
-    NYDBTest::TControllers::GetColumnShardController()->OnMoveDataRowPersisted(channel, fromGeneration, toGenerationExclusive, groupId);
-    if (HasMoveDataRow(channel, fromGeneration, toGenerationExclusive, groupId)) {
-        return;
-    }
-    MoveDataRows.emplace_back(TMoveDataRow{ channel, fromGeneration, toGenerationExclusive, groupId });
-}
-
 bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     // Load last collected Generation
     if (!db.LoadLastGcBarrier(LastCollectedGenStep)) {
         return false;
-    }
-    if (!db.LoadMoveDataRows(MoveDataRows)) {
-        return false;
-    }
-    {
-        // A row outlives its purpose once Hive has dropped the entry: that is the only evidence the cut committed.
-        std::vector<TMoveDataRow> liveRows;
-        liveRows.reserve(MoveDataRows.size());
-        for (const auto& row : MoveDataRows) {
-            const bool entryPresent = row.Channel < TabletInfo->Channels.size() &&
-                                      AnyOf(TabletInfo->Channels[row.Channel].History, [&row](const TTabletChannelInfo::THistoryEntry& e) {
-                                          return e.FromGeneration == row.FromGeneration && e.GroupID == row.GroupId;
-                                      });
-            if (entryPresent) {
-                liveRows.emplace_back(row);
-                continue;
-            }
-            db.EraseMoveDataRow(row.Channel, row.FromGeneration);
-        }
-        MoveDataRows.swap(liveRows);
     }
     if (!db.LoadGCBarrierPreparation(GCBarrierPreparation)) {
         return false;

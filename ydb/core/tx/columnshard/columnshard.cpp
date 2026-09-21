@@ -720,64 +720,6 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
     CheckMoveDataGate(ctx);
 }
 
-class TColumnShard::TTxWriteMoveDataRow: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
-private:
-    using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
-    const std::vector<NOlap::TMoveDataRow> Rows;
-    const TActorId HiveSender;
-    // The set this proof covers; Hive may widen the request while the transaction is in flight.
-    const THashSet<ui32> ProvenGroups;
-
-public:
-    TTxWriteMoveDataRow(TColumnShard* self, std::vector<NOlap::TMoveDataRow>&& rows)
-        : TBase(self)
-        , Rows(std::move(rows))
-        , HiveSender(self->MoveDataState.HiveSender)
-        , ProvenGroups(self->MoveDataState.TargetGroups)
-    {
-    }
-
-    TTxType GetTxType() const override {
-        return TXTYPE_WRITE_MOVE_DATA_ROW;
-    }
-
-    bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
-        NOlap::TBlobManagerDb blobManagerDb(txc.DB);
-        auto op = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(
-            Self->StoragesManager->GetOperatorOptional(NOlap::IStoragesManager::DefaultStorageId));
-        AFL_VERIFY(op);
-        for (const auto& row : Rows) {
-            op->AddMoveDataRowOnExecute(blobManagerDb, row);
-        }
-        // Fired inside the commit window, which is where a widened request can overtake this proof.
-        NYDBTest::TControllers::GetColumnShardController()->OnMoveDataRowsWritten();
-        return true;
-    }
-
-    void Complete(const TActorContext& ctx) override {
-        auto op = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(
-            Self->StoragesManager->GetOperatorOptional(NOlap::IStoragesManager::DefaultStorageId));
-        AFL_VERIFY(op);
-        for (const auto& row : Rows) {
-            op->AddMoveDataRowOnComplete(row);
-        }
-        for (const auto groupId : Self->MoveDataState.TargetGroups) {
-            if (ProvenGroups.contains(groupId)) {
-                continue;
-            }
-            // A target added while this proof was in flight is not covered by it; prove the widened set instead.
-            LOG_S_INFO("TColumnShard::TTxWriteMoveDataRow: target " << groupId << " added after the proof, re-running the gate at tablet "
-                                                                    << Self->TabletID());
-            Self->CheckMoveDataGate(ctx);
-            return;
-        }
-        // Success is answered only after the rows are committed: they are what CutHistory reads back.
-        ctx.Send(HiveSender, new TEvTablet::TEvMoveDataResponse(Self->TabletID(), NKikimrTabletBase::TEvMoveDataResponse::Success));
-        Self->Counters.GetCSCounters().OnMoveDataFinished();
-        Self->MoveDataState = TMoveDataState{};
-    }
-};
-
 void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
     if (!MoveDataState.Active) {
         return;
@@ -839,11 +781,10 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
     if (HasIndex()) {
         MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();
     }
-
-    auto op = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(
-        StoragesManager->GetOperatorOptional(NOlap::IStoragesManager::DefaultStorageId));
-    AFL_VERIFY(op);
-    Execute(new TTxWriteMoveDataRow(this, op->GetDrainedIntervalsForGroups(MoveDataState.TargetGroups)), ctx);
+    // The boot-time CutHistory scan finds drained intervals by itself, so nothing needs persisting before Success.
+    ctx.Send(MoveDataState.HiveSender, new TEvTablet::TEvMoveDataResponse(TabletID(), NKikimrTabletBase::TEvMoveDataResponse::Success));
+    Counters.GetCSCounters().OnMoveDataFinished();
+    MoveDataState = TMoveDataState{};
 }
 
 }   // namespace NKikimr::NColumnShard

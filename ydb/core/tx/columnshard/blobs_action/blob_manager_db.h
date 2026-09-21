@@ -17,14 +17,6 @@ namespace NKikimr::NOlap {
 // Garbage Collection generation and step
 using TGenStep = ::NKikimr::TGenStep;
 
-// MoveData persists one of these per drained interval; CutHistory consumes it after the restart.
-struct TMoveDataRow {
-    ui32 Channel = 0;
-    ui32 FromGeneration = 0;
-    ui32 ToGenerationExclusive = 0;
-    ui32 GroupId = 0;
-};
-
 class IBlobManagerDb {
 public:
     virtual ~IBlobManagerDb() = default;
@@ -38,10 +30,6 @@ public:
         const IBlobGroupSelector* dsGroupSelector, const TTabletId selfTabletId) = 0;
     virtual void AddBlobToKeep(const TUnifiedBlobId& blobId) = 0;
     virtual void EraseBlobToKeep(const TUnifiedBlobId& blobId) = 0;
-
-    [[nodiscard]] virtual bool LoadMoveDataRows(std::vector<TMoveDataRow>& rows) = 0;
-    virtual void AddMoveDataRow(const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId) = 0;
-    virtual void EraseMoveDataRow(const ui32 channel, const ui32 fromGeneration) = 0;
 
     virtual void AddBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
     virtual void EraseBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
@@ -80,9 +68,6 @@ public:
 
     void AddBlobToKeep(const TUnifiedBlobId& blobId) override;
     void EraseBlobToKeep(const TUnifiedBlobId& blobId) override;
-    [[nodiscard]] bool LoadMoveDataRows(std::vector<TMoveDataRow>& rows) override;
-    void AddMoveDataRow(const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId) override;
-    void EraseMoveDataRow(const ui32 channel, const ui32 fromGeneration) override;
     void AddBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
     void EraseBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
 

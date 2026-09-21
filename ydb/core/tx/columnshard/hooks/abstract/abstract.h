@@ -436,13 +436,6 @@ public:
 
     virtual void OnDeletePathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
     }
-
-    virtual void OnMoveDataRowPersisted(
-        const ui32 /*channel*/, const ui32 /*fromGeneration*/, const ui32 /*toGenerationExclusive*/, const ui32 /*groupId*/) {
-    }
-
-    virtual void OnMoveDataRowsWritten() {
-    }
 };
 
 class IKqpController {

@@ -358,6 +358,21 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     ComputeCpuTimes(simplifiedPlan);
 }
 
+void RemoveOperatorIds(NJson::TJsonValue& planNode) {
+    auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (auto& op : operators->second.GetArraySafe()) {
+            op.EraseValue("OperatorId");
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (auto& child : plans->second.GetArraySafe()) {
+            RemoveOperatorIds(child);
+        }
+    }
+}
+
 } // anonymous namespace
 
 NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
@@ -504,6 +519,12 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
     meta["type"] = "query";
 
     queryPlan["meta"] = meta;
+
+    // OperatorId is needed while correlating ANALYZE stats, but has no meaning in a published plan.
+    RemoveOperatorIds(txPlan["SimplifiedPlan"]);
+    for (auto& plan : txPlan["Plans"].GetArraySafe()) {
+        RemoveOperatorIds(plan);
+    }
 
     queryPlan["SimplifiedPlan"] = txPlan.GetMapSafe().at("SimplifiedPlan");
     txPlan.EraseValue("SimplifiedPlan");

@@ -1684,6 +1684,90 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTransfer();
     }
 
+    // TOKEN transfer has no StaticCredentials.User. Pause, then password-only alter must succeed.
+    Y_UNIT_TEST(AlterPauseWithoutUser)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithUsername("root"));
+
+        testCase.PauseTransfer();
+
+        testCase.ExecuteDDL(Sprintf(R"(
+            ALTER TRANSFER `%s`
+            SET (
+                PASSWORD = "password"
+            );
+        )", testCase.TransferName.data()));
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    // Same as AlterPauseWithoutUser, but credentials come from PASSWORD_SECRET_PATH.
+    Y_UNIT_TEST(AlterPauseWithoutUserSecret)
+    {
+        auto secret = TStringBuilder() << "password_secret_" << RandomNumber<ui16>();
+
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithUsername("root"));
+
+        testCase.ExecuteDDL(Sprintf(R"(
+            CREATE SECRET `%s` WITH (value="password")
+        )", secret.data()));
+
+        testCase.PauseTransfer();
+
+        testCase.ExecuteDDL(Sprintf(R"(
+            ALTER TRANSFER `%s`
+            SET (
+                PASSWORD_SECRET_PATH = "%s"
+            );
+        )", testCase.TransferName.data(), secret.data()));
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
     Y_UNIT_TEST(MessageField_Key) {
         MainTestCase(std::nullopt).Run({
             .TableDDL = R"(

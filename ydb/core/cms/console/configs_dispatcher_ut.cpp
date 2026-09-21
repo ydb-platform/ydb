@@ -1578,10 +1578,9 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
     }
 
     // Bootstrap a dispatcher and consume its initial Console response before testing metrics.
-    TActorId StartYamlVersionMetricsDispatcher(TTenantTestRuntime& runtime,
-                                              const NConfig::TConfigsDispatcherInitInfo& initInfo = {}) {
+    TActorId StartYamlVersionMetricsDispatcher(TTenantTestRuntime& runtime) {
         // Register the actor and allow its subscription client to start.
-        auto dispatcherId = runtime.Register(CreateConfigsDispatcher(initInfo));
+        auto dispatcherId = runtime.Register(CreateConfigsDispatcher({}));
         runtime.EnableScheduleForActor(dispatcherId, true);
 
         // Wait for bootstrap and the initial response before sending node-local requests.
@@ -1616,33 +1615,11 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         UNIT_ASSERT_VALUES_EQUAL(databaseCounter->Val(), databaseVersion);
     }
 
-    // Check that the default initialization does not register YAML version metrics.
-    Y_UNIT_TEST(TestYamlVersionMetricsDisabledByDefault) {
-        // Bootstrap with the default metric registration policy.
-        TTenantTestRuntime runtime(ConfigWithoutDispatcher());
-        auto dispatcherId = StartYamlVersionMetricsDispatcher(runtime);
-
-        // Process an enabled YAML config with EnableYamlConfigVersionMetrics disabled.
-        auto notification = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>();
-        notification->Record.SetMainYamlConfig(
-            "metadata: {version: 7}\nconfig: {yaml_config_enabled: true}\n");
-        runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, notification.Release()));
-        UNIT_ASSERT(QueryState(runtime, dispatcherId).YamlConfigEnabled);
-
-        // Verify that receiving YAML does not register either metric implicitly.
-        auto counters = GetServiceCounters(runtime.GetDynamicCounters(0), "config")
-            ->GetSubgroup("subsystem", "configs_dispatcher");
-        UNIT_ASSERT(!counters->FindCounter("MainYamlConfigVersion"));
-        UNIT_ASSERT(!counters->FindCounter("DatabaseYamlConfigVersion"));
-    }
-
-    // Check that EnableYamlConfigVersionMetrics registers both YAML version gauges with an initial zero.
+    // Check that default initialization registers both YAML version gauges with an initial zero.
     Y_UNIT_TEST(TestYamlVersionMetricsInitiallyZero) {
-        // Enable metrics on a dispatcher that has not received any YAML configuration.
+        // Bootstrap a dispatcher that has not received any YAML configuration.
         TTenantTestRuntime runtime(ConfigWithoutDispatcher());
-        NConfig::TConfigsDispatcherInitInfo initInfo;
-        initInfo.EnableYamlConfigVersionMetrics = true;
-        StartYamlVersionMetricsDispatcher(runtime, initInfo);
+        StartYamlVersionMetricsDispatcher(runtime);
 
         // Verify both the gauge type and the observable initial value.
         auto counters = GetServiceCounters(runtime.GetDynamicCounters(0), "config")
@@ -1659,9 +1636,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
     Y_UNIT_TEST(TestYamlVersionMetricsTrackCurrentDocuments) {
         // Drain the initial Console response before injecting deterministic node-local updates.
         TTenantTestRuntime runtime(ConfigWithoutDispatcher());
-        NConfig::TConfigsDispatcherInitInfo initInfo;
-        initInfo.EnableYamlConfigVersionMetrics = true;
-        auto dispatcherId = StartYamlVersionMetricsDispatcher(runtime, initInfo);
+        auto dispatcherId = StartYamlVersionMetricsDispatcher(runtime);
 
         TString mainYaml = "metadata: {version: 7}\nconfig: {yaml_config_enabled: true}\n";
         TString databaseYaml = "metadata: {version: 11}\nconfig: {}\n";
@@ -1690,13 +1665,12 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         CheckYamlVersionMetrics(runtime, dispatcherId, mainYaml, databaseYaml, 8, 3);
     }
 
-    // Check that missing or unreadable metadata zeros only the affected source's gauge.
+    // Check that missing or unreadable metadata zeros only the affected source's gauge without subscribers.
+    // Limit this test to metric error handling; the config delivery path is not exercised.
     Y_UNIT_TEST(TestYamlVersionMetricsUnknownVersions) {
         // Drain the initial Console response so it cannot overwrite injected configurations.
         TTenantTestRuntime runtime(ConfigWithoutDispatcher());
-        NConfig::TConfigsDispatcherInitInfo initInfo;
-        initInfo.EnableYamlConfigVersionMetrics = true;
-        auto dispatcherId = StartYamlVersionMetricsDispatcher(runtime, initInfo);
+        auto dispatcherId = StartYamlVersionMetricsDispatcher(runtime);
 
         const TString mainYaml = "metadata: {version: 7}\nconfig: {yaml_config_enabled: true}\n";
         const TString databaseYaml = "metadata: {version: 11}\nconfig: {}\n";
@@ -1726,10 +1700,8 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
         *mainCounter = 7;
         *databaseCounter = 11;
 
-        // Bootstrap with metrics enabled and verify that stale versions are not exposed.
-        NConfig::TConfigsDispatcherInitInfo initInfo;
-        initInfo.EnableYamlConfigVersionMetrics = true;
-        StartYamlVersionMetricsDispatcher(runtime, initInfo);
+        // Bootstrap with default initialization and verify that stale versions are not exposed.
+        StartYamlVersionMetricsDispatcher(runtime);
         UNIT_ASSERT_VALUES_EQUAL(mainCounter->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(databaseCounter->Val(), 0);
     }

@@ -2503,7 +2503,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         auto checkSysView = [&](bool executing) {
             auto result = kikimr.RunCall([&] {
                 return checkSession.ExecuteDataQuery(TStringBuilder()
-                    << "SELECT State, Query, DurationUs, CpuTimeUs, ComputeMemoryBytes, ReadIngressBytes "
+                    << "SELECT State, Query, DurationUs, CpuTimeUs, ComputeMemoryBytes, ReadIngressBytesPerSec "
                     << "FROM `/Root/.sys/query_sessions` WHERE SessionId = '" << session.GetId() << "';",
                     TTxControl::BeginTx().CommitTx()).GetValueSync();
             });
@@ -2511,7 +2511,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NYdb::TResultSetParser parser(result.GetResultSet(0));
             UNIT_ASSERT(parser.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("State").GetOptionalUtf8().value(), executing ? "EXECUTING" : "IDLE");
-            for (const auto* name : {"DurationUs", "CpuTimeUs", "ComputeMemoryBytes", "ReadIngressBytes"}) {
+            for (const auto* name : {"DurationUs", "CpuTimeUs", "ComputeMemoryBytes", "ReadIngressBytesPerSec"}) {
                 UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(name).GetOptionalUint64().has_value(), executing, name);
             }
         };

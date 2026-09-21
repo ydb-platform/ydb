@@ -92,4 +92,4 @@ runs:
             fi
           done
         fi
-        python3 .github/scripts/analytics/ci_metrics.py "${args[@]}" || true
+        python3 .github/scripts/utils/analytics/ci_metrics.py "${args[@]}" || true

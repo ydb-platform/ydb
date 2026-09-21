@@ -60,6 +60,7 @@ jobs:
         fi
         git fetch --depth=1 origin "$workflow_sha"
         git checkout "$workflow_sha" -- \
+          .github/scripts/utils/analytics \
           .github/scripts/analytics \
           .github/actions/test_ya \
           .github/actions/analytics_track
@@ -103,7 +104,7 @@ jobs:
         python3 -m pip install ydb ydb[yc] >/dev/null
         if [ -e ydb/apps/ydbd/ydbd ] || [ -L ydb/apps/ydbd/ydbd ]; then
           BINARY_SIZE_BYTES=$(stat -L -c%s ydb/apps/ydbd/ydbd)
-          python3 .github/scripts/analytics/ci_metrics.py track ydbd_size \
+          python3 .github/scripts/utils/analytics/ci_metrics.py track ydbd_size \
             --kind gauge \
             --unit bytes \
             --source nightly_build \
@@ -111,11 +112,11 @@ jobs:
             --label cache_mode=dist_cache \
             --label build_target=ydb/apps/ydbd || true
         fi
-        python3 .github/scripts/analytics/export_ya_nodes.py \
+        python3 .github/scripts/utils/analytics/export_ya_nodes.py \
           --evlog "${PUBLIC_DIR:-tmp/results}/try_*/ya_evlog.jsonl" \
           --source nightly_build \
           --label cache_mode=dist_cache || true
-        python3 .github/scripts/analytics/ci_metrics.py send || true
+        python3 .github/scripts/utils/analytics/ci_metrics.py send || true
     - name: Setup s3cmd
       uses: ./.github/actions/s3cmd
       with:

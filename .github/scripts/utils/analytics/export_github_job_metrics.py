@@ -8,10 +8,15 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote
+
+_QA_ANALYTICS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "analytics"))
+if _QA_ANALYTICS not in sys.path:
+    sys.path.insert(0, _QA_ANALYTICS)
 
 import requests
 

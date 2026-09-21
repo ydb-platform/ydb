@@ -1037,7 +1037,7 @@ struct TOptions {
     ui64 KeyCount = 0;
     ui32 BatchSize = 1;
     ui32 TraceEveryN = 0;
-    ui32 ThreadOffset = 0;
+    ui32 PartitionOffset = 0;
     bool Verbose = false;
 };
 
@@ -1207,7 +1207,7 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
             ctx.WriteLimiter.Acquire(batchBytes);
 
             const ui64 written = ctx.WrittenPerThread[t].load(std::memory_order_relaxed);
-            const ui32 globalThread = t + ctx.Options.ThreadOffset;
+            const ui32 globalThread = t + ctx.Options.PartitionOffset;
             const ui64 partitionId = StickyPartitionId(globalThread, ctx.Options.PartitionCount);
 
             TVector<TString> keys;
@@ -1267,7 +1267,7 @@ std::thread BuildReadWorker(TLoadContext& ctx, ui32 t) {
             const ui64 usable = (ctx.Options.KeyCount > 0) ? Min(written, ctx.Options.KeyCount) : written;
             std::uniform_int_distribution<ui64> keyDist(0, usable - 1);
             const ui64 keyIndex = keyDist(rng);
-            const ui32 globalWriter = writer + ctx.Options.ThreadOffset;
+            const ui32 globalWriter = writer + ctx.Options.PartitionOffset;
             const ui64 partitionId = StickyPartitionId(globalWriter, ctx.Options.PartitionCount);
             const TString key = TStringBuilder() << "load_" << ctx.RunId << "_" << globalWriter << "_" << keyIndex;
 
@@ -1322,7 +1322,7 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
     }
     Cout << "  storage channel: " << options.StorageChannel << Endl;
     Cout << "  write threads: " << options.Threads << Endl;
-    Cout << "  partitions: sticky, thread t -> partition (t + " << options.ThreadOffset << ") % " << options.PartitionCount;
+    Cout << "  partitions: sticky, thread t -> partition (t + " << options.PartitionOffset << ") % " << options.PartitionCount;
     if (options.Threads > options.PartitionCount) {
         Cout << " (" << options.Threads << " threads / " << options.PartitionCount
              << " tablets, pipelined)";
@@ -1811,8 +1811,8 @@ TOptions ParseOptions(int argc, char** argv) {
     opts.AddLongOption("trace-every-n", "Send a traceparent header on every N-th RPC and log its trace id with the measured latency (for load command, 0 = off). Requires an external_throttling rule for KeyValue.ExecuteTransaction / KeyValue.Read in the cluster tracing_config")
         .StoreResult(&options.TraceEveryN)
         .DefaultValue("0");
-    opts.AddLongOption("thread-offset", "Offset added to thread index for sticky partition assignment and key naming. Use to run multiple kvtool instances on different hosts without partition overlap (e.g. host1: --thread-offset 0, host2: --thread-offset 256)")
-        .StoreResult(&options.ThreadOffset)
+    opts.AddLongOption("partition-offset", "Starting partition offset for sticky partition assignment (for load command, wraps modulo --partition-count). Also applied to key naming. Use to run multiple kvtool instances on different hosts without partition overlap (e.g. host1: --partition-offset 0, host2: --partition-offset 256)")
+        .StoreResult(&options.PartitionOffset)
         .DefaultValue("0");
 
     opts.AddLongOption("report-period", "Report period in seconds (for load/load-channels commands)")

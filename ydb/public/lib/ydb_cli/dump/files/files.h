@@ -18,6 +18,7 @@ const TFileInfo& IncompleteData();
 const TFileInfo& Incomplete();
 const TFileInfo& Empty();
 const TFileInfo& CreateView();
+const TFileInfo& CreateTable();
 const TFileInfo& Database();
 const TFileInfo& CreateUser();
 const TFileInfo& CreateGroup();

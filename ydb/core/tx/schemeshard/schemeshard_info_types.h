@@ -3810,7 +3810,6 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         ESubState SubState = ESubState::AllocateTxId;
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeUploader;
-        bool CreateTableUploaded = false;
         TString Issue;
 
         TItem() = default;

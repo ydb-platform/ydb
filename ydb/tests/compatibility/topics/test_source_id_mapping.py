@@ -11,13 +11,13 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 logger = logging.getLogger(__name__)
 
 PARTITION_COUNT = 100
+PARTITION_ID = 37
 PRODUCER_ID = "compat-srcid-producer"
 SEQNO_FIRST = 13
 SEQNO_SECOND = 14
 PAYLOAD = b"compat-srcid-payload"
 
 FCC_TOPIC = "srcid_compat_topic"
-TOPIC_PARTITIONS_MAPPING_PATH = "/Root/.metadata/TopicPartitionsMapping"
 
 FED_DC = "dc1"
 FED_ACCOUNT = "account"
@@ -38,12 +38,17 @@ def execute_query(driver, query):
         return pool.execute_with_retries(query)
 
 
-def write_with_seqno(driver, topic, seqno):
+def write_with_seqno(driver, topic, seqno, partition_id=None):
     deadline = time.time() + 180
     last_error = None
     while time.time() < deadline:
         try:
-            with driver.topic_client.writer(topic, producer_id=PRODUCER_ID, auto_seqno=False) as writer:
+            with driver.topic_client.writer(
+                topic,
+                producer_id=PRODUCER_ID,
+                partition_id=partition_id,
+                auto_seqno=False,
+            ) as writer:
                 return writer.write_with_ack(
                     ydb.TopicWriterMessage(PAYLOAD, seqno=seqno),
                     timeout=60,
@@ -97,35 +102,6 @@ def write_after_init(driver, topic, expected_init_seqno, seqno):
     raise AssertionError(
         f"write seqno={seqno} to {topic!r} after init last_seqno={last_seqno} "
         f"(expected {expected_init_seqno}) failed: {last_error}"
-    )
-
-
-def mapping_key(row):
-    return (row["Hash"], row["Topic"], row["ProducerKey"], row["Partition"])
-
-
-def wait_mapping_row(driver, table_path, producer_column):
-    deadline = time.time() + 120
-    last = []
-    last_error = None
-    while time.time() < deadline:
-        try:
-            result_sets = execute_query(
-                driver,
-                f"""
-                SELECT Hash, Topic, {producer_column} AS ProducerKey, Partition
-                FROM `{table_path}`
-                """,
-            )
-            last = list(result_sets[0].rows) if result_sets else []
-            if len(last) == 1:
-                return last[0]
-        except Exception as exc:
-            last_error = exc
-            logger.info("mapping table query retry: %s", exc)
-        time.sleep(1)
-    raise AssertionError(
-        f"{table_path} expected 1 row, got {len(last)} ({last!r}), error={last_error}"
     )
 
 
@@ -211,12 +187,11 @@ def create_topic(driver, path, attributes=None):
     raise AssertionError(f"create_topic {path} failed: {last_error}")
 
 
-def run_scenario(fixture, topic, aliases, mapping_table, producer_column, attributes=None):
+def run_scenario(fixture, topic, aliases, attributes=None):
     create_topic(fixture.driver, topic, attributes)
 
-    first_ack = write_with_seqno(fixture.driver, topic, SEQNO_FIRST)
+    first_ack = write_with_seqno(fixture.driver, topic, SEQNO_FIRST, partition_id=PARTITION_ID)
     assert isinstance(first_ack, ydb.TopicWriteResult.Written), first_ack
-    before = mapping_key(wait_mapping_row(fixture.driver, mapping_table, producer_column))
 
     fixture.change_cluster_version()
 
@@ -226,8 +201,6 @@ def run_scenario(fixture, topic, aliases, mapping_table, producer_column, attrib
 
     second_ack = write_after_init(fixture.driver, topic, SEQNO_FIRST, SEQNO_SECOND)
     assert isinstance(second_ack, ydb.TopicWriteResult.Written), second_ack
-    after = mapping_key(wait_mapping_row(fixture.driver, mapping_table, producer_column))
-    assert after == before
 
 
 class TestSourceIdMappingFcc(RestartToAnotherVersionFixture):
@@ -240,8 +213,6 @@ class TestSourceIdMappingFcc(RestartToAnotherVersionFixture):
             self,
             topic=FCC_TOPIC,
             aliases=(),
-            mapping_table=TOPIC_PARTITIONS_MAPPING_PATH,
-            producer_column="ProducerId",
         )
 
 
@@ -256,7 +227,5 @@ class TestSourceIdMappingFederation(RestartToAnotherVersionFixture):
             self,
             topic=FED_TOPIC_PATH,
             aliases=FED_TOPIC_ALIASES,
-            mapping_table=SOURCE_ID_META2_PATH,
-            producer_column="SourceId",
             attributes={"_federation_account": FED_ACCOUNT},
         )

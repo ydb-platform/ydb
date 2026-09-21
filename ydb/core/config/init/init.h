@@ -287,6 +287,8 @@ struct TConfigsDispatcherInitInfo {
     // number). Node-local; empty by default. When set, the dispatcher parses the
     // section and attaches the result to the notification for that kind.
     THashMap<ui32, TOpaqueConfigParser> OpaqueConfigParsers;
+    // Publish YAML configs (Main and Database) version metrics for this node.
+    bool EnableYamlConfigVersionMetrics = false;
 };
 
 class IInitialConfigurator {

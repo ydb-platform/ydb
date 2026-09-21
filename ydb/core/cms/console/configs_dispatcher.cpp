@@ -163,6 +163,9 @@ public:
 
     TSubscriber::TPtr FindSubscriber(TActorId aid);
 
+    // Publish the current YAML config versions, using zero for disabled or unknown versions.
+    void UpdateYamlConfigVersionMetrics();
+
     void UpdateYamlVersion(const TSubscription::TPtr &kinds) const;
 
     struct TCheckKindsResult {
@@ -322,6 +325,12 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr StartupConfigChanged;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV1;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV2;
+    // YAML version metric registration policy, fixed for the actor's lifetime.
+    const bool EnableYamlConfigVersionMetrics;
+    // Main YAML version, or zero when YAML is disabled or the version is unknown; null when metrics are disabled.
+    ::NMonitoring::TDynamicCounters::TCounterPtr MainYamlConfigVersion;
+    // Database YAML version, or zero when YAML is disabled or the version is unknown; null when metrics are disabled.
+    ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseYamlConfigVersion;
     const std::optional<TDebugInfo> DebugInfo;
     std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
     std::vector<TString> Args;
@@ -369,6 +378,7 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
         , StartupConfigYaml(initInfo.StartupConfigYaml)
         , StartupStorageYaml(initInfo.StartupStorageYaml)
         , CandidateStartupConfig(initInfo.InitialConfig)
+        , EnableYamlConfigVersionMetrics(initInfo.EnableYamlConfigVersionMetrics)
         , DebugInfo(initInfo.DebugInfo)
         , RecordedInitialConfiguratorDeps(std::move(initInfo.RecordedInitialConfiguratorDeps))
         , Args(initInfo.Args)
@@ -391,6 +401,12 @@ void TConfigsDispatcher::Bootstrap()
     StartupConfigChanged = counters->GetCounter("StartupConfigChanged", true);
     ConfigurationV1 = counters->GetCounter("ConfigurationV1", false);
     ConfigurationV2 = counters->GetCounter("ConfigurationV2", false);
+    if (EnableYamlConfigVersionMetrics) {
+        MainYamlConfigVersion = counters->GetCounter("MainYamlConfigVersion", false);
+        DatabaseYamlConfigVersion = counters->GetCounter("DatabaseYamlConfigVersion", false);
+        *MainYamlConfigVersion = 0;
+        *DatabaseYamlConfigVersion = 0;
+    }
 
     Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
@@ -1406,12 +1422,47 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         }
     }
 
+    if (isYamlChanged) {
+        UpdateYamlConfigVersionMetrics();
+    }
+
     if (CurrentStateFunc() == &TThis::StateInit) {
         YDB_LOG_DEBUG("Handle TEvConfigSubscriptionNotification: transitioning to StateWork");
         Become(&TThis::StateWork);
         ProcessEnqueuedEvents();
     }
     YDB_LOG_DEBUG("Handle TEvConfigSubscriptionNotification: exit");
+}
+
+// Publish versions from the current documents independently of subscriber acknowledgements.
+// Keep unavailable versions at zero and isolate metadata errors from config delivery.
+void TConfigsDispatcher::UpdateYamlConfigVersionMetrics()
+{
+    if (!EnableYamlConfigVersionMetrics) {
+        return;
+    }
+
+    // Read each source independently so one unreadable version does not hide the other.
+    ui64 mainVersion = 0;
+    ui64 databaseVersion = 0;
+    if (YamlConfigEnabled) {
+        try {
+            mainVersion = NYamlConfig::GetMainMetadata(MainYamlConfig).Version.value_or(0);
+        } catch (const yexception& ex) {
+            YDB_LOG_WARN("Failed to read main YAML config version", {"error", ex.what()});
+        }
+        if (DatabaseYamlConfig) {
+            try {
+                databaseVersion = NYamlConfig::GetDatabaseMetadata(*DatabaseYamlConfig).Version.value_or(0);
+            } catch (const yexception& ex) {
+                YDB_LOG_WARN("Failed to read database YAML config version", {"error", ex.what()});
+            }
+        }
+    }
+
+    // Assign the completed values without a transient zero during successful updates.
+    *MainYamlConfigVersion = mainVersion;
+    *DatabaseYamlConfigVersion = databaseVersion;
 }
 
 void TConfigsDispatcher::UpdateYamlVersion(const TSubscription::TPtr &subscription) const

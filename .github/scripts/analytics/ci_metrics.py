@@ -75,8 +75,6 @@ FAT_SNAPSHOT_KEYS = frozenset(
         "headers_compile_duration",
     }
 )
-# Accepted as labels when leftover stage-specific writers still send them.
-LEGACY_LABEL_KEYS = ("cache_mode", "ya_attempt", "queued_ms", "stage_kind")
 
 # (name, sql_type, nullable)
 COLUMNS_SCHEMA = [
@@ -363,8 +361,6 @@ def merge_defaults(raw: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str, A
 
 def _coerce_labels(raw: Dict[str, Any]) -> Dict[str, Any]:
     labels = raw.get("labels")
-    if labels in (None, ""):
-        labels = raw.get("properties")
     if isinstance(labels, str):
         try:
             labels = json.loads(labels)
@@ -372,9 +368,6 @@ def _coerce_labels(raw: Dict[str, Any]) -> Dict[str, Any]:
             labels = {"raw": labels}
     if not isinstance(labels, dict):
         labels = {}
-    for key in LEGACY_LABEL_KEYS:
-        if raw.get(key) not in (None, "") and key not in labels:
-            labels[key] = raw[key]
     return labels
 
 
@@ -395,7 +388,7 @@ def _resolve_value_and_unit(raw: Dict[str, Any], kind: str, event_ts: datetime) 
 
 def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
     """Coerce a dict/JSONL record into a table row. None if required fields are missing."""
-    name = str(raw.get("name") or raw.get("stage_name") or "").strip()
+    name = str(raw.get("name") or "").strip()
     if not name:
         return None
     event_ts = parse_datetime(raw.get("event_ts") or raw.get("started_at"))
@@ -407,7 +400,7 @@ def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> 
     kind = str(raw.get("kind") or DEFAULT_KIND).strip() or DEFAULT_KIND
     value, unit = _resolve_value_and_unit(raw, kind, event_ts)
     labels = _coerce_labels(raw)
-    source = raw.get("source") or labels.get("source") or labels.get("stage_kind") or "unknown"
+    source = raw.get("source") or labels.get("source") or "unknown"
 
     return {
         "date": event_ts.date(),
@@ -434,7 +427,7 @@ def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> 
     }
 
 
-def build_emit_record(
+def _build_record(
     *,
     name: str,
     kind: str = DEFAULT_KIND,
@@ -535,7 +528,7 @@ def build_track_record(name: str, properties: Optional[Dict[str, Any]] = None, *
     started_epoch = props.pop("started_epoch", None)
     finished_epoch = props.pop("finished_epoch", None)
     props.pop("finished_at", None)
-    return build_emit_record(
+    return _build_record(
         name=name,
         kind=str(kind),
         source=None if source is None else str(source),
@@ -628,7 +621,6 @@ def close_span(record: Dict[str, Any], extras: Optional[Dict[str, Any]] = None) 
             record[key] = incoming
     extras.pop("name", None)
     extras.pop("file", None)
-    extras.pop("send", None)
     for key, value in extras.items():
         if value not in (None, ""):
             labels.setdefault(key, value)
@@ -644,13 +636,6 @@ def close_span(record: Dict[str, Any], extras: Optional[Dict[str, Any]] = None) 
     if labels:
         record["labels"] = labels
     return record
-
-
-_packet_nesting = 0
-
-
-def in_packet() -> bool:
-    return _packet_nesting > 0
 
 
 def start(
@@ -728,7 +713,6 @@ def track(
     properties: Optional[Dict[str, Any]] = None,
     *,
     file: Optional[str] = None,
-    send: Optional[bool] = None,
     kind: Optional[str] = None,
     source: Optional[str] = None,
     value: Optional[float] = None,
@@ -758,40 +742,6 @@ def track(
         conclusion=conclusion,
     )
     append_record(path, attach_context(record))
-    if send:
-        flush_file(path)
-
-
-def emit(
-    name: str,
-    *,
-    file: Optional[str] = None,
-    kind: str = DEFAULT_KIND,
-    source: Optional[str] = None,
-    value: Optional[float] = None,
-    unit: Optional[str] = None,
-    started_at: Optional[str] = None,
-    started_epoch: Optional[str] = None,
-    finished_epoch: Optional[str] = None,
-    conclusion: Optional[str] = None,
-    labels: Optional[Dict[str, Any]] = None,
-    send: Optional[bool] = True,
-) -> None:
-    """Legacy one-shot: track a completed event and export it."""
-    track(
-        name,
-        labels,
-        file=file,
-        send=True if send is None else send,
-        kind=kind,
-        source=source,
-        value=value,
-        unit=unit,
-        started_at=started_at,
-        started_epoch=started_epoch,
-        finished_epoch=finished_epoch,
-        conclusion=conclusion,
-    )
 
 
 def send(
@@ -816,7 +766,7 @@ def send(
         if snapshot is not None:
             extras["payload"] = snapshot
             extras.setdefault("kind", "info")
-        track(name, extras, file=path, send=False)
+        track(name, extras, file=path)
     else:
         end(name, extras, file=path)
         if snapshot is not None:
@@ -828,22 +778,8 @@ def send(
                 kind="info",
                 source=extras.get("source") or span_source,
                 conclusion=extras.get("conclusion"),
-                send=False,
             )
     return flush_file(path)
-
-
-@contextmanager
-def packet(file: Optional[str] = None) -> Iterator[None]:
-    """Group completed tracks and export once on exit (batch span processor)."""
-    global _packet_nesting
-    _packet_nesting += 1
-    try:
-        yield
-    finally:
-        _packet_nesting -= 1
-        if _packet_nesting == 0:
-            flush_file(file)
 
 
 @contextmanager
@@ -895,9 +831,6 @@ class Analytics:
         props["payload"] = payload
         kwargs.setdefault("kind", "info")
         self.track(name, props, **kwargs)
-
-    def packet(self):
-        return packet(self.file)
 
 
 def rows_from_jsonl(lines: Iterable[str], defaults: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
@@ -1060,7 +993,7 @@ def upsert_metrics(
 
 
 def flush_file(path: Optional[str] = None, table_path: Optional[str] = None, defaults: Optional[Dict[str, Any]] = None) -> int:
-    """Send the unacknowledged packet. Safe to call repeatedly."""
+    """Export unacknowledged completed events. Safe to call repeatedly."""
     try:
         metrics_path = path or default_metrics_file()
         lines, new_offset = load_unsent_lines(metrics_path)
@@ -1068,15 +1001,15 @@ def flush_file(path: Optional[str] = None, table_path: Optional[str] = None, def
             return 0
         rows = rows_from_jsonl(lines, defaults=defaults if defaults is not None else github_env_defaults())
         if not rows:
-            print(f"No valid metric rows in {metrics_path}, keeping packet")
+            print(f"No valid metric rows in {metrics_path}, keeping local batch")
             return 0
         if not has_send_credentials():
-            print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, keeping local packet")
+            print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, keeping local batch")
             return 0
         wrapper_cls = _ydb_wrapper_cls()
         with wrapper_cls() as wrapper:
             if not wrapper.check_credentials():
-                print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, keeping local packet")
+                print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, keeping local batch")
                 return 0
             path_used = table_path or resolve_table_path(wrapper)
             uploaded = upsert_metrics(wrapper, rows, table_path=path_used)
@@ -1163,7 +1096,7 @@ def _properties_from_args(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def resolve_track_name(args: argparse.Namespace) -> str:
-    for candidate in (getattr(args, "name", None), getattr(args, "event_flag", None), getattr(args, "positional_name", None)):
+    for candidate in (getattr(args, "name", None), getattr(args, "positional_name", None)):
         text = str(candidate).strip() if candidate is not None else ""
         if text:
             return text
@@ -1193,13 +1126,12 @@ def resolve_track_kind(args: argparse.Namespace) -> Optional[str]:
 def _cmd_track(args: argparse.Namespace) -> int:
     name = resolve_track_name(args)
     if not name:
-        print("Warning: track requires an event name (--name / --event / positional)", file=sys.stderr)
+        print("Warning: track requires an event name (--name / positional)", file=sys.stderr)
         return 0
     track(
         name,
         _properties_from_args(args),
         file=args.file,
-        send=False,
         kind=resolve_track_kind(args),
         source=args.source,
         value=resolve_track_value(args),
@@ -1266,30 +1198,9 @@ def _cmd_flush(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_emit(args: argparse.Namespace) -> int:
-    name = resolve_track_name(args)
-    if not name:
-        return 0
-    emit(
-        name,
-        file=args.file,
-        kind=resolve_track_kind(args) or DEFAULT_KIND,
-        source=args.source,
-        value=resolve_track_value(args),
-        unit=args.unit,
-        started_at=args.started_at,
-        started_epoch=args.started_epoch,
-        finished_epoch=args.finished_epoch,
-        conclusion=args.conclusion,
-        labels=_properties_from_args(args) or None,
-    )
-    return 0
-
-
 def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optional[str] = None) -> None:
     parser.add_argument("positional_name", nargs="?", default=None, help="Event/metric name")
     parser.add_argument("--name", default=None, help="Event/metric name")
-    parser.add_argument("--event", dest="event_flag", default=None, help="Alias of --name")
     parser.add_argument("--json", default=None, help="Optional measurement JSON (merged with flags)")
     parser.add_argument(
         "--json-file",
@@ -1310,7 +1221,6 @@ def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optiona
     parser.add_argument("--attr", action="append", default=[], help="Alias of --label (OTel attribute)")
     parser.add_argument("--extra", default=None, help="JSON object merged into attributes")
     parser.add_argument("--file", default=None, help="JSONL path (default: $CI_METRICS_FILE)")
-    parser.add_argument("--no-send", action="store_true", help="Ignored; track never exports")
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -1325,9 +1235,6 @@ def parse_args(argv=None) -> argparse.Namespace:
 
     track_p = sub.add_parser("track", help="Queue a completed event (no open span)")
     add_track_cli_args(track_p)
-
-    emit_p = sub.add_parser("emit", help="track + flush (legacy one-shot)")
-    add_track_cli_args(emit_p, kind_default=DEFAULT_KIND)
 
     send_p = sub.add_parser("send", help="End leftover spans and export the batch")
     add_track_cli_args(send_p)
@@ -1349,8 +1256,6 @@ def main(argv=None) -> int:
             return _cmd_end(args)
         if args.command == "track":
             return _cmd_track(args)
-        if args.command == "emit":
-            return _cmd_emit(args)
         if args.command == "send":
             return _cmd_send(args)
         if args.command == "flush":

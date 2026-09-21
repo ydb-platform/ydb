@@ -166,8 +166,6 @@ jobs:
           START_SEC=$(date +%s)
           python3 .github/scripts/analytics/ci_metrics.py start ydbd_clean_build \
             --source clean_build \
-            --started-at "$START_TS" \
-            --started-epoch "$START_SEC" \
             --attr cache_mode=none \
             --attr "build_target=$BUILD_TARGET" || true
 
@@ -214,7 +212,7 @@ jobs:
           if [ "$RC" -ne 0 ]; then
             CONCLUSION=failure
           fi
-          python3 .github/scripts/analytics/ci_metrics.py send \
+          python3 .github/scripts/analytics/ci_metrics.py end ydbd_clean_build \
             --conclusion "$CONCLUSION" \
             --json "$EXTRA" || true
           if [[ "$BINARY_SIZE_BYTES" =~ ^[0-9]+$ ]]; then
@@ -223,7 +221,6 @@ jobs:
               --unit bytes \
               --source clean_build \
               --value "$BINARY_SIZE_BYTES" \
-              --started-at "$START_TS" \
               --label cache_mode=none \
               --label "build_target=$BUILD_TARGET" || true
           fi
@@ -295,6 +292,8 @@ jobs:
       - name: Upload CI metrics to ydb-qa
         if: always()
         continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: python3 .github/scripts/analytics/ci_metrics.py send
 

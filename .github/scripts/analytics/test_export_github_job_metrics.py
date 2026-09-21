@@ -28,20 +28,14 @@ class ResolveWorkflowsTest(unittest.TestCase):
 
     def test_default_list(self):
         old = os.environ.get("CI_METRICS_WORKFLOW")
-        old_plural = os.environ.get("CI_METRICS_WORKFLOWS")
         try:
             os.environ.pop("CI_METRICS_WORKFLOW", None)
-            os.environ.pop("CI_METRICS_WORKFLOWS", None)
             self.assertEqual(resolve_workflows(None), list(DEFAULT_WORKFLOWS))
         finally:
             if old is None:
                 os.environ.pop("CI_METRICS_WORKFLOW", None)
             else:
                 os.environ["CI_METRICS_WORKFLOW"] = old
-            if old_plural is None:
-                os.environ.pop("CI_METRICS_WORKFLOWS", None)
-            else:
-                os.environ["CI_METRICS_WORKFLOWS"] = old_plural
 
     def test_env_override(self):
         old = os.environ.get("CI_METRICS_WORKFLOW")

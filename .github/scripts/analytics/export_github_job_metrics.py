@@ -54,7 +54,7 @@ def resolve_workflows(explicit: Optional[List[str]] = None) -> List[str]:
         workflows = split_workflows(explicit)
         if workflows:
             return workflows
-    env_value = os.environ.get("CI_METRICS_WORKFLOW") or os.environ.get("CI_METRICS_WORKFLOWS")
+    env_value = os.environ.get("CI_METRICS_WORKFLOW")
     workflows = split_workflows(env_value) if env_value else []
     return workflows or list(DEFAULT_WORKFLOWS)
 

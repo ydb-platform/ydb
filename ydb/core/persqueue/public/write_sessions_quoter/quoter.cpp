@@ -43,6 +43,8 @@ public:
 private:
     STFUNC(StateWork);
 
+    bool ProcessBucket(TCountedLeakyBucket& bucket, std::queue<TActorId>& pending, const TActorContext& ctx);
+
     absl::flat_hash_map<TKey, TCountedLeakyBucket> Buckets;
     absl::flat_hash_map<TKey, std::queue<TActorId>> Pending;
 };
@@ -83,44 +85,49 @@ void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvAcquireQuota::TPtr&
 
     auto& pending = Pending[key];
     auto& bucket = Buckets[key];
-    while (!pending.empty() && bucket.TryPush(ctx.Now(), 1)) {
-        auto actorId = pending.front();
-        pending.pop();
-        ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvQuotaAcquired());
-    }
+
+    ProcessBucket(bucket, pending, ctx);
    
     if (!bucket.TryPush(ctx.Now(), 1)) {
         pending.push(ev->Sender);
     } else {
         ctx.Send(ev->Sender, new TEvWriteSessionsQuoter::TEvQuotaAcquired());
     }
+
+    if (pending.empty()) {
+        Pending.erase(key);
+    }
 }
 
 void TWriteSessionsQuoter::Wakeup(NActors::TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
     for (auto iter = Pending.begin(); iter != Pending.end();) {
         auto& bucket = Buckets[iter->first];
+        bucket.Update(ctx.Now());
         auto& pending = iter->second;
-        bool shouldStop = false;
-        while (!pending.empty()) {
-            auto pushed = bucket.TryPush(ctx.Now(), 1);
-            if (!pushed) {
-                shouldStop = true;
-                break;
-            }
-        
-            auto actorId = pending.front();
-            pending.pop();
-            ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvQuotaAcquired());
-        }
-
-        if (shouldStop) {
-            break;
+        if (!ProcessBucket(bucket, pending, ctx)) {
+            iter++;
+            continue;
         }
 
         Pending.erase(iter++);
     }
 
     ctx.Schedule(TDuration::MilliSeconds(QUOTA_WINDOW_MS), new NActors::TEvents::TEvWakeup());
+}
+
+bool TWriteSessionsQuoter::ProcessBucket(TCountedLeakyBucket& bucket, std::queue<TActorId>& pending, const TActorContext& ctx) {
+    bucket.Update(ctx.Now());
+    while (!pending.empty()) {
+        if (!bucket.TryPush(ctx.Now(), 1)) {
+            return false;
+        }
+
+        auto actorId = pending.front();
+        pending.pop();
+        ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvQuotaAcquired());
+    }
+
+    return true;
 }
 
 STFUNC(TWriteSessionsQuoter::StateWork) {

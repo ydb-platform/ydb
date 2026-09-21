@@ -15,9 +15,9 @@ namespace {
     constexpr ui64 GcMaxErrors = 25;  // ~1.13 min in total
 }
 
-TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
+TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies, const TFeatureFlags& flags)
     : HistoryCutter(info)
-    , CutHistoryEnabled(AppData()->FeatureFlags.GetEnableCutHistory())
+    , CutHistoryEnabled(flags.GetEnableCutHistory())
     , TabletStorageInfo(std::move(info))
     , Cookies(cookies)
     , Generation(Cookies->Gen)

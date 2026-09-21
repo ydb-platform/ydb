@@ -320,7 +320,10 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         info->Channels[0].History.emplace_back(10u, 1u);
         info->Channels[0].History.emplace_back(100u, 2u);
 
-        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info));
+        TFeatureFlags flags;
+        flags.SetEnableCutHistory(true);
+
+        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info), flags);
 
         // Put a DoNotKeep blob at generation 50 (inside [10, 100)) into Deleted.
         TGCBlobDelta delta;
@@ -380,8 +383,11 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
             info->Channels[ch].History.emplace_back(survivingFromGen, survivingGroup);
         }
 
+        TFeatureFlags flags;
+        flags.SetEnableCutHistory(true);
+
         // Tablet generation must exceed the blob generations below so they are collectable.
-        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info, 20));
+        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info, 20), flags);
         gcLogic.FollowersSyncComplete(true);
 
         TGCBlobDelta delta;

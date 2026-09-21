@@ -4,7 +4,9 @@
 #include "flat_exec_commit.h"
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_history_cutter.h>
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 #include <ydb/core/util/backoff.h>
@@ -39,7 +41,7 @@ struct TGCLogEntry {
 
 class TExecutorGCLogic {
 public:
-    TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>);
+    TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>, const TFeatureFlags& flags = AppData()->FeatureFlags);
     void WriteToLog(TLogCommit &logEntry);
     TGCLogEntry SnapshotLog(ui32 step);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step);

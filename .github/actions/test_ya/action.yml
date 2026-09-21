@@ -139,8 +139,8 @@ runs:
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
-        echo "CI_STAGES_FILE=$PUBLIC_DIR/ci_stages.jsonl" >> $GITHUB_ENV
-        : > "$PUBLIC_DIR/ci_stages.jsonl"
+        echo "CI_METRICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl" >> $GITHUB_ENV
+        : > "$PUBLIC_DIR/ci_metrics.jsonl"
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly
 
@@ -188,22 +188,22 @@ runs:
       run: |
         set -ex
 
-        record_ci_stage() {
+        record_ci_metric() {
           local name="$1"
           local started_epoch="$2"
           local conclusion="${3:-success}"
           local ya_attempt="${4:-}"
           local extra_args=()
           if [ -n "$ya_attempt" ]; then
-            extra_args+=(--ya-attempt "$ya_attempt")
+            extra_args+=(--label "ya_attempt=${ya_attempt}")
           fi
-          python3 .github/scripts/analytics/ci_stage_timer.py append \
-            --file "${CI_STAGES_FILE}" \
-            --stage-kind ya_phase \
-            --stage-name "$name" \
+          python3 .github/scripts/analytics/ci_metrics.py emit \
+            --name "$name" \
+            --kind duration \
+            --source ya_phase \
             --started-epoch "$started_epoch" \
             --conclusion "$conclusion" \
-            --cache-mode "${CI_CACHE_MODE:-unknown}" \
+            --label "cache_mode=${CI_CACHE_MODE:-unknown}" \
             "${extra_args[@]}" || true
         }
 
@@ -355,9 +355,9 @@ runs:
           RC=${PIPESTATUS[0]}
           set -e
           if [ $RC -ne 0 ]; then
-            record_ci_stage graph_compare "$GRAPH_COMPARE_START" failure
+            record_ci_metric graph_compare "$GRAPH_COMPARE_START" failure
           else
-            record_ci_stage graph_compare "$GRAPH_COMPARE_START" success
+            record_ci_metric graph_compare "$GRAPH_COMPARE_START" success
           fi
 
           if [ $RC -ne 0 ]; then
@@ -507,9 +507,9 @@ runs:
           set -e
           RC=`cat exit_code`
           if [ $RC -ne 0 ]; then
-            record_ci_stage "ya_make_try_${RETRY}" "$YA_MAKE_START" failure "$RETRY"
+            record_ci_metric "ya_make_try_${RETRY}" "$YA_MAKE_START" failure "$RETRY"
           else
-            record_ci_stage "ya_make_try_${RETRY}" "$YA_MAKE_START" success "$RETRY"
+            record_ci_metric "ya_make_try_${RETRY}" "$YA_MAKE_START" success "$RETRY"
           fi
 
           # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
@@ -578,11 +578,11 @@ runs:
             "${DASHBOARD_ARGS[@]}" > "$TESTS_METRICS_DIR/dashboard_build.log" 2>&1; then
             mv "$TESTS_METRICS_DIR/dashboard_build.log" "$TESTS_METRICS_DIR/dashboard_error.log"
             echo "Dashboard generation failed (see dashboard_error.log in artifacts)"
-            record_ci_stage dashboard "$DASHBOARD_START" failure "$RETRY"
+            record_ci_metric dashboard "$DASHBOARD_START" failure "$RETRY"
           else
             rm -f "$TESTS_METRICS_DIR/dashboard_build.log"
             DASHBOARD_OK=1
-            record_ci_stage dashboard "$DASHBOARD_START" success "$RETRY"
+            record_ci_metric dashboard "$DASHBOARD_START" success "$RETRY"
           fi
           cp -f "$RESOURCES_JSONL" "$TESTS_METRICS_DIR/resources_monitor.jsonl" 2>/dev/null || true
           cp -f ram_usage.txt "$TESTS_METRICS_DIR/ram_usage_legacy.txt" 2>/dev/null || true
@@ -669,7 +669,7 @@ runs:
 
           S3_SYNC_START=$(date +%s)
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
-          record_ci_stage s3_sync_try "$S3_SYNC_START" success "$RETRY"
+          record_ci_metric s3_sync_try "$S3_SYNC_START" success "$RETRY"
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
@@ -702,7 +702,7 @@ runs:
           run_name="${run_name}_attempt_${RETRY}"
           UPLOAD_RESULTS_START=$(date +%s)
           result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
-          record_ci_stage upload_tests_results "$UPLOAD_RESULTS_START" success "$RETRY"
+          record_ci_metric upload_tests_results "$UPLOAD_RESULTS_START" success "$RETRY"
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
@@ -718,11 +718,11 @@ runs:
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
         fi
 
-    - name: Upload CI stage timings
+    - name: Upload CI metrics
       if: always()
       continue-on-error: true
       shell: bash
-      run: python3 .github/scripts/analytics/upload_ci_stages.py --file "${CI_STAGES_FILE:-}"
+      run: python3 .github/scripts/analytics/ci_metrics.py flush
 
     - name: resolve-status-sha
       shell: bash

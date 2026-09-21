@@ -57,10 +57,10 @@ jobs:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
-      - name: Init stage file
+      - name: Init metrics file
         shell: bash
         run: |
-          echo "CI_STAGES_FILE=${{ github.workspace }}/ci_stages.jsonl" >> "$GITHUB_ENV"
+          echo "CI_METRICS_FILE=${{ github.workspace }}/ci_metrics.jsonl" >> "$GITHUB_ENV"
           echo "CI_CACHE_MODE=none" >> "$GITHUB_ENV"
           echo "BUILD_PRESET=${{ inputs.build_preset || 'relwithdebinfo' }}" >> "$GITHUB_ENV"
           echo "BRANCH_NAME=${{ github.ref_name }}" >> "$GITHUB_ENV"
@@ -206,16 +206,27 @@ jobs:
           if [ "$RC" -ne 0 ]; then
             CONCLUSION=failure
           fi
-          python3 .github/scripts/analytics/ci_stage_timer.py append \
-            --file "$CI_STAGES_FILE" \
-            --stage-kind clean_build \
-            --stage-name ydbd_clean_build \
+          python3 .github/scripts/analytics/ci_metrics.py emit \
+            --name ydbd_clean_build \
+            --kind duration \
+            --source clean_build \
             --started-at "$START_TS" \
             --started-epoch "$START_SEC" \
             --finished-epoch "$END_SEC" \
             --conclusion "$CONCLUSION" \
-            --cache-mode none \
+            --label cache_mode=none \
             --extra "$EXTRA" || true
+          if [[ "$BINARY_SIZE_BYTES" =~ ^[0-9]+$ ]]; then
+            python3 .github/scripts/analytics/ci_metrics.py emit \
+              --name ydbd_size \
+              --kind gauge \
+              --unit bytes \
+              --source clean_build \
+              --value "$BINARY_SIZE_BYTES" \
+              --started-at "$START_TS" \
+              --label cache_mode=none \
+              --label "build_target=$BUILD_TARGET" || true
+          fi
 
           {
             echo "duration_sec=$DURATION"
@@ -275,11 +286,11 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload stage timings to ydb-qa
+      - name: Upload CI metrics to ydb-qa
         if: always()
         continue-on-error: true
         shell: bash
-        run: python3 .github/scripts/analytics/upload_ci_stages.py --file "${CI_STAGES_FILE:-}"
+        run: python3 .github/scripts/analytics/ci_metrics.py flush
 
       - name: Upload logs
         if: always()
@@ -291,6 +302,6 @@ jobs:
             ya_stat_tail.txt
             time_result.txt
             host_info.txt
-            ci_stages.jsonl
+            ci_metrics.jsonl
           retention-days: 14
           if-no-files-found: warn

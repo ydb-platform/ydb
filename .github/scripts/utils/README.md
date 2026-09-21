@@ -17,4 +17,4 @@
 
 Конфиг раннеров: `.github/config/runners_footprints.yml` — provisioned maximum (vcpu/ram) по build preset. Фактическое потребление — из `resources_monitor.jsonl`; на дашборде красная линия = monitor, фиолетовая пунктирная = лимит из конфига.
 
-Длительности этапов PR-check пишутся в ydb-qa таблицу `analytics/ci_pr_check_stages` (GitHub job/step collector + in-job ya phases + uncached ydbd build).
+Общие CI-метрики пишутся в ydb-qa таблицу `analytics/ci_metrics` клиентом `.github/scripts/analytics/ci_metrics.py` (`emit` / `flush`). Сейчас так снимаются длительности PR-check (GitHub job/step + in-job ya phases) и cache-free ydbd build (duration + binary size).

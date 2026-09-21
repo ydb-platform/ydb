@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Export GitHub Actions PR-check job/step timings into analytics/ci_pr_check_stages."""
+"""Export GitHub Actions job/step timings as generic CI metrics.
+
+Writes into analytics/ci_metrics via ci_metrics.upsert_metrics.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +15,7 @@ from urllib.parse import quote
 
 import requests
 
-from ci_pr_check_stages import resolve_table_path, rows_from_workflow_run, upsert_rows
+from ci_metrics import metrics_from_workflow_run, resolve_table_path, upsert_metrics
 from ydb_wrapper import YDBWrapper
 
 DEFAULT_ORG = "ydb-platform"
@@ -115,20 +118,20 @@ def collect_rows(org: str, repo: str, workflow: str, created_since: datetime) ->
         except Exception as exc:  # noqa: BLE001 — keep exporting other runs
             print(f"Warning: failed to list jobs for run {run_id}: {exc}")
             continue
-        rows.extend(rows_from_workflow_run(run, jobs))
+        rows.extend(metrics_from_workflow_run(run, jobs))
         run_count += 1
         if run_count % 20 == 0:
-            print(f"Collected {len(rows)} rows from {run_count} runs...")
+            print(f"Collected {len(rows)} metric rows from {run_count} runs...")
         time.sleep(0.05)
-    print(f"Collected {len(rows)} rows from {run_count} PR-check runs")
+    print(f"Collected {len(rows)} metric rows from {run_count} workflow runs")
     return rows
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Export PR-check stage timings from GitHub to YDB")
-    parser.add_argument("--org", default=os.environ.get("CI_STAGES_ORG", DEFAULT_ORG))
-    parser.add_argument("--repo", default=os.environ.get("CI_STAGES_REPO", DEFAULT_REPO))
-    parser.add_argument("--workflow", default=os.environ.get("CI_STAGES_WORKFLOW", DEFAULT_WORKFLOW))
+    parser = argparse.ArgumentParser(description="Export GitHub job/step timings as CI metrics")
+    parser.add_argument("--org", default=os.environ.get("CI_METRICS_ORG", DEFAULT_ORG))
+    parser.add_argument("--repo", default=os.environ.get("CI_METRICS_REPO", DEFAULT_REPO))
+    parser.add_argument("--workflow", default=os.environ.get("CI_METRICS_WORKFLOW", DEFAULT_WORKFLOW))
     parser.add_argument("--hours", type=int, default=24, help="Lookback window in hours (default 24)")
     parser.add_argument("--table-path", default=None)
     return parser.parse_args()
@@ -144,7 +147,7 @@ def main() -> int:
         )
         rows = collect_rows(args.org, args.repo, args.workflow, created_since)
         if not rows:
-            print("No PR-check stage rows to upload")
+            print("No GitHub job metric rows to upload")
             return 0
 
         with YDBWrapper() as wrapper:
@@ -152,11 +155,11 @@ def main() -> int:
                 print("Error: YDB credentials check failed")
                 return 1
             table_path = args.table_path or resolve_table_path(wrapper)
-            uploaded = upsert_rows(wrapper, table_path, rows)
-            print(f"Uploaded {uploaded} rows to {table_path}")
+            uploaded = upsert_metrics(wrapper, rows, table_path=table_path)
+            print(f"Uploaded {uploaded} metric rows to {table_path}")
         return 0
     except Exception as exc:  # noqa: BLE001 — collector must not fail the analytics job
-        print(f"Warning: PR-check stage export failed: {exc}")
+        print(f"Warning: GitHub job metrics export failed: {exc}")
         return 0
 
 

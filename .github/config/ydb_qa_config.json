@@ -29,7 +29,7 @@
               "mute_latency": "test_results/analytics/mute_latency",
               "mute_latency_affected_prs": "test_results/analytics/mute_latency_affected_prs",
               "mute_events": "test_results/analytics/mute_events",
-              "ci_pr_check_stages": "analytics/ci_pr_check_stages"
+              "ci_metrics": "analytics/ci_metrics"
 
           }
       },

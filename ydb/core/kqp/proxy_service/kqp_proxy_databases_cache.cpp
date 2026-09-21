@@ -4,6 +4,10 @@
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
+#include <ydb/library/actors/core/actor.h>
+
+#include <library/cpp/cache/cache.h>
+
 
 namespace NKikimr::NKqp {
 

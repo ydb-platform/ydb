@@ -11,6 +11,7 @@ SRCS(
 PEERDIR(
     library/cpp/threading/local_executor
     ydb/core/kqp/ut/common
+    ydb/core/memory_controller
     yql/essentials/sql/pg_dummy
 )
 

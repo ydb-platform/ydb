@@ -38,5 +38,6 @@ RECURSE(
     reset_offset
     schema
     write_meta
+    write_sessions_quoter
     cloud_events
 )

@@ -163,6 +163,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
     friend TInitFieldsStep;
+    friend TNotifyWriteSessionsQuoterStep;
 
     friend TPartitionSourceManager;
 

@@ -11,6 +11,7 @@ ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCounters
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
+ydb/core/tx/conveyor_composite/ut TCompositeConveyorRuntimeUpdate.LatestTopologySupersedesPrepare
 ydb/core/tx/replication/service/ut_worker unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk

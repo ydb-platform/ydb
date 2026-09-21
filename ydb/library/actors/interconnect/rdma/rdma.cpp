@@ -52,6 +52,7 @@ public:
             Thread.Join();
         }
 
+        DrainWaiters();
         Y_UNUSED(DestroyCq());
     }
 };
@@ -130,6 +131,7 @@ public:
             Thread.Join();
         }
 
+        DrainWaiters();
         const int destroyErr = DestroyCq();
 
         // 5. Destroy completion event channel
@@ -422,7 +424,9 @@ void TIbVerbsBuilderImpl::AddSendVerb(std::span<const TSendSge> sgList,
     item.IoCb = std::move(ioCb);
 }
 
-ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr, size_t deviceIndex) noexcept {
+ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr) noexcept {
+    Y_ABORT_UNLESS(HoldedQp);
+    size_t deviceIndex = HoldedQp->GetDeviceIndex();
     Y_ABORT_UNLESS(wr.size() == WorkBuf.size());
     Y_ABORT_UNLESS(wr.size());
 

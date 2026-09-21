@@ -31,9 +31,9 @@ TIntrusivePtr<IOperator> TPullUpMapOverCBORule::SimpleMatchAndApply(const TIntru
                 TVector<TInfoUnit> joinKeys;
                 for (const auto & k : join->JoinKeys) {
                     if (mapIsLeftInput) {
-                        joinKeys.push_back(k.first);
+                        joinKeys.push_back(k.Left);
                     } else {
-                        joinKeys.push_back(k.second);
+                        joinKeys.push_back(k.Right);
                     }
                 }
                 if (!IUIsSubset(joinKeys, map->GetInput()->GetOutputIUs())) {

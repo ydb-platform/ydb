@@ -28,7 +28,7 @@ constexpr TDuration PING_PERIOD = TDuration::Seconds(30);
 
 TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TComputeRuntimeSettings& settings,
     std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
-    const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& database,
+    const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& database, const TString& pool,
     const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
     const TCPULimits& cpuLimits, const bool useBatchPool)
@@ -36,6 +36,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , ScanDataMeta(Meta)
     , RuntimeSettings(settings)
     , Database(database)
+    , Pool(pool)
     , TxId(txId)
     , LockTxId(lockTxId)
     , LockNodeId(lockNodeId)
@@ -586,6 +587,11 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     if (const auto cpuGroupThreadsLimit = CPULimits.GetCPUGroupThreadsLimitOptional()) {
         ev->Record.SetCpuGroupThreadsLimit(*cpuGroupThreadsLimit);
         ev->Record.SetCpuGroupName(CPULimits.GetCPUGroupName());
+    }
+
+    if (!Database.empty() && !Pool.empty()) {
+        ev->Record.SetDatabaseId(Database);
+        ev->Record.SetPoolId(Pool);
     }
 
     if (UseBatchPool) {

@@ -1,9 +1,65 @@
 #include "category.h"
 
+#include <algorithm>
+#include <ranges>
+
 namespace NKikimr::NConveyorComposite {
+
+TProcessCategory::TProcessCategory(const NConfig::TCategory& config, TCounters& counters)
+    : Category(config.GetCategory()) {
+    Counters = counters.GetCategorySignals(Category);
+    RegisterProcess(0, RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)), TSchedulerQueryIdentity{});
+    Counters->WaitingQueueSizeLimit->Set(config.GetQueueSizeLimit());
+}
+
+TProcessCategory::~TProcessCategory() {
+    Y_UNUSED(UnregisterProcess(0));
+}
+
+void TProcessCategory::RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope,
+    const TSchedulerQueryIdentity& schedulerQueryIdentity) {
+    scope->IncProcesses();
+    AFL_VERIFY(Processes.emplace(internalProcessId,
+        std::make_shared<TProcess>(internalProcessId, std::move(scope), WaitingTasksCount, schedulerQueryIdentity)).second);
+}
+
+TSchedulerQueryIdentity TProcessCategory::UnregisterProcess(const ui64 processId) {
+    auto it = Processes.find(processId);
+    AFL_VERIFY(it != Processes.end());
+    Y_ENSURE(it->second->GetTasksCount() == 0, "cannot unregister process with queued tasks");
+    Y_ENSURE(it->second->GetInProgressTasksCount() == 0, "cannot unregister process with in-progress tasks");
+    const auto identity = it->second->GetSchedulerQueryIdentity();
+    Y_UNUSED(RemoveWeightedProcess(it->second));
+    if (it->second->GetScope()->DecProcesses()) {
+        AFL_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));
+    }
+    Processes.erase(it);
+    return identity;
+}
 
 bool TProcessCategory::HasTasks() const {
     return WeightedProcesses.size();
+}
+
+bool TProcessCategory::HasTasks(const TSchedulerQueryIdentity& identity) const {
+    return GetMinProcessUsage(identity).has_value();
+}
+
+bool TProcessCategory::HasProcesses(const TSchedulerQueryIdentity& identity) const {
+    return std::ranges::any_of(Processes | std::views::values, [&](const auto& process) {
+        return process->GetSchedulerQueryIdentity() == identity;
+    });
+}
+
+std::optional<TDuration> TProcessCategory::GetMinProcessUsage(const TSchedulerQueryIdentity& identity) const {
+    auto processes = WeightedProcesses | std::views::values | std::views::join;
+    const auto it = std::ranges::find_if(processes, [&](const auto& process) {
+        return process->GetSchedulerQueryIdentity() == identity && process->GetScope()->CheckToRun();
+    });
+    if (it != processes.end()) {
+        return (*it)->GetWeightedUsage();
+    }
+    return std::nullopt;
 }
 
 void TProcessCategory::ApplyConfig(const NConfig::TCategory& config) {
@@ -11,11 +67,12 @@ void TProcessCategory::ApplyConfig(const NConfig::TCategory& config) {
     Counters->WaitingQueueSizeLimit->Set(config.GetQueueSizeLimit());
 }
 
-std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds) {
+std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters,
+    THashSet<TString>& scopeIds, const TSchedulerQueryIdentity& identity) {
     std::shared_ptr<TProcess> pMin;
     for (auto it = WeightedProcesses.begin(); it != WeightedProcesses.end(); ++it) {
         for (ui32 i = 0; i < it->second.size(); ++i) {
-            if (!it->second[i]->GetScope()->CheckToRun()) {
+            if (it->second[i]->GetSchedulerQueryIdentity() != identity || !it->second[i]->GetScope()->CheckToRun()) {
                 continue;
             }
             pMin = it->second[i];

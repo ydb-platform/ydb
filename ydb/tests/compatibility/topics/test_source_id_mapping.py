@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
+from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, current_binary_path
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -31,6 +31,9 @@ FED_TOPIC_ALIASES = (
 SOURCE_ID_META2_PATH = "/Root/PQ/SourceIdMeta2"
 CLUSTER_TABLE_PATH = "/Root/PQ/Config/V2/Cluster"
 VERSION_TABLE_PATH = "/Root/PQ/Config/V2/Versions"
+
+MAPPING_BY_ID_FLAG = "enable_topic_source_id_mapping_by_id"
+TOPIC_ID = "1234567"
 
 
 def execute_query(driver, query):
@@ -170,6 +173,20 @@ def init_federation_tables(driver):
     time.sleep(5)
 
 
+def assign_topic_id(driver, path, topic_id=TOPIC_ID):
+    deadline = time.time() + 180
+    last_error = None
+    while time.time() < deadline:
+        try:
+            driver.topic_client.alter_topic(path, alter_attributes={"_id": topic_id})
+            return
+        except Exception as exc:
+            last_error = exc
+            logger.info("alter_topic _id retry: %s", exc)
+            time.sleep(2)
+    raise AssertionError(f"alter_topic {path} _id={topic_id} failed: {last_error}")
+
+
 def create_topic(driver, path, attributes=None):
     deadline = time.time() + 180
     last_error = None
@@ -203,6 +220,25 @@ def run_scenario(fixture, topic, aliases, attributes=None):
     assert isinstance(second_ack, ydb.TopicWriteResult.Written), second_ack
 
 
+def run_mapping_by_id_scenario(fixture, topic, aliases, attributes=None):
+    create_topic(fixture.driver, topic, attributes)
+
+    first_ack = write_with_seqno(fixture.driver, topic, SEQNO_FIRST, partition_id=PARTITION_ID)
+    assert isinstance(first_ack, ydb.TopicWriteResult.Written), first_ack
+
+    fixture.config.yaml_config.setdefault("feature_flags", {})[MAPPING_BY_ID_FLAG] = True
+    fixture.change_cluster_version()
+
+    assign_topic_id(fixture.driver, topic)
+
+    for alias in aliases:
+        if alias != topic:
+            wait_init_last_seqno(fixture.driver, alias, SEQNO_FIRST)
+
+    second_ack = write_after_init(fixture.driver, topic, SEQNO_FIRST, SEQNO_SECOND)
+    assert isinstance(second_ack, ydb.TopicWriteResult.Written), second_ack
+
+
 class TestSourceIdMappingFcc(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
@@ -224,6 +260,23 @@ class TestSourceIdMappingFederation(RestartToAnotherVersionFixture):
     def test_producer_session_after_restart(self):
         init_federation_tables(self.driver)
         run_scenario(
+            self,
+            topic=FED_TOPIC_PATH,
+            aliases=FED_TOPIC_ALIASES,
+            attributes={"_federation_account": FED_ACCOUNT},
+        )
+
+
+class TestSourceIdMappingByIdFederation(RestartToAnotherVersionFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        if self.all_binary_paths[1] != current_binary_path:
+            pytest.skip("EnableTopicSourceIdMappingById is available only on current")
+        yield from self.setup_cluster(use_legacy_pq=True)
+
+    def test_producer_session_after_enabling_mapping_by_id(self):
+        init_federation_tables(self.driver)
+        run_mapping_by_id_scenario(
             self,
             topic=FED_TOPIC_PATH,
             aliases=FED_TOPIC_ALIASES,

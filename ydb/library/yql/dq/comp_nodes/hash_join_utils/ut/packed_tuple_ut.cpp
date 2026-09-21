@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <array>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -1129,6 +1130,40 @@ Y_UNIT_TEST(EqualNullsIgnoresNullKeyLeftover) {
     tl->Pack(cols, validBits, packed.data(), overflow, 0, 2);
     UNIT_ASSERT(tl->KeysEqual(row(0), overflow.data(), row(1), overflow.data()));
     UNIT_ASSERT_VALUES_EQUAL(Hash(row(0)), Hash(row(1)));
+}
+
+Y_UNIT_TEST(EqualNullsSupportsMoreThan64KeyColumns) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    constexpr ui32 keyColumns = 65;
+    std::vector<TColumnDesc> columns(keyColumns);
+    std::vector<std::array<ui64, 2>> values(keyColumns);
+    std::vector<ui8> validity(keyColumns, 0b11);
+    std::vector<const ui8*> columnPtrs(keyColumns);
+    std::vector<const ui8*> validityPtrs(keyColumns);
+
+    for (ui32 i = 0; i < keyColumns; ++i) {
+        columns[i].Role = EColumnRole::Key;
+        columns[i].DataSize = sizeof(ui64);
+        values[i] = {i, i};
+        columnPtrs[i] = reinterpret_cast<const ui8*>(values[i].data());
+        validityPtrs[i] = &validity[i];
+    }
+
+    values.back() = {0x1111111111111111ull, 0x2222222222222222ull};
+    validity.back() = 0;
+
+    auto tl = TTupleLayout::Create(columns);
+    tl->ApplyEqualNulls({keyColumns - 1});
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> packed(tl->TotalRowSize * 2, 0);
+    tl->Pack(columnPtrs.data(), validityPtrs.data(), packed.data(), overflow, 0, 2);
+
+    const ui8* lhs = packed.data();
+    const ui8* rhs = lhs + tl->TotalRowSize;
+    UNIT_ASSERT(tl->KeysEqual(lhs, overflow.data(), rhs, overflow.data()));
+    UNIT_ASSERT_VALUES_EQUAL(Hash(lhs), Hash(rhs));
 }
 
 }

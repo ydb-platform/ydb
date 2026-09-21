@@ -2570,9 +2570,6 @@ public:
             }
             dst->MutableExtra()->PackFrom(extraStats);
             Stat->Clear();
-        // CA may fail before SetTaskRunner (e.g. WASM compartment acquire);
-        // FillStats then sends empty Tasks. Do not ENSURE — that would mask
-        // the real failure issues from COMPUTE_STATE_FAILURE.
         } else if (auto* taskStats = GetTaskRunnerStats()) { // for task_runner_actor_local
             auto* protoTask = dst->AddTasks();
 

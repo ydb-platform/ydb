@@ -1258,6 +1258,21 @@ Y_UNIT_TEST(NamedNodeSubquerySource) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 0);
 }
 
+Y_UNIT_TEST(NamedNodeTableWithoutCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $table = "Input";
+        SELECT * FROM $table;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(
+        Err2Str(res),
+        "<main>:3:23: Error: No cluster name given and no default cluster is selected\n");
+}
+
 Y_UNIT_TEST(LegacySourceBindTriggersFallbackInAutoMode) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;

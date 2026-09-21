@@ -202,6 +202,48 @@ def test_build_workspace_without_lockfile(tmp_path):
     assert lockfile.data["lockfileVersion"] == "9.0"
 
 
+def test_build_workspace_writes_pnpm_settings_to_workspace_config(tmp_path):
+    source_path = tmp_path / "source"
+    build_path = tmp_path / "build"
+    source_path.mkdir()
+    (source_path / "package.json").write_text(
+        '{"pnpm":{'
+        '"overrides":{"foo":"1.0.0"},'
+        '"packageExtensions":{"bar":{"peerDependencies":{"baz":"2.0.0"}}},'
+        '"neverBuiltDependencies":["esbuild"],'
+        '"allowNonAppliedPatches":true'
+        '}}\n'
+    )
+    (source_path / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
+
+    package_manager = object.__new__(package_manager_module.PackageManager)
+    package_manager.sources_path = str(source_path)
+    package_manager.sources_root = str(tmp_path)
+    package_manager.build_path = str(build_path)
+    package_manager.module_path = "project/module"
+    package_manager.inject_peers = False
+    package_manager.load_package_json = lambda path: _load_package_json(path)
+
+    package_manager.build_workspace(tarballs_store="__tarballs__", local_cli=True)
+
+    workspace = package_manager_module.PnpmWorkspace.load(str(build_path / "pnpm-workspace.yaml"))
+    assert workspace.packages == {"."}
+    assert workspace.settings == {
+        "overrides": {"foo": "1.0.0"},
+        "packageExtensions": {"bar": {"peerDependencies": {"baz": "2.0.0"}}},
+        "allowBuilds": {"esbuild": False},
+        "allowUnusedPatches": True,
+    }
+    assert _load_package_json(str(build_path / "package.json")).data["pnpm"] == {
+        "overrides": {"foo": "1.0.0"},
+        "packageExtensions": {"bar": {"peerDependencies": {"baz": "2.0.0"}}},
+        "allowNonAppliedPatches": True,
+    }
+    assert _load_package_json(str(source_path / "package.json")).data["pnpm"]["neverBuiltDependencies"] == [
+        "esbuild"
+    ]
+
+
 def test_build_workspace_merges_transitive_workspace_lockfiles(tmp_path):
     source_path = tmp_path / "source" / "consumer"
     build_path = tmp_path / "build" / "consumer"

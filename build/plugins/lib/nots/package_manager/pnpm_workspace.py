@@ -1,3 +1,4 @@
+import copy
 import os
 
 from .common_config import merge_config_sources
@@ -6,6 +7,72 @@ try:
     import ymakeyaml as yaml
 except Exception:
     import yaml
+
+
+def _as_string_list(value):
+    return value if isinstance(value, list) else []
+
+
+def _pnpm_workspace_settings(package_json):
+    """Adapt package.json#pnpm settings to the pnpm 11 workspace schema.
+
+    The generated package.json remains unchanged for pnpm 10 compatibility.
+    """
+    source = package_json.data.get("pnpm") or {}
+    if not isinstance(source, dict):
+        return {}
+
+    settings = copy.deepcopy(source)
+
+    explicit_allow_builds = settings.pop("allowBuilds", {})
+    allow_builds = {}
+    for package_name in _as_string_list(settings.pop("onlyBuiltDependencies", [])):
+        allow_builds[package_name] = True
+    for key in ("neverBuiltDependencies", "ignoredBuiltDependencies"):
+        for package_name in _as_string_list(settings.pop(key, [])):
+            allow_builds[package_name] = False
+    if isinstance(explicit_allow_builds, dict):
+        allow_builds.update(explicit_allow_builds)
+    settings.pop("onlyBuiltDependenciesFile", None)
+    settings.pop("ignoreDepScripts", None)
+    if allow_builds:
+        settings["allowBuilds"] = allow_builds
+    else:
+        settings.pop("allowBuilds", None)
+
+    if "allowNonAppliedPatches" in settings:
+        settings.setdefault("allowUnusedPatches", settings.pop("allowNonAppliedPatches"))
+    settings.pop("ignorePatchFailures", None)
+
+    pm_on_fail = settings.get("pmOnFail")
+    manage_versions = settings.pop("managePackageManagerVersions", None)
+    package_manager_strict = settings.pop("packageManagerStrict", None)
+    package_manager_strict_version = settings.pop("packageManagerStrictVersion", None)
+    if pm_on_fail is None:
+        if package_manager_strict_version is True:
+            pm_on_fail = "error"
+        elif package_manager_strict is False:
+            pm_on_fail = "warn"
+        elif manage_versions is not None:
+            pm_on_fail = "download" if manage_versions else "ignore"
+    if pm_on_fail is not None:
+        settings["pmOnFail"] = pm_on_fail
+
+    settings.pop("useNodeVersion", None)
+    execution_env = settings.get("executionEnv")
+    if isinstance(execution_env, dict):
+        execution_env.pop("nodeVersion", None)
+        if not execution_env:
+            settings.pop("executionEnv")
+
+    audit_config = settings.get("auditConfig")
+    if isinstance(audit_config, dict):
+        # CVE identifiers cannot be mechanically converted to GHSA identifiers.
+        audit_config.pop("ignoreCves", None)
+        if not audit_config:
+            settings.pop("auditConfig")
+
+    return settings
 
 
 class PnpmWorkspace(object):
@@ -25,6 +92,7 @@ class PnpmWorkspace(object):
         self.packages = set()
         self.catalogs = {}
         self.common_config_sources = {}
+        self.settings = {}
 
     def read(self):
         with open(self.path) as f:
@@ -32,15 +100,19 @@ class PnpmWorkspace(object):
             self.packages = set(parsed.get("packages", []))
             self.catalogs = parsed.get("catalogs", {})
             self.common_config_sources = parsed.get("notsCommonConfigSources", {})
+            self.settings = {
+                key: value
+                for key, value in parsed.items()
+                if key not in ("packages", "catalogs", "notsCommonConfigSources")
+            }
 
     def write(self, path=None):
         if not path:
             path = self.path
 
         with open(path, "w") as f:
-            data = {
-                "packages": sorted(self.packages),
-            }
+            data = copy.deepcopy(self.settings)
+            data["packages"] = sorted(self.packages)
             if self.catalogs:
                 data["catalogs"] = self.catalogs
             if self.common_config_sources:
@@ -81,6 +153,7 @@ class PnpmWorkspace(object):
         self.packages = set(path for _, path in package_json.get_workspace_dep_spec_paths())
         # Add relative path to self.
         self.packages.add(".")
+        self.settings = _pnpm_workspace_settings(package_json)
 
     def merge(self, ws):
         """

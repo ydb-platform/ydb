@@ -31,6 +31,25 @@ def _same_filesystem(source: str, destination: str) -> bool:
     return os.stat(source).st_dev == os.stat(os.path.dirname(destination)).st_dev
 
 
+def _remove_migrated_build_dependencies(package_json):
+    pnpm_settings = package_json.data.get("pnpm")
+    if not isinstance(pnpm_settings, dict):
+        return
+
+    changed = False
+    for key in ("onlyBuiltDependencies", "neverBuiltDependencies", "ignoredBuiltDependencies"):
+        if key in pnpm_settings:
+            del pnpm_settings[key]
+            changed = True
+
+    if not changed:
+        return
+
+    if not pnpm_settings:
+        del package_json.data["pnpm"]
+    package_json.write()
+
+
 class PackageManagerError(RuntimeError):
     pass
 
@@ -582,6 +601,7 @@ class PackageManager(object):
 
         ws = PnpmWorkspace(build_ws_config_path(self.build_path))
         ws.set_from_package_json(pj)
+        _remove_migrated_build_dependencies(pj)
         source_pj = self.load_package_json_from_dir(self.sources_path)
         config_path, ws.catalogs = load_common_config(source_pj, self.sources_root, self.inject_peers)
         if config_path:

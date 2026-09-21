@@ -77,12 +77,6 @@ public:
     virtual TString GetClassName() const override {
         return "SUB_COLUMNS_DICT_DENSE";
     }
-
-    // Decodes only the dictionary values from the `[dictionary_length][dictionary blob]` prefix of a serialized
-    // dictionary column (`TDictionaryAccessorData::DictionaryBlobSize` bytes; a longer blob is accepted and its
-    // positions part ignored). Used by the dictionary-only fetch path for DISTINCT over a sub-column.
-    static TConclusion<std::shared_ptr<arrow::Array>> DeserializeDictionaryOnly(
-        const TString& dictionaryBlob, const TChunkConstructionData& externalInfo);
 };
 
 // Dictionary values of a serialized sub-column key column, for either the Arrow IPC (`NDictionary::TConstructor`)

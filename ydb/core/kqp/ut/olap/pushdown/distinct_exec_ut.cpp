@@ -1353,6 +1353,61 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             "JSON_VALUE DISTINCT over a dictionary sub-column + JSON filter: pushdown must match plain");
     }
 
+    // Same as DictionarySubColumn, but the JSON column is stored with dense dictionary encoding.
+    Y_UNIT_TEST(OneShard_JsonValueDistinct_DenseDictionarySubColumn_OnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding helper(kikimr);
+        helper.SetWithJsonDocument(true);
+        helper.SetShardingMethod("HASH_FUNCTION_MODULO_N");
+        helper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        auto tableClient = kikimr.GetTableClient();
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto res = session.ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=json_payload,
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`,
+                    `DICTIONARY_UNIQUE_FRACTION`=`1`, `DENSE_ENCODING_VERSION`=`1`);
+            )").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        const auto ts = PickTimestampsForShard(0, 1, 60, 1);
+        const auto rids = MakeRepeatedResourceIds("rid", 60, 60);
+        const auto jsonPayloads = MakeJsonPayloadsWithOtherKey("jv", 60, 10, 4);
+        helper.SendDataViaActorSystem(
+            "/Root/olapStore/olapTable", BuildBatchForRowsWithJsonPayload(ts, rids, jsonPayloads, "u"));
+
+        constexpr ui64 kLimit = 100;
+
+        const i64 dictBefore = ReadDictionaryOnlyOptimizations(kikimr);
+        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "", kLimit);
+        const i64 dictAfterOff = ReadDictionaryOnlyOptimizations(kikimr);
+        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "", kLimit);
+        const i64 dictAfterOn = ReadDictionaryOnlyOptimizations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(dictAfterOff, dictBefore);
+        UNIT_ASSERT_C(dictAfterOn > dictAfterOff,
+            TStringBuilder() << "dictionary-only fetch expected for DISTINCT over a dense dictionary sub-column; before=" << dictBefore
+                             << " after_off=" << dictAfterOff << " after_on=" << dictAfterOn);
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10u);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10u);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+            "JSON_VALUE DISTINCT over a dense dictionary sub-column: pushdown must match plain");
+
+        const TString where = R"(WHERE JSON_VALUE(json_payload, "$.other") = "grp_1")";
+        const i64 dictBeforeFiltered = ReadDictionaryOnlyOptimizations(kikimr);
+        auto resOffFiltered = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, where, kLimit);
+        auto resOnFiltered = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, where, kLimit);
+        UNIT_ASSERT_VALUES_EQUAL(ReadDictionaryOnlyOptimizations(kikimr), dictBeforeFiltered);
+        UNIT_ASSERT_VALUES_EQUAL(resOffFiltered.RowsCount, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(resOnFiltered.RowsCount, 5u);
+        CompareYsonUnordered(resOffFiltered.ResultSetYson, resOnFiltered.ResultSetYson,
+            "JSON_VALUE DISTINCT over a dense dictionary sub-column + JSON filter: pushdown must match plain");
+    }
+
     // No matching rows: SYNC_DISTINCT_LIMIT must forward empty stages without breaking the scan pipeline.
     Y_UNIT_TEST(OneShard_WhereFalse_ForcedDistinct_EmptySameAsPlain) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);

@@ -17,6 +17,13 @@ bool PrepareExportTableSchemeContext(
     TString& error
 );
 
+bool PrepareExportTableSchemeContext(
+    const TString& sourcePathName,
+    const NKikimrSchemeOp::TBackupTask& task,
+    TExportTableSchemeContext& context,
+    TString& error
+);
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     TSchemeShard* ss,
     TTxId txId,

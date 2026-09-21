@@ -1,5 +1,7 @@
 #pragma once
 
+#include "schemeshard_export_table_scheme.h"
+
 #include <ydb/core/scheme/scheme_pathid.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -12,12 +14,28 @@ namespace NBackup {
     class TEncryptionIV;
 }
 
+namespace Ydb::Export {
+    class ExportToFsSettings;
+    class ExportToS3Settings;
+}
+
 namespace NKikimr::NSchemeShard {
 
 template <typename TSettings>
 NActors::IActor* CreateSchemeUploader(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const TSettings& settings, const TString& databaseRoot, const TString& metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
+);
+
+template <typename TSettings>
+NActors::IActor* CreateTableSchemeUploader(
+    NActors::TActorId schemeShard,
+    ui64 exportId,
+    ui32 itemIdx,
+    const TSettings& settings,
+    TExportTableSchemeContext&& context,
+    bool enableChecksums,
+    const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
 template <typename TSettings>

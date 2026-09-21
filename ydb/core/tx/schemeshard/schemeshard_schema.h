@@ -1343,6 +1343,7 @@ struct Schema : NIceDb::Schema {
         struct SourceOwnerPathId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct SourcePathType : Column<9, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EPathType; static constexpr Type Default = NKikimrSchemeOp::EPathTypeTable; };
         struct ParentIndex : Column<10, NScheme::NTypeIds::Uint32> {};
+        struct CreateTableUploaded : Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ExportId, Index>;
         using TColumns = TableColumns<
@@ -1355,7 +1356,8 @@ struct Schema : NIceDb::Schema {
             Issue,
             SourceOwnerPathId,
             SourcePathType,
-            ParentIndex
+            ParentIndex,
+            CreateTableUploaded
         >;
     };
 

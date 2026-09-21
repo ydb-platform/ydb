@@ -178,7 +178,8 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& e
             NIceDb::TUpdate<Schema::ExportItems::SourcePathId>(item.SourcePathId.LocalPathId),
             NIceDb::TUpdate<Schema::ExportItems::State>(static_cast<ui8>(item.State)),
             NIceDb::TUpdate<Schema::ExportItems::SourcePathType>(item.SourcePathType),
-            NIceDb::TUpdate<Schema::ExportItems::ParentIndex>(item.ParentIdx)
+            NIceDb::TUpdate<Schema::ExportItems::ParentIndex>(item.ParentIdx),
+            NIceDb::TUpdate<Schema::ExportItems::CreateTableUploaded>(item.CreateTableUploaded)
         );
     }
 }
@@ -236,7 +237,8 @@ void TSchemeShard::PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo
     db.Table<Schema::ExportItems>().Key(exportInfo.Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ExportItems::State>(static_cast<ui8>(item.State)),
         NIceDb::TUpdate<Schema::ExportItems::BackupTxId>(item.WaitTxId),
-        NIceDb::TUpdate<Schema::ExportItems::Issue>(item.Issue)
+        NIceDb::TUpdate<Schema::ExportItems::Issue>(item.Issue),
+        NIceDb::TUpdate<Schema::ExportItems::CreateTableUploaded>(item.CreateTableUploaded)
     );
 }
 

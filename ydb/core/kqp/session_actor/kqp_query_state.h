@@ -84,6 +84,7 @@ public:
         , UserTraceId((ev->Get()->GetUserCtx() != nullptr && ev->Get()->GetUserCtx()->GetUserTraceId()) ? ev->Get()->GetUserCtx()->GetUserTraceId().Clone() : NWilson::TTraceId())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
+        , LastCurrentQueryStatsPublishAt(startedAt)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
         , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
         , RuntimeParameterSizeLimitSatisfied(runtimeParameterSizeLimit > 0)
@@ -185,6 +186,7 @@ public:
     TCurrentQueryStats CurrentQueryStats;
     TCurrentQueryStats::TSourceState CurrentExecutionStats;
     ui64 CurrentQueryStatsSequenceNo = 0;
+    ui64 LastPublishedReadIngressBytes = 0;
     bool CurrentQueryStatsPublishScheduled = false;
     TString QueryAst;
     bool KeepSession = false;
@@ -192,6 +194,7 @@ public:
     NWilson::TTraceId UserTraceId;
     TString ClientAddress;
     NActors::TMonotonic StartedAt;
+    NActors::TMonotonic LastCurrentQueryStatsPublishAt;
     bool CompilationRunning = false;
 
     THashMap<NKikimr::TTableId, ui64> TableVersions;

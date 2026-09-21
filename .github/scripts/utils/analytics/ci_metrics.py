@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""CI wrapper around the generic analytics core.
-
-``core.py`` is the reusable client (copy to Arcadia / LLM evals). This module
-only attaches GitHub / job / PR / runner context and the CI table shape.
+"""GitHub CI wrapper around core.py: job/PR context, --runner/--usage, CI table.
 
     python3 .github/scripts/utils/analytics/ci_metrics.py start ydbd_cached_build \\
         --source nightly_build --attr cache_mode=dist_cache --runner
     python3 .github/scripts/utils/analytics/ci_metrics.py send --conclusion success --usage
-
-Never fails the caller (CLI exit 0).
 """
 
 from __future__ import annotations
@@ -26,34 +21,27 @@ from urllib.request import Request, urlopen
 
 from runner_info import apply_runner_labels, pop_runner_options
 
-from core import (  # noqa: F401 — re-export helpers tests and exporters import
+from core import (
     Analytics as CoreAnalytics,
     add_track_cli_args as add_core_cli_args,
     _as_uint,
-    _properties_from_args,
-    append_record,
+    _ydb_wrapper_cls,
     build_column_types as core_build_column_types,
     build_create_table_sql as core_build_create_table_sql,
-    build_track_record,
     duration_ms_between,
     end as core_end,
     flush_file as core_flush_file,
-    load_unsent_lines,
+    has_send_credentials,
     merge_defaults,
     normalize_metric as core_normalize_metric,
     parse_datetime,
-    parse_labels,
-    read_pending_spans,
     resolve_table_path as core_resolve_table_path,
-    resolve_track_kind,
-    resolve_track_name,
-    resolve_track_value,
     rows_from_jsonl as core_rows_from_jsonl,
+    run_cli,
     send as core_send,
     start as core_start,
     track as core_track,
     upsert_metrics as core_upsert_metrics,
-    write_send_offset,
 )
 
 BUILD_INFO_NAME = "build_info"
@@ -84,18 +72,6 @@ COLUMNS_SCHEMA = [
     ("exported_at", "Timestamp", True),
 ]
 PRIMARY_KEYS = ("date", "run_id", "github_job_id", "source", "name", "kind", "event_ts")
-CI_ROW_KEYS = (
-    "github_job_id",
-    "workflow",
-    "job_name",
-    "event_name",
-    "branch",
-    "build_preset",
-    "pr_number",
-    "commit",
-    "run_attempt",
-    "run_url",
-)
 BUILD_PRESET_RE = re.compile(
     r"(relwithdebinfo|release-asan|release-tsan|release-msan|release|debug)"
 )
@@ -161,23 +137,6 @@ def default_metrics_file() -> str:
 
 def resolve_table_path(ydb_wrapper=None) -> str:
     return core_resolve_table_path(ydb_wrapper, table_config_key=TABLE_CONFIG_KEY, default=DEFAULT_TABLE_PATH)
-
-
-def _qa_analytics_dir() -> str:
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "analytics"))
-
-
-def _ensure_qa_analytics_path() -> None:
-    qa_dir = _qa_analytics_dir()
-    if qa_dir not in sys.path:
-        sys.path.insert(0, qa_dir)
-
-
-def _ydb_wrapper_cls():
-    _ensure_qa_analytics_path()
-    from ydb_wrapper import YDBWrapper
-
-    return YDBWrapper
 
 
 def build_column_types():
@@ -555,6 +514,7 @@ def track(
     labels: Optional[Dict[str, Any]] = None,
     runner: bool = False,
     usage: bool = False,
+    **_ignored: Any,
 ) -> None:
     props = dict(properties or {})
     flag_runner, flag_usage = pop_runner_options(props)
@@ -619,27 +579,15 @@ def timed(name: str, **kwargs: Any) -> Iterator[None]:
 
 class Analytics(CoreAnalytics):
     def __init__(self, file: Optional[str] = None, source: Optional[str] = None):
-        super().__init__(file=file, source=source, attach=attach_context, info_name=BUILD_INFO_NAME, flush=flush_file)
-
-    def start(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
-        kwargs.setdefault("file", self.file)
-        kwargs.setdefault("source", self.source)
-        return start(name, properties, **kwargs)
-
-    def end(self, name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
-        kwargs.setdefault("file", self.file)
-        kwargs.setdefault("source", self.source)
-        return end(name, properties, **kwargs)
-
-    def track(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
-        kwargs.setdefault("file", self.file)
-        kwargs.setdefault("source", self.source)
-        track(name, properties, **kwargs)
-
-    def send(self, name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
-        kwargs.setdefault("file", self.file)
-        kwargs.setdefault("source", self.source)
-        return send(name, properties, **kwargs)
+        super().__init__(
+            file=file,
+            source=source,
+            flush=flush_file,
+            start_fn=start,
+            end_fn=end,
+            track_fn=track,
+            send_fn=send,
+        )
 
 
 def normalize_metric(raw: Dict[str, Any], *, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
@@ -693,6 +641,26 @@ def flush_file(path: Optional[str] = None, table_path: Optional[str] = None, def
         default_table=DEFAULT_TABLE_PATH,
         ydb_wrapper_factory=_ydb_wrapper_cls,
     )
+
+
+def upload_rows(rows: List[Dict[str, Any]], table_path: Optional[str] = None) -> int:
+    if not rows:
+        return 0
+    if not has_send_credentials():
+        print("Analytics YDB credentials are missing, skipping")
+        return 0
+    try:
+        with _ydb_wrapper_cls()() as wrapper:
+            if not wrapper.check_credentials():
+                print("Analytics YDB credentials are missing, skipping")
+                return 0
+            path = table_path or resolve_table_path(wrapper)
+            uploaded = upsert_metrics(wrapper, rows, table_path=path)
+        print(f"Uploaded {uploaded} metric rows to {path}")
+        return uploaded
+    except Exception as exc:  # noqa: BLE001 — telemetry must not fail the caller
+        print(f"Warning: analytics upload failed: {exc}", file=sys.stderr)
+        return 0
 
 
 def _first_pr_number(run: Dict[str, Any]) -> Optional[int]:
@@ -808,90 +776,6 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
     return [row for row in rows if row is not None]
 
 
-def _cmd_track(args: argparse.Namespace) -> int:
-    name = resolve_track_name(args)
-    if not name:
-        print("Warning: track requires an event name (--name / positional)", file=sys.stderr)
-        return 0
-    track(
-        name,
-        _properties_from_args(args),
-        file=args.file or default_metrics_file(),
-        kind=resolve_track_kind(args),
-        source=args.source,
-        value=resolve_track_value(args),
-        unit=args.unit,
-        started_at=args.started_at,
-        started_epoch=args.started_epoch,
-        finished_epoch=args.finished_epoch,
-        conclusion=args.conclusion,
-        runner=bool(getattr(args, "runner", False)),
-        usage=bool(getattr(args, "usage", False)),
-    )
-    return 0
-
-
-def _cmd_start(args: argparse.Namespace) -> int:
-    name = resolve_track_name(args)
-    if not name:
-        print("Warning: start requires a span name", file=sys.stderr)
-        return 0
-    start(
-        name,
-        _properties_from_args(args),
-        file=args.file or default_metrics_file(),
-        kind=resolve_track_kind(args) or "duration",
-        source=args.source,
-        started_at=args.started_at,
-        started_epoch=args.started_epoch,
-        conclusion=args.conclusion,
-        runner=bool(getattr(args, "runner", False)),
-        usage=bool(getattr(args, "usage", False)),
-    )
-    return 0
-
-
-def _cmd_end(args: argparse.Namespace) -> int:
-    end(
-        resolve_track_name(args) or None,
-        _properties_from_args(args),
-        file=args.file or default_metrics_file(),
-        conclusion=args.conclusion,
-        source=args.source,
-        value=resolve_track_value(args),
-        unit=args.unit,
-        finished_epoch=args.finished_epoch,
-        runner=bool(getattr(args, "runner", False)),
-        usage=bool(getattr(args, "usage", False)),
-    )
-    return 0
-
-
-def _cmd_send(args: argparse.Namespace) -> int:
-    send(
-        resolve_track_name(args) or None,
-        _properties_from_args(args),
-        file=args.file or default_metrics_file(),
-        conclusion=args.conclusion,
-        source=args.source,
-        kind=resolve_track_kind(args),
-        value=resolve_track_value(args),
-        unit=args.unit,
-        started_at=args.started_at,
-        started_epoch=args.started_epoch,
-        finished_epoch=args.finished_epoch,
-        runner=bool(getattr(args, "runner", False)),
-        usage=bool(getattr(args, "usage", False)),
-        table_path=getattr(args, "table_path", None),
-    )
-    return 0
-
-
-def _cmd_flush(args: argparse.Namespace) -> int:
-    flush_file(args.file or default_metrics_file(), table_path=args.table_path)
-    return 0
-
-
 def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optional[str] = None) -> None:
     add_core_cli_args(parser, kind_default=kind_default)
     parser.add_argument(
@@ -906,6 +790,15 @@ def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optiona
         default=False,
         help="Attach a fresh CPU/RAM/disk usage snapshot for this event only",
     )
+
+
+def _cli_runner_flags(args: argparse.Namespace) -> Dict[str, Any]:
+    flags: Dict[str, Any] = {}
+    if getattr(args, "runner", False):
+        flags["runner"] = True
+    if getattr(args, "usage", False):
+        flags["usage"] = True
+    return flags
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -925,18 +818,16 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 def main(argv=None) -> int:
     try:
-        args = parse_args(argv)
-        if args.command == "start":
-            return _cmd_start(args)
-        if args.command == "end":
-            return _cmd_end(args)
-        if args.command == "track":
-            return _cmd_track(args)
-        if args.command == "send":
-            return _cmd_send(args)
-        if args.command == "flush":
-            return _cmd_flush(args)
-        return 0
+        return run_cli(
+            parse_args(argv),
+            start_fn=start,
+            end_fn=end,
+            track_fn=track,
+            send_fn=send,
+            flush_fn=flush_file,
+            default_file=default_metrics_file(),
+            extra_kwargs_fn=_cli_runner_flags,
+        )
     except Exception as exc:  # noqa: BLE001 — telemetry must not fail CI
         print(f"Warning: CI metrics failed: {exc}", file=sys.stderr)
         return 0

@@ -7,27 +7,18 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional
 
+try:
+    from .html_embed import js_script_json
+    from .ya_make_requirements import normalize_suite_path
+except ImportError:
+    from html_embed import js_script_json
+    from ya_make_requirements import normalize_suite_path
+
 CHUNK_FROM_SUBTEST_RE = re.compile(r"\[(?:[^\]]*?\s)?(\d+)/(?:\d+)\]\s+chunk")
 CHUNK_SOLE_RE = re.compile(r"^\s*sole\s+chunk\s*$", re.IGNORECASE)
 CHUNK_BRACKET_ONLY_RE = re.compile(r"^\s*\[[^\]]+\]\s+chunk\s*$", re.IGNORECASE)
 CHUNK_GROUP_FROM_SUBTEST_RE = re.compile(r"\[([^\]\s]+)\s+\d+/\d+\]\s+chunk", re.IGNORECASE)
 CHUNK_GROUP_BRACKET_ONLY_RE = re.compile(r"\[([^\]]+)\]\s+chunk", re.IGNORECASE)
-PART_SUFFIX_RE = re.compile(r"/part\d+$")
-
-
-def js_script_json(value: Any) -> str:
-    """JSON text safe to embed in a <script> tag. Keep out of f-strings (Py<3.12)."""
-    text = json.dumps(value, ensure_ascii=False)
-    text = text.replace("<", "\\u003c")
-    text = text.replace(">", "\\u003e")
-    text = text.replace("&", "\\u0026")
-    text = text.replace("\u2028", "\\u2028")
-    text = text.replace("\u2029", "\\u2029")
-    return text
-
-
-def normalize_suite_path(path: str) -> str:
-    return PART_SUFFIX_RE.sub("", path)
 
 
 def chunk_group_from_subtest(subtest_name: str) -> Optional[str]:

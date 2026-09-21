@@ -1,26 +1,11 @@
 #!/usr/bin/env python3
-"""Generic analytics client (OpenTelemetry span + batch-export model).
+"""Reusable analytics client: start / end / track / send. No GitHub.
 
-Copy this file (stdlib + optional ydb SDK / YDBWrapper) to another repo —
-Arcadia CI, LLM evals, etc. No GitHub or runner assumptions.
-
-Lifecycle::
-
-    start(name)   open a span, stamp start time
-    end(name?)    close span(s); duration = now - start
-    track(name)   instant event or already-complete measurement
-    flush()       export the completed batch
-    send()        end leftover open spans + flush
-                  send(name, attrs) with no matching span = track + flush
-
-Context is whatever the caller passes, plus optional ``attach`` (CI wrapper
-fills GitHub / job / PR). ``run_id`` comes from the record, ``--run-id``,
-or ``$ANALYTICS_RUN_ID``.
+Copy this file (stdlib + optional YDBWrapper) to Arcadia or an LLM pipeline.
+run_id comes from the record, --run-id, or $ANALYTICS_RUN_ID. CLI always exits 0.
 
     python3 core.py start llm_call --source arcadia --run-id 42 --attr model=foo
     python3 core.py send --conclusion success --json '{"tokens": 12}'
-
-Never fails the caller (CLI exit 0).
 """
 
 from __future__ import annotations
@@ -415,16 +400,19 @@ def build_track_record(name: str, properties: Optional[Dict[str, Any]] = None, *
     kind = props.pop("kind", None) or DEFAULT_KIND
     source = props.pop("source", None)
     value = props.pop("value", None)
-    if value is None and props.get("duration_ms") is not None:
-        value = props.get("duration_ms")
+    duration_ms = props.pop("duration_ms", None)
+    if value is None and duration_ms is not None:
+        value = duration_ms
     unit = props.pop("unit", None)
     conclusion = props.pop("conclusion", None)
     event_ts = props.pop("event_ts", None)
     started_at = props.pop("started_at", None)
     started_epoch = props.pop("started_epoch", None)
     finished_epoch = props.pop("finished_epoch", None)
+    finished_at = props.pop("finished_at", None)
+    if finished_epoch is None:
+        finished_epoch = finished_at
     run_id = props.pop("run_id", None)
-    props.pop("finished_at", None)
     return _build_record(
         name=name,
         kind=str(kind),
@@ -503,6 +491,7 @@ def close_span(record: Dict[str, Any], extras: Optional[Dict[str, Any]] = None) 
     extras.pop("attach", None)
     extras.pop("enrich", None)
     extras.pop("info_name", None)
+    extras.pop("flush", None)
     labels = record.get("labels") if isinstance(record.get("labels"), dict) else {}
     extra_labels = extras.pop("labels", None)
     if isinstance(extra_labels, dict):
@@ -513,7 +502,6 @@ def close_span(record: Dict[str, Any], extras: Optional[Dict[str, Any]] = None) 
         if incoming not in (None, "") and record.get(key) in (None, ""):
             record[key] = incoming
     extras.pop("name", None)
-    extras.pop("file", None)
     for key, value in extras.items():
         if value not in (None, ""):
             labels.setdefault(key, value)
@@ -524,8 +512,6 @@ def close_span(record: Dict[str, Any], extras: Optional[Dict[str, Any]] = None) 
         record["value"] = duration_ms_between(parse_datetime(record.get("started_epoch")), finished)
         record.setdefault("unit", "ms")
         record.setdefault("kind", "duration")
-    if record.get("conclusion"):
-        labels.setdefault("result", record["conclusion"])
     if labels:
         record["labels"] = labels
     return record
@@ -718,7 +704,7 @@ def timed(name: str, **kwargs: Any) -> Iterator[None]:
 
 
 class Analytics:
-    """OpenTelemetry-shaped client: start / end / track / flush / send."""
+    """start / end / track / flush / send, with optional attach/enrich hooks."""
 
     def __init__(
         self,
@@ -729,6 +715,10 @@ class Analytics:
         enrich: Optional[EnrichFn] = None,
         info_name: Optional[str] = None,
         flush: Optional[Callable[..., int]] = None,
+        start_fn: Optional[Callable[..., Any]] = None,
+        end_fn: Optional[Callable[..., Any]] = None,
+        track_fn: Optional[Callable[..., Any]] = None,
+        send_fn: Optional[Callable[..., Any]] = None,
     ):
         self.file = file
         self.source = source
@@ -736,43 +726,49 @@ class Analytics:
         self.enrich = enrich
         self.info_name = info_name
         self.flush_fn = flush
+        self._start = start_fn or start
+        self._end = end_fn or end
+        self._track = track_fn or track
+        self._send = send_fn or send
 
-    def _kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def _base_kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         if self.source and kwargs.get("source") is None:
             kwargs["source"] = self.source
         if self.file and kwargs.get("file") is None:
             kwargs["file"] = self.file
+        return kwargs
+
+    def _record_kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        kwargs = self._base_kwargs(kwargs)
         if self.attach and kwargs.get("attach") is None:
             kwargs["attach"] = self.attach
         if self.enrich and kwargs.get("enrich") is None:
             kwargs["enrich"] = self.enrich
-        if self.info_name and kwargs.get("info_name") is None:
-            kwargs["info_name"] = self.info_name
-        if self.flush_fn and kwargs.get("flush") is None:
-            kwargs["flush"] = self.flush_fn
         return kwargs
 
     def start(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
-        return start(name, properties, **self._kwargs(kwargs))
+        return self._start(name, properties, **self._record_kwargs(kwargs))
 
     def end(self, name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
-        return end(name, properties, **self._kwargs(kwargs))
+        kwargs = self._base_kwargs(kwargs)
+        if self.enrich and kwargs.get("enrich") is None:
+            kwargs["enrich"] = self.enrich
+        return self._end(name, properties, **kwargs)
 
     def track(self, name: str, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
-        track(name, properties, **self._kwargs(kwargs))
+        self._track(name, properties, **self._record_kwargs(kwargs))
 
     def flush(self) -> int:
         flush_fn = self.flush_fn or flush_file
         return flush_fn(self.file)
 
     def send(self, name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> int:
-        return send(name, properties, **self._kwargs(kwargs))
-
-    def track_info(self, name: str, payload: Any, properties: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
-        props = dict(properties or {})
-        props["payload"] = payload
-        kwargs.setdefault("kind", "info")
-        self.track(name, props, **kwargs)
+        kwargs = self._record_kwargs(kwargs)
+        if self.info_name and kwargs.get("info_name") is None:
+            kwargs["info_name"] = self.info_name
+        if self.flush_fn and kwargs.get("flush") is None:
+            kwargs["flush"] = self.flush_fn
+        return self._send(name, properties, **kwargs)
 
 
 def rows_from_jsonl(
@@ -985,80 +981,96 @@ def resolve_track_kind(args: argparse.Namespace) -> Optional[str]:
     return None
 
 
-def _cmd_track(args: argparse.Namespace) -> int:
-    name = resolve_track_name(args)
-    if not name:
-        print("Warning: track requires an event name (--name / positional)", file=sys.stderr)
+def run_cli(
+    args: argparse.Namespace,
+    *,
+    start_fn: Optional[Callable[..., Any]] = None,
+    end_fn: Optional[Callable[..., Any]] = None,
+    track_fn: Optional[Callable[..., Any]] = None,
+    send_fn: Optional[Callable[..., Any]] = None,
+    flush_fn: Optional[Callable[..., Any]] = None,
+    default_file: Optional[str] = None,
+    extra_kwargs_fn: Optional[Callable[[argparse.Namespace], Dict[str, Any]]] = None,
+) -> int:
+    """Dispatch start/end/track/send/flush. Wrappers pass their own fns."""
+    start_fn = start_fn or start
+    end_fn = end_fn or end
+    track_fn = track_fn or track
+    send_fn = send_fn or send
+    flush_fn = flush_fn or flush_file
+    file = getattr(args, "file", None) or default_file
+    extra = extra_kwargs_fn(args) if extra_kwargs_fn else {}
+    if args.command == "flush":
+        flush_fn(file, table_path=getattr(args, "table_path", None))
         return 0
-    track(
-        name,
-        _properties_from_args(args),
-        file=args.file,
-        kind=resolve_track_kind(args),
-        source=args.source,
-        value=resolve_track_value(args),
-        unit=args.unit,
-        started_at=args.started_at,
-        started_epoch=args.started_epoch,
-        finished_epoch=args.finished_epoch,
-        conclusion=args.conclusion,
-    )
-    return 0
-
-
-def _cmd_start(args: argparse.Namespace) -> int:
+    props = _properties_from_args(args)
     name = resolve_track_name(args)
-    if not name:
-        print("Warning: start requires a span name", file=sys.stderr)
+    if args.command == "start":
+        if not name:
+            print("Warning: start requires a span name", file=sys.stderr)
+            return 0
+        start_fn(
+            name,
+            props,
+            file=file,
+            kind=resolve_track_kind(args) or "duration",
+            source=args.source,
+            started_at=args.started_at,
+            started_epoch=args.started_epoch,
+            conclusion=args.conclusion,
+            **extra,
+        )
         return 0
-    start(
-        name,
-        _properties_from_args(args),
-        file=args.file,
-        kind=resolve_track_kind(args) or "duration",
-        source=args.source,
-        started_at=args.started_at,
-        started_epoch=args.started_epoch,
-        conclusion=args.conclusion,
-    )
-    return 0
-
-
-def _cmd_end(args: argparse.Namespace) -> int:
-    end(
-        resolve_track_name(args) or None,
-        _properties_from_args(args),
-        file=args.file,
-        conclusion=args.conclusion,
-        source=args.source,
-        value=resolve_track_value(args),
-        unit=args.unit,
-        finished_epoch=args.finished_epoch,
-    )
-    return 0
-
-
-def _cmd_send(args: argparse.Namespace) -> int:
-    send(
-        resolve_track_name(args) or None,
-        _properties_from_args(args),
-        file=args.file,
-        conclusion=args.conclusion,
-        source=args.source,
-        kind=resolve_track_kind(args),
-        value=resolve_track_value(args),
-        unit=args.unit,
-        started_at=args.started_at,
-        started_epoch=args.started_epoch,
-        finished_epoch=args.finished_epoch,
-        info_name=getattr(args, "info_name", None),
-        table_path=getattr(args, "table_path", None),
-    )
-    return 0
-
-
-def _cmd_flush(args: argparse.Namespace) -> int:
-    flush_file(args.file, table_path=args.table_path)
+    if args.command == "end":
+        end_fn(
+            name or None,
+            props,
+            file=file,
+            conclusion=args.conclusion,
+            source=args.source,
+            value=resolve_track_value(args),
+            unit=args.unit,
+            finished_epoch=args.finished_epoch,
+            **extra,
+        )
+        return 0
+    if args.command == "track":
+        if not name:
+            print("Warning: track requires an event name (--name / positional)", file=sys.stderr)
+            return 0
+        track_fn(
+            name,
+            props,
+            file=file,
+            kind=resolve_track_kind(args),
+            source=args.source,
+            value=resolve_track_value(args),
+            unit=args.unit,
+            started_at=args.started_at,
+            started_epoch=args.started_epoch,
+            finished_epoch=args.finished_epoch,
+            conclusion=args.conclusion,
+            **extra,
+        )
+        return 0
+    if args.command == "send":
+        send_fn(
+            name or None,
+            props,
+            file=file,
+            conclusion=args.conclusion,
+            source=args.source,
+            kind=resolve_track_kind(args),
+            value=resolve_track_value(args),
+            unit=args.unit,
+            started_at=args.started_at,
+            started_epoch=args.started_epoch,
+            finished_epoch=args.finished_epoch,
+            info_name=getattr(args, "info_name", None),
+            table_path=getattr(args, "table_path", None),
+            **extra,
+        )
+        return 0
     return 0
 
 
@@ -1115,18 +1127,7 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 def main(argv=None) -> int:
     try:
-        args = parse_args(argv)
-        if args.command == "start":
-            return _cmd_start(args)
-        if args.command == "end":
-            return _cmd_end(args)
-        if args.command == "track":
-            return _cmd_track(args)
-        if args.command == "send":
-            return _cmd_send(args)
-        if args.command == "flush":
-            return _cmd_flush(args)
-        return 0
+        return run_cli(parse_args(argv))
     except Exception as exc:  # noqa: BLE001 — telemetry must not fail the caller
         print(f"Warning: analytics failed: {exc}", file=sys.stderr)
         return 0

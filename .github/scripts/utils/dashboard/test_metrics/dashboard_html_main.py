@@ -8,30 +8,15 @@ and ya.make update script generator.
 from __future__ import annotations
 
 import html as html_lib
-import json
 from pathlib import Path
 from typing import Any, Optional
 
 try:
     from .dashboard_html_payload import build_dashboard_payload
+    from .html_embed import js_script_json
 except ImportError:
     from dashboard_html_payload import build_dashboard_payload  # type: ignore[no-redef]
-
-
-def js_script_json(value: Any) -> str:
-    """JSON text safe to embed in a <script> tag.
-
-    Escape ``<`` / ``>`` / ``&`` as JSON unicode so any case of ``</script>``
-    cannot close the tag. Keep this helper outside f-string expressions
-    (Python < 3.12 rejects a backslash there; CI runners are still 3.10/3.11).
-    """
-    text = json.dumps(value, ensure_ascii=False)
-    text = text.replace("<", "\\u003c")
-    text = text.replace(">", "\\u003e")
-    text = text.replace("&", "\\u0026")
-    text = text.replace("\u2028", "\\u2028")
-    text = text.replace("\u2029", "\\u2029")
-    return text
+    from html_embed import js_script_json  # type: ignore[no-redef]
 
 
 def build_html_dashboard(

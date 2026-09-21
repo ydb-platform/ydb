@@ -4,9 +4,6 @@ inputs:
   build_preset:
     type: string
     default: ""
-  build_target:
-    type: string
-    default: ""
   secs:
     type: string
     default: ""
@@ -30,8 +27,6 @@ runs:
       shell: bash
       run: |
         set -ex
-        export build_preset="${{ inputs.build_preset }}" 
-        export build_target="${{ inputs.build_target }}" 
         ./ya tool bloat --linker-map ydb/apps/ydbd/ydbd.map.lld --input ydb/apps/ydbd/ydbd --save-html ya_bloat_html --save-json bloat.json
         # disabled until we learn to parse new version of bloat.json
         # ./ydb/ci/build_bloat/template_bloat.py -j bloat.json -o template_bloat -t template_bloat_html
@@ -63,23 +58,20 @@ runs:
         s3cmd sync -r --acl-public --stats --no-progress --no-mime-magic --guess-mime-type --no-check-md5 "html_headers_impact/" "$S3_BUCKET_PATH/html_headers_impact/"
         echo "[headers impact]($S3_URL_PREFIX/html_headers_impact/tree_map.html)" >> $GITHUB_STEP_SUMMARY
 
-    - name: Emit compile profiles to ci_metrics
+    - name: Send compile profiles to ci_metrics
       if: always()
       continue-on-error: true
       shell: bash
       run: |
         python3 -m pip install ydb ydb[yc] >/dev/null
-        echo "CI_CACHE_MODE=${CI_CACHE_MODE:-dist_cache}" >> "$GITHUB_ENV"
         python3 .github/scripts/utils/analytics/export_ya_nodes.py \
-          --evlog "tmp/results/try_*/ya_evlog.jsonl" \
+          --evlog "${PUBLIC_DIR:-tmp/results}/try_*/ya_evlog.jsonl" \
           --source build_analytics \
-          --label cache_mode=dist_cache \
           --label profile=evlog || true
         python3 .github/scripts/utils/analytics/export_ya_nodes.py \
           --cpp-json html_cpp_impact/output.json \
           --headers-json html_headers_impact/output.json \
           --source build_bloat \
-          --label cache_mode=dist_cache \
           --label profile=ftime_trace || true
         python3 .github/scripts/utils/analytics/ci_metrics.py send || true
 

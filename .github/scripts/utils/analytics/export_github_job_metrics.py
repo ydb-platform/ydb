@@ -8,19 +8,14 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote
 
-_QA_ANALYTICS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "analytics"))
-if _QA_ANALYTICS not in sys.path:
-    sys.path.insert(0, _QA_ANALYTICS)
-
 import requests
 
-from ci_metrics import metrics_from_workflow_run, resolve_table_path, upsert_metrics
+from ci_metrics import metrics_from_workflow_run, upload_rows
 
 DEFAULT_ORG = "ydb-platform"
 DEFAULT_REPO = "ydb"
@@ -200,16 +195,7 @@ def main(argv=None) -> int:
         if not rows:
             print("No GitHub job metric rows to upload")
             return 0
-
-        from ydb_wrapper import YDBWrapper
-
-        with YDBWrapper() as wrapper:
-            if not wrapper.check_credentials():
-                print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
-                return 0
-            table_path = args.table_path or resolve_table_path(wrapper)
-            uploaded = upsert_metrics(wrapper, rows, table_path=table_path)
-            print(f"Uploaded {uploaded} metric rows to {table_path}")
+        upload_rows(rows, table_path=args.table_path)
         return 0
     except Exception as exc:  # noqa: BLE001 — collector must not fail the analytics job
         print(f"Warning: GitHub job metrics export failed: {exc}")

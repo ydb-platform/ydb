@@ -1,17 +1,4 @@
-"""
-Library to read reserved CPU/RAM/SIZE from ya.make for a test suite.
-
-Supports conditional branches by sanitizer:
-  IF (SANITIZER_TYPE)
-  IF (SANITIZER_TYPE == "thread")
-  IF (SANITIZER_TYPE OR WITH_VALGRIND)
-
-Usage:
-  from .ya_make_requirements import get_requirements_for_suite, build_requirements_cache
-
-  req = get_requirements_for_suite(repo_root, "ydb/tests/functional/blobstorage", sanitizer="thread")
-  # -> {"ram_gb": 32, "cpu_cores": 4, "size": "LARGE"} (fields may be missing)
-"""
+"""Read REQUIREMENTS / SIZE / SPLIT_FACTOR from ya.make, including SANITIZER_TYPE branches."""
 
 from __future__ import annotations
 
@@ -20,8 +7,6 @@ import re
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-# REQUIREMENTS(...) / SIZE(...) / IF/ELSE/ENDIF — from ya.make
-RE_REQUIREMENTS_LINE = re.compile(r"^\s*REQUIREMENTS\s*\((.*)\)\s*$", re.DOTALL)
 RE_REQ_OPEN = re.compile(r"^\s*REQUIREMENTS\s*\(", re.IGNORECASE)
 RE_REQ_RAM = re.compile(r"\bram\s*:\s*(\d+)\b", re.IGNORECASE)
 RE_REQ_CPU = re.compile(r"\bcpu\s*:\s*(\w+)\b", re.IGNORECASE)
@@ -30,6 +15,7 @@ RE_SPLIT_FACTOR = re.compile(r"^\s*SPLIT_FACTOR\s*\(\s*(\d+)\s*\)\s*$")
 RE_FORK_TEST_FILES = re.compile(r"^\s*FORK_TEST_FILES\s*\(\s*\)\s*$")
 RE_TEST_SRCS_OPEN = re.compile(r"^\s*TEST_SRCS\s*\(\s*$")
 RE_IF = re.compile(r"^\s*IF\s*\((.*)\)\s*$")
+RE_ELSEIF = re.compile(r"^\s*ELSEIF\s*\((.*)\)\s*$")
 RE_ELSE = re.compile(r"^\s*ELSE\s*\(\s*\)\s*$")
 RE_ENDIF = re.compile(r"^\s*ENDIF\s*\(\s*\)\s*$")
 RE_SAN_EQ = re.compile(r'SANITIZER_TYPE\s*==\s*"([^"]+)"')
@@ -89,28 +75,20 @@ def _has_sanitizer(sanitizer: Optional[str]) -> bool:
     return bool(sanitizer and str(sanitizer).strip() and str(sanitizer).strip().lower() not in ("none", "off", "false", "0"))
 
 
-def _eval_condition(cond: str, sanitizer: Optional[str]) -> bool:
-    """
-    Evaluate a small subset of ya.make IF conditions for SANITIZER_TYPE branches.
-    Unknown identifiers default to False.
-    """
+def eval_ya_make_condition(cond: str, sanitizer: Optional[str] = None) -> bool:
     has_san = _has_sanitizer(sanitizer)
     san = (sanitizer or "").strip().lower()
     expr = cond.strip()
-
-    # Replace explicit SANITIZER_TYPE comparisons first.
     expr = RE_SAN_EQ.sub(lambda m: "True" if san == m.group(1).strip().lower() else "False", expr)
     expr = RE_SAN_NE.sub(lambda m: "True" if san != m.group(1).strip().lower() else "False", expr)
-
-    # Replace known identifiers.
     expr = re.sub(r"\bSANITIZER_TYPE\b", "True" if has_san else "False", expr)
     expr = re.sub(r"\bWITH_VALGRIND\b", "False", expr)
-
-    # Boolean operators.
+    expr = re.sub(r"\bOS_WINDOWS\b", "False", expr)
+    expr = re.sub(r"\bOS_LINUX\b", "True", expr)
+    expr = re.sub(r"\bOS_DARWIN\b", "False", expr)
     expr = re.sub(r"\bOR\b", "or", expr)
     expr = re.sub(r"\bAND\b", "and", expr)
     expr = re.sub(r"\bNOT\b", "not", expr)
-
     try:
         return _safe_eval_bool(expr)
     except Exception:
@@ -118,7 +96,6 @@ def _eval_condition(cond: str, sanitizer: Optional[str]) -> bool:
 
 
 def _safe_eval_bool(expr: str) -> bool:
-    """Safely evaluate a boolean expression (True/False, and/or/not). No eval()."""
     tree = ast.parse(expr, mode="eval")
     return _eval_ast_bool(tree.body)
 
@@ -199,9 +176,22 @@ def _parse_active_attrs(text: str, sanitizer: Optional[str]) -> dict[str, Any]:
         m_if = RE_IF.match(line)
         if m_if:
             parent_active = current_active
-            if_res = _eval_condition(m_if.group(1), sanitizer)
+            if_res = eval_ya_make_condition(m_if.group(1), sanitizer)
             current_active = parent_active and if_res
             stack.append((parent_active, if_res, current_active, False))
+            i += 1
+            continue
+
+        m_elseif = RE_ELSEIF.match(line)
+        if m_elseif:
+            if stack:
+                parent_active, if_res, _cur, seen_else = stack.pop()
+                if seen_else:
+                    stack.append((parent_active, if_res, _cur, seen_else))
+                else:
+                    elseif_res = eval_ya_make_condition(m_elseif.group(1), sanitizer)
+                    current_active = parent_active and (not if_res) and elseif_res
+                    stack.append((parent_active, if_res or elseif_res, current_active, False))
             i += 1
             continue
 
@@ -271,14 +261,7 @@ def _parse_active_attrs(text: str, sanitizer: Optional[str]) -> dict[str, Any]:
 
 
 def get_requirements_for_suite(repo_root: Path, suite_path: str, sanitizer: Optional[str] = None) -> Optional[dict[str, Any]]:
-    """
-    Read active REQUIREMENTS/SIZE/SPLIT_FACTOR from repo_root/suite_path/ya.make, optionally
-    selecting SANITIZER_TYPE branch. Returns subset of:
-      {"ram_gb": int, "cpu_cores": int, "size": str, "split_factor": int,
-       "test_srcs_count": int?, "effective_split_factor": int?, "split_factor_tooltip": str?}
-    When FORK_TEST_FILES() is present, test_srcs_count is set; if SPLIT_FACTOR is also set,
-    effective_split_factor = test_srcs_count × split_factor. None if file doesn't exist or nothing relevant found.
-    """
+    """Active REQUIREMENTS/SIZE/SPLIT_FACTOR for suite_path/ya.make, or None."""
     suite_path = normalize_suite_path(suite_path)
     ya_make = repo_root / suite_path / "ya.make"
     if not ya_make.exists():
@@ -292,10 +275,7 @@ def get_requirements_for_suite(repo_root: Path, suite_path: str, sanitizer: Opti
 
 
 def build_requirements_cache(repo_root: Path, suite_paths: list[str], sanitizer: Optional[str] = None) -> dict[str, dict[str, Any]]:
-    """
-    Build a mapping suite_path (normalized) -> attrs from active ya.make branch:
-      {"ram_gb": int?, "cpu_cores": int?, "size": str?, "split_factor": int?}
-    """
+    """suite_path -> attrs from the active ya.make branch."""
     cache: dict[str, dict[str, Any]] = {}
     for suite_path in suite_paths:
         norm = normalize_suite_path(suite_path)

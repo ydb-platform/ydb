@@ -1,20 +1,5 @@
 #!/usr/bin/env python3
-"""
-Monitor system resources (CPU, RAM, disk I/O) during ya make execution.
-
-Logs metrics every N seconds to JSONL file. Data can be correlated with:
-  - report.json (suite_start_timestamp, wall_time)
-  - ya_evlog.jsonl / Chromium trace timeline
-
-Output format (JSONL, one JSON object per line):
-  - ts, ts_us: Unix timestamp
-  - cpu_total_pct, ram_used_kb: system-wide CPU/RAM usage
-  - disk_*_sectors: ABSOLUTE system-wide disk I/O counters (cumulative)
-  - disk_*_mb_delta (e.g. disk_read_mb_delta): per-sample delta in MB
-  - disk_*_mbps (e.g. disk_read_mbps): normalized MB/s by actual sample interval
-  - cpu_ya_pct, ram_ya_kb, disk_ya_*: ya make process tree only
-  - cpu_per_pid: ALL processes in ya tree (no top-N limit)
-"""
+"""Sample CPU/RAM/disk while ya make runs; write JSONL for the tests dashboard."""
 
 from __future__ import annotations
 
@@ -37,12 +22,6 @@ def read_proc_stat() -> tuple[float, float]:
     iowait = int(parts[5]) if len(parts) > 5 else 0
     idle += iowait
     return float(total), float(idle)
-
-
-def read_proc_uptime() -> float:
-    """Read system uptime in seconds."""
-    with open("/proc/uptime") as f:
-        return float(f.read().split()[0])
 
 
 def _read_cmdline(pid: int) -> str:
@@ -184,14 +163,8 @@ def get_process_io(pid: int) -> tuple[int, int]:
         return 0, 0
 
 
-def get_cpu_per_process(processes: dict[int, dict]) -> list[dict]:
-    """Return CPU/RSS process records from a pre-read /proc snapshot."""
-    return list(processes.values())
-
-
-def read_meminfo() -> int:
-    """Return used RAM in KB (MemTotal - MemAvailable)."""
-    mem = {}
+def _meminfo_kb() -> dict[str, int]:
+    mem: dict[str, int] = {}
     with open("/proc/meminfo") as f:
         for line in f:
             parts = line.split(":")
@@ -199,13 +172,16 @@ def read_meminfo() -> int:
                 key = parts[0].strip()
                 val = parts[1].strip().split()[0]
                 mem[key] = int(val)
-    total = mem.get("MemTotal", 0)
-    avail = mem.get("MemAvailable", 0)
-    return total - avail
+    return mem
+
+
+def read_meminfo() -> int:
+    """Used RAM in KB (MemTotal - MemAvailable)."""
+    mem = _meminfo_kb()
+    return mem.get("MemTotal", 0) - mem.get("MemAvailable", 0)
 
 
 def get_cpu_cores() -> int:
-    """Return number of CPU cores from /proc/cpuinfo."""
     try:
         with open("/proc/cpuinfo") as f:
             return sum(1 for line in f if line.strip().startswith("processor"))
@@ -214,16 +190,7 @@ def get_cpu_cores() -> int:
 
 
 def get_ram_total_gb() -> float:
-    """Return total RAM in GB from /proc/meminfo."""
-    mem = {}
-    with open("/proc/meminfo") as f:
-        for line in f:
-            parts = line.split(":")
-            if len(parts) == 2:
-                key = parts[0].strip()
-                val = parts[1].strip().split()[0]
-                mem[key] = int(val)
-    return mem.get("MemTotal", 0) / (1024 * 1024)
+    return _meminfo_kb().get("MemTotal", 0) / (1024 * 1024)
 
 
 def read_diskstats() -> tuple[int, int]:
@@ -292,7 +259,7 @@ def run_monitor(
             # ya make process tree
             process_snapshot = read_process_snapshot()
             ya_pids = find_ya_process_tree(process_snapshot)
-            pid_data = get_cpu_per_process(process_snapshot)
+            pid_data = list(process_snapshot.values())
 
             # CPU per process + ya aggregates (ALL ya tree, no top-N limit)
             cpu_per_pid: list[dict] = []

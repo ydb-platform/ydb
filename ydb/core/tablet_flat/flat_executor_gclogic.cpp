@@ -207,33 +207,12 @@ void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
     }
     for (auto channelId : ChannelsToCutHistory) {
         auto& channel = ChannelInfo[channelId];
-        auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
-        std::unordered_set<ui32> seenGroups;
-        auto& channelHistory = TabletStorageInfo->Channels[channelId].History;
-        auto allHistoryIt = channelHistory.begin();
-        // The same group may back several of the entries we are about to cut. One hard barrier
-        // per entry would put several barriers on that group, and a retry could deliver the
-        // lower one last, which reads as a barrier decrease. Collapse them into the highest
-        // one per group: it collects everything the lower ones would have.
-        TMap<ui32, TGCTime> hardBarriers;
-        for (const auto* historyEntry : historyToCut) {
-            while (allHistoryIt != channelHistory.end() && allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
-                seenGroups.insert(allHistoryIt->GroupID);
-                ++allHistoryIt;
-            }
-            if (!seenGroups.contains(historyEntry->GroupID)) {
-                // we can cut this entry AND entries before it do not use same group
-                // we can put a hard barrier on it
-                auto& barrier = hardBarriers[historyEntry->GroupID];
-                barrier = Max(barrier, TGCTime{(historyEntry + 1)->FromGeneration - 1, Max<ui32>()});
-            }
-            channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::SentBarrier;
-            ++allHistoryIt;
-        }
+        auto hardBarriers = HistoryCutter.GetHardBarriers(channelId);
 
-        for (const auto& [groupId, barrier] : hardBarriers) {
-            channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, groupId, Generation, true, barrier);
+        for (const auto& [groupId, generation] : hardBarriers) {
+            channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, groupId, Generation, true, TGCTime{generation, Max<ui32>()});
         }
+        channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::SentBarrier;
     }
     ChannelsToCutHistory.clear();
 }
@@ -244,11 +223,6 @@ void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
         TGCTime gcTime(blobId.Generation(), blobId.Step());
         Y_ENSURE(channel.KnownGcBarrier < gcTime);
         channel.CommittedDelta[gcTime].Created.push_back(blobId);
-        // A pending Keep mark pins its entry just like a DoNotKeep one does. Every blob that
-        // gets here is also discovered by boot on its own (parts by ExtractState, memtable
-        // annex by NBoot::TMemTable, everything else by LoadEntry), so this is redundant
-        // today -- but it keeps the rule local instead of spread over those enumerations:
-        // whatever the GC logic still owes a mark for, the cutter knows about.
         HistoryCutter.SeenBlob(blobId);
     }
 

@@ -339,6 +339,33 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         UNIT_ASSERT_C(toCut.empty(),
             "history entry [10, 100) must not be cuttable while gen-50 blob has a pending DoNotKeep mark");
     }
+    Y_UNIT_TEST(CreatedBlobInApplyDeltaPinsHistoryEntry) {
+        const ui64 tabletId = 30;
+
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(tabletId, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        // Two history entries: [10, 100) -> group 1, [100, inf) -> group 2.
+        info->Channels[0].History.emplace_back(10u, 1u);
+        info->Channels[0].History.emplace_back(100u, 2u);
+
+        TFeatureFlags flags;
+        flags.SetEnableCutHistory(true);
+
+        TExecutorGCLogic gcLogic(info, MakeGCCookies(*info), flags);
+
+        // Put a DoNotKeep blob at generation 50 (inside [10, 100)) into Created.
+        TGCBlobDelta delta;
+        delta.Created.push_back(HistoryCutterUtBlob(tabletId, 50, 0));
+
+        // ApplyLogEntry is the public entry point; it calls ApplyDelta internally.
+        TGCLogEntry entry(TGCTime(1, 1), delta);
+        gcLogic.ApplyLogEntry(entry);
+
+        // The history entry covering [10, 100) must be blocked: generation 50
+        // was seen there, so the entry must not appear in the cut list.
+        auto toCut = gcLogic.HistoryCutter.GetHistoryToCut(0);
+        UNIT_ASSERT(toCut.empty());
+    }
 
     // The precondition the sentinel guard relies on: generations below the first
     // surviving history entry resolve to Max<ui32>().

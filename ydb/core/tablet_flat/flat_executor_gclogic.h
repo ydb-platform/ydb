@@ -4,7 +4,6 @@
 #include "flat_exec_commit.h"
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_history_cutter.h>
@@ -41,7 +40,7 @@ struct TGCLogEntry {
 
 class TExecutorGCLogic {
 public:
-    TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>, const TFeatureFlags& flags = AppData()->FeatureFlags);
+    TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>, const TFeatureFlags& flags);
     void WriteToLog(TLogCommit &logEntry);
     TGCLogEntry SnapshotLog(ui32 step);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step);
@@ -61,13 +60,8 @@ public:
     void Confirm(const TActorContext &ctx);
 
     THistoryCutter HistoryCutter;
-
-    // Cutting history is only safe when HistoryCutter knows about every blob that is still
-    // referenced, and boot only feeds it with the blobs of already existing parts when the
-    // feature flag is set (see TExecutorBootLogic::ExtractState). So the flag is latched
-    // once, before boot discovers anything, and the same value gates both discovery and
-    // cutting: switching EnableCutHistory on under a running tablet takes effect on its
-    // next boot, never in the middle of the current one.
+    // Needed so we do not cut history if the feature flag was
+    // enabled halfway through the booting process
     bool IsCutHistoryEnabled() const { return CutHistoryEnabled; }
 
     // Marks dropped by the sentinel guard since the last drain; the executor moves

@@ -161,7 +161,7 @@ void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches cac
         auto &steppedCookieAllocatorFactory = *(State().SteppedCookieAllocatorFactory = new NBoot::TSteppedCookieAllocatorFactory(*Info, gen));
 
         State().Waste = new NSnap::TWaste(gen);
-        Result().GcLogic = new TExecutorGCLogic(Info, steppedCookieAllocatorFactory.Sys(TCookie::EIdx::GCExt));
+        Result().GcLogic = new TExecutorGCLogic(Info, steppedCookieAllocatorFactory.Sys(TCookie::EIdx::GCExt), AppData()->FeatureFlags);
         Result().Alter = new TLogicAlter(steppedCookieAllocatorFactory.Sys(TCookie::EIdx::Alter));
         Result().Loans = new TExecutorBorrowLogic(steppedCookieAllocatorFactory.Sys(TCookie::EIdx::Loan));
         Result().Comp = new TCompactionLogicState();

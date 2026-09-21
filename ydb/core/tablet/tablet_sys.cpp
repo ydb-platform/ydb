@@ -1568,35 +1568,10 @@ void TTablet::SendBarriersForCutHistory() {
     }
 
     constexpr ui32 channelId = 0;
-    const auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
-    if (historyToCut.empty()) {
-        return;
-    }
-
     const ui64 tabletId = TabletID();
     const ui32 gen = StateStorageInfo.KnownGeneration;
-    const auto& channelHistory = Info->Channels[channelId].History;
 
-    std::unordered_set<ui32> seenGroups;
-    auto allHistoryIt = channelHistory.begin();
-    // The same group may back several of the entries we are about to cut. One hard barrier per
-    // entry would put several barriers on that group, and a retry could deliver the lower one
-    // last, which reads as a barrier decrease. Collapse them into the highest one per group: it
-    // collects everything the lower ones would have.
-    TMap<ui32, ui32> hardBarriers; // group -> collect generation
-    for (const auto* historyEntry : historyToCut) {
-        while (allHistoryIt != channelHistory.end() && allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
-            seenGroups.insert(allHistoryIt->GroupID);
-            ++allHistoryIt;
-        }
-        if (!seenGroups.contains(historyEntry->GroupID)) {
-            const auto nextFromGeneration = std::next(historyEntry)->FromGeneration;
-            auto& collectGeneration = hardBarriers[historyEntry->GroupID];
-            collectGeneration = Max(collectGeneration, nextFromGeneration - 1);
-        }
-        CutHistoryStatus = ECutHistoryStatus::SentBarrier;
-        ++allHistoryIt;
-    }
+    auto hardBarriers = HistoryCutter.GetHardBarriers(channelId);
 
     for (const auto& [groupId, collectGeneration] : hardBarriers) {
         ++GcInFly;
@@ -1611,7 +1586,9 @@ void TTablet::SendBarriersForCutHistory() {
         );
     }
 
-    if (CutHistoryStatus == ECutHistoryStatus::SentBarrier && hardBarriers.empty()) {
+    if (!hardBarriers.empty()) {
+        CutHistoryStatus = ECutHistoryStatus::SentBarrier;
+    } else {
         SendCutTabletHistory();
     }
 }

@@ -460,6 +460,14 @@ void TKeyValueState::CountTrashDeleted(const TLogoBlobID& id) {
         TabletCounters->Simple()[COUNTER_VIRTUAL_TRASH_BYTES].Get() == TotalTrashSize);
 }
 
+void TKeyValueState::PublishStateBytesCounters() {
+    TabletCounters->Simple()[COUNTER_MEMORY_STATE_BYTES].Set(StateBytes.Total());
+    TabletCounters->Simple()[COUNTER_MEMORY_INDEX_BYTES].Set(StateBytes.IndexBytes);
+    TabletCounters->Simple()[COUNTER_MEMORY_INLINE_DATA_BYTES].Set(StateBytes.InlineDataBytes);
+    TabletCounters->Simple()[COUNTER_MEMORY_REF_COUNTS_BYTES].Set(StateBytes.RefCountsBytes);
+    TabletCounters->Simple()[COUNTER_MEMORY_TRASH_BYTES].Set(StateBytes.TrashBytes);
+}
+
 void TKeyValueState::CountOverrun() {
     TabletCounters->Cumulative()[COUNTER_REQ_OVERRUN].Increment(1);
 }
@@ -1011,6 +1019,7 @@ void TKeyValueState::DropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool
     };
 
     refCountsIncr.erase(std::remove_if(refCountsIncr.begin(), refCountsIncr.end(), pred), refCountsIncr.end());
+    PublishStateBytesCounters();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1889,6 +1898,9 @@ TKeyValueState::TStateBytes TKeyValueState::GetIndexRecordBytes(const TString& k
 
 void TKeyValueState::SubtractStateBytes(ui64& total, ui64 bytes) {
     Y_DEBUG_ABORT_UNLESS(total >= bytes);
+    if (total < bytes) {
+        TabletCounters->Cumulative()[COUNTER_MEMORY_STATE_BYTES_UNDERFLOWS].Increment(1);
+    }
     total -= Min(total, bytes);
 }
 
@@ -1985,6 +1997,8 @@ void TKeyValueState::PushTrashBeingCommitted(TVector<TLogoBlobID>& trashBeingCom
         InsertTrash(trashBin, id);
         CountTrashCommitted(id);
     }
+    // every state-changing transaction completes here, so the state size is published once per transaction
+    PublishStateBytesCounters();
     PrepareCollectIfNeeded(ctx);
 }
 
@@ -3589,6 +3603,8 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
             fixPatch(*patch);
         }
     }
+    // the new entries live until the storage request completes, publish them before the wait
+    PublishStateBytesCounters();
 
     ctx.RegisterWithSameMailbox(CreateKeyValueStorageRequest(std::move(intermediate), info, tabletGeneration, this, GetLifetimeToken()));
 }

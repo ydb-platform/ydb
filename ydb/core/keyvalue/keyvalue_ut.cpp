@@ -3845,5 +3845,93 @@ Y_UNIT_TEST(TestStateBytesMatchRecountOnEdgePaths) {
     ExpectContents(tc, {{"k3", k3}});
 }
 
+Y_UNIT_TEST(TestStateBytesCounters) {
+    std::optional<TActorId> tabletActor;
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, TrackTabletActor(tabletActor), activeZone);
+
+    auto checkCounters = [&](const TString& stage) {
+        NKeyValue::TKeyValueState& state = GetTabletState(tc, tabletActor);
+        const NKeyValue::TKeyValueState::TStateBytes bytes = state.GetStateBytes();
+        const auto& simple = state.GetTabletCounters().Simple();
+        UNIT_ASSERT_VALUES_EQUAL_C(simple[NKeyValue::COUNTER_MEMORY_STATE_BYTES].Get(), bytes.Total(), stage);
+        UNIT_ASSERT_VALUES_EQUAL_C(simple[NKeyValue::COUNTER_MEMORY_INDEX_BYTES].Get(), bytes.IndexBytes, stage);
+        UNIT_ASSERT_VALUES_EQUAL_C(simple[NKeyValue::COUNTER_MEMORY_INLINE_DATA_BYTES].Get(), bytes.InlineDataBytes, stage);
+        UNIT_ASSERT_VALUES_EQUAL_C(simple[NKeyValue::COUNTER_MEMORY_REF_COUNTS_BYTES].Get(), bytes.RefCountsBytes, stage);
+        UNIT_ASSERT_VALUES_EQUAL_C(simple[NKeyValue::COUNTER_MEMORY_TRASH_BYTES].Get(), bytes.TrashBytes, stage);
+        return bytes;
+    };
+
+    const auto priority = NKikimrKeyValue::Priorities::PRIORITY_REALTIME;
+    UNIT_ASSERT_VALUES_EQUAL(checkCounters("empty").Total(), 0);
+
+    ExecuteWrite(tc, {{"i1", "abc"}, {"i2", "hello"}}, 0, NKeyValue::InlineStorageChannelInPublicApi, priority);
+    ExecuteWrite(tc, {{"m1", TString(100, 'a')}}, 0, NKeyValue::MainStorageChannelInPublicApi, priority);
+    const auto beforeRestart = checkCounters("writes");
+    UNIT_ASSERT_VALUES_EQUAL(beforeRestart.InlineDataBytes, 8);
+    UNIT_ASSERT(beforeRestart.IndexBytes > 0);
+    UNIT_ASSERT(beforeRestart.RefCountsBytes > 0);
+
+    RestartTablet(tc, tabletActor);
+    const auto afterRestart = checkCounters("restart");
+    UNIT_ASSERT_VALUES_EQUAL(afterRestart.IndexBytes, beforeRestart.IndexBytes);
+    UNIT_ASSERT_VALUES_EQUAL(afterRestart.InlineDataBytes, beforeRestart.InlineDataBytes);
+    UNIT_ASSERT_VALUES_EQUAL(afterRestart.RefCountsBytes, beforeRestart.RefCountsBytes);
+
+    ExecuteDeleteRange(tc, "", EBorderKind::Without, "", EBorderKind::Without, 0);
+    const auto afterDelete = checkCounters("delete everything");
+    UNIT_ASSERT_VALUES_EQUAL(afterDelete.IndexBytes, 0);
+    UNIT_ASSERT_VALUES_EQUAL(afterDelete.InlineDataBytes, 0);
+    UNIT_ASSERT_VALUES_EQUAL(afterDelete.RefCountsBytes, 0);
+}
+
+Y_UNIT_TEST(TestStateBytesCountersDuringStalledWrite) {
+    std::optional<TActorId> tabletActor;
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, TrackTabletActor(tabletActor), activeZone);
+    tc.Runtime->SetScheduledLimit(10000);
+
+    auto refCountsGauge = [&]() {
+        return GetTabletState(tc, tabletActor).GetTabletCounters().Simple()[NKeyValue::COUNTER_MEMORY_REF_COUNTS_BYTES].Get();
+    };
+    const auto priority = NKikimrKeyValue::Priorities::PRIORITY_REALTIME;
+    ExecuteWrite(tc, {{"m0", TString(30, 'z')}}, 0, NKeyValue::MainStorageChannelInPublicApi, priority);
+    const ui64 gaugeBefore = refCountsGauge();
+    UNIT_ASSERT(gaugeBefore > 0);
+
+    // hold the data puts, so the write allocates its blob ids and then waits for storage
+    TDeque<TEvBlobStorage::TEvPut::TPtr> heldPuts;
+    THashSet<IEventHandle*> releasedPuts;
+    auto putObserver = tc.Runtime->AddObserver<TEvBlobStorage::TEvPut>([&](TEvBlobStorage::TEvPut::TPtr& ev) {
+        if (ev->Get()->Id.Channel() >= NKeyValue::BLOB_CHANNEL && !releasedPuts.erase(ev.Get())) {
+            heldPuts.emplace_back(std::move(ev));
+        }
+    });
+    tc.Runtime->ResetScheduledCount();
+    SendWrite(tc, {{"m1", TString(100, 'a')}, {"m2", TString(200, 'b')}}, 0,
+        NKeyValue::MainStorageChannelInPublicApi, priority);
+    tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+    UNIT_ASSERT(!heldPuts.empty());
+
+    const NKeyValue::TKeyValueState::TStateBytes stalled = GetTabletState(tc, tabletActor).GetStateBytes();
+    UNIT_ASSERT(stalled.RefCountsBytes > gaugeBefore);
+    UNIT_ASSERT_VALUES_EQUAL(refCountsGauge(), stalled.RefCountsBytes);
+
+    while (!heldPuts.empty()) {
+        auto ev = std::move(heldPuts.front());
+        heldPuts.pop_front();
+        releasedPuts.insert(ev.Get());
+        tc.Runtime->Send(ev.Release(), 0, true);
+    }
+    UNIT_ASSERT_EQUAL(ReceiveResponse<TEvKeyValue::TEvExecuteTransactionResponse>(tc).status(),
+        NKikimrKeyValue::Statuses::RSTATUS_OK);
+    UNIT_ASSERT_VALUES_EQUAL(refCountsGauge(), GetTabletState(tc, tabletActor).GetStateBytes().RefCountsBytes);
+    ExpectContents(tc, {{"m0", TString(30, 'z')}, {"m1", TString(100, 'a')}, {"m2", TString(200, 'b')}});
+}
+
 } // TKeyValueTest
 } // NKikimr

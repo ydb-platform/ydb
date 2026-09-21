@@ -205,6 +205,7 @@ void TKeyValueState::ResetVacuumGeneration(const TActorContext &ctx, ui64 genera
     VacuumGenerationToSender.clear();
     CompletedVacuumGeneration = generation;
     CompletedVacuumTrashGeneration = generation;
+    PublishStateBytesCounters();
 
     VacuumResetGeneration += 1;
 }

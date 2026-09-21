@@ -402,6 +402,7 @@ public:
     void CountTrashCollected(const TLogoBlobID& id);
     void CountTrashCommitted(const TLogoBlobID& id);
     void CountTrashDeleted(const TLogoBlobID& id);
+    void PublishStateBytesCounters();
     void CountOverrun();
     void CountLatencyBsOps(const TRequestStat &stat);
     void CountLatencyBsCollect();

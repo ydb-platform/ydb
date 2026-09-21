@@ -556,9 +556,9 @@
     ],
     "test.test[expr-decimal_common_type_conversions_with_fix-default.txt-Debug]": [
         {
-            "checksum": "8bab68761984ab80e269b3d705daf582",
-            "size": 1115,
-            "uri": "https://{canondata_backend}/1942100/728bccc20a9bd07cadc3e00d0a0dc17203fcdc53/resource.tar.gz#test.test_expr-decimal_common_type_conversions_with_fix-default.txt-Debug_/opt.yql"
+            "checksum": "cc31d135129429341a5dbfa5e5bed1c8",
+            "size": 1004,
+            "uri": "https://{canondata_backend}/1937027/0bf2cf77f2b68b86866e73b0cbf60662e3c1a251/resource.tar.gz#test.test_expr-decimal_common_type_conversions_with_fix-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[expr-decimal_common_type_conversions_with_fix-default.txt-Results]": [

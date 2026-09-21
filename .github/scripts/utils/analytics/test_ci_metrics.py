@@ -37,6 +37,7 @@ from ci_metrics import (
     normalize_metric,
     rows_from_jsonl,
     start,
+    end,
     timed,
     track,
 )
@@ -1034,6 +1035,31 @@ class RunnerFlagsTest(unittest.TestCase):
             self.assertEqual(sends, [self.metrics])
         finally:
             client.flush_file = original
+
+    def test_enrich_cli_adds_url_keeps_duration(self):
+        start("dashboard", file=self.metrics, source="ya_phase", started_epoch="1000")
+        end("dashboard", file=self.metrics, conclusion="success", finished_epoch="1004")
+        self.assertEqual(
+            main(
+                [
+                    "enrich",
+                    "dashboard",
+                    "--file",
+                    self.metrics,
+                    "--label",
+                    "report_url=https://s3.example/dashboard.html",
+                    "--error",
+                    "should-not-change-conclusion",
+                ]
+            ),
+            0,
+        )
+        with open(self.metrics, encoding="utf-8") as handle:
+            row = json.loads(handle.readline())
+        self.assertEqual(row["value"], 4000.0)
+        self.assertEqual(row["conclusion"], "success")
+        self.assertEqual(row["labels"]["report_url"], "https://s3.example/dashboard.html")
+        self.assertEqual(row["labels"]["error"], "should-not-change-conclusion")
 
 
 if __name__ == "__main__":

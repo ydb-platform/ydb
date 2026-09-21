@@ -12,9 +12,12 @@ from core import (
     INFO_SNAPSHOT_NAME,
     Analytics,
     attach_context,
+    end,
+    enrich,
     main,
     normalize_metric,
     read_pending_spans,
+    start,
     track,
 )
 
@@ -153,6 +156,41 @@ class CoreLifecycleTest(unittest.TestCase):
         os.environ["GITHUB_RUN_ID"] = "123"
         record = attach_context({"name": "llm_call"})
         self.assertNotIn("run_id", record)
+
+    def test_enrich_adds_url_without_changing_duration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "analytics.jsonl")
+            start("dashboard", file=path, source="ya_phase", started_epoch="1000")
+            self.assertEqual(end("dashboard", file=path, conclusion="success", finished_epoch="1002"), 1)
+            self.assertEqual(
+                enrich(
+                    "dashboard",
+                    {"report_url": "https://s3.example/dashboard.html", "error": "late"},
+                    file=path,
+                ),
+                1,
+            )
+            with open(path, encoding="utf-8") as handle:
+                row = json.loads(handle.readline())
+            self.assertEqual(row["value"], 2000.0)
+            self.assertEqual(row["conclusion"], "success")
+            self.assertEqual(row["event_ts"], "1970-01-01T00:16:40.000000Z")
+            self.assertEqual(row["labels"]["report_url"], "https://s3.example/dashboard.html")
+            self.assertEqual(row["labels"]["error"], "late")
+
+    def test_enrich_matches_ya_attempt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "analytics.jsonl")
+            start("ya_make_try_1", {"ya_attempt": "1"}, file=path, source="ya_phase")
+            end("ya_make_try_1", file=path, conclusion="success")
+            start("ya_make_try_2", {"ya_attempt": "2"}, file=path, source="ya_phase")
+            end("ya_make_try_2", file=path, conclusion="failure")
+            enrich("ya_make_try_1", {"ya_attempt": "1", "report_url": "try1"}, file=path)
+            with open(path, encoding="utf-8") as handle:
+                rows = [json.loads(line) for line in handle if line.strip()]
+            by_name = {row["name"]: row for row in rows}
+            self.assertEqual(by_name["ya_make_try_1"]["labels"]["report_url"], "try1")
+            self.assertNotIn("report_url", by_name["ya_make_try_2"]["labels"])
 
 
 if __name__ == "__main__":

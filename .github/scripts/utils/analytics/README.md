@@ -42,7 +42,9 @@ analytics.send(conclusion="success", properties={"tokens": 12})
 python3 .github/scripts/utils/analytics/ci_metrics.py start my_step \
   --source my_wf --attr cache_mode=dist_cache --runner
 # ... work ...
-python3 .github/scripts/utils/analytics/ci_metrics.py end my_step --conclusion success --usage
+python3 .github/scripts/utils/analytics/ci_metrics.py end my_step --conclusion success --error "rc=1" --usage
+# later, after S3 upload — duration stays, labels gain the URL
+python3 .github/scripts/utils/analytics/ci_metrics.py enrich my_step --label report_url="$S3_URL"
 python3 .github/scripts/utils/analytics/ci_metrics.py send
 ```
 

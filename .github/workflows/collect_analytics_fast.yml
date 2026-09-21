@@ -53,6 +53,11 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       continue-on-error: true
       run: python3 .github/scripts/analytics/export_pull_requests_to_ydb.py
+    - name: Export PR-check stage timings
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/export_pr_check_stages_to_ydb.py
     - name: Upload GitHub issue mapping table
       continue-on-error: true
       run: python3 .github/scripts/analytics/github_issue_mapping.py

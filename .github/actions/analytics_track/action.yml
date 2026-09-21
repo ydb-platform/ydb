@@ -46,6 +46,14 @@ inputs:
     required: false
     default: ""
     description: Path to a large JSON snapshot (e.g. all-component build_info)
+  runner:
+    required: false
+    default: "false"
+    description: Collect static runner inventory (boot/cpu/ram/disks) once and reuse
+  usage:
+    required: false
+    default: "false"
+    description: Attach a fresh CPU/RAM/disk usage snapshot to this event only
   labels:
     required: false
     default: ""
@@ -72,6 +80,8 @@ runs:
         if [ -n "${{ inputs.conclusion }}" ]; then args+=(--conclusion "${{ inputs.conclusion }}"); fi
         if [ -n "${{ inputs.json }}" ]; then args+=(--json "${{ inputs.json }}"); fi
         if [ -n "${{ inputs.json-file }}" ]; then args+=(--json-file "${{ inputs.json-file }}"); fi
+        case "${{ inputs.runner }}" in true|TRUE|yes|YES|1) args+=(--runner);; esac
+        case "${{ inputs.usage }}" in true|TRUE|yes|YES|1) args+=(--usage);; esac
         if [ -n "${{ inputs.labels }}" ]; then
           IFS=',' read -ra pairs <<< "${{ inputs.labels }}"
           for pair in "${pairs[@]}"; do

@@ -172,6 +172,10 @@ public:
         return TBaseAsyncContext<TService>::GetPeer();
     }
 
+    TString GetAuthority() const override {
+        return TBaseAsyncContext<TService>::GetAuthority();
+    }
+
     TInstant Deadline() const override {
         return TBaseAsyncContext<TService>::Deadline();
     }

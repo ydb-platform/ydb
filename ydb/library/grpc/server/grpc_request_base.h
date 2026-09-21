@@ -120,6 +120,11 @@ public:
     //! Returns peer address
     virtual TString GetPeer() const = 0;
 
+    //! Returns HTTP/2 :authority (or gRPC equivalent). Empty when unavailable.
+    virtual TString GetAuthority() const {
+        return {};
+    }
+
     //! Returns true if server is using ssl
     virtual bool SslServer() const = 0;
 

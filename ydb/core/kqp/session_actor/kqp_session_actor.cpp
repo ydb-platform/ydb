@@ -2550,11 +2550,9 @@ public:
     }
 
     void UpdateCurrentQueryStats(const TCurrentExecStatsReport& report) {
-        if (report.SequenceNo <= QueryState->CurrentExecutionStatsSequenceNo) {
+        if (!QueryState->CurrentQueryStats.Update(QueryState->CurrentExecutionStats, report)) {
             return;
         }
-        QueryState->CurrentExecutionStatsSequenceNo = report.SequenceNo;
-        QueryState->CurrentQueryStats.Update(report.Stats, QueryState->PreviousExecutionStats);
         if (!QueryState->CurrentQueryStatsPublishScheduled) {
             QueryState->CurrentQueryStatsPublishScheduled = true;
             Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup(QueryState->QueryId));
@@ -2573,21 +2571,11 @@ public:
         }
     }
 
-    void ResetCurrentExecutionStats() {
-        if (QueryState->PreviousExecutionStats.ComputeMemoryBytes) {
-            auto current = QueryState->PreviousExecutionStats;
-            current.ComputeMemoryBytes = 0;
-            UpdateCurrentQueryStats({current, QueryState->CurrentExecutionStatsSequenceNo + 1});
-        }
-        QueryState->PreviousExecutionStats = {};
-        QueryState->CurrentExecutionStatsSequenceNo = 0;
-    }
-
     void FinishCurrentExecutionStats(const TEvKqpExecuter::TEvTxResponse& response) {
         if (response.CurrentExecutionStats) {
             UpdateCurrentQueryStats(*response.CurrentExecutionStats);
         }
-        ResetCurrentExecutionStats();
+        QueryState->CurrentQueryStats.Finish(QueryState->CurrentExecutionStats);
     }
 
     void HandleExecute(TEvKqpExecuter::TEvCurrentExecutionStats::TPtr& ev) {
@@ -4028,7 +4016,7 @@ public:
         FillTxInfo(response);
         FillPoolId(response);
 
-        ResetCurrentExecutionStats();
+        QueryState->CurrentQueryStats.Finish(QueryState->CurrentExecutionStats);
         ExecuterId = TActorId{};
         Cleanup(IsFatalError(ydbStatus));
     }

@@ -234,17 +234,15 @@ public:
 
     void PublishCurrentStats() {
         if (const auto current = CurrentQueryStats.Get()) {
-            Send(SessionActorId, new TEvKqpExecuter::TEvCurrentExecutionStats({*current, ++CurrentStatsSequenceNo}));
+            Send(SessionActorId, new TEvKqpExecuter::TEvCurrentExecutionStats({TCurrentQueryStats::ToExecutionStats(*current), ++CurrentStatsSequenceNo}));
         }
     }
 
     void UpdateCurrentStats(TActorId executer, const TCurrentExecStatsReport& report) {
-        auto& previous = ChildCurrentStats[executer];
-        if (report.SequenceNo <= previous.SequenceNo) {
+        auto& source = ChildCurrentStats[executer];
+        if (!CurrentQueryStats.Update(source, report)) {
             return;
         }
-        CurrentQueryStats.Update(report.Stats, previous.Stats);
-        previous.SequenceNo = report.SequenceNo;
         PublishCurrentStats();
     }
 
@@ -257,7 +255,7 @@ public:
     void FillCurrentStats() {
         if (auto current = CurrentQueryStats.Get()) {
             current->ComputeMemoryBytes = 0;
-            ResponseEv->CurrentExecutionStats = TCurrentExecStatsReport{*current, ++CurrentStatsSequenceNo};
+            ResponseEv->CurrentExecutionStats = TCurrentExecStatsReport{TCurrentQueryStats::ToExecutionStats(*current), ++CurrentStatsSequenceNo};
         }
     }
 
@@ -769,9 +767,7 @@ private:
 
     void ForgetExecuterAndBuffer(const TBatchPartitionInfo::TPtr& partInfo) {
         if (auto it = ChildCurrentStats.find(partInfo->ExecuterId); it != ChildCurrentStats.end()) {
-            auto final = it->second.Stats;
-            final.ComputeMemoryBytes = 0;
-            CurrentQueryStats.Update(final, it->second.Stats);
+            CurrentQueryStats.Finish(it->second);
             ChildCurrentStats.erase(it);
             PublishCurrentStats();
         }
@@ -1049,7 +1045,7 @@ private:
     TBatchOperationExecutionStats Stats;
     std::optional<TBatchExecutionTrace> TraceStats;
     TCurrentQueryStats CurrentQueryStats;
-    THashMap<TActorId, TCurrentExecStatsReport> ChildCurrentStats;
+    THashMap<TActorId, TCurrentQueryStats::TSourceState> ChildCurrentStats;
     ui64 CurrentStatsSequenceNo = 0;
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     NYql::TIssues ReturnIssues;

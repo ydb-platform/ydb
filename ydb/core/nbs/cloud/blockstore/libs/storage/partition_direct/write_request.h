@@ -43,7 +43,7 @@ private:
     void SendIndirectWriteRequest(THostMask hosts);
     void OnIndirectWriteResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
-    void SendAdditionalDirectWrites();
+    void MaybeSendAdditionalDirectWrites();
     void SendDirectWriteRequestsToDesired(size_t count);
     void SendDirectWriteRequestsToHandoffs(size_t count);
     void SendDirectWriteRequest(THostIndex host);
@@ -52,7 +52,7 @@ private:
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
-    void ReplyOrNotifyBelated(THostMask completedOnCurrentResponse);
+    void MaybeReplyOrNotifyBelated(THostMask completedOnCurrentResponse);
     void Reply(NProto::TError error);
     void NotifyBelated(THostMask completedOnCurrentResponse);
 

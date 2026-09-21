@@ -166,22 +166,20 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
 
     CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
 
-    ReplyOrNotifyBelated(completedWritesOfCurrentResponse);
+    MaybeReplyOrNotifyBelated(completedWritesOfCurrentResponse);
+    MaybeSendAdditionalDirectWrites();
+}
+
+void TWriteRequestExecutor::MaybeSendAdditionalDirectWrites()
+{
     if (IsReplied) {
         return;
     }
 
-    SendAdditionalDirectWrites();
-}
-
-void TWriteRequestExecutor::SendAdditionalDirectWrites()
-{
-    Y_DEBUG_ABORT_UNLESS(!IsReplied);
-
     LOG_TRACE(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s SendAdditionalDirectWrites %s",
+        "%s MaybeSendAdditionalDirectWrites %s",
         LogTitle.GetWithTime().c_str(),
         ExtendedDebugState().c_str());
 
@@ -253,7 +251,7 @@ void TWriteRequestExecutor::SendDirectWriteRequestsToHandoffs(size_t count)
         LOG_TRACE(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s SendAdditionalDirectWrites %s",
+            "%s SendDirectWriteRequestsToHandoffs %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str());
 
@@ -315,7 +313,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
 
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
-        ReplyOrNotifyBelated(THostMask::MakeOne(host));
+        MaybeReplyOrNotifyBelated(THostMask::MakeOne(host));
         return;
     }
 
@@ -359,7 +357,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
     SendDirectWriteRequest(*candidates.First());
 }
 
-void TWriteRequestExecutor::ReplyOrNotifyBelated(
+void TWriteRequestExecutor::MaybeReplyOrNotifyBelated(
     THostMask completedOnCurrentResponse)
 {
     if (IsReplied) {
@@ -496,7 +494,7 @@ void TWriteRequestExecutor::OnHedgingTimeout()
 
     switch (WriteMode) {
         case EWriteMode::IndirectWrite: {
-            SendAdditionalDirectWrites();
+            MaybeSendAdditionalDirectWrites();
             break;
         }
         case EWriteMode::DirectWrite: {

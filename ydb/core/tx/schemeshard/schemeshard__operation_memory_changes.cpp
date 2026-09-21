@@ -43,7 +43,11 @@ void TMemoryChanges::GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId)
 
 void TMemoryChanges::GrabColumnTable(TSchemeShard* ss, const TPathId& pathId) {
     Y_ABORT_UNLESS(ss->ColumnTables.contains(pathId));
-    ColumnTables.emplace(pathId, std::make_shared<TColumnTableInfo>(*ss->ColumnTables.GetVerified(pathId)));
+    ColumnTables.emplace(pathId, ss->ColumnTables.GetVerified(pathId)->Clone());
+}
+
+void TMemoryChanges::GrabOlapStore(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TOlapStoreInfo>(pathId, ss->OlapStores, OlapStores);
 }
 
 void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) {
@@ -296,6 +300,12 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->ColumnTables.BuildNew(id, elem);
         }
         ColumnTables.pop();
+    }
+
+    while (OlapStores) {
+        const auto& [id, elem] = OlapStores.top();
+        ss->OlapStores.RestoreMembershipWithoutRefcount(id, elem);
+        OlapStores.pop();
     }
 
     while (Shards) {

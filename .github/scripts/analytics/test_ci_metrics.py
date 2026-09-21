@@ -22,6 +22,7 @@ from ci_metrics import (
     main,
     metrics_from_workflow_run,
     normalize_metric,
+    parse_datetime,
     parse_labels,
     rows_from_jsonl,
     timed,
@@ -214,6 +215,26 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                     os.environ.pop(key, None)
                 else:
                     os.environ[key] = value
+
+
+class ParseDatetimeTest(unittest.TestCase):
+    def test_epoch_strings_and_iso(self):
+        self.assertEqual(
+            parse_datetime("1000"),
+            datetime.fromtimestamp(1000, tz=timezone.utc),
+        )
+        self.assertEqual(
+            parse_datetime("1010.5"),
+            datetime.fromtimestamp(1010.5, tz=timezone.utc),
+        )
+        self.assertEqual(
+            parse_datetime("1726900000000"),
+            datetime.fromtimestamp(1726900000, tz=timezone.utc),
+        )
+        self.assertEqual(
+            parse_datetime("2026-09-21T10:00:00Z"),
+            datetime(2026, 9, 21, 10, 0, tzinfo=timezone.utc),
+        )
 
 
 class EmitApiTest(unittest.TestCase):

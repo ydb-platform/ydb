@@ -481,16 +481,16 @@ void TWriteRequestExecutor::ScheduleRequestTimeout()
 
 void TWriteRequestExecutor::OnHedgingTimeout()
 {
-    if (IsReplied) {
-        return;
-    }
-
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "%s OnHedgingTimeout %s",
         LogTitle.GetWithTime().c_str(),
         ExtendedDebugState().c_str());
+
+    if (IsReplied) {
+        return;
+    }
 
     switch (WriteMode) {
         case EWriteMode::IndirectWrite: {

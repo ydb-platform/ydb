@@ -170,8 +170,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
 
         UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
 
-        DirectWritePromises[0].SetValue(CreateOkDirectResponse());
-        DirectWritePromises[1].SetValue(CreateOkDirectResponse());
+        for (auto& promise: DirectWritePromises) {
+            promise.SetValue(CreateOkDirectResponse());
+        }
 
         UNIT_ASSERT_VALUES_EQUAL(true, WriteClient->Response.has_value());
         UNIT_ASSERT_VALUES_EQUAL(S_OK, WriteClient->Response->Error.GetCode());

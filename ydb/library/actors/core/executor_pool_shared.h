@@ -101,11 +101,14 @@ namespace NActors {
         bool HasWakerPools = false;
         // Includes workers checking queues for the last time before parking.
         alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SharedSleepingCount = 0;
-        static constexpr i16 IdleWakerWorkerId = -1;
-        static constexpr i16 RequestedWakerWorkerId = -2;
+        enum class EWakerState : ui8 {
+            Idle,
+            Requested, // No worker has claimed the request yet.
+            Running,   // The worker that won Requested -> Running owns the role.
+        };
         alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
-        // Idle, a published request, or the worker that owns its processing.
-        std::atomic<i16> WakerWorkerId = IdleWakerWorkerId;
+        // Requesting work does not assign the caller or choose a worker.
+        std::atomic<EWakerState> WakerState = EWakerState::Idle;
 
         void RequestWaker();
         void RunWaker(TWorkerId workerId);

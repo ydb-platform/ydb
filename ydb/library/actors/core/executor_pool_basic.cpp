@@ -909,11 +909,10 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::ScheduleActivationExWaker(TMailbox* mailbox, ui64 revolvingCounter) {
-        // Pair with the shared worker's sleep announcement and queue recheck.
-        ActivationCredits.fetch_add(1, std::memory_order_seq_cst);
+        ActivationCredits.fetch_add(1, std::memory_order_acq_rel);
         Activations.Push(mailbox->Hint, revolvingCounter);
         if (SleepingCount.load(std::memory_order_acquire) > 0 ||
-                (SharedPool && SharedPool->SharedSleepingCount.load(std::memory_order_seq_cst) > 0)) {
+                (SharedPool && SharedPool->SharedSleepingCount.load(std::memory_order_acquire) > 0)) {
             RequestWaker(false);
         }
     }
@@ -1231,7 +1230,7 @@ namespace NActors {
     TBasicExecutorPool::TSemaphore TBasicExecutorPool::GetSemaphore() const {
         if (EnableWaker) {
             TSemaphore semaphore;
-            semaphore.OldSemaphore = ActivationCredits.load(std::memory_order_seq_cst);
+            semaphore.OldSemaphore = ActivationCredits.load(std::memory_order_acquire);
             semaphore.CurrentSleepThreadCount = SleepingCount.load(std::memory_order_acquire);
             semaphore.CurrentThreadCount = AtomicLoad(&ThreadCount);
             return semaphore;
@@ -1256,8 +1255,8 @@ namespace NActors {
         constexpr ui32 maxAttempts = 8;
         if (EnableWaker) {
             SharedPool->RunWaker(workerId);
+            TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
             for (ui32 attempt = 0; attempt < maxAttempts && !StopFlag.load(std::memory_order_acquire); ++attempt) {
-                TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
                 if (const ui32 activation = Activations.Pop(revolvingCounter++)) {
                     const i64 credits = ActivationCredits.fetch_sub(1, std::memory_order_acq_rel);
                     Y_DEBUG_ABORT_UNLESS(credits > 0);

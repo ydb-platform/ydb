@@ -178,7 +178,13 @@ namespace NActors {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "don't have leases; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;
             }
-            ui64 semaphore = Pools[i]->GetSemaphore().OldSemaphore;
+            // The caller has announced its intent to sleep. An RMW pairs that
+            // announcement with producers' credit increments: either we see
+            // their credit, or they acquire our announcement before checking
+            // SharedSleepingCount. An acquire load alone cannot close this race.
+            ui64 semaphore = Pools[i]->EnableWaker
+                ? Pools[i]->ActivationCredits.fetch_add(0, std::memory_order_acq_rel)
+                : Pools[i]->GetSemaphore().OldSemaphore;
             if (semaphore == 0) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "pool[", i, "]::Semaphore == 0; OwnerPoolId == ", thread.OwnerPoolId);
                 continue;
@@ -270,11 +276,11 @@ namespace NActors {
             // Publish before rechecking queues: either we see a new credit or
             // its producer sees a sleeper and requests a waker.
             if (HasWakerPools) {
-                SharedSleepingCount.fetch_add(1, std::memory_order_seq_cst);
+                SharedSleepingCount.fetch_add(1, std::memory_order_acq_rel);
             }
             Y_DEFER {
                 if (HasWakerPools) {
-                    SharedSleepingCount.fetch_sub(1, std::memory_order_seq_cst);
+                    SharedSleepingCount.fetch_sub(1, std::memory_order_acq_rel);
                 }
             };
             bool goToSleep = true;
@@ -637,8 +643,8 @@ namespace NActors {
         }
         // Reserve the request before notifying. Further producers only mark
         // pending while a worker is on its way to, or already running, the waker.
-        i16 expected = IdleWakerWorkerId;
-        if (!WakerWorkerId.compare_exchange_strong(expected, RequestedWakerWorkerId)) {
+        EWakerState expected = EWakerState::Idle;
+        if (!WakerState.compare_exchange_strong(expected, EWakerState::Requested)) {
             return;
         }
         // Use the existing pre-park notification handshake, even when there
@@ -663,14 +669,14 @@ namespace NActors {
     }
 
     void TSharedExecutorPool::RunWaker(TWorkerId workerId) {
-        if (!HasWakerPools || WakerWorkerId.load() != RequestedWakerWorkerId) {
+        if (!HasWakerPools || WakerState.load() != EWakerState::Requested) {
             return;
         }
         auto& thread = Threads[workerId];
         const i16 poolId = thread.CurrentPoolId;
         do {
-            i16 expected = RequestedWakerWorkerId;
-            if (!WakerWorkerId.compare_exchange_strong(expected, workerId)) {
+            EWakerState expected = EWakerState::Requested;
+            if (!WakerState.compare_exchange_strong(expected, EWakerState::Running)) {
                 return;
             }
             EThreadState resumeState;
@@ -684,14 +690,14 @@ namespace NActors {
             Y_DEBUG_ABORT_UNLESS(thread.CurrentPoolId == poolId);
             EThreadState state = EThreadState::Waker;
             Y_ABORT_UNLESS(thread.ReplaceState(state, resumeState));
-            WakerWorkerId.store(IdleWakerWorkerId);
+            WakerState.store(EWakerState::Idle);
             // A requester may have observed us between the last pending check
             // and owner release. Do not leave its obligation behind.
             if (StopFlag.load(std::memory_order_acquire) || !WakerPending.load()) {
                 return;
             }
-            expected = IdleWakerWorkerId;
-            WakerWorkerId.compare_exchange_strong(expected, RequestedWakerWorkerId);
+            expected = EWakerState::Idle;
+            WakerState.compare_exchange_strong(expected, EWakerState::Requested);
         } while (true);
     }
 

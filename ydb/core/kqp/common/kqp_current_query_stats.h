@@ -30,6 +30,7 @@ public:
         ui64 ComputeMemoryBytes = 0;
         ui64 TableReadBytes = 0;
         ui64 ReadIngressBytes = 0;
+        ui64 ReadIngressBytesPerSec = 0;
         ui64 ObservedPeakComputeMemoryBytes = 0;
     };
 

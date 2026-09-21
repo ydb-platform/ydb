@@ -20,8 +20,43 @@ from ydb_wrapper import YDBWrapper
 
 DEFAULT_ORG = "ydb-platform"
 DEFAULT_REPO = "ydb"
-DEFAULT_WORKFLOW = "pr_check.yml"
+DEFAULT_WORKFLOWS = (
+    "pr_check.yml",
+    "nightly_build.yml",
+    "ydbd_clean_build.yml",
+    "build_analytics.yml",
+)
 RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
+
+
+def split_workflows(raw: Any) -> List[str]:
+    """Accept a string, comma-separated string, or list of workflow file names."""
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple)):
+        items = list(raw)
+    else:
+        items = [raw]
+    result: List[str] = []
+    seen = set()
+    for item in items:
+        for part in str(item).split(","):
+            name = part.strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            result.append(name)
+    return result
+
+
+def resolve_workflows(explicit: Optional[List[str]] = None) -> List[str]:
+    if explicit:
+        workflows = split_workflows(explicit)
+        if workflows:
+            return workflows
+    env_value = os.environ.get("CI_METRICS_WORKFLOW") or os.environ.get("CI_METRICS_WORKFLOWS")
+    workflows = split_workflows(env_value) if env_value else []
+    return workflows or list(DEFAULT_WORKFLOWS)
 
 
 def _github_headers() -> Dict[str, str]:
@@ -127,25 +162,37 @@ def collect_rows(org: str, repo: str, workflow: str, created_since: datetime) ->
     return rows
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Export GitHub job/step timings as CI metrics")
     parser.add_argument("--org", default=os.environ.get("CI_METRICS_ORG", DEFAULT_ORG))
     parser.add_argument("--repo", default=os.environ.get("CI_METRICS_REPO", DEFAULT_REPO))
-    parser.add_argument("--workflow", default=os.environ.get("CI_METRICS_WORKFLOW", DEFAULT_WORKFLOW))
+    parser.add_argument(
+        "--workflow",
+        action="append",
+        default=None,
+        help="Workflow file name (repeatable or comma-separated). "
+        "Default: pr_check.yml,nightly_build.yml,ydbd_clean_build.yml,build_analytics.yml",
+    )
     parser.add_argument("--hours", type=int, default=24, help="Lookback window in hours (default 24)")
     parser.add_argument("--table-path", default=None)
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
+def main(argv=None) -> int:
     try:
-        args = parse_args()
+        args = parse_args(argv)
+        workflows = resolve_workflows(args.workflow)
         created_since = datetime.now(timezone.utc) - timedelta(hours=args.hours)
         print(
-            f"Exporting {args.org}/{args.repo} workflow={args.workflow} "
+            f"Exporting {args.org}/{args.repo} workflows={workflows} "
             f"since {created_since.isoformat()}"
         )
-        rows = collect_rows(args.org, args.repo, args.workflow, created_since)
+        rows: List[Dict[str, Any]] = []
+        for workflow in workflows:
+            try:
+                rows.extend(collect_rows(args.org, args.repo, workflow, created_since))
+            except Exception as exc:  # noqa: BLE001 — keep other workflows
+                print(f"Warning: failed to export workflow {workflow}: {exc}")
         if not rows:
             print("No GitHub job metric rows to upload")
             return 0

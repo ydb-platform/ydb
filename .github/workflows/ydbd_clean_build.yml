@@ -145,6 +145,7 @@ jobs:
             --build-all
             --force-build-depends
             -DDEBUGINFO_LINES_ONLY
+            --evlog-file ya_evlog.jsonl
           )
 
           case "$BUILD_PRESET" in
@@ -228,6 +229,12 @@ jobs:
               --label cache_mode=none \
               --label "build_target=$BUILD_TARGET" || true
           fi
+          if [ -f ya_evlog.jsonl ]; then
+            python3 .github/scripts/analytics/export_ya_nodes.py \
+              --evlog ya_evlog.jsonl \
+              --source clean_build \
+              --label cache_mode=none || true
+          fi
 
           {
             echo "duration_sec=$DURATION"
@@ -304,5 +311,6 @@ jobs:
             time_result.txt
             host_info.txt
             ci_metrics.jsonl
+            ya_evlog.jsonl
           retention-days: 14
           if-no-files-found: warn

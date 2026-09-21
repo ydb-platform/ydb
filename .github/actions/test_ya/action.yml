@@ -160,8 +160,8 @@ runs:
           -H "Accept: application/vnd.github+json" \
           -H "X-GitHub-Api-Version: 2022-11-28" \
           "$jobs_url" || true)
-        job_id=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | split(" ")[-1]) == $n) | .id' | head -1 || true)
-        job_title=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | split(" ")[-1]) == $n) | .name' | head -1 || true)
+        job_id=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | contains(" " + $n + " ")) or (.name | endswith(" " + $n)) or ((.name | split(" ")[-1]) == $n)) | .id' | head -1 || true)
+        job_title=$(echo "$job_json" | jq --arg n "$BUILD_PRESET" -r '.jobs[]? | select((.name | contains(" " + $n + " ")) or (.name | endswith(" " + $n)) or ((.name | split(" ")[-1]) == $n)) | .name' | head -1 || true)
         echo "GITHUB_NUMERIC_JOB_ID=${job_id:-0}" >> "$GITHUB_ENV"
         echo "CI_JOB_TITLE=${job_title:-$ANALYTICS_JOB_NAME}" >> "$GITHUB_ENV"
 

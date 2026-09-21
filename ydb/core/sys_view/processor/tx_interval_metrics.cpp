@@ -38,6 +38,12 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
 
+        if (Record.GetIntervalEndUs() <= Self->LastMergedQueryMetricsIntervalEnd.MicroSeconds()) {
+            db.Table<Schema::NodesToRequest>().Key(node->second.NodeId).Delete();
+            Self->RequestsInFlight.erase(node);
+            return true;
+        }
+
         for (auto& queryText : *Record.MutableQueryTexts()) {
             auto queryHash = queryText.GetHash();
             auto& text = *queryText.MutableText();
@@ -192,14 +198,6 @@ void TSysViewProcessor::Handle(TEvSysView::TEvGetIntervalMetricsResponse::TPtr& 
             {"requestId", requestId},
             {"expectedIntervalEnd", IntervalEnd},
             {"responseIntervalEnd", TInstant::MicroSeconds(record.GetIntervalEndUs())});
-        return;
-    }
-
-    if (IntervalEnd <= LastMergedQueryMetricsIntervalEnd) {
-        YDB_LOG_WARN("Handle TEvSysView::TEvGetIntervalMetricsResponse: interval already merged",
-            {"tabletId", TabletID()},
-            {"requestId", requestId},
-            {"intervalEnd", IntervalEnd});
         return;
     }
 

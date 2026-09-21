@@ -493,6 +493,10 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     auto partitionNewHourEnd = EndOfHourInterval(IntervalEnd + TotalInterval);
 
     if (oldHourEnd != newHourEnd) {
+        for (const auto& [queryHash, _] : CurrentHourMetrics) {
+            db.Table<Schema::IntervalMetricsOneHour>().Key(
+                oldHourEnd.MicroSeconds(), queryHash).Delete();
+        }
         CurrentHourMetrics.clear();
         CurrentHourEnd = newHourEnd;
 

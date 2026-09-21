@@ -33,6 +33,7 @@ class BaseSystemViews(object):
             )
         )
         cls.cluster.config.yaml_config['feature_flags']['enable_column_statistics'] = False
+        cls.cluster.config.yaml_config['feature_flags']['collect_hour_metric'] = True
         cls.cluster.start()
 
     @classmethod

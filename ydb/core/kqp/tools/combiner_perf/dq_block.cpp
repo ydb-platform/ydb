@@ -579,23 +579,45 @@ EDataSlot GetBlockSumResultSlot(EDataSlot slot)
     }
 }
 
-std::vector<size_t> ResolveKeys(const TRunParams& params, const TDqBlockData& data)
+std::vector<std::string> MakeAggregationColumnNames(
+    const TDqBlockData& data,
+    size_t width,
+    bool postTransform)
+{
+    std::vector<std::string> result;
+    result.reserve(width);
+    if (postTransform) {
+        for (size_t i = 0; i < width; ++i) {
+            result.push_back(ToString(i + 1));
+        }
+    } else {
+        Y_ENSURE(width == data.Columns.size(), "Unexpected aggregation input width");
+        for (const auto& column : data.Columns) {
+            result.push_back(column.Name);
+        }
+    }
+    return result;
+}
+
+std::vector<size_t> ResolveKeys(
+    const TRunParams& params,
+    const std::vector<std::string>& columnNames)
 {
     Y_ENSURE(!params.DqBlockKeyColumns.empty(), "At least one --dq-block-keys column is required");
     std::vector<size_t> result;
     std::unordered_set<std::string> seen;
     for (const auto& name : params.DqBlockKeyColumns) {
         Y_ENSURE(seen.emplace(name).second, "Duplicate key column: " << name);
-        auto it = std::find_if(data.Columns.begin(), data.Columns.end(), [&](const auto& column) {
-            return column.Name == name;
-        });
-        Y_ENSURE(it != data.Columns.end(), "Key column was not selected by --dq-block-columns: " << name);
-        result.push_back(std::distance(data.Columns.begin(), it));
+        auto it = std::find(columnNames.begin(), columnNames.end(), name);
+        Y_ENSURE(it != columnNames.end(), "Aggregation input has no key column named " << name);
+        result.push_back(std::distance(columnNames.begin(), it));
     }
     return result;
 }
 
-std::vector<TAggregation> ResolveAggregations(const TRunParams& params, const TDqBlockData& data)
+std::vector<TAggregation> ResolveAggregations(
+    const TRunParams& params,
+    const std::vector<std::string>& columnNames)
 {
     Y_ENSURE(!params.DqBlockAggregations.empty(), "At least one aggregation is required");
     std::vector<TAggregation> result;
@@ -609,16 +631,11 @@ std::vector<TAggregation> ResolveAggregations(const TRunParams& params, const TD
         Y_ENSURE(TStringBuf(text).StartsWith(sumPrefix),
             "Unsupported aggregation '" << text << "'; expected sum:column_name or count");
         const std::string name = text.substr(sumPrefix.size());
-        auto it = std::find_if(data.Columns.begin(), data.Columns.end(), [&](const auto& column) {
-            return column.Name == name;
-        });
-        Y_ENSURE(it != data.Columns.end(),
-            "Sum column was not selected by --dq-block-columns: " << name);
-        Y_ENSURE(IsSummable(it->Slot), "Cannot sum column " << name << " of type "
-            << NUdf::GetDataTypeInfo(it->Slot).Name);
+        auto it = std::find(columnNames.begin(), columnNames.end(), name);
+        Y_ENSURE(it != columnNames.end(), "Aggregation input has no sum column named " << name);
         result.push_back({
             EAggregationKind::Sum,
-            static_cast<size_t>(std::distance(data.Columns.begin(), it)),
+            static_cast<size_t>(std::distance(columnNames.begin(), it)),
         });
     }
     return result;
@@ -923,7 +940,7 @@ THolder<IComputationGraph> BuildBlockCombineHashedGraph(
                 .ArgsColumns = {static_cast<ui32>(aggregation.Column)},
             });
             const auto inputSlot = GetBlockItemDataSlot(inputBlockTypes[aggregation.Column]);
-            Y_ENSURE(IsSummable(inputSlot), "Cannot sum transformed column "
+            Y_ENSURE(IsSummable(inputSlot), "Cannot sum aggregation input column "
                 << aggregation.Column << " of type " << NUdf::GetDataTypeInfo(inputSlot).Name);
             auto* itemType = pb.NewOptionalType(pb.NewDataType(
                 GetBlockSumResultSlot(inputSlot)));
@@ -1275,7 +1292,7 @@ std::vector<EDataSlot> MakeOutputSlots(
         Y_ENSURE(aggregation.Column < inputBlockTypes.size(),
             "Sum column index exceeds input transform output width");
         const auto inputSlot = GetBlockItemDataSlot(inputBlockTypes[aggregation.Column]);
-        Y_ENSURE(IsSummable(inputSlot), "Cannot sum transformed column "
+        Y_ENSURE(IsSummable(inputSlot), "Cannot sum aggregation input column "
             << aggregation.Column << " of type " << NUdf::GetDataTypeInfo(inputSlot).Name);
         result.push_back(promoteSums ? GetBlockSumResultSlot(inputSlot) : inputSlot);
     }
@@ -1432,8 +1449,9 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
     TInputTransformAst* inputTransformAst = aggregationAst
         ? static_cast<TInputTransformAst*>(aggregationAst.Get())
         : generatorAst.Get();
-    const auto keys = aggregationAst ? std::vector<size_t>() : ResolveKeys(params, data);
-    const auto aggregations = aggregationAst ? std::vector<TAggregation>() : ResolveAggregations(params, data);
+    std::vector<size_t> keys;
+    std::vector<TAggregation> aggregations;
+    std::vector<EDataSlot> outputSlots;
     const bool blockCombineHashed = params.DqBlockImpl == "BlockCombineHashed";
     Y_ENSURE(blockCombineHashed || params.DqBlockImpl == "DqHashAggregate",
         "Unknown DQ block implementation: " << params.DqBlockImpl);
@@ -1476,16 +1494,29 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
                     << transformType << " vs " << inputType);
         }
     }
+    if (!aggregationAst) {
+        const auto columnNames = MakeAggregationColumnNames(
+            data, inputBlockTypes.size(), static_cast<bool>(generatorAst));
+        if (generatorAst) {
+            Cerr << "Post-transform columns:" << Endl;
+            for (size_t i = 0; i < columnNames.size(); ++i) {
+                Cerr << "  " << columnNames[i] << ": "
+                    << *static_cast<TBlockType*>(inputBlockTypes[i])->GetItemType() << Endl;
+            }
+        }
+        keys = ResolveKeys(params, columnNames);
+        aggregations = ResolveAggregations(params, columnNames);
+        outputSlots = MakeOutputSlots(
+            inputBlockTypes, keys, aggregations, blockCombineHashed);
+    }
     auto graph = blockCombineHashed
         ? BuildBlockCombineHashedGraph(*setup, inputBlockTypes, keys, aggregations)
         : BuildGraph(
             *setup, inputBlockTypes, keys, aggregations, true, true, aggregationAst.Get());
-    const auto outputSlots = aggregationAst
-        ? aggregationAst->OutputSlots
-        : MakeOutputSlots(inputBlockTypes, keys, aggregations, blockCombineHashed);
-    const size_t outputWidth = aggregationAst
-        ? aggregationAst->OutputSlots.size()
-        : keys.size() + aggregations.size();
+    if (aggregationAst) {
+        outputSlots = aggregationAst->OutputSlots;
+    }
+    const size_t outputWidth = outputSlots.size();
     if constexpr (Spilling) {
         graph->GetContext().SpillerFactory = std::make_shared<TPreallocatedSpillerFactory>();
     }

@@ -504,11 +504,11 @@ int main(int argc, const char* argv[])
     options.AddLongOption("dq-block-keys")
         .RequiredArgument("NAME,...")
         .SplitHandler(&runParams.DqBlockKeyColumns, ',')
-        .Help("Key columns for the dq-block aggregation");
+        .Help("Key columns; input names normally, or 1-based output names with dq-block-generator-ast");
     options.AddLongOption("dq-block-aggregations")
         .RequiredArgument("AGG,...")
         .SplitHandler(&runParams.DqBlockAggregations, ',')
-        .Help("Aggregations: sum:column_name or count");
+        .Help("Aggregations: sum:column_name or count, using post-transform names when applicable");
     options.AddLongOption("dq-block-impl")
         .Choices({"DqHashAggregate", "BlockCombineHashed"})
         .RequiredArgument("IMPLEMENTATION")

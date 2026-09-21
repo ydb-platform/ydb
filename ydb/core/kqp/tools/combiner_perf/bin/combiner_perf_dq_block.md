@@ -40,8 +40,8 @@ Relevant CLI options:
 - `--rows-per-run ROWS` — maximum rows to preload from a file, or the generated row count. It defaults to 10 million. For a file source, `0` reads the entire dataset; a generator requires a positive value.
 - `--num-keys KEYS` — number of distinct values produced by the shuffle generator. The generator fills the input by repeating `[0, KEYS)`, then shuffles it reproducibly. It defaults to 1,000 and cannot exceed `--rows-per-run`.
 - `--dq-block-columns NAME,...` — selected file columns, preserving input order. This is required for file input and defaults to `i` for the generator.
-- `--dq-block-keys NAME,...` — key columns for synthesized aggregation; every key must be in `--dq-block-columns`.
-- `--dq-block-aggregations AGG,...` — synthesized aggregations containing `sum:column_name` and/or `count`; sum columns must be selected.
+- `--dq-block-keys NAME,...` — key columns for synthesized aggregation. Names refer to `--dq-block-columns` normally, or to one-based post-transform column names `1`, `2`, ... when `--dq-block-generator-ast` is used.
+- `--dq-block-aggregations AGG,...` — synthesized aggregations containing `sum:column_name` and/or `count`, using the same pre- or post-transform column set as `--dq-block-keys`.
 - `--dq-block-impl DqHashAggregate|BlockCombineHashed` — measured implementation; defaults to `DqHashAggregate`.
 - `--dq-block-ast PATH` — external textual AST defining the four aggregation lambdas and output key width.
 - `--dq-block-generator-ast PATH` — external textual AST whose input transform is applied before synthesized aggregation. Any aggregation lambdas and key width in the file are ignored.
@@ -92,7 +92,9 @@ The AST file has the following shape (the older `AsTuple` root is also accepted)
 
 ### Input transform AST
 
-`--dq-block-generator-ast` reuses only the input-transform element described above and is used together with `--dq-block-keys` and `--dq-block-aggregations`. It accepts the full six-element custom aggregation tuple, a shorter tuple/list whose first element is the transform, or the transform lambda itself. Elements after the transform are parsed as source text but are otherwise ignored, including invalid aggregation-lambda shapes and key-width values. Key and aggregation column names continue to identify their original input positions, while their effective types are derived after the transform. Selected keys must remain DataSlots, and transformed sum columns must remain numeric.
+`--dq-block-generator-ast` reuses only the input-transform element described above and is used together with `--dq-block-keys` and `--dq-block-aggregations`. It accepts the full six-element custom aggregation tuple, a shorter tuple/list whose first element is the transform, or the transform lambda itself. Elements after the transform are parsed as source text but are otherwise ignored, including invalid aggregation-lambda shapes and key-width values.
+
+The transform output forms a new column set independent of `--dq-block-columns`. Its data columns are named `1`, `2`, ... in output order; the trailing block-height column is not named. Synthesized keys and sums refer to these generated names, so transforms may add, remove, reorder, merge, or change the types of columns. Selected keys must be DataSlots, and sum columns must be numeric. The effective types used to construct and verify the aggregation are derived from this post-transform schema.
 
 ### Measurement isolation
 
@@ -162,7 +164,7 @@ ydb/core/kqp/tools/combiner_perf/bin/combiner_perf \
   --rows-per-run 100000 \
   --num-keys 1000 \
   --dq-block-generator-ast ydb/core/kqp/tools/combiner_perf/bin/ast_generator_example.txt \
-  --dq-block-keys i \
+  --dq-block-keys 1 \
   --dq-block-aggregations count \
   --dq-block-impl BlockCombineHashed
 ```
@@ -193,6 +195,7 @@ ydb/core/kqp/tools/combiner_perf/bin/combiner_perf \
 - Verified `BlockCombineHashed` `sum` and `count` together over generated `Uint32` input and `Int64` Parquet input.
 - Verified both implementations with `--dq-block-generator-ast`, including a shortened tuple with ignored trailing elements and a standalone transform lambda.
 - Verified synthesized key and sum output decoding after casting the generated `Uint32` column to `Int64` and `Uint64`; both implementations produced and verified 1,000 groups.
+- Verified that synthesized aggregation addresses transformed output columns by generated one-based names rather than source-column names.
 - Verified that `BlockCombineHashed` rejects custom aggregation lambdas and LLVM mode.
 - Confirmed DQ-block-specific options produce an error with another test mode.
 - After the rename, rebuilt `ydb/core/kqp/tools/combiner_perf/bin` and verified the synthesized `sum`/`count` path over 1,000 rows through the new `dq-block` CLI and JSON field names.

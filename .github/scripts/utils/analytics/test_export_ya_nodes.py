@@ -139,6 +139,20 @@ class ResolveFilesTest(unittest.TestCase):
             self.assertEqual(matches, [path1, path2])
             self.assertEqual(pick_latest_file(matches), path2)
 
+    def test_glob_picks_try_10_over_try_2(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = []
+            for n in (2, 10, 9):
+                try_dir = os.path.join(tmp, f"try_{n}")
+                os.makedirs(try_dir)
+                path = os.path.join(try_dir, "ya_evlog.jsonl")
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("{}\n")
+                paths.append(path)
+            matches = resolve_input_files(os.path.join(tmp, "try_*/ya_evlog.jsonl"))
+            self.assertEqual(pick_latest_file(matches), os.path.join(tmp, "try_10", "ya_evlog.jsonl"))
+            self.assertNotEqual(pick_latest_file(matches), os.path.join(tmp, "try_9", "ya_evlog.jsonl"))
+
     def test_missing_glob(self):
         self.assertEqual(resolve_input_files("/no/such/try_*/ya_evlog.jsonl"), [])
         self.assertIsNone(pick_latest_file([]))

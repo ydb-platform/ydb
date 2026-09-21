@@ -196,6 +196,14 @@ def nodes_from_headers_json(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     return nodes
 
 
+_TRY_DIR_RE = re.compile(r"(?:^|/)try_(\d+)(?:/|$)")
+
+
+def try_dir_index(path: str) -> int:
+    match = _TRY_DIR_RE.search(path.replace("\\", "/"))
+    return int(match.group(1)) if match else -1
+
+
 def resolve_input_files(pattern: str) -> List[str]:
     """Accept a concrete path or a glob; missing patterns yield []."""
     if not pattern:
@@ -206,10 +214,10 @@ def resolve_input_files(pattern: str) -> List[str]:
 
 
 def pick_latest_file(paths: List[str]) -> Optional[str]:
-    """Prefer the last try_N evlog when several matches exist."""
+    """Prefer the highest-numbered try_N path when several matches exist."""
     if not paths:
         return None
-    return paths[-1]
+    return max(paths, key=lambda path: (try_dir_index(path), path))
 
 
 def load_jsonl_objects(path: str) -> List[Dict[str, Any]]:

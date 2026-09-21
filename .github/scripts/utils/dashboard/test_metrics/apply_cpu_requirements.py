@@ -90,7 +90,8 @@ def _find_with_valgrind_else_span(lines: list[str]) -> Optional[tuple[int, int]]
 
 
 def _find_requirements_line(lines: list[str], sanitizer: Optional[str]) -> Optional[int]:
-    stack: list[tuple[bool, bool, bool, bool, bool]] = []
+    # parent_active, taken, current_active, seen_else, parent_scope, current_sanitizer_scope
+    stack: list[tuple[bool, bool, bool, bool, bool, bool]] = []
     current_active = True
     current_sanitizer_scope = False
     seen_sanitizer_or_valgrind_if = False
@@ -98,10 +99,8 @@ def _find_requirements_line(lines: list[str], sanitizer: Optional[str]) -> Optio
         line = raw.strip()
         m_if = RE_IF.match(line)
         m_elseif = RE_ELSEIF.match(line) if not m_if else None
-        if m_if or m_elseif:
-            cond = (m_if or m_elseif).group(1)
-            if m_elseif and stack:
-                stack.pop()
+        if m_if:
+            cond = m_if.group(1)
             parent_active = current_active
             parent_scope = current_sanitizer_scope
             if_res = eval_ya_make_condition(cond, sanitizer)
@@ -109,24 +108,39 @@ def _find_requirements_line(lines: list[str], sanitizer: Optional[str]) -> Optio
             current_sanitizer_scope = parent_scope or _cond_mentions_sanitizer(cond)
             if _cond_mentions_valgrind_or_sanitizer(cond):
                 seen_sanitizer_or_valgrind_if = True
-            stack.append((parent_active, if_res, current_active, bool(m_elseif), current_sanitizer_scope))
+            stack.append((parent_active, if_res, current_active, False, parent_scope, current_sanitizer_scope))
+            continue
+        if m_elseif:
+            cond = m_elseif.group(1)
+            if not stack:
+                continue
+            parent_active, if_res, _prev_cur, seen_else, parent_scope, _prev_scope = stack.pop()
+            if seen_else:
+                stack.append((parent_active, if_res, _prev_cur, seen_else, parent_scope, _prev_scope))
+                continue
+            elseif_res = eval_ya_make_condition(cond, sanitizer)
+            current_active = parent_active and (not if_res) and elseif_res
+            current_sanitizer_scope = parent_scope or _cond_mentions_sanitizer(cond)
+            if _cond_mentions_valgrind_or_sanitizer(cond):
+                seen_sanitizer_or_valgrind_if = True
+            stack.append((parent_active, if_res or elseif_res, current_active, False, parent_scope, current_sanitizer_scope))
             continue
         if RE_ELSE.match(line):
             if not stack:
                 continue
-            parent_active, if_res, _prev_cur, seen_else, scope = stack.pop()
+            parent_active, if_res, _prev_cur, seen_else, parent_scope, _prev_scope = stack.pop()
             if seen_else:
-                stack.append((parent_active, if_res, _prev_cur, seen_else, scope))
+                stack.append((parent_active, if_res, _prev_cur, seen_else, parent_scope, _prev_scope))
                 continue
             current_active = parent_active and (not if_res)
-            current_sanitizer_scope = scope
-            stack.append((parent_active, if_res, current_active, True, current_sanitizer_scope))
+            current_sanitizer_scope = parent_scope
+            stack.append((parent_active, if_res, current_active, True, parent_scope, current_sanitizer_scope))
             continue
         if RE_ENDIF.match(line):
             if stack:
                 stack.pop()
             current_active = stack[-1][2] if stack else True
-            current_sanitizer_scope = stack[-1][4] if stack else False
+            current_sanitizer_scope = stack[-1][5] if stack else False
             continue
         if current_active and RE_REQ_OPEN.match(raw):
             if not seen_sanitizer_or_valgrind_if or (not sanitizer or current_sanitizer_scope):
@@ -143,15 +157,28 @@ def _find_sanitizer_block_insert_index(lines: list[str], sanitizer: Optional[str
         line = raw.strip()
         m_if = RE_IF.match(line)
         m_elseif = RE_ELSEIF.match(line) if not m_if else None
-        if m_if or m_elseif:
-            cond = (m_if or m_elseif).group(1)
-            if m_elseif and stack:
-                stack.pop()
+        if m_if:
+            cond = m_if.group(1)
             parent_active = current_active
             if_res = eval_ya_make_condition(cond, sanitizer)
             current_active = parent_active and if_res
             has_sanitizer = _cond_mentions_sanitizer(cond)
-            stack.append((i, parent_active, if_res, bool(m_elseif), has_sanitizer))
+            stack.append((i, parent_active, if_res, False, has_sanitizer))
+            if has_sanitizer and current_active:
+                return i + 1
+            continue
+        if m_elseif:
+            cond = m_elseif.group(1)
+            if not stack:
+                continue
+            start, parent_active, if_res, seen_else, has_sanitizer = stack.pop()
+            if seen_else:
+                stack.append((start, parent_active, if_res, seen_else, has_sanitizer))
+                continue
+            elseif_res = eval_ya_make_condition(cond, sanitizer)
+            current_active = parent_active and (not if_res) and elseif_res
+            has_sanitizer = _cond_mentions_sanitizer(cond)
+            stack.append((i, parent_active, if_res or elseif_res, False, has_sanitizer))
             if has_sanitizer and current_active:
                 return i + 1
             continue
@@ -188,14 +215,24 @@ def _find_default_insert_index(lines: list[str]) -> int:
             end_idx = i
         m_if = RE_IF.match(line)
         m_elseif = RE_ELSEIF.match(line) if not m_if else None
-        if m_if or m_elseif:
-            cond = (m_if or m_elseif).group(1)
-            if m_elseif and stack:
-                stack.pop()
+        if m_if:
+            cond = m_if.group(1)
             parent_active = current_active
             if_res = eval_ya_make_condition(cond, None)
             current_active = parent_active and if_res
-            stack.append((parent_active, if_res, current_active, bool(m_elseif)))
+            stack.append((parent_active, if_res, current_active, False))
+            continue
+        if m_elseif:
+            cond = m_elseif.group(1)
+            if not stack:
+                continue
+            parent_active, if_res, _prev_cur, seen_else = stack.pop()
+            if seen_else:
+                stack.append((parent_active, if_res, _prev_cur, seen_else))
+                continue
+            elseif_res = eval_ya_make_condition(cond, None)
+            current_active = parent_active and (not if_res) and elseif_res
+            stack.append((parent_active, if_res or elseif_res, current_active, False))
             continue
         if RE_ELSE.match(line):
             if not stack:

@@ -157,6 +157,9 @@ jobs:
             BUILD_THREADS="$HOST_NPROC"
           fi
 
+          YA_MAKE_OUT_DIR="${RUNNER_TEMP:-$PWD}/ya_clean_out"
+          mkdir -p "$YA_MAKE_OUT_DIR"
+
           params=(
             --stat
             --threads "$BUILD_THREADS"
@@ -164,6 +167,7 @@ jobs:
             --no-bazel-remote-store
             -DCONSISTENT_DEBUG
             --no-dir-outputs
+            --output "$YA_MAKE_OUT_DIR"
             --build-all
             --force-build-depends
             -DDEBUGINFO_LINES_ONLY
@@ -206,14 +210,19 @@ jobs:
 
           BINARY_LINK=""
           BINARY_BASENAME="$(basename "$BUILD_TARGET")"
-          for candidate in "${BUILD_TARGET}/${BINARY_BASENAME}" "${BUILD_TARGET}"; do
+          for candidate in \
+            "${YA_MAKE_OUT_DIR}/${BUILD_TARGET}/${BINARY_BASENAME}" \
+            "${YA_MAKE_OUT_DIR}/${BUILD_TARGET}" \
+            "${BUILD_TARGET}/${BINARY_BASENAME}" \
+            "${BUILD_TARGET}"
+          do
             if [ -n "$candidate" ] && { [ -f "$candidate" ] || [ -L "$candidate" ]; } && [ -x "$candidate" ]; then
               BINARY_LINK="$candidate"
               break
             fi
           done
           if [ -z "$BINARY_LINK" ]; then
-            BINARY_LINK="$(find "${BUILD_TARGET}" -maxdepth 1 \( -type f -o -type l \) -executable -name "${BINARY_BASENAME}" 2>/dev/null | head -1 || true)"
+            BINARY_LINK="$(find "$YA_MAKE_OUT_DIR" "${BUILD_TARGET}" -maxdepth 4 \( -type f -o -type l \) -executable -name "${BINARY_BASENAME}" 2>/dev/null | head -1 || true)"
           fi
 
           BINARY_PATH="n/a"

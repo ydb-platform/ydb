@@ -9,8 +9,9 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
         return conclusion;
     }
     const auto pathId = context.GetObjectPath()->Base()->PathId;
-    auto tableInfo = context.GetSSOperationContext()->SS->ColumnTables.TakeVerified(pathId);
-    context.GetSSOperationContext()->SS->PersistColumnTableAlter(*context.GetDB(), pathId, *GetTargetTableInfoVerified());
+    auto* ssContext = context.GetSSOperationContext();
+    ssContext->MemChanges.GrabColumnTable(ssContext->SS, pathId);
+    auto tableInfo = ssContext->SS->ColumnTables.TakeVerified(pathId);
     tableInfo->AlterData = GetTargetTableInfoVerified();
 
     {
@@ -18,17 +19,21 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
         THashSet<TString> newDataSources = GetTargetTableInfoVerified()->GetUsedTiers();
         for (const auto& tier : oldDataSources) {
             if (!newDataSources.contains(tier)) {
-                auto tierPath = TPath::Resolve(tier, context.GetSSOperationContext()->SS);
+                auto tierPath = TPath::Resolve(tier, ssContext->SS);
                 AFL_VERIFY(tierPath.IsResolved())("path", tier);
-                context.GetSSOperationContext()->SS->PersistRemoveExternalDataSourceReference(*context.GetDB(), tierPath->PathId, pathId);
+                ssContext->MemChanges.GrabExternalDataSource(ssContext->SS, tierPath->PathId);
+                ssContext->SS->RemoveExternalDataSourceReference(tierPath->PathId, pathId);
+                ssContext->DbChanges.PersistExternalDataSource(tierPath->PathId);
             }
         }
         for (const auto& tier : newDataSources) {
             if (!oldDataSources.contains(tier)) {
-                auto tierPath = TPath::Resolve(tier, context.GetSSOperationContext()->SS);
+                auto tierPath = TPath::Resolve(tier, ssContext->SS);
                 AFL_VERIFY(tierPath.IsResolved())("path", tier);
-                context.GetSSOperationContext()->SS->PersistExternalDataSourceReference(
-                    *context.GetDB(), tierPath->PathId, TPath::Init(pathId, context.GetSSOperationContext()->SS));
+                ssContext->MemChanges.GrabExternalDataSource(ssContext->SS, tierPath->PathId);
+                ssContext->SS->AddExternalDataSourceReference(
+                    tierPath->PathId, TPath::Init(pathId, ssContext->SS));
+                ssContext->DbChanges.PersistExternalDataSource(tierPath->PathId);
             }
         }
     }
@@ -43,9 +48,12 @@ TConclusionStatus TColumnTableUpdate::DoFinish(const TUpdateFinishContext& conte
     }
 
     const auto pathId = context.GetObjectPath()->Base()->PathId;
-    auto tableInfo = context.GetSSOperationContext()->SS->ColumnTables.TakeAlterVerified(pathId);
-    context.GetSSOperationContext()->SS->PersistColumnTableAlterRemove(*context.GetDB(), pathId);
-    context.GetSSOperationContext()->SS->PersistColumnTable(*context.GetDB(), pathId, *tableInfo);
+    auto* ssContext = context.GetSSOperationContext();
+    ssContext->MemChanges.GrabColumnTable(ssContext->SS, pathId);
+    auto tableInfo = ssContext->SS->ColumnTables.TakeAlterVerified(pathId);
+    ssContext->DbChanges.PersistColumnTableAlterRemove(pathId);
+    ssContext->DbChanges.PersistColumnTable(pathId);
+    Y_UNUSED(tableInfo);
     return TConclusionStatus::Success();
 }
 

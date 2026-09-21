@@ -270,7 +270,6 @@ bool TTupleLayout::HashVariableKey(const ui8* res, ui32 keyColIdx) const {
 
 void TTupleLayout::ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColumns) {
     EqualNullsKeyMask.Clear();
-    EqualNullsKeyMask.Reserve(KeyColumnsNum);
     HasEqualNullsKeys = false;
     for (ui32 j = 0; j < KeyColumnsNum; ++j) {
         if (std::find(equalNullsInputColumns.begin(), equalNullsInputColumns.end(),

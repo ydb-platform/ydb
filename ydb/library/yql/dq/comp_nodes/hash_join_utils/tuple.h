@@ -182,9 +182,9 @@ struct TTupleLayout {
     void ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColumns);
 
     Y_FORCE_INLINE ui8 GetEqualNullsMaskByte(ui32 byteN) const {
-        constexpr ui32 BytesPerChunk = sizeof(TDynBitMap::TChunk);
-        return static_cast<ui8>(EqualNullsKeyMask.GetChunks()[byteN / BytesPerChunk] >>
-                                ((byteN % BytesPerChunk) * 8));
+        ui8 mask = 0;
+        EqualNullsKeyMask.Export(byteN * 8, mask);
+        return mask;
     }
 
     void NormalizeEqualNullsFixedKeys(ui8* res) const;

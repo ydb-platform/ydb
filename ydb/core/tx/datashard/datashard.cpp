@@ -786,13 +786,14 @@ public:
             TDataShard* self, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> writeResult,
             const TActorId& target,
             ui64 step, ui64 txId,
-            NWilson::TSpan&& span)
+            NWilson::TSpan&& span, ui64 cookie)
         : Self(self)
         , WriteResult(std::move(writeResult))
         , Target(target)
         , Step(step)
         , TxId(txId)
         , Span(std::move(span))
+        , Cookie(cookie)
     {
     }
 
@@ -814,7 +815,7 @@ public:
         }
 
         LWTRACK(ProposeTransactionSendResult, WriteResult->GetOrbit());
-        Self->Send(Target, WriteResult.release(), 0, 0, Span.GetTraceId());
+        Self->Send(Target, WriteResult.release(), 0, Cookie, Span.GetTraceId());
         Span.End();
     }
 
@@ -833,6 +834,7 @@ private:
     ui64 Step;
     ui64 TxId;
     NWilson::TSpan Span;
+    ui64 Cookie;
 };
 
 void TDataShard::SendResult(const TActorContext &ctx,
@@ -882,7 +884,7 @@ void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEven
         // This is a volatile transaction, and we need to wait until it is resolved
         bool ok = VolatileTxManager.AttachVolatileTxCallback(txId,
             new TSendVolatileWriteResult(this, std::move(result), target, step, txId,
-                std::move(span)));
+                std::move(span), cookie));
         Y_ENSURE(ok);
         return;
     }

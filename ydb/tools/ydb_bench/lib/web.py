@@ -53,6 +53,7 @@ from ydb.tools.ydb_bench.lib.distributed_runtime import DistributedRuntime
 from ydb.tools.ydb_bench.lib.distributed_reports import attempt_counters
 from ydb.tools.ydb_bench.lib import cluster_templates_ui, distributed_builder_ui, monitoring_settings_ui
 from ydb.tools.ydb_bench.lib import cluster_config, cluster_config_ui
+from ydb.tools.ydb_bench.lib.cluster_deployment import run_deployment
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 _STREAM_CHUNK_SIZE = 1024 * 1024
@@ -399,7 +400,7 @@ async function refreshEditorActivity(){
   try{
     const value=await editorApi('/api/activity-status');
     if(host===editorHost&&button===document.querySelector('#start-run')){
-      button.textContent=value.active_run_id||value.queued?'Add to queue':'Start run'
+      button.textContent=value.active_run_id||value.queued?'Add to queue':editor.model?.profiles?.some(p=>p.distributed_config?.mode==='deploy')?'Deploy cluster':'Start run'
     }
   }catch{}
 }
@@ -1453,6 +1454,7 @@ function compactRun(run){
     '</div><div class=dense-run-meta><span>'+esc(benchmarks.join(' · '))+'</span><a class=dense-run-id href="#run/'+
     enc(run.id)+'">'+esc(run.run_id||run.id)+'</a><span>'+esc(run.config_path||'config snapshot')+'</span></div></div>'+
     '<details class=dense-run-actions><summary>Actions</summary><div class=actions>'+
+    (run.state==='running'&&run.deployment?.phase==='cluster-ready'?'<button data-release-cluster="'+esc(run.id)+'">Release cluster</button>':'')+
     '<a href="#run/'+enc(run.id)+'">Open</a><a href="#new" data-repeat="'+esc(run.id)+'">Repeat</a>'+
     '<a href="'+runHref(run.id,'config')+'">YAML</a><a href="'+runHref(run.id,'manifest')+'">run.json</a>'+
     '<a href="'+runHref(run.id,'archive')+'">Archive</a></div></details></article>'
@@ -1519,6 +1521,11 @@ async function renderRuns(){
       '<div class=empty>No runs match these filters.</div>');
     for(const item of target.querySelectorAll('[data-repeat]'))item.onclick=event=>{
       event.preventDefault();reuseRun(item.dataset.repeat)
+    };
+    for(const item of target.querySelectorAll('[data-release-cluster]'))item.onclick=async()=>{
+      if(!confirm('Stop this cluster and release its hosts?'))return;
+      item.disabled=true;try{await api('/api/runs/'+enc(item.dataset.releaseCluster)+'/release-cluster',jsonOptions({}));item.textContent='Releasing…'}
+      catch(error){item.disabled=false;alert(error.message)}
     };
   }
   const pager=bindRunPager(app,()=>{
@@ -2690,6 +2697,28 @@ function bindLocalAttemptRows(container){
   }
 }
 function renderLocalYdbProfile(container,data){
+  if(data.parameters?.mode==='deploy'){
+    const progress=data.progress||{},endpoints=data.endpoints||progress.endpoints||[],telemetry=data.telemetry;
+    let release=document.querySelector('#release-cluster');
+    if(data.state==='running'&&progress.phase==='cluster-ready'){
+      if(!release){release=document.createElement('button');release.id='release-cluster';release.textContent='Release cluster';
+        document.querySelector('#repeat-run')?.before(release)}
+      release.onclick=async()=>{if(!confirm('Stop this cluster and release its hosts?'))return;release.disabled=true;
+        try{await api('/api/runs/'+enc(container.dataset.localYdbRunId)+'/release-cluster',jsonOptions({}));release.textContent='Releasing…'}
+        catch(error){release.disabled=false;alert(error.message)}};
+    }else release?.remove();
+    container.innerHTML='<div class=runs-toolbar><h3>Cluster reservation · '+
+      esc(progress.phase==='cluster-ready'?'Ready':String(progress.phase||data.state).replaceAll('-',' '))+'</h3><span data-reservation-grafana></span></div>'+
+      (data.error?displayError(Error(data.error)):'')+
+      '<p class=muted>'+esc(telemetry?'Metrics: '+telemetry.status+' · '+telemetry.segments+' saved intervals':'Metrics were not recorded for this reservation.')+'</p>'+
+      (telemetry?.error?displayError(Error(telemetry.error)):'')+
+      (endpoints.length?localReportTable('Endpoints',endpoints.map(e=>[e.node,e.tenant,e.host+':'+e.port]),['Node','Tenant','Host:port']):'')+
+      savedYdbConfigurationHtml(container.dataset.localYdbRunId,data.ydb_configurations||[]);
+    mountGrafana(container.querySelector('[data-reservation-grafana]'),container.dataset.localYdbRunId,
+      {benchmark:data.benchmark,profile:data.profile,attempt:'deployment'},
+      Date.parse(data.started_at),data.finished_at?Date.parse(data.finished_at):Date.now());
+    return;
+  }
   const failure=['failed','cancelled'].includes(data.state)?'<section class=profile-error role=alert><h3>'+
     (data.state==='failed'?'Profile failed':'Profile cancelled')+'</h3><div>'+
     esc(String(data.error||'No diagnostic was recorded.').split(String.fromCharCode(10))[0].slice(0,240))+'</div>'+
@@ -3390,7 +3419,8 @@ function bindRunConfiguration(container,id){
     "selection.profile?selection.view:'',activeBenchmark=activeProfile?activeProfile.split('/')[0]:'';\n"
     "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:runDisplay(id)}];\n"
     "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><div class=toolbar>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
-    ":'')+'<span class=toolbar id=run-export></span><button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
+    ":'')+(run.state==='running'&&run.deployment?.phase==='cluster-ready'?'<button id=release-cluster>Release cluster</button>':'')+"
+    "'<span class=toolbar id=run-export></span><button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
     "ss=actions><a href=\"'+runHref(id,'config')+'\">YAML</a><a href=\"'+runHref(id,'manifest')+'\">run.json</a><a href=\"'+r"
     "unHref(id,'archive')+'\">Archive.zip</a></div></details></div></div><p class=muted>'+esc(hostName)+' · '+status(run.status)+' · '+"
     "esc(humanTime(run.started_at))+' · Run duration <span id=run-duration>'+duration(run)+'</span> · '+run.finished_steps+' / '+run.steps.length+"
@@ -3432,6 +3462,10 @@ function bindRunConfiguration(container,id){
     "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedRoute(),runView);\n"
     "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
     "    const cancel=document.querySelector('#cancel-run');\n"
+    "    const release=document.querySelector('#release-cluster');if(release)release.onclick=async()=>{"
+    "if(!confirm('Stop this cluster and release its hosts?'))return;release.disabled=true;"
+    "try{await api('/api/runs/'+enc(id)+'/release-cluster',jsonOptions({}));renderRun(id,selectedRoute(),runView)}"
+    "catch(error){release.disabled=false;alert(error.message)}};\n"
     "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',jsonOptions({}));renderRun(id,sele"
     'ctedRoute(),runView)}catch(error){alert(error.message)}};\n'
     "    if(activeProfile){const pieces=activeProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');if("
@@ -3950,6 +3984,7 @@ def run_record(run_id, manifest, root):
         "id": run_id,
         "status": manifest.get("status", "unknown"),
         "state": manifest.get("state", "unknown"),
+        "deployment": manifest.get("deployment"),
         "source": (
             "imported"
             if (
@@ -4796,11 +4831,17 @@ class RunService:
         model["binary_catalog"] = binary_catalog(self.binaries_dir)
         return model
 
+    def _reserved_by_other_run(self):
+        session = self.distributed_sessions.status()
+        return session is not None and not (
+            session.get("coordinator_id") == self.hosts.id and session.get("run_id") == self._active_run_id
+        )
+
     def start(self, yaml_text, perf=False, continue_on_error=False):
         with self._lock:
             if not self._accepting_runs:
                 raise BenchmarkError("web run service is shutting down")
-            if self.distributed_sessions.status() is not None:
+            if self._reserved_by_other_run():
                 raise BenchmarkError("Host is reserved by a distributed benchmark")
         plan_result = self.plan(yaml_text, perf)
         if not plan_result["valid"]:
@@ -4813,7 +4854,7 @@ class RunService:
             # with its worker before shutdown takes its active-run snapshot.
             if not self._accepting_runs:
                 raise BenchmarkError("web run service is shutting down")
-            if self.distributed_sessions.status() is not None:
+            if self._reserved_by_other_run():
                 raise BenchmarkError("Host is reserved by a distributed benchmark")
             run_id = "{}-web".format(datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
             while (self.output / run_id).exists():
@@ -4849,6 +4890,7 @@ class RunService:
                 "events": deque(maxlen=self.event_limit),
                 "tail": {"stdout": "", "stderr": ""},
                 "cancel": threading.Event(),
+                "release_cluster": threading.Event(),
                 "cancel_requested": False,
                 "finished": threading.Event(),
                 "finalized": False,
@@ -4876,7 +4918,7 @@ class RunService:
     def _dispatch(self):
         while True:
             with self._lock:
-                while self._queue and self.distributed_sessions.status() is not None:
+                while self._queue and (self.distributed_sessions.status() is not None or self._recovery_runs):
                     self._admission.wait(0.1)
                 while self._queue:
                     run = self._queue.popleft()
@@ -5037,6 +5079,21 @@ class RunService:
         self._emit_locked(run, {"type": "run-finished", "state": state})
         run["finalized"] = True
         run["finished"].set()
+
+    def release_cluster(self, run_id):
+        with self._lock:
+            run = self._runs.get(run_id)
+            if run is None:
+                raise BenchmarkError("Cluster deployment is not active")
+            with run["lock"]:
+                if run["release_cluster"].is_set():
+                    return {"id": run_id, "release_requested": True}
+                if run["store"].manifest.get("deployment", {}).get("phase") != "cluster-ready" or run["finalized"]:
+                    raise BenchmarkError("Cluster is not ready for release")
+                run["store"].manifest["release_requested"] = True
+                self._emit_locked(run, {"type": "cluster-release-requested"})
+                run["release_cluster"].set()
+                return {"id": run_id, "release_requested": True}
 
     def cancel(self, run_id):
         with self._lock:
@@ -5415,7 +5472,7 @@ class RunService:
             return unavailable_profile(record.get("status"), record.get("error"))
         if candidate.stat().st_size > 16 * 1024 * 1024:
             raise BenchmarkError("local-ydb profile manifest is too large")
-        value = load_manifest(candidate)
+        value = load_manifest(candidate, allow_legacy_deployment=True)
         value["workload_result_schema"] = _resolved_local_ydb_result_schema(value)
         top_state = manifest.get("state")
         if value.get("state") in ("preparing", "running") and top_state not in ("pending", "queued", "running"):
@@ -5442,6 +5499,8 @@ class RunService:
             "distributed",
             "coordinator_hardware",
             "progress",
+            "endpoints",
+            "telemetry",
             "attempts",
             "searches",
             "verification",
@@ -5945,8 +6004,9 @@ class RunService:
             'profile_names',
             'current_run_id',
             'queue_position',
+            'deployment',
         )
-        return [{key: item[key] for key in fields} for item in self.indexed_runs(filters)]
+        return [{key: item.get(key) for key in fields} for item in self.indexed_runs(filters)]
 
     def indexed_runs(self, filters, order='newest', limit=None, after=None):
         with self._lock:
@@ -6151,7 +6211,9 @@ def production_executor(resource_loader, tool_revision):
                         emit(item)
 
                 try:
-                    if configuration.benchmark.executor in ("local-ydb", "distributed-ydb"):
+                    if distributed and configuration.parameters["local_ydb"].get("mode") == "deploy":
+                        profile = run_deployment(run, configuration, directory, event, cancelled)
+                    elif configuration.benchmark.executor in ("local-ydb", "distributed-ydb"):
                         profile = run_local_ydb(
                             profile_binaries,
                             configuration,
@@ -6616,7 +6678,9 @@ def _handler(service):
                             self.path = '/' + parts[1]
                             return self.do_POST()
                         options = (
-                            self._json_body() if parts[1].endswith(('/cancel', '/metrics-export')) else self._options()
+                            self._json_body()
+                            if parts[1].endswith(('/cancel', '/metrics-export', '/release-cluster'))
+                            else self._options()
                         )
                         if not isinstance(options, dict):
                             raise BenchmarkError('request must be an object')
@@ -6764,6 +6828,10 @@ def _handler(service):
                     return self._json(200, service.run_config(unquote(path[len("/api/runs/") : -len("/repeat")])))
                 if path.startswith("/api/runs/") and path.endswith("/cancel"):
                     return self._json(200, service.cancel(unquote(path[len("/api/runs/") : -len("/cancel")])))
+                if path.startswith("/api/runs/") and path.endswith("/release-cluster"):
+                    return self._json(
+                        200, service.release_cluster(unquote(path[len("/api/runs/") : -len("/release-cluster")]))
+                    )
             except BenchmarkError as error:
                 return self._json(400, {"error": str(error)})
             return self._json(404, {"error": "not found"})

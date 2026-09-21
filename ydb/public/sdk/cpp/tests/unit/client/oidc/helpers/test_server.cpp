@@ -11,6 +11,7 @@
 #include <util/network/socket.h>
 #include <util/system/env.h>
 #include <util/system/tempfile.h>
+#include <util/system/datetime.h>
 
 #include <algorithm>
 #include <chrono>
@@ -77,14 +78,14 @@ SSL_CTX* ServerContext() {
             BIO_new_mem_buf(TestCertificate, sizeof(TestCertificate) - 1), BIO_free);
         std::unique_ptr<BIO, decltype(&BIO_free)> keyBio(
             BIO_new_mem_buf(TestPrivateKey, sizeof(TestPrivateKey) - 1), BIO_free);
-        Y_ENSURE(certificateBio && keyBio);
+        Y_ENSURE(certificateBio != nullptr && keyBio != nullptr);
         std::unique_ptr<X509, decltype(&X509_free)> certificate(
             PEM_read_bio_X509(certificateBio.get(), nullptr, nullptr, nullptr), X509_free);
         std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> key(
             PEM_read_bio_PrivateKey(keyBio.get(), nullptr, nullptr, nullptr), EVP_PKEY_free);
-        Y_ENSURE(certificate && key);
+        Y_ENSURE(certificate != nullptr && key != nullptr);
         std::unique_ptr<SSL_CTX, decltype(&SSL_CTX_free)> result(SSL_CTX_new(TLS_server_method()), SSL_CTX_free);
-        Y_ENSURE(result, "Cannot create test TLS context");
+        Y_ENSURE(result != nullptr, "Cannot create test TLS context");
         Y_ENSURE(SSL_CTX_use_certificate(result.get(), certificate.get()) == 1);
         Y_ENSURE(SSL_CTX_use_PrivateKey(result.get(), key.get()) == 1);
         Y_ENSURE(SSL_CTX_check_private_key(result.get()) == 1);
@@ -119,7 +120,7 @@ TTlsStreams::TTlsStreams(const TSocket& socket)
     : Socket(socket)
     , Ssl(SSL_new(ServerContext()), SSL_free)
 {
-    Y_ENSURE(Ssl);
+    Y_ENSURE(Ssl != nullptr);
     Y_ENSURE(SSL_set_fd(Ssl.get(), Socket) == 1);
     Y_ENSURE(SSL_accept(Ssl.get()) == 1, "Test TLS handshake failed");
 }
@@ -172,10 +173,10 @@ std::string TOidcTestServer::Issuer() const {
     return "https://localhost:" + std::to_string(Options.Port) + "/realm";
 }
 
-NYdb::TOidcConfig TOidcTestServer::ClientConfig() const {
-    NYdb::TOidcConfig config;
+NYdb::NOidc::TOidcConfig TOidcTestServer::ClientConfig() const {
+    NYdb::NOidc::TOidcConfig config;
     config.Issuer = Issuer();
-    config.FlowConfig = NYdb::TClientOidcConfig{"client", "secret +&", {"read", "write"}};
+    config.FlowConfig = NYdb::NOidc::TClientOidcConfig{"client", "secret +&", {"read", "write"}};
     return config;
 }
 
@@ -188,6 +189,12 @@ void TOidcTestServer::Enqueue(TString body, HttpCodes status) {
 void TOidcTestServer::SetDiscoveryReply(TString body, HttpCodes status) {
     with_lock (Mutex) {
         DiscoveryReply = TReply{status, std::move(body)};
+    }
+}
+
+void TOidcTestServer::SetTokenReplyDelay(TDuration delay) {
+    with_lock (Mutex) {
+        TokenReplyDelay = delay;
     }
 }
 
@@ -237,6 +244,7 @@ bool TOidcTestServer::TRequest::DoReply(const TReplyParams& params) {
     const TString body = params.Input.ReadAll();
     TReply reply;
     NThreading::TFuture<void> replyGate;
+    TDuration replyDelay;
     with_lock (Server.Mutex) {
         if (parsed.Path == "/realm/.well-known/openid-configuration") {
             ++Server.Discoveries;
@@ -245,7 +253,7 @@ bool TOidcTestServer::TRequest::DoReply(const TReplyParams& params) {
             metadata["token_endpoint"] = Server.Issuer() + "/token";
             metadata["device_authorization_endpoint"] = Server.Issuer() + "/device";
             reply.Body = NJson::WriteJson(metadata, false);
-            if (Server.DiscoveryReply) {
+            if (Server.DiscoveryReply.has_value()) {
                 reply = *Server.DiscoveryReply;
             }
         } else {
@@ -258,6 +266,7 @@ bool TOidcTestServer::TRequest::DoReply(const TReplyParams& params) {
             Server.Recorded.push_back(std::move(request));
             if (parsed.Path == "/realm/token") {
                 replyGate = Server.TokenReplyGate;
+                replyDelay = Server.TokenReplyDelay;
             }
             if (Server.Replies.empty()) {
                 reply = {HTTP_BAD_REQUEST, R"({"error":"unexpected_request"})"};
@@ -270,6 +279,16 @@ bool TOidcTestServer::TRequest::DoReply(const TReplyParams& params) {
     }
     if (replyGate.Initialized()) {
         replyGate.Wait();
+    }
+    if (replyDelay) {
+        params.Output << "HTTP/1.1 " << static_cast<unsigned>(reply.Status)
+                      << " OK\r\nContent-Length: " << reply.Body.size() << "\r\n\r\n";
+        for (const char c : reply.Body) {
+            params.Output.Write(c);
+            params.Output.Flush();
+            Sleep(replyDelay);
+        }
+        return true;
     }
     THttpResponse response(reply.Status);
     response.SetContent(reply.Body);

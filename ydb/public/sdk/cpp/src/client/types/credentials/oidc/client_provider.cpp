@@ -2,9 +2,14 @@
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 
-TClientProvider::TClientProvider(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility, bool standalone)
-    : TRefreshingProviderBase(config, std::move(facility), standalone)
+TClientProvider::TClientProvider(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility)
+    : TRefreshingProviderBase(config, std::move(facility))
 {
+    Start();
+}
+
+TClientProvider::~TClientProvider() {
+    Stop();
 }
 
 TTokenCache TClientProvider::AcquireToken() {

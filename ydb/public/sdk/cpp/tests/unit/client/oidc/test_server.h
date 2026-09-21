@@ -7,27 +7,27 @@
 
 #include <condition_variable>
 
-class TMemoryTokenCacher: public NYdb::ITokenCacher {
+class TMemoryTokenCacher: public NYdb::NOidc::ITokenCacher {
 public:
-    std::optional<NYdb::TTokenCache> Read() const override;
+    std::optional<NYdb::NOidc::TTokenCache> Read() const override;
 
-    void Write(const NYdb::TTokenCache& tokens) override;
+    void Write(const NYdb::NOidc::TTokenCache& tokens) override;
 
 private:
     mutable TMutex Mutex;
-    std::optional<NYdb::TTokenCache> Tokens;
+    std::optional<NYdb::NOidc::TTokenCache> Tokens;
 };
 
-class TTestAcceptor: public NYdb::IAuthAcceptor {
+class TTestAcceptor: public NYdb::NOidc::IAuthAcceptor {
 public:
-    void Accept(const NYdb::TDeviceAuthInfo& info) override;
+    void Accept(const NYdb::NOidc::TDeviceAuthInfo& info) override;
 
-    NYdb::TDeviceAuthInfo Wait();
+    NYdb::NOidc::TDeviceAuthInfo Wait();
 
 private:
     TMutex Mutex;
     std::condition_variable_any Changed;
-    std::optional<NYdb::TDeviceAuthInfo> Info;
+    std::optional<NYdb::NOidc::TDeviceAuthInfo> Info;
 };
 
 class TQueuedOidcFacility: public NYdb::ICoreFacility {
@@ -50,7 +50,7 @@ private:
 
 class TGatedOidcCacher: public TMemoryTokenCacher {
 public:
-    void Write(const NYdb::TTokenCache& tokens) override;
+    void Write(const NYdb::NOidc::TTokenCache& tokens) override;
 
     NThreading::TPromise<void> Entered = NThreading::NewPromise<void>();
     NThreading::TPromise<void> Release = NThreading::NewPromise<void>();

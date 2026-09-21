@@ -21,21 +21,34 @@ void SetException(NThreading::TPromise<std::string> promise, std::exception_ptr 
 
 } // namespace
 
-TProviderBase::TProviderBase(TOidcConfig config, std::weak_ptr<ICoreFacility> facility, bool standalone)
+TProviderBase::TProviderBase(TOidcConfig config, std::weak_ptr<ICoreFacility> facility)
     : Config(std::move(config))
     , Facility(std::move(facility))
-    , Standalone(standalone)
     , Pending(NThreading::NewPromise<std::string>())
 {
 }
 
-TProviderBase::~TProviderBase() = default;
+TProviderBase::~TProviderBase() {
+    Stop();
+}
+
+void TProviderBase::Start() {
+    try {
+        Worker = std::thread([this] { Run(); });
+    } catch (...) {
+        Fail(std::current_exception());
+    }
+}
+
+std::string TProviderBase::GetAuthInfo() const {
+    return GetAuthInfoAsync().GetValueSync();
+}
 
 NThreading::TFuture<std::string> TProviderBase::GetAuthInfoAsync() const {
     std::string token;
     std::exception_ptr error;
     with_lock (Mutex) {
-        if (Stopping || (!Standalone && Facility.expired())) {
+        if (Stopping || Facility.expired()) {
             error = StoppedError();
         } else if (Tokens.has_value() && Tokens->AccessToken.IsValid(TInstant::Now())) {
             token = "Bearer " + Tokens->AccessToken.Token;
@@ -53,14 +66,25 @@ NThreading::TFuture<std::string> TProviderBase::GetAuthInfoAsync() const {
 
 bool TProviderBase::IsValid() const {
     with_lock (Mutex) {
-        return !Stopping && (Standalone || !Facility.expired()) &&
+        return !Stopping && !Facility.expired() &&
                ((Tokens.has_value() && Tokens->AccessToken.IsValid(TInstant::Now())) || Error == nullptr);
     }
 }
 
 void TProviderBase::Stop() {
+    RequestStop();
+    if (Worker.joinable()) {
+        Worker.join();
+    }
+    CancelDeliveries();
+}
+
+void TProviderBase::RequestStop() {
     NThreading::TPromise<std::string> pending;
     with_lock (Mutex) {
+        if (Stopping) {
+            return;
+        }
         Stopping = true;
         pending = Pending;
     }
@@ -73,7 +97,7 @@ void TProviderBase::Stop() {
 void TProviderBase::Run() {
     try {
         if (IsStopped()) {
-            Stop();
+            RequestStop();
             return;
         }
         RunTokens();
@@ -97,8 +121,8 @@ void TProviderBase::Run() {
     }
 }
 
-TRefreshingProviderBase::TRefreshingProviderBase(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility, bool standalone)
-    : TProviderBase(config, std::move(facility), standalone)
+TRefreshingProviderBase::TRefreshingProviderBase(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility)
+    : TProviderBase(config, std::move(facility))
     , Protocol(Config, Cancellation.Token())
 {
 }
@@ -106,7 +130,7 @@ TRefreshingProviderBase::TRefreshingProviderBase(const TOidcConfig& config, std:
 void TRefreshingProviderBase::RunTokens() {
     TTokenCache current = ReadCache().value_or(TTokenCache{});
 
-    const bool unknownRefresh = !current.AccessToken.ExpiresAt && current.RefreshToken.has_value();
+    const bool unknownRefresh = !current.AccessToken.ExpiresAt.has_value() && current.RefreshToken.has_value();
     if (current.AccessToken.IsValid(TInstant::Now()) && !unknownRefresh) {
         Publish(current);
         if (!WaitForRefresh(current)) {
@@ -117,7 +141,7 @@ void TRefreshingProviderBase::RunTokens() {
     TDuration retryDelay = TDuration::MilliSeconds(200);
     for (;;) {
         if (IsStopped()) {
-            Stop();
+            RequestStop();
             return;
         }
         try {
@@ -145,7 +169,7 @@ void TRefreshingProviderBase::RunTokens() {
 
 bool TProviderBase::IsStopped() const {
     with_lock (Mutex) {
-        return Stopping || (!Standalone && Facility.expired());
+        return Stopping || Facility.expired();
     }
 }
 
@@ -153,7 +177,7 @@ bool TProviderBase::Wait(TDuration delay) {
     with_lock (Mutex) {
         auto remaining = std::chrono::microseconds(delay.MicroSeconds());
         const auto end = std::chrono::steady_clock::now() + remaining;
-        while (!Stopping && (Standalone || !Facility.expired())) {
+        while (!Stopping && !Facility.expired()) {
             {
                 auto unguard = Unguard(Mutex);
                 CompleteDiscardedDeliveries();
@@ -168,7 +192,7 @@ bool TProviderBase::Wait(TDuration delay) {
             remaining = std::chrono::duration_cast<std::chrono::microseconds>(end - std::chrono::steady_clock::now());
         }
     }
-    Stop();
+    RequestStop();
     return false;
 }
 
@@ -187,7 +211,7 @@ bool TRefreshingProviderBase::WaitForRefresh(const TTokenCache& current) {
 
 void TProviderBase::Write(const TTokenCache& tokens) const {
     try {
-        if (Config.Cacher_) {
+        if (Config.Cacher_ != nullptr) {
             Config.Cacher_->Write(tokens);
         }
     } catch (...) {
@@ -197,7 +221,7 @@ void TProviderBase::Write(const TTokenCache& tokens) const {
 }
 
 TTokenCache TRefreshingProviderBase::Update(const TTokenCache& current) {
-    if (current.RefreshToken && current.RefreshToken->IsValid(TInstant::Now())) {
+    if (current.RefreshToken.has_value() && current.RefreshToken->IsValid(TInstant::Now())) {
         try {
             return Protocol.Refresh(*current.RefreshToken);
         } catch (const TError& error) {
@@ -228,7 +252,7 @@ void TProviderBase::Complete(NThreading::TPromise<std::string> pending, std::opt
     auto completion = [pending, token = std::move(token), error, callbackLifetime]() mutable {
         Y_UNUSED(callbackLifetime);
         try {
-            if (error) {
+            if (error != nullptr) {
                 SetException(pending, error);
             } else if (!token->IsValid(TInstant::Now())) {
                 SetException(pending, std::make_exception_ptr(TError("access token expired before delivery", false, {})));
@@ -242,9 +266,7 @@ void TProviderBase::Complete(NThreading::TPromise<std::string> pending, std::opt
         }
     };
     try {
-        if (Standalone) {
-            completion();
-        } else if (auto facility = Facility.lock()) {
+        if (auto facility = Facility.lock(); facility != nullptr) {
             facility->PostToResponseQueue(std::move(completion));
         } else {
             SetException(pending, StoppedError());
@@ -311,7 +333,7 @@ void TProviderBase::CancelDeliveries() {
 
 std::optional<TTokenCache> TProviderBase::ReadCache() const {
     try {
-        return Config.Cacher_ ? Config.Cacher_->Read() : std::nullopt;
+        return Config.Cacher_ != nullptr ? Config.Cacher_->Read() : std::nullopt;
     } catch (...) {
         // A broken cache must not prevent a fresh authorization attempt.
         return std::nullopt;
@@ -320,34 +342,6 @@ std::optional<TTokenCache> TProviderBase::ReadCache() const {
 
 TProtocol& TRefreshingProviderBase::GetProtocol() {
     return Protocol;
-}
-
-TCredentialsProviderAdapter::TCredentialsProviderAdapter(std::shared_ptr<TProviderBase> provider)
-    : Provider(std::move(provider))
-    , Worker([provider = Provider] { provider->Run(); })
-{
-}
-
-TCredentialsProviderAdapter::~TCredentialsProviderAdapter() {
-    Provider->Stop();
-    if (Worker.get_id() == std::this_thread::get_id()) {
-        Worker.detach();
-    } else {
-        Worker.join();
-    }
-    Provider->CancelDeliveries();
-}
-
-std::string TCredentialsProviderAdapter::GetAuthInfo() const {
-    return GetAuthInfoAsync().GetValueSync();
-}
-
-NThreading::TFuture<std::string> TCredentialsProviderAdapter::GetAuthInfoAsync() const {
-    return Provider->GetAuthInfoAsync();
-}
-
-bool TCredentialsProviderAdapter::IsValid() const {
-    return Provider->IsValid();
 }
 
 } // namespace NYdb::inline Dev::NOidc::NPrivate

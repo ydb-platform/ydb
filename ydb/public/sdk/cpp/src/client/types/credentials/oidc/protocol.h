@@ -7,11 +7,8 @@
 #include <library/cpp/threading/cancellation/cancellation_token.h>
 
 #include <functional>
-#include <memory>
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
-
-struct THttpJob;
 
 class TProtocol {
 public:
@@ -31,7 +28,6 @@ private:
     NThreading::TCancellationToken Cancellation;
     std::string TokenEndpoint;
     std::string DeviceEndpoint;
-    std::unique_ptr<THttpJob> HttpJob;
 };
 
 } // namespace NYdb::inline Dev::NOidc::NPrivate

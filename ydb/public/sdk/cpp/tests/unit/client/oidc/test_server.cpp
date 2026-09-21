@@ -5,26 +5,26 @@
 #include <chrono>
 #include <utility>
 
-std::optional<NYdb::TTokenCache> TMemoryTokenCacher::Read() const {
+std::optional<NYdb::NOidc::TTokenCache> TMemoryTokenCacher::Read() const {
     with_lock (Mutex) {
         return Tokens;
     }
 }
 
-void TMemoryTokenCacher::Write(const NYdb::TTokenCache& tokens) {
+void TMemoryTokenCacher::Write(const NYdb::NOidc::TTokenCache& tokens) {
     with_lock (Mutex) {
         Tokens = tokens;
     }
 }
 
-void TTestAcceptor::Accept(const NYdb::TDeviceAuthInfo& info) {
+void TTestAcceptor::Accept(const NYdb::NOidc::TDeviceAuthInfo& info) {
     with_lock (Mutex) {
         Info = info;
     }
     Changed.notify_all();
 }
 
-NYdb::TDeviceAuthInfo TTestAcceptor::Wait() {
+NYdb::NOidc::TDeviceAuthInfo TTestAcceptor::Wait() {
     with_lock (Mutex) {
         UNIT_ASSERT(Changed.wait_for(Mutex, std::chrono::seconds(10), [&] { return Info.has_value(); }));
         return Info.value();
@@ -63,7 +63,7 @@ void TQueuedOidcFacility::DiscardTasks() {
     }
 }
 
-void TGatedOidcCacher::Write(const NYdb::TTokenCache& tokens) {
+void TGatedOidcCacher::Write(const NYdb::NOidc::TTokenCache& tokens) {
     Entered.TrySetValue();
     Release.GetFuture().Wait();
     TMemoryTokenCacher::Write(tokens);

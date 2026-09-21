@@ -11,7 +11,7 @@
 #include <variant>
 #include <vector>
 
-namespace NYdb::inline Dev {
+namespace NYdb::inline Dev::NOidc {
 
 struct TOAuthToken {
     std::string Token;
@@ -93,19 +93,21 @@ void ValidateOidcConfig(const TOidcConfig& config);
 // Deterministic credential fingerprint; excludes cacher/acceptor instances.
 std::string GetOidcClientIdentity(const TOidcConfig& config);
 
-// Device factories and factories with custom hooks have distinct client identities.
-// Reuse a factory to retain its identity. Parameterless CreateProvider() reuses one
-// provider; CreateProvider(facility) creates an independent provider for each call.
+// Factory identity is stable for the same credentials and custom hook instances.
+// Different hook instances isolate independent user sessions.
+// Parameterless CreateProvider() reuses one provider; CreateProvider(facility) creates an independent provider for each call.
 // Each device provider can prompt if no usable cached credentials exist. Sharing a
 // cacher reuses stored tokens but does not coalesce concurrent authorization flows.
 //
 // GetAuthInfo() blocks until credentials or an error are available; prefer
 // GetAuthInfoAsync() when waiting for interactive sign-in.
 //
-// Destruction cancels requests but does not wait for blocked DNS/connect/TLS setup.
-// An HTTP worker may outlive its provider until the underlying operation returns;
-// the socket/connect timeouts do not bound DNS resolution. Destruction therefore
-// does not guarantee HTTP quiescence for SDK/TLS unloading or static runtime teardown.
+// HTTP runs synchronously on the provider worker. Destruction stops polling and
+// joins that worker; active HTTP may wait for socket/connect timeouts (5 s / 30 s).
+// DNS resolution is subject to the system resolver's timeout. Transport timeouts
+// bound individual socket operations, not the total duration of a streaming response.
+// Keep provider/factory owners alive until their hooks and future callbacks return;
+// synchronous destruction from those callbacks is not supported.
 std::shared_ptr<ICredentialsProviderFactory> CreateOidcProviderFactory(const TOidcConfig& config);
 
-} // namespace NYdb::inline Dev
+} // namespace NYdb::inline Dev::NOidc

@@ -13,6 +13,7 @@ namespace NYdb::inline Dev::NOidc::NPrivate {
 namespace {
 
 constexpr size_t MaxJwtPayloadSize = 1024 * 1024;
+constexpr ui64 MaxDurationSeconds = std::numeric_limits<i64>::max() / 2 / 1'000'000;
 
 } // namespace
 
@@ -34,7 +35,7 @@ ui64 Seconds(const NJson::TJsonValue& value, const std::string& field, bool allo
         throw TError("invalid " + field, false, {});
     }
     const auto seconds = value.GetUInteger();
-    if ((!seconds && !allowZero) || seconds > std::numeric_limits<i64>::max() / 2 / 1'000'000) {
+    if ((!seconds && !allowZero) || seconds > MaxDurationSeconds) {
         throw TError("invalid " + field, false, {});
     }
     return seconds;
@@ -42,13 +43,33 @@ ui64 Seconds(const NJson::TJsonValue& value, const std::string& field, bool allo
 
 NUri::TUri ParseUrl(const std::string& value, bool issuer) {
     const std::string role = issuer ? "issuer" : "endpoint";
+    const auto invalidUrl = [&role] {
+        return std::invalid_argument("OIDC credentials: invalid " + role + " URL");
+    };
+    if (value.empty()) {
+        throw invalidUrl();
+    }
+    const bool hasControlCharacters = std::any_of(value.begin(), value.end(), [](unsigned char c) {
+        return c <= 0x20 || c == 0x7f;
+    });
+    if (hasControlCharacters) {
+        throw invalidUrl();
+    }
+
     NUri::TUri url;
-    if (value.empty() ||
-        std::any_of(value.begin(), value.end(), [](unsigned char c) { return c <= 0x20 || c == 0x7f; }) ||
-        url.Parse(value, NUri::TFeature::FeaturesAll) != NUri::TUri::TState::EParsed::ParsedOK ||
-        url.GetHost().empty() || !url.IsNull(NUri::TUri::FieldUser) || !url.IsNull(NUri::TUri::FieldPass) ||
-        !url.IsNull(NUri::TUri::FieldFrag) || (issuer && !url.IsNull(NUri::TUri::FieldQuery))) {
-        throw std::invalid_argument("OIDC credentials: invalid " + role + " URL");
+    if (url.Parse(value, NUri::TFeature::FeaturesAll) != NUri::TUri::TState::EParsed::ParsedOK) {
+        throw invalidUrl();
+    }
+    if (url.GetHost().empty()) {
+        throw invalidUrl();
+    }
+    for (const auto field : {NUri::TUri::FieldUser, NUri::TUri::FieldPass, NUri::TUri::FieldFrag}) {
+        if (!url.IsNull(field)) {
+            throw invalidUrl();
+        }
+    }
+    if (issuer && !url.IsNull(NUri::TUri::FieldQuery)) {
+        throw invalidUrl();
     }
     if (url.GetScheme() != NUri::TScheme::SchemeHTTPS) {
         throw std::invalid_argument("OIDC credentials: " + role + " requires HTTPS");

@@ -1,16 +1,18 @@
-#include "private.h"
-#include "static_provider.h"
-#include "client_provider.h"
-#include "device_provider.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/static_provider.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/client_provider.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/device_provider.h>
 
 #include <library/cpp/openssl/crypto/sha.h>
-#include <util/generic/guid.h>
+
 #include <util/generic/overloaded.h>
 #include <util/system/mutex.h>
 
 #include <algorithm>
+#include <cstdint>
 
-namespace NYdb::inline Dev {
+namespace NYdb::inline Dev::NOidc {
 
 ITokenCacher::~ITokenCacher() = default;
 
@@ -20,9 +22,20 @@ bool TOAuthToken::IsValid(TInstant now) const {
     return !Token.empty() && (!ExpiresAt.has_value() || ExpiresAt.value() > now);
 }
 
-namespace NOidc::NPrivate {
+namespace NPrivate {
 
 namespace {
+
+std::string HashIdentity(const std::string& data) {
+    const auto hash = NOpenSsl::NSha256::Calc(data.data(), data.size());
+    static constexpr char Hex[] = "0123456789abcdef";
+    std::string identity = "oidc:";
+    for (const auto byte : hash) {
+        identity += Hex[byte >> 4];
+        identity += Hex[byte & 0xF];
+    }
+    return identity;
+}
 
 class TFactory final: public ICredentialsProviderFactory {
 public:
@@ -35,7 +48,7 @@ public:
     std::string GetClientIdentity() const override;
 
 private:
-    TCredentialsProviderPtr CreateProviderImpl(std::weak_ptr<ICoreFacility> facility, bool standalone) const;
+    TCredentialsProviderPtr CreateProviderImpl(std::weak_ptr<ICoreFacility> facility) const;
 
     TOidcConfig Config;
     std::string Identity;
@@ -47,50 +60,54 @@ TFactory::TFactory(TOidcConfig config)
     : Config(std::move(config))
     , Identity(GetOidcClientIdentity(Config))
 {
-    // Do not deduplicate user sessions or silently replace custom hooks with
-    // another factory's hooks when the driver reuses a database state.
-    if (std::holds_alternative<TDeviceOidcConfig>(Config.FlowConfig) || Config.Cacher_ || Config.Acceptor_) {
-        Identity += ":" + std::string(CreateGuidAsString());
+    // The factory is identified before authorization, so a token's sub claim
+    // is not available for client/device grants. Keep the credential fingerprint
+    // stable and distinguish custom hooks by their process-local instance identity.
+    if (Config.Cacher_ != nullptr || Config.Acceptor_ != nullptr) {
+        Identity = HashIdentity(Identity + ":" +
+            std::to_string(reinterpret_cast<uintptr_t>(Config.Cacher_.get())) + ":" +
+            std::to_string(reinterpret_cast<uintptr_t>(Config.Acceptor_.get())));
     }
 }
 
 TCredentialsProviderPtr TFactory::CreateProvider() const {
     with_lock (Mutex) {
-        if (!Provider) {
-            Provider = CreateProviderImpl(std::weak_ptr<ICoreFacility>{}, true);
+        if (Provider == nullptr) {
+            auto facility = CreateSimpleCoreFacility();
+            Provider = std::make_shared<NCredentials::NDetail::TOwningFacilityCredentialsProvider>(
+                facility, CreateProviderImpl(facility));
         }
         return Provider;
     }
 }
 
 TCredentialsProviderPtr TFactory::CreateProvider(std::weak_ptr<ICoreFacility> facility) const {
-    return CreateProviderImpl(std::move(facility), false);
+    return CreateProviderImpl(std::move(facility));
 }
 
 std::string TFactory::GetClientIdentity() const {
     return Identity;
 }
 
-TCredentialsProviderPtr TFactory::CreateProviderImpl(std::weak_ptr<ICoreFacility> facility, bool standalone) const {
-    auto provider = std::visit(TOverloaded{
-        [&](const TStaticOidcConfig&) -> std::shared_ptr<TProviderBase> {
-            return std::make_shared<TStaticProvider>(Config, std::move(facility), standalone);
+TCredentialsProviderPtr TFactory::CreateProviderImpl(std::weak_ptr<ICoreFacility> facility) const {
+    return std::visit(TOverloaded{
+        [&](const TStaticOidcConfig&) -> TCredentialsProviderPtr {
+            return std::make_shared<TStaticProvider>(Config, std::move(facility));
         },
-        [&](const TClientOidcConfig&) -> std::shared_ptr<TProviderBase> {
-            return std::make_shared<TClientProvider>(Config, std::move(facility), standalone);
+        [&](const TClientOidcConfig&) -> TCredentialsProviderPtr {
+            return std::make_shared<TClientProvider>(Config, std::move(facility));
         },
-        [&](const TDeviceOidcConfig&) -> std::shared_ptr<TProviderBase> {
-            return std::make_shared<TDeviceProvider>(Config, std::move(facility), standalone);
+        [&](const TDeviceOidcConfig&) -> TCredentialsProviderPtr {
+            return std::make_shared<TDeviceProvider>(Config, std::move(facility));
         },
     }, Config.FlowConfig);
-    return std::make_shared<TCredentialsProviderAdapter>(std::move(provider));
 }
 
 } // namespace
-} // namespace NOidc::NPrivate
+} // namespace NPrivate
 
 void ValidateOidcConfig(const TOidcConfig& config) {
-    using namespace NOidc::NPrivate;
+    using namespace NPrivate;
     ParseUrl(config.Issuer, true);
     std::visit(TOverloaded{
         [](const TStaticOidcConfig& flow) {
@@ -122,7 +139,7 @@ void ValidateOidcConfig(const TOidcConfig& config) {
 }
 
 std::string GetOidcClientIdentity(const TOidcConfig& config) {
-    using namespace NOidc::NPrivate;
+    using namespace NPrivate;
     std::string data;
     const auto append = [&data](const std::string& value) {
         data += std::to_string(value.size()) + ":" + value;
@@ -137,23 +154,16 @@ std::string GetOidcClientIdentity(const TOidcConfig& config) {
     for (const auto& scope : scopes) {
         append(scope);
     }
-    if (const auto* flow = std::get_if<TStaticOidcConfig>(&config.FlowConfig)) {
+    if (const auto* flow = std::get_if<TStaticOidcConfig>(&config.FlowConfig); flow != nullptr) {
         append(flow->AccessToken);
-        append(flow->ExpiresAt ? std::to_string(flow->ExpiresAt->MicroSeconds()) : "");
+        append(flow->ExpiresAt.has_value() ? std::to_string(flow->ExpiresAt->MicroSeconds()) : "");
     }
-    const auto hash = NOpenSsl::NSha256::Calc(data.data(), data.size());
-    static constexpr char Hex[] = "0123456789abcdef";
-    std::string identity = "oidc:";
-    for (const auto byte : hash) {
-        identity += Hex[byte >> 4];
-        identity += Hex[byte & 0xF];
-    }
-    return identity;
+    return HashIdentity(data);
 }
 
 std::shared_ptr<ICredentialsProviderFactory> CreateOidcProviderFactory(const TOidcConfig& config) {
     ValidateOidcConfig(config);
-    return std::make_shared<NOidc::NPrivate::TFactory>(config);
+    return std::make_shared<NPrivate::TFactory>(config);
 }
 
-} // namespace NYdb::inline Dev
+} // namespace NYdb::inline Dev::NOidc

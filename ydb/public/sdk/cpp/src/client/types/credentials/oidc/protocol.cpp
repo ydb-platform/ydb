@@ -1,5 +1,6 @@
 #include "protocol.h"
-#include "private.h"
+
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
 
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_reader.h>
@@ -10,7 +11,6 @@
 #include <util/stream/output.h>
 
 #include <algorithm>
-#include <thread>
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 namespace {
@@ -72,62 +72,6 @@ void CheckToken(const std::string& token) {
 
 } // namespace
 
-struct THttpResult {
-    unsigned Status;
-    TString Body;
-};
-
-struct THttpJob {
-    NThreading::TCancellationTokenSource Cancellation;
-    NThreading::TFuture<THttpResult> Result;
-    std::thread Worker;
-
-    THttpJob(NUri::TUri url, TString body, bool post, TKeepAliveHttpClient::THeaders headers,
-             TDuration socketTimeout, TDuration connectTimeout);
-
-    bool Ready() const;
-
-    ~THttpJob();
-};
-
-THttpJob::THttpJob(NUri::TUri url, TString body, bool post, TKeepAliveHttpClient::THeaders headers,
-                   TDuration socketTimeout, TDuration connectTimeout)
-{
-    auto promise = NThreading::NewPromise<THttpResult>();
-    Result = promise.GetFuture();
-    Worker = std::thread([url = std::move(url), body = std::move(body), post, headers = std::move(headers),
-                          socketTimeout, connectTimeout, cancellation = Cancellation.Token(), promise]() mutable {
-        try {
-            cancellation.ThrowIfCancellationRequested();
-            const auto host = url.PrintS(NUri::TUri::FlagScheme | NUri::TUri::FlagHost | NUri::TUri::FlagHostAscii);
-            const auto path = url.PrintS(NUri::TUri::FlagPath | NUri::TUri::FlagQuery);
-            TKeepAliveHttpClient client(host, url.GetPort(), socketTimeout, connectTimeout, false, false, true);
-            TResponseBuffer response;
-            const auto status = post
-                                    ? client.DoPost(path, body, &response, headers, nullptr, cancellation)
-                                    : client.DoGet(path, &response, headers, nullptr, cancellation);
-            promise.TrySetValue(THttpResult{status, std::move(response.Body)});
-        } catch (...) {
-            promise.TrySetException(std::current_exception());
-        }
-    });
-}
-
-bool THttpJob::Ready() const {
-    return Result.HasValue() || Result.HasException();
-}
-
-THttpJob::~THttpJob() {
-    Cancellation.Cancel();
-    if (Ready()) {
-        Worker.join();
-    } else {
-        // DNS/connect/TLS setup does not observe cancellation. The worker owns
-        // all request data, so it can finish without keeping the provider alive.
-        Worker.detach();
-    }
-}
-
 TProtocol::TProtocol(const TOidcConfig& config, NThreading::TCancellationToken cancellation)
     : Config(config)
     , Cancellation(std::move(cancellation))
@@ -138,12 +82,6 @@ TProtocol::~TProtocol() = default;
 
 NJson::TJsonValue TProtocol::Request(const std::string& endpoint, const TCgiParameters* form, bool authenticate, TInstant deadline) {
     Cancellation.ThrowIfCancellationRequested();
-    if (HttpJob != nullptr && !HttpJob->Ready()) {
-        // Keep at most one in-flight request per provider. Replacing a timed-out
-        // job could accumulate detached workers while DNS or TLS is blocked.
-        throw TError("previous HTTP request is still stopping", true, {});
-    }
-    HttpJob.reset();
     const auto url = ParseUrl(endpoint, false);
     TKeepAliveHttpClient::THeaders headers;
     TCgiParameters body = (form != nullptr) ? *form : TCgiParameters{};
@@ -159,47 +97,45 @@ NJson::TJsonValue TProtocol::Request(const std::string& endpoint, const TCgiPara
         }
     }
     headers["Accept"] = "application/json";
-    if (form) {
+    if (form != nullptr) {
         headers["Content-Type"] = "application/x-www-form-urlencoded";
     }
     const auto now = TInstant::Now();
     if (deadline <= now) {
         throw TError("HTTP request deadline exceeded", true, {});
     }
-    const auto timeout = std::min(deadline - now, SocketTimeout + ConnectTimeout);
-    const auto monotonicDeadline = std::chrono::steady_clock::now() + std::chrono::microseconds(timeout.MicroSeconds());
-    HttpJob = std::make_unique<THttpJob>(url, body.Print(), form != nullptr, std::move(headers), SocketTimeout, ConnectTimeout);
-    THttpResult response;
+    const auto remaining = deadline - now;
+    const auto host = url.PrintS(NUri::TUri::FlagScheme | NUri::TUri::FlagHost | NUri::TUri::FlagHostAscii);
+    const auto path = url.PrintS(NUri::TUri::FlagPath | NUri::TUri::FlagQuery);
+    TResponseBuffer response;
+    unsigned status;
     try {
-        while (!HttpJob->Ready()) {
-            if (Cancellation.IsCancellationRequested()) {
-                HttpJob->Cancellation.Cancel();
-                Cancellation.ThrowIfCancellationRequested();
-            }
-            const auto remaining = std::chrono::duration_cast<std::chrono::microseconds>(monotonicDeadline - std::chrono::steady_clock::now());
-            if (remaining <= std::chrono::microseconds::zero()) {
-                HttpJob->Cancellation.Cancel();
-                throw TError("HTTP request deadline exceeded", true, {});
-            }
-            HttpJob->Result.Wait(TDuration::MicroSeconds(std::min<i64>(remaining.count(), 100'000)));
-        }
-        response = HttpJob->Result.GetValueSync();
-        HttpJob.reset();
+        // Shutdown waits for this synchronous request. Keep HTTP cancellation
+        // subscriptions local to the request instead of retaining them until shutdown.
+        NThreading::TCancellationTokenSource requestCancellation;
+        TKeepAliveHttpClient client(host, url.GetPort(),
+            std::min(SocketTimeout, remaining), std::min(ConnectTimeout, remaining), false, false, true);
+        status = (form != nullptr)
+            ? client.DoPost(path, body.Print(), &response, headers, nullptr, requestCancellation.Token())
+            : client.DoGet(path, &response, headers, nullptr, requestCancellation.Token());
+        Cancellation.ThrowIfCancellationRequested();
     } catch (const TError&) {
         throw;
     } catch (const std::exception&) {
         Cancellation.ThrowIfCancellationRequested();
         throw TError("HTTP transport failed", true, {});
     }
+    if (TInstant::Now() >= deadline) {
+        throw TError("HTTP request deadline exceeded", true, {});
+    }
     NJson::TJsonValue json;
     NJson::TJsonReaderConfig reader;
     reader.MaxDepth = 32;
     const bool valid = NJson::ReadJsonTree(response.Body, &reader, &json) && json.IsMap();
-    const auto status = response.Status;
     if (status != 200) {
         std::string code;
         if (valid) {
-            if (const auto* error = Field(json, "error"); error && error->IsString()) {
+            if (const auto* error = Field(json, "error"); error != nullptr && error->IsString()) {
                 for (const char* known : {"invalid_grant", "invalid_client", "invalid_scope", "unauthorized_client",
                                           "unsupported_grant_type", "authorization_pending", "slow_down", "access_denied", "expired_token"}) {
                     if (error->GetString() == known) {
@@ -248,7 +184,7 @@ void TProtocol::Discover() {
         ParseUrl(deviceEndpoint, false);
     }
     if (!ClientSecret(Config).empty()) {
-        if (const auto* methods = Field(metadata, "token_endpoint_auth_methods_supported")) {
+        if (const auto* methods = Field(metadata, "token_endpoint_auth_methods_supported"); methods != nullptr) {
             if (!methods->IsArray()) {
                 throw TError("invalid token_endpoint_auth_methods_supported", false, {});
             }
@@ -272,8 +208,7 @@ TTokenCache TProtocol::TokenRequest(TCgiParameters form, const std::optional<TOA
     Discover();
     const auto now = TInstant::Now();
     const auto response = Request(TokenEndpoint, &form, true, deadline);
-    // A ready HTTP future can race with the deadline check inside Request().
-    // Keep the entire device grant bounded, including response processing.
+    // Include JSON response processing in the device authorization deadline.
     if (TInstant::Now() >= deadline) {
         throw TError("device authorization expired", false, "expired_token");
     }
@@ -298,7 +233,7 @@ TTokenCache TProtocol::TokenRequest(TCgiParameters form, const std::optional<TOA
     } else {
         result.RefreshToken = refresh;
     }
-    if (result.RefreshToken) {
+    if (result.RefreshToken.has_value()) {
         if (const auto* expires = Field(response, "refresh_expires_in"); expires != nullptr) {
             const auto seconds = Seconds(*expires, "refresh_expires_in", true);
             result.RefreshToken->ExpiresAt = seconds

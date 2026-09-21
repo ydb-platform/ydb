@@ -33,11 +33,13 @@ public:
 
     std::string Issuer() const;
 
-    NYdb::TOidcConfig ClientConfig() const;
+    NYdb::NOidc::TOidcConfig ClientConfig() const;
 
     void Enqueue(TString body, HttpCodes status);
 
     void SetDiscoveryReply(TString body, HttpCodes status);
+
+    void SetTokenReplyDelay(TDuration delay);
 
     void BlockTokenRepliesUntil(NThreading::TFuture<void> released);
 
@@ -77,5 +79,6 @@ private:
     NThreading::TFuture<void> TokenReplyGate;
     NThreading::TFuture<void> TlsHandshakeGate;
     bool TlsHandshakeStarted = false;
+    TDuration TokenReplyDelay;
     THttpServer Server;
 };

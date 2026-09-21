@@ -2,9 +2,14 @@
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 
-TDeviceProvider::TDeviceProvider(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility, bool standalone)
-    : TRefreshingProviderBase(config, std::move(facility), standalone)
+TDeviceProvider::TDeviceProvider(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility)
+    : TRefreshingProviderBase(config, std::move(facility))
 {
+    Start();
+}
+
+TDeviceProvider::~TDeviceProvider() {
+    Stop();
 }
 
 TTokenCache TDeviceProvider::AcquireToken() {

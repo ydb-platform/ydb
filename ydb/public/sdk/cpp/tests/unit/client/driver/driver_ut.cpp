@@ -395,14 +395,14 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         const auto address = TStringBuilder() << "127.0.0.1:" << pm.GetPort();
         auto server = StartGrpcServer(address, discoveryService);
 
-        TOidcConfig oidc;
+        NOidc::TOidcConfig oidc;
         oidc.Issuer = "https://issuer.example";
-        oidc.FlowConfig = TStaticOidcConfig{.AccessToken = "oidc-access"};
+        oidc.FlowConfig = NOidc::TStaticOidcConfig{.AccessToken = "oidc-access"};
         auto driver = TDriver(TDriverConfig()
             .SetEndpoint(address)
             .SetDatabase("/Root/My/DB")
             .SetDiscoveryMode(EDiscoveryMode::Sync)
-            .SetCredentialsProviderFactory(CreateOidcProviderFactory(oidc)));
+            .SetCredentialsProviderFactory(NOidc::CreateOidcProviderFactory(oidc)));
 
         UNIT_ASSERT_VALUES_EQUAL(discoveryService.AuthTicket, "Bearer oidc-access");
     }

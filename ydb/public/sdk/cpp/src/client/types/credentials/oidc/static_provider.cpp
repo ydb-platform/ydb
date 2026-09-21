@@ -2,9 +2,14 @@
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 
-TStaticProvider::TStaticProvider(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility, bool standalone)
-    : TProviderBase(config, std::move(facility), standalone)
+TStaticProvider::TStaticProvider(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility)
+    : TProviderBase(config, std::move(facility))
 {
+    Start();
+}
+
+TStaticProvider::~TStaticProvider() {
+    Stop();
 }
 
 void TStaticProvider::RunTokens() {
@@ -19,7 +24,7 @@ void TStaticProvider::RunTokens() {
     }
     Write(current);
     Publish(current);
-    if (current.AccessToken.ExpiresAt) {
+    if (current.AccessToken.ExpiresAt.has_value()) {
         Fail(std::make_exception_ptr(TError("static credentials have expired", false, {})));
     }
 }

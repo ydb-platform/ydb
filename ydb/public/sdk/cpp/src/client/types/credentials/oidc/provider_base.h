@@ -10,23 +10,23 @@
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 
-class TProviderBase {
+class TProviderBase: public ICredentialsProvider {
     struct TDelivery {
         NThreading::TPromise<std::string> Promise;
         std::weak_ptr<void> CallbackLifetime;
     };
 
 public:
-    TProviderBase(TOidcConfig config, std::weak_ptr<ICoreFacility> facility, bool standalone);
-    virtual ~TProviderBase();
+    TProviderBase(TOidcConfig config, std::weak_ptr<ICoreFacility> facility);
+    ~TProviderBase() override;
 
-    NThreading::TFuture<std::string> GetAuthInfoAsync() const;
-    bool IsValid() const;
+    std::string GetAuthInfo() const override;
+    NThreading::TFuture<std::string> GetAuthInfoAsync() const override;
+    bool IsValid() const override;
     void Stop();
-    void Run();
-    void CancelDeliveries();
 
 protected:
+    void Start();
     virtual void RunTokens() = 0;
 
     bool Wait(TDuration delay);
@@ -35,16 +35,18 @@ protected:
     void Fail(std::exception_ptr error);
     void Publish(const TTokenCache& current);
     bool IsStopped() const;
+    void RequestStop();
 
     TOidcConfig Config;
     NThreading::TCancellationTokenSource Cancellation;
 
 private:
+    void Run();
+    void CancelDeliveries();
     void Complete(NThreading::TPromise<std::string> pending, std::optional<TOAuthToken> token, std::exception_ptr error);
     void CompleteDiscardedDeliveries();
 
     std::weak_ptr<ICoreFacility> Facility;
-    const bool Standalone;
     mutable TMutex Mutex;
     std::condition_variable_any Changed;
     bool Stopping = false;
@@ -52,11 +54,12 @@ private:
     std::exception_ptr Error;
     NThreading::TPromise<std::string> Pending;
     std::vector<TDelivery> Deliveries;
+    std::thread Worker;
 };
 
 class TRefreshingProviderBase: public TProviderBase {
 public:
-    TRefreshingProviderBase(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility, bool standalone);
+    TRefreshingProviderBase(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility);
 
 protected:
     virtual TTokenCache AcquireToken() = 0;
@@ -69,20 +72,6 @@ private:
     TTokenCache Update(const TTokenCache& current);
 
     TProtocol Protocol;
-};
-
-class TCredentialsProviderAdapter final: public ICredentialsProvider {
-public:
-    explicit TCredentialsProviderAdapter(std::shared_ptr<TProviderBase> provider);
-    ~TCredentialsProviderAdapter() override;
-
-    std::string GetAuthInfo() const override;
-    NThreading::TFuture<std::string> GetAuthInfoAsync() const override;
-    bool IsValid() const override;
-
-private:
-    std::shared_ptr<TProviderBase> Provider;
-    std::thread Worker;
 };
 
 } // namespace NYdb::inline Dev::NOidc::NPrivate

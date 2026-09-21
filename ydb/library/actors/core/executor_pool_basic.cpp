@@ -346,11 +346,7 @@ namespace NActors {
             LWPROBE(TryToHarmonize, PoolId, PoolName);
             Harmonizer->Harmonize(hpnow);
         }
-        const bool finishedActivation = Threads[workerId].GetState<EThreadState>() == EThreadState::Work;
         Threads[workerId].UnsetWork();
-        if (SharedPool && finishedActivation) {
-            RequestWaker(true);
-        }
 
         const auto settleWakerState = [&] {
             while (!StopFlag.load(std::memory_order_acquire)) {
@@ -913,9 +909,11 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::ScheduleActivationExWaker(TMailbox* mailbox, ui64 revolvingCounter) {
-        ActivationCredits.fetch_add(1, std::memory_order_acq_rel);
+        // Pair with the shared worker's sleep announcement and queue recheck.
+        ActivationCredits.fetch_add(1, std::memory_order_seq_cst);
         Activations.Push(mailbox->Hint, revolvingCounter);
-        if (SharedPool || SleepingCount.load(std::memory_order_acquire) > 0) {
+        if (SleepingCount.load(std::memory_order_acquire) > 0 ||
+                (SharedPool && SharedPool->SharedSleepingCount.load(std::memory_order_seq_cst) > 0)) {
             RequestWaker(false);
         }
     }
@@ -1233,7 +1231,7 @@ namespace NActors {
     TBasicExecutorPool::TSemaphore TBasicExecutorPool::GetSemaphore() const {
         if (EnableWaker) {
             TSemaphore semaphore;
-            semaphore.OldSemaphore = ActivationCredits.load(std::memory_order_acquire);
+            semaphore.OldSemaphore = ActivationCredits.load(std::memory_order_seq_cst);
             semaphore.CurrentSleepThreadCount = SleepingCount.load(std::memory_order_acquire);
             semaphore.CurrentThreadCount = AtomicLoad(&ThreadCount);
             return semaphore;
@@ -1255,13 +1253,11 @@ namespace NActors {
             LWPROBE(TryToHarmonize, PoolId, PoolName);
             Harmonizer->Harmonize(hpnow);
         }
+        constexpr ui32 maxAttempts = 8;
         if (EnableWaker) {
-            while (!StopFlag.load(std::memory_order_acquire)) {
-                // Only the shared executor consumes this bit and acquires its
-                // own waker role. No shared worker enters the Basic waker.
-                if (SharedWakerRequested.load(std::memory_order_acquire)) {
-                    return nullptr;
-                }
+            SharedPool->RunWaker(workerId);
+            for (ui32 attempt = 0; attempt < maxAttempts && !StopFlag.load(std::memory_order_acquire); ++attempt) {
+                TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
                 if (const ui32 activation = Activations.Pop(revolvingCounter++)) {
                     const i64 credits = ActivationCredits.fetch_sub(1, std::memory_order_acq_rel);
                     Y_DEBUG_ABORT_UNLESS(credits > 0);
@@ -1278,7 +1274,7 @@ namespace NActors {
         TAtomic x = AtomicGet(Semaphore);
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "revolvingCounter == ", revolvingCounter, " semaphore == ", semaphore.OldSemaphore);
-        while (!StopFlag.load(std::memory_order_acquire)) {
+        for (ui32 attempt = 0; attempt < maxAttempts && !StopFlag.load(std::memory_order_acquire); ++attempt) {
             if (!semaphore.OldSemaphore) {
                 EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "semaphore == 0");
                 return nullptr;

@@ -193,7 +193,6 @@ namespace NActors {
     private:
         alignas(PLATFORM_CACHE_LINE) std::atomic<i64> ActivationCredits = 0;
         alignas(PLATFORM_CACHE_LINE) std::atomic<i16> DesiredSharedThreads = 0;
-        std::atomic_bool SharedWakerRequested = false;
         alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SleepingCount = 0;
         alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
         alignas(PLATFORM_CACHE_LINE) std::atomic<i16> WakerWorkerId = InvalidWakerWorkerId;

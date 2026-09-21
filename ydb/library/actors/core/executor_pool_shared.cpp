@@ -11,6 +11,7 @@
 #include "thread_context.h"
 #include <atomic>
 #include <memory>
+#include <util/generic/scope.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
 
@@ -266,6 +267,16 @@ namespace NActors {
                 // after soft deadline we check adjacent pool
                 continue;
             }
+            // Publish before rechecking queues: either we see a new credit or
+            // its producer sees a sleeper and requests a waker.
+            if (HasWakerPools) {
+                SharedSleepingCount.fetch_add(1, std::memory_order_seq_cst);
+            }
+            Y_DEFER {
+                if (HasWakerPools) {
+                    SharedSleepingCount.fetch_sub(1, std::memory_order_seq_cst);
+                }
+            };
             bool goToSleep = true;
             for (i16 attempt = 0; attempt < 2; ++attempt) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "attempt == ", attempt, " ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
@@ -624,18 +635,11 @@ namespace NActors {
         if (PoolThreads == 0 || WakerPending.exchange(true)) {
             return;
         }
-        // Paired seq_cst operations on pending and owner close the release
-        // handoff: either the owner sees pending or we notify another worker.
-        if (WakerWorkerId.load() != -1) {
+        // Reserve the request before notifying. Further producers only mark
+        // pending while a worker is on its way to, or already running, the waker.
+        i16 expected = IdleWakerWorkerId;
+        if (!WakerWorkerId.compare_exchange_strong(expected, RequestedWakerWorkerId)) {
             return;
-        }
-
-        // Conservative routing for this prototype: publish in every Basic pool
-        // instead of racing a worker's non-atomic CurrentPoolId while it switches.
-        for (auto* pool : Pools) {
-            if (pool) {
-                pool->SharedWakerRequested.store(true, std::memory_order_release);
-            }
         }
         // Use the existing pre-park notification handshake, even when there
         // are no foreign slots: running the shared waker needs no pool lease.
@@ -659,17 +663,13 @@ namespace NActors {
     }
 
     void TSharedExecutorPool::RunWaker(TWorkerId workerId) {
-        if (!HasWakerPools) {
+        if (!HasWakerPools || WakerWorkerId.load() != RequestedWakerWorkerId) {
             return;
         }
         auto& thread = Threads[workerId];
         const i16 poolId = thread.CurrentPoolId;
-        const bool requested = Pools[poolId]->SharedWakerRequested.exchange(false, std::memory_order_acq_rel);
-        if (!requested && !WakerPending.load()) {
-            return;
-        }
         do {
-            i16 expected = -1;
+            i16 expected = RequestedWakerWorkerId;
             if (!WakerWorkerId.compare_exchange_strong(expected, workerId)) {
                 return;
             }
@@ -684,10 +684,15 @@ namespace NActors {
             Y_DEBUG_ABORT_UNLESS(thread.CurrentPoolId == poolId);
             EThreadState state = EThreadState::Waker;
             Y_ABORT_UNLESS(thread.ReplaceState(state, resumeState));
-            WakerWorkerId.store(-1);
+            WakerWorkerId.store(IdleWakerWorkerId);
             // A requester may have observed us between the last pending check
             // and owner release. Do not leave its obligation behind.
-        } while (!StopFlag.load(std::memory_order_acquire) && WakerPending.load());
+            if (StopFlag.load(std::memory_order_acquire) || !WakerPending.load()) {
+                return;
+            }
+            expected = IdleWakerWorkerId;
+            WakerWorkerId.compare_exchange_strong(expected, RequestedWakerWorkerId);
+        } while (true);
     }
 
     void TSharedExecutorPool::WakerLoop() {

@@ -99,8 +99,13 @@ namespace NActors {
 
         // Set during pool registration, before any executor thread starts.
         bool HasWakerPools = false;
+        // Includes workers checking queues for the last time before parking.
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SharedSleepingCount = 0;
+        static constexpr i16 IdleWakerWorkerId = -1;
+        static constexpr i16 RequestedWakerWorkerId = -2;
         alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
-        std::atomic<i16> WakerWorkerId = -1;
+        // Idle, a published request, or the worker that owns its processing.
+        std::atomic<i16> WakerWorkerId = IdleWakerWorkerId;
 
         void RequestWaker();
         void RunWaker(TWorkerId workerId);

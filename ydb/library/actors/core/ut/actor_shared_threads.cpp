@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         std::atomic<ui64>* const Shared;
     };
 
-    void RunSharedWakerBursts(bool sharedOnly, bool mixed, bool foreignOnly) {
+    void RunSharedWakerBursts(bool sharedOnly, bool mixed, bool foreignOnly, bool singleSharedWorker = false) {
         auto setup = TActorBenchmark::GetActorSystemSetup();
         constexpr ui32 poolCount = 3;
         constexpr ui32 actorsPerPool = 16;
@@ -309,6 +309,9 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
             config.PoolId = poolId;
             config.PoolName = "SharedWakerTest";
             config.Threads = sharedOnly ? 2 : 3;
+            if (singleSharedWorker) {
+                config.Threads = 1;
+            }
             config.MinThreadCount = config.Threads;
             config.MaxThreadCount = config.Threads;
             config.DefaultThreadCount = config.Threads;
@@ -317,7 +320,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
             config.HasSharedThread = !sharedOnly;
             config.AllThreadsAreShared = sharedOnly;
             config.EnableWaker = !mixed || poolId != 1;
-            if (foreignOnly && poolId == 2) {
+            if (foreignOnly && (poolId == 2 || singleSharedWorker && poolId != 0)) {
                 config.Threads = 0;
                 config.MinThreadCount = 0;
                 config.MaxThreadCount = 0;
@@ -396,6 +399,10 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
 
     Y_UNIT_TEST(WakerForeignOnlyPool) {
         RunSharedWakerBursts(true, false, true);
+    }
+
+    Y_UNIT_TEST(WakerSingleSharedWorker) {
+        RunSharedWakerBursts(true, false, true, true);
     }
 
 } // Y_UNIT_TEST_SUITE(ActorBenchmark)

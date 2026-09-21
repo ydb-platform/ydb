@@ -41,6 +41,11 @@ namespace NKikimr::NDDisk {
         ui64 TabletId;
         ui32 Generation;
         ui64 Lsn;
+        // Direct block group number this barrier applies to. Fits in a single byte (0-255);
+        // defaults to 0 so on-disk records written before this field existed (and callers that
+        // never pass a direct block group) keep using persistent buffer namespace 0, matching the
+        // pre-existing "one namespace per tablet" behavior.
+        ui8 DirectBlockGroupIndex = 0;
     };
 
     struct TPersistentBufferBarriers {
@@ -53,7 +58,10 @@ namespace NKikimr::NDDisk {
     static_assert(sizeof(TPersistentBufferBarriers) <= DataAlignment);
 
     struct TPersistentBufferFastErases {
-        static constexpr ui32 ErasesBufferSize = DataAlignment - sizeof(TPersistentBufferHeader) - sizeof(ui64) - sizeof(ui32);
+        // Direct block group number this fast-erase record applies to (accounted for in
+        // ErasesBufferSize below). See TPersistentBufferId for rationale; defaults to 0 to preserve
+        // the pre-existing single-namespace-per-tablet behavior.
+        static constexpr ui32 ErasesBufferSize = DataAlignment - sizeof(TPersistentBufferHeader) - sizeof(ui64) - sizeof(ui32) - sizeof(ui8);
         // Heuristic based on ErasesBufferSize, means that it's better to fallback on zeroing erases
         // If lsns count exeed this number - barrier was not moved for a long time and fast erases is not efficient in this case.
         // It is better to fall back to zeroing erases a little bit earlier,
@@ -63,6 +71,7 @@ namespace NKikimr::NDDisk {
         TPersistentBufferHeader Header;
         ui64 TabletId;
         ui32 Generation;
+        ui8 DirectBlockGroupIndex = 0;
         ui8 CompactLsns[ErasesBufferSize];
     };
 
@@ -92,6 +101,9 @@ namespace NKikimr::NDDisk {
         ui32 OffsetInBytes;
         ui32 Size;
         ui64 Lsn;
+        // Direct block group number this record applies to. See TPersistentBufferId for rationale;
+        // defaults to 0 to preserve the pre-existing single-namespace-per-tablet behavior.
+        ui8 DirectBlockGroupIndex = 0;
     };
 
     static_assert(sizeof(TPersistentBufferLsnRecordHeader) <= DataAlignment);

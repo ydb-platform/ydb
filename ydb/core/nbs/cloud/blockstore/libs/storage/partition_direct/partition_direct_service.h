@@ -19,6 +19,18 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Result of an asynchronous request to persist partition state.
+// Cancelled means the partition stopped before it could confirm completion.
+enum class EPersistResult
+{
+    Success,
+    Cancelled,
+};
+using TPersistResultFuture = NThreading::TFuture<EPersistResult>;
+using TPersistResultPromise = NThreading::TPromise<EPersistResult>;
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct IPartitionDirectService
 {
     virtual ~IPartitionDirectService() = default;
@@ -32,12 +44,12 @@ struct IPartitionDirectService
 
     // Asynchronously persists the given vchunk config to the partition's
     // local DB. Caller must ensure cfg.IsValid().
-    virtual NThreading::TFuture<void> UpdateVChunkConfig(
+    virtual TPersistResultFuture UpdateVChunkConfig(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
 
     // Asynchronously persists the given TDirtyMapStateProto to the partition's
     // local DB.
-    virtual NThreading::TFuture<void> UpdateDirtyMapState(
+    virtual TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,
         TDirtyMapStateProto state) = 0;
 

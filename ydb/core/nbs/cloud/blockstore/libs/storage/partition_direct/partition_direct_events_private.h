@@ -1,8 +1,12 @@
 #pragma once
 
+#include "partition_direct_service.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <ydb/core/base/events.h>
 
@@ -36,6 +40,7 @@ struct TEvPartitionDirectPrivate
         EvFastPathServiceStopped,
         EvPoisonByBlockedGeneration,
         EvAddHostToDBG,
+        EvPartitionCleanupCompleted,
 
         EvEnd,
     };
@@ -45,7 +50,8 @@ struct TEvPartitionDirectPrivate
               TEventLocal<TEvUpdateVChunkConfig, EvUpdateVChunkConfig>
     {
         TVChunkConfig VChunkConfig;
-        NThreading::TPromise<void> UpdateCompleted = NThreading::NewPromise();
+        TPersistResultPromise UpdateCompleted =
+            NThreading::NewPromise<EPersistResult>();
 
         explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
             : VChunkConfig(std::move(cfg))
@@ -58,7 +64,8 @@ struct TEvPartitionDirectPrivate
     {
         ui32 VChunkIndex;
         TDirtyMapStateProto State;
-        NThreading::TPromise<void> UpdateCompleted = NThreading::NewPromise();
+        TPersistResultPromise UpdateCompleted =
+            NThreading::NewPromise<EPersistResult>();
 
         TEvUpdateDirtyMapState(ui32 vChunkIndex, TDirtyMapStateProto state)
             : VChunkIndex(vChunkIndex)
@@ -108,6 +115,21 @@ struct TEvPartitionDirectPrivate
         TEvAddHostToDBG(size_t dbgId, size_t newHostIndex)
             : DirectBlockGroupId(dbgId)
             , NewHostIndex(newHostIndex)
+        {}
+    };
+
+    // Cleanup actor reports wipe + BSC deallocate outcome to the tablet.
+    struct TEvPartitionCleanupCompleted
+        : public NActors::TEventLocal<
+              TEvPartitionCleanupCompleted,
+              EvPartitionCleanupCompleted>
+    {
+        NProto::TError Error;
+
+        TEvPartitionCleanupCompleted() = default;
+
+        explicit TEvPartitionCleanupCompleted(NProto::TError error)
+            : Error(std::move(error))
         {}
     };
 };

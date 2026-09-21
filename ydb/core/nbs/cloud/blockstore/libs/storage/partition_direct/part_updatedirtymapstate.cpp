@@ -17,7 +17,13 @@ bool TPartitionActor::PrepareUpdateDirtyMapState(
 {
     Y_UNUSED(ctx);
     Y_UNUSED(tx);
-    Y_UNUSED(args);
+
+    Y_DEBUG_ABORT_UNLESS(ExecutingUpdateDirtyMapStatePromises.empty());
+    ExecutingUpdateDirtyMapStatePromises.reserve(
+        args.UpdateStateRequests.size());
+    for (const auto& request: args.UpdateStateRequests) {
+        ExecutingUpdateDirtyMapStatePromises.push_back(request.UpdateCompleted);
+    }
 
     return true;
 }
@@ -30,16 +36,35 @@ void TPartitionActor::ExecuteUpdateDirtyMapState(
     Y_UNUSED(ctx);
 
     TPartitionDatabase db(tx.DB);
-    db.StoreDirtyMapState(args.VChunkIndex, args.State);
+    for (const auto& request: args.UpdateStateRequests) {
+        db.StoreDirtyMapState(request.VChunkIndex, request.State);
+    }
 }
 
 void TPartitionActor::CompleteUpdateDirtyMapState(
     const TActorContext& ctx,
     TTxPartition::TUpdateDirtyMapState& args)
 {
-    Y_UNUSED(ctx);
+    for (auto& request: args.UpdateStateRequests) {
+        request.UpdateCompleted.TrySetValue(EPersistResult::Success);
+    }
+    ExecutingUpdateDirtyMapStatePromises.clear();
+    ExecutingUpdateDirtyMapState = false;
 
-    args.UpdateCompleted.SetValue();
+    if (!PendingUpdateDirtyMapStateRequests.empty()) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Execute pending UpdateDirtyMapStateRequests %zu",
+            LogTitle.GetWithTime().c_str(),
+            PendingUpdateDirtyMapStateRequests.size());
+
+        ExecutingUpdateDirtyMapState = true;
+        ExecuteTx(
+            ctx,
+            CreateTx<TUpdateDirtyMapState>(
+                std::move(PendingUpdateDirtyMapStateRequests)));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

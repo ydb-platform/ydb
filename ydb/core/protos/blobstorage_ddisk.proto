@@ -194,8 +194,8 @@ message TEvWrite {
 
     // Sender-computed checksum per MinSectorSize (4 KiB) block of the payload, in order. Each value is a
     // raw XXH3_64(data) over that block only: no tablet/vchunk identity or salt is mixed in (this is a
-    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself may compute
-    // and store). Optional: if empty, no checksum validation is performed.
+    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself computes
+    // and stores). Mandatory: writes without exactly one checksum per aligned block are rejected.
     repeated fixed64 Checksums = 4;
 }
 
@@ -214,8 +214,10 @@ message TEvReadResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     TReadResult ReadResult = 3;
-    // Reserved for checksum piggybacking: same raw XXH3_64(data) per MinSectorSize block of ReadResult
-    // payload as TEvWrite.Checksums, no identity/salt mixed in; not filled yet.
+    // Raw XXH3_64(data) per MinSectorSize block of ReadResult payload, restored from the DDisk
+    // integrity extent with its on-disk identity salt removed. Every successful read returns exactly
+    // one value per aligned block. DDisk does not compare these values with the returned data; the
+    // caller performs that check.
     repeated fixed64 Checksums = 4;
 }
 
@@ -237,8 +239,8 @@ message TEvWritePersistentBuffer {
 
     // Sender-computed checksum per MinSectorSize (4 KiB) block of the payload, in order. Each value is a
     // raw XXH3_64(data) over that block only: no tablet/vchunk identity or salt is mixed in (this is a
-    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself may compute
-    // and store). Optional: if empty, no checksum validation is performed.
+    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself computes
+    // and stores). Mandatory: writes without exactly one checksum per aligned block are rejected.
     repeated fixed64 Checksums = 5;
 }
 
@@ -267,9 +269,9 @@ message TEvWritePersistentBuffers {
 
     // Sender-computed checksum per MinSectorSize (4 KiB) block of the payload, in order. Each value is a
     // raw XXH3_64(data) over that block only: no tablet/vchunk identity or salt is mixed in (this is a
-    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself may compute
-    // and store). Optional: if empty, no checksum validation is performed. Forwarded as-is to every
-    // fanned-out TEvWritePersistentBuffer sent to each PersistentBufferIds entry.
+    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself computes
+    // and stores). Mandatory: writes without exactly one checksum per aligned block are rejected.
+    // Forwarded as-is to every fanned-out TEvWritePersistentBuffer sent to each PersistentBufferIds entry.
     repeated fixed64 Checksums = 7;
 }
 
@@ -298,10 +300,10 @@ message TEvReadPersistentBufferResult {
     uint32 OffsetInBytes = 5;
     uint32 SizeInBytes = 6;
     // Same raw XXH3_64(data) per MinSectorSize block of ReadResult payload as
-    // TEvWritePersistentBuffer.Checksums, no identity/salt mixed in. Opt-in: populated only when the
-    // persisted record itself carries sender-supplied checksums (empty for legacy/checksum-less
-    // records). Forwarded verbatim by TWritePersistentBuffersRequestActor when re-replicating a
-    // record via TEvReadThenWritePersistentBuffers.
+    // TEvWritePersistentBuffer.Checksums, no identity/salt mixed in. Successful writes always store
+    // checksums, so a successful read of a live record returns exactly one value per aligned block.
+    // Forwarded verbatim by TWritePersistentBuffersRequestActor when re-replicating a record via
+    // TEvReadThenWritePersistentBuffers.
     repeated fixed64 Checksums = 7;
 }
 

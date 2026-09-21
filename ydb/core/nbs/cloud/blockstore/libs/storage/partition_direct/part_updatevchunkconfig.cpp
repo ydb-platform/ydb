@@ -17,7 +17,13 @@ bool TPartitionActor::PrepareUpdateVChunkConfig(
 {
     Y_UNUSED(ctx);
     Y_UNUSED(tx);
-    Y_UNUSED(args);
+
+    Y_DEBUG_ABORT_UNLESS(ExecutingUpdateVChunkConfigPromises.empty());
+    ExecutingUpdateVChunkConfigPromises.reserve(
+        args.UpdateConfigRequests.size());
+    for (const auto& request: args.UpdateConfigRequests) {
+        ExecutingUpdateVChunkConfigPromises.push_back(request.UpdateCompleted);
+    }
 
     return true;
 }
@@ -30,16 +36,35 @@ void TPartitionActor::ExecuteUpdateVChunkConfig(
     Y_UNUSED(ctx);
 
     TPartitionDatabase db(tx.DB);
-    db.StoreVChunkConfig(args.VChunkConfig);
+    for (const auto& request: args.UpdateConfigRequests) {
+        db.StoreVChunkConfig(request.VChunkConfig);
+    }
 }
 
 void TPartitionActor::CompleteUpdateVChunkConfig(
     const TActorContext& ctx,
     TTxPartition::TUpdateVChunkConfig& args)
 {
-    Y_UNUSED(ctx);
+    for (auto& request: args.UpdateConfigRequests) {
+        request.UpdateCompleted.TrySetValue(EPersistResult::Success);
+    }
+    ExecutingUpdateVChunkConfigPromises.clear();
+    ExecutingUpdateVChunkConfig = false;
 
-    args.UpdateCompleted.SetValue();
+    if (!PendingUpdateVChunkConfigRequests.empty()) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Execute pending UpdateVChunkConfigRequests %zu",
+            LogTitle.GetWithTime().c_str(),
+            PendingUpdateVChunkConfigRequests.size());
+
+        ExecutingUpdateVChunkConfig = true;
+        ExecuteTx(
+            ctx,
+            CreateTx<TUpdateVChunkConfig>(
+                std::move(PendingUpdateVChunkConfigRequests)));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

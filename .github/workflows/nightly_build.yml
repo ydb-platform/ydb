@@ -85,30 +85,40 @@ jobs:
           CONCLUSION=failure
         fi
         python3 -m pip install ydb ydb[yc] >/dev/null
-        python3 .github/scripts/analytics/ci_metrics.py emit \
+        python3 .github/scripts/analytics/ci_metrics.py track \
           --name ydbd_cached_build \
-          --kind duration \
-          --source nightly_build \
-          --started-epoch "${NIGHTLY_BUILD_START}" \
-          --finished-epoch "$(date +%s)" \
-          --conclusion "$CONCLUSION" \
-          --label cache_mode=dist_cache \
-          --label "build_target=ydb/apps/ydbd" || true
+          --json "$(CONCLUSION="$CONCLUSION" python3 -c '
+import json, os, time
+print(json.dumps({
+    "kind": "duration",
+    "source": "nightly_build",
+    "started_epoch": os.environ["NIGHTLY_BUILD_START"],
+    "finished_epoch": str(int(time.time())),
+    "conclusion": os.environ["CONCLUSION"],
+    "cache_mode": "dist_cache",
+    "build_target": "ydb/apps/ydbd",
+}, separators=(",", ":")))
+')" || true
         if [ -e ydb/apps/ydbd/ydbd ] || [ -L ydb/apps/ydbd/ydbd ]; then
           BINARY_SIZE_BYTES=$(stat -L -c%s ydb/apps/ydbd/ydbd)
-          python3 .github/scripts/analytics/ci_metrics.py emit \
+          python3 .github/scripts/analytics/ci_metrics.py track \
             --name ydbd_size \
-            --kind gauge \
-            --unit bytes \
-            --source nightly_build \
-            --value "$BINARY_SIZE_BYTES" \
-            --label cache_mode=dist_cache || true
+            --json "$(BINARY_SIZE_BYTES="$BINARY_SIZE_BYTES" python3 -c '
+import json, os
+print(json.dumps({
+    "kind": "gauge",
+    "unit": "bytes",
+    "source": "nightly_build",
+    "value": int(os.environ["BINARY_SIZE_BYTES"]),
+    "cache_mode": "dist_cache",
+}, separators=(",", ":")))
+')" || true
         fi
         python3 .github/scripts/analytics/export_ya_nodes.py \
           --evlog "tmp/results/try_*/ya_evlog.jsonl" \
           --source nightly_build \
           --label cache_mode=dist_cache || true
-        python3 .github/scripts/analytics/ci_metrics.py flush || true
+        python3 .github/scripts/analytics/ci_metrics.py send || true
     - name: Setup s3cmd
       uses: ./.github/actions/s3cmd
       with:

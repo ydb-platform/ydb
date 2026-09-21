@@ -193,19 +193,28 @@ runs:
           local started_epoch="$2"
           local conclusion="${3:-success}"
           local ya_attempt="${4:-}"
-          local extra_args=()
-          if [ -n "$ya_attempt" ]; then
-            extra_args+=(--label "ya_attempt=${ya_attempt}")
-          fi
-          python3 .github/scripts/analytics/ci_metrics.py emit \
+          local measurement
+          measurement=$(
+            NAME="$name" STARTED="$started_epoch" CONCLUSION="$conclusion" YA_ATTEMPT="$ya_attempt" \
+            CACHE_MODE="${CI_CACHE_MODE:-unknown}" python3 -c '
+import json, os, time
+payload = {
+    "kind": "duration",
+    "source": "ya_phase",
+    "started_epoch": os.environ["STARTED"],
+    "finished_epoch": str(int(time.time())),
+    "conclusion": os.environ["CONCLUSION"],
+    "cache_mode": os.environ.get("CACHE_MODE") or "unknown",
+}
+attempt = os.environ.get("YA_ATTEMPT") or ""
+if attempt:
+    payload["ya_attempt"] = attempt
+print(json.dumps(payload, separators=(",", ":")))
+'
+          )
+          python3 .github/scripts/analytics/ci_metrics.py track \
             --name "$name" \
-            --kind duration \
-            --source ya_phase \
-            --started-epoch "$started_epoch" \
-            --finished-epoch "$(date +%s)" \
-            --conclusion "$conclusion" \
-            --label "cache_mode=${CI_CACHE_MODE:-unknown}" \
-            "${extra_args[@]}" || true
+            --json "$measurement" || true
         }
 
         if [ -n "${{ inputs.bazel_remote_uri }}" ]; then
@@ -737,7 +746,7 @@ runs:
       if: always()
       continue-on-error: true
       shell: bash
-      run: python3 .github/scripts/analytics/ci_metrics.py flush
+      run: python3 .github/scripts/analytics/ci_metrics.py send
 
     - name: resolve-status-sha
       shell: bash

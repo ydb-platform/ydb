@@ -90,6 +90,7 @@ namespace NKikimrConfig {
     class TRecoveryShardConfig;
     class TClusterDiagnosticsConfig;
     class TLongTxServiceConfig;
+    class TUdfStoreConfig;
 }
 
 namespace NKikimrReplication {
@@ -290,6 +291,7 @@ struct TAppData {
     NKikimrConfig::TRecoveryShardConfig& RecoveryShardConfig;
     NKikimrConfig::TClusterDiagnosticsConfig& ClusterDiagnosticsConfig;
     NKikimrConfig::TLongTxServiceConfig& LongTxServiceConfig;
+    NKikimrConfig::TUdfStoreConfig& UdfStoreConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AlwaysSetSystemOwner = false;

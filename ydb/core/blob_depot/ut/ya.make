@@ -4,6 +4,7 @@ UNITTEST_FOR(ydb/core/blob_depot)
 
     IF (NOT OS_WINDOWS)
         SRCS(
+            agent_disconnect_ut.cpp
             s3_router_ut.cpp
         )
 

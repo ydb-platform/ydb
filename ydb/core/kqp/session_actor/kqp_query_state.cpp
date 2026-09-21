@@ -218,6 +218,7 @@ bool TKqpQueryState::TryGetFromCache(
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
+    settings.IsAnalyze = settings.IsInternalCall && IsAnalyzeRequest(GetRequestType());
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
@@ -281,6 +282,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
+    settings.IsAnalyze = settings.IsInternalCall && IsAnalyzeRequest(GetRequestType());
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
@@ -343,6 +345,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
+    settings.IsAnalyze = settings.IsInternalCall && IsAnalyzeRequest(GetRequestType());
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
@@ -392,6 +395,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     TKqpQuerySettings settings(GetType());
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
+    settings.IsAnalyze = settings.IsInternalCall && IsAnalyzeRequest(GetRequestType());
     settings.Syntax = GetSyntax();
     settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
     settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;

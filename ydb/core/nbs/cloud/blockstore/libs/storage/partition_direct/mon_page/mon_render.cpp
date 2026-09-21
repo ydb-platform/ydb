@@ -1085,7 +1085,10 @@ void RenderLatency(IOutputStream& str, const TMonPageData& data)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString RenderMonPage(const TMonPageData& data)
+TString RenderMonPage(
+    const TMonPageData& data,
+    const TVChunkConfigs& vChunkConfigs,
+    const ITouchedProvider& touchedProvider)
 {
     TStringStream str;
 
@@ -1103,17 +1106,17 @@ TString RenderMonPage(const TMonPageData& data)
 
     switch (data.Page) {
         case EMonPage::Overview:
-            RenderOverview(str, data);
+            RenderOverview(str, data, vChunkConfigs, touchedProvider);
             break;
         case EMonPage::Dbg:
-            RenderDbg(str, data);
+            RenderDbg(str, data, vChunkConfigs);
             break;
         case EMonPage::Chaos:
             RenderChaos(str, data);
             break;
         case EMonPage::LocalDb:
             if (data.LocalDb) {
-                RenderLocalDb(str, *data.LocalDb);
+                RenderLocalDb(str, *data.LocalDb, vChunkConfigs);
             }
             break;
         case EMonPage::VChunk:

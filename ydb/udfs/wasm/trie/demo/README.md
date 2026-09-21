@@ -2,7 +2,7 @@
 
 Shows **WASM Bridge** reuse of a precomputed dictionary blob:
 
-- `Trie::Lookup` / `LookupWithString` use `calling_convention: "bridge"`.
+- `Trie::Lookup` / `LookupWithString` use bridge handles.
 - Host `RegisterOrReuse` + `BridgeEnsureString` pin `$dict` once per distinct
   value (`BridgeRef` not required).
 - `Trie::LookupCachedBlob` — guest state via `BridgeGetOrBuild`.

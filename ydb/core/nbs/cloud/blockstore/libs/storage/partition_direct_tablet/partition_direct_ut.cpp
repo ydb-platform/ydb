@@ -240,13 +240,8 @@ NKikimrBlockStore::TUpdateVolumeConfigResponse SendUpdateVolumeConfig(
 TPersistResultFuture SendVChunkConfigUpdate(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
-    ui32 vChunkIndex)
+    TVChunkConfig config)
 {
-    auto config = TVChunkConfig::MakeDefault(
-        vChunkIndex,
-        DirectBlockGroupHostCount,
-        DefaultPrimaryCount);
-
     auto request =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(
             std::move(config));
@@ -265,6 +260,21 @@ TPersistResultFuture SendVChunkConfigUpdate(
     env.Runtime->DestroyActor(sender);
 
     return future;
+}
+
+TPersistResultFuture SendVChunkConfigUpdate(
+    TEnvironmentSetup& env,
+    ui64 partitionTabletId,
+    ui32 vChunkIndex,
+    size_t primaryCount = DefaultPrimaryCount)
+{
+    return SendVChunkConfigUpdate(
+        env,
+        partitionTabletId,
+        TVChunkConfig::MakeDefault(
+            vChunkIndex,
+            DirectBlockGroupHostCount,
+            primaryCount));
 }
 
 TPersistResultFuture SendDirtyMapStateUpdate(
@@ -2978,25 +2988,51 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
         const ui64 tabletId = CreatePartitionTablet(env);
 
-        const TActorId edge = runtime->AllocateEdgeActor(
-            env.Settings.ControllerNodeId,
-            __FILE__,
-            __LINE__);
+        PersistDDiskTouch(env, tabletId, 0);
+        PersistDDiskTouch(env, tabletId, 1);
+        PersistDDiskTouch(env, tabletId, 2);
 
-        runtime->SendToPipe(
-            tabletId,
-            edge,
-            new NActors::NMon::TEvRemoteHttpInfo(
-                "/app?TabletID=" + ToString(tabletId)),
-            0,
-            TTestActorSystem::GetPipeConfigWithRetries());
+        auto firstUpdate = SendVChunkConfigUpdate(env, tabletId, 1, 2);
+        auto secondConfig =
+            TVChunkConfig::MakeDefault(2, DirectBlockGroupHostCount, 4);
+        for (THostIndex host = 0; host < secondConfig.GetHostCount(); ++host) {
+            if (secondConfig.GetDDiskRole(host) == EHostRole::Primary) {
+                secondConfig.DisableHost(host);
+                break;
+            }
+        }
+        auto secondUpdate =
+            SendVChunkConfigUpdate(env, tabletId, std::move(secondConfig));
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EPersistResult::Success,
+            firstUpdate.GetValue(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EPersistResult::Success,
+            secondUpdate.GetValue(TDuration::Seconds(10)));
 
-        auto response =
-            env.WaitForEdgeActorEvent<NActors::NMon::TEvRemoteHttpInfoRes>(
-                edge);
-        UNIT_ASSERT(response);
+        const auto renderOverview = [&]
+        {
+            const TActorId edge = runtime->AllocateEdgeActor(
+                env.Settings.ControllerNodeId,
+                __FILE__,
+                __LINE__);
+            runtime->SendToPipe(
+                tabletId,
+                edge,
+                new NActors::NMon::TEvRemoteHttpInfo(
+                    "/app?TabletID=" + ToString(tabletId)),
+                0,
+                TTestActorSystem::GetPipeConfigWithRetries());
 
-        const TString& html = response->Get()->Html;
+            auto response =
+                env.WaitForEdgeActorEvent<NActors::NMon::TEvRemoteHttpInfoRes>(
+                    edge);
+            UNIT_ASSERT(response);
+            return response->Get()->Html;
+        };
+
+        TString html = renderOverview();
         UNIT_ASSERT(!html.empty());
         UNIT_ASSERT_STRING_CONTAINS(html, "<h3>Overview</h3>");
         UNIT_ASSERT_STRING_CONTAINS(
@@ -3006,6 +3042,22 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "VChunk size");
         UNIT_ASSERT_STRING_CONTAINS(html, "Region size");
         UNIT_ASSERT_STRING_CONTAINS(html, "Regions");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Touched VChunks</td><td>3 /");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "1.13 GiB = 128.00 MiB * 8 (Enabled DDisk) + "
+            "128.00 MiB * 1 (Disabled DDisk)");
+
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(EWriteMode::DirectWrite));
+
+        html = renderOverview();
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "1.13 GiB = 128.00 MiB * 8 (Enabled DDisk) + "
+            "128.00 MiB * 1 (Disabled DDisk)");
     }
 
     Y_UNIT_TEST(ChaosMonitoringPageUpdatesNodeState)

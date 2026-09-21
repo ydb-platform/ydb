@@ -48,6 +48,24 @@ public:
 private:
     using Schema = TControllerSchema;
 
+    enum class ESchemaBarrierPhase: ui8 {
+        Collecting = 1,
+        Altering = 2,
+        Applied = 3,
+        Error = 4,
+    };
+
+    struct TSchemaBarrier {
+        ESchemaBarrierPhase Phase = ESchemaBarrierPhase::Collecting;
+        NKikimrReplication::TSchemaChange Schema;
+        THashSet<TWorkerId> ExpectedWorkers;
+        THashSet<TWorkerId> ReportedWorkers;
+        THashSet<TWorkerId> AppliedWorkers;
+        THashSet<TWorkerId> CompletedWorkers;
+        THashMap<TWorkerId, ui64> WorkerOffsets;
+        ui64 DstAlterTxId = 0;
+    };
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::REPLICATION_CONTROLLER_ACTOR;
@@ -93,6 +111,9 @@ private:
     void Handle(TEvPrivate::TEvProcessQueues::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvResumeDeferredAlter::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx);
@@ -104,6 +125,7 @@ private:
     void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
@@ -117,6 +139,9 @@ private:
     bool IsValidWorker(const TWorkerId& id) const;
     TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
+    void ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id);
+    void SendSchemaChangeResult(const TWorkerId& id, const NKikimrReplication::TSchemaChange& schema,
+        ui64 offset, bool applied, bool completed, const TActorContext& ctx);
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
@@ -151,6 +176,10 @@ private:
     class TTxRunWorker;
     class TTxRemoveWorker;
     class TTxCompleteWorkerSet;
+    class TTxSchemaChangeReport;
+    class TTxSchemaChangeDstAlterTxId;
+    class TTxSchemaChangeDstAlterResult;
+    class TTxResumeDeferredAlter;
 
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
@@ -177,6 +206,14 @@ private:
     void RunTxRunWorker(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
     void RunTxRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     void RunTxCompleteWorkerSet(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
+    void RunTxSchemaChangeReport(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx);
+    void RunTxSchemaChangeDstAlterTxId(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx);
+    void RunTxSchemaChangeDstAlterResult(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxResumeDeferredAlter(TEvPrivate::TEvResumeDeferredAlter::TPtr& ev, const TActorContext& ctx);
+
+    void StartSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    void StopSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    bool HasActiveSchemaBarrier(ui64 replicationId) const;
 
     // other
     template <typename T>
@@ -215,6 +252,9 @@ private:
     THashMap<ui32, TSessionInfo> Sessions;
     THashMap<TWorkerId, TWorkerInfo> Workers;
     THashSet<std::pair<ui64, ui64>> CompleteWorkerSets;
+    TMap<std::pair<ui64, ui64>, TSchemaBarrier> SchemaBarriers;
+    THashMap<std::pair<ui64, ui64>, TActorId> SchemaChangeDstAlterers;
+    THashSet<ui64> DeferredAlters;
     THashSet<TWorkerId> BootQueue;
     THashSet<std::pair<TWorkerId, ui32>> StopQueue;
     THashSet<TWorkerId> RemoveQueue;

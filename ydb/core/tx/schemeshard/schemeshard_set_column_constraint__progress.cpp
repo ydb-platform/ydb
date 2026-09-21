@@ -791,6 +791,10 @@ public:
         Y_ENSURE(operationInfoPtr);
         auto& operationInfo = *operationInfoPtr->get();
 
+        if (operationInfo.IsBroken) {
+            return true;
+        }
+
         if (!operationInfo.DependencyTxIds.empty()) {
             YDB_LOG_NOTICE("TTxProgressSetColumnConstraint: waiting for dependencies",
                 {"buildId", BuildId},

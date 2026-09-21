@@ -5591,6 +5591,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         // Read SetColumnConstraint operations
         {
             THashMap<TIndexBuildId, std::shared_ptr<TSetColumnConstraintOperationInfo>> loadedOperations;
+            TVector<std::shared_ptr<TSetColumnConstraintOperationInfo>> operationsWithoutPersistedDomain;
 
             {
                 auto rowset = db.Table<Schema::SetColumnConstraint>().Range().Select();
@@ -5609,9 +5610,27 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         rowset.GetValue<Schema::SetColumnConstraint::TableLocalId>()
                     );
 
+                    const bool tableExists = Self->PathsById.contains(operationInfo->TablePathId);
+
+                    if (rowset.HaveValue<Schema::SetColumnConstraint::DomainOwnerId>()
+                        && rowset.HaveValue<Schema::SetColumnConstraint::DomainLocalId>())
                     {
-                        TPath tablePath = TPath::Init(operationInfo->TablePathId, Self);
-                        operationInfo->DomainPathId = tablePath.GetPathIdForDomain();
+                        operationInfo->DomainPathId = TPathId(
+                            rowset.GetValue<Schema::SetColumnConstraint::DomainOwnerId>(),
+                            rowset.GetValue<Schema::SetColumnConstraint::DomainLocalId>()
+                        );
+                    } else if (tableExists) {
+                        // Backward compatibility: records created before DomainOwnerId/DomainLocalId were persisted
+                        operationInfo->DomainPathId = TPath::Init(operationInfo->TablePathId, Self).GetPathIdForDomain();
+                        operationsWithoutPersistedDomain.push_back(operationInfo);
+                    } else {
+                        // The domain of a dropped table is not recoverable
+                        operationInfo->DomainPathId = Self->RootPathId();
+                    }
+
+                    if (!tableExists) {
+                        operationInfo->IsBroken = true;
+                        operationInfo->AddIssue(TStringBuilder() << "Table path id not found: " << operationInfo->TablePathId.ToString());
                     }
 
                     TString serializedColumns = rowset.GetValue<Schema::SetColumnConstraint::SerializedColumnNames>();
@@ -5727,6 +5746,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         return false;
                     }
                 }
+            }
+
+            for (const auto& operationInfo : operationsWithoutPersistedDomain) {
+                db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo->Id)).Update(
+                    NIceDb::TUpdate<Schema::SetColumnConstraint::DomainOwnerId>(operationInfo->DomainPathId.OwnerId),
+                    NIceDb::TUpdate<Schema::SetColumnConstraint::DomainLocalId>(operationInfo->DomainPathId.LocalPathId)
+                );
             }
 
             for (auto& [id, operationInfo] : loadedOperations) {

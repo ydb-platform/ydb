@@ -23,6 +23,7 @@
 
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
+#include <ydb/core/grpc_services/base/http_database_access_verdict.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/config.pb.h>
@@ -1399,6 +1400,10 @@ public:
         return Ctx_->GetPeer();
     }
 
+    TString GetAuthority() const override {
+        return Ctx_->GetAuthority();
+    }
+
     bool SslServer() const {
         return Ctx_->SslServer();
     }
@@ -1890,11 +1895,18 @@ public:
         Issues.AddIssue(error);
     }
 
-    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TAuditLogParts& auditLogParts)
+    TEvRequestAuthAndCheckResult(
+        const TString& database,
+        const TMaybe<TString>& ydbToken,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+        const TAuditLogParts& auditLogParts,
+        const EHttpDatabaseAccessVerdict databaseAccessVerdict
+    )
         : Database(database)
         , YdbToken(ydbToken)
         , UserToken(userToken)
         , AuditLogParts(auditLogParts)
+        , DatabaseAccessVerdict(databaseAccessVerdict)
     {}
 
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
@@ -1903,6 +1915,7 @@ public:
     TMaybe<TString> YdbToken;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TAuditLogParts AuditLogParts;
+    EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
 };
 
 class TEvRequestAuthAndCheck
@@ -1958,7 +1971,8 @@ public:
                     Database,
                     YdbToken,
                     UserToken,
-                    GetAuditLogParts()
+                    GetAuditLogParts(),
+                    DatabaseAccessVerdict
                 )
             );
         } else {
@@ -2130,6 +2144,7 @@ public:
     TAuditMode AuditMode;
     TString PeerName;
     TString RequestId;
+    EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
 
     inline static const TString EmptySerializedTokenMessage;
 };

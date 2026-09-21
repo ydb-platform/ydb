@@ -100,6 +100,21 @@ namespace {
             Update(key, memRec);
         }
 
+        void BeginKey(const TKey&) {
+        }
+
+        void UpdateFreshRecord(const TMemRec& memRec, const TRope*, const TKey& key, ui64) {
+            Update(key, memRec);
+        }
+
+        void UpdateLevelRecord(const TMemRec& memRec, const TDiskPart*, const TKey& key, ui64,
+                const TLevelSegment*) {
+            Update(key, memRec);
+        }
+
+        void FinishKey(const TKey&) {
+        }
+
         void Finish() {
             Finished = true;
         }

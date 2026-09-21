@@ -1,14 +1,17 @@
 """Saved placement specifications; deliberately does not launch cluster processes."""
 
+import copy
 import json
 import posixpath
 import re
 import threading
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_json
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
+from ydb.tools.ydb_bench.lib import cluster_config
 
 
 def _text(value, label, limit=200):
@@ -139,9 +142,10 @@ def validate_template(value, host_ids):
         raise BenchmarkError("Tenants must be a list of at most 64 objects")
     paths = _names([t.get("path") for t in tenants], "Tenant paths")
     normalized_tenants = []
+    domain = cluster_config.domain_name(cluster_config.validate(value.get('ydb_config', {}))[0])
     for path, tenant in zip(paths, tenants):
-        if not re.fullmatch(r"/Root/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", path):
-            raise BenchmarkError("Tenant path must start with /Root/ and contain valid path components")
+        if not re.fullmatch('/' + re.escape(domain) + r'/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*', path):
+            raise BenchmarkError('Tenant path must start with /' + domain + '/ and contain valid path components')
         if tenant.get("storage_kind") not in ("ssd", "hdd"):
             raise BenchmarkError("Tenant storage kind must be ssd or hdd")
         normalized_tenants.append(
@@ -211,7 +215,100 @@ def validate_template(value, host_ids):
         "host_ids": selected_hosts,
         "data_centers": centers,
         "tenants": normalized_tenants,
+        **({"ydb_config": cluster_config.validate(value["ydb_config"])[0]} if "ydb_config" in value else {}),
+        **(
+            {'ydb_tenant_configs': cluster_config.tenant_configs(value['ydb_tenant_configs'], paths)}
+            if 'ydb_tenant_configs' in value
+            else {}
+        ),
+        **(
+            {
+                'ydb_tenant_replacements': cluster_config.tenant_replacements(
+                    value['ydb_tenant_replacements'], value.get('ydb_tenant_configs', {})
+                )
+            }
+            if 'ydb_tenant_replacements' in value
+            else {}
+        ),
     }
+
+
+def apply_configuration_yaml(template, text, hosts):
+    """Reconcile referenced entities in a detached draft; never register hosts."""
+    if not isinstance(template, dict):
+        raise BenchmarkError("Expected a cluster template")
+    result = cluster_config.parse_document(text)
+    draft = copy.deepcopy(template)
+    draft.update(
+        ydb_config=result['config'],
+        ydb_tenant_configs=result['tenant_configs'],
+        ydb_tenant_replacements=result['tenant_replacements'],
+    )
+    selected = draft.setdefault('host_ids', list(dict.fromkeys(n['host_id'] for n in draft.get('nodes', []))))
+    centers = draft.setdefault('data_centers', [])
+    tenants = draft.setdefault('tenants', [])
+    additions = {'hosts': [], 'data_centers': [], 'racks': [], 'tenants': []}
+    aliases = {}
+    for host in hosts:
+        for alias in (host['id'], host.get('name'), urlparse(host.get('endpoint', '')).hostname):
+            if alias:
+                aliases.setdefault(alias.lower().rstrip('.'), set()).add(host['id'])
+    config = result['config']
+    locations = config.get('hosts', [])
+    nameservice = config.get('nameservice_config', {}).get('node', [])
+    if not isinstance(locations, list) or any(not isinstance(item, dict) for item in locations):
+        raise BenchmarkError('hosts must be a list of objects')
+    missing, ambiguous = [], []
+    for item in [*locations, *nameservice]:
+        name = item.get('host') or item.get('interconnect_host')
+        if not isinstance(name, str) or not name.strip():
+            raise BenchmarkError('Every YAML host must have a host name')
+        matches = aliases.get(name.lower().rstrip('.'), set())
+        if not matches:
+            missing.append(name)
+        elif len(matches) != 1:
+            ambiguous.append(name)
+        else:
+            host_id = next(iter(matches))
+            if host_id not in selected:
+                selected.append(host_id)
+                additions['hosts'].append(name)
+        location = item.get('location', {})
+        if not isinstance(location, dict):
+            raise BenchmarkError('Host location must be an object')
+        dc, rack = location.get('data_center', ''), location.get('rack', '')
+        if not isinstance(dc, str) or not isinstance(rack, str):
+            raise BenchmarkError('Data center and rack names must be strings')
+        if rack and not dc:
+            raise BenchmarkError('Rack requires a data center: ' + rack)
+        if dc:
+            center = next((item for item in centers if item['name'] == dc), None)
+            if center is None:
+                center = {'name': dc, 'racks': []}
+                centers.append(center)
+                additions['data_centers'].append(dc)
+            rack = rack or (center['racks'][0] if center['racks'] else dc + '-R1')
+            if rack not in center['racks']:
+                center['racks'].append(rack)
+                additions['racks'].append(dc + ' / ' + rack)
+    if missing or ambiguous:
+        problems = []
+        if missing:
+            problems.append('Unregistered hosts: ' + ', '.join(dict.fromkeys(missing)))
+        if ambiguous:
+            problems.append('Ambiguous hosts: ' + ', '.join(dict.fromkeys(ambiguous)))
+        raise BenchmarkError('; '.join(problems) + '. Register hosts or use their exact names/IDs. Template unchanged.')
+    paths = list(result['tenant_configs'])
+    paths.extend(
+        slot['tenant_name'] for slot in config.get('tenant_pool_config', {}).get('slots', []) if slot.get('tenant_name')
+    )
+    for path in dict.fromkeys(paths):
+        if not any(tenant['path'] == path for tenant in tenants):
+            tenants.append({'path': path, 'storage_kind': 'ssd', 'storage_groups': 1})
+            additions['tenants'].append(path)
+    normalized = validate_template(draft, {host['id'] for host in hosts})
+    draft.update(normalized)
+    return {**result, 'template': draft, 'added': additions}
 
 
 class ClusterTemplateStore:

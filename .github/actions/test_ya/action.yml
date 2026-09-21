@@ -142,7 +142,7 @@ runs:
         echo "CI_METRICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl" >> $GITHUB_ENV
         : > "$PUBLIC_DIR/ci_metrics.jsonl"
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize plotly
+        python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml
 
     - name: Resolve analytics job name
       shell: bash
@@ -668,7 +668,14 @@ runs:
           fi
 
           S3_SYNC_START=$(date +%s)
+          set +e
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+          S3_RC=$?
+          set -e
+          if [ $S3_RC -ne 0 ]; then
+            record_ci_metric s3_sync_try "$S3_SYNC_START" failure "$RETRY"
+            exit $S3_RC
+          fi
           record_ci_metric s3_sync_try "$S3_SYNC_START" success "$RETRY"
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
@@ -701,7 +708,14 @@ runs:
           esac
           run_name="${run_name}_attempt_${RETRY}"
           UPLOAD_RESULTS_START=$(date +%s)
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          set +e
+          result=$(.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}")
+          UPLOAD_RC=$?
+          set -e
+          if [ $UPLOAD_RC -ne 0 ]; then
+            record_ci_metric upload_tests_results "$UPLOAD_RESULTS_START" failure "$RETRY"
+            exit $UPLOAD_RC
+          fi
           record_ci_metric upload_tests_results "$UPLOAD_RESULTS_START" success "$RETRY"
 
           if [ $IS_LAST_RETRY = 1 ]; then

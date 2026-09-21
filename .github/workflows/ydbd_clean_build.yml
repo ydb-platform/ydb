@@ -64,7 +64,7 @@ jobs:
           echo "CI_CACHE_MODE=none" >> "$GITHUB_ENV"
           echo "BUILD_PRESET=${{ inputs.build_preset || 'relwithdebinfo' }}" >> "$GITHUB_ENV"
           echo "BRANCH_NAME=${{ github.ref_name }}" >> "$GITHUB_ENV"
-          echo "ORIGINAL_HEAD=${{ github.sha }}" >> "$GITHUB_ENV"
+          echo "ORIGINAL_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
           echo "ANALYTICS_JOB_NAME=ydbd-clean-build" >> "$GITHUB_ENV"
 
       - name: Resolve GitHub job id
@@ -260,7 +260,7 @@ jobs:
             echo "| Parameter | Value |"
             echo "|---|---|"
             echo "| Branch | \`${{ github.ref_name }}\` |"
-            echo "| Commit | [\`${{ github.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |"
+            echo "| Commit | [\`${{ env.ORIGINAL_HEAD }}\`](https://github.com/${{ github.repository }}/commit/${{ env.ORIGINAL_HEAD }}) |"
             echo "| Runner | \`${{ runner.name }}\` |"
             echo "| CPU model | ${{ steps.host.outputs.cpu_model }} |"
             echo "| \`nproc\` | **${{ steps.host.outputs.nproc }}** |"

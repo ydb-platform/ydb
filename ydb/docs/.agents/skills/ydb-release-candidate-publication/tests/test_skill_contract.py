@@ -31,6 +31,9 @@ class ReleaseCandidatePublicationSkillContractTest(unittest.TestCase):
         ):
             self.assertIn(forbidden_action, skill)
 
+        self.assertIn('--title "$version RC"', skill)
+        self.assertNotIn('--title "$version" \\', skill)
+
     def test_evals_cover_ready_blocked_and_final_routing(self) -> None:
         payload = json.loads((SKILL_ROOT / "evals" / "evals.json").read_text(encoding="utf-8"))
 
@@ -48,6 +51,7 @@ class ReleaseCandidatePublicationSkillContractTest(unittest.TestCase):
             (SKILL_ROOT / "evals" / "fixtures" / "blocked-release-candidate.json").read_text(encoding="utf-8")
         )
         self.assertEqual(ready["stable_backport_pr"]["required_checks"], "failed")
+        self.assertEqual(ready["release_title"], "26.3.1.16 RC")
         self.assertEqual(ready["remediation_pr"]["required_checks"], "green")
         self.assertTrue(ready["remediation_pr"]["published"])
         self.assertEqual(blocked["published_docs"], {"en_date": "TBD", "ru_date": "уточняется"})

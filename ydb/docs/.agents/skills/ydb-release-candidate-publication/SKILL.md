@@ -62,7 +62,7 @@ Create the release with the project token and explicit RC flags:
 env -u GITHUB_TOKEN GH_TOKEN="$YDB_GH_TOKEN" gh release create "$version" \
   --repo ydb-platform/ydb \
   --verify-tag \
-  --title "$version" \
+  --title "$version RC" \
   --notes "$body" \
   --prerelease \
   --latest=false
@@ -73,8 +73,8 @@ RU URL, or a final-release anchor.
 
 ## Verification and handoff
 
-Read the release back with `gh release view`. Confirm the exact tag, title,
-body, URL, `isDraft=false`, and `isPrerelease=true`. Call
+Read the release back with `gh release view`. Confirm the exact tag, title
+`<version> RC`, body, URL, `isDraft=false`, and `isPrerelease=true`. Call
 `GET /repos/ydb-platform/ydb/releases/latest` and confirm its `tag_name` is not
 the RC tag. Recheck the public EN release-notes URL.
 

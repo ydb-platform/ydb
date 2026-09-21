@@ -1,5 +1,6 @@
 {
   "release": "26.3.1.16",
+  "release_title": "26.3.1.16 RC",
   "release_line": "26.3",
   "release_notes_pr": {"number": 53488, "state": "merged", "required_checks": "green"},
   "stable_backport_pr": {"number": 53647, "state": "merged", "required_checks": "failed"},

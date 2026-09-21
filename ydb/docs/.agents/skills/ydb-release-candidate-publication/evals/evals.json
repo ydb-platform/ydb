@@ -7,7 +7,7 @@
       "expected_output": "Создаёт GitHub pre-release и не выполняет шаги финального релиза.",
       "files": ["fixtures/ready-release-candidate.json"],
       "expectations": [
-        "Использует exact tag 26.3.1.16 and title 26.3.1.16",
+        "Использует exact tag 26.3.1.16 and title 26.3.1.16 RC",
         "Использует prerelease=true, draft=false and latest=false",
         "Использует body Release notes: https://ydb.tech/docs/en/changelog-server?version=v26.3#26-3-rc",
         "Не запускает docs_release",

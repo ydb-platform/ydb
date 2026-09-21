@@ -183,8 +183,7 @@ public:
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
     TCurrentQueryStats CurrentQueryStats;
-    TCurrentExecStats PreviousExecutionStats;
-    ui64 CurrentExecutionStatsSequenceNo = 0;
+    TCurrentQueryStats::TSourceState CurrentExecutionStats;
     ui64 CurrentQueryStatsSequenceNo = 0;
     bool CurrentQueryStatsPublishScheduled = false;
     TString QueryAst;

@@ -838,7 +838,7 @@ public:
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
                 return;
             }
-            LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
+            LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
             ev->Get()->GetUserRequestContext()->CollectCurrentQueryStats = true;
 
             // Pass WmState from session to the event
@@ -1064,7 +1064,7 @@ public:
         Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
         if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest && info->QueryRequestId == requestId) {
-            LocalSessions->DetachQueryText(info);
+            LocalSessions->EndQuery(info);
         }
 
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);

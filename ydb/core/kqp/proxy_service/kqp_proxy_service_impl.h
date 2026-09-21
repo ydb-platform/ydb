@@ -252,7 +252,7 @@ public:
         return actors.insert(sessionInfo).second;
     }
 
-    void AttachQueryText(const TKqpSessionInfo* sessionInfo, const TString& queryText, const TString& traceId, ui64 requestId) {
+    void BeginQuery(const TKqpSessionInfo* sessionInfo, const TString& queryText, const TString& traceId, ui64 requestId) {
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryRequestId = requestId;
         const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStats.reset();
         const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStatsSequenceNo = 0;
@@ -266,7 +266,7 @@ public:
         const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
     }
 
-    void DetachQueryText(const TKqpSessionInfo* sessionInfo) {
+    void EndQuery(const TKqpSessionInfo* sessionInfo) {
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryRequestId = 0;
         const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStats.reset();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = TString();

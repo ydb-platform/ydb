@@ -4,6 +4,9 @@ inputs:
   build_preset:
     type: string
     default: ""
+  build_target:
+    type: string
+    default: ""
   secs:
     type: string
     default: ""
@@ -27,6 +30,8 @@ runs:
       shell: bash
       run: |
         set -ex
+        export build_preset="${{ inputs.build_preset }}" 
+        export build_target="${{ inputs.build_target }}" 
         ./ya tool bloat --linker-map ydb/apps/ydbd/ydbd.map.lld --input ydb/apps/ydbd/ydbd --save-html ya_bloat_html --save-json bloat.json
         # disabled until we learn to parse new version of bloat.json
         # ./ydb/ci/build_bloat/template_bloat.py -j bloat.json -o template_bloat -t template_bloat_html

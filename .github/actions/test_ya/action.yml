@@ -452,6 +452,7 @@ runs:
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
           if [ $IS_RETRY = 0 ]; then
+            CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
@@ -466,11 +467,24 @@ runs:
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
+          monitor_memory() {
+              set +x
+              rm -f ram_usage.txt
+              while true; do
+                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo |
+                            awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
+                  echo "$(date +%s) $used_kb" >> ram_usage.txt
+                  sleep 3
+              done
+          }
+
+          monitor_memory &
+          MONITOR_PID=$!
+
           RESOURCES_JSONL="$CURRENT_PUBLIC_DIR/resources_monitor.jsonl"
           rm -f "$RESOURCES_JSONL"
           python3 .github/scripts/utils/metrics/monitor_resources.py \
             --output "$RESOURCES_JSONL" \
-            --ram-usage-file ram_usage.txt \
             --interval 1 &
           MONITOR_RESOURCES_PID=$!
 
@@ -529,6 +543,7 @@ runs:
             echo "35 [OOM dmesg (try $RETRY)]($OOM_DMESG_LOG_URL)" >> $SUMMARY_LINKS
           fi
 
+          kill $MONITOR_PID
           if [ -n "$MONITOR_RESOURCES_PID" ] && kill -0 "$MONITOR_RESOURCES_PID" 2>/dev/null; then
             kill "$MONITOR_RESOURCES_PID" 2>/dev/null || true
             wait "$MONITOR_RESOURCES_PID" 2>/dev/null || true
@@ -849,6 +864,7 @@ runs:
         IFS=';;;'
         read -ra comment_arr <<< "$comment_raw"
 
+        printf "$comment"
         if [[ ${comment_raw} != "Error"* ]]; then
           color=${comment_arr[0]}
           replace=$color";;;"

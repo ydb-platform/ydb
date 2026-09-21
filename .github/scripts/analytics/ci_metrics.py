@@ -87,6 +87,7 @@ PRIMARY_KEYS = ("date", "run_id", "github_job_id", "name", "kind", "event_ts")
 BUILD_PRESET_RE = re.compile(
     r"(relwithdebinfo|release-asan|release-tsan|release-msan|release|debug)"
 )
+EPOCH_STRING_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 
 
 def resolve_table_path(ydb_wrapper=None) -> str:
@@ -162,6 +163,11 @@ def parse_datetime(value: Any) -> Optional[datetime]:
     text = str(value).strip()
     if not text:
         return None
+    if EPOCH_STRING_RE.fullmatch(text):
+        ts = float(text)
+        if ts > 1e12:
+            ts = ts / 1000.0
+        return datetime.fromtimestamp(ts, tz=timezone.utc)
     if text.endswith("Z"):
         text = text[:-1] + "+00:00"
     try:

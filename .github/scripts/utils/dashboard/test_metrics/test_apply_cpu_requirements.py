@@ -100,6 +100,28 @@ SRCS(foo.cpp)
 END()
 """
 
+YA_MAKE_MULTILINE_CPU = """UNITTEST()
+
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(
+        cpu:4
+        container:4467981730
+        dns:dns64
+    )
+ENDIF()
+
+END()
+"""
+
+YA_MAKE_MULTILINE_RAM_ONLY = """UNITTEST()
+
+REQUIREMENTS(
+    ram:32
+)
+
+END()
+"""
+
 # Expected outputs
 EXPECTED_DEFAULT_INSERT_AT_TOP = """UNITTEST_FOR(ydb/core/kqp)
 
@@ -177,6 +199,29 @@ SRCS(foo.cpp)
 END()
 """
 
+EXPECTED_MULTILINE_CPU_UPDATE = """UNITTEST()
+
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(
+        cpu:8
+        container:4467981730
+        dns:dns64
+    )
+ENDIF()
+
+END()
+"""
+
+EXPECTED_MULTILINE_RAM_ADD_CPU = """UNITTEST()
+
+REQUIREMENTS(
+    ram:32
+    cpu:2
+)
+
+END()
+"""
+
 
 APPLY_CPU_TEST_CASES = [
     # (name, content, cpu, sanitizer, expected_content, expected_status)
@@ -236,6 +281,22 @@ APPLY_CPU_TEST_CASES = [
         EXPECTED_SANITIZER_UPDATE,
         "updated",
     ),
+    (
+        "update_multiline_cpu",
+        YA_MAKE_MULTILINE_CPU,
+        "8",
+        "address",
+        EXPECTED_MULTILINE_CPU_UPDATE,
+        "updated",
+    ),
+    (
+        "add_cpu_to_multiline_ram",
+        YA_MAKE_MULTILINE_RAM_ONLY,
+        "2",
+        None,
+        EXPECTED_MULTILINE_RAM_ADD_CPU,
+        "updated",
+    ),
 ]
 
 
@@ -253,7 +314,7 @@ def _run_one(name: str, content: str, cpu: str, sanitizer: str | None, expected_
     return ok
 
 
-def test_apply_cpu_requirements_etalon(
+def assert_apply_cpu_requirements(
     name: str,
     content: str,
     cpu: str,
@@ -263,9 +324,9 @@ def test_apply_cpu_requirements_etalon(
 ) -> None:
     """On test data, apply_cpu_requirements_to_content yields expected content and status."""
     result_content, result_status = apply_cpu_requirements_to_content(content, cpu, sanitizer)
-    assert result_status == expected_status, f"status: got {result_status!r}"
+    assert result_status == expected_status, f"{name}: status: got {result_status!r}"
     assert result_content == expected_content, (
-        "content mismatch:\n"
+        f"{name}: content mismatch:\n"
         f"--- expected ---\n{expected_content!r}\n"
         f"--- got ---\n{result_content!r}"
     )
@@ -295,7 +356,7 @@ if pytest is not None:
         expected_status: str,
     ) -> None:
         """Parametrized pytest: on test data we get expected content and status."""
-        test_apply_cpu_requirements_etalon(
+        assert_apply_cpu_requirements(
             name, content, cpu, sanitizer, expected_content, expected_status
         )
 

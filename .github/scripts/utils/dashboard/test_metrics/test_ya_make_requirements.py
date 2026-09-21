@@ -76,6 +76,27 @@ END()
     assert san_attrs["effective_split_factor"] == 30
 
 
+def test_multiline_requirements_block():
+    content = """UNITTEST_FOR(ydb/core/mind)
+
+IF (SANITIZER_TYPE  == "thread")
+    SIZE(LARGE)
+    REQUIREMENTS(
+        ram:32
+    )
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
+END()
+"""
+    assert _parse_active_attrs(content, sanitizer="thread") == {
+        "ram_gb": 32,
+        "size": "LARGE",
+    }
+    assert _parse_active_attrs(content, sanitizer=None) == {"size": "MEDIUM"}
+
+
 def test_get_requirements_normalizes_partitioned_suite_path():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -105,5 +126,6 @@ END()
 if __name__ == "__main__":
     test_sanitizer_conditional_requirements()
     test_fork_test_files_effective_split_counts_active_test_srcs_only()
+    test_multiline_requirements_block()
     test_get_requirements_normalizes_partitioned_suite_path()
     print("OK")

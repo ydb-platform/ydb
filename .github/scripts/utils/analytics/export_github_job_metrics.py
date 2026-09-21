@@ -21,7 +21,6 @@ if _QA_ANALYTICS not in sys.path:
 import requests
 
 from ci_metrics import metrics_from_workflow_run, resolve_table_path, upsert_metrics
-from ydb_wrapper import YDBWrapper
 
 DEFAULT_ORG = "ydb-platform"
 DEFAULT_REPO = "ydb"
@@ -201,6 +200,8 @@ def main(argv=None) -> int:
         if not rows:
             print("No GitHub job metric rows to upload")
             return 0
+
+        from ydb_wrapper import YDBWrapper
 
         with YDBWrapper() as wrapper:
             if not wrapper.check_credentials():

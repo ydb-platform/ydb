@@ -100,6 +100,7 @@ def read_process_snapshot() -> dict[int, dict]:
             ppid = int(rest[1])
             utime = int(rest[11])
             stime = int(rest[12])
+            starttime = int(rest[19]) if len(rest) > 19 else 0
             rss_pages = int(rest[21])
             snapshot[pid] = {
                 "pid": pid,
@@ -108,6 +109,7 @@ def read_process_snapshot() -> dict[int, dict]:
                 "cmdline": _read_cmdline(pid),
                 "utime": utime,
                 "stime": stime,
+                "starttime": starttime,
                 "rss_kb": rss_pages * page_size_kb,
             }
         except (OSError, ValueError):
@@ -134,6 +136,37 @@ def find_ya_process_tree(processes: dict[int, dict]) -> set[int]:
                 ya_pids.add(pid)
                 changed = True
     return ya_pids
+
+
+def process_identity(proc: dict) -> tuple[int, int]:
+    return (int(proc["pid"]), int(proc.get("starttime") or 0))
+
+
+def cpu_delta_jiffies(prev: tuple[int, int] | None, utime: int, stime: int) -> int:
+    """Interval CPU for a PID. New processes contribute their lifetime so far."""
+    if prev is None:
+        return max(int(utime) + int(stime), 0)
+    return max((int(utime) - prev[0]) + (int(stime) - prev[1]), 0)
+
+
+def io_delta_bytes(prev: tuple[int, int] | None, curr: tuple[int, int]) -> tuple[int, int]:
+    """Interval I/O for one PID. New processes contribute their lifetime counters."""
+    if prev is None:
+        return (max(curr[0], 0), max(curr[1], 0))
+    return (max(curr[0] - prev[0], 0), max(curr[1] - prev[1], 0))
+
+
+def seed_ya_counters(processes: dict[int, dict], ya_pids: set[int]) -> tuple[dict[tuple[int, int], tuple[int, int]], dict[tuple[int, int], tuple[int, int]]]:
+    cpu: dict[tuple[int, int], tuple[int, int]] = {}
+    io: dict[tuple[int, int], tuple[int, int]] = {}
+    for pid in ya_pids:
+        proc = processes.get(pid)
+        if not proc:
+            continue
+        ident = process_identity(proc)
+        cpu[ident] = (int(proc.get("utime") or 0), int(proc.get("stime") or 0))
+        io[ident] = get_process_io(pid)
+    return cpu, io
 
 
 def get_process_io(pid: int) -> tuple[int, int]:
@@ -232,8 +265,8 @@ def run_monitor(
     """Main monitoring loop."""
     prev_stat = read_proc_stat()
     prev_disk = read_diskstats()
-    prev_pid_cpu: dict[int, tuple[int, int]] = {}
-    prev_ya_io: tuple[int, int] | None = None
+    seed_snapshot = read_process_snapshot()
+    prev_pid_cpu, prev_pid_io = seed_ya_counters(seed_snapshot, find_ya_process_tree(seed_snapshot))
     meta_added = False
     prev_ts = time.time()
     time.sleep(interval_sec)
@@ -265,25 +298,25 @@ def run_monitor(
             cpu_per_pid: list[dict] = []
             cpu_ya_jiffies = 0
             ram_ya_kb = 0
-            ya_read_bytes = 0
-            ya_write_bytes = 0
+            ya_read_delta = 0
+            ya_write_delta = 0
+            next_pid_cpu: dict[tuple[int, int], tuple[int, int]] = {}
+            next_pid_io: dict[tuple[int, int], tuple[int, int]] = {}
 
             for p in pid_data:
                 pid = p["pid"]
                 if pid not in ya_pids:
                     continue
                 ram_ya_kb += p.get("rss_kb", 0)
+                ident = process_identity(p)
                 r, w = get_process_io(pid)
-                ya_read_bytes += r
-                ya_write_bytes += w
-                if pid not in prev_pid_cpu:
-                    prev_pid_cpu[pid] = (p["utime"], p["stime"])
-                    continue
-                prev_val = prev_pid_cpu[pid]
-                delta_total = (p["utime"] - prev_val[0]) + (p["stime"] - prev_val[1])
+                next_pid_cpu[ident] = (p["utime"], p["stime"])
+                next_pid_io[ident] = (r, w)
+                delta_r, delta_w = io_delta_bytes(prev_pid_io.get(ident), (r, w))
+                ya_read_delta += delta_r
+                ya_write_delta += delta_w
+                delta_total = cpu_delta_jiffies(prev_pid_cpu.get(ident), p["utime"], p["stime"])
                 cpu_pct = 100.0 * delta_total / total_delta if total_delta > 0 and delta_total > 0 else 0.0
-
-                prev_pid_cpu[pid] = (p["utime"], p["stime"])
                 if delta_total > 0:
                     cpu_ya_jiffies += delta_total
                 cpu_per_pid.append({
@@ -293,20 +326,15 @@ def run_monitor(
                     "utime": p["utime"],
                     "stime": p["stime"],
                 })
-            prev_pid_cpu = {k: v for k, v in prev_pid_cpu.items() if k in ya_pids}
+            prev_pid_cpu = next_pid_cpu
+            prev_pid_io = next_pid_io
             cpu_per_pid.sort(key=lambda x: x["cpu_pct"], reverse=True)
             cpu_ya_pct = 100.0 * cpu_ya_jiffies / total_delta if total_delta > 0 else 0.0
 
-            # ya disk delta (first observation is baseline only)
-            if prev_ya_io is None:
-                disk_ya_read_mb = 0.0
-                disk_ya_write_mb = 0.0
-            else:
-                disk_ya_read_mb = (ya_read_bytes - prev_ya_io[0]) / (1024 * 1024)
-                disk_ya_write_mb = (ya_write_bytes - prev_ya_io[1]) / (1024 * 1024)
+            disk_ya_read_mb = ya_read_delta / (1024 * 1024)
+            disk_ya_write_mb = ya_write_delta / (1024 * 1024)
             disk_ya_read_mbps = disk_ya_read_mb / dt
             disk_ya_write_mbps = disk_ya_write_mb / dt
-            prev_ya_io = (ya_read_bytes, ya_write_bytes)
 
             # RAM (absolute)
             ram_used_kb = read_meminfo()

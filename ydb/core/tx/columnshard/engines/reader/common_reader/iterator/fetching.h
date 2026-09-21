@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/conveyor_task.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/script_cursor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
@@ -18,7 +19,7 @@ namespace NKikimr::NOlap::NReader::NCommon {
 class TStepAction: public IDataTasksProcessor::ITask {
 private:
     using TBase = IDataTasksProcessor::ITask;
-    std::shared_ptr<IDataSource> Source;
+    std::unique_ptr<TDataSourceLease> SourceLease;
     TFetchingScriptCursor Cursor;
     bool FinishedFlag = false;
     ui64 CachedSourceId = 0;
@@ -64,32 +65,8 @@ public:
         return CachedTotalReservedBytes;
     }
 
-    template <class T>
-    TStepAction(std::shared_ptr<T>&& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId, const bool changeSyncSection)
-        : TStepAction(std::static_pointer_cast<IDataSource>(source), std::move(cursor), ownerActorId, changeSyncSection)
-    {
-    }
-
-    TStepAction(std::shared_ptr<IDataSource>&& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
+    TStepAction(std::unique_ptr<TDataSourceLease> sourceLease, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
         const bool changeSyncSection);
-};
-
-class TSendEventJob: public IAsyncJob {
-private:
-    const NActors::TActorId Recipient;
-    std::unique_ptr<NActors::IEventBase> Event;
-
-public:
-    TSendEventJob(const NActors::TActorId& recipient, std::unique_ptr<NActors::IEventBase>&& event)
-        : Recipient(recipient)
-        , Event(std::move(event))
-    {
-        AFL_VERIFY(Event);
-    }
-
-    virtual void Start() override {
-        NActors::TActivationContext::AsActorContext().Send(Recipient, Event.release());
-    }
 };
 
 class TProgramStep: public IFetchingStep {
@@ -98,13 +75,12 @@ private:
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     THashMap<ui32, std::shared_ptr<TFetchingStepSignals>> Signals;
     const std::shared_ptr<TFetchingStepSignals>& GetSignals(const ui32 nodeId) const;
-    void ReportTracing(const std::shared_ptr<IDataSource>& source, const NArrow::NAccessor::TAccessorsCollection& resources,
-        const TDuration executionDurationMs, const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
+    void ReportTracing(IDataSource& source, const NArrow::NAccessor::TAccessorsCollection& resources, const TDuration executionDurationMs,
+        const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
         const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor) const;
 
 public:
-    virtual TConclusion<TExecutionResult> DoExecuteInplace(
-        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TProgramStep(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
         : TBase("PROGRAM_EXECUTION")

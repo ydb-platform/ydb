@@ -331,7 +331,6 @@ public:
 class IAsyncJob {
 public:
     virtual ~IAsyncJob() = default;
-    virtual void Start() = 0;
 };
 
 class TExecutionResult {

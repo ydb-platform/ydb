@@ -63,9 +63,9 @@ private:
     std::optional<TFetchingScriptCursor> ScriptCursor;
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
 
-    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
-    virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
-    virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
+    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<NCommon::TDataSourceLease> self) override;
+    virtual void DoBuildStageResult() override;
+    virtual void DoOnEmptyStageData() override;
 
     void Finalize(const std::optional<ui64> memoryLimit);
     std::optional<ui32> PurposeSyncPointIndex;
@@ -79,8 +79,7 @@ protected:
         return NJson::JSON_MAP;
     }
 
-    virtual NCommon::TExecutionResult DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
+    virtual NCommon::TExecutionResult DoStartFetchingAccessor(const TFetchingScriptCursor& step) = 0;
 
 public:
     static bool CheckTypeCast(const EType type) {
@@ -188,16 +187,16 @@ public:
         ScriptCursor = std::move(scriptCursor);
     }
 
-    void ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    static void ContinueCursor(std::unique_ptr<NCommon::TDataSourceLease> sourceLease);
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
 
-    void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
-    virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    static void StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sourceLease);
+    virtual void InitializeProcessing();
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
 
-    NCommon::TExecutionResult StartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
-        return DoStartFetchingAccessor(sourcePtr, step);
+    NCommon::TExecutionResult StartFetchingAccessor(const TFetchingScriptCursor& step) {
+        return DoStartFetchingAccessor(step);
     }
 
     virtual TInternalPathId GetPathId() const override = 0;
@@ -255,8 +254,7 @@ private:
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
-    virtual NCommon::TExecutionResult DoStartFetchingColumns(
-        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
+    virtual NCommon::TExecutionResult DoStartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
 
     std::shared_ptr<NIndexes::TSkipIndex> SelectOptimalIndex(
@@ -312,8 +310,7 @@ private:
         return Portion->GetPathId();
     }
 
-    virtual NCommon::TExecutionResult DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
+    virtual NCommon::TExecutionResult DoStartFetchingAccessor(const TFetchingScriptCursor& step) override;
 
 public:
     virtual void InitUsedRawBytes() override {
@@ -357,9 +354,9 @@ public:
         return Portion->GetApproxChunksCount(entityIds.size()) * sizeof(TColumnRecord);
     }
 
-    virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override {
+    virtual void InitializeProcessing() override {
         AFL_VERIFY(HasPortionAccessor())("type", GetType());
-        TBase::InitializeProcessing(sourcePtr);
+        TBase::InitializeProcessing();
     }
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
@@ -413,18 +410,6 @@ public:
         return Portion;
     }
 
-    TConclusion<NCommon::TExecutionResult> StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
-        auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
-        const auto duplicatesManager = context->GetDuplicatesManager();
-        if (!duplicatesManager) {
-            // Scan abort raced with this step: UnregisterActors already dropped the manager.
-            AFL_VERIFY(!context->IsActive());
-            return TConclusionStatus::Fail("duplicates manager is unregistered by scan abort");
-        }
-        auto event = std::make_unique<NDuplicateFiltering::TEvRequestFilter>(*this, std::move(subscriber));
-        return NCommon::TExecutionResult::Pending(std::make_shared<NCommon::TSendEventJob>(duplicatesManager, std::move(event)));
-    }
-
     std::optional<ui64> GetPortionIdOptional() const override {
         return Portion->GetPortionId();
     }
@@ -436,12 +421,12 @@ public:
 class TAggregationDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
+    YDB_READONLY_DEF(std::vector<std::unique_ptr<NCommon::TDataSourceLease>>, Sources);
     const ui32 LastSourceIdx;
     const ui64 LastSourceRecordsCount;
     const std::optional<ui64> LastPortionIdOptional;
 
-    void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
+    void DoBuildStageResult() override {
         const ui32 recordsCount = GetStageData().GetTable().GetRecordsCountActualVerified();
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, recordsCount, 0) });
@@ -452,8 +437,7 @@ private:
         AFL_VERIFY(false);
     }
 
-    virtual NCommon::TExecutionResult DoStartFetchingColumns(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/,
-        const TFetchingScriptCursor& /*step*/, const TColumnsSetIds& /*columns*/) override {
+    virtual NCommon::TExecutionResult DoStartFetchingColumns(const TFetchingScriptCursor& /*step*/, const TColumnsSetIds& /*columns*/) override {
         AFL_VERIFY(false);
         return NCommon::TExecutionResult::Done();
     }
@@ -515,19 +499,18 @@ private:
     }
 
     virtual TInternalPathId GetPathId() const override {
-        return Sources.front()->GetAs<IDataSource>()->GetPathId();
+        return Sources.front()->GetSource().GetAs<IDataSource>()->GetPathId();
     }
 
-    virtual NCommon::TExecutionResult DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
+    virtual NCommon::TExecutionResult DoStartFetchingAccessor(const TFetchingScriptCursor& /*step*/) override {
         AFL_VERIFY(false);
         return NCommon::TExecutionResult::Done();
     }
 
-    static ui32 CalcInputRecordsCount(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources) {
+    static ui32 CalcInputRecordsCount(const std::vector<std::unique_ptr<NCommon::TDataSourceLease>>& sources) {
         ui32 recordsCount = 0;
         for (auto&& i : sources) {
-            recordsCount += i->GetStageData().GetTable().GetRecordsCountActualVerified();
+            recordsCount += i->GetSource().GetStageData().GetTable().GetRecordsCountActualVerified();
         }
         return recordsCount;
     }
@@ -620,15 +603,26 @@ public:
     }
 
     TAggregationDataSource(
-        std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, false, TSnapshot::Zero(), TSnapshot::Zero(),
-              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetSourceId())
-        , Sources(std::move(sources))
-        , LastSourceIdx(Sources.back()->GetSourceIdx())
-        , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
-        , LastPortionIdOptional(Sources.back()->GetPortionIdOptional())
+        std::vector<std::unique_ptr<NCommon::TDataSourceLease>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
+        : TAggregationDataSource(std::move(sources), LastOf(sources), context)
     {
-        AFL_VERIFY(Sources.size());
+    }
+
+private:
+    static const NCommon::IDataSource& LastOf(const std::vector<std::unique_ptr<NCommon::TDataSourceLease>>& sources) {
+        AFL_VERIFY(sources.size());
+        return sources.back()->GetSource();
+    }
+
+    TAggregationDataSource(std::vector<std::unique_ptr<NCommon::TDataSourceLease>>&& sources, const NCommon::IDataSource& last,
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context)
+        : TBase(EType::SimpleAggregation, last.GetSourceIdx(), context, false, TSnapshot::Zero(), TSnapshot::Zero(),
+              CalcInputRecordsCount(sources), std::nullopt, false, last.GetSourceId())
+        , Sources(std::move(sources))
+        , LastSourceIdx(last.GetSourceIdx())
+        , LastSourceRecordsCount(last.GetRecordsCount())
+        , LastPortionIdOptional(last.GetPortionIdOptional())
+    {
     }
 };
 

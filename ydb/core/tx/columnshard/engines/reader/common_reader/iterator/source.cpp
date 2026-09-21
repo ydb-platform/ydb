@@ -37,11 +37,11 @@ void TExecutionContext::Stop() {
     ExecutionVisitor.reset();
 }
 
-void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,
-    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program, const TFetchingScriptCursor& step) {
-    auto readMeta = source->GetContext()->GetCommonContext()->GetReadMetadata();
+void TExecutionContext::Start(
+    IDataSource& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program, const TFetchingScriptCursor& step) {
+    auto readMeta = source.GetContext()->GetCommonContext()->GetReadMetadata();
     NArrow::NSSA::TProcessorContext context(
-        source, source->MutableStageData().ExtractTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
+        source, source.MutableStageData().ExtractTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
     auto visitor = std::make_shared<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(std::move(context));
     SetProgramIterator(program->BuildIterator(visitor), visitor);
     SetCursorStep(step);
@@ -283,18 +283,17 @@ void IDataSource::ResetSourceFinishedFlag() {
     AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 0, 1));
 }
 
-void IDataSource::OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) {
+void IDataSource::OnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<TDataSourceLease> self) {
     AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 1, 0));
-    AFL_VERIFY(sourcePtr);
-    DoOnSourceFetchingFinishedSafe(owner, sourcePtr);
+    AFL_VERIFY(self && &self->GetSource() == this);
+    DoOnSourceFetchingFinishedSafe(owner, std::move(self));
 }
 
-void IDataSource::OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+void IDataSource::OnEmptyStageData() {
     AFL_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
-    AFL_VERIFY(sourcePtr);
     AFL_VERIFY(!StageResult);
     AFL_VERIFY(StageData);
-    DoOnEmptyStageData(sourcePtr);
+    DoOnEmptyStageData();
     AFL_VERIFY(StageResult);
     AFL_VERIFY(!StageData);
 
@@ -304,13 +303,12 @@ void IDataSource::OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& 
         GetTotalExecutionDuration(), GetReservedMemory());
 }
 
-void IDataSource::BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) {
+void IDataSource::BuildStageResult() {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
-    AFL_VERIFY(sourcePtr);
     AFL_VERIFY(!StageResult);
     AFL_VERIFY(StageData);
-    DoBuildStageResult(sourcePtr);
+    DoBuildStageResult();
     AFL_VERIFY(StageResult);
     AFL_VERIFY(!StageData);
 

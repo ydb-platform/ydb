@@ -37,11 +37,7 @@ private:
     }
 
     virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const override {
-        auto source = context.GetDataSource().lock();
-        if (!source) {
-            return TConclusionStatus::Fail("source was destroyed before (original fetch start)");
-        }
-        return source->StartReserveMemory(context, DataAddresses, IndexContext, HeaderContext, Policy);
+        return context.GetDataSource().StartReserveMemory(context, DataAddresses, IndexContext, HeaderContext, Policy);
     }
 
     virtual bool IsAggregation() const override {

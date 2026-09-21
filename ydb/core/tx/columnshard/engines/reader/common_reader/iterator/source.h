@@ -29,6 +29,7 @@ class IDataReader;
 namespace NKikimr::NOlap::NReader::NCommon {
 
 class TFetchingScriptCursor;
+class TDataSourceLease;
 
 class TExecutionContext {
 private:
@@ -71,7 +72,7 @@ public:
         OnFinishProgramStepExecution();
     }
 
-    void Start(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program,
+    void Start(IDataSource& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program,
         const TFetchingScriptCursor& step);
 
     void Stop();
@@ -140,9 +141,9 @@ private:
     bool InFlightReleasedFlag = false;
     TAtomic SourceFinishedSafeFlag = 0;
     TAtomic StageResultBuiltFlag = 0;
-    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
-    virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
-    virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
+    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<TDataSourceLease> self) = 0;
+    virtual void DoBuildStageResult() = 0;
+    virtual void DoOnEmptyStageData() = 0;
 
     virtual TConclusion<TExecutionResult> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchersExt) = 0;
@@ -150,8 +151,7 @@ private:
     virtual TConclusion<TExecutionResult> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
 
-    virtual TExecutionResult DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
+    virtual TExecutionResult DoStartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
     std::optional<NEvLog::TLogsThread> Events;
@@ -376,9 +376,8 @@ public:
 
     void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false);
 
-    TExecutionResult StartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
-        return DoStartFetchingColumns(sourcePtr, step, columns);
+    TExecutionResult StartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
+        return DoStartFetchingColumns(step, columns);
     }
 
     bool IsInFlightReleased() const {
@@ -392,16 +391,11 @@ public:
 
     void ResetSourceFinishedFlag();
 
-    void OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr);
+    void OnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<TDataSourceLease> self);
 
-    void OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    void OnEmptyStageData();
 
-    template <class T>
-    void BuildStageResult(const std::shared_ptr<T>& sourcePtr) {
-        BuildStageResult(std::static_pointer_cast<IDataSource>(sourcePtr));
-    }
-
-    void BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr);
+    void BuildStageResult();
 
     bool AddTxConflict();
 
@@ -443,6 +437,32 @@ public:
 
     ui64 GetTxId() const {
         return GetContext()->GetCommonContext()->GetReadMetadata()->GetTxId();
+    }
+};
+
+class TDataSourceLease: TNonCopyable {
+private:
+    const std::shared_ptr<IDataSource> Source;
+
+public:
+    explicit TDataSourceLease(std::shared_ptr<IDataSource>&& source)
+        : Source(std::move(source))
+    {
+        AFL_VERIFY(Source);
+    }
+
+    IDataSource& GetSource() const {
+        return *Source;
+    }
+
+    std::shared_ptr<const IDataSource> ShareReadOnly() const {
+        return Source;
+    }
+
+    template <class T>
+    std::shared_ptr<const T> ShareReadOnlyAs() const {
+        AFL_VERIFY(T::CheckTypeCast(Source->GetType()))("type", Source->GetType());
+        return std::static_pointer_cast<const T>(Source);
     }
 };
 

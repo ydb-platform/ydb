@@ -351,7 +351,7 @@ public:
 class TProcessorContext {
 private:
     std::unique_ptr<NAccessor::TAccessorsCollection> Resources;
-    YDB_READONLY_DEF(std::weak_ptr<IDataSource>, DataSource);
+    IDataSource& DataSource;
     YDB_READONLY_DEF(std::optional<ui32>, Limit);
     YDB_READONLY(bool, Reverse, false);
     bool Extracted = false;
@@ -381,17 +381,21 @@ public:
         return std::move(Resources);
     }
 
-    template <class T>
-    std::shared_ptr<T> GetDataSourceVerifiedAs() const {
-        auto result = std::static_pointer_cast<T>(DataSource.lock());
-        AFL_VERIFY(result);
-        return result;
+    IDataSource& GetDataSource() const {
+        return DataSource;
     }
 
-    TProcessorContext(std::weak_ptr<IDataSource>&& dataSource, std::unique_ptr<NAccessor::TAccessorsCollection>&& resources,
-        const std::optional<ui32> limit, const bool reverse)
+    template <class T>
+    T& GetDataSourceVerifiedAs() const {
+        auto* result = dynamic_cast<T*>(&DataSource);
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    TProcessorContext(IDataSource& dataSource, std::unique_ptr<NAccessor::TAccessorsCollection>&& resources, const std::optional<ui32> limit,
+        const bool reverse)
         : Resources(std::move(resources))
-        , DataSource(std::move(dataSource))
+        , DataSource(dataSource)
         , Limit(limit)
         , Reverse(reverse) {
         AFL_VERIFY(!!Resources);

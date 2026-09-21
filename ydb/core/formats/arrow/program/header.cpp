@@ -7,11 +7,8 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<TExecutionResult> THeaderCheckerProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto source = context.GetDataSource().lock();
-    if (!source) {
-        return TConclusionStatus::Fail("source was destroyed before (header check start)");
-    }
-    auto conclusion = source->CheckHeader(context, HeaderContext);
+    auto& source = context.GetDataSource();
+    auto conclusion = source.CheckHeader(context, HeaderContext);
     if (conclusion.IsFail()) {
         return conclusion;
     }

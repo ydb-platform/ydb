@@ -5,10 +5,7 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto source = context.GetDataSource().lock();
-    if (!source) {
-        return TConclusionStatus::Fail("source was destroyed before (original fetch start)");
-    }
+    auto& source = context.GetDataSource();
     THashSet<uint32_t> uniqueEntityIds;
     std::vector<std::shared_ptr<IFetchLogic>> logic;
     for (auto&& [_, i] : DataAddresses) {
@@ -25,7 +22,7 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
         if (subColumnsToFetch.empty()) {
             continue;
         }
-        auto conclusion = source->StartFetchData(context, i.SelectSubColumns(subColumnsToFetch));
+        auto conclusion = source.StartFetchData(context, i.SelectSubColumns(subColumnsToFetch));
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {
@@ -41,7 +38,7 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
     }
 
     for (auto&& [_, i] : IndexContext) {
-        auto conclusion = source->StartFetchIndex(context, i);
+        auto conclusion = source.StartFetchIndex(context, i);
         if (conclusion.IsFail()) {
             return conclusion;
         } else {
@@ -59,7 +56,7 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
         if (context.GetResources().GetAccessorOptional(i.GetColumnId())) {
             continue;
         }
-        auto conclusion = source->StartFetchHeader(context, i);
+        auto conclusion = source.StartFetchHeader(context, i);
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {
@@ -74,7 +71,7 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
         }
     }
 
-    return source->StartFetch(context, logic);
+    return source.StartFetch(context, logic);
 }
 
 TConclusion<TExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
@@ -82,11 +79,8 @@ TConclusion<TExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
     const auto acc = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
     for (auto&& sc : DataAddress.GetSubColumnNames(true)) {
         if (!acc || !acc->HasSubColumnData(sc)) {
-            auto source = context.GetDataSource().lock();
-            if (!source) {
-                return TConclusionStatus::Fail("source was destroyed before (original assemble start)");
-            }
-            auto conclusion = source->AssembleAccessor(context, GetOutputColumnIdOnce(), sc);
+            auto& source = context.GetDataSource();
+            auto conclusion = source.AssembleAccessor(context, GetOutputColumnIdOnce(), sc);
             if (conclusion.IsFail()) {
                 return conclusion;
             }

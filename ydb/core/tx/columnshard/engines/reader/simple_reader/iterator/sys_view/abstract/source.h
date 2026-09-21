@@ -23,8 +23,7 @@ private:
         return false;
     }
 
-    virtual NReader::NCommon::TExecutionResult DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
+    virtual NReader::NCommon::TExecutionResult DoStartFetchingAccessor(const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
         return NReader::NCommon::TExecutionResult::Done();
     }
 
@@ -45,7 +44,7 @@ private:
         }
     }
 
-    virtual NReader::NCommon::TExecutionResult DoStartFetchingColumns(const std::shared_ptr<NReader::NCommon::IDataSource>& /*sourcePtr*/,
+    virtual NReader::NCommon::TExecutionResult DoStartFetchingColumns(
         const NReader::NCommon::TFetchingScriptCursor& /*step*/, const NReader::NCommon::TColumnsSetIds& /*columns*/) override {
         return NReader::NCommon::TExecutionResult::Done();
     }

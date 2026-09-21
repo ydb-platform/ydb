@@ -10,11 +10,10 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSource>& source) {
-    AFL_VERIFY(source);
+TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(IDataSource& source) {
     YDB_LOG_CREATE_CONTEXT(
-        {"sourceIdx", source->GetSourceIdx()},
-        {"tabletId", source->GetContext()->GetCommonContext()->GetReadMetadata()->GetTabletId()});
+        {"sourceIdx", source.GetSourceIdx()},
+        {"tabletId", source.GetContext()->GetCommonContext()->GetReadMetadata()->GetTabletId()});
     NMiniKQL::TThrowingBindTerminator bind;
     if (StepStartInstant == TMonotonic::Zero()) {
         StepStartInstant = TMonotonic::Now();
@@ -22,19 +21,19 @@ TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(const std::shared_p
     Script->OnExecute();
     AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     while (!Script->IsFinished(CurrentStepIdx)) {
-        if (source->HasStageData() && source->GetStageData().IsEmptyWithData()) {
+        if (source.HasStageData() && source.GetStageData().IsEmptyWithData()) {
             YDB_LOG_DEBUG("",
                 {"event", "empty_data"},
                 {"scanStepIdx", CurrentStepIdx});
-            source->OnEmptyStageData(source);
+            source.OnEmptyStageData();
             break;
-        } else if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
+        } else if (source.HasStageResult() && source.GetStageResult().IsEmpty()) {
             YDB_LOG_DEBUG("",
                 {"event", "empty_result"},
                 {"scanStepIdx", CurrentStepIdx});
             break;
         }
-        const NColumnShard::TConcreteScanCounters& counters = source->GetContext()->GetCommonContext()->GetCounters();
+        const NColumnShard::TConcreteScanCounters& counters = source.GetContext()->GetCommonContext()->GetCounters();
         if (StepEndIfStepIsAsync.has_value()) {
             // previous step was asynchronous; measure how long we waited since it finished
             auto waitDuration = TMonotonic::Now() - *StepEndIfStepIsAsync;
@@ -78,7 +77,7 @@ TConclusion<TExecutionResult> TFetchingScriptCursor::Execute(const std::shared_p
         StepStartInstant = TMonotonic::Now();
         ++CurrentStepIdx;
     }
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fcursor"));
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("fcursor"));
     return TExecutionResult::Done();
 }
 

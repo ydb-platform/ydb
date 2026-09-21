@@ -1010,11 +1010,7 @@
         "type": "Uint64?"
       },
       {
-        "name": "TableReadBytes",
-        "type": "Uint64?"
-      },
-      {
-        "name": "SourceReadBytes",
+        "name": "ReadIngressBytes",
         "type": "Uint64?"
       }
     ],

@@ -2555,7 +2555,10 @@ public:
         }
         if (!QueryState->CurrentQueryStatsPublishScheduled) {
             QueryState->CurrentQueryStatsPublishScheduled = true;
-            Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup(QueryState->QueryId));
+            const auto interval = QueryState->CurrentQueryStatsSequenceNo == 0
+                ? TDuration::Seconds(1)
+                : TDuration::Seconds(5);
+            Schedule(interval, new TEvents::TEvWakeup(QueryState->QueryId));
         }
     }
 

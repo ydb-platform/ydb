@@ -147,12 +147,8 @@ public:
         auto createVolumeRequest = std::make_unique<TEvSSProxy::TEvCreateVolumeRequest>(
             std::move(volumeConfig));
 
-<<<<<<< HEAD
         YDB_LOG_DEBUG_CTX(ctx, "Sending createvolume request for volume",
             {"diskId", DiskId});
-=======
-        YDB_LOG_DEBUG_CTX(ctx, "Sending createvolume request for volume testDiskId");
->>>>>>> stable-26-3-1
 
         NYdb::NBS::Send(
             ctx,
@@ -184,7 +180,6 @@ private:
         }
     }
 
-<<<<<<< HEAD
     void SendDescribeScheme(const TActorContext& ctx) {
         auto describeRequest = std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(DiskId);
         NYdb::NBS::Send(ctx, MakeSSProxyServiceId(), std::move(describeRequest), 0);
@@ -230,12 +225,6 @@ private:
     void HandleDescribeScheme(TEvSSProxy::TEvDescribeSchemeResponse::TPtr& ev) {
         const auto& ctx = TActivationContext::AsActorContext();
         const auto& response = *ev->Get();
-=======
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: received TEvCreateVolumeResponse from ss",
-            {"proxy", ev->Sender},
-            {"status", static_cast<int>(response.Status)},
-            {"reason", response.Reason.data()});
->>>>>>> stable-26-3-1
 
         Ydb::Nbs::CreatePartitionResult result;
 

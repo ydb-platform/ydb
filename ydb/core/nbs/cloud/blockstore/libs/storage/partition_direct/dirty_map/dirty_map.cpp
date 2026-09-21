@@ -1199,8 +1199,8 @@ bool TBlocksDirtyMap::CheckEraseAbility(
     TBlockRange16 range,
     TInflightInfo& inflightInfo)
 {
-    if (StateGeneration == 0) {
-        // There is not a single red block.
+    if (StateGeneration == PersistedStateGeneration) {
+        // All current red blocks persisted. Can erase.
         return true;
     }
 

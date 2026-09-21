@@ -462,7 +462,7 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         bundle->GetPBufferKey());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
-    DoPersistDirtyMap();
+    StartPersist();
     ScheduleCleaningUp();
 }
 
@@ -514,7 +514,7 @@ void TVChunk::OnCopyProgress(ui64 totalBytes)
         LogTitle.GetWithTime().c_str(),
         totalBytes);
 
-    DoPersistDirtyMap();
+    StartPersist();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -535,7 +535,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 
     DoFlush(false);
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
-    DoPersistDirtyMap();
+    StartPersist();
 }
 
 void TVChunk::DoStart()
@@ -833,7 +833,7 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
     UpdatePendingCounters();
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
-    DoPersistDirtyMap();
+    StartPersist();
     ScheduleCleaningUp();
 }
 
@@ -939,15 +939,30 @@ void TVChunk::OnEraseBelatedResponse(
     ScheduleCleaningUp();
 }
 
-void TVChunk::DoPersistDirtyMap()
+void TVChunk::StartPersist()
 {
-    if (DirtyMapStatePersisting) {
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (Persisting) {
         return;
     }
+
+    if (!PendingVChunkConfigs.empty()) {
+        PersistNextPendingConfig();
+        return;
+    }
+
+    DoPersistDirtyMap();
+}
+
+void TVChunk::DoPersistDirtyMap()
+{
+    Y_ABORT_UNLESS(!Persisting);
+
     if (!BlocksDirtyMap->NeedPersist()) {
         return;
     }
-    DirtyMapStatePersisting = true;
+    Persisting = true;
 
     auto state = BlocksDirtyMap->GetStateForPersist();
     const ui32 stateGeneration = BlocksDirtyMap->GetCurrentGeneration();
@@ -993,10 +1008,11 @@ void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks)
         LogTitle.GetWithTime().c_str(),
         stateGeneration);
 
-    DirtyMapStatePersisting = false;
+    Y_ABORT_UNLESS(Persisting);
+    Persisting = false;
     BlocksDirtyMap->StatePersisted(stateGeneration);
     PersistedFreshDDisks = freshDDisks;
-    DoPersistDirtyMap();
+    StartPersist();
     DemoteUnavailableHostsIfNeeded();
     ScheduleCleaningUp();
 }
@@ -1112,7 +1128,7 @@ void TVChunk::CleaningUp()
 
     DoFlush(true);
     DoErase(true, TBlocksDirtyMap::EEraseType::Standard);
-    DoPersistDirtyMap();
+    StartPersist();
 }
 
 void TVChunk::UpdatePendingCounters()
@@ -1143,22 +1159,21 @@ void TVChunk::UpdateConfig(TPrepareConfigFunc prepareConfig, TString message)
     PendingVChunkConfigs.push_back(TPendingVChunkConfig{
         .PrepareConfig = std::move(prepareConfig),
         .Message = std::move(message)});
-    if (PendingVChunkConfigs.size() == 1) {
-        PersistNextPendingConfig();
-    }
+
+    StartPersist();
 }
 
 void TVChunk::PersistNextPendingConfig()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (PendingVChunkConfigs.empty()) {
-        return;
-    }
+    Y_ABORT_UNLESS(!Persisting);
+    Y_ABORT_UNLESS(!PendingVChunkConfigs.empty());
 
-    auto& pending = PendingVChunkConfigs.front();
-
+    TPendingVChunkConfig& pending = PendingVChunkConfigs.front();
     auto config = std::move(pending.PrepareConfig)();
+    auto message = std::move(pending.Message);
+    PendingVChunkConfigs.pop_front();
 
     if (config.Empty() || config == VChunkConfig) {
         LOG_INFO(
@@ -1166,19 +1181,22 @@ void TVChunk::PersistNextPendingConfig()
             NKikimrServices::NBS_PARTITION,
             "%s Skip update config: %s %s",
             LogTitle.GetWithTime().c_str(),
-            pending.Message.Quote().c_str(),
+            message.Quote().c_str(),
             config.DebugPrint().c_str());
 
-        PendingVChunkConfigs.pop_front();
-        PersistNextPendingConfig();
+        StartPersist();
         return;
     }
+
+    Persisting = true;
 
     Y_ABORT_UNLESS(config.GetVChunkIndex() == VChunkConfig.GetVChunkIndex());
     Y_ABORT_UNLESS(config.IsValid());
 
     const ui32 stateGeneration = BlocksDirtyMap->GetCurrentGeneration();
     auto dirtyMapState = BlocksDirtyMap->MakeFutureState(config, IsTouched());
+    // GetOutdatedDDisks() only sees current DDisks and would miss a newly
+    // promoted DDisk. Use the state that will be persisted with the config.
     const THostMask freshDDisks = GetFreshDDisks(dirtyMapState);
     auto onPersisted = PartitionDirectService->UpdateVChunkState(
         config,
@@ -1187,6 +1205,7 @@ void TVChunk::PersistNextPendingConfig()
         [weakSelf = weak_from_this(),
          executor = Executor,
          config,
+         message = std::move(message),
          stateGeneration,
          freshDDisks]   //
         (const TPersistResultFuture& f) mutable
@@ -1197,12 +1216,14 @@ void TVChunk::PersistNextPendingConfig()
             executor->ExecuteSimple(
                 [weakSelf = std::move(weakSelf),
                  config,
+                 message = std::move(message),
                  stateGeneration,
                  freshDDisks]() mutable
                 {
                     if (auto self = weakSelf.lock()) {
                         self->OnConfigPersisted(
                             config,
+                            message,
                             stateGeneration,
                             freshDDisks);
                     }
@@ -1211,20 +1232,20 @@ void TVChunk::PersistNextPendingConfig()
 }
 
 void TVChunk::OnConfigPersisted(
-    TVChunkConfig config,
+    const TVChunkConfig& config,
+    const TString& message,
     ui32 stateGeneration,
     THostMask freshDDisks)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    Y_ABORT_UNLESS(!PendingVChunkConfigs.empty());
+    Y_ABORT_UNLESS(Persisting);
 
-    auto pending = std::move(PendingVChunkConfigs.front());
-    PendingVChunkConfigs.pop_front();
+    Persisting = false;
 
     BlocksDirtyMap->StatePersisted(stateGeneration);
     PersistedFreshDDisks = freshDDisks;
-    ApplyConfig(config, pending.Message);
-    PersistNextPendingConfig();
+    ApplyConfig(config, message);
+    StartPersist();
     DemoteUnavailableHostsIfNeeded();
 }
 
@@ -1381,7 +1402,7 @@ void TVChunk::OnCopyComplete(
     }
 
     Copiers.erase(hostIndex);
-    DoPersistDirtyMap();
+    StartPersist();
 }
 
 void TVChunk::DemoteUnavailableHostsIfNeeded()

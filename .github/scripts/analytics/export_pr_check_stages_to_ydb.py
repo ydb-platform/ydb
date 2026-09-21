@@ -110,7 +110,11 @@ def collect_rows(org: str, repo: str, workflow: str, created_since: datetime) ->
         run_id = run.get("id")
         if run_id is None:
             continue
-        jobs = list_run_jobs(org, repo, int(run_id))
+        try:
+            jobs = list_run_jobs(org, repo, int(run_id))
+        except Exception as exc:  # noqa: BLE001 — keep exporting other runs
+            print(f"Warning: failed to list jobs for run {run_id}: {exc}")
+            continue
         rows.extend(rows_from_workflow_run(run, jobs))
         run_count += 1
         if run_count % 20 == 0:
@@ -131,25 +135,29 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    args = parse_args()
-    created_since = datetime.now(timezone.utc) - timedelta(hours=args.hours)
-    print(
-        f"Exporting {args.org}/{args.repo} workflow={args.workflow} "
-        f"since {created_since.isoformat()}"
-    )
-    rows = collect_rows(args.org, args.repo, args.workflow, created_since)
-    if not rows:
-        print("No PR-check stage rows to upload")
-        return 0
+    try:
+        args = parse_args()
+        created_since = datetime.now(timezone.utc) - timedelta(hours=args.hours)
+        print(
+            f"Exporting {args.org}/{args.repo} workflow={args.workflow} "
+            f"since {created_since.isoformat()}"
+        )
+        rows = collect_rows(args.org, args.repo, args.workflow, created_since)
+        if not rows:
+            print("No PR-check stage rows to upload")
+            return 0
 
-    with YDBWrapper() as wrapper:
-        if not wrapper.check_credentials():
-            print("Error: YDB credentials check failed")
-            return 1
-        table_path = args.table_path or resolve_table_path(wrapper)
-        uploaded = upsert_rows(wrapper, table_path, rows)
-        print(f"Uploaded {uploaded} rows to {table_path}")
-    return 0
+        with YDBWrapper() as wrapper:
+            if not wrapper.check_credentials():
+                print("Error: YDB credentials check failed")
+                return 1
+            table_path = args.table_path or resolve_table_path(wrapper)
+            uploaded = upsert_rows(wrapper, table_path, rows)
+            print(f"Uploaded {uploaded} rows to {table_path}")
+        return 0
+    except Exception as exc:  # noqa: BLE001 — collector must not fail the analytics job
+        print(f"Warning: PR-check stage export failed: {exc}")
+        return 0
 
 
 if __name__ == "__main__":

@@ -24,6 +24,11 @@
 
 using NKikimr::NMiniKQL::TRunParams;
 
+bool IsDqBlockRun(const TRunParams& runParams)
+{
+    return !runParams.DqBlockFile.empty() || !runParams.DqBlockGenerator.empty();
+}
+
 TStringBuf HashMapTypeName(NKikimr::NMiniKQL::EHashMapImpl implType)
 {
     switch (implType) {
@@ -51,10 +56,11 @@ class TPrintingResultCollector : public TTestResultCollector {
             Cout << ", " << (spilling.value() ? "+" : "-") << "spilling";
         }
         Cout << Endl;
-        const bool dqBlock = TStringBuf(testName).Contains("DqBlock");
+        const bool dqBlock = IsDqBlockRun(runParams);
         Cout << "Data rows total: " << runParams.RowsPerRun << " x " << runParams.NumRuns << Endl;
         Cout << "Random seed: " << *runParams.RandomSeed << Endl;
         if (dqBlock) {
+            Cout << "Implementation: " << runParams.DqBlockImpl << Endl;
             if (runParams.DqBlockGenerator.empty()) {
                 Cout << "Input file: " << runParams.DqBlockFile << Endl;
             } else {
@@ -67,6 +73,9 @@ class TPrintingResultCollector : public TTestResultCollector {
                 Cout << "Aggregations: " << JoinSeq(",", runParams.DqBlockAggregations) << Endl;
             } else {
                 Cout << "Aggregation AST: " << runParams.DqBlockAstFile << Endl;
+            }
+            if (!runParams.DqBlockGeneratorAstFile.empty()) {
+                Cout << "Input transform AST: " << runParams.DqBlockGeneratorAstFile << Endl;
             }
             Cout << "Block size: " << runParams.BlockSize << Endl;
         } else {
@@ -120,11 +129,12 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
     out["rowsPerRun"] = runParams.RowsPerRun;
     out["numRuns"] = runParams.NumRuns;
     out["randomSeed"] = *runParams.RandomSeed;
-    const bool dqBlock = TStringBuf(testName).Contains("DqBlock");
+    const bool dqBlock = IsDqBlockRun(runParams);
     if (TStringBuf(testName).Contains("Block") || dqBlock) {
         out["blockSize"] = runParams.BlockSize;
     }
     if (dqBlock) {
+        out["dqBlockImpl"] = runParams.DqBlockImpl;
         out["dqBlockFile"] = runParams.DqBlockFile;
         out["dqBlockGenerator"] = runParams.DqBlockGenerator;
         if (!runParams.DqBlockGenerator.empty()) {
@@ -134,6 +144,7 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
         out["dqBlockKeys"] = JoinSeq(",", runParams.DqBlockKeyColumns);
         out["dqBlockAggregations"] = JoinSeq(",", runParams.DqBlockAggregations);
         out["dqBlockAstFile"] = runParams.DqBlockAstFile;
+        out["dqBlockGeneratorAstFile"] = runParams.DqBlockGeneratorAstFile;
     } else {
         out["longStringKeys"] = runParams.LongStringKeys;
         out["numKeys"] = runParams.NumKeys;
@@ -498,16 +509,25 @@ int main(int argc, const char* argv[])
         .RequiredArgument("AGG,...")
         .SplitHandler(&runParams.DqBlockAggregations, ',')
         .Help("Aggregations: sum:column_name or count");
+    options.AddLongOption("dq-block-impl")
+        .Choices({"DqHashAggregate", "BlockCombineHashed"})
+        .RequiredArgument("IMPLEMENTATION")
+        .StoreResult(&runParams.DqBlockImpl)
+        .Help("Block aggregation implementation; defaults to DqHashAggregate");
     options.AddLongOption("dq-block-ast")
         .RequiredArgument("PATH")
         .StoreResult(&runParams.DqBlockAstFile)
         .Help("Textual input transform, aggregation lambdas, and output key width");
+    options.AddLongOption("dq-block-generator-ast")
+        .RequiredArgument("PATH")
+        .StoreResult(&runParams.DqBlockGeneratorAstFile)
+        .Help("Textual input transform to use with synthesized keys and aggregations");
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
-    const std::array<TString, 6> dqBlockOptions = {
+    const std::array<TString, 8> dqBlockOptions = {
         "dq-block-file", "dq-block-generator", "dq-block-columns", "dq-block-keys",
-        "dq-block-aggregations", "dq-block-ast"};
+        "dq-block-aggregations", "dq-block-impl", "dq-block-ast", "dq-block-generator-ast"};
     if (testType != ETestType::DqBlock) {
         for (const auto& option : dqBlockOptions) {
             if (parsedOptions.Has(option)) {
@@ -539,12 +559,22 @@ int main(int argc, const char* argv[])
             }
         }
         const bool hasAst = parsedOptions.Has("dq-block-ast");
+        const bool hasGeneratorAst = parsedOptions.Has("dq-block-generator-ast");
         const bool hasKeys = parsedOptions.Has("dq-block-keys");
         const bool hasAggregations = parsedOptions.Has("dq-block-aggregations");
         Y_ENSURE(hasAst || (hasKeys && hasAggregations),
             "Specify either --dq-block-ast or both --dq-block-keys and --dq-block-aggregations");
         Y_ENSURE(!hasAst || (!hasKeys && !hasAggregations),
             "--dq-block-ast cannot be combined with --dq-block-keys or --dq-block-aggregations");
+        Y_ENSURE(!hasGeneratorAst || !hasAst,
+            "--dq-block-generator-ast can only be used with --dq-block-keys and --dq-block-aggregations");
+        if (runParams.DqBlockImpl == "BlockCombineHashed") {
+            Y_ENSURE(!hasAst,
+                "BlockCombineHashed does not support --dq-block-ast; use --dq-block-keys and "
+                "--dq-block-aggregations instead");
+            Y_ENSURE(!llvm, "BlockCombineHashed does not support --llvm");
+            Y_ENSURE(!spilling, "BlockCombineHashed does not support --spilling");
+        }
         Y_ENSURE(runParams.TestMode == NKikimr::NMiniKQL::ETestMode::Full ||
                 runParams.TestMode == NKikimr::NMiniKQL::ETestMode::GraphOnly,
             "The dq-block test only supports mode=all and mode=graph");

@@ -70,16 +70,16 @@ runs:
       run: |
         python3 -m pip install ydb ydb[yc] >/dev/null
         echo "CI_CACHE_MODE=${CI_CACHE_MODE:-dist_cache}" >> "$GITHUB_ENV"
-        python3 .github/scripts/analytics/export_ya_nodes.py \
+        python3 .github/scripts/utils/analytics/export_ya_nodes.py \
           --evlog "tmp/results/try_*/ya_evlog.jsonl" \
           --source build_analytics \
           --label cache_mode=dist_cache \
           --label profile=evlog || true
-        python3 .github/scripts/analytics/export_ya_nodes.py \
+        python3 .github/scripts/utils/analytics/export_ya_nodes.py \
           --cpp-json html_cpp_impact/output.json \
           --headers-json html_headers_impact/output.json \
           --source build_bloat \
           --label cache_mode=dist_cache \
           --label profile=ftime_trace || true
-        python3 .github/scripts/analytics/ci_metrics.py send || true
+        python3 .github/scripts/utils/analytics/ci_metrics.py send || true
 

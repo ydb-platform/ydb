@@ -15,17 +15,17 @@ Callers may add attributes; they never have to pass job id or start time.
 
 From a workflow::
 
-    python3 .github/scripts/analytics/ci_metrics.py start ydbd_cached_build \\
+    python3 .github/scripts/utils/analytics/ci_metrics.py start ydbd_cached_build \\
         --source nightly_build --attr cache_mode=dist_cache --runner
     # ... work ...
-    python3 .github/scripts/analytics/ci_metrics.py send --conclusion success --usage
+    python3 .github/scripts/utils/analytics/ci_metrics.py send --conclusion success --usage
 
-    python3 .github/scripts/analytics/ci_metrics.py track ydbd_size \\
+    python3 .github/scripts/utils/analytics/ci_metrics.py track ydbd_size \\
         --kind gauge --value 123456 --unit bytes --source nightly_build
 
-    python3 .github/scripts/analytics/ci_metrics.py track build_info \\
+    python3 .github/scripts/utils/analytics/ci_metrics.py track build_info \\
         --kind info --source nightly_build --json-file modules.json
-    python3 .github/scripts/analytics/ci_metrics.py send
+    python3 .github/scripts/utils/analytics/ci_metrics.py send
 
 Never fails the caller (CLI exit 0).
 """
@@ -123,7 +123,19 @@ def default_metrics_file() -> str:
     return os.environ.get("CI_METRICS_FILE") or "ci_metrics.jsonl"
 
 
+def _qa_analytics_dir() -> str:
+    """Pre-existing YDB QA scripts (ydb_wrapper), not this client."""
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "analytics"))
+
+
+def _ensure_qa_analytics_path() -> None:
+    qa_dir = _qa_analytics_dir()
+    if qa_dir not in sys.path:
+        sys.path.insert(0, qa_dir)
+
+
 def _ydb_wrapper_cls():
+    _ensure_qa_analytics_path()
     from ydb_wrapper import YDBWrapper
 
     return YDBWrapper

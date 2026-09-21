@@ -206,7 +206,7 @@ runs:
           if [ -n "${CI_BUILD_SPAN:-}" ] && [ "$name" = "$CI_BUILD_SPAN" ]; then
             extra_args+=(--runner)
           fi
-          python3 .github/scripts/analytics/ci_metrics.py start \
+          python3 .github/scripts/utils/analytics/ci_metrics.py start \
             --name "$name" \
             --source "$source" \
             --label "cache_mode=${CI_CACHE_MODE:-unknown}" \
@@ -220,7 +220,7 @@ runs:
           if [ -n "${CI_BUILD_SPAN:-}" ] && [ "$name" = "$CI_BUILD_SPAN" ]; then
             extra_args+=(--usage)
           fi
-          python3 .github/scripts/analytics/ci_metrics.py end \
+          python3 .github/scripts/utils/analytics/ci_metrics.py end \
             --name "$name" \
             --conclusion "$conclusion" \
             "${extra_args[@]}" || true
@@ -764,7 +764,7 @@ runs:
       if: always()
       continue-on-error: true
       shell: bash
-      run: python3 .github/scripts/analytics/ci_metrics.py send
+      run: python3 .github/scripts/utils/analytics/ci_metrics.py send
 
     - name: resolve-status-sha
       shell: bash

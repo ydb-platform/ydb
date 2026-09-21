@@ -2,7 +2,7 @@
 
 ## Version 26.3 RC {#26-3-rc}
 
-Release date: TBD.
+Release date: 18.09.26
 
 ### Functionality
 

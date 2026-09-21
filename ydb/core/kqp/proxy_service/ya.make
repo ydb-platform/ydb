@@ -36,6 +36,7 @@ PEERDIR(
     ydb/library/actors/http
     ydb/library/query_actor
     ydb/library/security
+    ydb/core/security/iam_delegation
     ydb/library/table_creator
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/providers/common/http_gateway

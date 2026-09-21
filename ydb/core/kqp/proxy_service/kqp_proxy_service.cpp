@@ -24,6 +24,12 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/security/iam_delegation/iam_delegated_token_service.h>
+#include <ydb/core/security/iam_delegation/iam_delegation_service.h>
+#include <ydb/core/security/iam_delegation/services.h>
+#include <ydb/core/security/iam_delegation/settings.h>
+#include <ydb/core/security/iam_delegation/system_token_source.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
@@ -434,6 +440,7 @@ public:
         InitCheckpointStorage();
         InitDescribeResourceIdService();
         InitAccessServiceService();
+        InitIamDelegationServices();
 
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
@@ -602,6 +609,7 @@ public:
         InitCheckpointStorage();
         InitDescribeResourceIdService();
         InitAccessServiceService();
+        InitIamDelegationServices();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -2115,6 +2123,44 @@ private:
             MakeKqpDescribeResourceIdServiceId(), DescribeResourceIdService);
     }
 
+    // IAM delegation secrets: the delegated token service (tokens of delegated service accounts) and
+    // the node-local delegation service (SetupDelegation/RevokeDelegation for CREATE/ALTER/DROP SECRET).
+    //
+    // The two are started independently. Minting a token needs only the IAM token service, while
+    // setting a delegation up also needs the IAM control plane, so a cluster configured without the
+    // control plane endpoint keeps reading the delegation secrets it already has and only loses the
+    // ability to create new ones.
+    void InitIamDelegationServices() {
+        if (!FeatureFlags.GetEnableIamDelegationSecrets() || (IamDelegatedTokenService && IamDelegationService)) {
+            return;
+        }
+        try {
+            const auto settings = NIamDelegation::TIamDelegationSettings::FromConfig(AppData()->IamConfig, AppData()->ReplicationConfig);
+            if (const TString error = settings.Validate()) {
+                YDB_LOG_WARN("IAM delegation services are not started", {"reason", error});
+                return;
+            }
+            const auto& metadata = AppData()->AuthConfig.GetLocalMetadataService();
+            auto tokenSource = NIamDelegation::CreateVmMetadataSystemTokenSource(
+                AppData()->AuthConfig.HasLocalMetadataService() ? metadata.GetHost() : TString(), metadata.GetPort());
+            if (!IamDelegatedTokenService) {
+                IamDelegatedTokenService = TActivationContext::Register(NIamDelegation::CreateIamDelegatedTokenService(settings, tokenSource));
+                TActivationContext::ActorSystem()->RegisterLocalService(NIamDelegation::MakeIamDelegatedTokenServiceId(), IamDelegatedTokenService);
+            }
+            if (const TString error = settings.ValidateForDelegation()) {
+                YDB_LOG_WARN("IAM delegation service is not started, new IAM delegation secrets cannot be created;"
+                    " the existing ones keep working", {"reason", error});
+                return;
+            }
+            if (!IamDelegationService) {
+                IamDelegationService = TActivationContext::Register(NIamDelegation::CreateIamDelegationService(settings, tokenSource));
+                TActivationContext::ActorSystem()->RegisterLocalService(NIamDelegation::MakeIamDelegationServiceId(), IamDelegationService);
+            }
+        } catch (const std::exception& ex) {
+            YDB_LOG_ERROR("Failed to start IAM delegation services", {"exception", ex.what()});
+        }
+    }
+
     void InitAccessServiceService() {
         if (!FederatedQuerySetup || !FeatureFlags.GetEnableExternalDataSourceAuthMethodIam() || AccessServiceService) {
             return;
@@ -2193,6 +2239,8 @@ private:
     TActorId CheckpointStorageService;
     TActorId DescribeResourceIdService;
     TActorId AccessServiceService;
+    TActorId IamDelegationService;
+    TActorId IamDelegatedTokenService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

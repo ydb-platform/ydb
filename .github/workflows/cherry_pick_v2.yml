@@ -31,6 +31,10 @@ env:
 jobs:
   create-pr:
     runs-on: [self-hosted, tiny-worker]
+    timeout-minutes: 40
+    concurrency:
+      group: cherry-pick-v2
+      cancel-in-progress: false
     steps:
       - name: checkout
         uses: actions/checkout@v5
@@ -49,6 +53,7 @@ jobs:
         run: |
           git config --global user.name YDBot
           git config --global user.email ydbot@ydb.tech
+          git config --global http.version HTTP/1.1
           git config --local github.token ${{ env.GH_TOKEN }}
 
       - name: run-command

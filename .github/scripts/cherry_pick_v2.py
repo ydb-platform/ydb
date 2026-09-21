@@ -15,6 +15,7 @@ import re
 import tempfile
 import shutil
 import json
+import time
 from typing import List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from github import Github, GithubException, Auth
@@ -52,6 +53,10 @@ class ChangesAlreadyAppliedError(Exception):
     """Raised when all requested commits are already present in the target branch."""
 
 
+CLONE_ATTEMPTS = 3
+CLONE_RETRY_DELAY_SEC = 20
+
+
 def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.CompletedProcess:
     """Run git command"""
     result = subprocess.run(
@@ -62,6 +67,46 @@ def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.Co
         check=check
     )
     return result
+
+
+def clone_repository(repo_url: str, repo_dir: str, logger, seed_branch: Optional[str] = None) -> None:
+    """Clone commits and trees only; file blobs are fetched later when a branch is checked out."""
+    cmd = [
+        'git', '-c', 'http.version=HTTP/1.1',
+        'clone',
+        '--filter=blob:none',
+        '--no-checkout',
+    ]
+    if seed_branch:
+        cmd.extend(['--single-branch', '--branch', seed_branch])
+    cmd.extend([repo_url, repo_dir])
+
+    last_error = None
+    for attempt in range(1, CLONE_ATTEMPTS + 1):
+        if os.path.exists(repo_dir):
+            shutil.rmtree(repo_dir)
+        extra = f" --single-branch --branch {seed_branch}" if seed_branch else ""
+        logger.info(
+            "Cloning repository to %s (attempt %s/%s, --filter=blob:none --no-checkout%s)",
+            repo_dir, attempt, CLONE_ATTEMPTS, extra,
+        )
+        try:
+            subprocess.run(
+                cmd,
+                env={**os.environ, 'GIT_PROTOCOL': '2'},
+                check=True,
+                text=True,
+            )
+            return
+        except subprocess.CalledProcessError as e:
+            last_error = e
+            logger.error(
+                "Clone attempt %s/%s failed with exit %s",
+                attempt, CLONE_ATTEMPTS, e.returncode,
+            )
+            if attempt < CLONE_ATTEMPTS:
+                time.sleep(CLONE_RETRY_DELAY_SEC)
+    raise last_error
 
 
 def expand_sha(repo, ref: str, logger) -> str:
@@ -450,10 +495,11 @@ def process_branch(
     all_conflict_files = []
     cherry_pick_logs = []
     
-    # Prepare branch
+    # Prepare branch. Force-checkout the target tip so a blobless clone does not
+    # materialize main (or the previous backport branch) first.
     run_git(repo_path, ['fetch', 'origin', target_branch], logger)
-    run_git(repo_path, ['reset', '--hard', 'HEAD'], logger)
-    run_git(repo_path, ['checkout', '-B', target_branch, f'origin/{target_branch}'], logger)
+    run_git(repo_path, ['cherry-pick', '--abort'], logger, check=False)
+    run_git(repo_path, ['checkout', '-f', '-B', target_branch, f'origin/{target_branch}'], logger)
     run_git(repo_path, ['checkout', '-b', dev_branch_name, target_branch], logger)
     
     # Cherry-pick each commit
@@ -752,14 +798,7 @@ def main():
     repo_dir = tempfile.mkdtemp(prefix="ydb-cherry-pick-")
     try:
         repo_url = f"https://{token}@github.com/{repo_name}.git"
-        logger.info("Cloning repository: %s to %s", repo_url, repo_dir)
-        subprocess.run(
-            ['git', 'clone', repo_url, repo_dir],
-            env={**os.environ, 'GIT_PROTOCOL': '2'},
-            check=True,
-            text=True,
-            capture_output=True
-        )
+        clone_repository(repo_url, repo_dir, logger, seed_branch=valid_target_branches[0])
         
         # Process each target branch
         results: list[BackportResult] = []

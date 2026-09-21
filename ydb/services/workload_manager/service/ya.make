@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/actors/interconnect
     ydb/services/workload_manager/actors
     ydb/services/workload_manager/common
+    ydb/services/workload_manager/gateway
     ydb/services/workload_manager/tables
 )
 

@@ -61,7 +61,10 @@ jobs:
         git fetch --depth=1 origin "$workflow_sha"
         git checkout "$workflow_sha" -- \
           .github/scripts/utils/analytics \
+          .github/scripts/utils/metrics \
+          .github/scripts/utils/dashboard \
           .github/scripts/analytics \
+          .github/config/runners_footprints.yml \
           .github/actions/test_ya \
           .github/actions/build_and_test_ya
     - name: Setup ydb access
@@ -102,8 +105,18 @@ jobs:
       shell: bash
       run: |
         python3 -m pip install ydb ydb[yc] >/dev/null
-        if [ -e ydb/apps/ydbd/ydbd ] || [ -L ydb/apps/ydbd/ydbd ]; then
-          BINARY_SIZE_BYTES=$(stat -L -c%s ydb/apps/ydbd/ydbd)
+        BINARY=""
+        for candidate in \
+          "${TMP_DIR:-tmp}/out/ydb/apps/ydbd/ydbd" \
+          ydb/apps/ydbd/ydbd
+        do
+          if [ -e "$candidate" ] || [ -L "$candidate" ]; then
+            BINARY="$candidate"
+            break
+          fi
+        done
+        if [ -n "$BINARY" ]; then
+          BINARY_SIZE_BYTES=$(stat -L -c%s "$BINARY")
           python3 .github/scripts/utils/analytics/ci_metrics.py track ydbd_size \
             --kind gauge \
             --unit bytes \

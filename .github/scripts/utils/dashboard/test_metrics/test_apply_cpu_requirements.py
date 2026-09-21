@@ -100,6 +100,21 @@ SRCS(foo.cpp)
 END()
 """
 
+YA_MAKE_EXISTING_VALGRIND_ELSEIF = """UNITTEST_FOR(ydb/core/foo)
+
+SIZE(MEDIUM)
+IF (WITH_VALGRIND)
+    SIZE(LARGE)
+ELSEIF(SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
+SRCS(foo.cpp)
+END()
+"""
+
 YA_MAKE_MULTILINE_CPU = """UNITTEST()
 
 IF (SANITIZER_TYPE)
@@ -199,6 +214,21 @@ SRCS(foo.cpp)
 END()
 """
 
+EXPECTED_EXISTING_VALGRIND_ELSEIF = """UNITTEST_FOR(ydb/core/foo)
+
+SIZE(MEDIUM)
+IF (WITH_VALGRIND)
+    SIZE(LARGE)
+ELSEIF(SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
+SRCS(foo.cpp)
+END()
+"""
+
 EXPECTED_MULTILINE_CPU_UPDATE = """UNITTEST()
 
 IF (SANITIZER_TYPE)
@@ -279,6 +309,14 @@ APPLY_CPU_TEST_CASES = [
         "4",
         "thread",
         EXPECTED_SANITIZER_UPDATE,
+        "updated",
+    ),
+    (
+        "update_existing_valgrind_elseif",
+        YA_MAKE_EXISTING_VALGRIND_ELSEIF,
+        "4",
+        "thread",
+        EXPECTED_EXISTING_VALGRIND_ELSEIF,
         "updated",
     ),
     (

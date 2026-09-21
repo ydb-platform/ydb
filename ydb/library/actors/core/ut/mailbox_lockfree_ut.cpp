@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(LockFreeMailbox) {
         UNIT_ASSERT(!ev1);
 
         // Check that we pop the event we just pushed
-        std::unique_ptr<IEventHandle> ev2 = m.Pop();
+        std::unique_ptr<IEventHandle> ev2(m.Pop());
         UNIT_ASSERT(ev2.get() == ev1raw);
 
         // Check that the mailbox is now empty
@@ -59,9 +59,15 @@ Y_UNIT_TEST_SUITE(LockFreeMailbox) {
         std::unique_ptr<IEventHandle> ev4 = std::make_unique<IEventHandle>(TActorId(), TActorId(), new TEvents::TEvPing);
         UNIT_ASSERT(m.Push(ev4) == EMailboxPush::Free);
 
-        UNIT_ASSERT(m.Pop().get() == ev1raw);
-        UNIT_ASSERT(m.Pop().get() == ev2raw);
-        UNIT_ASSERT(m.Pop().get() == ev3raw);
+        IEventHandle* p = m.Pop();
+        UNIT_ASSERT(p == ev1raw);
+        delete p;
+        p = m.Pop();
+        UNIT_ASSERT(p == ev2raw);
+        delete p;
+        p = m.Pop();
+        UNIT_ASSERT(p == ev3raw);
+        delete p;
         UNIT_ASSERT(!m.Pop());
 
         // We shouldn't be able to unlock a free mailbox
@@ -196,6 +202,7 @@ Y_UNIT_TEST_SUITE(LockFreeMailbox) {
                         }
                         // Only one thread is supposed to be a consumer
                         observed.push_back(ev->Cookie);
+                        delete ev;
                     }
                 }
             });

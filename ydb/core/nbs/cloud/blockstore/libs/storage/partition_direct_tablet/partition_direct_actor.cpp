@@ -455,6 +455,7 @@ void TPartitionActor::Start(
         LogTitle.GetWithTime().c_str());
 
     DirectBlockGroupsConnections = std::move(directBlockGroupsConnections);
+    VChunkConfigs = vChunkConfigs;
 
     FastPathService = CreateFastPathService(vChunkConfigs, dirtyMapStates);
 
@@ -947,6 +948,7 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
+        HFunc(TEvPartitionDirectPrivate::TEvRenderMonPage, HandleRenderMonPage);
         HFunc(TEvPartitionDirectPrivate::TEvAddHostToDBG, HandleAddHostToDBG);
         HFunc(
             TEvPartitionDirectPrivate::TEvPersistHostHealth,

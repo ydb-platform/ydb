@@ -26,15 +26,14 @@ public:
         TString Mask;
     };
 
-    // Returns whether vchunkIndex has a touched bit.
-    [[nodiscard]] bool Get(ui32 vChunkIndex) const;
-
     // Returns the number of touched vchunks.
     [[nodiscard]] size_t GetCount() const;
 
-    // ITouchedProvider implementation.
+    // Implemented ITouchedProvider.
+    [[nodiscard]] bool Get(ui32 vChunkIndex) const override;
+
     [[nodiscard]] TRegionVChunks GetTouchedVChunks(
-        ui32 startVChunkIndex) const override;
+        ui32 regionIndex) const override;
 
     // Sets the touched bit and returns true if ready to start transaction.
     bool Add(ui32 vChunkIndex, TPersistResultPromise promise);

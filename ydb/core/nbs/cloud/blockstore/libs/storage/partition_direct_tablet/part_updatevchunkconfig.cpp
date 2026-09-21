@@ -45,6 +45,8 @@ void TPartitionActor::CompleteUpdateVChunkConfig(
     TTxPartition::TUpdateVChunkConfig& args)
 {
     for (auto& request: args.UpdateConfigRequests) {
+        VChunkConfigs[request.VChunkConfig.GetVChunkIndex()] =
+            request.VChunkConfig;
         request.UpdateCompleted.TrySetValue(EPersistResult::Success);
     }
     ExecutingUpdateVChunkConfigPromises.clear();

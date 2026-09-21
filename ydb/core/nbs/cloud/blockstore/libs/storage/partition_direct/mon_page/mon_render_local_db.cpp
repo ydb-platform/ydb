@@ -30,7 +30,10 @@ void RenderProtoDump(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void RenderLocalDb(IOutputStream& str, const TLocalDbContents& db)
+void RenderLocalDb(
+    IOutputStream& str,
+    const TLocalDbContents& db,
+    const TVChunkConfigs& vChunkConfigs)
 {
     HTML (str) {
         TAG (TH3) {
@@ -57,10 +60,10 @@ void RenderLocalDb(IOutputStream& str, const TLocalDbContents& db)
                 }
             }
             TABLEBODY () {
-                for (const auto& [vChunkIndex, config]: db.VChunkConfigs) {
+                for (const auto& [vChunkIndex, config]: vChunkConfigs) {
                     TABLER () {
                         TABLED () {
-                            str << config.GetVChunkIndex();
+                            str << vChunkIndex;
                         }
                         TABLED () {
                             str << "<pre>" << HtmlEscape(config.DebugPrint())

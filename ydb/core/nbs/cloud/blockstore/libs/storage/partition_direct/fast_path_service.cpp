@@ -117,7 +117,7 @@ TVector<TRegionPtr> CreateRegions(
             i,
             directBlockGroups,
             vChunkConfigs,
-            touchedProvider->GetTouchedVChunks(i * VChunkPerRegionCount),
+            touchedProvider->GetTouchedVChunks(i),
             dirtyMapStates,
             storageConfig.GetSyncRequestsBatchSize(),
             blockSize,

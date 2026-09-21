@@ -31,6 +31,12 @@
 .dbg-config-pbuffer {
     background-color: #b8daff;
 }
+.dbg-config-fresh {
+    background-color: #eef8ee;
+}
+.dbg-config-rotten {
+    background-color: #f2dede;
+}
 
 .chaos-cell {
     text-align: center;

@@ -280,7 +280,6 @@ struct TTxPartition
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TMaybe<TAddHostInProgress> AddHostInProgress;
-        TVChunkConfigs VChunkConfigs;
 
         explicit TMonitoring(NActors::TActorId requester)
             : Requester(requester)
@@ -291,7 +290,6 @@ struct TTxPartition
             VolumeConfig.Clear();
             DirectBlockGroupsConnections.Clear();
             AddHostInProgress.Clear();
-            VChunkConfigs.clear();
         }
     };
 };

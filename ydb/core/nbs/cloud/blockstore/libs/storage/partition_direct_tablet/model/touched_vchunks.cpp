@@ -2,8 +2,6 @@
 
 #include <util/generic/bitmap.h>
 
-#include <cstring>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
@@ -63,7 +61,11 @@ TRegionVChunks TTouchedVChunks::GetTouchedVChunks(ui32 regionIndex) const
     const size_t regionIndexInMask = regionIndex % RegionsPerMask;
     const size_t byteIndex = regionIndexInMask * RegionByteCount;
     ui32 bits = 0;
-    std::memcpy(&bits, Masks[maskIndex].data() + byteIndex, RegionByteCount);
+    // Persisted mask bytes store lower VChunk indices in less significant bits.
+    for (size_t i = 0; i < RegionByteCount; ++i) {
+        bits |= ui32(static_cast<ui8>(Masks[maskIndex][byteIndex + i]))
+                << (8 * i);
+    }
     return TRegionVChunks(bits);
 }
 

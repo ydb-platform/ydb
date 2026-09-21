@@ -61,27 +61,13 @@ using TDefaultConfigCache = TVector<TDefaultConfigs>;
 class TDbgConfigTableData final
 {
 public:
-    // Builds table columns, node rows, and default config cache.
-    static TDbgConfigTableData Build(const TVector<TDbgSnapshot>& dbgs);
-
-    // Counts touched VChunks matching every cached default config.
-    void FillDefaultConfigs(
-        size_t regionCount,
-        size_t directBlockGroupCount,
-        const ITouchedProvider& touchedProvider);
-
-    // Replaces cached defaults with touched persisted config counters.
-    void ApplyRealConfigs(
+    // Builds and fills the complete table in the required calculation order.
+    static TDbgConfigTableData BuildAndFill(
         const TVector<TDbgSnapshot>& dbgs,
+        size_t regionCount,
         size_t directBlockGroupCount,
         const TVChunkConfigs& vChunkConfigs,
         const ITouchedProvider& touchedProvider);
-
-    // Adds cached default config counters to node cells.
-    void TransferDefaultConfigsToTable(const TVector<TDbgSnapshot>& dbgs);
-
-    // Calculates totals after all table cells have been filled.
-    void CalculateTotals();
 
     // Returns the rendered column headers.
     const TDbgConfigHeaders& GetHeaders() const
@@ -114,6 +100,18 @@ public:
     }
 
 private:
+    void FillDefaultConfigs(
+        size_t regionCount,
+        size_t directBlockGroupCount,
+        const ITouchedProvider& touchedProvider);
+    void ApplyRealConfigs(
+        const TVector<TDbgSnapshot>& dbgs,
+        size_t directBlockGroupCount,
+        const TVChunkConfigs& vChunkConfigs,
+        const ITouchedProvider& touchedProvider);
+    void TransferDefaultConfigsToTable(const TVector<TDbgSnapshot>& dbgs);
+    void CalculateTotals();
+
     static TDefaultConfigs BuildDefaultConfigCache(const TDbgSnapshot& dbg);
     static void AddTableCell(
         const TDbgTableCell& source,
@@ -165,12 +163,17 @@ TCountAndSize GetPBuffersUsage(const TVector<TDbgSnapshot>& dbgs)
 }
 
 // static
-TDbgConfigTableData TDbgConfigTableData::Build(
-    const TVector<TDbgSnapshot>& dbgs)
+TDbgConfigTableData TDbgConfigTableData::BuildAndFill(
+    const TVector<TDbgSnapshot>& dbgs,
+    size_t regionCount,
+    size_t directBlockGroupCount,
+    const TVChunkConfigs& vChunkConfigs,
+    const ITouchedProvider& touchedProvider)
 {
     TDbgConfigTableData result;
     result.DefaultConfigs.resize(dbgs.size());
     for (const auto& dbg: dbgs) {
+        Y_ABORT_UNLESS(dbg.Index < dbgs.size());
         result.Headers[dbg.Index % VChunkPerRegionCount].DbgIds.push_back(
             dbg.Index);
         result.DefaultConfigs[dbg.Index] = BuildDefaultConfigCache(dbg);
@@ -179,6 +182,18 @@ TDbgConfigTableData TDbgConfigTableData::Build(
             result.Table[connection.PBufferId.NodeId];
         }
     }
+
+    result.FillDefaultConfigs(
+        regionCount,
+        directBlockGroupCount,
+        touchedProvider);
+    result.ApplyRealConfigs(
+        dbgs,
+        directBlockGroupCount,
+        vChunkConfigs,
+        touchedProvider);
+    result.TransferDefaultConfigsToTable(dbgs);
+    result.CalculateTotals();
     return result;
 }
 
@@ -221,10 +236,12 @@ void TDbgConfigTableData::ApplyRealConfigs(
 
         Y_ABORT_UNLESS(dbgId < dbgs.size() && dbgs[dbgId].Index == dbgId);
         const auto& dbg = dbgs[dbgId];
-        Y_ABORT_UNLESS(dbg.Connections.size() >= config.GetHostCount());
         const size_t columnIndex = dbg.Index % VChunkPerRegionCount;
         const auto disabledHosts = config.GetDisabledHosts();
-        for (THostIndex host = 0; host < config.GetHostCount(); ++host) {
+        for (THostIndex host = 0;
+             host < Min(config.GetHostCount(), dbg.Connections.size());
+             ++host)
+        {
             const auto& connection = dbg.Connections[host];
             if (config.GetDDiskRole(host) != EHostRole::None) {
                 const auto state = config.GetHostHumanReadableState(host);
@@ -252,8 +269,10 @@ void TDbgConfigTableData::TransferDefaultConfigsToTable(
             }
 
             const auto& config = entry.Config;
-            Y_ABORT_UNLESS(dbg.Connections.size() >= config.GetHostCount());
-            for (THostIndex host = 0; host < config.GetHostCount(); ++host) {
+            for (THostIndex host = 0;
+                 host < Min(config.GetHostCount(), dbg.Connections.size());
+                 ++host)
+            {
                 const auto& connection = dbg.Connections[host];
                 if (config.GetDDiskRole(host) != EHostRole::None) {
                     const auto state = config.GetHostHumanReadableState(host);
@@ -427,22 +446,16 @@ void RenderDbgConfigTable(
     const TVChunkConfigs& vChunkConfigs,
     const ITouchedProvider& touchedProvider)
 {
-    auto tableData = TDbgConfigTableData::Build(dbgs);
     const size_t regionCount = GetRegionCount(
         tabletInfo.BlockCount,
         tabletInfo.BlockSize,
         tabletInfo.VChunkSize);
-    tableData.FillDefaultConfigs(
-        regionCount,
-        tabletInfo.VolumeDirectBlockGroupCount,
-        touchedProvider);
-    tableData.ApplyRealConfigs(
+    auto tableData = TDbgConfigTableData::BuildAndFill(
         dbgs,
+        regionCount,
         tabletInfo.VolumeDirectBlockGroupCount,
         vChunkConfigs,
         touchedProvider);
-    tableData.TransferDefaultConfigsToTable(dbgs);
-    tableData.CalculateTotals();
 
     TVector<TNodeId> nodeIds;
     nodeIds.reserve(tableData.GetTable().size());
@@ -635,7 +648,7 @@ void RenderOverviewInfo(
                         << " (region)");
                 RenderValue(
                     str,
-                    "Space usage %",
+                    "Storage overhead %",
                     TStringBuilder()
                         << static_cast<double>(
                                totalDDiskSize + pBuffersUsage.Size) /

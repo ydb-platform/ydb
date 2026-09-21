@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             "1.00 MiB * 1 (Disabled DDisk)");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
-            "Space usage %</td><td>14.0625% = "
+            "Storage overhead %</td><td>14.0625% = "
             "(9.00 MiB + 0 B) / 64.00 MiB");
     }
 

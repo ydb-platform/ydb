@@ -2497,7 +2497,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         request->Record.MutableRequest()->SetKeepSession(true);
         SendKqpQueryRequest(runtime, streamSender, std::move(request));
 
-        runtime.SimulateSleep(TDuration::Seconds(6));
+        runtime.SimulateSleep(TDuration::Seconds(10));
         UNIT_ASSERT(executerId);
 
         auto checkSysView = [&](bool executing) {

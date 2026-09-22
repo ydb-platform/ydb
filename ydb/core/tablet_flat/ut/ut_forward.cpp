@@ -23,7 +23,9 @@ namespace {
     struct TBlobsWrap : public NTest::TSteps<TBlobsWrap>, protected NFwd::IPageLoadingQueue {
         using TFrames = NPage::TFrames;
 
-        TBlobsWrap(TIntrusiveConstPtr<TFrames> frames, TIntrusiveConstPtr<TSlices> run, ui32 edge, ui64 aLo = 999, ui64 aHi = 999)
+        TBlobsWrap(TIntrusiveConstPtr<TFrames> frames, TIntrusiveConstPtr<TSlices> run, ui32 edge, ui64 aLo = 999, ui64 aHi = 999,
+                    TIntrusiveConstPtr<NPage::TExtBlobs> blobs = nullptr,
+                    std::shared_ptr<const THashSet<ui32>> forceMaterializeGroups = nullptr)
             : Large(std::move(frames))
             , Run(std::move(run))
             , Edge(edge)
@@ -32,11 +34,13 @@ namespace {
         {
             TVector<ui32> edges(Large->Stats().Tags.size(), edge);
 
-            Cache = new NFwd::TBlobs(Large, Run, edges, true);
+            Cache = new NFwd::TBlobs(Large, Run, edges, true, std::move(blobs), std::move(forceMaterializeGroups));
         }
 
-        TBlobsWrap(TIntrusiveConstPtr<TFrames> frames, ui32 edge, ui64 aLo = 999, ui64 aHi = 999)
-            : TBlobsWrap(std::move(frames), TSlices::All(), edge, aLo, aHi)
+        TBlobsWrap(TIntrusiveConstPtr<TFrames> frames, ui32 edge, ui64 aLo = 999, ui64 aHi = 999,
+                    TIntrusiveConstPtr<NPage::TExtBlobs> blobs = nullptr,
+                    std::shared_ptr<const THashSet<ui32>> forceMaterializeGroups = nullptr)
+            : TBlobsWrap(std::move(frames), TSlices::All(), edge, aLo, aHi, std::move(blobs), std::move(forceMaterializeGroups))
         {
         }
 
@@ -431,6 +435,27 @@ Y_UNIT_TEST_SUITE(NFwd_TBlobs) {
         UNIT_ASSERT(logo.size() == 2);
         UNIT_ASSERT(logo[0] == globs[3].Logo);
         UNIT_ASSERT(logo[1] == globs[5].Logo);
+    }
+
+    Y_UNIT_TEST(ForceMaterializeGroups)
+    {
+        NPage::TFrameWriter writer(1);
+        writer.Put(10, 0, 250);
+        const TIntrusiveConstPtr<NPage::TFrames> frames = new NPage::TFrames(writer.Make());
+
+        NPage::TExtBlobsWriter out;
+        out.Put({ TLogoBlobID(1, 2, 3, 1, 250, 0), 5 });
+        const TIntrusiveConstPtr<NPage::TExtBlobs> blobs = new NPage::TExtBlobs(out.Make(), TLogoBlobID());
+
+        auto forcedGroups = std::make_shared<THashSet<ui32>>(THashSet<ui32>{5});
+
+        // 250b with edge 200 stays a reference unless its group is forced
+        TBlobsWrap(frames, 200, 999, 999, blobs, forcedGroups)
+            .Get(0, false, true, true);
+
+        auto otherGroups = std::make_shared<THashSet<ui32>>(THashSet<ui32>{6});
+        TBlobsWrap(frames, 200, 999, 999, blobs, otherGroups)
+            .Get(0, false, true, false);
     }
 
     Y_UNIT_TEST(Basics)

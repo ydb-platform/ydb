@@ -385,7 +385,7 @@ namespace NKikimr::NBlobDepot {
                 switch (Data->CheckMoveDataTrash(MoveData.Groups)) {
                     case TData::EMoveDataTrashStatus::Clear:
                         MoveData.Phase = TMoveDataState::EPhase::Vacuum;
-                        Executor()->StartMoveDataVacuumFromOwner();
+                        Executor()->StartMoveDataVacuumFromOwner(MoveData.Groups);
                         break;
 
                     case TData::EMoveDataTrashStatus::NeedsIndexRescan:

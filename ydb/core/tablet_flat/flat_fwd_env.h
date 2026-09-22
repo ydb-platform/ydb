@@ -386,7 +386,8 @@ namespace NFwd {
 
                 bool trace = Conf.Trace && !ColdParts.contains(part);
 
-                return {MakeHolder<TBlobs>(part->Large, std::move(bounds), edge, trace), nullptr, blobs};
+                return {MakeHolder<TBlobs>(part->Large, std::move(bounds), edge, trace,
+                            blobs, Conf.ForceMaterializeGroups), nullptr, blobs};
             } else {
                 return {nullptr, nullptr, nullptr};
             }

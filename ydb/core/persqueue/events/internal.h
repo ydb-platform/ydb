@@ -2029,6 +2029,8 @@ struct TEvWriteSessionsQuoter {
         EvAcquireQuota,
         EvQuoterInitialized,
         EvQuotaAcquired,
+        EvRemove,
+        EvQuotaDeclined,
         EvEnd,
     };
 
@@ -2066,6 +2068,23 @@ struct TEvWriteSessionsQuoter {
 
     struct TEvQuotaAcquired : TEventLocal<TEvQuotaAcquired, EvQuotaAcquired> {
         TEvQuotaAcquired() = default;
+    };
+
+    struct TEvQuotaDeclined : TEventLocal<TEvQuotaDeclined, EvQuotaDeclined> {
+        TEvQuotaDeclined() = default;
+    };
+
+    struct TEvRemove : TEventLocal<TEvRemove, EvRemove> {
+        TEvRemove(const TString& topic, ui32 partition, ui32 generation)
+            : Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
     };
 };
 

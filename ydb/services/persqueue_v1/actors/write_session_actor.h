@@ -118,6 +118,7 @@ private:
             HFunc(NPQ::TEvPartitionChooser::TEvChooseResult, Handle);
             HFunc(NPQ::TEvPartitionChooser::TEvChooseError, Handle);
             HFunc(TEvWriteSessionsQuoter::TEvQuotaAcquired, Handle);
+            HFunc(TEvWriteSessionsQuoter::TEvQuotaDeclined, Handle);
 
         default:
             break;
@@ -177,6 +178,7 @@ private:
     void CloseSpans(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode);
 
     void Handle(TEvWriteSessionsQuoter::TEvQuotaAcquired::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvWriteSessionsQuoter::TEvQuotaDeclined::TPtr& ev, const TActorContext& ctx);
 
 private:
     void CreatePartitionChooser(const TActorContext& ctx);

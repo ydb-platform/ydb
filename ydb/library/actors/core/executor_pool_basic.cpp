@@ -484,8 +484,9 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::RequestWaker(bool persistent) {
-        if (MaxFullThreadCount == 0) {
-            // Shared-only pools have no worker that may acquire the Basic role.
+        if (MaxFullThreadCount == 0 || (!persistent && SharedPool && GetFullThreadCount() == 0)) {
+            // With no active dedicated workers, queue demand belongs to the
+            // shared waker. Quota changes still need the Basic waker.
             if (SharedPool) {
                 SharedPool->RequestWaker();
             }
@@ -661,7 +662,11 @@ namespace NActors {
         }
         AtomicSet(ThreadCount, desiredThreadCount);
 
-        const i64 previousActivationCredits = ActivationCredits.load(std::memory_order_acquire);
+        // Pair the published thread count with producers' credit increments:
+        // either this pass sees their credit or they see the new routing count.
+        const i64 previousActivationCredits = SharedPool
+            ? ActivationCredits.fetch_add(0, std::memory_order_acq_rel)
+            : ActivationCredits.load(std::memory_order_acquire);
         i64 budget = previousActivationCredits;
         for (i16 workerId = 0; workerId < MaxFullThreadCount; ++workerId) {
             const bool isWaker = workerId == wakerWorkerId;

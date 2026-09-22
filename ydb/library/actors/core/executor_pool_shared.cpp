@@ -396,6 +396,8 @@ namespace NActors {
                     }
                     TlsThreadContext->ProcessedActivationsByCurrentPool = 0;
                     SwitchToPool(poolId, GetCycleCountFast());
+                }
+                if (thread.SoftDeadlineForPool == Max<NHPTimer::STime>()) {
                     thread.SoftDeadlineForPool = GetCycleCountFast() + thread.SoftProcessingDurationTs;
                 }
                 return Pools[poolId]->GetReadyActivationShared(revolvingCounter++);
@@ -880,7 +882,7 @@ namespace NActors {
             }
             const i64 credits = pool->GetSemaphore().OldSemaphore;
             creditsByPool[poolId] = credits;
-            i64 budget = pool->EnableWaker && pool->MaxFullThreadCount != 0
+            i64 budget = pool->EnableWaker && pool->GetFullThreadCount() != 0
                 ? Min<i64>(credits, pool->DesiredSharedThreads.load(std::memory_order_acquire))
                 : Min<i64>(credits, PoolThreads);
             ui64 foreignSlots = ForeignThreadsAllowedByPool[poolId].load(std::memory_order_acquire) != 0

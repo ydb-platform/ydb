@@ -488,6 +488,90 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         RunSharedWakerBursts(EWakerScenario::AdjacentPools);
     }
 
+    void RunWakerMixedPoolFullThreadCounts(const std::vector<i16>& fullThreadCounts) {
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        setup->CpuManager.Basic.emplace_back(TBasicExecutorPoolConfig{
+            .PoolId = 0,
+            .PoolName = "WakerMixedPoolWithoutActiveFullThreads",
+            .Threads = 2,
+            .SpinThreshold = 0,
+            .EventsPerMailbox = 1,
+            .MinThreadCount = 1,
+            .MaxThreadCount = 2,
+            .DefaultThreadCount = 1,
+            .HasSharedThread = true,
+            .EnableWaker = true,
+        });
+
+        std::atomic<ui64> completed = 0;
+        std::atomic<ui64> shared = 0;
+        TActorSystem actorSystem(setup);
+        const auto pools = actorSystem.GetBasicExecutorPools();
+        UNIT_ASSERT_VALUES_EQUAL(pools.size(), 1);
+        auto* pool = pools.front();
+        const i16 maxFullThreads = pool->GetMaxFullThreadCount();
+        const i16 defaultFullThreads = pool->GetDefaultFullThreadCount();
+        actorSystem.Start();
+
+        TActorId actor;
+        TString failure;
+        ui64 expected = 0;
+        for (const i16 fullThreads : fullThreadCounts) {
+            pool->SetFullThreadCount(fullThreads);
+            const TInstant quotaDeadline = TInstant::Now() + TDuration::Seconds(5);
+            while (pool->GetFullThreadCount() != fullThreads && TInstant::Now() < quotaDeadline) {
+                Sleep(TDuration::MilliSeconds(1));
+            }
+            if (pool->GetFullThreadCount() != fullThreads) {
+                failure = TStringBuilder() << "The mixed pool did not apply its full-thread quota: expected# "
+                    << fullThreads << " actual# " << pool->GetFullThreadCount();
+                break;
+            }
+            if (!actor) {
+                actor = actorSystem.Register(new TWakerCountingActor(&completed, &shared),
+                    TMailboxType::HTSwap, 0);
+            }
+            const ui64 sharedBefore = shared.load(std::memory_order_acquire);
+            constexpr ui32 rounds = 20;
+            for (ui32 round = 0; round < rounds; ++round) {
+                // Exercise idle-to-activation transitions; the delay does not
+                // establish that either worker has reached a sleep state.
+                Sleep(TDuration::MilliSeconds(5));
+                actorSystem.Send(actor, new TEvents::TEvWakeup());
+                ++expected;
+                const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+                while (completed.load(std::memory_order_acquire) < expected && TInstant::Now() < deadline) {
+                    Sleep(TDuration::MilliSeconds(1));
+                }
+                if (completed.load(std::memory_order_acquire) != expected) {
+                    failure = TStringBuilder() << "The mixed pool stalled: fullThreads# " << fullThreads
+                        << " expected# " << expected << " completed# " << completed.load(std::memory_order_acquire);
+                    break;
+                }
+            }
+            if (!failure.empty()) {
+                break;
+            }
+            if (fullThreads == 0 && shared.load(std::memory_order_acquire) - sharedBefore != rounds) {
+                failure = "A pool with no active full threads executed an event on a full thread";
+                break;
+            }
+        }
+
+        actorSystem.Stop();
+        UNIT_ASSERT_VALUES_EQUAL(maxFullThreads, 1);
+        UNIT_ASSERT_VALUES_EQUAL(defaultFullThreads, 0);
+        UNIT_ASSERT_C(failure.empty(), failure);
+    }
+
+    Y_UNIT_TEST(WakerMixedPoolWithoutActiveFullThreads) {
+        RunWakerMixedPoolFullThreadCounts({0});
+    }
+
+    Y_UNIT_TEST(WakerMixedPoolFullThreadCountTransitions) {
+        RunWakerMixedPoolFullThreadCounts({0, 1, 0});
+    }
+
     class TContinuouslyActiveActor : public TActorBootstrapped<TContinuouslyActiveActor> {
     public:
         TContinuouslyActiveActor(TManualEvent* started, const std::atomic<bool>* stop)
@@ -559,6 +643,65 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
 
     Y_UNIT_TEST(WakerReturnsFromBusyAdjacentPool) {
         RunWakerReturnsToOwner(true);
+    }
+
+    Y_UNIT_TEST(WakerVisitsAdjacentPoolFromBusyOwnerAfterParking) {
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        for (ui32 poolId = 0; poolId < 2; ++poolId) {
+            TBasicExecutorPoolConfig config;
+            config.PoolId = poolId;
+            config.PoolName = "WakerVisitsAdjacentPool";
+            config.Threads = poolId == 0 ? 1 : 0;
+            config.MinThreadCount = config.Threads;
+            config.MaxThreadCount = config.Threads;
+            config.DefaultThreadCount = config.Threads;
+            config.AllThreadsAreShared = poolId == 0;
+            config.EnableWaker = true;
+            config.SpinThreshold = 0;
+            config.EventsPerMailbox = 1;
+            config.ForcedForeignSlotCount = 0;
+            if (poolId == 0) {
+                config.AdjacentPools = {1};
+            }
+            setup->CpuManager.Basic.push_back(config);
+        }
+
+        TManualEvent started;
+        TManualEvent done;
+        std::atomic<bool> stop = false;
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        bool parked = false;
+        const TInstant idleDeadline = TInstant::Now() + TDuration::Seconds(5);
+        while (!parked && TInstant::Now() < idleDeadline) {
+            TExecutorPoolStats poolStats;
+            TVector<TExecutorThreadStats> fullStats;
+            TVector<TExecutorThreadStats> sharedStats;
+            GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, fullStats, sharedStats);
+            for (const auto& stats : sharedStats) {
+                parked |= stats.SafeParkedTicks > 0;
+            }
+            if (!parked) {
+                Sleep(TDuration::MilliSeconds(1));
+            }
+        }
+
+        bool running = false;
+        bool visited = false;
+        if (parked) {
+            actorSystem.Register(new TContinuouslyActiveActor(&started, &stop), TMailboxType::HTSwap, 0);
+            running = started.WaitT(TDuration::Seconds(5));
+            if (running) {
+                actorSystem.Register(new TSignalActor(&done), TMailboxType::HTSwap, 1);
+                visited = done.WaitT(TDuration::Seconds(5));
+            }
+        }
+        stop.store(true, std::memory_order_release);
+        actorSystem.Stop();
+        UNIT_ASSERT_C(parked, "The shared worker did not park before the owner became busy");
+        UNIT_ASSERT_C(running, "The continuously active owner did not start after parking");
+        UNIT_ASSERT_C(visited, "A busy owner prevented the shared worker from visiting its adjacent pool after parking");
     }
 
 } // Y_UNIT_TEST_SUITE(ActorBenchmark)

@@ -22,6 +22,7 @@ ELSE()
         contrib/libs/curl
         library/cpp/monlib/dynamic_counters
         ydb/library/actors/core
+        ydb/library/actors/prof
         ydb/core/base
         ydb/core/protos
         ydb/core/wrappers/events

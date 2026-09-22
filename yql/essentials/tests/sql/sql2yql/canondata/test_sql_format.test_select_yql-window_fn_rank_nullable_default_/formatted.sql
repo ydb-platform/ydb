@@ -1,0 +1,17 @@
+PRAGMA YqlSelect = 'force';
+PRAGMA DisableAnsiRankForNullableKeys;
+
+SELECT
+    value,
+    Rank(value) OVER (
+        ORDER BY
+            value
+    ) AS rank
+FROM
+    AS_TABLE([
+        <|value: 1|>,
+        <|value: NULL|>,
+        <|value: NULL|>,
+        <|value: 2|>
+    ])
+;

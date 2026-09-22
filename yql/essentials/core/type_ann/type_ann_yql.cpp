@@ -3,6 +3,7 @@
 #include "type_ann_columnorder.h"
 #include "type_ann_list.h"
 
+#include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_module_helpers.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -117,6 +118,88 @@ bool IsOptionalAggregation(const TExprNode::TPtr& options) {
     const bool hasEmptyGroupingSet = groupSets && IsEmptyGroupingSetPresent(groupSets->Tail());
 
     return !(hasGroupingKey && !hasEmptyGroupingSet);
+}
+
+bool IsYqlRank(const TExprNode& node) {
+    return node.IsCallable("YqlWin") &&
+        IsIn({"rank", "denserank", "percentrank"}, node.Head().Content());
+}
+
+TStringBuf YqlRankDisplayName(TStringBuf name) {
+    if (name == "rank") {
+        return "Rank";
+    }
+    if (name == "denserank") {
+        return "DenseRank";
+    }
+
+    YQL_ENSURE(name == "percentrank");
+    return "PercentRank";
+}
+
+const TExprNode* FindYqlWindow(const TExprNode* windows, TStringBuf name) {
+    if (!windows) {
+        return nullptr;
+    }
+
+    for (const auto& window : windows->Children()) {
+        if (window->Head().Content() == name) {
+            return window.Get();
+        }
+    }
+
+    return nullptr;
+}
+
+const TTypeAnnotationNode* BuildYqlWindowSortKeyType(const TExprNode& sort, TExprContext& ctx) {
+    auto getColumnType = [&](const TExprNode& column) -> const TTypeAnnotationNode* {
+        YQL_ENSURE(column.GetTypeAnn());
+        const auto* type = &*column.GetTypeAnn();
+        if (column.Child(3)->Content() != "last") {
+            return type;
+        }
+
+        return ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
+            ctx.MakeType<TDataExprType>(EDataSlot::Bool), type});
+    };
+
+    YQL_ENSURE(sort.ChildrenSize() > 0);
+    if (sort.ChildrenSize() == 1) {
+        return getColumnType(sort.Head());
+    }
+
+    TTypeAnnotationNode::TListType types;
+    types.reserve(sort.ChildrenSize());
+    for (const auto& column : sort.Children()) {
+        types.push_back(getColumnType(*column));
+    }
+    return ctx.MakeType<TTupleExprType>(std::move(types));
+}
+
+TExprNode::TPtr BuildYqlWindowSortKeyTypeWitness(const TExprNode& sort, TExprContext& ctx) {
+    if (sort.ChildrenSize() == 0) {
+        return ctx.NewCallable(sort.Pos(), "Void", {});
+    }
+
+    // clang-format off
+    return ctx.Builder(sort.Pos())
+        .Callable("InstanceOf")
+            .Add(0, ExpandType(sort.Pos(), *BuildYqlWindowSortKeyType(sort, ctx), ctx))
+        .Seal()
+        .Build();
+    // clang-format on
+}
+
+bool WarnYqlRankWithoutOrderBy(const TExprNode& rank, TExprContext& ctx) {
+    const auto name = YqlRankDisplayName(rank.Head().Content());
+    const bool hasArgument = rank.ChildrenSize() > 4;
+    TIssue issue(
+        rank.Pos(ctx),
+        hasArgument
+            ? TStringBuilder() << name << "(<expression>) is used with unordered window - the result is likely to be undefined"
+            : TStringBuilder() << name << "() is used with unordered window - all rows will be considered equal to each other");
+    SetIssueCode(TIssuesIds::YQL_RANK_WITHOUT_ORDER_BY, issue);
+    return ctx.AddWarning(issue);
 }
 
 TMaybe<IGraphTransformer::TStatus> TryFinishYqlTypeSlot(
@@ -393,6 +476,47 @@ TYqlColumnOrder ToColumnOrder(TVector<TYqlResultItemLabel> labels) {
 }
 
 } // namespace
+
+// A YqlWin result lambda is rebuilt before its type annotation, when the input row type and the
+// named window specification are both available. Rank nullability depends on the effective ORDER BY
+// key type, which is not otherwise present in YqlWin. WindowSortKeyTypeWitness carries that type only;
+// common optimization later builds the actual key extractor from the window specification.
+TExprNode::TPtr RebuildLambdaYqlWin(
+    const TExprNode::TPtr& node,
+    const TExprNode::TPtr& row,
+    const TExprNode* windows,
+    TExprContext& ctx)
+{
+    auto children = node->ChildrenList();
+    children[3] = row;
+
+    if (!IsYqlRank(*node)) {
+        return ctx.ChangeChildren(*node, std::move(children));
+    }
+
+    const auto* window = FindYqlWindow(windows, node->Child(1)->Content());
+    if (!window) {
+        ctx.AddError(TIssue(
+            node->Pos(ctx),
+            TStringBuilder() << "Not found window name: " << node->Child(1)->Content()));
+        return nullptr;
+    }
+
+    const auto& sort = *window->Child(3);
+    if (sort.ChildrenSize() == 0 && !HasSetting(*node->Child(2), "warned_unordered_window")) {
+        children[2] = AddSetting(
+            *node->Child(2), node->Pos(), "warned_unordered_window", /*value=*/nullptr, ctx);
+        if (!WarnYqlRankWithoutOrderBy(*node, ctx)) {
+            return nullptr;
+        }
+    }
+
+    if (node->ChildrenSize() == 4) {
+        children.push_back(BuildYqlWindowSortKeyTypeWitness(sort, ctx));
+    }
+
+    return ctx.ChangeChildren(*node, std::move(children));
+}
 
 TMaybe<TYqlFromSettings> TYqlFromSettings::Parse(const TExprNode::TPtr& settings, TExtContext& ctx) {
     TYqlFromSettings parsed;
@@ -1112,13 +1236,43 @@ IGraphTransformer::TStatus YqlWinWrapper(
         return IGraphTransformer::TStatus::Ok;
     }
 
-    if (bool isUniversal; !EnsureTupleOfAtomsOrUniversal(*input->Child(2), ctx.Expr, isUniversal)) {
-        return IGraphTransformer::TStatus::Error;
-    } else if (isUniversal) {
+    if (input->Child(2)->GetTypeAnn() &&
+        input->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal)
+    {
         input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
         return IGraphTransformer::TStatus::Ok;
-    } else if (!EnsureTupleSize(*input->Child(2), 0, ctx.Expr)) {
+    }
+
+    const TStringBuf name = input->Head().Content();
+    const bool isRank = name == "rank" || name == "denserank" || name == "percentrank";
+    THashSet<TStringBuf> supportedSettings;
+    if (isRank) {
+        supportedSettings.insert("ansi");
+        supportedSettings.insert("warnNoAnsi");
+        supportedSettings.insert("warned_unordered_window");
+    }
+    auto settingsValidator = [](TStringBuf, TExprNode& setting, TExprContext& ctx) {
+        return EnsureTupleSize(setting, 1, ctx);
+    };
+    if (!EnsureValidSettings(*input->Child(2), supportedSettings, settingsValidator, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* typeSlot = input->Child(3)->GetTypeAnn();
+    if (GetSetting(*input->Child(2), "warnNoAnsi") &&
+        typeSlot && typeSlot->GetKind() == ETypeAnnotationKind::Type)
+    {
+        // The callable is already expanded to the Rank and emitted a warning during that annotation
+        output = ctx.Expr.ChangeChild(*input, 2, RemoveSetting(*input->Child(2), "warnNoAnsi", ctx.Expr));
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (GetSetting(*input->Child(2), "warned_unordered_window") &&
+        typeSlot && typeSlot->GetKind() == ETypeAnnotationKind::Type)
+    {
+        output = ctx.Expr.ChangeChild(
+            *input, 2, RemoveSetting(*input->Child(2), "warned_unordered_window", ctx.Expr));
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     if (auto status = TryFinishYqlTypeSlot(input->ChildPtr(3), input, ctx)) {
@@ -1150,19 +1304,25 @@ IGraphTransformer::TStatus YqlWinWrapper(
         .Build();
     // clang-format on
 
-    if (input->Head().Content().EndsWith("rank") && input->ChildrenSize() == 4) {
+    if (isRank) {
         // clang-format off
         keyExtractor = ctx.Expr.Builder(keyExtractor->Pos())
             .Lambda()
                 .Param("row")
-                .Set(input->Child(3))
+                .Set(input->ChildrenSize() == 4 ? input->Child(3) : input->Child(4))
             .Seal()
             .Build();
         // clang-format on
     }
 
+    TExprNode::TPtr call = input;
+    if (GetSetting(*input->Child(2), "warned_unordered_window")) {
+        call = ctx.Expr.ChangeChild(
+            *input, 2, RemoveSetting(*input->Child(2), "warned_unordered_window", ctx.Expr));
+    }
+
     TExprNode::TPtr resultExpr = ExpandSqlWindowCall(
-        input, listType, keyExtractor, rewrite, ctx.Expr, ctx.Types);
+        call, listType, keyExtractor, rewrite, ctx.Expr, ctx.Types);
     if (!resultExpr) {
         return IGraphTransformer::TStatus::Error;
     }

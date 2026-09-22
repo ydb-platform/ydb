@@ -67,6 +67,12 @@ IGraphTransformer::TStatus ValidateYqlWarnShadow(
     TExtContext& ctx,
     const TInputs& inputs);
 
+TExprNode::TPtr RebuildLambdaYqlWin(
+    const TExprNode::TPtr& node,
+    const TExprNode::TPtr& row,
+    const TExprNode* windows,
+    TExprContext& ctx);
+
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 

@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem
+    	SELECT Rank(key) OVER w
+	^
+        <tmp_path>/program.sql:<main>:3:8: Warning: Rank(<expression>) is used with unordered window - the result is likely to be undefined
+        	SELECT Rank(key) OVER w
+	       ^

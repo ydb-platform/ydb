@@ -672,6 +672,63 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestMultipleSelects(ColumnStore);
     }
 
+    Y_UNIT_TEST(PGInsertUpdate) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE src (
+                _q_000_f_000_type String,
+                _q_000_f_000_rtref String,
+                _q_000_f_000_rrref String,
+                _q_000_f_001_type String,
+                _q_000_f_001_rtref String,
+                _q_000_f_001_rrref String,
+                _q_000_f_002 String,
+                _ydb_pk String NOT NULL,
+                PRIMARY KEY (_ydb_pk)
+            );
+
+            CREATE TABLE dst (
+                _q_000_f_000_type String,
+                _q_000_f_000_rtref String,
+                _q_000_f_000_rrref String,
+                _q_000_f_001_type String,
+                _q_000_f_001_rtref String,
+                _q_000_f_001_rrref String,
+                _q_000_f_002 Decimal(35,4),
+                _ydb_pk Utf8 NOT NULL,
+                PRIMARY KEY (_ydb_pk)
+            );
+        )";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        auto dbSession2 = client.GetSession().GetValueSync().GetSession();
+
+        auto insertSelectRes = dbSession2.ExecuteQuery(R"(
+            INSERT INTO dst (`_q_000_f_000_type`, `_q_000_f_000_rtref`, `_q_000_f_000_rrref`, `_q_000_f_001_type`, `_q_000_f_001_rtref`, `_q_000_f_001_rrref`, `_q_000_f_002`, `_ydb_pk`) 
+SELECT `_q_000_f_000_type` AS `_q_000_f_000_type`, `_q_000_f_000_rtref` AS `_q_000_f_000_rtref`, `_q_000_f_000_rrref` AS `_q_000_f_000_rrref`, `_q_000_f_001_type` AS `_q_000_f_001_type`, `_q_000_f_001_rtref` AS `_q_000_f_001_rtref`, `_q_000_f_001_rrref` AS `_q_000_f_001_rrref`, CAST(`_q_000_f_002` AS Decimal(35,4)) AS `_q_000_f_002`, CAST(RandomUuid(`_ydb_pk`) AS Utf8) AS `_ydb_pk` 
+FROM (
+    SELECT `t3`.`_q_000_f_000_type`, `t3`.`_q_000_f_000_rtref`, `t3`.`_q_000_f_000_rrref`, `t3`.`_q_000_f_001_type`, `t3`.`_q_000_f_001_rtref`, `t3`.`_q_000_f_001_rrref`, `t3`.`_q_000_f_002`, `t3`.`_ydb_pk`
+    FROM src AS `t3`
+) AS `direct_base_source`
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT(insertSelectRes.IsSuccess());
+
+    }
+
+    
+
     Y_UNIT_TEST(InsertUpdate) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);

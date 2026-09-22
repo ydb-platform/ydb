@@ -271,8 +271,10 @@ TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node, TExprNod
         columnOrder.push_back(column.StringValue());
     }
 
-    for (const auto& column : queryColumnsList->Children()) {
-        queryColumns.push_back(TString(column->Content()));
+    if (queryColumnsList) {
+        for (const auto& column : queryColumnsList->Children()) {
+            queryColumns.push_back(TString(column->Content()));
+        }
     }
 
     auto opRoot = MakeIntrusive<TOpRoot>(rootInput, node->Pos(), columnOrder, queryColumns);
@@ -773,11 +775,25 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceColumns(TExprNode::T
 
     TVector<TMapElement> mapElements;
 
-    for (size_t i=0; i<inputIUs.size(); i++) {
-        auto inputIU = inputIUs[i];
+    Y_ENSURE(inputIUs.size() >= outputColumns->ChildrenSize(), "Error in replace columns");
+    TStringBuilder buff2;
+    for (auto & iu : inputIUs) {
+        buff2 << iu.GetFullName() << ",";
+    }
+    YQL_CLOG(TRACE, CoreDq) << "Incoming columns [" << buff2 << "]";
+
+    int inputIUOffset = inputIUs.size() - outputColumns->ChildrenSize();
+
+    TStringBuilder buff;
+
+    for (size_t i=0; i<outputColumns->ChildrenSize(); i++) {
+        auto inputIU = inputIUs[inputIUOffset + i];
         auto outputColumn = TInfoUnit(TString(outputColumns->ChildPtr(i)->Content()));
         mapElements.emplace_back(outputColumn, inputIU, node->Pos(), &Ctx, &PlanProps);
+        buff << inputIU.GetFullName() << "->" << outputColumn.GetFullName() << ",";
     }
+
+    YQL_CLOG(TRACE, CoreDq) << "Replace columns [" << buff << "]";
 
     return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements);
 }

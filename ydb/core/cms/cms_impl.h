@@ -46,6 +46,7 @@ public:
             EvStartCollecting,
             EvProcessQueue,
             EvPersistDDiskInfo,
+            EvNbs2MaintenanceResult,
 
             EvEnd
         };
@@ -80,6 +81,15 @@ public:
 
         struct TEvPersistDDiskInfo : public TEventLocal<TEvPersistDDiskInfo, EvPersistDDiskInfo> {
             NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult Record;
+        };
+
+        struct TEvNbs2MaintenanceResult : public TEventLocal<TEvNbs2MaintenanceResult, EvNbs2MaintenanceResult> {
+            // The recipient must match this against its pending attempt.
+            ui64 AttemptId = 0;
+            // ALLOW, DISALLOW_TEMP for DENY, or ERROR_TEMP for a failed check.
+            NKikimrCms::TStatus::ECode Status = NKikimrCms::TStatus::ERROR_TEMP;
+            TString Reason;
+            TVector<ui64> BlockingPartitionIds;
         };
     };
 

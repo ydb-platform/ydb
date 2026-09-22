@@ -64,9 +64,18 @@ struct TEvPartitionDirectPrivate
               TEventLocal<TEvUpdateVChunkConfig, EvUpdateVChunkConfig>
     {
         TVChunkConfig VChunkConfig;
+<<<<<<< HEAD
+=======
+        TDirtyMapStateProto DirtyMapState;
+        TPersistResultPromise UpdateCompleted =
+            NThreading::NewPromise<EPersistResult>();
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
-        explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
+        TEvUpdateVChunkConfig(
+            TVChunkConfig cfg,
+            TDirtyMapStateProto dirtyMapState)
             : VChunkConfig(std::move(cfg))
+            , DirtyMapState(std::move(dirtyMapState))
         {}
     };
 

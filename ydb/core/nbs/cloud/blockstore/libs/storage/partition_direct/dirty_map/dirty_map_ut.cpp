@@ -209,9 +209,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H5-{Disabled,0,0}");
     }
 
-    Y_UNIT_TEST(ShouldRespectWatermarksWhenConstruct)
+    Y_UNIT_TEST(ShouldStartExistingDDisksFull)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
+<<<<<<< HEAD
         vchunkConfig.SetWatermark(0, 30 * DefaultBlockSize);
         vchunkConfig.SetWatermark(2, 40 * DefaultBlockSize);
 
@@ -230,10 +231,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 =======
+=======
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         UNIT_ASSERT_VALUES_EQUAL(
+<<<<<<< HEAD
             "H0*{Fresh,30,30};"
             "H1*{Operational,32768,32768};"
             "H2*{Fresh,40,40};"
@@ -250,15 +254,38 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
+=======
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
             "H0*{Operational,32768};"
             "H1*{Operational,32768};"
             "H2*{Operational,32768};"
             "H3+{Disabled,0};"
             "H4+{Disabled,0};",
             dirtyMap->DebugPrintDDiskState());
+    }
 
-        vchunkConfig.PromoteHost(3, false);
-        vchunkConfig.SetWatermark(3, 40 * DefaultBlockSize);
+    Y_UNIT_TEST(ShouldOmitPersistedStateWithoutFreshDDisks)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            dirtyMap->GetStateForPersist().DDiskStatesSize());
+
+        vchunkConfig.PromoteHost(3);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            vchunkConfig.GetHostCount(),
+            dirtyMap->GetStateForPersist().DDiskStatesSize());
+    }
+
+    Y_UNIT_TEST(ShouldStartAddedDDiskFullWhenUntouched)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
+
+        vchunkConfig.PromoteHost(3);
         dirtyMap->UpdateConfig(vchunkConfig, false);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
@@ -267,28 +294,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
             dirtyMap->DebugPrintDDiskState());
-
-        const auto range = TBlockRange16::MakeOneBlock(0);
-        dirtyMap->RegisterInflightWrite(MakeKey(1), range);
-        dirtyMap->WriteFinished(
-            MakeKey(1),
-            range,
-            MakePrimaryHosts(),
-            MakePrimaryHosts());
-
-        vchunkConfig.PromoteHost(4, true);
-        vchunkConfig.SetWatermark(4, 50 * DefaultBlockSize);
-        dirtyMap->UpdateConfig(vchunkConfig, true);
-        UNIT_ASSERT_VALUES_EQUAL(
-            "H0*{Operational,32768};"
-            "H1*{Operational,32768};"
-            "H2*{Operational,32768};"
-            "H3*{Operational,32768};"
-            "H4*{Fresh+,50};",
-            dirtyMap->DebugPrintDDiskState());
     }
 
-    Y_UNIT_TEST(ShouldRespectWatermarksForAddedDDisks)
+    Y_UNIT_TEST(ShouldStartAddedDDiskBehindWhenTouched)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 <<<<<<< HEAD
@@ -309,28 +317,41 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
+<<<<<<< HEAD
         vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(0, 30 * DefaultBlockSize);
         vchunkConfig.SetWatermark(3, 40 * DefaultBlockSize);
 <<<<<<< HEAD
         dirtyMap.UpdateConfig(vchunkConfig);
 =======
+=======
+        vchunkConfig.PromoteHost(3);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
+<<<<<<< HEAD
             "H0*{Operational,32768,32768};"
             "H1*{Operational,32768,32768};"
             "H2*{Operational,32768,32768};"
             "H3*{Fresh,40,40};"
             "H4+{Disabled,0,0};",
             dirtyMap.DebugPrintDDiskState());
+=======
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Fresh+,0};"
+            "H4+{Disabled,0};",
+            dirtyMap->DebugPrintDDiskState());
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     }
 
     Y_UNIT_TEST(ShouldSwitchOffline)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         // Offline H1
-        vchunkConfig.EvacuateHost(1, true);
+        vchunkConfig.EvacuateHost(1);
 
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -351,6 +372,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         UNIT_ASSERT_VALUES_EQUAL(
+<<<<<<< HEAD
             "H0*{Operational,32768,32768};"
             "H1-{Disabled,0,0};"
             "H2*{Operational,32768,32768};"
@@ -364,9 +386,21 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.UpdateConfig(vchunkConfig);
 =======
         vchunkConfig.EvacuateHost(0, true);
+=======
+            "H0*{Operational,32768};"
+            "H1-{Disabled,0};"
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            dirtyMap->DebugPrintDDiskState());
+
+        // Offline H0
+        vchunkConfig.EvacuateHost(0);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
+<<<<<<< HEAD
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
             "H2*{Operational,32768,32768};"
@@ -396,9 +430,22 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.UpdateConfig(vchunkConfig);
 =======
         vchunkConfig.EvacuateHost(3, true);
+=======
+            "H0-{Disabled,0};"
+            "H1-{Disabled,0};"
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4*{Fresh+,0};",
+            dirtyMap->DebugPrintDDiskState());
+
+        // Offline H3
+        vchunkConfig.DisableHost(3);
+        vchunkConfig.DemoteHost(3);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
+<<<<<<< HEAD
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
             "H2-{Operational,32768,32768};"
@@ -412,15 +459,36 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.UpdateConfig(vchunkConfig);
 =======
         vchunkConfig.EvacuateHost(4, true);
+=======
+            "H0-{Disabled,0};"
+            "H1-{Disabled,0};"
+            "H2*{Operational,32768};"
+            "H3-{Disabled,0};"
+            "H4*{Fresh+,0};",
+            dirtyMap->DebugPrintDDiskState());
+
+        // Offline H4
+        vchunkConfig.DisableHost(4);
+        vchunkConfig.DemoteHost(4);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
+<<<<<<< HEAD
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
             "H2-{Operational,32768,32768};"
             "H3-{Disabled,0,0};"
             "H4-{Disabled,0,0};",
             dirtyMap.DebugPrintDDiskState());
+=======
+            "H0-{Disabled,0};"
+            "H1-{Disabled,0};"
+            "H2*{Operational,32768};"
+            "H3-{Disabled,0};"
+            "H4-{Disabled,0};",
+            dirtyMap->DebugPrintDDiskState());
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
         // Enable H4
         vchunkConfig.EnableHost(4);
@@ -430,12 +498,21 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
+<<<<<<< HEAD
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
             "H2-{Operational,32768,32768};"
             "H3-{Disabled,0,0};"
             "H4*{Fresh,0,0};",
             dirtyMap.DebugPrintDDiskState());
+=======
+            "H0-{Disabled,0};"
+            "H1-{Disabled,0};"
+            "H2*{Operational,32768};"
+            "H3-{Disabled,0};"
+            "H4*{Fresh+,0};",
+            dirtyMap->DebugPrintDDiskState());
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
         // Enable H0
         vchunkConfig.EnableHost(0);
@@ -445,12 +522,21 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
+<<<<<<< HEAD
             "H0*{Fresh,0,0};"
             "H1-{Disabled,0,0};"
             "H2-{Operational,32768,32768};"
             "H3-{Disabled,0,0};"
             "H4*{Fresh,0,0};",
             dirtyMap.DebugPrintDDiskState());
+=======
+            "H0*{Fresh+,0};"
+            "H1-{Disabled,0};"
+            "H2*{Operational,32768};"
+            "H3-{Disabled,0};"
+            "H4*{Fresh+,0};",
+            dirtyMap->DebugPrintDDiskState());
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
         // Enable H1
         vchunkConfig.EnableHost(1);
@@ -460,6 +546,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
+<<<<<<< HEAD
             "H0*{Fresh,0,0};"
             "H1+{Disabled,0,0};"
             "H2-{Operational,32768,32768};"
@@ -481,6 +568,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H3-{Disabled,0,0};"
             "H4*{Fresh,0,0};",
             dirtyMap.DebugPrintDDiskState());
+=======
+            "H0*{Fresh+,0};"
+            "H1+{Disabled,0};"
+            "H2*{Operational,32768};"
+            "H3-{Disabled,0};"
+            "H4*{Fresh+,0};",
+            dirtyMap->DebugPrintDDiskState());
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
         // Enable H3
         vchunkConfig.EnableHost(3);
@@ -490,6 +585,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
         UNIT_ASSERT_VALUES_EQUAL(
+<<<<<<< HEAD
             "H0*{Fresh,0,0};"
             "H1+{Disabled,0,0};"
             "H2*{Operational,32768,32768};"
@@ -512,11 +608,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H3+{Disabled,0,0};"
             "H4*{Fresh,0,0};",
             dirtyMap.DebugPrintDDiskState());
+=======
+            "H0*{Fresh+,0};"
+            "H1+{Disabled,0};"
+            "H2*{Operational,32768};"
+            "H3+{Disabled,0};"
+            "H4*{Fresh+,0};",
+            dirtyMap->DebugPrintDDiskState());
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     }
 
     Y_UNIT_TEST(ShouldNotReadFromFresh)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
+<<<<<<< HEAD
 <<<<<<< HEAD
         TBlocksDirtyMap dirtyMap(
 =======
@@ -541,6 +646,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         dirtyMap.MarkFresh(THostIndex{0}, 30 * DefaultBlockSize);
         dirtyMap.MarkFresh(THostIndex{2}, 40 * DefaultBlockSize);
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 30 * DefaultBlockSize);
+        dirtyMap->SetReadablePrefixDebugOnly(2, 40 * DefaultBlockSize);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh,30,30};"
@@ -550,7 +660,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H4+{Disabled,0,0};",
             dirtyMap.DebugPrintDDiskState());
 
-        // Read below fresh watermark
+        // Read below the first Behind range
         auto readHint =
 <<<<<<< HEAD
             dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
@@ -561,30 +671,42 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "0{[H0,H1,H2][10..19][0..9]};",
             readHint.DebugPrint());
 
+<<<<<<< HEAD
         // Read crossed fresh watermark
 <<<<<<< HEAD
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(25, 10));
 =======
+=======
+        // Read crosses the first Behind range
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(25, 10));
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2][25..34][0..9]};",
             readHint.DebugPrint());
 
+<<<<<<< HEAD
         // Read above fresh watermark
 <<<<<<< HEAD
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(30, 10));
 =======
+=======
+        // Read above the readable prefix
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(30, 10));
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2][30..39][0..9]};",
             readHint.DebugPrint());
 
+<<<<<<< HEAD
         // Read above fresh watermark
 <<<<<<< HEAD
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(40, 10));
 =======
+=======
+        // Read above the readable prefix
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         readHint = dirtyMap->MakeReadHint(TBlockRange16::WithLength(40, 10));
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1168,6 +1290,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         // Promote hand-off H3 to primary.
+<<<<<<< HEAD
         vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
 <<<<<<< HEAD
@@ -1175,6 +1298,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 =======
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
+=======
+        vchunkConfig.PromoteHost(3);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768,32768};"
             "H1*{Operational,32768,32768};"
@@ -1232,21 +1360,18 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         }
 =======
     // A Fresh DDisk has range tracking enabled. When a write is flushed to it,
-    // FlushCompleted must propagate the completion down to the DDisk state so
-    // the flushed range is recorded in the DDisk's Ahead field (data that is
-    // already up-to-date above the operational watermark and needs no sync).
+    // FlushCompleted must remove the up-to-date range from Behind.
     // Operational DDisks have tracking disabled, so they record nothing.
-    Y_UNIT_TEST(ShouldTrackAheadRangeOnFreshDDiskAfterFlush)
+    Y_UNIT_TEST(ShouldRemoveFlushedRangeFromBehindOnFreshDDisk)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
-        // Promote hand-off H3 to primary and make it Fresh with a low
-        // watermark so tracking is enabled and writes above the watermark are
-        // recorded as "ahead".
-        vchunkConfig.PromoteHost(3, true);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
+        // Promote hand-off H3 to primary and leave only a short readable
+        // prefix.
+        vchunkConfig.PromoteHost(3);
         dirtyMap->UpdateConfig(vchunkConfig, true);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 5);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
             "H1*{Operational,32768};"
@@ -1256,12 +1381,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintDDiskState());
 
         // The unsynced tail is tracked as Behind before the flush.
-        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL(
             "  H3: [5..32767]\n",
             dirtyMap->DebugPrintBehind());
 
-        // Write above the fresh watermark to all four DDisks.
+        // Write above the readable prefix to all four DDisks.
         const THostMask requested = MakeHostMask(true, true, true, true, false);
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
@@ -1277,11 +1401,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         FlushAll(flushHint, *dirtyMap);
 
-        // FlushCompleted recorded the flushed range in the Fresh DDisk's Ahead
-        // field. Only the Fresh host H3 tracks; the Operational hosts do not.
-        UNIT_ASSERT_VALUES_EQUAL(
-            "  H3: [10..19]\n",
-            dirtyMap->DebugPrintAhead());
+        // Only the Fresh host H3 updates its Behind map; the Operational hosts
+        // do not track completed flushes.
         UNIT_ASSERT_VALUES_EQUAL(
             "  H3: [5..9][20..32767]\n",
             dirtyMap->DebugPrintBehind());
@@ -1298,10 +1419,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
 
         // Host 0 disabled, hosts 1,2,3 primary, host 4 hand-off.
-        vchunkConfig.PromoteHost(3, true);
+        vchunkConfig.PromoteHost(3);
         TString error;
-        vchunkConfig.EvacuateHost(0, true);
+        vchunkConfig.EvacuateHost(0);
         UNIT_ASSERT_VALUES_EQUAL("", error);
+<<<<<<< HEAD
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
 
 <<<<<<< HEAD
@@ -1321,6 +1443,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 =======
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
         // Written to two primary and one hand-off
         const THostMask requested =
@@ -1375,10 +1501,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Hosts 0,1 disabled; hosts 2,3,4 are primary.
         TString error;
-        vchunkConfig.EvacuateHost(0, true);
+        vchunkConfig.EvacuateHost(0);
         UNIT_ASSERT_VALUES_EQUAL("", error);
-        vchunkConfig.EvacuateHost(1, true);
+        vchunkConfig.EvacuateHost(1);
         UNIT_ASSERT_VALUES_EQUAL("", error);
+<<<<<<< HEAD
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
         vchunkConfig.SetWatermark(4, DefaultBlockSize * 1024);
 
@@ -1399,6 +1526,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 =======
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
+=======
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
+        dirtyMap->SetReadablePrefixDebugOnly(4, DefaultBlockSize * 1024);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
@@ -1458,8 +1590,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         // Host 0 disabled; hosts 1,2,3 primary; host 4 hand-off.
-        vchunkConfig.EvacuateHost(0, true);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
+        vchunkConfig.EvacuateHost(0);
 
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -1477,7 +1608,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 =======
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
+<<<<<<< HEAD
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
+=======
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 1024);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
             "H1*{Operational,32768,32768};"
@@ -1536,7 +1671,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST(ShouldNotFlushOverWriteWatermark)
+=======
+    Y_UNIT_TEST(ShouldFlushAcrossReadablePrefix)
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         // Enable 4 DDisks (hosts 0,1,2,3 primary)
@@ -1560,17 +1699,21 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 =======
         vchunkConfig.DisableHost(2);
-        vchunkConfig.PromoteHost(3, true);
-        vchunkConfig.SetWatermark(3, 100);
+        vchunkConfig.PromoteHost(3);
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
+<<<<<<< HEAD
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
         dirtyMap.SetFlushWatermark(THostIndex{2}, 100 * DefaultBlockSize);
+=======
+        dirtyMap->SetReadablePrefixDebugOnly(3, 100);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
         const THostMask requested =
             MakeHostMask(true, true, true, false, false);
         const THostMask confirmed = requested;
 
+<<<<<<< HEAD
 <<<<<<< HEAD
         // Range below write watermark. Should be flushed to 4 ddisks.
         dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
@@ -1593,6 +1736,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange64::WithLength(100, 10),
 =======
         // Range below write watermark. Should be flushed to 3 enabled ddisks.
+=======
+        // Range below readable prefix. Should be flushed to 3 enabled ddisks.
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         dirtyMap->RegisterInflightWrite(
             MakeKey(123),
             TBlockRange16::WithLength(10, 10));
@@ -1601,7 +1747,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange16::WithLength(10, 10),
             requested,
             confirmed);
-        // Range cross write watermark. Should be flushed to 3 enabled ddisks.
+        // Range crosses readable prefix. Should be flushed to 3 enabled ddisks.
         dirtyMap->RegisterInflightWrite(
             MakeKey(124),
             TBlockRange16::WithLength(95, 10));
@@ -1610,7 +1756,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange16::WithLength(95, 10),
             requested,
             confirmed);
-        // Range over write watermark. Should be flushed to 3 enabled ddisks.
+        // Range beyond readable prefix. Should be flushed to 3 enabled ddisks.
         // Because it overlaps 124, this record must be flushed after 124.
         dirtyMap->RegisterInflightWrite(
             MakeKey(125),
@@ -3483,7 +3629,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 =======
         // DDisk set changes from {0, 1, 2} to {0, 2, 3}, making host 1
         // "removed".
-        vchunkConfig.EvacuateHost(1, true);
+        vchunkConfig.EvacuateHost(1);
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
@@ -3577,7 +3723,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.UpdateConfig(vchunkConfig);
 =======
         // Evacuate host 1
-        vchunkConfig.EvacuateHost(1, true);
+        vchunkConfig.EvacuateHost(1);
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
@@ -3637,7 +3783,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.UpdateConfig(vchunkConfig);
 =======
         // Evacuate host 2 — host 3 gets promoted; DDisk set becomes {0, 1, 3}.
-        vchunkConfig.EvacuateHost(2, true);
+        vchunkConfig.EvacuateHost(2);
         dirtyMap->UpdateConfig(vchunkConfig, true);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 
@@ -3763,7 +3909,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // out of the DDisk set (promoting host 3 as replacement). The write is
         // still pending (WriteRequested is empty), so UpdateConfig's
         // RemoveHosts is a no-op and the inflight item survives.
-        vchunkConfig.EvacuateHost(0, true);
+        vchunkConfig.EvacuateHost(0);
         dirtyMap->UpdateConfig(vchunkConfig, true);
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
 
@@ -3861,10 +4007,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // Make H0 partially fresh: only the first 30 blocks are up to date.
-        vchunkConfig.SetWatermark(THostIndex{0}, 30 * DefaultBlockSize);
-
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 30 * DefaultBlockSize);
 
         const ui64 totalBlocks =
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize);
@@ -3900,10 +4044,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // Make H0 completely fresh (nothing synced yet).
-        vchunkConfig.SetWatermark(THostIndex{0}, 0);
-
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 0);
 
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
@@ -3957,10 +4099,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // Make H0 completely fresh.
-        vchunkConfig.SetWatermark(THostIndex{0}, 0);
-
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 0);
 
         const auto range = TBlockRange16::MakeClosedInterval(0, 255);
 
@@ -3986,10 +4126,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // Make H0 completely fresh (nothing synced yet).
-        vchunkConfig.SetWatermark(THostIndex{0}, 0);
-
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(0, 0);
 
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
@@ -4018,22 +4156,22 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     // Exercises the full persist lifecycle:
     //   - NeedPersist() starts false and generation is 0.
-    //   - After a flush that populates a fresh DDisk's Ahead field,
+    //   - After a flush that changes a fresh DDisk's Behind field,
     //     NeedPersist() becomes true and generation advances.
     //   - GetStateForPersist() captures the generation and correct DDisk count.
     //   - StatePersisted() resets NeedPersist() to false.
-    //   - Only Behind data (not Ahead) can block MakeEraseHint().
-    Y_UNIT_TEST(PersistLifecycleAndEraseNotBlockedByAheadData)
+    //   - Behind data blocks MakeEraseHint() until it is persisted.
+    Y_UNIT_TEST(PersistLifecycleAndEraseBlockedByBehindData)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // H3 is fresh; writes above watermark populate its Ahead field.
+        // H3 is fresh; successful writes remove ranges from Behind.
         // H1 is lagging; writes populate Behind field.
-        vchunkConfig.PromoteHost(3, true);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
+        vchunkConfig.PromoteHost(3);
         vchunkConfig.DisableHost(1);
 
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        dirtyMap->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 5);
 
         // Initially no changes.
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
@@ -4049,7 +4187,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             requested,
             requested);
 
-        // Flush all DDIsks; H3's Ahead field changes → generation increments.
+        // Flush all DDisks; H3's Behind field changes → generation increments.
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         FlushAll(flushHint, *dirtyMap);
@@ -4070,7 +4208,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap->StatePersisted(gen);
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
 
-        // Only Behind blocks erase; Ahead does not.
+        // Persisted Behind state no longer blocks erase.
         UNIT_ASSERT_VALUES_EQUAL(
             "  H1: [10..19]\n"
             "  H3: [5..9][20..32767]\n",
@@ -4083,19 +4221,19 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             eraseHints.DebugPrint());
     }
 
-    // Load() restores the per-DDisk Ahead/Behind state captured by
+    // Load() restores the per-DDisk Behind state captured by
     // GetStateForPersist() into a freshly constructed dirty map.
     Y_UNIT_TEST(ShouldLoadPersistedDDiskState)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
 
-        // H3 is fresh; writes above watermark populate its Ahead field.
+        // H3 is fresh; successful writes remove ranges from Behind.
         // H1 is lagging; writes populate Behind field.
-        vchunkConfig.PromoteHost(3, true);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
+        vchunkConfig.PromoteHost(3);
         vchunkConfig.DisableHost(1);
 
         auto source = MakeDirtyMap(vchunkConfig);
+        source->SetReadablePrefixDebugOnly(3, DefaultBlockSize * 5);
 
         const THostMask requested = MakeHostMask(true, true, true, true, false);
         source->RegisterInflightWrite(
@@ -4107,12 +4245,11 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             requested,
             requested);
 
-        // Flush all DDisks so H3's Ahead field records the flushed range.
+        // Flush all DDisks so H3's Behind field drops the flushed range.
         auto flushHint = source->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         FlushAll(flushHint, *source);
 
-        UNIT_ASSERT_VALUES_EQUAL("  H3: [10..19]\n", source->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL(
             "  H1: [10..19]\n"
             "  H3: [5..9][20..32767]\n",
@@ -4129,13 +4266,35 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
-        // After load the target mirrors the source's Ahead/Behind fields.
-        UNIT_ASSERT_VALUES_EQUAL(
-            source->DebugPrintAhead(),
-            target->DebugPrintAhead());
+        // After load the target mirrors the source's Behind fields.
         UNIT_ASSERT_VALUES_EQUAL(
             source->DebugPrintBehind(),
             target->DebugPrintBehind());
+    }
+
+    Y_UNIT_TEST(ShouldBuildDirtyStateForConfigPersistWithoutApplyingConfig)
+    {
+        const auto currentConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(currentConfig);
+
+        auto nextConfig = currentConfig;
+        nextConfig.PromoteHost(3);
+
+        const auto persisted = dirtyMap->MakeFutureState(nextConfig, true);
+        UNIT_ASSERT_VALUES_EQUAL(5, persisted.DDiskStatesSize());
+
+        auto restored = std::make_shared<TBlocksDirtyMap>(
+            CreateArenaAllocatorPool(),
+            nextConfig,
+            true,
+            persisted,
+            DefaultBlockSize,
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "  H3: [0..32767]\n",
+            restored->DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
     }
 
     // A default-constructed proto keeps the initial DDisk state derived from
@@ -4147,7 +4306,6 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         const auto before = dirtyMap->DebugPrintDDiskState();
 
-        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
         UNIT_ASSERT_VALUES_EQUAL(before, dirtyMap->DebugPrintDDiskState());
     }
@@ -4169,20 +4327,22 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->MakeFlushHint(1).Empty());
     }
 
-    Y_UNIT_TEST(ShouldUseWatermarkOnlyForTouchedVChunk)
+    Y_UNIT_TEST(ShouldInitializeAddedDDiskFromTouchedState)
     {
-        auto vchunkConfig = MakeTestVChunkConfig();
-        vchunkConfig.PromoteHost(3, true);
-        vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
+        const auto initialConfig = MakeTestVChunkConfig();
+        auto untouched = MakeUntouchedDirtyMap(initialConfig);
+        auto touched = MakeDirtyMap(initialConfig);
 
-        auto untouched = MakeUntouchedDirtyMap(vchunkConfig);
-        auto touched = MakeDirtyMap(vchunkConfig);
+        auto nextConfig = initialConfig;
+        nextConfig.PromoteHost(3);
+        untouched->UpdateConfig(nextConfig, false);
+        touched->UpdateConfig(nextConfig, true);
 
         UNIT_ASSERT(!untouched->GetFreshRange(3));
 
         const auto freshRange = touched->GetFreshRange(3);
         UNIT_ASSERT(freshRange);
-        UNIT_ASSERT_VALUES_EQUAL(5, freshRange->Start);
+        UNIT_ASSERT_VALUES_EQUAL(0, freshRange->Start);
         UNIT_ASSERT_VALUES_EQUAL(
             GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize),
             freshRange->End + 1);
@@ -4193,8 +4353,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
 
         // Promote hand-off H3 to a primary DDisk so we have 4 desired DDisks.
-        vchunkConfig.PromoteHost(3, true);
-        vchunkConfig.SetWatermark(3, std::nullopt);
+        vchunkConfig.PromoteHost(3);
 
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
 

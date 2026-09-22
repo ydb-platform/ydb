@@ -225,6 +225,10 @@ struct TPBufferCounters
 class TBlocksDirtyMap
     : public ILockableRanges
     , public IReadyQueue
+<<<<<<< HEAD
+=======
+    , public IBehindMonitor
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     , public TDisableCopyMove
 {
 public:
@@ -242,7 +246,8 @@ public:
         ui16 blockCount);
     ~TBlocksDirtyMap() override;
 
-    // Note. Fresh watermarks are not applying for exists DDisks.
+    // Existing DDisks retain their Behind state; newly added DDisks start
+    // with full Behind only when the VChunk is touched.
     void UpdateConfig(const TVChunkConfig& vChunkConfig, bool isTouched);
 
 <<<<<<< HEAD
@@ -291,6 +296,7 @@ public:
 
     void UpdateBelatedEraseQueue(THostMask completedWrites, ui64 lsn);
 
+<<<<<<< HEAD
     // Sets a mark on the ddisk to which offset it contains data and can be read
     // from it.
     void MarkFresh(THostIndex host, ui64 bytesOffset);
@@ -304,11 +310,16 @@ public:
     void SetFlushWatermark(THostIndex host, ui64 bytesOffset);
 =======
     void UpdateWatermarkDebugOnly(THostIndex host, ui64 bytesOffset);
+=======
+    // Sets the readable prefix of one DDisk for tests.
+    void SetReadablePrefixDebugOnly(THostIndex host, ui64 bytesOffset);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     // Returns the first "fresh" range to be synced with data from another
     // replicas. Nullopt means that the disk is completely full of data. And you
     // can read it from anywhere.
     [[nodiscard]] std::optional<TBlockRange16> GetFreshRange(
         THostIndex host) const;
+    [[nodiscard]] THostMask GetOutdatedDDisks() const;
     // See TSyncHint for details.
     // The BeginRangeSync and EndRangeSync calls must be paired.
     TSyncHint BeginRangeSync(THostIndex host, TBlockRange16 range);
@@ -381,6 +392,12 @@ public:
         THostIndex host,
         EPBufferCounter counter) override;
 
+<<<<<<< HEAD
+=======
+    // IBehindMonitor implementation
+    void OnBehindChanged() override;
+
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     [[nodiscard]] bool NeedFlush() const;
     [[nodiscard]] bool NeedErase() const;
 
@@ -388,7 +405,13 @@ public:
 =======
     // Persist
     [[nodiscard]] bool NeedPersist() const;
+    // Returns an empty proto when no DDisk needs repair.
     [[nodiscard]] TDirtyMapStateProto GetStateForPersist() const;
+    // Predicts the future state after applying vChunkConfig without changing
+    // the current in-memory state.
+    [[nodiscard]] TDirtyMapStateProto MakeFutureState(
+        const TVChunkConfig& vChunkConfig,
+        bool isTouched) const;
     void StatePersisted(ui32 persistGeneration);
     [[nodiscard]] ui32 GetCurrentGeneration() const;
 
@@ -412,10 +435,13 @@ public:
     [[nodiscard]] TString DebugPrintReadyToFlush() const;
     [[nodiscard]] TString DebugPrintReadyToErase() const;
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     [[nodiscard]] TString DebugPrintAhead() const;
+=======
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     [[nodiscard]] TString DebugPrintBehind() const;
-    [[nodiscard]] TString DebugPrintAheadBehindBrief() const;
+    [[nodiscard]] TString DebugPrintBehindBrief() const;
     [[nodiscard]] TString DebugPrintInflightSync() const;
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
@@ -475,10 +501,14 @@ private:
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     const ui32 BlockSize;
     const ui64 BlockCount;
 =======
     void AddToAheadAndBehindOnFlushCompleted(
+=======
+    void UpdateBehindOnFlushCompleted(
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         const TInflightInfo& inflight,
         THostMask ddisks);
 
@@ -556,8 +586,12 @@ private:
     // DDisks freshness state.
     TVector<TDDiskState> DDiskStates;
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     // Changes when behind/ahead map changes.
+=======
+    // Changes when the behind map changes.
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     ui32 StateGeneration = 0;
     // Last persisted DDisks states generation.
     ui32 PersistedStateGeneration = 0;

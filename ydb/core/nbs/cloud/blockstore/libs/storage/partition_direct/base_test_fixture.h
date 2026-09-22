@@ -116,16 +116,20 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     static bool IsDirtyMapStatePersisting(TVChunk& vchunk)
+=======
+    static bool IsPersisting(TVChunk& vchunk)
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     {
-        return vchunk.DirtyMapStatePersisting;
+        return vchunk.Persisting;
     }
 
     // Must be invoked on the vchunk's executor thread.
-    static void InvokePersistDirtyMap(TVChunk& vchunk)
+    static void InvokeStartPersist(TVChunk& vchunk)
     {
-        vchunk.DoPersistDirtyMap();
+        vchunk.StartPersist();
     }
 
     // Must be invoked on the vchunk's executor thread.

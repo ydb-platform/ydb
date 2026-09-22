@@ -447,10 +447,22 @@ void TFastPathService::ScheduleAfterDelay(
         std::move(callback));
 }
 
+<<<<<<< HEAD
 void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
 {
     auto event =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(cfg);
+=======
+TPersistResultFuture TFastPathService::UpdateVChunkState(
+    const TVChunkConfig& cfg,
+    TDirtyMapStateProto state)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(
+            cfg,
+            std::move(state));
+    auto result = event->UpdateCompleted.GetFuture();
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     ActorSystem->Send(PartitionActorId, event.release());
 }
 

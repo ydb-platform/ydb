@@ -37,8 +37,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(LoadState, __VA_ARGS__)                                                \
     xxx(StoreVolumeConfig, __VA_ARGS__)                                        \
     xxx(StorePartitionIds, __VA_ARGS__)                                        \
-    xxx(UpdateVChunkConfig, __VA_ARGS__)                                       \
-    xxx(UpdateDirtyMapState, __VA_ARGS__)                                      \
+    xxx(UpdateVChunkState, __VA_ARGS__)                                        \
     xxx(SetVChunkTouched, __VA_ARGS__)                                         \
     xxx(StartAddHost, __VA_ARGS__)                                             \
     xxx(AddHostToDBG, __VA_ARGS__)                                             \
@@ -148,14 +147,33 @@ struct TTxPartition
     };
 
     //
-    // TUpdateVChunkConfig
+    // TUpdateVChunkState
     //
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_tx.h
     struct TUpdateVChunkConfig
     {
         const TVChunkConfig VChunkConfig;
 
         explicit TUpdateVChunkConfig(TVChunkConfig vChunkConfig)
             : VChunkConfig(std::move(vChunkConfig))
+=======
+    struct TUpdateVChunkState
+    {
+        struct TUpdateStateRequest
+        {
+            ui32 VChunkIndex;
+            TVChunkConfig VChunkConfig;
+            TDirtyMapStateProto DirtyMapState;
+            TPersistResultPromise UpdateCompleted;
+        };
+
+        using TUpdateStateRequests = TVector<TUpdateStateRequest>;
+
+        TUpdateStateRequests UpdateStateRequests;
+
+        explicit TUpdateVChunkState(TUpdateStateRequests updateStateRequests)
+            : UpdateStateRequests(std::move(updateStateRequests))
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_tx.h
         {}
 
         void Clear()

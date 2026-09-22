@@ -525,10 +525,13 @@ void RenderDbgDetail(
                     TABLEH () {
                         str << "Enabled";
                     }
+<<<<<<< HEAD
                     TABLEH () {
                         str << "Watermark";
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
                     }
+=======
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
                 }
             }
             TABLEBODY () {
@@ -575,6 +578,7 @@ void RenderDbgDetail(
                         TABLED () {
                             str << (disabled.Get(host) ? "no" : "yes");
                         }
+<<<<<<< HEAD
                         TABLED () {
                             const auto watermark = config.GetWatermark(host);
                             if (watermark) {
@@ -584,6 +588,8 @@ void RenderDbgDetail(
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
                             }
                         }
+=======
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
                     }
                 }
             }
@@ -1593,7 +1599,7 @@ TString RenderMonPage(
 >>>>>>> 7af514ad642 ([NBS-7516] Extend the partition direct overview page with actual storage placement for touched VChunks (#53472))
             break;
         case EMonPage::Dbg:
-            RenderDbg(str, data, vChunkConfigs);
+            RenderDbg(str, data);
             break;
         case EMonPage::LocalDb:
             if (data.LocalDb) {

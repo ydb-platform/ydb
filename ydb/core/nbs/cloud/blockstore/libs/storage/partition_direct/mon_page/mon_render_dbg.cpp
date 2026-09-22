@@ -18,38 +18,10 @@ namespace {
 
 //////////////////////////////////////////////////////////////////////////////////
 
-void RenderWatermarks(
-    IOutputStream& str,
-    size_t dbgIndex,
-    size_t dbgCount,
-    const TVChunkConfigs& vChunkConfigs,
-    ui32 blockSize)
-{
-    for (const auto& [vChunkId, vChunkConfig]: vChunkConfigs) {
-        if (GetDirectBlockGroupIndex(vChunkId, dbgCount) != dbgIndex) {
-            continue;
-        }
-        TStringBuilder w;
-        for (auto host: vChunkConfig.GetDDisks()) {
-            if (auto watermark = vChunkConfig.GetWatermark(host)) {
-                if (!w.empty()) {
-                    w << ",";
-                }
-                w << PrintHostIndex(host) << ":" << *watermark / blockSize;
-            }
-        }
-
-        if (w) {
-            str << PrintVChunkId(vChunkId) << "[" << w << "] ";
-        }
-    }
-}
-
 void RenderDbgList(
     IOutputStream& str,
     const TTabletInfo& tabletInfo,
-    const TVector<TDbgSnapshot>& dbgs,
-    const TVChunkConfigs& vChunkConfigs)
+    const TVector<TDbgSnapshot>& dbgs)
 {
     HTML (str) {
         TAG (TH3) {
@@ -170,13 +142,6 @@ void RenderDbgList(
                             str << FormatByteSize(rottenTotalBytes);
                             str << " / ";
                             str << FormatByteSize(freshTotalBytes);
-                            str << "<br>";
-                            RenderWatermarks(
-                                str,
-                                dbg.Index,
-                                tabletInfo.VolumeDirectBlockGroupCount,
-                                vChunkConfigs,
-                                tabletInfo.BlockSize);
                         }
                     }
                 }
@@ -495,13 +460,10 @@ void RenderDbgDetail(
 
 }   // namespace
 
-void RenderDbg(
-    IOutputStream& str,
-    const TMonPageData& data,
-    const TVChunkConfigs& vChunkConfigs)
+void RenderDbg(IOutputStream& str, const TMonPageData& data)
 {
     if (!data.SelectedDbg) {
-        RenderDbgList(str, data.TabletInfo, data.Dbgs, vChunkConfigs);
+        RenderDbgList(str, data.TabletInfo, data.Dbgs);
         return;
     }
     for (const auto& dbg: data.Dbgs) {

@@ -99,14 +99,17 @@ private:
     // AddHostInFlight.
     std::optional<TRemoveHostInFlight> RemoveHostInFlight;
 
-    // Batch persisting of vchunk configs.
-    bool ExecutingUpdateVChunkConfig = false;
-    TVector<TPersistResultPromise> ExecutingUpdateVChunkConfigPromises;
-    TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests
-        PendingUpdateVChunkConfigRequests;
+    // Batch persisting of vChunk configs and behind fields. Both kinds of
+    // updates share one queue so a combined update cannot overwrite a newer
+    // dirty-map state.
+    bool ExecutingUpdateVChunkState = false;
+    TVector<TPersistResultPromise> ExecutingUpdateVChunkStatePromises;
+    TTxPartition::TUpdateVChunkState::TUpdateStateRequests
+        PendingUpdateVChunkStateRequests;
     // Persisted vchunk config overrides, keyed by vchunk index.
     TVChunkConfigs VChunkConfigs;
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h
     // Batch persisting of ahead and behind fields.
     bool ExecutingUpdateDirtyMapState = false;
     TVector<TPersistResultPromise> ExecutingUpdateDirtyMapStatePromises;
@@ -116,6 +119,8 @@ private:
 <<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h
 >>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h
 =======
+=======
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h
     // A bit is set after its vchunk is touched and is never cleared.
     TTouchedVChunks TouchedVChunks;
 
@@ -234,6 +239,10 @@ private:
 =======
     void HandleUpdateDirtyMapState(
         const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void EnqueueUpdateVChunkState(
+        TTxPartition::TUpdateVChunkState::TUpdateStateRequest request,
         const NActors::TActorContext& ctx);
 
     void HandleSetVChunkTouched(

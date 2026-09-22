@@ -58,8 +58,7 @@ public:
         TBlocksDirtyMap* dirtyMap,
         THostIndex destination);
 
-    // Starts processing from the FreshWatermark position, which is stored in
-    // dirtyMap.
+    // Starts processing at the first range in DirtyMap's Behind field.
     NThreading::TFuture<EResult> Start();
     // Stops processing. After stopping, the processing can be started again.
     NThreading::TFuture<EResult> Stop();

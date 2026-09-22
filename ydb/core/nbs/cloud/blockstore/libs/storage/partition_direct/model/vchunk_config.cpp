@@ -10,6 +10,36 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
 
+<<<<<<< HEAD
+=======
+TVChunkConfig::EHostHumanReadableState CalcHostHumanReadableState(
+    EHostRole ddisk,
+    EHostRole pbuffer,
+    bool enabled,
+    bool fresh)
+{
+    Y_ABORT_UNLESS(ddisk != EHostRole::HandOff);
+
+    if (ddisk == EHostRole::Primary && enabled) {
+        Y_ABORT_UNLESS(pbuffer == EHostRole::Primary);
+        return fresh ? TVChunkConfig::EHostHumanReadableState::Fresh
+                     : TVChunkConfig::EHostHumanReadableState::Primary;
+    }
+    if (ddisk == EHostRole::Primary && !enabled) {
+        Y_ABORT_UNLESS(pbuffer == EHostRole::Primary);
+        return TVChunkConfig::EHostHumanReadableState::Rotten;
+    }
+
+    Y_ABORT_UNLESS(pbuffer != EHostRole::Primary);
+
+    if (pbuffer == EHostRole::HandOff) {
+        return enabled ? TVChunkConfig::EHostHumanReadableState::HandOff
+                       : TVChunkConfig::EHostHumanReadableState::Disabled;
+    }
+    return TVChunkConfig::EHostHumanReadableState::Demoted;
+}
+
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 THostMask
 Filter(const THostRoles& hosts, THostMask enabledHosts, EHostRole role)
 {
@@ -56,7 +86,6 @@ TVChunkConfig TVChunkConfig::MakeDefault(
         primaryCount,
         EHostRole::None);
     result.EnabledHosts = THostMask::MakeAll(hostCount);
-    result.Watermarks = TVector<std::optional<ui64>>(hostCount);
     return result;
 }
 
@@ -65,8 +94,7 @@ TVChunkConfig TVChunkConfig::Make(
     ui32 vChunkIndex,
     THostRoles pbufferHosts,
     THostRoles ddiskHosts,
-    THostMask enabledHosts,
-    TVector<std::optional<ui64>> watermarks)
+    THostMask enabledHosts)
 {
     TVChunkConfig result;
     result.HostCount = pbufferHosts.HostCount();
@@ -74,11 +102,28 @@ TVChunkConfig TVChunkConfig::Make(
     result.PBufferHosts = pbufferHosts;
     result.DDiskHosts = ddiskHosts;
     result.EnabledHosts = enabledHosts;
-    watermarks.resize(result.HostCount);
-    result.Watermarks = std::move(watermarks);
     return result;
 }
 
+<<<<<<< HEAD
+=======
+TVChunkConfig::EHostHumanReadableState TVChunkConfig::GetHostHumanReadableState(
+    THostIndex hostIndex,
+    bool fresh) const
+{
+    return CalcHostHumanReadableState(
+        DDiskHosts.GetRole(hostIndex),
+        PBufferHosts.GetRole(hostIndex),
+        EnabledHosts.Get(hostIndex),
+        fresh);
+}
+
+bool TVChunkConfig::Empty() const
+{
+    return HostCount == 0;
+}
+
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 size_t TVChunkConfig::GetHostCount() const
 {
     return HostCount;
@@ -107,7 +152,6 @@ void TVChunkConfig::EnableHost(THostIndex hostIndex)
         ddisks.Count() < QuorumDirectBlockGroupHostCount)
     {
         DDiskHosts.SetRole(hostIndex, EHostRole::Primary);
-        Watermarks[hostIndex] = 0;
     }
 }
 
@@ -121,14 +165,26 @@ void TVChunkConfig::AppendHost()
     Y_ABORT_UNLESS(PBufferHosts.HostCount() == DDiskHosts.HostCount());
     const auto newHostIndex = static_cast<THostIndex>(HostCount);
 
+<<<<<<< HEAD
     PBufferHosts.AppendRole(EHostRole::None);
     DDiskHosts.AppendRole(EHostRole::None);
     EnabledHosts.Reset(newHostIndex);
     Watermarks.push_back(std::nullopt);
+=======
+    if (ddiskCount < QuorumDirectBlockGroupHostCount) {
+        PBufferHosts.AppendRole(EHostRole::Primary);
+        DDiskHosts.AppendRole(EHostRole::Primary);
+    } else {
+        PBufferHosts.AppendRole(EHostRole::HandOff);
+        DDiskHosts.AppendRole(EHostRole::None);
+    }
+
+    EnabledHosts.Set(newHostIndex);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     ++HostCount;
 }
 
-TString TVChunkConfig::EvacuateHost(THostIndex hostIndex, bool fresh)
+TString TVChunkConfig::EvacuateHost(THostIndex hostIndex)
 {
     DisableHost(hostIndex);
 
@@ -149,7 +205,7 @@ TString TVChunkConfig::EvacuateHost(THostIndex hostIndex, bool fresh)
                                 << PrintHostIndex(hostIndex);
     }
 
-    PromoteHost(to, fresh);
+    PromoteHost(to);
     Y_ABORT_UNLESS(EnabledHosts.Get(to) == true);
 
     return TStringBuilder() << PrintHostIndex(hostIndex) << " demoted, "
@@ -158,32 +214,32 @@ TString TVChunkConfig::EvacuateHost(THostIndex hostIndex, bool fresh)
 
 TString TVChunkConfig::DemoteHost(THostIndex hostIndex)
 {
-    const auto fullDDisks = GetFullDDisks();
-    if (fullDDisks.Count() == 1 && fullDDisks.Get(hostIndex)) {
-        return TStringBuilder() << "Can't demote last healthy ddisk "
-                                << PrintHostIndex(hostIndex);
+    const auto ddisks = GetDDisks();
+    if (ddisks.Count() == 1 && ddisks.Get(hostIndex)) {
+        return TStringBuilder()
+               << "Can't demote last ddisk " << PrintHostIndex(hostIndex);
     }
 
     DDiskHosts.SetRole(hostIndex, EHostRole::None);
     PBufferHosts.SetRole(hostIndex, EHostRole::HandOff);
-    Watermarks[hostIndex] = std::nullopt;
     return {};
 }
 
-void TVChunkConfig::PromoteHost(THostIndex hostIndex, bool fresh)
+void TVChunkConfig::PromoteHost(THostIndex hostIndex)
 {
     PBufferHosts.SetRole(hostIndex, EHostRole::Primary);
     if (DDiskHosts.GetRole(hostIndex) != EHostRole::Primary) {
         DDiskHosts.SetRole(hostIndex, EHostRole::Primary);
-        if (fresh) {
-            Watermarks[hostIndex] = 0;
-        }
     }
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 TString TVChunkConfig::PromoteHostIfNeeded(bool fresh)
+=======
+TString TVChunkConfig::PromoteHostIfNeeded()
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 {
     TStringBuilder result;
     auto enabledDDisks = GetEnabledDDisks();
@@ -200,7 +256,7 @@ TString TVChunkConfig::PromoteHostIfNeeded(bool fresh)
 
     result << "Promote " << PrintHostIndex(hostToPromote) << " "
            << DebugPrint();
-    PromoteHost(hostToPromote, fresh);
+    PromoteHost(hostToPromote);
     return result;
 }
 
@@ -258,6 +314,7 @@ THostMask TVChunkConfig::GetDDisks() const
         EHostRole::Primary);
 }
 
+<<<<<<< HEAD
 THostMask TVChunkConfig::GetFullDDisks() const
 {
     THostMask result;
@@ -267,6 +324,11 @@ THostMask TVChunkConfig::GetFullDDisks() const
         }
     }
     return result;
+=======
+THostMask TVChunkConfig::GetEnabledDDisks() const
+{
+    return Filter(DDiskHosts, EnabledHosts, EHostRole::Primary);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 }
 
 THostMask TVChunkConfig::GetDisabledHosts() const
@@ -274,6 +336,7 @@ THostMask TVChunkConfig::GetDisabledHosts() const
     return EnabledHosts.LogicalNot();
 }
 
+<<<<<<< HEAD
 THostMask TVChunkConfig::GetHealthyDDisks() const
 {
     THostMask result;
@@ -299,6 +362,8 @@ std::optional<ui64> TVChunkConfig::GetWatermark(THostIndex hostIndex) const
     return Watermarks[hostIndex];
 }
 
+=======
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 bool TVChunkConfig::IsValid() const
 {
     if (PBufferHosts.HostCount() != DDiskHosts.HostCount()) {
@@ -325,6 +390,11 @@ TString TVChunkConfig::DebugPrint() const
         if (Watermarks[hostIndex] != std::nullopt) {
             result << "[" << *Watermarks[hostIndex] << "]";
         }
+<<<<<<< HEAD
+=======
+        const auto state = GetHostHumanReadableState(i, false);
+        result << Print(state, false);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     }
     result << "}";
     return result;

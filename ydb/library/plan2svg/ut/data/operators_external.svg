@@ -1935,19 +1935,19 @@
 <text x='396' y='13' class='texte'>Tasks</text>
 <text x='403' y='13' class='texts'>Statistics</text>
 <g><title>2025-07-16T15:24:49.490000Z</title>
-<text x='608' y='13' class='texts'>0:00</text>
+<text x='608' y='13' class='texts'>0</text>
 </g>
 <g><title>2025-07-16T15:24:50.490000Z</title>
-<text x='774' y='13' class='texts'>0:01</text>
+<text x='770' y='13' class='texte'>0:01</text>
 </g>
 <g><title>2025-07-16T15:24:51.490000Z</title>
-<text x='941' y='13' class='texts'>0:02</text>
+<text x='937' y='13' class='texte'>0:02</text>
 </g>
 <g><title>2025-07-16T15:24:52.490000Z</title>
-<text x='1107' y='13' class='texts'>0:03</text>
+<text x='1103' y='13' class='texte'>0:03</text>
 </g>
 <g><title>2025-07-16T15:24:53.490000Z</title>
-<text x='1274' y='13' class='texts'>0:04</text>
+<text x='1270' y='13' class='texte'>0:04</text>
 </g>
 </svg>
 <line x1='0' y1='18' x2='1280' y2='18' class='columns' />

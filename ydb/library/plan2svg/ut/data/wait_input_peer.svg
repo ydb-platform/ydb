@@ -1375,28 +1375,28 @@
 <text x='396' y='13' class='texte'>Tasks</text>
 <text x='403' y='13' class='texts'>Statistics</text>
 <g><title>2026-09-04T14:27:09.759000Z</title>
-<text x='608' y='13' class='texts'>0:00</text>
+<text x='608' y='13' class='texts'>0</text>
 </g>
 <g><title>2026-09-04T14:27:19.759000Z</title>
-<text x='695' y='13' class='texts'>0:10</text>
+<text x='691' y='13' class='texte'>0:10</text>
 </g>
 <g><title>2026-09-04T14:27:29.759000Z</title>
-<text x='783' y='13' class='texts'>0:20</text>
+<text x='779' y='13' class='texte'>0:20</text>
 </g>
 <g><title>2026-09-04T14:27:39.759000Z</title>
-<text x='870' y='13' class='texts'>0:30</text>
+<text x='866' y='13' class='texte'>0:30</text>
 </g>
 <g><title>2026-09-04T14:27:49.759000Z</title>
-<text x='958' y='13' class='texts'>0:40</text>
+<text x='954' y='13' class='texte'>0:40</text>
 </g>
 <g><title>2026-09-04T14:27:59.759000Z</title>
-<text x='1046' y='13' class='texts'>0:50</text>
+<text x='1042' y='13' class='texte'>0:50</text>
 </g>
 <g><title>2026-09-04T14:28:09.759000Z</title>
-<text x='1133' y='13' class='texts'>1:00</text>
+<text x='1129' y='13' class='texte'>1:00</text>
 </g>
 <g><title>2026-09-04T14:28:19.759000Z</title>
-<text x='1221' y='13' class='texts'>1:10</text>
+<text x='1217' y='13' class='texte'>1:10</text>
 </g>
 </svg>
 <line x1='0' y1='18' x2='1280' y2='18' class='columns' />

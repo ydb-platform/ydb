@@ -1092,10 +1092,10 @@
 <text x='396' y='13' class='texte'>Tasks</text>
 <text x='403' y='13' class='texts'>Statistics</text>
 <g><title>2024-08-15T06:59:24.501000Z</title>
-<text x='608' y='13' class='texts'>0:00</text>
+<text x='608' y='13' class='texts'>0</text>
 </g>
 <g><title>2024-08-15T06:59:25.501000Z</title>
-<text x='963' y='13' class='texts'>0:01</text>
+<text x='959' y='13' class='texte'>0:01</text>
 </g>
 </svg>
 <line x1='0' y1='18' x2='1280' y2='18' class='columns' />

@@ -401,4 +401,8 @@ message TFeatureFlags {
     // still overrides the cyan permille; floors stay on while this flag is on.
     optional bool EnableTightPDiskSpaceColors = 333 [default = false, (RequireRestart) = true];
     optional bool CollectHourMetric = 334 [default = false];
+    // Only a leading '/' makes a client path absolute. Otherwise prepend the
+    // cluster root for database names, or the database for schema-object paths.
+    // Main: enabled. Backports to 26-4 must use default = false.
+    optional bool EnableRelativePaths = 335 [default = true];
 }

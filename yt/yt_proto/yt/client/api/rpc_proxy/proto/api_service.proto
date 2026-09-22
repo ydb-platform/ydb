@@ -3961,6 +3961,9 @@ message TReqStartShuffle
 
     // YSON-serialized TShuffleConfig.
     optional bytes config = 9;
+
+    // NCompression::ECodec.
+    optional int32 codec = 10 [default = 0];
 }
 
 message TRspStartShuffle

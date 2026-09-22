@@ -58,7 +58,7 @@ TEST(TQueryStatisticsScanOrderTest, MergeLeavesScanOrderUnknownWhenNeitherSideHa
     EXPECT_EQ(EReportedScanOrder::Unknown, statistics.ScanOrder);
 }
 
-TEST(TQueryStatisticsScanOrderTest, InnerStatisticsDoNotAffectTheTopLevelScanOrder)
+TEST(TQueryStatisticsScanOrderTest, InnerStatisticsDoNotAffectTopLevelScanOrder)
 {
     // Collapsed subqueries need not share a scan order: join prefetch subqueries sit alongside
     // the plan ones.
@@ -95,7 +95,7 @@ TEST(TQueryStatisticsScanOrderTest, ScanOrderRoundTripsThroughProto)
     EXPECT_EQ(EReportedScanOrder::Reversed, deserialized.ScanOrder);
 }
 
-TEST(TQueryStatisticsScanOrderTest, ScanOrderIsUnknownWhenTheProtoLacksTheField)
+TEST(TQueryStatisticsScanOrderTest, ScanOrderIsUnknownWhenProtoLacksField)
 {
     // What a server that predates the field sends.
     NProto::TQueryStatistics serialized;

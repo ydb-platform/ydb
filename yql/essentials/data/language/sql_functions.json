@@ -1370,6 +1370,254 @@
     "kind": "Agg"
   },
   {
+    "name": "Spark::acos",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::asin",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::asinh",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::atan",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::atan2",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::base64",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::bit_length",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::cbrt",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::char_length",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::character_length",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::contains",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::cos",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::cosh",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::degrees",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::e",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::endswith",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::exp",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::hex",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::hypot",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::ifnull",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::instr",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::isnotnull",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::isnull",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::lcase",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::left",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::len",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::length",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::ln",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::log",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::log10",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::log2",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::lower",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::lpad",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::md5",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::nullif",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::nvl",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::nvl2",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::octet_length",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::pi",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::pow",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::power",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::radians",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::replace",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::reverse",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::right",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::rint",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::rpad",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::sha1",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::sign",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::signum",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::sin",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::sinh",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::sqrt",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::startswith",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::substr",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::substring",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::tan",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::tanh",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::ucase",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::unbase64",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::unhex",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::upper",
+    "kind": "Normal"
+  },
+  {
     "name": "SpreadMembers",
     "kind": "Normal"
   },

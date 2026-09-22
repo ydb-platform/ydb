@@ -360,7 +360,7 @@ namespace {
             return !BarriersYieldedState;
         }
 
-        void FinishHuge(TComponentState& huge) {
+        void FinishHuge(TComponentState& huge, ui64 stripeChunkCount) {
             for (THugeClassState& sizeClass : HugeClasses) {
                 const auto& allocator = sizeClass.Allocator;
                 const ui64 capacity = allocator.ChunkCount * ChunkSize;
@@ -418,7 +418,7 @@ namespace {
             huge.Breakdown += StripedHugeBreakdown;
 
             const auto& stripes = HugeSource.StripeHeap;
-            const ui64 stripeCapacity = stripes.ChunkCount * ChunkSize;
+            const ui64 stripeCapacity = stripeChunkCount * ChunkSize;
             const ui64 classifiedStripeBytes = LogoBlobs.StripedBytes
                 + Blocks.StripedBytes
                 + Barriers.StripedBytes
@@ -470,8 +470,11 @@ namespace {
             FinishHullComponent(Blocks, ChunkSize);
             FinishHullComponent(Barriers, ChunkSize);
 
+            const ui64 stripeChunkCount = HugeReceived
+                ? HugeSource.StripeHeap.ChunkCount
+                : StripeChunksReceived ? StripeChunks.size() : 0;
             TComponentState huge;
-            FinishHuge(huge);
+            FinishHuge(huge, stripeChunkCount);
             FinishSyncLog();
             FinishChunkKeeper();
 
@@ -481,7 +484,7 @@ namespace {
             for (const auto& [_, component] : ChunkKeeper) {
                 namedChunks += component.ChunkCount;
             }
-            namedChunks += HugeSource.StripeHeap.ChunkCount;
+            namedChunks += stripeChunkCount;
 
             TComponentState unattributed;
             if (namedChunks < PDiskAllocatedChunks) {
@@ -545,8 +548,8 @@ namespace {
             FillComponent(unattributed, report->MutableUnattributed());
 
             auto* stripeReport = report->MutableStripeHeap();
-            stripeReport->SetChunkCount(HugeSource.StripeHeap.ChunkCount);
-            stripeReport->SetAllocatedBytes(HugeSource.StripeHeap.ChunkCount * ChunkSize);
+            stripeReport->SetChunkCount(stripeChunkCount);
+            stripeReport->SetAllocatedBytes(stripeChunkCount * ChunkSize);
             stripeReport->SetUsedBytes(HugeSource.StripeHeap.UsedBytes);
             stripeReport->SetFreeBytes(HugeSource.StripeHeap.FreeBytes);
             stripeReport->SetLockedFreeBytes(HugeSource.StripeHeap.LockedFreeBytes);

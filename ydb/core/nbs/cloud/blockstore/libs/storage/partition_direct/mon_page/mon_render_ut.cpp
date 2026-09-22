@@ -298,9 +298,10 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             0,
             DirectBlockGroupHostCount,
             DefaultPrimaryCount);
-        config.PromoteHost(3, true);
+        config.PromoteHost(3);
         config.DisableHost(0);
         const TVChunkConfigs configs{{0, std::move(config)}};
+        data.Dbgs[0].FreshDDisks[0].Set(3);
 
         TTestTouchedProvider touchedProvider;
         touchedProvider.Touched = {0};
@@ -571,35 +572,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT(!html.Contains("action=addhost"));
     }
 
-    Y_UNIT_TEST(DbgListShowsFreshDDisksByVChunk)
-    {
-        constexpr ui32 BlockSize = 4096;
-        auto dbg = MakeDbg(17);
-        auto config = TVChunkConfig::MakeDefault(
-            /*vChunkIndex*/ 17,
-            /*hostCount*/ 5,
-            /*primaryCount*/ 3);
-        config.PromoteHost(3, true);
-        config.SetWatermark(3, 42 * BlockSize);
-        const TVChunkConfigs configs{
-            {config.GetVChunkIndex(), std::move(config)},
-        };
-
-        const TMonPageData data{
-            .Page = EMonPage::Dbg,
-            .TabletInfo =
-                {.TabletId = 42,
-                 .BlockSize = BlockSize,
-                 .VolumeDirectBlockGroupCount = 1},
-            .Dbgs = {std::move(dbg)},
-        };
-        const TTestTouchedProvider touched;
-
-        const TString html = RenderMonPage(data, configs, touched);
-        UNIT_ASSERT_STRING_CONTAINS(html, "Fresh");
-        UNIT_ASSERT_STRING_CONTAINS(html, "17[H3:42]");
-    }
-
     Y_UNIT_TEST(DbgDetailShowsHostsTable)
     {
         const TMonPageData data{
@@ -687,7 +659,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             /*hostCount*/ 3,
             /*primaryCount*/ 1);
         config.SetDBGIndex(1);
-        config.SetWatermark(0, 7);
         const TMonPageData data{
             .Page = EMonPage::VChunk,
             .TabletInfo = {.TabletId = 42},
@@ -708,8 +679,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "<td>H0</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Primary");
         UNIT_ASSERT_STRING_CONTAINS(html, "HandOff");
-        // Host 0's watermark set above renders in its row.
-        UNIT_ASSERT_STRING_CONTAINS(html, "<td>7</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "DDiskStates: dump-text");
     }
 

@@ -56,7 +56,6 @@ public:
 private:
     TString Type;
     TString Kind;
-    TString Status;
     TString Format = "table";
 };
 

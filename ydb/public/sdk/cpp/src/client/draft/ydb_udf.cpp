@@ -25,10 +25,6 @@ Ydb::Udf::ModuleKind ToProto(EModuleKind kind) {
     return static_cast<Ydb::Udf::ModuleKind>(kind);
 }
 
-Ydb::Udf::CompileStatus ToProto(ECompileStatus status) {
-    return static_cast<Ydb::Udf::CompileStatus>(status);
-}
-
 Ydb::Udf::WriteMode ToProto(EWriteMode mode) {
     return static_cast<Ydb::Udf::WriteMode>(mode);
 }
@@ -82,10 +78,7 @@ TModuleInfo FromProto(const Ydb::Udf::ModuleInfo& proto) {
     info.Md5 = proto.md5();
     info.Size = proto.size();
     info.Version = proto.version();
-    info.CompileStatus = FromProto(proto.compile_status());
-    info.CompileError = proto.compile_error();
     info.CreatedAt = ProtoTimestampToInstant(proto.created_at());
-    info.CompileFinishedAt = ProtoTimestampToInstant(proto.compile_finished_at());
     return info;
 }
 
@@ -303,7 +296,6 @@ TUploadModuleResult::TUploadModuleResult(TStatus&& status, Ydb::Udf::UploadModul
     , Uid_(proto.uid())
     , Md5_(proto.md5())
     , Size_(proto.size())
-    , CompileStatus_(FromProto(proto.compile_status()))
     , ReplacedExisting_(proto.replaced_existing())
 {
 }
@@ -326,11 +318,6 @@ const std::string& TUploadModuleResult::GetMd5() const {
 uint64_t TUploadModuleResult::GetSize() const {
     CheckStatusOk("TUploadModuleResult::GetSize");
     return Size_;
-}
-
-ECompileStatus TUploadModuleResult::GetCompileStatus() const {
-    CheckStatusOk("TUploadModuleResult::GetCompileStatus");
-    return CompileStatus_;
 }
 
 bool TUploadModuleResult::GetReplacedExisting() const {
@@ -439,9 +426,6 @@ public:
         request.set_type_filter(ToProto(settings.TypeFilter_));
         if (settings.KindFilter_ != EModuleKind::Unspecified) {
             request.set_kind_filter(ToProto(settings.KindFilter_));
-        }
-        if (settings.StatusFilter_ != ECompileStatus::Unspecified) {
-            request.set_status_filter(ToProto(settings.StatusFilter_));
         }
         if (settings.PageSize_) {
             request.set_page_size(*settings.PageSize_);

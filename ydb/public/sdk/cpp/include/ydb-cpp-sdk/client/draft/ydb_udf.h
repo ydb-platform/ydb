@@ -52,10 +52,7 @@ struct TModuleInfo {
     std::string Md5;
     uint64_t Size = 0;
     uint64_t Version = 0;
-    ECompileStatus CompileStatus = ECompileStatus::Unspecified;
-    std::string CompileError;
     TInstant CreatedAt;
-    TInstant CompileFinishedAt;
 };
 
 struct TPlatformCompileStatus {
@@ -90,7 +87,6 @@ struct TListModulesSettings: public TOperationRequestSettings<TListModulesSettin
 
     FLUENT_SETTING_DEFAULT(EModuleType, TypeFilter, EModuleType::Unspecified);
     FLUENT_SETTING_DEFAULT(EModuleKind, KindFilter, EModuleKind::Unspecified);
-    FLUENT_SETTING_DEFAULT(ECompileStatus, StatusFilter, ECompileStatus::Unspecified);
     FLUENT_SETTING_OPTIONAL(uint32_t, PageSize);
     FLUENT_SETTING(std::string, PageToken);
 };
@@ -104,7 +100,6 @@ struct TUploadModuleResult: public TStatus {
     const std::string& GetUid() const;
     const std::string& GetMd5() const;
     uint64_t GetSize() const;
-    ECompileStatus GetCompileStatus() const;
     bool GetReplacedExisting() const;
 
 private:
@@ -112,7 +107,6 @@ private:
     std::string Uid_;
     std::string Md5_;
     uint64_t Size_ = 0;
-    ECompileStatus CompileStatus_ = ECompileStatus::Unspecified;
     bool ReplacedExisting_ = false;
 };
 

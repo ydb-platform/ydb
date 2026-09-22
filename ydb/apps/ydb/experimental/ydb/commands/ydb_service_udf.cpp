@@ -99,24 +99,6 @@ void CheckFormat(const TString& format, std::initializer_list<TStringBuf> allowe
     throw TMisuseException() << "Unsupported output format: " << format;
 }
 
-NUdf::ECompileStatus ParseCompileStatus(const TString& value) {
-    const TString lower = to_lower(value);
-    if (lower == "pending") {
-        return NUdf::ECompileStatus::Pending;
-    }
-    if (lower == "compiling") {
-        return NUdf::ECompileStatus::Compiling;
-    }
-    if (lower == "ready") {
-        return NUdf::ECompileStatus::Ready;
-    }
-    if (lower == "failed") {
-        return NUdf::ECompileStatus::Failed;
-    }
-    throw TMisuseException() << "Unknown compile status '" << value
-        << "'. Expected: pending, compiling, ready, failed";
-}
-
 TStringBuf TypeToString(NUdf::EModuleType kind) {
     switch (kind) {
         case NUdf::EModuleType::Module:
@@ -166,10 +148,6 @@ NJson::TJsonValue ModuleToJson(const NUdf::TModuleInfo& module) {
     json["md5"] = module.Md5;
     json["size"] = module.Size;
     json["version"] = module.Version;
-    json["compile_status"] = TString(StatusToString(module.CompileStatus));
-    if (!module.CompileError.empty()) {
-        json["compile_error"] = module.CompileError;
-    }
     return json;
 }
 
@@ -278,7 +256,6 @@ int TCommandUdfUpload::Run(TConfig& config) {
         json["uid"] = result.GetUid();
         json["md5"] = result.GetMd5();
         json["size"] = result.GetSize();
-        json["compile_status"] = TString(StatusToString(result.GetCompileStatus()));
         json["replaced_existing"] = result.GetReplacedExisting();
         NJson::WriteJson(&Cout, &json, true, true);
         Cout << Endl;
@@ -287,7 +264,6 @@ int TCommandUdfUpload::Run(TConfig& config) {
              << "uid: " << result.GetUid() << Endl
              << "md5: " << result.GetMd5() << Endl
              << "size: " << result.GetSize() << Endl
-             << "compile_status: " << StatusToString(result.GetCompileStatus()) << Endl
              << "replaced_existing: " << (result.GetReplacedExisting() ? "true" : "false") << Endl;
     }
     return EXIT_SUCCESS;
@@ -359,10 +335,6 @@ void TCommandUdfList::Config(TConfig& config) {
         .Optional()
         .RequiredArgument("KIND")
         .StoreResult(&Kind);
-    config.Opts->AddLongOption("status", "Filter by compile status")
-        .Optional()
-        .RequiredArgument("STATUS")
-        .StoreResult(&Status);
     config.Opts->AddLongOption("format", "Output format: table (default) | json | yaml").RequiredArgument("FORMAT").StoreResult(&Format);
     config.SetFreeArgsNum(0);
 }
@@ -380,15 +352,11 @@ int TCommandUdfList::Run(TConfig& config) {
     if (Kind) {
         settings.KindFilter(ParseKind(Kind));
     }
-    if (Status) {
-        settings.StatusFilter(ParseCompileStatus(Status));
-    }
-
     auto driver = CreateDriver(config);
     NUdf::TUdfClient client(driver);
     NJson::TJsonValue json(NJson::JSON_MAP);
     NJson::TJsonValue modules(NJson::JSON_ARRAY);
-    TPrettyTable table({"Name", "ModuleType", "ModuleKind", "Uid", "CompileStatus"});
+    TPrettyTable table({"Name", "ModuleType", "ModuleKind", "Uid"});
     do {
         auto result = client.ListModules(settings).GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -399,7 +367,6 @@ int TCommandUdfList::Run(TConfig& config) {
             row.Column(1, TypeToString(module.Type));
             row.Column(2, KindToString(module.Kind));
             row.Column(3, module.Uid);
-            row.Column(4, StatusToString(module.CompileStatus));
         }
         settings.PageToken(result.GetNextPageToken());
     } while (!settings.PageToken_.empty());

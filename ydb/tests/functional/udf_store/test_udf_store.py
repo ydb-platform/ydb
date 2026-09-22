@@ -463,7 +463,7 @@ def test_ydb_udf_cli_library_roundtrip():
         assert upload["name"] == library_name
         assert upload["uid"]
         assert upload["size"] > 0
-        assert upload["compile_status"] == "pending"
+        assert "compile_status" not in upload
         uid = upload["uid"]
 
         list_out = _run_ydb_udf(
@@ -669,7 +669,7 @@ def test_ydb_udf_cli_yaml_preserves_types():
     modules = [udf.ModuleInfo(
         name=name, module_type=udf.LIBRARY, module_kind=udf.WASM,
         uid="test-upload-uid", md5="00123456789012345678901234567890",
-        size=8, version=2**64 - 1, compile_status=udf.FAILED, compile_error="false",
+        size=8, version=2**64 - 1,
     ) for name in names]
 
     def response(response_type, result):
@@ -776,7 +776,6 @@ def test_ydb_udf_rpc_validation_and_pagination():
             upload([header(manifest(), expected_md5="0" * 32), data], StatusIds.PRECONDITION_FAILED)
             first = upload([header(manifest()), data], StatusIds.SUCCESS)
             assert first.md5 == hashlib.md5(body).hexdigest()
-            assert first.compile_status == udf.PENDING
 
             def describe():
                 response = stub.DescribeModule(udf.DescribeModuleRequest(name=first.name), metadata=metadata, timeout=60)

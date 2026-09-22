@@ -1178,6 +1178,23 @@
             "uri": "https://{canondata_backend}/1781765/ee7884f77a94b3c00c74a5d31da7bffa9735f156/resource.tar.gz#test.test_select_yql-window_fn_rank_0_desc-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-window_fn_rank_1_without_order_by-default.txt-Debug]": [
+        {
+            "checksum": "5c15bf67d61e8d8ec581e89fbeca8f8e",
+            "size": 484,
+            "uri": "https://{canondata_backend}/1903280/899fe228f6a8ac870342d7ff1de2c1f6d65cb982/resource.tar.gz#test.test_select_yql-window_fn_rank_1_without_order_by-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-window_fn_rank_1_without_order_by-default.txt-Results]": [
+        {
+            "checksum": "73b19e13a88ea9232a51708003717069",
+            "size": 696,
+            "uri": "https://{canondata_backend}/1903280/899fe228f6a8ac870342d7ff1de2c1f6d65cb982/resource.tar.gz#test.test_select_yql-window_fn_rank_1_without_order_by-default.txt-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_select_yql-window_fn_rank_1_without_order_by-default.txt-Results_/extracted"
+        }
+    ],
     "test.test[select_yql-window_pg_tutorial_4-default.txt-Debug]": [
         {
             "checksum": "a3a1f2630eae51655d76deca8e7bbd33",

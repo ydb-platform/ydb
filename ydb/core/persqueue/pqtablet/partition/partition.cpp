@@ -991,7 +991,7 @@ void TPartition::DestroyActor(const TActorContext& ctx)
 }
 
 void TPartition::PassAway() {
-    if (WriteSessionsQuoterRegistered) {
+    if (WriteSessionsQuoterNotified) {
         Send(MakeWriteSessionsQuoterId(), new TEvWriteSessionsQuoter::TEvRemove(
             TopicName(), Partition.OriginalPartitionId, TabletGeneration));
     }

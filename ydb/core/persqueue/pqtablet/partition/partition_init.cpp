@@ -1213,20 +1213,6 @@ TNotifyWriteSessionsQuoterStep::TNotifyWriteSessionsQuoterStep(TInitializer* ini
     : TInitializerStep(initializer, "TNotifyWriteSessionsQuoterStep", false) {
 }
 
-void TNotifyWriteSessionsQuoterStep::QuoterInitialized(const TActorContext& ctx) {
-    Done(ctx);
-}
-
-bool TNotifyWriteSessionsQuoterStep::Handle(STFUNC_SIG) {
-    switch (ev->GetTypeRewrite()) {
-        case TEvWriteSessionsQuoter::TEvQuoterInitialized::EventType:
-            QuoterInitialized(TActivationContext::AsActorContext());
-            return true;
-        default:
-            return false;
-    }
-}
-
 void TNotifyWriteSessionsQuoterStep::Execute(const TActorContext& ctx) {
     if (Partition()->IsSupportive()) {
         return Done(ctx);
@@ -1234,8 +1220,9 @@ void TNotifyWriteSessionsQuoterStep::Execute(const TActorContext& ctx) {
 
     auto actorId = MakeWriteSessionsQuoterId();
 
-    Partition()->WriteSessionsQuoterRegistered = true;
+    Partition()->WriteSessionsQuoterNotified = true;
     ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvNotify(TopicName(), PartitionId().OriginalPartitionId, Partition()->TabletGeneration));
+    Done(ctx);
 }
 
 //

@@ -1994,7 +1994,6 @@ struct TEvWriteSessionsQuoter {
     enum EEv {
         EvNotify = InternalEventSpaceBegin(NPQ::NEvents::EServices::WRITE_SESSIONS_QUOTER),
         EvAcquireQuota,
-        EvQuoterInitialized,
         EvQuotaAcquired,
         EvRemove,
         EvQuotaDeclined,
@@ -2027,10 +2026,6 @@ struct TEvWriteSessionsQuoter {
         const TString Topic;
         const ui32 Partition;
         const ui32 Generation;
-    };
-
-    struct TEvQuoterInitialized : TEventLocal<TEvQuoterInitialized, EvQuoterInitialized> {
-        TEvQuoterInitialized() = default;
     };
 
     struct TEvQuotaAcquired : TEventLocal<TEvQuotaAcquired, EvQuotaAcquired> {

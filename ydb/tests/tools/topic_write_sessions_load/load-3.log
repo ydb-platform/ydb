@@ -1,0 +1,463 @@
+mode=direct target_rps=1000 partition=0 duration_s=3600 hold_s=600 max_sessions=25000 producer_prefix=write-session-load-264b4e6d-9a6f6dd3-3f0c40cc-e9025010 retries=off
+elapsed_s=1.0 phase=opening started=1000 started_rps=999.9 initialized=78 initialized_rps=78.0 pending=922 retained=1000 init_failed=0 closed=0 avg_init_ms=459.4 skipped_slots=0
+elapsed_s=2.0 phase=opening started=2001 started_rps=1000.9 initialized=180 initialized_rps=102.0 pending=1821 retained=2001 init_failed=0 closed=0 avg_init_ms=978.8 skipped_slots=0
+elapsed_s=3.0 phase=opening started=3001 started_rps=999.9 initialized=234 initialized_rps=54.0 pending=2767 retained=3001 init_failed=0 closed=0 avg_init_ms=1281.1 skipped_slots=0
+elapsed_s=4.0 phase=opening started=4001 started_rps=999.9 initialized=311 initialized_rps=77.0 pending=3690 retained=4001 init_failed=0 closed=0 avg_init_ms=1777.8 skipped_slots=0
+elapsed_s=5.0 phase=opening started=4990 started_rps=988.9 initialized=407 initialized_rps=96.0 pending=4583 retained=4990 init_failed=0 closed=0 avg_init_ms=2327.9 skipped_slots=11
+elapsed_s=6.0 phase=opening started=5817 started_rps=826.9 initialized=491 initialized_rps=84.0 pending=5326 retained=5817 init_failed=0 closed=0 avg_init_ms=2792.9 skipped_slots=184
+elapsed_s=7.0 phase=opening started=6476 started_rps=658.9 initialized=558 initialized_rps=67.0 pending=5918 retained=6476 init_failed=0 closed=0 avg_init_ms=3166.4 skipped_slots=525
+elapsed_s=8.0 phase=opening started=7088 started_rps=611.9 initialized=621 initialized_rps=63.0 pending=6467 retained=7088 init_failed=0 closed=0 avg_init_ms=3544.5 skipped_slots=913
+elapsed_s=9.0 phase=opening started=7653 started_rps=558.1 initialized=702 initialized_rps=80.0 pending=6951 retained=7653 init_failed=0 closed=0 avg_init_ms=4037.4 skipped_slots=1361
+elapsed_s=10.0 phase=opening started=8143 started_rps=489.9 initialized=777 initialized_rps=75.0 pending=7366 retained=8143 init_failed=0 closed=0 avg_init_ms=4490.5 skipped_slots=1871
+elapsed_s=11.0 phase=opening started=8610 started_rps=466.9 initialized=874 initialized_rps=97.0 pending=7736 retained=8610 init_failed=0 closed=0 avg_init_ms=5065.0 skipped_slots=2404
+elapsed_s=12.0 phase=opening started=9043 started_rps=427.2 initialized=1001 initialized_rps=125.3 pending=8042 retained=9043 init_failed=0 closed=0 avg_init_ms=5757.0 skipped_slots=2985
+elapsed_s=13.1 phase=opening started=9494 started_rps=428.5 initialized=1096 initialized_rps=90.3 pending=8398 retained=9494 init_failed=0 closed=0 avg_init_ms=6249.0 skipped_slots=3586
+elapsed_s=14.1 phase=opening started=9919 started_rps=424.9 initialized=1231 initialized_rps=135.0 pending=8688 retained=9919 init_failed=0 closed=0 avg_init_ms=6927.8 skipped_slots=4161
+elapsed_s=15.2 phase=opening started=10282 started_rps=333.8 initialized=1341 initialized_rps=101.1 pending=8941 retained=10282 init_failed=0 closed=0 avg_init_ms=7458.1 skipped_slots=4886
+elapsed_s=16.2 phase=opening started=10641 started_rps=358.9 initialized=1434 initialized_rps=93.0 pending=9207 retained=10641 init_failed=0 closed=0 avg_init_ms=7893.6 skipped_slots=5527
+elapsed_s=17.2 phase=opening started=10979 started_rps=337.9 initialized=1531 initialized_rps=97.0 pending=9448 retained=10979 init_failed=0 closed=0 avg_init_ms=8346.8 skipped_slots=6189
+elapsed_s=18.2 phase=opening started=11279 started_rps=299.9 initialized=1649 initialized_rps=118.0 pending=9630 retained=11279 init_failed=0 closed=0 avg_init_ms=8892.8 skipped_slots=6890
+elapsed_s=19.2 phase=opening started=11604 started_rps=309.1 initialized=1783 initialized_rps=127.4 pending=9821 retained=11604 init_failed=0 closed=0 avg_init_ms=9493.3 skipped_slots=7616
+elapsed_s=20.3 phase=opening started=11934 started_rps=293.7 initialized=1929 initialized_rps=129.9 pending=10005 retained=11934 init_failed=0 closed=0 avg_init_ms=10124.8 skipped_slots=8410
+elapsed_s=21.5 phase=opening started=12268 started_rps=291.9 initialized=2106 initialized_rps=154.7 pending=10162 retained=12268 init_failed=0 closed=0 avg_init_ms=10850.2 skipped_slots=9220
+elapsed_s=22.5 phase=opening started=12598 started_rps=321.6 initialized=2309 initialized_rps=197.8 pending=10289 retained=12598 init_failed=0 closed=0 avg_init_ms=11637.2 skipped_slots=9916
+elapsed_s=23.5 phase=opening started=12822 started_rps=223.9 initialized=2446 initialized_rps=137.0 pending=10376 retained=12822 init_failed=0 closed=0 avg_init_ms=12139.6 skipped_slots=10692
+elapsed_s=24.5 phase=opening started=13143 started_rps=313.0 initialized=2693 initialized_rps=240.9 pending=10450 retained=13143 init_failed=0 closed=0 avg_init_ms=12991.8 skipped_slots=11397
+elapsed_s=25.6 phase=opening started=13364 started_rps=206.9 initialized=2888 initialized_rps=182.5 pending=10476 retained=13364 init_failed=0 closed=0 avg_init_ms=13617.4 skipped_slots=12244
+elapsed_s=26.6 phase=opening started=13664 started_rps=299.7 initialized=3199 initialized_rps=310.7 pending=10465 retained=13664 init_failed=0 closed=0 avg_init_ms=14541.4 skipped_slots=12945
+elapsed_s=27.6 phase=opening started=13924 started_rps=253.3 initialized=3301 initialized_rps=99.4 pending=10622 retained=13351 init_failed=1 closed=573 avg_init_ms=14826.5 skipped_slots=13690 status_400050=573 last_error="<main>: Error: pipe to partition's 0 tablet is dead #2, code: 500027
+"
+elapsed_s=28.7 phase=opening started=14186 started_rps=248.5 initialized=3302 initialized_rps=0.9 pending=10878 retained=12606 init_failed=6 closed=1580 avg_init_ms=14829.5 skipped_slots=14463 status_400050=1580 last_error="<main>: Error: pipe to partition's 0 tablet is dead #2, code: 500027
+"
+elapsed_s=29.8 phase=opening started=14586 started_rps=358.0 initialized=3302 initialized_rps=0.0 pending=11240 retained=11240 init_failed=44 closed=3346 avg_init_ms=14829.5 skipped_slots=15167 status_400050=3346 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=30.8 phase=opening started=14937 started_rps=341.9 initialized=3302 initialized_rps=0.0 pending=11130 retained=11130 init_failed=505 closed=3807 avg_init_ms=14829.5 skipped_slots=15873 status_400050=3807 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=31.9 phase=opening started=15279 started_rps=335.2 initialized=3302 initialized_rps=0.0 pending=11098 retained=11098 init_failed=879 closed=4181 avg_init_ms=14829.5 skipped_slots=16555 status_400050=4181 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=32.9 phase=opening started=15626 started_rps=338.0 initialized=3388 initialized_rps=83.8 pending=10917 retained=11003 init_failed=1321 closed=4623 avg_init_ms=14590.6 skipped_slots=17229 status_400050=4623 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=33.9 phase=opening started=15968 started_rps=335.1 initialized=3438 initialized_rps=49.0 pending=10717 retained=10942 init_failed=1813 closed=5115 avg_init_ms=14471.7 skipped_slots=17913 status_400050=5115 last_error="<main>: Error: kqp error Marker# PQ51 : { Response { SessionId: \"ydb://session/3?node_id=50005&id=NjI4ZjVkYjMtNjdkNWUxMzctOWYxNWY2NDQtOTE4ZjNkZGU%3D\" QueryIssues { message: \"State of operation is unknown. Error writing to table `//ledzeppelin-slice-1/db1/.metadata/TopicPartitionsMapping`. Transaction state unknown for tablet 72075186224037935.\" issue_code: 2026 severity: 1 } TxMeta { id: \"01m34eka5pfga7svgpdzhgrpt9\" } EffectivePoolId: \"default\" } YdbStatus: UNDETERMINED ConsumedRu: 1 }, code: 50"
+elapsed_s=34.9 phase=opening started=16348 started_rps=372.5 initialized=3493 initialized_rps=53.9 pending=10760 retained=10951 init_failed=2095 closed=5397 avg_init_ms=14350.2 skipped_slots=18555 status_400050=5397 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=36.0 phase=opening started=16692 started_rps=332.6 initialized=3547 initialized_rps=52.2 pending=10651 retained=10896 init_failed=2494 closed=5796 avg_init_ms=14244.3 skipped_slots=19242 status_400050=5796 last_error="<main>: Error: kqp error Marker# PQ51 : { Response { SessionId: \"ydb://session/3?node_id=50002&id=NDI3NzY3MDUtOGJiNWM3YWMtOWJkMTc0NjctZDQzMThkYjA%3D\" QueryIssues { message: \"Kikimr cluster or one of its subsystems is overloaded. Tablet 72075186224037935 is overloaded. Table `//ledzeppelin-slice-1/db1/.metadata/TopicPartitionsMapping`.\" issue_code: 2006 severity: 1 issues { message: \"Rejecting data TxId 0 because datashard 72075186224037935: decided to reject due to given RejectProbability; MaxTx"
+elapsed_s=37.0 phase=opening started=17029 started_rps=325.2 initialized=3701 initialized_rps=148.6 pending=10541 retained=10940 init_failed=2787 closed=6089 avg_init_ms=13991.4 skipped_slots=19946 status_400050=6089 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=38.1 phase=opening started=17373 started_rps=306.6 initialized=3799 initialized_rps=87.3 pending=10104 retained=10601 init_failed=3470 closed=6772 avg_init_ms=13857.3 skipped_slots=20710 status_400050=6772 last_error="<main>: Error: kqp error Marker# PQ51 : { Response { SessionId: \"ydb://session/3?node_id=50005&id=YWI4MGY1ZGEtOGMxZTE4OTgtZmUyNmYwMDgtMmFlMWEwMTQ%3D\" QueryIssues { message: \"Kikimr cluster or one of its subsystems is overloaded. Tablet 72075186224037935 is overloaded. Table `//ledzeppelin-slice-1/db1/.metadata/TopicPartitionsMapping`.\" issue_code: 2006 severity: 1 issues { message: \"Rejecting data TxId 0 because datashard 72075186224037935: MaxTxInFly was exceeded\" issue_code: 2006 severity: 1 }"
+elapsed_s=39.2 phase=opening started=17792 started_rps=400.4 initialized=3799 initialized_rps=0.0 pending=9303 retained=9835 init_failed=4690 closed=7992 avg_init_ms=13857.3 skipped_slots=21322 status_400050=7992 last_error="<main>: Error: kqp error Marker# PQ50 : Response {
+  SessionId: \"ydb://session/3?node_id=50005&id=OGZlYmM1ZTAtZDNmZjEwNWEtYzdlNjhiMWYtZjAwZjM3NA%3D%3D\"
+  QueryIssues {
+    message: \"TxId: 562949953561427, NodeId: 50005, not enough compute actors resource.\"
+    severity: 1
+  }
+  TxMeta {
+    id: \"01m34em1a2b38rrhvz6g1fyfne\"
+  }
+  EffectivePoolId: \"default\"
+}
+YdbStatus: OVERLOADED
+ConsumedRu: 1
+, code: 500001
+"
+elapsed_s=40.2 phase=opening started=18143 started_rps=333.3 initialized=3799 initialized_rps=0.0 pending=8614 retained=9111 init_failed=5730 closed=9032 avg_init_ms=13857.3 skipped_slots=22024 status_400050=9032 last_error="<main>: Error: kqp error Marker# PQ51 : { Response { SessionId: \"ydb://session/3?node_id=50005&id=NmQ2NGQ1ODktZTMzZDRhMmQtMTRjMjUxNmItM2EwMjc1ZjY%3D\" QueryIssues { message: \"Kikimr cluster or one of its subsystems is overloaded. Tablet 72075186224037935 is overloaded. Table `//ledzeppelin-slice-1/db1/.metadata/TopicPartitionsMapping`.\" issue_code: 2006 severity: 1 issues { message: \"Rejecting data TxId 0 because datashard 72075186224037935: decided to reject due to given RejectProbability; MaxTx"
+elapsed_s=41.3 phase=opening started=18631 started_rps=456.3 initialized=3799 initialized_rps=0.0 pending=6862 retained=7663 init_failed=7970 closed=11272 avg_init_ms=13857.3 skipped_slots=22583 status_400050=11272 last_error="<main>: Error: kqp error Marker# PQ50 : Response {
+  SessionId: \"ydb://session/3?node_id=50005&id=MjcwZjk1NDUtZTA5YmY2NGMtYzhhY2M4NTAtMzg1NjMwOTc%3D\"
+  QueryIssues {
+    message: \"Table \\'//ledzeppelin-slice-1/db1/.metadata/TopicPartitionsMapping\\' retry limit exceeded.\"
+    severity: 1
+    issues {
+      message: \"Request 10 rejected, MaxTxInFly was exceeded (shard# 72075186224037935 node# 50002 state# Ready)\"
+      severity: 1
+    }
+  }
+  TxMeta {
+    id: \"01m34em0e01r91h978fjmktd7y\"
+  }
+  Eff"
+elapsed_s=42.4 phase=opening started=19250 started_rps=576.0 initialized=3799 initialized_rps=0.0 pending=5933 retained=6430 init_failed=9518 closed=12820 avg_init_ms=13857.3 skipped_slots=23037 status_400050=12820 last_error="<main>: Error: kqp error Marker# PQ50 : Response {
+  SessionId: \"ydb://session/3?node_id=50002&id=ZmQ5NjhiOGMtMWM5MWE4ZmMtMjA3NWVlOWYtMzllMTIxNGI%3D\"
+  QueryIssues {
+    message: \"Table \\'//ledzeppelin-slice-1/db1/.metadata/TopicPartitionsMapping\\' retry limit exceeded.\"
+    severity: 1
+    issues {
+      message: \"Request 10 rejected, MaxTxInFly was exceeded (shard# 72075186224037935 node# 50002 state# Ready)\"
+      severity: 1
+    }
+  }
+  TxMeta {
+    id: \"01m34em2rf8pp2k3gpen3arxy1\"
+  }
+  Eff"
+elapsed_s=43.4 phase=opening started=19907 started_rps=642.3 initialized=3799 initialized_rps=0.0 pending=6180 retained=6677 init_failed=9928 closed=13230 avg_init_ms=13857.3 skipped_slots=23451 status_400050=13230 last_error="<main>: Error: kqp error Marker# PQ51 : { Response { SessionId: \"ydb://session/3?node_id=50002&id=MjFiZjVjLTVlMDg1ZTQtYzU4YWNmZGQtOTBkMTQwMDM%3D\" QueryIssues { message: \"Kikimr cluster or one of its subsystems is overloaded. Tablet 72075186224037935 is overloaded. Table `//ledzeppelin-slice-1/db1/.metadata/TopicPartitionsMapping`.\" issue_code: 2006 severity: 1 issues { message: \"Rejecting data TxId 0 because datashard 72075186224037935: decided to reject due to given RejectProbability; MaxTxInFl"
+elapsed_s=44.4 phase=opening started=20510 started_rps=593.6 initialized=3799 initialized_rps=0.0 pending=6442 retained=6992 init_failed=10269 closed=13571 avg_init_ms=13857.3 skipped_slots=23871 status_400050=13571 last_error="<main>: Error: kqp error Marker# PQ50 : Response {
+  SessionId: \"ydb://session/3?node_id=50002&id=YjEyYjNkZmEtNWM2ZDE3OTItYjM1OWVlNzUtNGZlYTFjMWE%3D\"
+  QueryIssues {
+    message: \"TxId: 281474976863769, NodeId: 50002, not enough compute actors resource.\"
+    severity: 1
+  }
+  TxMeta {
+    id: \"01m34em86pd93wqfnvdy7kt756\"
+  }
+  EffectivePoolId: \"default\"
+}
+YdbStatus: OVERLOADED
+ConsumedRu: 1
+, code: 500001
+"
+elapsed_s=45.4 phase=opening started=21060 started_rps=540.6 initialized=3799 initialized_rps=0.0 pending=6752 retained=7249 init_failed=10509 closed=13811 avg_init_ms=13857.3 skipped_slots=24338 status_400050=13811 last_error="<main>: Error: kqp error Marker# PQ50 : Response {
+  SessionId: \"ydb://session/3?node_id=50002&id=OTc3ZjJlNmEtOWQxOGU1MTYtOWNiZjI1YzAtYjljYWIwYzA%3D\"
+  QueryIssues {
+    message: \"TxId: 844424930283817, NodeId: 50002, not enough compute actors resource.\"
+    severity: 1
+  }
+  TxMeta {
+    id: \"01m34em9491pa8447g1aaf1h4b\"
+  }
+  EffectivePoolId: \"default\"
+}
+YdbStatus: OVERLOADED
+ConsumedRu: 1
+, code: 500001
+"
+elapsed_s=46.5 phase=opening started=21659 started_rps=573.7 initialized=3799 initialized_rps=0.0 pending=6891 retained=7388 init_failed=10969 closed=14271 avg_init_ms=13857.3 skipped_slots=24776 status_400050=14271 last_error="<main>: Error: kqp error Marker# PQ50 : Response {
+  SessionId: \"ydb://session/3?node_id=50002&id=M2YxMTJkMDUtOWQxN2QxYWItZGVlMGZlYzctNzg2YjgyMTI%3D\"
+  QueryIssues {
+    message: \"TxId: 562949953582924, NodeId: 50002, not enough compute actors resource.\"
+    severity: 1
+  }
+  TxMeta {
+    id: \"01m34ema383k59z34wqj4acsv6\"
+  }
+  EffectivePoolId: \"default\"
+}
+YdbStatus: OVERLOADED
+ConsumedRu: 1
+, code: 500001
+"
+elapsed_s=47.5 phase=opening started=22202 started_rps=534.8 initialized=3799 initialized_rps=0.0 pending=7137 retained=7637 init_failed=11266 closed=14568 avg_init_ms=13857.3 skipped_slots=25256 status_400050=14568 last_error="<main>: Error: kqp error Marker# PQ50 : Response {
+  SessionId: \"ydb://session/3?node_id=50002&id=NTQzNGU3NTAtNGE2YzA0MGQtN2Y1YWUzNWYtNjhlYTNjZTQ%3D\"
+  QueryIssues {
+    message: \"TxId: 281474976866537, NodeId: 50002, not enough compute actors resource.\"
+    severity: 1
+  }
+  TxMeta {
+    id: \"01m34emb6d2hm1ph6q8s5cspce\"
+  }
+  EffectivePoolId: \"default\"
+}
+YdbStatus: OVERLOADED
+ConsumedRu: 1
+, code: 500001
+"
+elapsed_s=48.5 phase=opening started=22703 started_rps=484.9 initialized=3799 initialized_rps=0.0 pending=7130 retained=7627 init_failed=11774 closed=15076 avg_init_ms=13857.3 skipped_slots=25776 status_400050=15076 last_error="<main>: Error: kqp error Marker# PQ51 : { Response { SessionId: \"ydb://session/3?node_id=50002&id=ZWQwZDFhOGMtMzgzNzk3NDktYTc0ZGY4MWYtZWU4YjhiOTg%3D\" QueryIssues { message: \"TxId: 844424930292206, NodeId: 50002, not enough compute actors resource.\" severity: 1 } TxMeta { id: \"01m34ekzkp5v6vmmfnjd8vn2e6\" } EffectivePoolId: \"default\" } YdbStatus: OVERLOADED ConsumedRu: 1 }, code: 500001
+"
+elapsed_s=49.5 phase=opening started=23257 started_rps=536.3 initialized=3799 initialized_rps=0.0 pending=6937 retained=7517 init_failed=12521 closed=15824 avg_init_ms=13857.3 skipped_slots=26250 status_400050=15824 last_error="<main>: Error: kqp error Marker# PQ50 : Response {
+  SessionId: \"ydb://session/3?node_id=50002&id=ZjJiMDRiN2UtYzc5ZDQ1ZjktOGJmNjM4NTktZmNlM2M3ZGM%3D\"
+  QueryIssues {
+    message: \"TxId: 562949953588447, NodeId: 50002, not enough compute actors resource.\"
+    severity: 1
+  }
+  TxMeta {
+    id: \"01m34emd7ee6bwknanf880p827\"
+  }
+  EffectivePoolId: \"default\"
+}
+YdbStatus: OVERLOADED
+ConsumedRu: 1
+, code: 500001
+"
+elapsed_s=50.6 phase=opening started=23756 started_rps=481.6 initialized=3799 initialized_rps=0.0 pending=6822 retained=7319 init_failed=13135 closed=16437 avg_init_ms=13857.3 skipped_slots=26784 status_400050=16437 last_error="<main>: Error: kqp error Marker# PQ50 : Response {
+  SessionId: \"ydb://session/3?node_id=50002&id=ODVjMjk4NmQtNTkxN2Q5ZDAtOTQ2OWY1YjgtOTA3OGJhOGM%3D\"
+  QueryIssues {
+    message: \"TxId: 281474976878088, NodeId: 50002, not enough compute actors resource.\"
+    severity: 1
+  }
+  TxMeta {
+    id: \"01m34eme637mzzgqxjkvg13z13\"
+  }
+  EffectivePoolId: \"default\"
+}
+YdbStatus: OVERLOADED
+ConsumedRu: 1
+, code: 500001
+"
+elapsed_s=51.6 phase=opening started=24318 started_rps=540.5 initialized=3799 initialized_rps=0.0 pending=6625 retained=7122 init_failed=13894 closed=17196 avg_init_ms=13857.3 skipped_slots=27263 status_400050=17196 last_error="<main>: Error: kqp error Marker# PQ51 : { Response { SessionId: \"ydb://session/3?node_id=50002&id=MjkxZjU5YzgtYmM3YmZlNzEtZmE2ZmM0MjUtZTMzZDQ0NTE%3D\" QueryIssues { message: \"TxId: 844424930305018, NodeId: 50002, not enough compute actors resource.\" severity: 1 } TxMeta { id: \"01m34em3yh1ga4cdk8vj8vxhte\" } EffectivePoolId: \"default\" } YdbStatus: OVERLOADED ConsumedRu: 1 }, code: 500001
+"
+elapsed_s=52.7 phase=opening started=24902 started_rps=560.1 initialized=3799 initialized_rps=0.0 pending=6377 retained=6876 init_failed=14726 closed=18028 avg_init_ms=13857.3 skipped_slots=27716 status_400050=18028 last_error="<main>: Error: kqp error Marker# PQ51 : { Response { SessionId: \"ydb://session/3?node_id=50002&id=ZTljZjU5ZTQtY2YyZDY5ODMtNzMzZTg5MTAtZWZmN2M0OTU%3D\" QueryIssues { message: \"TxId: 562949953600676, NodeId: 50002, not enough compute actors resource.\" severity: 1 } TxMeta { id: \"01m34em50b7wdmk6xgqt3mf6jf\" } EffectivePoolId: \"default\" } YdbStatus: OVERLOADED ConsumedRu: 1 }, code: 500001
+"
+elapsed_s=52.8 phase=holding started=25000 started_rps=525.7 initialized=3799 initialized_rps=0.0 pending=6348 retained=6845 init_failed=14853 closed=18155 avg_init_ms=13857.3 skipped_slots=27837 status_400050=18155 last_error="<main>: Error: kqp error Marker# PQ50 : Response {
+  SessionId: \"ydb://session/3?node_id=50002&id=YjUwZWQ2OTMtZWJkYWRmNjItM2FjOTk5YTgtYTVjM2UzYjU%3D\"
+  QueryIssues {
+    message: \"TxId: 281474976886714, NodeId: 50002, not enough compute actors resource.\"
+    severity: 1
+  }
+  TxMeta {
+    id: \"01m34emgnx0xkf6qdrmx4yvas2\"
+  }
+  EffectivePoolId: \"default\"
+}
+YdbStatus: OVERLOADED
+ConsumedRu: 1
+, code: 500001
+"
+elapsed_s=53.9 phase=holding started=25000 started_rps=0.0 initialized=3799 initialized_rps=0.0 pending=5706 retained=6209 init_failed=15495 closed=18797 avg_init_ms=13857.3 skipped_slots=27837 status_400050=18797 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=55.0 phase=holding started=25000 started_rps=0.0 initialized=3817 initialized_rps=16.7 pending=3644 retained=4159 init_failed=17539 closed=20841 avg_init_ms=13895.4 skipped_slots=27837 status_400050=20841 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=56.0 phase=holding started=25000 started_rps=0.0 initialized=4033 initialized_rps=214.6 pending=3342 retained=4073 init_failed=17625 closed=20927 avg_init_ms=14421.1 skipped_slots=27837 status_400050=20927 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=57.0 phase=holding started=25000 started_rps=0.0 initialized=4234 initialized_rps=200.6 pending=3112 retained=4045 init_failed=17653 closed=20956 avg_init_ms=14912.9 skipped_slots=27837 status_400050=20956 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=58.0 phase=holding started=25000 started_rps=0.0 initialized=4258 initialized_rps=23.6 pending=2804 retained=3765 init_failed=17938 closed=21240 avg_init_ms=14936.7 skipped_slots=27837 status_400050=21240 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=59.0 phase=holding started=25000 started_rps=0.0 initialized=4300 initialized_rps=41.2 pending=2464 retained=3468 init_failed=18236 closed=21538 avg_init_ms=14987.7 skipped_slots=27837 status_400050=21538 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=60.0 phase=holding started=25000 started_rps=0.0 initialized=4566 initialized_rps=265.4 pending=2187 retained=3451 init_failed=18247 closed=21549 avg_init_ms=15277.9 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=61.0 phase=holding started=25000 started_rps=0.0 initialized=4895 initialized_rps=329.0 pending=1858 retained=3451 init_failed=18247 closed=21549 avg_init_ms=15609.4 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=62.0 phase=holding started=25000 started_rps=0.0 initialized=5212 initialized_rps=317.0 pending=1541 retained=3451 init_failed=18247 closed=21549 avg_init_ms=15919.1 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=63.0 phase=holding started=25000 started_rps=0.0 initialized=5534 initialized_rps=322.0 pending=1219 retained=3451 init_failed=18247 closed=21549 avg_init_ms=16220.5 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=64.0 phase=holding started=25000 started_rps=0.0 initialized=5896 initialized_rps=361.9 pending=857 retained=3451 init_failed=18247 closed=21549 avg_init_ms=16452.7 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=65.0 phase=holding started=25000 started_rps=0.0 initialized=6170 initialized_rps=274.0 pending=583 retained=3451 init_failed=18247 closed=21549 avg_init_ms=16586.9 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=66.0 phase=holding started=25000 started_rps=0.0 initialized=6360 initialized_rps=190.0 pending=393 retained=3451 init_failed=18247 closed=21549 avg_init_ms=16653.8 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=67.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=392.9 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=68.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=69.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=70.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=71.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=72.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=73.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=74.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=75.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=76.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=77.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=78.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=79.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=80.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=81.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=82.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=83.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=84.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=85.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=86.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=87.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=88.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=89.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=90.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=91.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=92.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=93.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=94.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=95.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=96.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=97.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=98.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=99.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=100.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=101.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=102.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=103.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=104.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=105.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=106.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=107.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=108.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=109.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=110.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=111.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=112.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=113.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=114.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=115.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=116.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=117.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=118.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=119.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=120.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=121.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=122.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=123.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=124.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=125.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=126.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=127.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=128.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=129.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=130.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=131.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=132.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=133.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=134.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=135.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=136.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=137.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=138.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=139.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=140.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=141.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=142.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=143.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=144.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=145.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=146.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=147.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=148.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=149.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=150.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=151.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=152.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=153.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=154.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=155.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=156.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=157.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=158.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=159.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=160.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=161.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=162.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=163.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=164.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=165.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=166.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=167.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=168.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=169.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=170.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=171.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=172.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=173.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=174.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=175.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=176.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=177.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=178.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=179.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=180.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=181.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=182.0 phase=holding started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+elapsed_s=182.9 phase=final started=25000 started_rps=0.0 initialized=6753 initialized_rps=0.0 pending=0 retained=3451 init_failed=18247 closed=21549 avg_init_ms=17101.3 skipped_slots=27837 status_400050=21549 last_error="<main>: Error: pipe to partition's 0 tablet is dead #1, code: 500027
+"
+Closing 3451 retained sessions

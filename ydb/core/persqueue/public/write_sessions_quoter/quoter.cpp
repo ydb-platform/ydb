@@ -80,8 +80,6 @@ void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvNotify::TPtr& ev, c
             TDuration::MilliSeconds(QUOTA_WINDOW_MS),
             ctx.Now())
     );
-
-    ctx.Send(ev->Sender, new TEvWriteSessionsQuoter::TEvQuoterInitialized());
 }
 
 void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvAcquireQuota::TPtr& ev, const TActorContext& ctx) {

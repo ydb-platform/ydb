@@ -11,6 +11,7 @@ RECURSE(
     s3_bench
     s3_recipe
     token_accessor_mock
+    topic_write_sessions_load
     ydb_serializable
     ydb_serializable/replay
 )

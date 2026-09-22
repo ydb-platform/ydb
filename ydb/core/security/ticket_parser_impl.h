@@ -1904,6 +1904,10 @@ private:
     }
 
 protected:
+    bool UseAccessServiceAuthenticationOnly() const {
+        return false;
+    }
+
     auto ParseTokenType(const TStringBuf tokenType) const {
         if (tokenType == "Login") {
             if (UseLoginProvider) {
@@ -1991,7 +1995,7 @@ protected:
     void InitTokenRecord(const TString& key, TTokenRecord& record, TInstant) {
         if (GetDerived()->CanInitAccessServiceToken(record)) {
             if (AccessServiceEnabled()) {
-                if (record.Permissions) {
+                if (record.Permissions && !GetDerived()->UseAccessServiceAuthenticationOnly()) {
                     RequestAccessServiceAuthorization(key, record);
                 } else {
                     RequestAccessServiceAuthentication(key, record);
@@ -2275,7 +2279,7 @@ protected:
         }
         if (CanRefreshAccessServiceTicket(record)) {
             GetDerived()->ResetTokenRecord(record);
-            if (record.Permissions) {
+            if (record.Permissions && !GetDerived()->UseAccessServiceAuthenticationOnly()) {
                 RequestAccessServiceAuthorization(key, record);
             } else {
                 RequestAccessServiceAuthentication(key, record);

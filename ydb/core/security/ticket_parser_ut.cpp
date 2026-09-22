@@ -187,6 +187,41 @@ private:
     }
 };
 
+// Parser with UseAccessServiceAuthenticationOnly() enabled.
+// Used to verify that with this flag the parser asks Access Service for
+// authentication even when the request comes with permissions.
+class TTicketParserAuthenticationOnly : public TTicketParserImpl<TTicketParserAuthenticationOnly> {
+    using TBase = TTicketParserImpl<TTicketParserAuthenticationOnly>;
+    using TBase::TBase;
+    friend TBase;
+
+public:
+    enum class ETokenType {
+        Unknown,
+        Unsupported,
+        AccessService,
+        NebiusAccessService,
+        Builtin,
+        Login,
+        ApiKey,
+        Certificate,
+        ExternalIdp,
+    };
+
+    using TTokenRecord = TBase::TTokenRecordBase;
+
+    bool UseAccessServiceAuthenticationOnly() const {
+        return true;
+    }
+
+private:
+    THashMap<TString, TTokenRecord> UserTokens;
+
+    THashMap<TString, TTokenRecord>& GetUserTokens() {
+        return UserTokens;
+    }
+};
+
 } // namespace
 
 } // namespace NKikimr
@@ -1218,6 +1253,63 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(NebiusAccessServiceAuthenticationOk) {
         AccessServiceAuthenticationOk<NKikimr::TNebiusAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(AccessServiceAuthenticationOnlyIgnoresAuthorizeEntries) {
+        using namespace Tests;
+
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 accessServicePort = tp.GetPort(4284);
+        TString accessServiceEndpoint = "localhost:" + ToString(accessServicePort);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        SetUseAccessService<NKikimr::TAccessServiceMockV2>(authConfig);
+        authConfig.SetUseAccessServiceTLS(false);
+        authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
+        authConfig.SetUseStaff(false);
+        auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceV2Interface(true);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = [](const TTicketParserSettings& s) -> IActor* {
+            return new TTicketParserAuthenticationOnly(s);
+        };
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        TClient client(settings);
+        client.InitRootScheme();
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        NKikimr::TAccessServiceMockV2 accessServiceMock;
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
+        std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
+
+        TActorId sender = runtime->AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+        const TString userToken = "user1";
+        const TVector<std::pair<TString, TString>> dbAttrs = {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}};
+        const TVector<std::pair<TString, TString>> gizmoAttrs = {{"gizmo_id", "gizmo"}};
+
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = "Bearer " + userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {TEvAuthorizeTicket::ToPermissions({"something.read"}), dbAttrs},
+                {TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get"}), gizmoAttrs},
+            },
+        })), 0);
+
+        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT_C(!result->HasError(), result->Error);
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), userToken + "@as");
+        UNIT_ASSERT_C(!result->Token->IsExist("something.read@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->Token->IsExist("ydb.developerApi.get-gizmo@as"), result->Token->ShortDebugString());
     }
 
     Y_UNIT_TEST(CacheHitTraceContextIsUsedForAccessServiceRefresh) {

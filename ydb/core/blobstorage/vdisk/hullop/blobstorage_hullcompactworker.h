@@ -8,6 +8,9 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/blobstorage_hullgcmap.h>
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+// TEvHugeAllocateSlots{,Result}: this header is included before the huge one by
+// blobstorage_hullcompact.h, so it cannot rely on picking them up along the way.
+#include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <ydb/core/base/appdata.h>
 
 namespace NKikimr {
@@ -142,6 +145,25 @@ namespace NKikimr {
 
         // maximum number of chunks we use per SST
         ui32 ChunksToUse;
+
+        // Total output this job was admitted for, taken in one go before anything is
+        // written and never exceeded afterwards. Reserving a chunk at a time lets several
+        // VDisks on one PDisk interleave their allocations and collectively overrun the
+        // space each of them was budgeted, and it lets a job get half way through and then
+        // find there is no room left for the rest of it. Zero means the old, incremental
+        // behaviour, which is what Fresh compaction keeps: it cannot be refused.
+        ui32 ChunksToPrereserve = 0;
+
+        // The grant is spent and a writer still wants a chunk. The estimate that sized the
+        // grant was too low -- an extra sst split, say -- and the honest answer is to give
+        // up rather than quietly allocate past what the broker handed out.
+        bool OutOfBudget = false;
+        // The heap-growth allowance carried out of the grant was too small, as opposed to
+        // the chunk budget being too small. Retrying needs a bigger allowance; a bigger
+        // chunk budget would not help.
+        bool OutOfHeapAllowance = false;
+        // Chunks this job may still cause the huge heap to grow by.
+        ui32 HeapChunkAllowance = 0;
 
         // chunks obtained from TEvChunkReserve and not yet handed to a writer; these are ours
         // to recycle, and nothing owned by anyone else may enter this deque
@@ -307,7 +329,9 @@ namespace NKikimr {
                               ui64 lastLsn,
                               TDuration restoreDeadline,
                               std::optional<TKey> partitionKey,
-                              bool allowGarbageCollection)
+                              bool allowGarbageCollection,
+                              ui32 chunksToPrereserve = 0,
+                              ui32 heapChunkAllowance = 0)
             : HullCtx(std::move(hullCtx))
             , PDiskCtx(std::move(pdiskCtx))
             , HugeBlobCtx(std::move(hugeBlobCtx))
@@ -338,6 +362,15 @@ namespace NKikimr {
                 ChunksToUse = HullCtx->HullSstSizeInChunksLevel;
                 ReadsInFlight = &LevelIndex->HullCompReadsInFlight;
                 WritesInFlight = &LevelIndex->HullCompWritesInFlight;
+            }
+            HeapChunkAllowance = heapChunkAllowance;
+            if (chunksToPrereserve) {
+                // The broker's number is a hard output budget.  Do not silently raise it
+                // to one SST: doing so would let this VDisk reserve more than it was
+                // admitted for.  The broker rejects a sub-SST request through
+                // MinChunksNeeded; if a malformed/old broker still grants one, the
+                // worker reports OutOfBudget before reserving anything.
+                ChunksToPrereserve = chunksToPrereserve;
             }
 
             MaxInFlightWrites = GetMaxInFlightWrites();
@@ -411,8 +444,11 @@ namespace NKikimr {
                                 // generate request for chunk reservation and try again
                                 if (auto msg = CheckForReservation()) {
                                     msgsForYard.push_back(std::move(msg));
-                                } else {
-                                    Y_VERIFY_S(ChunkReservePending, HullCtx->VCtx->VDiskLogPrefix);
+                                } else if (!ChunkReservePending) {
+                                    // Nothing outstanding and nothing left to ask for: the
+                                    // job needs more output than it was admitted for.
+                                    Y_VERIFY_S(ChunksToPrereserve, HullCtx->VCtx->VDiskLogPrefix);
+                                    OutOfBudget = true;
                                 }
                                 return false;
 
@@ -560,6 +596,15 @@ namespace NKikimr {
 
         void Apply(TEvHugeAllocateSlotsResult *msg) {
             Y_DEBUG_ABORT_UNLESS(State == EState::WaitForSlotAllocation);
+            if (!msg->Success) {
+                // The heap could not satisfy this batch within the allowance this job
+                // carried. Abort so the actor can come back with a larger one; growing the
+                // heap here would spend chunks the broker never granted.
+                OutOfBudget = true;
+                OutOfHeapAllowance = msg->HeapAllowanceExceeded;
+                State = EState::WaitForPendingRequests;
+                return;
+            }
             State = EState::TryProcessItem;
             Y_VERIFY_S(msg->Locations.size() == msg->IsStripe.size(), HullCtx->VCtx->VDiskLogPrefix);
             if constexpr (LogoBlobs) {
@@ -586,6 +631,14 @@ namespace NKikimr {
         const TDiskPartVec& GetAllocatedHugeBlobs() const { return AllocatedHugeBlobs; }
         const TDiskPartVec& GetAllocatedStripeBlobs() const { return AllocatedStripeBlobs; }
         const TDeque<TChunkIdx>& GetReservedChunks() const { return ReservedChunks; }
+
+        bool IsOutOfBudget() const { return OutOfBudget; }
+        bool IsOutOfHeapAllowance() const { return OutOfHeapAllowance; }
+        // What the huge keeper may still grow the heap by for this job, or Unlimited when
+        // this job carries no grant at all.
+        ui32 GetHeapChunkAllowance() const {
+            return ChunksToPrereserve ? HeapChunkAllowance : TEvHugeAllocateSlots::Unlimited;
+        }
         const TDeque<TChunkIdx>& GetAllocatedChunks() const { return AllocatedChunks; }
 
     private:
@@ -859,15 +912,35 @@ namespace NKikimr {
         }
 
         std::unique_ptr<NPDisk::TEvChunkReserve> CheckForReservation() {
-            if (ReservedChunks.size() + ChunkReservePending >= ChunksToUse) {
+            // Two requirements pull in opposite directions. ChunksToUse is the size of one
+            // sst: the writer draws that many off the front of ReservedChunks, so the
+            // window has to be full for the next sst to start. ChunksToPrereserve is the
+            // whole job's admitted output, counted against AllocatedChunks -- everything
+            // ever reserved, whether or not a writer has since taken it.
+            //
+            // The first ask covers the whole grant in one all-or-nothing request, which is
+            // what makes it exclusive: several VDisks reserving a chunk at a time
+            // interleave and collectively overrun the space each was budgeted. After that
+            // the grant is a hard cap. Refilling the per-sst window past it would put the
+            // overcommit back, just later in the job, so when the cap is reached this
+            // returns nothing and the job aborts instead.
+            const ui64 reservedOrPending = ReservedChunks.size() + ChunkReservePending;
+            const ui64 takenOrPending = AllocatedChunks.size() + ChunkReservePending;
+            ui64 num = reservedOrPending < ChunksToUse ? ChunksToUse - reservedOrPending : 0;
+            if (ChunksToPrereserve) {
+                // Whatever the window happens to want, take the rest of the grant -- all of
+                // it on the first ask -- and nothing beyond it.
+                num = ChunksToPrereserve > takenOrPending ? ChunksToPrereserve - takenOrPending : 0;
+            }
+            if (!num) {
                 return nullptr;
             }
-            const ui32 num = ChunksToUse - (ReservedChunks.size() + ChunkReservePending);
             ChunkReservePending += num;
             // Compaction output: this is what gives space back, so it is not held behind
             // the static group reserve the way a write of newly accepted data is.
-            return std::make_unique<NPDisk::TEvChunkReserve>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num,
-                /*forHousekeeping=*/true);
+            return std::make_unique<NPDisk::TEvChunkReserve>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
+                ui32(num), /*forHousekeeping=*/true, /*consumesFreshHold=*/IsFresh,
+                /*allowBlackOvercommit=*/!IsFresh && !LogoBlobs);
         }
 
         ui32 GetMaxInFlightWrites() {

@@ -36,6 +36,14 @@ namespace NKikimr {
         TDiskPartVec AllocatedStripeBlobs;
         // was the compaction process aborted by some reason?
         bool Aborted = false;
+        // the abort was a refused chunk reservation, i.e. the space this job was admitted
+        // for was not there; the broker needs to know so it stops handing out that number
+        bool OutOfSpace = false;
+        // the abort was the job exhausting the grant it was admitted for, which means the
+        // output forecast was too low rather than the disk being full
+        bool OutOfBudget = false;
+        // the budget that ran out was the heap-growth allowance, not the chunk budget
+        bool OutOfHeapAllowance = false;
         bool FreshCompaction = false;
 
         THullChange() = default;
@@ -90,6 +98,9 @@ namespace NKikimr {
         const TActorId HugeKeeperId;
 
         bool IsAborting = false;
+        bool IsOutOfSpace = false;
+        bool IsOutOfBudget = false;
+        bool IsOutOfHeapAllowance = false;
         ui32 PendingResponses = 0;
 
         //  Compaction throttler
@@ -144,6 +155,21 @@ namespace NKikimr {
             // is finished or not
             std::vector<ui32> *slotsToAllocate = nullptr;
             const bool done = Worker.MainCycle(MsgsForYard, &slotsToAllocate);
+            if (Worker.IsOutOfBudget()) {
+                // The job wants more output than the compaction broker admitted it for.
+                // Allocating past the grant is what the grant exists to prevent, so give up
+                // the same way a refused reservation does: everything this job took goes
+                // back, the token is released as failed, and the work stays pending.
+                YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP,
+                    "Compaction aborted: output exceeds the granted chunk budget",
+                    {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix});
+                MsgsForYard.clear();
+                IsAborting = true;
+                IsOutOfBudget = true;
+                IsOutOfHeapAllowance = Worker.IsOutOfHeapAllowance();
+                FinalizeIfAborting(ctx);
+                return;
+            }
             // check if there are messages we have for yard
             for (std::unique_ptr<IEventBase>& msg : MsgsForYard) {
                 ui64 bytes = GetMsgSize(msg);
@@ -155,7 +181,10 @@ namespace NKikimr {
             MsgsForYard.clear();
             // send slots to allocate to huge keeper, if any
             if (slotsToAllocate) {
-                ctx.Send(HugeKeeperId, new TEvHugeAllocateSlots(std::move(*slotsToAllocate)));
+                // A brokered compaction may grow the heap only by the allowance carried out
+                // of its grant, so heap chunks it causes are accounted for like its own.
+                ctx.Send(HugeKeeperId, new TEvHugeAllocateSlots(std::move(*slotsToAllocate),
+                    Worker.GetHeapChunkAllowance()));
             }
             // when done, continue with other state
             if (done) {
@@ -237,7 +266,14 @@ namespace NKikimr {
         void HandleYardResponse(NPDisk::TEvChunkReserveResult::TPtr& ev, const TActorContext& ctx) {
             --PendingResponses;
             if (ev->Get()->Status == NKikimrProto::OUT_OF_SPACE) {
+                // This reply carries what PDisk thinks the disk looks like now, and this is
+                // the one path that does not run it through CHECK_PDISK_RESPONSE. Record it
+                // before giving up: the number this VDisk is caching is demonstrably wrong,
+                // and it is the number it will quote to the compaction broker next time.
+                HullCtx->VCtx->GetOutOfSpaceState().ObserveLocalChunk(ev->Get()->StatusFlags);
+                HullCtx->VCtx->GetOutOfSpaceState().ObserveSpaceHeadroom(ev->Get()->Headroom);
                 IsAborting = true;
+                IsOutOfSpace = true;
                 const bool flag = FinalizeIfAborting(ctx);
                 Y_ABORT_UNLESS(flag);
                 return;
@@ -319,6 +355,9 @@ namespace NKikimr {
             msg->SegVec = IsAborting ? nullptr : std::move(Result);
             msg->FreshSegment = IsAborting ? nullptr : FreshSegment;
             msg->Aborted = IsAborting;
+            msg->OutOfSpace = IsOutOfSpace;
+            msg->OutOfBudget = IsOutOfBudget;
+            msg->OutOfHeapAllowance = IsOutOfHeapAllowance;
             msg->FreshCompaction = static_cast<bool>(FreshSegment);
 
             ctx.Send(LIActor, msg.release());
@@ -353,7 +392,9 @@ namespace NKikimr {
                         TDuration restoreDeadline,
                         std::optional<TKey> partitionKey,
                         bool allowGarbageCollection,
-                        bool useThrottle)
+                        bool useThrottle,
+                        ui32 chunksToPrereserve = 0,
+                        ui32 heapChunkAllowance = 0)
             : TActorBootstrapped<TThis>()
             , HullCtx(std::move(hullCtx))
             , PDiskCtx(rtCtx->PDiskCtx)
@@ -365,7 +406,8 @@ namespace NKikimr {
             , Hmp(CreateHandoffMap<TKey, TMemRec>(HullCtx, rtCtx->RunHandoff, rtCtx->SkeletonId))
             , It(it)
             , Worker(HullCtx, PDiskCtx, std::move(hugeBlobCtx), minHugeBlobInBytes, rtCtx->LevelIndex, it,
-                static_cast<bool>(FreshSegment), firstLsn, lastLsn, restoreDeadline, partitionKey, allowGarbageCollection)
+                static_cast<bool>(FreshSegment), firstLsn, lastLsn, restoreDeadline, partitionKey,
+                allowGarbageCollection, chunksToPrereserve, heapChunkAllowance)
             , CompactionID(TAppData::RandomProvider->GenRand64())
             , SkeletonId(rtCtx->SkeletonId)
             , HugeKeeperId(rtCtx->HugeKeeperId)

@@ -71,6 +71,14 @@ namespace NKikimr {
             return static_cast<ui64>(AtomicGet(LocalSpaceObservationGeneration));
         }
 
+        void PublishFreshDebtChunks(ui32 chunks) {
+            AtomicSet(PublishedFreshDebtChunks, static_cast<TAtomicBase>(chunks));
+        }
+
+        ui32 GetPublishedFreshDebtChunks() const {
+            return static_cast<ui32>(AtomicGet(PublishedFreshDebtChunks));
+        }
+
         void UpdateLocalFreeSpaceShare(ui64 freeSpaceShare24bit) {
             AtomicSet(ApproximateFreeSpaceShare24bit, freeSpaceShare24bit);
         }
@@ -288,6 +296,8 @@ namespace NKikimr {
         TAtomic LocalUsedChunks = 0;
         // VDisk chunks limit in shared free space mode
         TAtomic LocalTotalChunks = 0;
+        // Chunks Fresh is expected to allocate, published for the PDisk space poll.
+        TAtomic PublishedFreshDebtChunks = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////

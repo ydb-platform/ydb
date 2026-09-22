@@ -8,6 +8,7 @@
 #include "blobstorage_pdisk_quota_record.h"
 #include "blobstorage_pdisk_util_space_color.h"
 
+#include <util/generic/hash.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/queue.h>
 
@@ -977,6 +978,41 @@ private:
         const i64 floor = Max<i64>(AtomicGet(StaticReserveFreeTotal) - GetOwnerStaticReserveFree(owner), 0);
         return Min(floor, SharedQuota->GetAllocatableFree());
     }
+
+public:
+    // Chunks a VDisk says its Fresh compaction will need and has not reserved yet.
+    // Level-compaction reserves are refused while this debt is still outstanding.
+    void SetFreshDebt(TOwner owner, ui32 chunks) {
+        if (!IsOwnerUser(owner)) {
+            return;
+        }
+        if (chunks == 0) {
+            FreshDebtChunks.erase(owner);
+        } else {
+            FreshDebtChunks[owner] = chunks;
+        }
+    }
+
+    ui32 GetFreshDebt(TOwner owner) const {
+        const auto it = FreshDebtChunks.find(owner);
+        return it == FreshDebtChunks.end() ? 0 : it->second;
+    }
+
+    ui64 TotalFreshDebt() const {
+        ui64 total = 0;
+        for (const auto& item : FreshDebtChunks) {
+            total += item.second;
+        }
+        return total;
+    }
+
+    void ConsumeFreshDebt(TOwner owner, ui32 chunks) {
+        const ui32 current = GetFreshDebt(owner);
+        SetFreshDebt(owner, current > chunks ? current - chunks : 0);
+    }
+
+private:
+    THashMap<TOwner, ui32> FreshDebtChunks;
 };
 
 } // NPDisk

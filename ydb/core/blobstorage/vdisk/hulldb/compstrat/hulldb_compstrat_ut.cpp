@@ -2,6 +2,8 @@
 #include "hulldb_compstrat_emergency.h"
 #include "hulldb_compstrat_explicit.h"
 #include "hulldb_compstrat_ratio.h"
+#include "hulldb_compstrat_space.h"
+#include "hulldb_compstrat_squeeze.h"
 #include <util/stream/null.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/test/testhull_index.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_ut.h>
@@ -22,6 +24,8 @@ namespace NKikimr {
         using TStrategy = ::NKikimr::NHullComp::TStrategy<TKeyLogoBlob, TMemRecLogoBlob>;
         using TStrategyEmergency = ::NKikimr::NHullComp::TStrategyEmergency<TKeyLogoBlob, TMemRecLogoBlob>;
         using TStrategyExplicit = ::NKikimr::NHullComp::TStrategyExplicit<TKeyLogoBlob, TMemRecLogoBlob>;
+        using TStrategyFreeSpace = ::NKikimr::NHullComp::TStrategyFreeSpace<TKeyLogoBlob, TMemRecLogoBlob>;
+        using TStrategySqueeze = ::NKikimr::NHullComp::TStrategySqueeze<TKeyLogoBlob, TMemRecLogoBlob>;
         using TTask = ::NKikimr::NHullComp::TTask<TKeyLogoBlob, TMemRecLogoBlob>;
         using TUtils = ::NKikimr::NHullComp::TUtils<TKeyLogoBlob, TMemRecLogoBlob>;
         using TLeveledSstsIterator = TLeveledSsts<TKeyLogoBlob, TMemRecLogoBlob>::TIterator;
@@ -364,8 +368,93 @@ namespace NKikimr {
             AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::DelSst);
         }
 
-        // Whatever picked the job, it has to say what it will cost: that number is what a
-        // later admission step can hand out, and what the job can reserve from PDisk.
+        // An sst whose huge data is mostly garbage, so TStrategyFreeSpace wants to squeeze
+        // it, and whose surviving index/inplaced data needs `outputChunks` chunks to write.
+        NHullComp::TSstRatioPtr SqueezableRatio(ui64 keepBytes, ui64 hugeGarbage) {
+            auto ratio = MakeIntrusive<NHullComp::TSstRatio>();
+            ratio->IndexItemsTotal = 1;
+            ratio->IndexItemsKeep = 1;
+            ratio->InplacedDataTotal = keepBytes;
+            ratio->InplacedDataKeep = keepBytes;
+            ratio->HugeDataTotal = hugeGarbage;
+            ratio->HugeDataKeep = 0;
+            return ratio;
+        }
+
+        // TStrategyFreeSpace used to be the one ActCompactSsts producer that ignored the
+        // budget entirely: it would start a job whose output the VDisk was never going to be
+        // allowed to allocate, which aborts and gets reselected for ever.
+        Y_UNIT_TEST(FreeSpaceYieldsWhenOutputDoesNotFitTheBudget) {
+            TSynthHull hull(17);
+            const ui64 chunkSize = hull.Ctx.GetHullCtx()->ChunkSize;
+            hull.PutLevel(hull.LastLevelIdx(),
+                hull.MakeSst(1, 1, 1, 10, 100, SqueezableRatio(2 * chunkSize, 3 * chunkSize)));
+
+            auto snap = hull.Ds->GetIndexSnapshot();
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, TInstant::Seconds(0), {}};
+            params.FreeChunksBudget = 1;
+
+            TTask task;
+            TStrategyFreeSpace tight(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
+            AssertAction(tight.Select(), NHullComp::ActNothing);
+        }
+
+        Y_UNIT_TEST(FreeSpaceSqueezesWhenTheBudgetAllowsIt) {
+            TSynthHull hull(17);
+            const ui64 chunkSize = hull.Ctx.GetHullCtx()->ChunkSize;
+            hull.PutLevel(hull.LastLevelIdx(),
+                hull.MakeSst(1, 1, 1, 10, 100, SqueezableRatio(2 * chunkSize, 3 * chunkSize)));
+
+            auto snap = hull.Ds->GetIndexSnapshot();
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, TInstant::Seconds(0), {}};
+            params.FreeChunksBudget = Max<ui32>();
+
+            TTask task;
+            TStrategyFreeSpace roomy(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
+            AssertAction(roomy.Select(), NHullComp::ActCompactSsts);
+            UNIT_ASSERT_VALUES_EQUAL(CountSstsToDelete(task), 1u);
+        }
+
+        // Same gap in the squeeze strategy, except that it may skip an sst that does not fit
+        // and keep looking: a smaller stale one further down the scan may still fit.
+        Y_UNIT_TEST(SqueezeSkipsSstsThatDoNotFitTheBudget) {
+            TSynthHull hull(17);
+            const ui64 chunkSize = hull.Ctx.GetHullCtx()->ChunkSize;
+            hull.PutLevel(hull.LastLevelIdx(), hull.MakeSst(1, 1, 1, 10, 100, hull.KeepRatio(3 * chunkSize)));
+            hull.PutLevel(hull.LastLevelIdx(), hull.MakeSst(1, 2, 2, 11, 100, hull.KeepRatio(chunkSize / 4)));
+
+            auto snap = hull.Ds->GetIndexSnapshot();
+            const TInstant squeezeBefore = TInstant::Seconds(1);
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, squeezeBefore, {}};
+            params.FreeChunksBudget = 1;
+
+            TTask task;
+            TStrategySqueeze squeeze(snap.HullCtx, params, snap.LogoBlobsSnap, &task, squeezeBefore);
+            AssertAction(squeeze.Select(), NHullComp::ActCompactSsts);
+            // The big one was skipped; the small one was taken.
+            UNIT_ASSERT_VALUES_EQUAL(CountSstsToDelete(task), 1u);
+            TLeveledSstsIterator it(&task.GetSstsToDelete());
+            it.SeekToFirst();
+            UNIT_ASSERT_VALUES_EQUAL(it.Get().SstPtr->AllChunks.front(), 11u);
+        }
+
+        Y_UNIT_TEST(SqueezeYieldsWhenNothingFitsTheBudget) {
+            TSynthHull hull(17);
+            const ui64 chunkSize = hull.Ctx.GetHullCtx()->ChunkSize;
+            hull.PutLevel(hull.LastLevelIdx(), hull.MakeSst(1, 1, 1, 10, 100, hull.KeepRatio(3 * chunkSize)));
+
+            auto snap = hull.Ds->GetIndexSnapshot();
+            const TInstant squeezeBefore = TInstant::Seconds(1);
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, squeezeBefore, {}};
+            params.FreeChunksBudget = 1;
+
+            TTask task;
+            TStrategySqueeze squeeze(snap.HullCtx, params, snap.LogoBlobsSnap, &task, squeezeBefore);
+            AssertAction(squeeze.Select(), NHullComp::ActNothing);
+        }
+
+        // Whatever picked the job, it has to say what it will cost: that number is what the
+        // compaction broker hands out and what the job then reserves from PDisk.
         Y_UNIT_TEST(EmergencyPublishesItsMeasuredForecast) {
             TSynthHull hull(17);
             const ui64 keep = hull.Ctx.GetHullCtx()->ChunkSize / 3;
@@ -402,8 +491,8 @@ namespace NKikimr {
             UNIT_ASSERT(task.Forecast.Valid);
             UNIT_ASSERT_VALUES_EQUAL(task.Forecast.InputChunks, CountSstsToDelete(task));
             UNIT_ASSERT(task.Forecast.OutputChunks >= 1);
-            // The selection already trimmed itself to the budget, so the forecast does not
-            // ask for more than that budget.
+            // The selection already trimmed itself to the budget, so what it asks the broker
+            // for is something the broker can actually back.
             UNIT_ASSERT(task.Forecast.OutputChunks <= params.FreeChunksBudget);
         }
 

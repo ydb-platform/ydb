@@ -324,6 +324,12 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
         void Handle(NPDisk::TEvChunkReserveResult::TPtr &ev, const TActorContext &ctx) {
             if (ev->Get()->Status == NKikimrProto::OUT_OF_SPACE) {
+                // This reply is the one that skips CHECK_PDISK_RESPONSE, and it is the reply
+                // that carries the news. Record what PDisk just said before giving up: the
+                // heap's chunk growth is outside the compaction broker's budget, and this
+                // observation is what makes it show up in the headroom this VDisk reports.
+                HugeKeeperCtx->VCtx->GetOutOfSpaceState().ObserveLocalChunk(ev->Get()->StatusFlags);
+                HugeKeeperCtx->VCtx->GetOutOfSpaceState().ObserveSpaceHeadroom(ev->Get()->Headroom);
                 ctx.Send(ParentId, new TEvHullHugeChunkAllocated(SlotSize, false));
                 Die(ctx);
                 Span.EndOk();
@@ -1136,19 +1142,35 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             std::vector<ui32> BlobSizes;
             std::vector<TDiskPart> Result;
             THashMap<ui32, TDynBitMap> Pending;
+            // Chunks this task may still cause the heap to grow by. Decremented as chunk
+            // allocators are started on its behalf; at zero the task fails rather than
+            // reserving more than the compaction that sent it was admitted for.
+            ui32 MaxNewChunks = TEvHugeAllocateSlots::Unlimited;
 
             TAllocateSlotsTask(TEvHugeAllocateSlots::TPtr& ev)
                 : Sender(ev->Sender)
                 , Cookie(ev->Cookie)
                 , BlobSizes(std::move(ev->Get()->BlobSizes))
                 , Result(BlobSizes.size())
+                , MaxNewChunks(ev->Get()->MaxNewChunks)
             {}
+
+            bool MayGrowHeap() const {
+                return MaxNewChunks == TEvHugeAllocateSlots::Unlimited || MaxNewChunks > 0;
+            }
+
+            void NoteHeapGrowth() {
+                if (MaxNewChunks != TEvHugeAllocateSlots::Unlimited && MaxNewChunks) {
+                    --MaxNewChunks;
+                }
+            }
         };
 
         std::set<std::tuple<ui32, std::shared_ptr<TAllocateSlotsTask>>> SlotSizeToTask;
 
         void TryToFulfillTask(const std::shared_ptr<TAllocateSlotsTask>& task, ui32 slotSizeToProcess, const TActorContext& ctx) {
             bool done = true;
+            bool failed = false;
 
             auto processItem = [&](size_t index, TDynBitMap *pending) {
                 auto& result = task->Result[index];
@@ -1164,8 +1186,16 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                         Y_DEBUG_ABORT_UNLESS(pending->Get(index));
                         pending->Reset(index);
                     }
+                } else if (!task->MayGrowHeap()) {
+                    // A brokered compaction has spent the heap-growth allowance it carried
+                    // out of its grant. Roll back the slots taken for this batch and say so,
+                    // so the caller can come back with a bigger allowance rather than retry
+                    // the identical request for ever.
+                    failed = true;
+                    done = false;
                 } else {
                     if (AllocatingChunkPerSlotSize.insert(slotSize).second) {
+                        task->NoteHeapGrowth();
                         auto aid = ctx.RegisterWithSameMailbox(new THullHugeBlobChunkAllocator(HugeKeeperCtx,
                             State.Pers, {}, slotSize));
                         ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
@@ -1186,14 +1216,29 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 Y_VERIFY_S(it != task->Pending.end(), HugeKeeperCtx->VCtx->VDiskLogPrefix);
                 auto& pending = it->second;
                 Y_FOR_EACH_BIT(index, pending) {
-                    if (!processItem(index, &pending)) {
+                    if (failed || !processItem(index, &pending)) {
                         break;
                     }
                 }
             } else {
                 for (size_t i = 0; i < task->BlobSizes.size(); ++i) {
-                    processItem(i, nullptr);
+                    if (failed || !processItem(i, nullptr)) {
+                        break;
+                    }
                 }
+            }
+
+            if (failed) {
+                for (const TDiskPart& location : task->Result) {
+                    if (!location.Empty()) {
+                        const NHuge::THugeSlot slot = State.Pers->ResolveSlotInFlight(location);
+                        State.Pers->FreeBlob(slot.GetDiskPart());
+                        const bool deleted = State.Pers->DeleteSlotInFlight(slot);
+                        Y_VERIFY_S(deleted, HugeKeeperCtx->VCtx->VDiskLogPrefix);
+                    }
+                }
+                Send(task->Sender, new TEvHugeAllocateSlotsResult({}, {}, false, true), 0, task->Cookie);
+                return;
             }
 
             if (done) {
@@ -1205,7 +1250,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLHUGE, "THullHugeKeeper TryToFulfillTask",
                     {"VDiskLogPrefix", HugeKeeperCtx->VCtx->VDiskLogPrefix},
                     {"TEvHugeAllocateSlotsResult", FormatList(task->Result)});
-                Send(task->Sender, new TEvHugeAllocateSlotsResult(std::move(task->Result), std::move(isStripe)), 0,
+                Send(task->Sender, new TEvHugeAllocateSlotsResult(std::move(task->Result), std::move(isStripe), true), 0,
                     task->Cookie);
             }
         }

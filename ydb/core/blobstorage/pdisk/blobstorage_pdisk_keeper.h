@@ -168,6 +168,22 @@ public:
         return ChunkTracker.EstimateAllocationColor(owner, allocationSize, housekeeping, occupancy);
     }
 
+    void SetFreshDebt(TOwner owner, ui32 chunks) {
+        ChunkTracker.SetFreshDebt(owner, chunks);
+    }
+
+    ui32 GetFreshDebt(TOwner owner) const {
+        return ChunkTracker.GetFreshDebt(owner);
+    }
+
+    ui64 TotalFreshDebt() const {
+        return ChunkTracker.TotalFreshDebt();
+    }
+
+    void ConsumeFreshDebt(TOwner owner, ui32 chunks) {
+        ChunkTracker.ConsumeFreshDebt(owner, chunks);
+    }
+
     double GetPDiskUsage() const {
         i64 totalUsed = ChunkTracker.GetTotalUsed();
         i64 totalHardLimit = ChunkTracker.GetTotalHardLimit();

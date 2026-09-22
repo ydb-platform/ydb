@@ -80,6 +80,9 @@ namespace NKikimr {
         double Priority;
         TInstant RequestTime;
         ui64 RequestOrder;
+        ui32 RequestedChunks = 0;
+        ui32 ExpectedFreedChunks = 0;
+        ui32 ExpectedFreedHugeChunks = 0;
 
         TCompactionRequest(const TGroupId& groupId, const TVDiskIdShort& vDiskId, const TActorId actorId, const double priority, ui64 requestOrder)
             : Key(groupId, vDiskId, actorId)
@@ -88,6 +91,12 @@ namespace NKikimr {
             , RequestOrder(requestOrder)
         {}
 
+        // Chunks given back minus chunks taken. Huge-blob garbage counts: a squeeze that
+        // rewrites one index chunk and frees dead huge data is the job that makes room.
+        i64 NetChunks() const {
+            return i64(ExpectedFreedChunks) + i64(ExpectedFreedHugeChunks) - i64(RequestedChunks);
+        }
+
         TString ToString() const {
             TStringStream str;
             str << "{TCompactionRequest " << Key.ToString()
@@ -95,6 +104,9 @@ namespace NKikimr {
                 << " RequestTime# " << RequestTime.ToStringUpToSeconds()
                 << " WaitTimeMs# " << (TInstant::Now() - RequestTime).MilliSeconds()
                 << " RequestOrder# " << RequestOrder
+                << " RequestedChunks# " << RequestedChunks
+                << " ExpectedFreedChunks# " << ExpectedFreedChunks
+                << " ExpectedFreedHugeChunks# " << ExpectedFreedHugeChunks
                 << "}";
             return str.Str();
         }
@@ -180,10 +192,15 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void RequestCompactionToken(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, double priority) {
+        void RequestCompactionToken(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, double priority,
+                ui32 requestedChunks, ui32 expectedFreedChunks, ui32 expectedFreedHugeChunks) {
             TCompactionKey key(groupId, vdiskId, actorId);
 
-            PendingCompactions.insert_or_assign(key, TCompactionRequest(groupId, vdiskId, actorId, priority, NextRequestOrder++));
+            TCompactionRequest request(groupId, vdiskId, actorId, priority, NextRequestOrder++);
+            request.RequestedChunks = requestedChunks;
+            request.ExpectedFreedChunks = expectedFreedChunks;
+            request.ExpectedFreedHugeChunks = expectedFreedHugeChunks;
+            PendingCompactions.insert_or_assign(key, std::move(request));
         }
 
         void ReleaseCompactionToken(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, TCompactionTokenId token) {
@@ -240,6 +257,9 @@ namespace NKikimr {
 
             auto it = std::max_element(PendingCompactions.begin(), PendingCompactions.end(),
                     [](const auto& lhs, const auto& rhs) {
+                        if (lhs.second.NetChunks() != rhs.second.NetChunks()) {
+                            return lhs.second.NetChunks() < rhs.second.NetChunks();
+                        }
                         constexpr double epsilon = 1e-9;
                         if (std::abs(lhs.second.Priority - rhs.second.Priority) > epsilon) {
                             return lhs.second.Priority < rhs.second.Priority;
@@ -272,8 +292,10 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void RequestCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, double priority) {
-            return CompactionsPerPDisk[pdiskId].RequestCompactionToken(groupId, vdiskId, actorId, priority);
+        void RequestCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, double priority,
+                ui32 requestedChunks, ui32 expectedFreedChunks, ui32 expectedFreedHugeChunks) {
+            return CompactionsPerPDisk[pdiskId].RequestCompactionToken(groupId, vdiskId, actorId, priority,
+                requestedChunks, expectedFreedChunks, expectedFreedHugeChunks);
         }
 
         void ReleaseCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, TCompactionTokenId token) {
@@ -352,7 +374,9 @@ namespace NKikimr {
                 {"TEvCompactionTokenRequest", ev->Get()->ToString()});
 
             Mon->CompBrokerTokenRequests->Inc();
-            CompactionsPerPDisk.RequestCompactionToken(ev->Get()->PDiskId, ev->Get()->GroupId, ev->Get()->VDiskId, ev->Sender, ev->Get()->Ratio);
+            auto *msg = ev->Get();
+            CompactionsPerPDisk.RequestCompactionToken(msg->PDiskId, msg->GroupId, msg->VDiskId, ev->Sender, msg->Ratio,
+                msg->RequestedChunks, msg->ExpectedFreedChunks, msg->ExpectedFreedHugeChunks);
             TryToStartNewCompactions(ctx);
         }
 

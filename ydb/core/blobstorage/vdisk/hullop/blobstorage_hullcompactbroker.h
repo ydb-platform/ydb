@@ -14,13 +14,22 @@ namespace NKikimr {
         TGroupId GroupId;
         TVDiskIdShort VDiskId;
         double Ratio;
+        // What the job expects to allocate and to give back. Used only to choose which
+        // waiting compaction runs first. The chunks themselves are reserved from PDisk.
+        ui32 RequestedChunks = 0;
+        ui32 ExpectedFreedChunks = 0;
+        ui32 ExpectedFreedHugeChunks = 0;
 
         TEvCompactionTokenRequest(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, double ratio)
             : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Ratio(ratio) {}
 
         TString ToString() const {
             TStringStream str;
-            str << "{EvCompactionTokenRequest PDiskId# " << PDiskId << " GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << " Ratio# " << Ratio << "}";
+            str << "{EvCompactionTokenRequest PDiskId# " << PDiskId << " GroupId# " << GroupId
+                << " VDiskId# " << VDiskId.ToString() << " Ratio# " << Ratio
+                << " RequestedChunks# " << RequestedChunks
+                << " ExpectedFreedChunks# " << ExpectedFreedChunks
+                << " ExpectedFreedHugeChunks# " << ExpectedFreedHugeChunks << "}";
             return str.Str();
         }
     };

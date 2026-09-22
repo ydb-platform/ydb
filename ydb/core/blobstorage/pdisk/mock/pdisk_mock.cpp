@@ -33,6 +33,7 @@ struct TPDiskMockState::TImpl {
         ui64 LastLsn = 0;
         ui32 Weight = 0;
         ui32 GroupSizeInUnits = 0;
+        ui32 FreshDebtChunks = 0;
     };
 
     const ui32 NodeId;
@@ -826,7 +827,18 @@ public:
         Y_VERIFY(!Impl.CheckIsReadOnlyOwner(msg));
         auto res = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, GetStatusFlags());
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
-            if (Impl.GetNumFreeChunks() < msg->SizeChunks) {
+            ui64 debt = 0;
+            if (msg->ForHousekeeping) {
+                for (const auto& item : Impl.Owners) {
+                    debt += item.second.FreshDebtChunks;
+                }
+                if (msg->ConsumesFreshHold) {
+                    debt -= owner->FreshDebtChunks;
+                }
+            }
+            const bool overcommit = msg->AllowBlackOvercommit && msg->SizeChunks <= 4
+                && Impl.GetNumFreeChunks() > msg->SizeChunks;
+            if (Impl.GetNumFreeChunks() < msg->SizeChunks + (overcommit ? 0 : debt)) {
                 YDB_LOG_PDISK_MOCK(PRI_NOTICE, "Received TEvChunkReserve",
                     {"marker", "PDM09"},
                     {"msg", msg->ToString()},
@@ -841,6 +853,10 @@ public:
                     {"VDiskId", owner->VDiskId});
                 for (ui32 i = 0; i < msg->SizeChunks; ++i) {
                     res->ChunkIds.push_back(Impl.AllocateChunk(*owner));
+                }
+                if (msg->ConsumesFreshHold) {
+                    owner->FreshDebtChunks = owner->FreshDebtChunks > msg->SizeChunks
+                        ? owner->FreshDebtChunks - msg->SizeChunks : 0;
                 }
                 res->StatusFlags = GetStatusFlags();
                 YDB_LOG_PDISK_MOCK(PRI_DEBUG, "Sending TEvChunkReserveResult",
@@ -1144,7 +1160,9 @@ public:
             Impl.Owners.size(), 0u, 0, TString());
         res->NormalizedOccupancy = GetOccupancy();
         res->Headroom = GetSpaceHeadroom();
-        Impl.FindOwner(msg, res); // to ensure correct owner/round
+        if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
+            owner->FreshDebtChunks = msg->FreshDebtChunks;
+        }
         Send(ev->Sender, res.release());
     }
 

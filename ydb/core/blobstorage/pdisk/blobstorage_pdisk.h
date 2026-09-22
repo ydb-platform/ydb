@@ -873,6 +873,8 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
     // compaction is the only thing that can free anything, so refusing it leaves the
     // owner stuck for good. It still stops at black.
     bool ForHousekeeping;
+    // DDisk waits for a terminal reply even when PDisk stops with this request queued.
+    bool IsDDisk = false;
 
     TEvChunkReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks, bool forHousekeeping = false)
         : Owner(owner)
@@ -936,6 +938,8 @@ struct TEvChunkForget : TEventLocal<TEvChunkForget, TEvBlobStorage::EvChunkForge
     TOwner Owner;
     TOwnerRound OwnerRound;
     TVector<TChunkIdx> ForgetChunks;
+    // Opt in to DDisk lifecycle replies, execution-time session validation, and cookies.
+    bool IsDDisk = false;
 
     TEvChunkForget(TOwner owner, TOwnerRound ownerRound)
         : Owner(owner)

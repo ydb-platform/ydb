@@ -491,22 +491,21 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
 
     struct DumpRestOfPages {
         DumpRestOfPages(Self& self, std::unordered_map<int, TSpilledBucket>&& base,
-                        TMKQLVector<TValueAndLocation<TWithMatchFlags<NThreading::TFuture<ISpiller::TKey>>>>&& futures,
-                        TProbeMatchFlags&& probeMatchFlags)
+                        TMKQLVector<TSpillingPage>&& pages, TProbeMatchFlags&& probeMatchFlags)
             : AlreadyDumped(std::move(base))
-            , Futures(std::move(futures))
+            , Pages(std::move(pages))
             , ProbeMatchFlags(std::move(probeMatchFlags))
         {
             NThreading::TWaitGroup<NThreading::TWaitPolicy::TAll> wg;
-            for (auto& future : Futures) {
-                wg.Add(future.Val.Value);
+            for (auto& page : Pages) {
+                wg.Add(page.Write);
             }
             All = std::move(wg).Finish();
-            self.Logger_.LogDebug(Sprintf("DumpRestOfPages stage started, page count: %i", Futures.size()));
+            self.Logger_.LogDebug(Sprintf("DumpRestOfPages stage started, page count: %i", Pages.size()));
         }
 
         DumpedBuckets AlreadyDumped;
-        TMKQLVector<TValueAndLocation<TWithMatchFlags<NThreading::TFuture<ISpiller::TKey>>>> Futures;
+        TMKQLVector<TSpillingPage> Pages;
         TProbeMatchFlags ProbeMatchFlags;
         NThreading::TFuture<void> All;
     };
@@ -783,7 +782,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         }
                     }
                     std::unordered_map<int, TSpilledBucket> alreadyDumped;
-                    TMKQLVector<TValueAndLocation<TWithMatchFlags<NThreading::TFuture<ISpiller::TKey>>>> futures;
+                    TMKQLVector<TSpillingPage> pages;
                     state.Spiller.FlushBuildingPages();
                     for (int index = 0; index < std::ssize(state.Spiller.GetState().Buckets); ++index) {
                         if (state.Spiller.IsBucketSpilled(index)) {
@@ -797,15 +796,13 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         }
                     }
                     for (auto& page : state.Spiller.GetState().InMemoryPages) {
-                        futures.push_back(
-                            {.Val = {.Value = SpillPage(*Spiller_, std::move(page.Val.Value)),
-                                     .MatchFlags = std::move(page.Val.MatchFlags)},
-                             .Side = page.Side, .BucketIndex = page.BucketIndex});
+                        page.Write = SpillPage(*Spiller_, std::move(page.Page));
+                        pages.push_back(std::move(page));
                     }
                     TProbeMatchFlags probeMatchFlags = std::move(state.Spiller.GetState().ProbeMatchFlags);
                     state.Spiller.GetState().InMemoryPages.clear();
                     state.Spiller.GetState().InMemoryPages.shrink_to_fit();
-                    if (futures.empty()) {
+                    if (pages.empty()) {
                         if (alreadyDumped.empty()) {
                             State_ = Finish{};
                         } else {
@@ -815,7 +812,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     } else {
 
                         MKQL_ENSURE(!alreadyDumped.empty(), "0 dumped buckets but have some parts in memory?");
-                        State_ = DumpRestOfPages{*this, std::move(alreadyDumped), std::move(futures),
+                        State_ = DumpRestOfPages{*this, std::move(alreadyDumped), std::move(pages),
                                                  std::move(probeMatchFlags)};
                     }
                 }
@@ -874,14 +871,14 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         } else if (auto* s = std::get_if<DumpRestOfPages>(&State_)) {
             DumpRestOfPages& state = *s;
             if (state.All.IsReady()) {
-                for (auto& future : state.Futures) {
-                    auto it = state.AlreadyDumped.find(future.BucketIndex);
+                for (auto& page : state.Pages) {
+                    auto it = state.AlreadyDumped.find(page.BucketIndex);
                     MKQL_ENSURE(it != state.AlreadyDumped.end(), "bucket with this index is processed already");
-                    const ISpiller::TKey key = ExtractReadyFuture(std::move(future.Val.Value));
-                    it->second.SelectSide(future.Side).push_back(key);
-                    if (!future.Val.MatchFlags.empty()) {
-                        MKQL_ENSURE(future.Side == ESide::Probe, "build page has probe match state");
-                        state.ProbeMatchFlags.emplace(key, std::move(future.Val.MatchFlags));
+                    const ISpiller::TKey key = ExtractReadyFuture(std::move(page.Write));
+                    it->second.SelectSide(page.Side).push_back(key);
+                    if (!page.MatchFlags.empty()) {
+                        MKQL_ENSURE(page.Side == ESide::Probe, "build page has probe match state");
+                        state.ProbeMatchFlags.emplace(key, std::move(page.MatchFlags));
                     }
                 }
                 State_ = JoinPairsOfPartitions{*this, std::move(state.AlreadyDumped),

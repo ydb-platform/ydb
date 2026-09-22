@@ -922,37 +922,38 @@ public:
             {"locks", txLocks},
             {"cookie", ev->Cookie});
 
+        // Each message carries the cookie of the shard's current in-flight round, so
+        // while batches are being written (WRITE) or prepared (PREPARE,
+        // IMMEDIATE_COMMIT), only the answer echoing the in-flight round's cookie is
+        // meaningful: results of already acknowledged rounds are ignored (retries of
+        // the same round reuse the cookie, so their delayed answers are processed).
+        // Two kinds of results must pass the filter:
+        //  - COMMIT-mode completions: they are not replies to a per-attempt message
+        //    (distributed and volatile commit completions carry cookie 0), and every
+        //    participant shard (including lock-only ones without a controller record)
+        //    sends exactly one completion that must be processed, so the whole rule
+        //    does not apply in COMMIT mode.
+        //  - (TODO: Fix this) Datashard gate rejections (e.g. STATUS_WRONG_SHARD_STATE for a shard
+        //    split/offlined behind the pipe) are not replies to a specific message:
+        //    they carry cookie 0 and must be processed to drive the re-resolve logic.
+
+        const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
+
+        if (Mode != EMode::COMMIT && IsSupersededWriteResult(ev->Cookie, metadata)) {
+            YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",
+                {"logPrefix", this->LogPrefix},
+                {"shardID", ev->Get()->Record.GetOrigin()},
+                {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
+                {"cookie", ev->Cookie});
+            return;
+        }
+
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         if (ev->Sender.NodeId() == SelfId().NodeId()) {
             Counters->WriteActorLocalShardWrites->Inc();
         } else {
             Counters->WriteActorRemoteShardWrites->Inc();
-        }
-
-        // Each message carries its own cookie and, while batches are being written
-        // (WRITE) or prepared (PREPARE, IMMEDIATE_COMMIT), only the answer echoing the
-        // last sent message's cookie is meaningful: results of messages superseded by
-        // a resend are ignored (the resend produces its own answer or a delivery
-        // problem). Two exceptions must pass:
-        //  - In COMMIT mode the rule must not apply: commit completions echo the
-        //    cookie of the prepare message whose round was already popped at Prepare
-        //    time, every participant shard (including lock-only ones without a
-        //    controller record) sends exactly one completion, and all of them must be
-        //    processed.
-        //  - (TODO: Fix this) Datashard gate rejections (e.g. STATUS_WRONG_SHARD_STATE for a shard
-        //    split/offlined behind the pipe) are not replies to a specific message:
-        //    they carry cookie 0 and must be processed to drive the re-resolve logic.
-        if (Mode != EMode::COMMIT) {
-            const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
-            if (ev->Cookie != 0 && (!metadata || metadata->Cookie != ev->Cookie)) {
-                YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",
-                    {"logPrefix", this->LogPrefix},
-                    {"shardID", ev->Get()->Record.GetOrigin()},
-                    {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
-                    {"cookie", ev->Cookie});
-                return;
-            }
         }
 
         const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
@@ -966,7 +967,6 @@ public:
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
 
-            const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
             if (metadata && ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
                 YDB_LOG_INFO("Waiting for overloaded shard.",
                     {"logPrefix", this->LogPrefix},
@@ -1396,10 +1396,6 @@ public:
             return false;
         }
 
-        // Each outbound message, a first attempt or a retry, gets its own fresh cookie.
-        // Only the answer echoing the last sent message's cookie is processed, so the
-        // value is minted at send time (retries therefore advance the cookie as well).
-        const ui64 cookie = ShardedWriteController->AllocateMessageCookie(shardId);
 
         // BreakerQuerySpanId is set in AddAction during write phase, not here
 
@@ -1513,7 +1509,7 @@ public:
             {"lockNodeId", evWrite->Record.GetLockNodeId()},
             {"locks", locks},
             {"size", serializationResult.TotalDataSize},
-            {"cookie", cookie},
+            {"cookie", metadata->Cookie},
             {"operationsCount", evWrite->Record.OperationsSize()},
             {"isFinal", metadata->IsFinal},
             {"attempts", metadata->SendAttempts},
@@ -1527,10 +1523,10 @@ public:
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
             0,
-            cookie,
+            metadata->Cookie,
             NWilson::TTraceId(ParentTraceId));
 
-        ShardedWriteController->OnMessageSent(shardId, cookie);
+        ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
 
         return true;
     }

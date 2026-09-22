@@ -1619,8 +1619,8 @@ public:
             : Memory(memory)
             , PendingBatches(pendingBatches)
             , NextCookie(nextCookie)
-            , Cookie(NextCookie++)
             , Closed(closed) {
+            AdvanceCookie();
         }
 
     public:
@@ -1676,7 +1676,7 @@ public:
                     Batches.pop_front();
                 }
 
-                Cookie = NextCookie++;
+                AdvanceCookie();
                 SendAttempts = 0;
                 BatchesInFlight = 0;
 
@@ -1694,11 +1694,6 @@ public:
         }
 
         ui64 GetCookie() const {
-            return Cookie;
-        }
-
-        ui64 AllocateCookie() {
-            Cookie = NextCookie++;
             return Cookie;
         }
 
@@ -1737,6 +1732,10 @@ public:
         }
 
     private:
+        void AdvanceCookie() {
+            Cookie = NextCookie++;
+        }
+
         std::deque<TBatchWithMetadata> Batches;
         i64& Memory;
         ui64& PendingBatches;
@@ -1762,6 +1761,12 @@ public:
 
         auto [insertIt, _] = ShardsInfo.emplace(shard, TShardInfo(Memory, PendingBatches, NextCookie, Closed));
         return insertIt->second;
+    }
+
+    // A read-only lookup: unlike GetShard it never creates an entry for unknown shards.
+    TShardInfo* FindShard(const ui64 shard) {
+        auto it = ShardsInfo.find(shard);
+        return it != std::end(ShardsInfo) ? &it->second : nullptr;
     }
 
     void ForEachPendingShard(std::function<void(const IShardedWriteController::TPendingShardInfo&)>&& callback) const {
@@ -2078,26 +2083,23 @@ public:
     }
 
     std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty()) {
+        // A read-only lookup: results for shards unknown to the controller (e.g.
+        // COMMIT-mode completions from lock-only participant shards) must not create
+        // empty shard entries, which would otherwise leak into GetShardsIds().
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        if (!shardInfo || shardInfo->IsEmpty()) {
             return {};
         }
-        BuildBatchesForShard(shardInfo);
+        BuildBatchesForShard(*shardInfo);
 
         TMessageMetadata meta;
-        meta.Cookie = shardInfo.GetCookie();
-        meta.OperationsCount = shardInfo.GetBatchesInFlight();
-        meta.IsFinal = shardInfo.IsClosed() && shardInfo.Size() == shardInfo.GetBatchesInFlight();
-        meta.SendAttempts = shardInfo.GetSendAttempts();
-        meta.NextOverloadSeqNo = shardInfo.GetOverloadSeqNo();
+        meta.Cookie = shardInfo->GetCookie();
+        meta.OperationsCount = shardInfo->GetBatchesInFlight();
+        meta.IsFinal = shardInfo->IsClosed() && shardInfo->Size() == shardInfo->GetBatchesInFlight();
+        meta.SendAttempts = shardInfo->GetSendAttempts();
+        meta.NextOverloadSeqNo = shardInfo->GetOverloadSeqNo();
 
         return meta;
-    }
-
-    ui64 AllocateMessageCookie(ui64 shardId) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        AFL_ENSURE(!shardInfo.IsEmpty());
-        return shardInfo.AllocateCookie();
     }
 
     TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) override {
@@ -2140,30 +2142,35 @@ public:
     }
 
     std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        const auto result = shardInfo.PopBatches(cookie);
+        // A read-only lookup: acknowledgements from shards unknown to the controller
+        // (e.g. COMMIT-mode completions) must not create empty shard entries.
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        if (!shardInfo) {
+            return std::nullopt;
+        }
+        const auto result = shardInfo->PopBatches(cookie);
         if (result) {
             return TMessageAcknowledgedResult {
                 .DataSize = result->DataSize,
-                .IsShardEmpty = shardInfo.IsEmpty(),
+                .IsShardEmpty = shardInfo->IsEmpty(),
             };
         }
         return std::nullopt;
     }
 
     void OnMessageSent(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        AFL_ENSURE(!shardInfo.IsEmpty() && shardInfo.GetCookie() == cookie);
-        shardInfo.IncSendAttempts();
-        shardInfo.IncOverloadSeqNo();
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo && !shardInfo->IsEmpty() && shardInfo->GetCookie() == cookie);
+        shardInfo->IncSendAttempts();
+        shardInfo->IncOverloadSeqNo();
     }
 
     void ResetRetries(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty() || shardInfo.GetCookie() != cookie) {
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        if (!shardInfo || shardInfo->IsEmpty() || shardInfo->GetCookie() != cookie) {
             return;
         }
-        shardInfo.ResetSendAttempts();
+        shardInfo->ResetSendAttempts();
     }
 
     i64 GetMemory() const override {
@@ -2356,6 +2363,10 @@ IShardedWriteControllerPtr CreateShardedWriteController(
         const TShardedWriteControllerSettings& settings,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TShardedWriteController>(settings, std::move(alloc));
+}
+
+bool IsSupersededWriteResult(const ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata) {
+    return cookie != 0 && (!metadata || metadata->Cookie != cookie);
 }
 
 }

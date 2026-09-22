@@ -49,8 +49,8 @@ Y_UNIT_TEST_SUITE(KqpOverload) {
                     SELECT * FROM `/Root/KeyValue`;
                 )";
 
-            std::vector<std::unique_ptr<IEventHandle>> requests;
             std::vector<std::unique_ptr<IEventHandle>> responses;
+            size_t requests = 0;
             bool blockResults = true;
 
             size_t overloadSeqNo = 0; 
@@ -68,7 +68,8 @@ Y_UNIT_TEST_SUITE(KqpOverload) {
                         UNIT_ASSERT(overloadSeqNo > 0);
                         overloadedResult->Record.SetOverloadSubscribed(overloadSeqNo);
 
-                        runtime.Send(ev->Recipient, ev->Sender, overloadedResult.release());
+                        // The result must keep the cookie of the answered message.
+                        runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, overloadedResult.release(), 0, ev->Cookie));
 
                         auto overloadedReady = std::make_unique<TEvDataShard::TEvOverloadReady>(msg->Record.GetOrigin(), overloadSeqNo);
 
@@ -81,11 +82,19 @@ Y_UNIT_TEST_SUITE(KqpOverload) {
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                 } else if (!blockResults && ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWrite::EventType && ev->GetRecipientRewrite() == overloadedShardActor) {
-                    for(auto& ev : responses) {
-                        runtime.Send(ev.release());
+                    ++requests;
+                    // The resent write is deduplicated by the shard, which re-answers
+                    // it with the resent message's cookie. Emulate this re-answer by
+                    // rewriting the held original result's cookie accordingly; the
+                    // duplicate write itself must not reach the shard, which already
+                    // registered this txId.
+                    for (auto& resp : responses) {
+                        const auto sender = resp->Sender;
+                        auto result = resp->Release<NEvents::TDataEvents::TEvWriteResult>();
+                        // The result must carry the cookie of the resent message.
+                        runtime.Send(new IEventHandle(resp->Recipient, sender, result.Release(), 0, ev->Cookie));
                     }
                     responses.clear();
-                    requests.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 } else if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWrite::EventType && ev->GetRecipientRewrite() == overloadedShardActor) {
                     auto* msg = ev->Get<NEvents::TDataEvents::TEvWrite>();
@@ -107,10 +116,10 @@ Y_UNIT_TEST_SUITE(KqpOverload) {
 
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&](IEventHandle&) {
-                return requests.size() >= requestsExpected;
+                return requests >= requestsExpected;
             });
             runtime.DispatchEvents(opts);
-            UNIT_ASSERT(requests.size() == requestsExpected);
+            UNIT_ASSERT(requests == requestsExpected);
             UNIT_ASSERT(!blockResults);
             UNIT_ASSERT(overloadSeqNo > 0);
 
@@ -128,7 +137,7 @@ Y_UNIT_TEST_SUITE(KqpOverload) {
             });
 
             runtime.DispatchEvents(opts);
-            UNIT_ASSERT(requests.size() == requestsExpected);
+            UNIT_ASSERT(requests == requestsExpected);
             UNIT_ASSERT(!blockResults);
             UNIT_ASSERT(overloadSeqNo > 0);
 

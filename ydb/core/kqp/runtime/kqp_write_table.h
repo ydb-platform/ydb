@@ -230,6 +230,8 @@ public:
     };
     virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;
 
+    virtual ui64 AllocateMessageCookie(ui64 shardId) = 0;
+
     struct TSerializationResult {
         i64 TotalDataSize = 0;
         TVector<ui64> PayloadIndexes;
@@ -267,13 +269,16 @@ struct TShardedWriteControllerSettings {
     ui64 WriterIndex = 0;
 };
 
-// The stale-response filter for TEvWriteResult: while batches are being written or
-// prepared, only the result echoing the cookie of the shard's current in-flight
-// round is meaningful. Results of already acknowledged rounds must be dropped.
-// Retries of the same round reuse its cookie, so delayed or duplicated answers of
-// any attempt are processed. A result with cookie 0 is not tied to any specific
-// message (version 26-3 datashard gate rejections, distributed/volatile commit completions) and
-// always passes.
+// The stale-response filter for TEvWriteResult: only the result echoing the cookie
+// of the shard's last sent message (see AllocateMessageCookie) is meaningful; results
+// of superseded messages are dropped. Dropping is safe because a resend is triggered
+// only by a delivery failure or an error result, never while a valid answer is merely
+// in flight, and every resent message is guaranteed its own answer with the resent
+// message's cookie: a deduped replay (write seq num dedup) re-sends the result with
+// the new message's cookie, and an overload-rejected write is re-sent
+// after the TEvOverloadReady wakeup. A result with cookie 0 is not tied to any
+// specific message (version 26-3 datashard gate rejections, distributed/volatile commit
+// completions) and always passes.
 bool IsSupersededWriteResult(ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata);
 
 IShardedWriteControllerPtr CreateShardedWriteController(

@@ -1697,6 +1697,11 @@ public:
             return Cookie;
         }
 
+        ui64 AllocateMessageCookie() {
+            AdvanceCookie();
+            return Cookie;
+        }
+
         size_t GetBatchesInFlight() const {
             return BatchesInFlight;
         }
@@ -1767,6 +1772,12 @@ public:
     TShardInfo* FindShard(const ui64 shard) {
         auto it = ShardsInfo.find(shard);
         return it != std::end(ShardsInfo) ? &it->second : nullptr;
+    }
+
+    ui64 AllocateMessageCookie(const ui64 shardId) {
+        auto* const shardInfo = FindShard(shardId);
+        AFL_ENSURE(shardInfo && !shardInfo->IsEmpty());
+        return shardInfo->AllocateMessageCookie();
     }
 
     void ForEachPendingShard(std::function<void(const IShardedWriteController::TPendingShardInfo&)>&& callback) const {
@@ -2100,6 +2111,10 @@ public:
         meta.NextOverloadSeqNo = shardInfo->GetOverloadSeqNo();
 
         return meta;
+    }
+
+    ui64 AllocateMessageCookie(ui64 shardId) override {
+        return ShardsInfo.AllocateMessageCookie(shardId);
     }
 
     TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) override {

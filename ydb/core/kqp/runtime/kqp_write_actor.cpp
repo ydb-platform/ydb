@@ -922,13 +922,15 @@ public:
             {"locks", txLocks},
             {"cookie", ev->Cookie});
 
-        // Each message carries the cookie of the shard's current in-flight round, so
-        // while batches are being written (WRITE) or prepared (PREPARE,
-        // IMMEDIATE_COMMIT), only the answer echoing the in-flight round's cookie is
-        // meaningful: results of already acknowledged rounds are ignored (retries of
-        // the same round reuse the cookie, so their delayed answers are processed).
-        // Two kinds of results must pass the filter:
-        //  - COMMIT-mode completions: they are not replies to a per-attempt message
+        // Each outbound message carries its own cookie (see SendDataToShard), so only the
+        // answer echoing the cookie of the shard's last sent message is meaningful:
+        // results of superseded messages are ignored. Dropping is safe because a resend
+        // is triggered only by a delivery failure or an error result, never while a
+        // valid answer is merely in flight, and every resent message is guaranteed its
+        // own answer with the resent message's cookie (a deduped replay re-sends the
+        // result with the new message's cookie). Two kinds of results must pass the
+        // filter:
+        //  - COMMIT-mode completions: they are not replies to a per-message EvWrite
         //    (distributed and volatile commit completions carry cookie 0), and every
         //    participant shard (including lock-only ones without a controller record)
         //    sends exactly one completion that must be processed, so the whole rule
@@ -1396,7 +1398,6 @@ public:
             return false;
         }
 
-
         // BreakerQuerySpanId is set in AddAction during write phase, not here
 
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
@@ -1495,6 +1496,15 @@ public:
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "WriteActor");
 
+        // Each outbound message, a first attempt or a resend, gets its own fresh cookie:
+        // only the result echoing the cookie of the shard's last sent message is
+        // processed (see IsSupersededWriteResult). Dropping older answers is safe
+        // because resends are triggered only by a delivery failure or an error result,
+        // never while a valid answer is merely in flight, and every resent message is
+        // guaranteed its own answer with the resent message's cookie (a deduped replay
+        // re-sends the result with the new message's cookie).
+        const ui64 cookie = ShardedWriteController->AllocateMessageCookie(shardId);
+
         TStringBuilder locks;
         for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
             locks << lock.ShortDebugString();
@@ -1509,7 +1519,7 @@ public:
             {"lockNodeId", evWrite->Record.GetLockNodeId()},
             {"locks", locks},
             {"size", serializationResult.TotalDataSize},
-            {"cookie", metadata->Cookie},
+            {"cookie", cookie},
             {"operationsCount", evWrite->Record.OperationsSize()},
             {"isFinal", metadata->IsFinal},
             {"attempts", metadata->SendAttempts},
@@ -1523,10 +1533,10 @@ public:
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
             0,
-            metadata->Cookie,
+            cookie,
             NWilson::TTraceId(ParentTraceId));
 
-        ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
+        ShardedWriteController->OnMessageSent(shardId, cookie);
 
         return true;
     }

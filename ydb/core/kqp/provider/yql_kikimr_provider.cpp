@@ -980,12 +980,8 @@ const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns() {
     return Singleton<TKikimrData>()->SystemColumns;
 }
 
-bool IsKikimrSystemColumn(const TStringBuf columnName) {
-    return KikimrSystemColumns().FindPtr(columnName);
-}
-
 bool IsKikimrSystemColumn(const TStringBuf columnName, bool isOlapTable) {
-    if (!IsKikimrSystemColumn(columnName)) {
+    if (!KikimrSystemColumns().FindPtr(columnName)) {
         return false;
     }
     if (columnName == NKikimr::YqlPortionColumnName) {

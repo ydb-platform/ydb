@@ -1,5 +1,6 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_services/grpc_request_check_actor.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
@@ -326,6 +327,10 @@ public:
         UsedDatabase = database;
     }
 
+    NYdbGrpc::ICounterBlock* GetCounterBlock() const override {
+        return CounterBlock.Get();
+    }
+
     void SetNextReplyCallback(NYdbGrpc::IRequestContextBase::TOnNextReply&&) override {
     }
 
@@ -362,6 +367,7 @@ public:
     }
 
 public:
+    NYdbGrpc::ICounterBlockPtr CounterBlock;
     TString UsedDatabase;
     ui32 ReplyCount = 0;
     ui32 ByteReplyCount = 0;
@@ -430,6 +436,10 @@ public:
         UsedDatabase = database;
     }
 
+    NYdbGrpc::ICounterBlock* GetCounterBlock() const override {
+        return CounterBlock.Get();
+    }
+
     TString GetRpcMethodName() const override {
         return "Draft.Dummy.Ping";
     }
@@ -449,6 +459,7 @@ public:
     }
 
 public:
+    NYdbGrpc::ICounterBlockPtr CounterBlock;
     TString UsedDatabase;
     ui32 AttachCount = 0;
     ui32 FinishCount = 0;
@@ -497,6 +508,13 @@ class TPublicProxyHandleMethods : public NGRpcService::TGRpcRequestProxyHandleMe
 public:
     using NGRpcService::TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError;
 };
+
+void InitializeDatabaseRuntime(TTestActorRuntime& runtime, bool relativePathsEnabled) {
+    TAppPrepare app;
+    app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("Root").Release());
+    app.FeatureFlags.SetEnableRelativePaths(relativePathsEnabled);
+    runtime.Initialize(app.Unwrap());
+}
 
 NWilson::TFakeWilsonUploader* SetupFakeWilsonUploader(TTestActorRuntime& runtime) {
     auto* uploader = new NWilson::TFakeWilsonUploader;
@@ -676,118 +694,166 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckErrorReply) {
 Y_UNIT_TEST_SUITE(TGrpcRequestBaseTracing) {
 
 Y_UNIT_TEST_TWIN(DiscoveryCountsOriginalHeaderAndBody, relativePathsEnabled) {
+    TTestActorRuntime runtime;
+    InitializeDatabaseRuntime(runtime, relativePathsEnabled);
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     Ydb::Discovery::ListEndpointsRequest proto;
     proto.set_database("Root/db");
     auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), TString("/Root"), &proto,
         "Ydb.Discovery.V1.DiscoveryService/ListEndpoints");
-    NGRpcService::TEvListEndpointsRequest request(ctx.Get());
-    request.InitRequestPaths("/Root", relativePathsEnabled, counters);
+    ctx->CounterBlock = NGRpcService::CreateCounterCb(counters, nullptr)("discovery", "ListEndpoints");
+    NGRpcService::TEvListEndpointsRequest request(ctx.Get(), &runtime.GetAppData());
+    request.CountRequestPaths();
     request.UseDatabase("/Root");
-    request.InitRequestPaths("/Root", relativePathsEnabled, counters);
-    auto group = GetServiceCounters(counters, "grpc")->GetSubgroup("method", request.GetRpcMethodName());
-    UNIT_ASSERT_VALUES_EQUAL(group->GetNamedCounter("name", "api.grpc.request.relative_path_count", true)->Val(), 1);
+    request.CountRequestPaths();
+    auto group = GetServiceCounters(counters, "ydb")->GetSubgroup("api_service", "discovery")->GetSubgroup("method", "ListEndpoints");
+    UNIT_ASSERT_VALUES_EQUAL(group->GetNamedCounter("name", "api.grpc.request.relative_database_count", true)->Val(), 1);
     UNIT_ASSERT_VALUES_EQUAL(proto.database(), "Root/db");
 }
 
 Y_UNIT_TEST(PathCountersSeparateMethodsAndDeduplicateRequests) {
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     auto requestCtx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), Nothing(), nullptr, "Ydb.Table.RenameTables");
+    requestCtx->CounterBlock = NGRpcService::CreateCounterCb(counters, nullptr)("table", "RenameTables");
     TTestGrpcRequest request(requestCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
-    request.InitPathCounters(counters);
-    request.CountRequestPath("");
-    request.CountRequestPath("/Root/db/destination");
-    request.CountRequestPath("Root/db");
-    request.CountRequestPath("source");
-    request.CountRequestPath("another_source");
-    request.InitPathCounters(counters);
-    request.CountRequestPath("Root/db");
+    request.CountRequestPaths();
+    request.CountDatabasePath("");
+    request.CountDatabasePath("/Root/db/destination");
+    request.CountDatabasePath("Root/db");
+    request.CountDatabasePath("source");
+    request.CountDatabasePath("another_source");
+    request.CountRequestPaths();
+    request.CountDatabasePath("Root/db");
 
     auto anotherMethodCtx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), Nothing(), nullptr, "Ydb.Scheme.DescribePath");
+    anotherMethodCtx->CounterBlock = NGRpcService::CreateCounterCb(counters, nullptr)("scheme", "DescribePath");
     TTestGrpcRequest anotherMethod(anotherMethodCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
-    anotherMethod.InitPathCounters(counters);
-    anotherMethod.CountRequestPath("");
-    anotherMethod.CountRequestPath("/Root/db");
-    auto grpc = GetServiceCounters(counters, "grpc");
-    const auto relativeRequests = [&](const TString& method) {
-        return grpc->GetSubgroup("method", method)
-            ->GetNamedCounter("name", "api.grpc.request.relative_path_count", true)->Val();
+    anotherMethod.CountRequestPaths();
+    anotherMethod.CountDatabasePath("");
+    anotherMethod.CountDatabasePath("/Root/db");
+    auto ydb = GetServiceCounters(counters, "ydb");
+    const auto relativeRequests = [&](const TString& service, const TString& method) {
+        return ydb->GetSubgroup("api_service", service)->GetSubgroup("method", method)
+            ->GetNamedCounter("name", "api.grpc.request.relative_database_count", true)->Val();
     };
-    UNIT_ASSERT_VALUES_EQUAL(relativeRequests("Ydb.Table.RenameTables"), 1);
-    UNIT_ASSERT_VALUES_EQUAL(relativeRequests("Ydb.Scheme.DescribePath"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(relativeRequests("table", "RenameTables"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(relativeRequests("scheme", "DescribePath"), 0);
 
     auto anotherRequestCtx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), Nothing(), nullptr, "Ydb.Table.RenameTables");
+    anotherRequestCtx->CounterBlock = requestCtx->CounterBlock->Clone();
+    UNIT_ASSERT(anotherRequestCtx->CounterBlock.Get() == requestCtx->CounterBlock.Get());
     TTestGrpcRequest anotherRequest(anotherRequestCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
-    anotherRequest.InitPathCounters(counters);
-    anotherRequest.CountRequestPath("source");
-    UNIT_ASSERT_VALUES_EQUAL(relativeRequests("Ydb.Table.RenameTables"), 2);
+    anotherRequest.CountRequestPaths();
+    anotherRequest.CountDatabasePath("source");
+    anotherRequest.CountDatabasePath("another_source");
+    UNIT_ASSERT_VALUES_EQUAL(relativeRequests("table", "RenameTables"), 2);
 }
 
 Y_UNIT_TEST_TWIN(PathCountersWorkWithEitherFlagValue, relativePathsEnabled) {
+    TTestActorRuntime runtime;
+    InitializeDatabaseRuntime(runtime, relativePathsEnabled);
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     auto unaryCtx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), TString("Root/db"));
-    TTestGrpcRequest unary(unaryCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+    unaryCtx->CounterBlock = NGRpcService::CreateCounterCb(counters, nullptr)("operation", "CancelOperation");
+    TTestGrpcRequest unary(unaryCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {},
+        {.AppData = &runtime.GetAppData()});
     auto bidiCtx = MakeIntrusive<TTestBiStreamContext>(Nothing(), TString("/Root/db"));
-    NGRpcService::TEvBiStreamPingRequest bidi(bidiCtx);
-    unary.InitRequestPaths("/Root", relativePathsEnabled, counters);
-    bidi.InitRequestPaths("/Root", relativePathsEnabled, counters);
+    bidiCtx->CounterBlock = NGRpcService::CreateCounterCb(counters, nullptr)("dummy", "biStreamPing", true);
+    NGRpcService::TEvBiStreamPingRequest bidi(bidiCtx, {.AppData = &runtime.GetAppData()});
+    unary.CountRequestPaths();
+    bidi.CountRequestPaths();
     unary.UseDatabase("/Root/Root/db");
-    unary.InitRequestPaths("/Root", relativePathsEnabled, counters);
-    bidi.InitRequestPaths("/Root", relativePathsEnabled, counters);
-    auto grpc = GetServiceCounters(counters, "grpc");
-    UNIT_ASSERT_VALUES_EQUAL(grpc->GetSubgroup("method", unary.GetRpcMethodName())
-        ->GetNamedCounter("name", "api.grpc.request.relative_path_count", true)->Val(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(grpc->GetSubgroup("method", bidi.GetRpcMethodName())
-        ->GetNamedCounter("name", "api.grpc.request.relative_path_count", true)->Val(), 0);
+    unary.CountRequestPaths();
+    bidi.CountRequestPaths();
+    auto ydb = GetServiceCounters(counters, "ydb");
+    UNIT_ASSERT_VALUES_EQUAL(ydb->GetSubgroup("api_service", "operation")->GetSubgroup("method", "CancelOperation")
+        ->GetNamedCounter("name", "api.grpc.request.relative_database_count", true)->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(ydb->GetSubgroup("api_service", "dummy")->GetSubgroup("method", "biStreamPing")
+        ->GetNamedCounter("name", "api.grpc.request.relative_database_count", true)->Val(), 0);
 }
 
 Y_UNIT_TEST_TWIN(PathCountersObserveRawHeadersAfterUseDatabase, relativePathsEnabled) {
+    TTestActorRuntime runtime;
+    InitializeDatabaseRuntime(runtime, relativePathsEnabled);
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     auto unaryCtx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), TString("Root/db"));
-    TTestGrpcRequest unary(unaryCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+    unaryCtx->CounterBlock = NGRpcService::CreateCounterCb(counters, nullptr)("operation", "CancelOperation");
+    TTestGrpcRequest unary(unaryCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {},
+        {.AppData = &runtime.GetAppData()});
     auto bidiCtx = MakeIntrusive<TTestBiStreamContext>(Nothing(), TString("Root/db"));
-    NGRpcService::TEvBiStreamPingRequest bidi(bidiCtx);
+    bidiCtx->CounterBlock = NGRpcService::CreateCounterCb(counters, nullptr)("dummy", "biStreamPing", true);
+    NGRpcService::TEvBiStreamPingRequest bidi(bidiCtx, {.AppData = &runtime.GetAppData()});
     unary.UseDatabase("/Root/Root/db");
     bidi.UseDatabase("/Root/Root/db");
-    unary.InitRequestPaths("/Root", relativePathsEnabled, counters);
-    bidi.InitRequestPaths("/Root", relativePathsEnabled, counters);
-    auto grpc = GetServiceCounters(counters, "grpc");
-    for (const auto& method : {unary.GetRpcMethodName(), bidi.GetRpcMethodName()}) {
-        UNIT_ASSERT_VALUES_EQUAL(grpc->GetSubgroup("method", method)
-            ->GetNamedCounter("name", "api.grpc.request.relative_path_count", true)->Val(), 1);
+    unary.CountRequestPaths();
+    bidi.CountRequestPaths();
+    auto ydb = GetServiceCounters(counters, "ydb");
+    for (const auto& group : {ydb->GetSubgroup("api_service", "operation")->GetSubgroup("method", "CancelOperation"),
+            ydb->GetSubgroup("api_service", "dummy")->GetSubgroup("method", "biStreamPing")}) {
+        UNIT_ASSERT_VALUES_EQUAL(group->GetNamedCounter("name", "api.grpc.request.relative_database_count", true)->Val(), 1);
     }
 }
 
 Y_UNIT_TEST_TWIN(InternalDatabaseResolutionRespectsFlag, relativePathsEnabled) {
-    NGRpcService::TEvRequestAuthAndCheck request("mydb", Nothing(), {},
-        NGRpcService::TAuditMode::NonModifying(), "", "");
+    TTestActorRuntime runtime;
+    InitializeDatabaseRuntime(runtime, relativePathsEnabled);
+    const auto replyTo = runtime.AllocateEdgeActor();
+    auto request = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>("mydb", Nothing(), replyTo,
+        NGRpcService::TAuditMode::NonModifying(), "", "", &runtime.GetAppData());
     NGRpcService::TRefreshTokenGenericRequest refresh("", "Root/mydb", "", "", {});
+    NGRpcService::TRefreshTokenGenericRequest emptyRefresh("", "", "", "", {});
     const TString expected = relativePathsEnabled ? "/Root/mydb" : "mydb";
-    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-    request.InitRequestPaths("/Root", relativePathsEnabled, counters);
-    refresh.InitRequestPaths("/Root", relativePathsEnabled, counters);
-    UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetRef(), expected);
+    runtime.GetAppData().FeatureFlags.SetEnableRelativePaths(!relativePathsEnabled);
+    UNIT_ASSERT_VALUES_EQUAL(request->GetDatabaseName().GetRef(), expected);
     // Refresh keeps the database selected by the original stream, even if the flag changed.
     UNIT_ASSERT_VALUES_EQUAL(refresh.GetDatabaseName().GetRef(), "Root/mydb");
-    request.UseDatabase("/Root/mydb");
-    // With the feature off, the internal context retains its original mutable name.
-    UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetRef(), "/Root/mydb");
+    UNIT_ASSERT(emptyRefresh.GetDatabaseName() == TMaybe<TString>(TString()));
+    request->UseDatabase("/Root/mydb");
+    UNIT_ASSERT_VALUES_EQUAL(request->GetDatabaseName().GetRef(), "/Root/mydb");
+    UNIT_ASSERT_VALUES_EQUAL(request->Database, "mydb");
+    runtime.Register(new TAuthAndCheckReplyActor(std::move(request), Ydb::StatusIds::SUCCESS));
+    TAutoPtr<IEventHandle> handle;
+    auto* result = runtime.GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(result->Database, "/Root/mydb");
 }
 
 Y_UNIT_TEST_TWIN(UseDatabasePreservesUnaryDatabaseHeaderPresence, relativePathsEnabled) {
     for (const auto& database : TVector<TMaybe<TString>>{Nothing(), TString(), TString("mydb"), TString("/Root/mydb")}) {
+        TTestActorRuntime runtime;
+        InitializeDatabaseRuntime(runtime, relativePathsEnabled);
+        auto& appData = runtime.GetAppData();
         auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), database);
-        TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
-        UNIT_ASSERT(request.GetDatabaseName() == database);
-        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        request.InitRequestPaths("/Root", relativePathsEnabled, counters);
+        TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {},
+            {.AppData = &appData});
+        appData.DomainsInfo->Domain = TDomainsInfo::TDomain::ConstructEmptyDomain("Other");
+        appData.FeatureFlags.SetEnableRelativePaths(!relativePathsEnabled);
         const auto expected = relativePathsEnabled && database && !database->empty() ? TMaybe<TString>(TString("/Root/mydb")) : database;
         UNIT_ASSERT(request.GetDatabaseName() == expected);
         request.UseDatabase("/Root/mydb");
-        request.InitRequestPaths("/Other", !relativePathsEnabled, counters);
         UNIT_ASSERT(request.GetDatabaseName() == expected);
         UNIT_ASSERT_VALUES_EQUAL(ctx->UsedDatabase, "/Root/mydb");
     }
+}
+
+Y_UNIT_TEST(DatabaseResolutionWithoutDomainPreservesRawName) {
+    TTestActorRuntime runtime;
+    TAppPrepare app;
+    app.FeatureFlags.SetEnableRelativePaths(true);
+    runtime.Initialize(app.Unwrap());
+    auto& appData = runtime.GetAppData();
+    UNIT_ASSERT(!appData.DomainsInfo->Domain);
+    auto unaryCtx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), TString("mydb"));
+    TTestGrpcRequest unary(unaryCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {},
+        {.AppData = &appData});
+    auto bidiCtx = MakeIntrusive<TTestBiStreamContext>(Nothing(), TString("mydb"));
+    NGRpcService::TEvBiStreamPingRequest bidi(bidiCtx, {.AppData = &appData});
+    NGRpcService::TEvRequestAuthAndCheck internal("mydb", Nothing(), {},
+        NGRpcService::TAuditMode::NonModifying(), "", "", &appData);
+    UNIT_ASSERT_VALUES_EQUAL(unary.GetDatabaseName().GetRef(), "mydb");
+    UNIT_ASSERT_VALUES_EQUAL(bidi.GetDatabaseName().GetRef(), "mydb");
+    UNIT_ASSERT_VALUES_EQUAL(internal.GetDatabaseName().GetRef(), "mydb");
 }
 
 Y_UNIT_TEST(GeneratesTraceIdForEmptyUnaryTraceHeader) {
@@ -985,15 +1051,16 @@ Y_UNIT_TEST_SUITE(TGrpcRequestBiStreamTracing) {
 
 Y_UNIT_TEST_TWIN(UseDatabasePreservesBidiDatabaseHeaderPresence, relativePathsEnabled) {
     for (const auto& database : TVector<TMaybe<TString>>{Nothing(), TString(), TString("mydb"), TString("/Root/mydb")}) {
+        TTestActorRuntime runtime;
+        InitializeDatabaseRuntime(runtime, relativePathsEnabled);
+        auto& appData = runtime.GetAppData();
         auto ctx = MakeIntrusive<TTestBiStreamContext>(Nothing(), database);
-        NGRpcService::TEvBiStreamPingRequest request(ctx);
-        UNIT_ASSERT(request.GetDatabaseName() == database);
-        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        request.InitRequestPaths("/Root", relativePathsEnabled, counters);
+        NGRpcService::TEvBiStreamPingRequest request(ctx, {.AppData = &appData});
+        appData.DomainsInfo->Domain = TDomainsInfo::TDomain::ConstructEmptyDomain("Other");
+        appData.FeatureFlags.SetEnableRelativePaths(!relativePathsEnabled);
         const auto expected = relativePathsEnabled && database && !database->empty() ? TMaybe<TString>(TString("/Root/mydb")) : database;
         UNIT_ASSERT(request.GetDatabaseName() == expected);
         request.UseDatabase("/Root/mydb");
-        request.InitRequestPaths("/Other", !relativePathsEnabled, counters);
         UNIT_ASSERT(request.GetDatabaseName() == expected);
         UNIT_ASSERT_VALUES_EQUAL(ctx->UsedDatabase, "/Root/mydb");
     }

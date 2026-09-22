@@ -896,12 +896,10 @@ TEST(TableTest, AlterTableSetMetricsSettings) {
     );
 }
 
-// TODO: Enable with the tiering tree object key implementation (PR #52993).
-#if 0
 TEST(TtlTierSettings, ObjectKeyPrefixRoundTrip) {
     using namespace NYdb::NTable;
     for (auto&& prefix : {std::optional<std::string>(), std::make_optional(std::string()),
-                         std::make_optional(std::string("archive//2026:09/"))}) {
+                          std::make_optional(std::string("archive//2026:09/"))}) {
         const TTtlTierSettings original(TDateTypeColumnModeSettings("ts", TDuration::Days(1)),
                                         TTtlEvictToExternalStorageAction("/Root/eds", prefix));
         Ydb::Table::TtlTier proto;
@@ -919,4 +917,3 @@ TEST(TtlTierSettings, ObjectKeyPrefixRoundTrip) {
     TTtlEvictToExternalStorageAction("/Root/eds").SerializeTo(proto);
     EXPECT_FALSE(proto.has_object_key_prefix());
 }
-#endif

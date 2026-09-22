@@ -1,6 +1,4 @@
-// TODO: Enable with the tiering tree object key implementation (PR #52993).
-#if 0
-// TODO: Include <ydb/core/tx/columnshard/blobs_action/tier/object_key.h> with the implementation (PR #52993).
+#include <ydb/core/tx/columnshard/blobs_action/tier/object_key.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/hash_set.h>
@@ -150,4 +148,3 @@ Y_UNIT_TEST_SUITE(TierObjectKey) {
 }
 
 }
-#endif

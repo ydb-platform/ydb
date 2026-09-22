@@ -8734,8 +8734,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    // TODO: Enable with the tiering tree object key implementation (PR #52993).
-#if 0
     Y_UNIT_TEST(ColumnTableTieringObjectKeyPrefix, ETieringObjectKeyTree) {
         const bool EnableTree = Arg<0>() == ETieringObjectKeyTree::Enabled;
         TKikimrSettings settings;
@@ -8746,6 +8744,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         helper.CreateTier("tier1");
         auto db = helper.GetKikimr().GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto checkTier = [&](const TString& expectedPrefix) {
+            const auto desc = session.DescribeTable("/Root/tiering_tree").GetValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            const auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT(ttl);
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            const auto& action = std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction());
+            UNIT_ASSERT_VALUES_EQUAL(action.GetStorage(), "/Root/tier1");
+            UNIT_ASSERT(action.GetObjectKeyPrefix());
+            UNIT_ASSERT_VALUES_EQUAL(*action.GetObjectKeyPrefix(), expectedPrefix);
+        };
+
         const auto create = session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/tiering_tree` (ts Timestamp NOT NULL, value String, PRIMARY KEY(ts))
             WITH (STORE = COLUMN, TTL = Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/tier1`.`archive/data` ON ts);
@@ -8760,14 +8770,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(legacy.IsSuccess(), legacy.GetIssues().ToString());
         } else {
             UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
-            const auto desc = session.DescribeTable("/Root/tiering_tree").GetValueSync();
-            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
-            const auto ttl = desc.GetTableDescription().GetTtlSettings();
-            UNIT_ASSERT(ttl);
-            const auto& action = std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction());
-            UNIT_ASSERT_VALUES_EQUAL(action.GetStorage(), "/Root/tier1");
-            UNIT_ASSERT(action.GetObjectKeyPrefix());
-            UNIT_ASSERT_VALUES_EQUAL(*action.GetObjectKeyPrefix(), "archive/data");
+            checkTier("archive/data");
         }
 
         const auto alter = session.ExecuteSchemeQuery(R"(
@@ -8776,16 +8779,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(alter.IsSuccess(), EnableTree, alter.GetIssues().ToString());
         if (EnableTree) {
-            const auto desc = session.DescribeTable("/Root/tiering_tree").GetValueSync();
-            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
-            const auto ttl = desc.GetTableDescription().GetTtlSettings();
-            UNIT_ASSERT(ttl);
-            const auto& action = std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction());
-            UNIT_ASSERT(action.GetObjectKeyPrefix());
-            UNIT_ASSERT_VALUES_EQUAL(*action.GetObjectKeyPrefix(), "another/path");
+            checkTier("another/path");
         }
     }
-#endif
 
     Y_UNIT_TEST(AlterColumnTableTiering) {
         TKikimrSettings runnerSettings;

@@ -11,7 +11,6 @@ from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
-@pytest.mark.skip(reason="Requires tiering tree object key implementation (PR #52993)")
 class TestTieringRestart(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self, tree):

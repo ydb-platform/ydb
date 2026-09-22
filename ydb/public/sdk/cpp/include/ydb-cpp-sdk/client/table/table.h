@@ -804,12 +804,15 @@ class TTtlDeleteAction {};
 class TTtlEvictToExternalStorageAction {
 public:
     TTtlEvictToExternalStorageAction(const std::string& storageName);
+    TTtlEvictToExternalStorageAction(const std::string& storageName, const std::optional<std::string>& objectKeyPrefix);
     void SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const;
 
     std::string GetStorage() const;
+    const std::optional<std::string>& GetObjectKeyPrefix() const;
 
 private:
     std::string Storage_;
+    std::optional<std::string> ObjectKeyPrefix_;
 };
 
 class TTtlTierSettings {

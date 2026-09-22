@@ -1,7 +1,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/testlib/cs_helper.h>
-// TODO: Include <ydb/core/tx/columnshard/blobs_action/tier/object_key.h> with the implementation (PR #52993).
+#include <ydb/core/tx/columnshard/blobs_action/tier/object_key.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/ro_controller.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -424,16 +424,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        // TODO: Enable with the tiering tree object key implementation (PR #52993).
-#if 0
         const NTiers::TExternalStorageId tierId("/Root/tier1", Tree ? std::make_optional(TString("archive")) : std::nullopt);
         const NTiers::TExternalStorageId otherTierId("/Root/tier1", Tree ? std::make_optional(TString("cold")) : std::nullopt);
         TTestCSEmulator* emulator = new TTestCSEmulator({ tierId, otherTierId });
-#else
-        Y_UNUSED(Tree);
-        const NTiers::TExternalStorageId tierId("/Root/tier1");
-        TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1" });
-#endif
         runtime.Register(emulator);
         emulator->CheckRuntime(runtime);
         for (const TInstant start = Now(); !emulator->GetTierConfigs().at(tierId).HasConfig() && Now() - start < TDuration::Seconds(30);) {
@@ -460,24 +453,18 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
         UNIT_ASSERT_VALUES_EQUAL(manager.GetAwaitedConfigsCount(), 0);
         UNIT_ASSERT(tierManager->IsReady());
-        // TODO: Enable with the tiering tree object key implementation (PR #52993).
-#if 0
         const auto* otherTierManager = manager.GetManagerOptional(otherTierId);
         UNIT_ASSERT(otherTierManager && otherTierManager->IsReady());
         UNIT_ASSERT_VALUES_EQUAL(otherTierManager->GetS3Settings().GetBucket(), "abc");
-#endif
     }
 
     Y_UNIT_TEST(TierBecomesReadyAfterLateSecretsSnapshot) {
         TierBecomesReadyAfterLateSecretsSnapshotImpl(false);
     }
 
-    // TODO: Enable with the tiering tree object key implementation (PR #52993).
-#if 0
     Y_UNIT_TEST(TreeTierBecomesReadyAfterLateSecretsSnapshot) {
         TierBecomesReadyAfterLateSecretsSnapshotImpl(true);
     }
-#endif
 
 //#define S3_TEST_USAGE
 #ifdef S3_TEST_USAGE
@@ -616,8 +603,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             UNIT_ASSERT(check);
         }
         Cerr << "storage initialized..." << Endl;
-// TODO: Enable with the tiering tree object key implementation (PR #52993).
-#if 0
 #ifndef S3_TEST_USAGE
         if (Tree) {
             using TObjectKey = NOlap::NBlobOperations::NTier::TObjectKey;
@@ -657,7 +642,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             }
         }
 #endif
-#endif
 
 /*
         lHelper.DropTable("/Root/olapStore/olapTable");
@@ -693,12 +677,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         TieringUsageImpl(false);
     }
 
-    // TODO: Enable with the tiering tree object key implementation (PR #52993).
-#if 0
     Y_UNIT_TEST(TreeTieringUsage) {
         TieringUsageImpl(true);
     }
-#endif
 
     std::optional<NYdb::TValue> GetValueResult(const THashMap<TString, NYdb::TValue>& hMap, const TString& fName) {
         auto it = hMap.find(fName);

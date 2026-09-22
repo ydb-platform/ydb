@@ -1,3 +1,5 @@
+* Added an optional S3 object key prefix to TTL eviction settings for column tables.
+
 * Added `Float16` and `BFloat16` vector index types.
 
 ## v3.23.0

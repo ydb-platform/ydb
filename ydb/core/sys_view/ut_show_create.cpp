@@ -1181,8 +1181,6 @@ Y_UNIT_TEST(TableKeyBloomFilter) {
     );
 }
 
-// TODO: Enable with the tiering tree object key implementation (PR #52993).
-#if 0
 Y_UNIT_TEST(TableTtlObjectKeyPrefix) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
     env.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableTieringObjectKeyTree(true);
@@ -1199,7 +1197,6 @@ Y_UNIT_TEST(TableTtlObjectKeyPrefix) {
         );
     )", "test_show_create");
 }
-#endif
 
 Y_UNIT_TEST(TableTtlSettings) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});

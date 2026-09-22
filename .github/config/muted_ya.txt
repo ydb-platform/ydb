@@ -1,4 +1,5 @@
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/pdisk/ut TPDiskTest.ChunkForgetTransitionalRejectionsPreserveStateAndSeverity
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
 ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
@@ -16,7 +17,9 @@ ydb/core/persqueue/public/schema/ut SchemaOps.AlterIfExistsMissingIsSuccess
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
 ydb/core/tx/conveyor_composite/ut TCompositeConveyorRuntimeUpdate.LatestTopologySupersedesPrepare
 ydb/core/tx/replication/service/ut_worker unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.CreateIndexedTableAndForceDropSimultaneously[PipeResets]
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
+ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions

@@ -454,9 +454,6 @@ class TExecutor
     THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
 
-    // In-flight resumable V2 B-tree preloads, keyed by index collection
-    THashMap<TLogoBlobID, THolder<TBTreePreloadState>> StickyPreloadsByIndex;
-    THashMap<TLogoBlobID, THolder<TBTreePreloadState>> TryKeepInMemoryPreloadsByIndex;
     THolder<TExecutorCounters> Counters;
     THolder<TTabletCountersBase> AppCounters;
     THolder<TTabletCountersBase> CountersBaseline;
@@ -565,8 +562,10 @@ class TExecutor
     void TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& pages, TPrivatePageCache::TPageCollection* collectionInfo);
     void ActivateWaitingTransaction(TTransactionWaitPad& transaction);
     void LogWaitingTransaction(const TTransactionWaitPad& transaction);
-    void AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
-    void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection);
+    void AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
+        const THashSet<NTable::TTag>& stickyColumns);
+    void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection,
+        TVector<NSharedCache::TEvAttach::TBtreeSeed> btreeSeeds = {});
     void DropPartStorePageCollections(const NTable::TPart &part);
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
     void StartNewBackup();
@@ -575,15 +574,10 @@ class TExecutor
 
     NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const;
 
-    void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
+    void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
+        const THashSet<NTable::TTag>& stickyColumns);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
     void RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);
-    void RequestTryKeepInMemoryPagesForPartStore(const NTable::TPartView& partView);
-
-    void StartBTreePreload(const NTable::TPartStore& partStore,
-        const TVector<std::pair<NTable::NPage::TGroupId, bool>>& groups, bool sticky);
-    void DriveBTreePreload(TBTreePreloadState* state);
-    void DropBTreePreloadState(TBTreePreloadState* state);
 
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     THashMap<NTable::TTag, ECacheMode> GetCacheModes(ui32 tableId);
@@ -617,6 +611,7 @@ class TExecutor
     void Handle(TEvPrivate::TEvRetryGcRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(NSharedCache::TEvResult::TPtr &ev);
     void Handle(NSharedCache::TEvUpdated::TPtr &ev);
+    void Handle(NSharedCache::TEvStickyCollectionPages::TPtr &ev);
     void Handle(NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr&);
     void Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx);
     void Handle(NOps::TEvResult::TPtr &ev);

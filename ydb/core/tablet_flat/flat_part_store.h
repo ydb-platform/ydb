@@ -153,13 +153,13 @@ public:
         auto& pageCollection = *PageCollections[room]->PageCollection;
         auto meta =
             room < IndexPages.BTreeGroups.size() ? &IndexPages.GetBTree(NTable::NPage::TGroupId(room)) : nullptr;
-        bool skipV1 = meta && meta->HasRootV2();
+        bool supersededByV2Tree = meta && meta->HasRootV2();
         auto total = pageCollection.MetaPages();
-        TVector<TPageLocation> pages(Reserve(skipV1 ? 8 : total));
+        TVector<TPageLocation> pages(Reserve(supersededByV2Tree ? 8 : total));
         for (ui32 i = 0; i < total; ++i) {
             auto type = pageCollection.Page(i).Type;
             if (type == ui32(EPage::Skip) ||
-                (skipV1 && (type == ui32(EPage::BTreeIndex) || type == ui32(EPage::BTreeIndexV2) ||
+                (supersededByV2Tree && (type == ui32(EPage::BTreeIndex) || type == ui32(EPage::BTreeIndexV2) ||
                                type == ui32(EPage::DataPage)))) {
                 continue;
             }

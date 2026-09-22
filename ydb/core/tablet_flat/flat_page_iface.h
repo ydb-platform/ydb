@@ -155,6 +155,12 @@ namespace NPage {
         Skip = 15,     /* Absorbs excluded data/btree pages in TMeta */
     };
 
+    /// A page the V2-only writer absorbs into an EPage::Skip entry instead of recording it in the meta.
+    constexpr bool IsAbsorbedInV2Only(EPage type) noexcept
+    {
+        return type == EPage::DataPage || type == EPage::BTreeIndexV2;
+    }
+
     struct TPageLocation {
         TPageOffset Offset;
         ui64 Size = 0;

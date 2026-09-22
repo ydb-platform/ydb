@@ -1,74 +1,70 @@
-name: ydbdoc start-job diagnostic
+name: Read ydbdoc job audit for PR 51079
 
 on:
   push:
     branches: [ydbdoc-v1.1-audit-51079-20260922]
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  diagnose:
-    runs-on: ubuntu-24.04
+  audit:
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: ydb-platform/ydbdoc-review-ng
+          ref: 738fe6cc425945c349e9a1e26d2a2100bed44eb7
+          path: tool
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.11"
-      - run: python -m pip install 'ydb[yc]>=3.31,<4'
-      - name: Execute the exact start-job UPSERT with dummy data
+      - run: python -m pip install './tool[runtime]'
+      - name: Print sanitized job and attempt status only
         env:
           YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
-          YDB_ENDPOINT: ${{ vars.YDB_ENDPOINT }}
-          YDB_DATABASE: ${{ vars.YDB_DATABASE }}
         run: |
           python - <<'PY'
-          from datetime import UTC, datetime
           import os
-          import re
-          import uuid
+          from ydbdoc_review_ng.runtime_ydb import (
+              DEFAULT_YDB_DATABASE,
+              DEFAULT_YDB_ENDPOINT,
+              SDKExecutor,
+          )
 
-          import ydb
-
-          endpoint = os.environ.get("YDB_ENDPOINT") or "grpcs://ydb.serverless.yandexcloud.net:2135"
-          database = os.environ.get("YDB_DATABASE") or "/ru-central1/b1g7gqj2vnq67gjseuva/etns0641qf73btm7j21k"
-          credentials = ydb.iam.ServiceAccountCredentials.from_content(os.environ["YDB_SA_KEY"])
-          driver = ydb.Driver(endpoint=endpoint, database=database, credentials=credentials)
-          driver.wait(timeout=30, fail_fast=True)
-          pool = ydb.QuerySessionPool(driver)
-          job_id = "diagnostic-" + str(uuid.uuid4())
-          query = """DECLARE $job_id AS Utf8?;
-          DECLARE $mode AS Utf8;
-          DECLARE $pr_number AS Uint64;
-          DECLARE $source_sha AS Utf8?;
-          DECLARE $target_sha AS Utf8?;
-          DECLARE $started_at AS Timestamp;
-          DECLARE $status AS Utf8;
-          UPSERT INTO `ydbdoc_review/jobs`
-              (job_id, mode, pr_number, source_sha, target_sha, started_at, status)
-          VALUES ($job_id, $mode, $pr_number, $source_sha, $target_sha, $started_at, $status);"""
-          values = {
-              "$job_id": ydb.TypedValue(job_id, ydb.OptionalType(ydb.PrimitiveType.Utf8)),
-              "$mode": ydb.TypedValue("doc_translate", ydb.PrimitiveType.Utf8),
-              "$pr_number": ydb.TypedValue(51079, ydb.PrimitiveType.Uint64),
-              "$source_sha": ydb.TypedValue("0" * 40, ydb.OptionalType(ydb.PrimitiveType.Utf8)),
-              "$target_sha": ydb.TypedValue(None, ydb.OptionalType(ydb.PrimitiveType.Utf8)),
-              "$started_at": ydb.TypedValue(datetime.now(UTC), ydb.PrimitiveType.Timestamp),
-              "$status": ydb.TypedValue("started", ydb.PrimitiveType.Utf8),
-          }
+          executor = SDKExecutor(
+              os.environ.get("YDB_ENDPOINT", DEFAULT_YDB_ENDPOINT),
+              os.environ.get("YDB_DATABASE", DEFAULT_YDB_DATABASE),
+              "",
+              os.environ["YDB_SA_KEY"],
+          )
           try:
-              pool.execute_with_retries(query, values)
-              print("START_UPSERT_OK", flush=True)
-          except Exception as error:
-              message = re.sub(r"[A-Za-z0-9_=-]{80,}", "<redacted>", str(error))
-              print("START_UPSERT_ERROR", type(error).__name__, message[:3000], flush=True)
-          finally:
-              try:
-                  pool.execute_with_retries(
-                      "DECLARE $job_id AS Utf8; DELETE FROM `ydbdoc_review/jobs` WHERE job_id = $job_id;",
-                      {"$job_id": ydb.TypedValue(job_id, ydb.PrimitiveType.Utf8)},
+              jobs = executor.execute(
+                  """SELECT job_id, mode, pr_number, source_sha, target_sha,
+                            started_at, finished_at, status, error
+                     FROM `ydbdoc_review/jobs`
+                     WHERE pr_number = $pr_number
+                     ORDER BY started_at DESC
+                     LIMIT 5;""",
+                  {"pr_number": 51079},
+              )
+              for job in jobs:
+                  safe_job = {key: job.get(key) for key in (
+                      "job_id", "mode", "pr_number", "source_sha", "target_sha",
+                      "started_at", "finished_at", "status", "error",
+                  )}
+                  print("JOB", safe_job, flush=True)
+                  attempts = executor.execute(
+                      """SELECT role, status, error, model, started_at,
+                                finished_at, cost_rub
+                         FROM `ydbdoc_review/attempts`
+                         WHERE job_id = $job_id
+                         ORDER BY started_at ASC;""",
+                      {"job_id": job["job_id"]},
                   )
-              finally:
-                  driver.stop()
+                  for attempt in attempts:
+                      print("ATTEMPT", dict(attempt), flush=True)
+          finally:
+              executor.close()
           PY

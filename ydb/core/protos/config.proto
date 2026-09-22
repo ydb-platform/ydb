@@ -2849,7 +2849,7 @@ message TBlobCacheConfig {
     optional uint64 MaxInFlightBytes = 2 [default = 262144000];
     optional uint64 MaxRequestBytes = 3 [default = 8388608];
     optional uint64 ReadDeadlineMs = 4 [default = 30000];
-    optional uint64 WriteProtectDurationMs = 5 [default = 10800000];
+    optional uint64 WriteProtectDurationMs = 5 [default = 3600000];
 }
 
 message TColumnShardConfig {

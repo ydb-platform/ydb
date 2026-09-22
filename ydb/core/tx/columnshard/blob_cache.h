@@ -105,9 +105,9 @@ struct TEvBlobCache {
     struct TEvCacheBlobRange: public NActors::TEventLocal<TEvCacheBlobRange, EvCacheBlobRange> {
         TBlobRange BlobRange;
         TString Data;
-        bool Sticky = true;
+        bool Sticky = false;
 
-        TEvCacheBlobRange(const TBlobRange& blobRange, const TString& data, const bool sticky = true)
+        TEvCacheBlobRange(const TBlobRange& blobRange, const TString& data, const bool sticky)
             : BlobRange(blobRange)
             , Data(data)
             , Sticky(sticky)

@@ -95,8 +95,8 @@ private:
     static constexpr i64 DEFAULT_MAX_IN_FLIGHT_BYTES = 250ll << 20;
     static constexpr i64 DEFAULT_MAX_REQUEST_BYTES = 8ll << 20;
     static constexpr ui64 DEFAULT_READ_DEADLINE_MS = 30000;
-    static constexpr ui64 DEFAULT_WRITE_PROTECT_DURATION_MS = 10800000;
-    static constexpr ui64 DEFAULT_MAX_CACHE_DATA_SIZE = 1073741824ull;
+    static constexpr ui64 DEFAULT_WRITE_PROTECT_DURATION_MS = 3600000;
+    static constexpr ui64 DEFAULT_MAX_CACHE_DATA_SIZE = 1000ull << 20;
 
     struct TCacheEntry {
         TString Data;

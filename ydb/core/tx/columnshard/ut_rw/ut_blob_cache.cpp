@@ -27,7 +27,7 @@ TString MakeData(const ui32 size, const char fill) {
 
 class TBlobCacheFixture {
 public:
-    TBlobCacheFixture(const ui64 maxBytes, const ui64 writeProtectDurationMs = 10800000) {
+    TBlobCacheFixture(const ui64 maxBytes, const ui64 writeProtectDurationMs = 3600000) {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
 

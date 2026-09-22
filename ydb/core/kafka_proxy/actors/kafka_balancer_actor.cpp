@@ -1550,8 +1550,7 @@ void TKafkaBalancerActor::SendLeaveGroupResponseOk(const TActorContext& ctx, ui6
     auto response = std::make_shared<TLeaveGroupResponseData>();
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, EKafkaErrors::NONE_ERROR));
-    Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(-1, BuildGroupLabels(Context, GroupId, "api.kafka.consumer_group.members_count")));
-    Send(Context->ConnectionId, new TEvKafka::TEvReleaseGroupMemberCounter(GroupId));
+    Send(Context->ConnectionId, new TEvKafka::TEvDecrementGroupMemberCounter(GroupId));
     Die(ctx);
 }
 

@@ -632,8 +632,10 @@ protected:
         GroupMemberCounters[ev->Get()->GroupId] = std::move(ev->Get()->Counter);
     }
 
-    void Handle(TEvKafka::TEvReleaseGroupMemberCounter::TPtr ev, const TActorContext& /*ctx*/) {
-        GroupMemberCounters.erase(ev->Get()->GroupId);
+    void Handle(TEvKafka::TEvDecrementGroupMemberCounter::TPtr ev, const TActorContext&) {
+        if (*GroupMemberCounters[ev->Get()->GroupId] > 0) {
+            --(*GroupMemberCounters[ev->Get()->GroupId]);
+        };
     }
 
     void Handle(TEvKafka::TEvAuthResult::TPtr ev, const TActorContext& ctx) {
@@ -1266,7 +1268,7 @@ protected:
             HFunc(TEvKafka::TEvReadSessionInfo, Handle);
             HFunc(TEvKafka::TEvHandshakeResult, Handle);
             HFunc(TEvKafka::TEvSaveGroupMemberCounter, Handle);
-            HFunc(TEvKafka::TEvReleaseGroupMemberCounter, Handle);
+            HFunc(TEvKafka::TEvDecrementGroupMemberCounter, Handle);
             sFunc(TEvKafka::TEvKillReadSession, HandleKillReadSession);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:

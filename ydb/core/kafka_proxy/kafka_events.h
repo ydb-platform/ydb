@@ -51,10 +51,9 @@ struct TEvKafka {
         EvFetchActorStateResponse,
         EvMtlsAuthRequest,
         EvTokenRecheck,
-        // EvSetCounter,
         EvGetGroupMemberCounter,
-        EvGroupMemberCounter,
-        EvReleaseGroupMemberCounter,
+        EvSaveGroupMemberCounter,
+        EvDecrementGroupMemberCounter,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -319,7 +318,7 @@ struct PartitionConsumerOffset {
         {}
     };
 
-    struct TEvSaveGroupMemberCounter : public TEventLocal<TEvSaveGroupMemberCounter, EvGroupMemberCounter> {
+    struct TEvSaveGroupMemberCounter : public TEventLocal<TEvSaveGroupMemberCounter, EvSaveGroupMemberCounter> {
         NMonitoring::TDynamicCounters::TCounterPtr Counter;
         TString GroupId;
 
@@ -329,10 +328,11 @@ struct PartitionConsumerOffset {
         {}
     };
 
-    struct TEvReleaseGroupMemberCounter : public TEventLocal<TEvReleaseGroupMemberCounter, EvReleaseGroupMemberCounter> {
+    struct TEvDecrementGroupMemberCounter : public TEventLocal<TEvDecrementGroupMemberCounter, EvDecrementGroupMemberCounter> {
+        NMonitoring::TDynamicCounters::TCounterPtr Counter;
         TString GroupId;
 
-        explicit TEvReleaseGroupMemberCounter(TString groupId)
+        TEvDecrementGroupMemberCounter(TString groupId)
             : GroupId(std::move(groupId))
         {}
     };

@@ -7,6 +7,7 @@
 #include "events.h"
 #include "executor_pool_base.h"
 #include "executor_pool_basic.h"
+#include "executor_pool_shared.h"
 #include "executor_thread_ctx.h"
 #include "probes.h"
 #include "debug.h"
@@ -551,9 +552,19 @@ namespace NActors {
             ThreadCtx.ExecutionContext.Orbit.Reset();
         };
 
-        IExecutorPool* mainPool = ThreadCtx.IsShared() ? ThreadCtx.SharedPool() : ThreadCtx.Pool();
+        auto* sharedPool = ThreadCtx.IsShared()
+            ? static_cast<TSharedExecutorPool*>(ThreadCtx.SharedPool()) : nullptr;
+        IExecutorPool* mainPool = sharedPool ? sharedPool : ThreadCtx.Pool();
 
         while (!StopFlag.load(std::memory_order_relaxed)) {
+            if (sharedPool && sharedPool->ShouldRescheduleCapturedActivation(ThreadCtx.WorkerId())) {
+                // Finish the current activation, but do not extend a captured
+                // chain past a shared waker's sleep or ownership request.
+                if (TMailbox* captured = ThreadCtx.CaptureMailbox(nullptr)) {
+                    ThreadCtx.Pool()->ScheduleActivation(captured);
+                }
+                ThreadCtx.ChangeCapturedSendingType(ESendingType::Common);
+            }
             if (TlsThreadContext->CheckCapturedSendingType(ESendingType::Tail)) {
                 TMailbox* mailbox = ThreadCtx.CaptureMailbox(nullptr);
                 Y_ABORT_UNLESS(mailbox, "activation must be not null");

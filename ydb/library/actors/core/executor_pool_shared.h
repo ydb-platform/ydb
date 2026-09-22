@@ -99,20 +99,18 @@ namespace NActors {
 
         // Set during pool registration, before any executor thread starts.
         bool HasWakerPools = false;
-        // Includes workers checking queues for the last time before parking.
+        // Only the shared waker changes sleep decisions and their accounting.
         alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SharedSleepingCount = 0;
-        enum class EWakerState : ui8 {
-            Idle,
-            Requested, // No worker has claimed the request yet.
-            Running,   // The worker that won Requested -> Running owns the role.
-        };
+        std::vector<bool> SleepingWorkers;
+        static constexpr i16 InvalidWakerWorkerId = -1;
         alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
-        // Requesting work does not assign the caller or choose a worker.
-        std::atomic<EWakerState> WakerState = EWakerState::Idle;
+        std::atomic<i16> WakerWorkerId = InvalidWakerWorkerId;
 
-        void RequestWaker();
+        void RequestWaker(i16 workerId = InvalidWakerWorkerId);
         void RunWaker(TWorkerId workerId);
-        void WakerLoop();
+        void WakerLoop(TWorkerId workerId, EThreadState* resumeState);
+        void SetSleeping(TWorkerId workerId, bool sleeping);
+        TMailbox* GetReadyActivationWaker(ui64 revolvingCounter);
 
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
@@ -144,6 +142,7 @@ namespace NActors {
         void Initialize() override;
         i16 FindPoolForWorker(TSharedExecutorThreadCtx& thread, ui64 revolvingReadCounter);
         TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
+        bool ShouldRescheduleCapturedActivation(TWorkerId workerId);
 
         void SwitchToPool(i16 poolId, NHPTimer::STime hpNow);
 

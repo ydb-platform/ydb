@@ -26,6 +26,55 @@ using namespace NActors::NTests;
 
 Y_UNIT_TEST_SUITE(SharedThreads) {
 
+    class TTestSharedThreadCtx : public TSharedExecutorThreadCtx {
+    public:
+        void SetState(EThreadState state) {
+            ExchangeState(state);
+        }
+
+        EThreadState State() {
+            return GetState<EThreadState>();
+        }
+
+        bool TryBlock() {
+            EThreadState state = EThreadState::Spin;
+            return ReplaceState(state, EThreadState::Blocking);
+        }
+    };
+
+    Y_UNIT_TEST(WakerBlockingSurvivesDequeuedActivation) {
+        TTestSharedThreadCtx thread;
+        thread.SetState(EThreadState::Spin);
+        UNIT_ASSERT(thread.TryBlock());
+        // The mailbox was popped concurrently with the waker's decision.
+        thread.SetWorkForWaker();
+        UNIT_ASSERT(thread.State() == EThreadState::Blocking);
+        thread.UnsetWorkForWaker();
+        UNIT_ASSERT(thread.State() == EThreadState::Blocking);
+    }
+
+    Y_UNIT_TEST(WakerCannotBlockCommittedActivation) {
+        TTestSharedThreadCtx thread;
+        thread.SetState(EThreadState::Spin);
+        thread.SetWorkForWaker();
+        UNIT_ASSERT(!thread.TryBlock());
+        UNIT_ASSERT(thread.State() == EThreadState::Work);
+        thread.UnsetWorkForWaker();
+        UNIT_ASSERT(thread.State() == EThreadState::None);
+    }
+
+    Y_UNIT_TEST(WakerRequestSurvivesDequeuedActivation) {
+        TTestSharedThreadCtx thread;
+        thread.SetState(EThreadState::Spin);
+        UNIT_ASSERT(thread.TrySetNeedToBeWaker());
+        thread.SetWorkForWaker();
+        thread.UnsetWorkForWaker();
+        UNIT_ASSERT(thread.State() == EThreadState::NeedToBeWakerFromSpin);
+        EThreadState resumeState;
+        UNIT_ASSERT(thread.TryBecomeWaker(&resumeState));
+        UNIT_ASSERT(resumeState == EThreadState::Spin);
+    }
+
     using TActorBenchmark = ::NActors::NTests::TActorBenchmark<>;
     using TSettings = TActorBenchmark::TSettings;
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
@@ -161,10 +210,13 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
 
 
     template <ESendingType SendingType>
-    void RunRegistrationAndPassingAwayActors(bool strictPool) {
+    void RunRegistrationAndPassingAwayActors(bool strictPool, bool enableWaker = false) {
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
          TActorBenchmark::AddBasicPool(setup, 1, 1, true);
          TActorBenchmark::AddBasicPool(setup, 1, 1, true);
+        for (auto& config : setup->CpuManager.Basic) {
+            config.EnableWaker = enableWaker;
+        }
 
         TActorSystem actorSystem(setup);
         actorSystem.Start();
@@ -249,6 +301,14 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         RunRegistrationAndPassingAwayActors<ESendingType::Lazy>(true);
     }
 
+    Y_UNIT_TEST(WakerRegistrationAndPassingAwayActorsLazy) {
+        RunRegistrationAndPassingAwayActors<ESendingType::Lazy>(true, true);
+    }
+
+    Y_UNIT_TEST(WakerRegistrationAndPassingAwayActorsTail) {
+        RunRegistrationAndPassingAwayActors<ESendingType::Tail>(true, true);
+    }
+
     Y_UNIT_TEST(AllThreadsSharedRunWithoutLegacySharedFlag) {
         THolder<TActorSystemSetup> setup = TActorBenchmark::GetActorSystemSetup();
         setup->CpuManager.Shared.United = true;
@@ -299,7 +359,20 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         std::atomic<ui64>* const Shared;
     };
 
-    void RunSharedWakerBursts(bool sharedOnly, bool mixed, bool foreignOnly, bool singleSharedWorker = false) {
+    enum class EWakerScenario {
+        BasicAndShared,
+        SharedOnly,
+        MixedWithLegacy,
+        ForeignOnly,
+        SingleSharedWorker,
+        AdjacentPools,
+    };
+
+    void RunSharedWakerBursts(EWakerScenario scenario) {
+        const bool mixed = scenario == EWakerScenario::MixedWithLegacy;
+        const bool sharedOnly = scenario != EWakerScenario::BasicAndShared && !mixed;
+        const bool singleSharedWorker = scenario == EWakerScenario::SingleSharedWorker || scenario == EWakerScenario::AdjacentPools;
+        const bool foreignOnly = scenario == EWakerScenario::ForeignOnly || singleSharedWorker;
         auto setup = TActorBenchmark::GetActorSystemSetup();
         constexpr ui32 poolCount = 3;
         constexpr ui32 actorsPerPool = 16;
@@ -328,6 +401,12 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
                 config.HasSharedThread = false;
                 config.AllThreadsAreShared = false;
                 config.ForcedForeignSlotCount = 2;
+            }
+            if (scenario == EWakerScenario::AdjacentPools) {
+                config.ForcedForeignSlotCount = 0;
+                if (poolId == 0) {
+                    config.AdjacentPools = {1, 2};
+                }
             }
             setup->CpuManager.Basic.push_back(config);
         }
@@ -386,23 +465,100 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
     }
 
     Y_UNIT_TEST(WakerMultiplePools) {
-        RunSharedWakerBursts(false, false, false);
+        RunSharedWakerBursts(EWakerScenario::BasicAndShared);
     }
 
     Y_UNIT_TEST(WakerSharedOnly) {
-        RunSharedWakerBursts(true, false, false);
+        RunSharedWakerBursts(EWakerScenario::SharedOnly);
     }
 
     Y_UNIT_TEST(WakerMixedWithLegacyPool) {
-        RunSharedWakerBursts(false, true, false);
+        RunSharedWakerBursts(EWakerScenario::MixedWithLegacy);
     }
 
     Y_UNIT_TEST(WakerForeignOnlyPool) {
-        RunSharedWakerBursts(true, false, true);
+        RunSharedWakerBursts(EWakerScenario::ForeignOnly);
     }
 
     Y_UNIT_TEST(WakerSingleSharedWorker) {
-        RunSharedWakerBursts(true, false, true, true);
+        RunSharedWakerBursts(EWakerScenario::SingleSharedWorker);
+    }
+
+    Y_UNIT_TEST(WakerAdjacentPools) {
+        RunSharedWakerBursts(EWakerScenario::AdjacentPools);
+    }
+
+    class TContinuouslyActiveActor : public TActorBootstrapped<TContinuouslyActiveActor> {
+    public:
+        TContinuouslyActiveActor(TManualEvent* started, const std::atomic<bool>* stop)
+            : Started(started)
+            , Stop(stop)
+        {}
+
+        void Bootstrap() {
+            Become(&TContinuouslyActiveActor::StateWork);
+            Send(SelfId(), new TEvents::TEvWakeup());
+        }
+
+        STFUNC(StateWork) {
+            Y_UNUSED(ev);
+            if (++Events == 100) {
+                Started->Signal();
+            }
+            if (Stop->load(std::memory_order_acquire)) {
+                PassAway();
+            } else {
+                Send(SelfId(), new TEvents::TEvWakeup());
+            }
+        }
+
+    private:
+        TManualEvent* const Started;
+        const std::atomic<bool>* const Stop;
+        ui32 Events = 0;
+    };
+
+    void RunWakerReturnsToOwner(bool adjacent) {
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        for (ui32 poolId = 0; poolId < 2; ++poolId) {
+            TBasicExecutorPoolConfig config;
+            config.PoolId = poolId;
+            config.PoolName = "WakerReturnsToOwner";
+            config.Threads = poolId == 0 ? 1 : 0;
+            config.MinThreadCount = config.Threads;
+            config.MaxThreadCount = config.Threads;
+            config.DefaultThreadCount = config.Threads;
+            config.AllThreadsAreShared = poolId == 0;
+            config.EnableWaker = true;
+            config.SpinThreshold = 0;
+            config.EventsPerMailbox = 1;
+            config.ForcedForeignSlotCount = !adjacent && poolId == 1 ? 1 : 0;
+            if (adjacent && poolId == 0) {
+                config.AdjacentPools = {1};
+            }
+            setup->CpuManager.Basic.push_back(config);
+        }
+        TManualEvent started;
+        TManualEvent done;
+        std::atomic<bool> stop = false;
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+        actorSystem.Register(new TContinuouslyActiveActor(&started, &stop), TMailboxType::HTSwap, 1);
+        const bool running = started.WaitT(TDuration::Seconds(5));
+        actorSystem.Register(new TSignalActor(&done), TMailboxType::HTSwap, 0);
+        const bool returned = done.WaitT(TDuration::Seconds(5));
+        stop.store(true, std::memory_order_release);
+        actorSystem.Stop();
+        UNIT_ASSERT_C(running, "The continuously active pool did not start");
+        UNIT_ASSERT_C(returned, "A busy other pool prevented the shared worker from returning to its owner");
+    }
+
+    Y_UNIT_TEST(WakerReturnsFromBusyForeignPool) {
+        RunWakerReturnsToOwner(false);
+    }
+
+    Y_UNIT_TEST(WakerReturnsFromBusyAdjacentPool) {
+        RunWakerReturnsToOwner(true);
     }
 
 } // Y_UNIT_TEST_SUITE(ActorBenchmark)

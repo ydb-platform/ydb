@@ -1247,7 +1247,9 @@ namespace NActors {
         NHPTimer::STime hpnow = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
 
-        SharedPool->Threads[workerId].UnsetWork();
+        if (!SharedPool->HasWakerPools) {
+            SharedPool->Threads[workerId].UnsetWork();
+        }
         if (Harmonizer) {
             LWPROBE(TryToHarmonize, PoolId, PoolName);
             Harmonizer->Harmonize(hpnow);
@@ -1259,7 +1261,7 @@ namespace NActors {
                 if (const ui32 activation = Activations.Pop(revolvingCounter++)) {
                     const i64 credits = ActivationCredits.fetch_sub(1, std::memory_order_acq_rel);
                     Y_DEBUG_ABORT_UNLESS(credits > 0);
-                    SharedPool->Threads[workerId].SetWork();
+                    SharedPool->Threads[workerId].SetWorkForWaker();
                     return MailboxTable->Get(activation);
                 }
                 if (ActivationCredits.load(std::memory_order_acquire) == 0) {
@@ -1279,7 +1281,11 @@ namespace NActors {
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
                 if (const ui32 activation = Activations.Pop(revolvingCounter++)) {
-                    SharedPool->Threads[workerId].SetWork();
+                    if (SharedPool->HasWakerPools) {
+                        SharedPool->Threads[workerId].SetWorkForWaker();
+                    } else {
+                        SharedPool->Threads[workerId].SetWork();
+                    }
                     AtomicDecrement(Semaphore);
                     EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphore == ", semaphore.OldSemaphore);
                     return MailboxTable->Get(activation);

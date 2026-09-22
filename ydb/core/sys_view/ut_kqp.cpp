@@ -2465,6 +2465,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(QuerySessionsRuntimeStats) {
         NKqp::TKikimrSettings settings = NKqp::TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetCurrentQueryStatsIntervalSeconds(1);
         NKqp::TKikimrRunner kikimr(settings);
         constexpr ui32 totalRows = 2000;
         kikimr.RunCall([&] { NKqp::CreateManyShardsTable(kikimr, totalRows, 50, 20); return true; });
@@ -2503,7 +2504,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         auto checkSysView = [&](bool executing) {
             auto result = kikimr.RunCall([&] {
                 return checkSession.ExecuteDataQuery(TStringBuilder()
-                    << "SELECT State, Query, DurationUs, CpuTimeUs, ComputeMemoryBytes, ReadIngressBytesPerSec "
+                    << "SELECT State, Query, DurationUs, CpuTimeUs, ComputeMemoryBytes, ReadIngressBytesPerInterval "
                     << "FROM `/Root/.sys/query_sessions` WHERE SessionId = '" << session.GetId() << "';",
                     TTxControl::BeginTx().CommitTx()).GetValueSync();
             });
@@ -2511,7 +2512,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NYdb::TResultSetParser parser(result.GetResultSet(0));
             UNIT_ASSERT(parser.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("State").GetOptionalUtf8().value(), executing ? "EXECUTING" : "IDLE");
-            for (const auto* name : {"DurationUs", "CpuTimeUs", "ComputeMemoryBytes", "ReadIngressBytesPerSec"}) {
+            for (const auto* name : {"DurationUs", "CpuTimeUs", "ComputeMemoryBytes", "ReadIngressBytesPerInterval"}) {
                 UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(name).GetOptionalUint64().has_value(), executing, name);
             }
         };

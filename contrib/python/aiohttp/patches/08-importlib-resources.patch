@@ -1,6 +1,8 @@
---- contrib/python/aiohttp/aiohttp/web_fileresponse.py	(4519f9a6f455df2a2d92670c1d43e4da2fdf57a0)
-+++ contrib/python/aiohttp/aiohttp/web_fileresponse.py	(af2f4ddbeb99de10bbbd64a8995abf061fe8cc5c)
-@@ -3,6 +3,7 @@ import os
+diff --git a/aiohttp/web_fileresponse.py b/aiohttp/web_fileresponse.py
+index 8aa67ce..64f37df 100644
+--- a/aiohttp/web_fileresponse.py
++++ b/aiohttp/web_fileresponse.py
+@@ -5,6 +5,7 @@ import pathlib
  import sys
  from contextlib import suppress
  from enum import Enum, auto
@@ -8,7 +10,7 @@
  from mimetypes import MimeTypes
  from stat import S_ISREG
  from types import MappingProxyType
-@@ -89,7 +90,7 @@ class FileResponse(StreamResponse):
+@@ -102,7 +103,7 @@ class FileResponse(StreamResponse):
      ) -> None:
          super().__init__(status=status, reason=reason, headers=headers)
  
@@ -16,21 +18,29 @@
 +        self._path = pathlib.Path(path) if not isinstance(path, Traversable) else path
          self._chunk_size = chunk_size
  
-     async def _sendfile_fallback(
-@@ -319,1 +320,1 @@ class FileResponse(StreamResponse):
+     def _seek_and_read(self, fobj: IO[Any], offset: int, chunk_size: int) -> bytes:
+@@ -386,7 +387,7 @@ class FileResponse(StreamResponse):
+                 guesser = CONTENT_TYPES.guess_file_type
+             else:
+                 guesser = CONTENT_TYPES.guess_type
 -            self.content_type = guesser(self._path)[0] or FALLBACK_CONTENT_TYPE
 +            self.content_type = guesser(self._path.name)[0] or FALLBACK_CONTENT_TYPE
---- contrib/python/aiohttp/aiohttp/web_urldispatcher.py	(4519f9a6f455df2a2d92670c1d43e4da2fdf57a0)
-+++ contrib/python/aiohttp/aiohttp/web_urldispatcher.py	(af2f4ddbeb99de10bbbd64a8995abf061fe8cc5c)
-@@ -11,6 +11,7 @@ import re
- import sys
- import warnings
+ 
+         if file_encoding:
+             self._headers[hdrs.CONTENT_ENCODING] = file_encoding
+diff --git a/aiohttp/web_urldispatcher.py b/aiohttp/web_urldispatcher.py
+index 74351ee..9f1e824 100644
+--- a/aiohttp/web_urldispatcher.py
++++ b/aiohttp/web_urldispatcher.py
+@@ -22,6 +22,7 @@ from collections.abc import (
+     Sized,
+ )
  from functools import wraps
 +from importlib.resources.abc import Traversable, TraversalError
  from pathlib import Path
+ from re import Pattern
  from types import MappingProxyType
- from typing import (
-@@ -559,7 +560,8 @@ class StaticResource(PrefixResource):
+@@ -543,7 +544,8 @@ class StaticResource(PrefixResource):
      ) -> None:
          super().__init__(prefix, name=name)
          try:
@@ -40,10 +50,10 @@
          except FileNotFoundError as error:
              raise ValueError(f"'{directory}' does not exist") from error
          if not directory.is_dir():
-@@ -670,7 +672,10 @@ class StaticResource(PrefixResource):
-             # where the static dir is totally different
-             raise HTTPForbidden()
- 
+@@ -658,7 +660,10 @@ class StaticResource(PrefixResource):
+             # filename is an absolute path e.g. //network/share or D:\path
+             # which could be a UNC path leading to NTLM credential theft
+             raise HTTPNotFound()
 -        unresolved_path = self._directory.joinpath(filename)
 +        try:
 +            unresolved_path = self._directory.joinpath(filename)
@@ -52,7 +62,7 @@
          loop = asyncio.get_running_loop()
          return await loop.run_in_executor(
              None, self._resolve_path_to_response, unresolved_path
-@@ -681,6 +686,8 @@ class StaticResource(PrefixResource):
+@@ -669,6 +674,8 @@ class StaticResource(PrefixResource):
          # Check for access outside the root directory. For follow symlinks, URI
          # cannot traverse out, but symlinks can. Otherwise, no access outside
          # root is permitted.

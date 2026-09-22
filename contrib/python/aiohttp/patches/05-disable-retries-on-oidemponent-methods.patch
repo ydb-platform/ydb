@@ -1,6 +1,8 @@
---- contrib/python/aiohttp/aiohttp/client.py	(index)
-+++ contrib/python/aiohttp/aiohttp/client.py	(working tree)
-@@ -574,7 +574,7 @@ class ClientSession:
+diff --git a/aiohttp/client.py b/aiohttp/client.py
+index 12f236d..2725103 100644
+--- a/aiohttp/client.py
++++ b/aiohttp/client.py
+@@ -701,7 +701,7 @@ class ClientSession:
              with timer:
                  # https://www.rfc-editor.org/rfc/rfc9112.html#name-retrying-requests
                  retry_persistent_connection = (

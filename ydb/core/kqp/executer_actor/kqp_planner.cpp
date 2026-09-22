@@ -91,6 +91,28 @@ bool LimitCPU(TIntrusivePtr<TUserRequestContext> ctx) {
 
 }
 
+TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext& context, TDuration progressStatsPeriod) {
+    TKqpStatsReportingSettings settings;
+    settings.CollectCurrentQueryStats = context.CurrentQueryStatsInterval != TDuration::Zero();
+    settings.WithProgressStats = progressStatsPeriod != TDuration::Zero() || settings.CollectCurrentQueryStats;
+
+    if (context.IsStreamingQuery) {
+        settings.RemoteReportStatsSettings = NYql::NDq::TReportStatsSettings{
+            TDuration::Seconds(1), TDuration::Seconds(5)};
+    }
+    if (settings.CollectCurrentQueryStats) {
+        const auto interval = context.CurrentQueryStatsInterval;
+        settings.LocalReportStatsSettings = NYql::NDq::TReportStatsSettings{interval, interval};
+        if (settings.RemoteReportStatsSettings) {
+            settings.RemoteReportStatsSettings->MinInterval = Min(settings.RemoteReportStatsSettings->MinInterval, interval);
+            settings.RemoteReportStatsSettings->MaxInterval = Min(settings.RemoteReportStatsSettings->MaxInterval, interval);
+        } else {
+            settings.RemoteReportStatsSettings = settings.LocalReportStatsSettings;
+        }
+    }
+    return settings;
+}
+
 bool TKqpPlanner::UseMockEmptyPlanner = false;
 
 // Task can allocate extra memory during execution.
@@ -104,7 +126,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , UserToken(args.UserToken)
     , Deadline(args.Deadline)
     , StatsMode(args.StatsMode)
-    , WithProgressStats(args.WithProgressStats)
+    , StatsReportingSettings(args.StatsReportingSettings)
     , RlPath(args.RlPath)
     , ResourcesSnapshot(std::move(args.ResourcesSnapshot))
     , ExecuterSpan(args.ExecuterSpan)
@@ -270,7 +292,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     }
 
     request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
-    request.MutableRuntimeSettings()->SetWithProgressStats(WithProgressStats);
+    request.MutableRuntimeSettings()->SetWithProgressStats(StatsReportingSettings.WithProgressStats);
     request.SetStartAllOrFail(true);
     request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
     request.MutableRuntimeSettings()->SetUseSpilling(TasksGraph.GetMeta().AllowWithSpilling);
@@ -307,12 +329,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
-    if (UserRequestContext->IsStreamingQuery) {
-        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(1000);
-        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(5000);
-    } else if (const auto interval = UserRequestContext->CurrentQueryStatsInterval) {
-        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(interval.MilliSeconds());
-        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(interval.MilliSeconds());
+    if (StatsReportingSettings.RemoteReportStatsSettings) {
+        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(StatsReportingSettings.RemoteReportStatsSettings->MinInterval.MilliSeconds());
+        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(StatsReportingSettings.RemoteReportStatsSettings->MaxInterval.MilliSeconds());
     }
 
     if (UserToken) {
@@ -583,10 +602,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .TxInfo = TxInfo,
         .TaskQuotaManager = CreateTaskQuotaManager(ResourceManager_, TxInfo, taskId, initialMemoryLimit),
         .ChannelQuotaManager = nullptr,
-        .ReportStatsSettings = UserRequestContext->CurrentQueryStatsInterval
-            ? TMaybe<NYql::NDq::TReportStatsSettings>(NYql::NDq::TReportStatsSettings{
-                UserRequestContext->CurrentQueryStatsInterval, UserRequestContext->CurrentQueryStatsInterval})
-            : Nothing(),
+        .ReportStatsSettings = StatsReportingSettings.LocalReportStatsSettings,
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
         .SerializedGUCSettings = SerializedGUCSettings,
@@ -594,7 +610,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .OutputChunkMaxSize = OutputChunkMaxSize,
         .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
         .StatsMode = GetDqStatsMode(StatsMode),
-        .WithProgressStats = WithProgressStats,
+        .WithProgressStats = StatsReportingSettings.WithProgressStats,
         // Compute actor should not arm a timeout timer: in case of timeout it will receive
         // TEvAbortExecution from the executer (driven by gRPC client deadline / cancel ->
         // session actor -> executer). Matches the remote path in kqp_query_control_plane.cpp.

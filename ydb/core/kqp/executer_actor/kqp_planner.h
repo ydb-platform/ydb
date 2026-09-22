@@ -20,6 +20,15 @@
 
 namespace NKikimr::NKqp {
 
+struct TKqpStatsReportingSettings {
+    bool WithProgressStats = false;
+    bool CollectCurrentQueryStats = false;
+    TMaybe<NYql::NDq::TReportStatsSettings> RemoteReportStatsSettings;
+    TMaybe<NYql::NDq::TReportStatsSettings> LocalReportStatsSettings;
+};
+
+TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext& context, TDuration progressStatsPeriod);
+
 class TKqpPlanner {
 
     struct TRequestData {
@@ -48,7 +57,7 @@ public:
         const TIntrusiveConstPtr<NACLib::TUserToken>& UserToken;
         const TInstant Deadline;
         const Ydb::Table::QueryStatsCollection::Mode& StatsMode;
-        const bool WithProgressStats;
+        const TKqpStatsReportingSettings& StatsReportingSettings;
         const TMaybe<NKikimrKqp::TRlPath>& RlPath;
         NWilson::TSpan& ExecuterSpan;
         TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
@@ -119,7 +128,7 @@ private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
-    const bool WithProgressStats;
+    const TKqpStatsReportingSettings StatsReportingSettings;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;

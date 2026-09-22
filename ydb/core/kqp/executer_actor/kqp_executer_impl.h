@@ -130,6 +130,7 @@ public:
         bool useKqpTasksGraphV2 = false)
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
+        , StatsReportingSettings(MakeStatsReportingSettings(*userRequestContext, Request.ProgressStatsPeriod))
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
@@ -949,7 +950,7 @@ protected:
                 StatCollectInflightBytes = collectBytes;
                 Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
             }
-            if (GetUserRequestContext()->CurrentQueryStatsInterval) {
+            if (StatsReportingSettings.CollectCurrentQueryStats) {
                 this->Send(Target, new TEvKqpExecuter::TEvCurrentExecutionStats(Stats->TakeCurrentStats()));
             }
             ProcessStreamingQueryCounters();
@@ -1614,7 +1615,7 @@ protected:
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
             .StatsMode = Request.StatsMode,
-            .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero() || GetUserRequestContext()->CurrentQueryStatsInterval,
+            .StatsReportingSettings = StatsReportingSettings,
             .RlPath = Request.RlPath,
             .ExecuterSpan =  ExecuterSpan,
             .ResourcesSnapshot = std::move(ResourcesSnapshot),
@@ -1928,7 +1929,7 @@ protected:
             ReportEventElapsedTime();
 
             Stats->FinishTs = TInstant::Now();
-            if (GetUserRequestContext()->CurrentQueryStatsInterval) {
+            if (StatsReportingSettings.CollectCurrentQueryStats) {
                 ResponseEv->CurrentExecutionStats = Stats->TakeCurrentStats(true);
             }
 
@@ -2162,6 +2163,7 @@ protected:
 
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
+    const TKqpStatsReportingSettings StatsReportingSettings;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;

@@ -85,13 +85,8 @@ public:
     )
 
     void Init() {
-<<<<<<< HEAD
         EventsQueue.Init("TxId", SelfId(), SelfId(), EventQueueId, true /*KeepAlive*/);
         EventsQueue.OnNewRecipientId(ServerActorId);
-=======
-        EventsQueue.Init("TxId", SelfId(), SelfId(), EventQueueId, /* keepAlive */ true);
-        EventsQueue.OnNewRecipientId(ServerActorId, /* unsubscribe */ false, /* connected */ true);
->>>>>>> db4fe26f2d2 (YQ-5701 fixed retry queue messages reordering (#53269))
     }
 
     NYql::NDq::TRetryEventsQueue EventsQueue;
@@ -262,9 +257,6 @@ struct TUnorderedRemoteQueueFixture : public TRemoteQueueFixture {
 };
 
 Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
-<<<<<<< HEAD
-    Y_UNIT_TEST(SendDisconnectAfterPoisonPill) { 
-=======
     Y_UNIT_TEST_F(SendAndReplayPreserveRecordPayloadsAndCookie, TRemoteQueueFixture) {
         Act([&] {
             auto event = MakeHolder<TEvDqCompute::TEvInjectCheckpoint>();
@@ -627,7 +619,6 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
     }
 
     Y_UNIT_TEST(SendDisconnectAfterPoisonPill) {
->>>>>>> db4fe26f2d2 (YQ-5701 fixed retry queue messages reordering (#53269))
         TRuntime runtime;
 
         runtime.Send(new IEventHandle(

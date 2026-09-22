@@ -6,6 +6,7 @@
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/gtest.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -120,10 +121,11 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(expectedGeneration, eventHolder->Cookie);
     }
 
-    void ExpectGetNextBatch(NActors::TActorId rowDispatcherId, ui64 partitionId) const {
+    auto ExpectGetNextBatch(NActors::TActorId rowDispatcherId, ui64 partitionId) const {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_UNEQUAL(nullptr, eventHolder.Get());
         UNIT_ASSERT_VALUES_EQUAL(partitionId, eventHolder->Get()->Record.GetPartitionId());
+        return eventHolder;
     }
 
     void MockCoordinatorChanged(NActors::TActorId coordinatorId) const {
@@ -146,11 +148,12 @@ public:
         });
     }
 
-    void MockAck(NActors::TActorId rowDispatcherId, ui64 generation, ui64 partitionId) const {
+    void MockAck(NActors::TActorId rowDispatcherId, ui64 generation, ui64 partitionId, ui64 seqNo = 0) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             NFq::NRowDispatcherProto::TEvStartSession proto;
             proto.AddPartitionIds(partitionId);
             auto event = new NFq::TEvRowDispatcher::TEvStartSessionAck(proto);
+            event->Record.MutableTransportMeta()->SetSeqNo(seqNo);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
@@ -162,9 +165,10 @@ public:
         });
     }
 
-    void MockNewDataArrived(NActors::TActorId rowDispatcherId, ui64 generation, ui64 partitionId) const {
+    void MockNewDataArrived(NActors::TActorId rowDispatcherId, ui64 generation, ui64 partitionId, ui64 seqNo = 0) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvNewDataArrived();
+            event->Record.MutableTransportMeta()->SetSeqNo(seqNo);
             event->Record.SetPartitionId(partitionId);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
@@ -196,10 +200,12 @@ public:
         const std::vector<TMessage>& messages,
         NActors::TActorId rowDispatcherId,
         ui64 generation,
-        ui64 partitionId
+        ui64 partitionId,
+        ui64 seqNo = 0
     ) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvMessageBatch();
+            event->Record.MutableTransportMeta()->SetSeqNo(seqNo);
             for (const auto& item : messages) {
                 NFq::NRowDispatcherProto::TEvMessage message;
                 message.SetPayloadId(event->AddPayload(SerializeItem(actor.ProgramBuilder, item)));
@@ -217,13 +223,7 @@ public:
         const std::vector<std::pair<TMaybe<TMessage>, TMaybe<TInstant>>>& messages,
         NActors::TActorId rowDispatcherId,
         ui64 generation,
-<<<<<<< HEAD
         ui64 partitionId
-=======
-        ui64 partitionId,
-        TMaybe<ui64> nextOffset = Nothing(),
-        NActors::TActorId readActorId = {}
->>>>>>> db4fe26f2d2 (YQ-5701 fixed retry queue messages reordering (#53269))
     ) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvMessageBatch();
@@ -239,13 +239,8 @@ public:
                 *event->Record.AddMessages() = message;
             }
             event->Record.SetPartitionId(partitionId);
-<<<<<<< HEAD
             event->Record.SetNextMessageOffset(offset);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
-=======
-            event->Record.SetNextMessageOffset(nextOffset.GetOrElse(offset));
-            CaSetup->Runtime->Send(new NActors::IEventHandle(readActorId ? readActorId : *actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
->>>>>>> db4fe26f2d2 (YQ-5701 fixed retry queue messages reordering (#53269))
         });
     }
 
@@ -271,9 +266,10 @@ public:
         });
     }
 
-    void MockStatistics(NActors::TActorId rowDispatcherId, ui64 nextOffset, ui64 generation, ui64 partitionId) const {
+    void MockStatistics(NActors::TActorId rowDispatcherId, ui64 nextOffset, ui64 generation, ui64 partitionId, ui64 seqNo = 0) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvStatistics();
+            event->Record.MutableTransportMeta()->SetSeqNo(seqNo);
             auto* partitionsProto = event->Record.AddPartition();
             partitionsProto->SetPartitionId(partitionId);
             partitionsProto->SetNextMessageOffset(nextOffset);
@@ -424,7 +420,7 @@ public:
         MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, PartitionId1}}, request->Cookie);
         ExpectStartSession({}, RowDispatcherId1, 1);
         if (acknowledge) {
-            MockAck(RowDispatcherId1, 1, PartitionId1, {}, 1);
+            MockAck(RowDispatcherId1, 1, PartitionId1, 1);
         }
     }
 };
@@ -463,7 +459,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     Y_UNIT_TEST_F(ReorderedNotificationBeforeAckWaitsForReplay, TRemoteFixture) {
         StartRemoteSession(false);
         MockNewDataArrived(RowDispatcherId1, 1, PartitionId1, 2);
-        MockAck(RowDispatcherId1, 1, PartitionId1, {}, 1);
+        MockAck(RowDispatcherId1, 1, PartitionId1, 1);
         MockNewDataArrived(RowDispatcherId1, 1, PartitionId1, 2);
         auto request = ExpectGetNextBatch(RowDispatcherId1, PartitionId1);
         UNIT_ASSERT_VALUES_EQUAL(request->Cookie, 1);
@@ -488,77 +484,6 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         ReadMessages(expected);
     }
 
-<<<<<<< HEAD
-=======
-    Y_UNIT_TEST_F(FederatedPartitionsUseClusterCounts, TFixture) {
-        for (ui32 i = 0; i < 3; ++i) {
-            auto* cluster = Settings.AddFederatedClusters();
-            cluster->SetName(TStringBuilder() << "cluster" << i);
-            cluster->SetEndpoint(TStringBuilder() << "endpoint" << i);
-            cluster->SetDatabase("database");
-            cluster->SetPartitionsCount(PartitionId1 + i);
-        }
-        InitRdSource(Settings, 1_MB, PartitionId2 + 1);
-        SourceRead<TMessage>(UVPairParser);
-        TSet<NActors::TActorId> children;
-        while (children.size() < 3) {
-            children.insert(ExpectCoordinatorChangesSubscribe()->Sender);
-        }
-        for (const auto& child : children) {
-            MockCoordinatorChanged(CoordinatorId1, child);
-            const auto request = ExpectCoordinatorRequest(CoordinatorId1);
-            const auto& record = request->Get()->Record;
-            TSet<ui32> actual(record.GetPartitionIds().begin(), record.GetPartitionIds().end());
-            const auto& endpoint = record.GetSource().GetEndpoint();
-            const TSet<ui32> expected = endpoint == "endpoint0" ? TSet<ui32>{}
-                : endpoint == "endpoint1" ? TSet<ui32>{PartitionId1} : TSet<ui32>{PartitionId1, PartitionId2};
-            UNIT_ASSERT_VALUES_EQUAL(actual, expected);
-        }
-    }
-
-    Y_UNIT_TEST_TWIN_F(FederatedWatermarkWaitsForEveryCluster, DelayedCoordinator, TFixture) {
-        for (ui32 i = 0; i < 2; ++i) {
-            auto* cluster = Settings.AddFederatedClusters();
-            cluster->SetName(TStringBuilder() << "cluster" << i);
-            cluster->SetEndpoint(TStringBuilder() << "endpoint" << i);
-            cluster->SetDatabase("database");
-            cluster->SetPartitionsCount(PartitionId1 + 1);
-        }
-        InitRdSource(Settings, 1_MB, PartitionId1 + 1);
-        SourceRead<TMessage>(UVPairParser);
-        TSet<NActors::TActorId> children;
-        while (children.size() < 2) {
-            children.insert(ExpectCoordinatorChangesSubscribe()->Sender);
-        }
-        const auto first = *children.begin();
-        const auto second = *children.rbegin();
-        const auto start = [&](const auto& child) {
-            MockCoordinatorChanged(CoordinatorId1, child);
-            const auto request = ExpectCoordinatorRequest(CoordinatorId1);
-            MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, PartitionId1}}, request->Cookie, child);
-            ExpectStartSession({}, RowDispatcherId1, 1);
-            MockAck(RowDispatcherId1, 1, PartitionId1, child);
-        };
-        start(first);
-        if (!DelayedCoordinator) {
-            start(second);
-        }
-        const std::vector<std::pair<TMaybe<TMessage>, TMaybe<TInstant>>> firstBatch = {
-            {Message1, TInstant::MicroSeconds(400)},
-        };
-        MockMessageBatch(0, firstBatch, RowDispatcherId1, 1, PartitionId1, Nothing(), first);
-        AssertDataWithWatermarks({Message1}, SourceRead<TMessage>(UVPairParser));
-        if (DelayedCoordinator) {
-            start(second);
-        }
-        const std::vector<std::pair<TMaybe<TMessage>, TMaybe<TInstant>>> secondBatch = {
-            {Message2, TInstant::MicroSeconds(200)},
-        };
-        MockMessageBatch(0, secondBatch, RowDispatcherId1, 1, PartitionId1, Nothing(), second);
-        ReadMessages({Message2, TInstant::MicroSeconds(200)});
-    }
-
->>>>>>> db4fe26f2d2 (YQ-5701 fixed retry queue messages reordering (#53269))
     Y_UNIT_TEST_F(IgnoreUndeliveredWithWrongGeneration, TFixture) {
         StartSession(Settings);
 

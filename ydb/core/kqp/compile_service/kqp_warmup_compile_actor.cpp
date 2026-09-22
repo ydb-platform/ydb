@@ -223,6 +223,23 @@ private:
 
 namespace {
 
+TVector<NACLib::TSID> GetGroupSidsFromMetadata(const TString& metadata) {
+    NJson::TJsonValue json;
+    if (metadata.empty() || !NJson::ReadJsonTree(metadata, &json, false)
+            || !json.Has("user_group_sids") || !json["user_group_sids"].IsArray()) {
+        return {};
+    }
+
+    TVector<NACLib::TSID> groups;
+    for (const auto& sid : json["user_group_sids"].GetArray()) {
+        if (!sid.IsString()) {
+            return {};
+        }
+        groups.push_back(sid.GetString());
+    }
+    return groups;
+}
+
 void FillYdbParametersFromMetadata(
     const TString& metadata,
     google::protobuf::Map<TProtoStringType, Ydb::TypedValue>& params)
@@ -654,7 +671,7 @@ private:
         auto queryEv = std::make_unique<TEvKqp::TEvQueryRequest>();
         auto& record = queryEv->Record;
         if (!userSid.empty()) {
-            auto userToken = MakeIntrusive<NACLib::TUserToken>(userSid, TVector<NACLib::TSID>{});
+            auto userToken = MakeIntrusive<NACLib::TUserToken>(userSid, GetGroupSidsFromMetadata(metadata));
             record.SetUserToken(userToken->SerializeAsString());
         }
 

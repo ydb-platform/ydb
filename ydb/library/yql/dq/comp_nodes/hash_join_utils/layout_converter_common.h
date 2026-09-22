@@ -11,6 +11,9 @@ namespace NKikimr::NMiniKQL {
 struct TPackResult {
     std::vector<ui8, TMKQLAllocator<ui8>> PackedTuples;
     std::vector<ui8, TMKQLAllocator<ui8>> Overflow;
+    // Optional per-row state used while a keyless outer/semi/only join replays
+    // the same probe page against several spilled build partitions.
+    std::vector<ui8, TMKQLAllocator<ui8>> MatchFlags;
     i64 NTuples{ 0 };
     i64 AllocatedBytes() const;
     TPackResult() = default;
@@ -19,6 +22,7 @@ struct TPackResult {
     TPackResult(TPackResult&& other)
         : PackedTuples(std::move(other.PackedTuples))
         , Overflow(std::move(other.Overflow))
+        , MatchFlags(std::move(other.MatchFlags))
         , NTuples(other.NTuples)
     {
         other.NTuples = 0;
@@ -27,6 +31,7 @@ struct TPackResult {
     TPackResult& operator=(TPackResult&& other) {
         PackedTuples = std::move(other.PackedTuples);
         Overflow = std::move(other.Overflow);
+        MatchFlags = std::move(other.MatchFlags);
         NTuples = other.NTuples;
         other.NTuples = 0;
         return *this;
@@ -41,6 +46,10 @@ struct TPackResult {
         MKQL_ENSURE(allFieldEmpty == haveOneFieldEmpty, "inconsistent state");
         if (allFieldEmpty) {
             MKQL_ENSURE(Overflow.empty(), "sanity check");
+            MKQL_ENSURE(MatchFlags.empty(), "sanity check");
+        } else {
+            MKQL_ENSURE(MatchFlags.empty() || std::ssize(MatchFlags) == NTuples,
+                        "match flags must be empty or contain one flag per tuple");
         }
         return allFieldEmpty;
     }
@@ -78,6 +87,7 @@ struct TPackResult {
     void Reset() {
         PackedTuples.clear();
         Overflow.clear();
+        MatchFlags.clear();
         NTuples = 0;
     }
 

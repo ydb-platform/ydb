@@ -4,7 +4,7 @@
 namespace NKikimr::NMiniKQL {
 
 i64 TPackResult::AllocatedBytes() const {
-    return PackedTuples.size() + Overflow.size();
+    return PackedTuples.size() + Overflow.size() + MatchFlags.size();
 }
 
 void TPackResult::AppendTuple(TSingleTuple tuple, const NPackedTuple::TTupleLayout* layout) {

@@ -342,10 +342,11 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto parsed = ParseCommonHashJoinArgs(callable);
     const auto joinKind = parsed.Kind;
+    const bool isGrid = parsed.KeyColumns.Build.empty();
     meta.Kind = joinKind;
     meta.KeyColumns = parsed.KeyColumns;
 
-    if (joinKind != EJoinKind::Cross) {
+    if (!isGrid) {
         MKQL_ENSURE(!joinComponents.empty(), "Expected at least one column");
         MKQL_ENSURE(!leftFlowComponents.empty(), "Expected at least one column");
         MKQL_ENSURE(!rightFlowComponents.empty(), "Expected at least one column");
@@ -366,8 +367,9 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     const TSides<IComputationWideFlowNode*> flows{.Build = rightFlow, .Probe = leftFlow};
 
     return DispatchHashJoinByKind<TScalarHashJoinWrapper, IComputationWideFlowNode>(
-        joinKind, ESide::Probe, "unsupported join type in scalar hash join, see gh#26780 for details.", ctx.Mutables,
-        std::move(meta), flows, ParseJoinFilters(ctx, callable, BaseInputs));
+        joinKind, ESide::Probe, isGrid,
+        "unsupported join type in scalar hash join, see gh#26780 for details.", ctx.Mutables, std::move(meta), flows,
+        ParseJoinFilters(ctx, callable, BaseInputs));
 }
 
 } // namespace NKikimr::NMiniKQL

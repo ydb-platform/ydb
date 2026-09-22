@@ -236,11 +236,17 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         return ESpillResult::FinishedSpilling;
     }
 
-    void AddRow(TValueAndLocation<TSingleTuple> tuple) {
+    void AddRow(TValueAndLocation<TSingleTuple> tuple, std::optional<bool> matched = std::nullopt) {
         MKQL_ENSURE(tuple.Side == ESide::Probe, "this spiller is for probe rows");
         TSides<TBucket>* thisBucket = std::get_if<TSides<TBucket>>(&State_.Buckets[tuple.BucketIndex]);
         MKQL_ENSURE(thisBucket, "spilling row that should be looked up?");
         thisBucket->Probe.BuildingPage.AppendTuple(tuple.Val, Layout_);
+        if (matched.has_value()) {
+            thisBucket->Probe.BuildingPage.MatchFlags.push_back(*matched);
+        } else {
+            MKQL_ENSURE(thisBucket->Probe.BuildingPage.MatchFlags.empty(),
+                        "all rows in a page must use the same match-state format");
+        }
         if (thisBucket->Probe.template DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>()) {
             for( TPackResult& page: thisBucket->Probe.DetatchPages()){
                 State_.InMemoryPages.push_back(

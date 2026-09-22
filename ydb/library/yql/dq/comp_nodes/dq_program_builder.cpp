@@ -14,8 +14,6 @@ void ValidateHashJoinKeyColumns(EJoinKind joinKind, const TArrayRef<const ui32>&
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
     if (joinKind == EJoinKind::Cross) {
         MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
-    } else {
-        MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
     }
 }
 

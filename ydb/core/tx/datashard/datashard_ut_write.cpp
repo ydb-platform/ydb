@@ -5494,8 +5494,10 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
     }
 
-    // Immediate write replies must carry the cookie of the TEvWrite request
-    Y_UNIT_TEST(ImmediateWriteResultCarriesCookie) {
+    // Write results must carry the cookie of the TEvWrite request on all reply
+    // paths: immediate, parse errors, planned (PREPARED and final COMPLETED),
+    // volatile (PREPARED, deferred COMPLETED and deferred ABORTED)
+    Y_UNIT_TEST(WriteResultsCarryCookie) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -5503,55 +5505,76 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
-        TShardedTableOptions opts;
-        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-        const ui64 shard = shards.at(0);
-        const auto& columns = opts.Columns_;
+        TDisableDataShardLogBatching disableDataShardLogBatching;
 
-        const ui64 txId = 1001;
-        const ui64 cookie = 0xC0FFEE11;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        const ui64 shard = shards.at(0);
+
+        TVector<TShardedTableOptions::TColumn> columns{
+            {"key", "Int32", true, false},
+            {"value", "Int32", false, false},
+        };
+
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        auto txSender = runtime.AllocateEdgeActor();
 
         Cout << "========= Send immediate write with a cookie =========\n";
         {
+            const ui64 txId = 1001;
+            const ui64 cookie = 0xC0FFEE01;
+
             auto request = MakeWriteRequestOneKeyValue(
                 txId,
                 NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
                 NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
                 tableId, columns, 1, 11);
 
-            runtime.SendToPipe(shard, sender, request.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
+            runtime.SendToPipe(shard, txSender, request.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
 
-            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
                 "Immediate write result must carry the cookie of the request");
         }
-    }
 
-    // Planned write replies (both PREPARED and the final COMPLETED one) must carry
-    // the cookie of the TEvWrite request
-    Y_UNIT_TEST(PlannedWriteResultsCarryCookie) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        Cout << "========= Send a write with an unsupported lock mode and a cookie =========\n";
+        {
+            const ui64 txId = 1002;
+            const ui64 cookie = 0xC0FFEE02;
 
-        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+            auto request = MakeWriteRequestOneKeyValue(
+                txId,
+                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, columns, 1, 11);
+            request->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
 
-        TShardedTableOptions opts;
-        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-        const ui64 shard = shards.at(0);
-        const auto& columns = opts.Columns_;
+            runtime.SendToPipe(shard, txSender, request.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
 
-        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
-        const ui64 txId = 1234567890011;
-        const ui64 cookie = 0xC0FFEE11;
-
-        auto txSender = runtime.AllocateEdgeActor();
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
+                "Parse error result must carry the cookie of the request");
+        }
 
         Cout << "========= Prepare a planned write with a cookie =========\n";
         {
+            const ui64 txId = 1003;
+            const ui64 cookie = 0xC0FFEE03;
+
             auto req = MakeWriteRequestOneKeyValue(
                 txId,
                 NKikimrDataEvents::TEvWrite::MODE_PREPARE,
@@ -5574,72 +5597,38 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                     .MinStep = ev->Get()->Record.GetMinStep(),
                     .MaxStep = ev->Get()->Record.GetMaxStep(),
                 });
-        }
 
-        Cout << "========= Check the final completed result =========\n";
-        {
-            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
+            Cout << "========= Check the final completed result =========\n";
+            auto done = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+            UNIT_ASSERT_VALUES_EQUAL(done->Get()->Record.GetTxId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(done->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL_C(done->Cookie, cookie,
                 "Final COMPLETED write result must carry the cookie of the request");
         }
-    }
-
-    // Deferred final replies for volatile writes (sent after the plan step) must
-    // carry the cookie of the TEvWrite request
-    Y_UNIT_TEST(VolatileWriteResultsCarryCookie) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
-
-        auto [runtime, server, sender] = TestCreateServer(serverSettings);
-
-        TDisableDataShardLogBatching disableDataShardLogBatching;
-
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSchemeExec(runtime, R"(
-                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
-                WITH (PARTITION_AT_KEYS = (10));
-            )"),
-            "SUCCESS"
-        );
-
-        const auto tableId = ResolveTableId(server, sender, "/Root/table");
-        const auto shards = GetTableShards(server, sender, "/Root/table");
-        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
-
-        TVector<TShardedTableOptions::TColumn> columns{
-            {"key", "Int32", true, false},
-            {"value", "Int32", false, false},
-        };
-
-        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
-        const ui64 txId = 1234567890011;
-        const ui64 cookie = 0xC0FFEE11;
-
-        auto txSender = runtime.AllocateEdgeActor();
 
         Cout << "========= Prepare volatile writes with a cookie =========\n";
-        ui64 minStep = 0;
-        ui64 maxStep = Max<ui64>();
         {
-            for (ui64 shard : shards) {
+            const ui64 txId = 1004;
+            const ui64 cookie = 0xC0FFEE04;
+
+            ui64 minStep = 0;
+            ui64 maxStep = Max<ui64>();
+
+            for (ui64 shardId : shards) {
                 auto req = MakeWriteRequestOneKeyValue(
                     txId,
                     NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE,
                     NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT,
                     tableId, columns,
-                    shard == shards.at(0) ? 2 : 12,
-                    shard == shards.at(0) ? 1003 : 1004);
+                    shardId == shards.at(0) ? 3 : 13,
+                    shardId == shards.at(0) ? 1004 : 1005);
                 req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                 req->Record.MutableLocks()->AddSendingShards(shards.at(0));
                 req->Record.MutableLocks()->AddSendingShards(shards.at(1));
                 req->Record.MutableLocks()->AddReceivingShards(shards.at(0));
                 req->Record.MutableLocks()->AddReceivingShards(shards.at(1));
 
-                runtime.SendToPipe(shard, txSender, req.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
+                runtime.SendToPipe(shardId, txSender, req.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
             }
 
             for (int i = 0; i < 2; ++i) {
@@ -5661,79 +5650,47 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                     .MaxStep = maxStep,
                     .Volatile = true,
                 });
+
+            Cout << "========= Check the final completed results =========\n";
+            for (int i = 0; i < 2; ++i) {
+                auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+                UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
+                    "Final COMPLETED volatile write result must carry the cookie of the request");
+            }
         }
 
-        Cout << "========= Check the final completed results =========\n";
-        for (int i = 0; i < 2; ++i) {
-            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
-                "Final COMPLETED volatile write result must carry the cookie of the request");
-        }
-    }
-
-    // Deferred ABORTED replies for volatile writes (sent when the distributed
-    // commit fails) must carry the cookie of the TEvWrite request
-    Y_UNIT_TEST(VolatileAbortedResultCarriesCookie) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
-
-        auto [runtime, server, sender] = TestCreateServer(serverSettings);
-
-        TDisableDataShardLogBatching disableDataShardLogBatching;
-
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSchemeExec(runtime, R"(
-                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
-                WITH (PARTITION_AT_KEYS = (10));
-            )"),
-            "SUCCESS"
-        );
-
-        const auto tableId = ResolveTableId(server, sender, "/Root/table");
-        const auto shards = GetTableShards(server, sender, "/Root/table");
-        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
-
-        TVector<TShardedTableOptions::TColumn> columns{
-            {"key", "Int32", true, false},
-            {"value", "Int32", false, false},
-        };
-
-        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
-        const ui64 txId = 1234567890012;
-        const ui64 cookie = 0xC0FFEE11;
-
-        auto txSender = runtime.AllocateEdgeActor();
-
-        // Block non-expectation readsets so that the distributed commit cannot
-        // resolve and will be aborted with decision unknown
-        TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime, [&](auto& ev) {
-            auto* msg = ev->Get();
-            return !(msg->Record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET);
-        });
-
-        Cout << "========= Prepare volatile writes with a cookie =========\n";
-        ui64 minStep = 0;
-        ui64 maxStep = Max<ui64>();
+        Cout << "========= Prepare volatile writes that will be aborted =========\n";
         {
-            for (ui64 shard : shards) {
+            const ui64 txId = 1005;
+            const ui64 cookie = 0xC0FFEE05;
+
+            // Block non-expectation readsets so that the distributed commit
+            // cannot resolve and will be aborted with decision unknown
+            TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime, [&](auto& ev) {
+                auto* msg = ev->Get();
+                return !(msg->Record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET);
+            });
+
+            ui64 minStep = 0;
+            ui64 maxStep = Max<ui64>();
+
+            for (ui64 shardId : shards) {
                 auto req = MakeWriteRequestOneKeyValue(
                     txId,
                     NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE,
                     NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT,
                     tableId, columns,
-                    shard == shards.at(0) ? 2 : 12,
-                    shard == shards.at(0) ? 1003 : 1004);
+                    shardId == shards.at(0) ? 4 : 14,
+                    shardId == shards.at(0) ? 1006 : 1007);
                 req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                 req->Record.MutableLocks()->AddSendingShards(shards.at(0));
                 req->Record.MutableLocks()->AddSendingShards(shards.at(1));
                 req->Record.MutableLocks()->AddReceivingShards(shards.at(0));
                 req->Record.MutableLocks()->AddReceivingShards(shards.at(1));
 
-                runtime.SendToPipe(shard, txSender, req.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
+                runtime.SendToPipe(shardId, txSender, req.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
             }
 
             for (int i = 0; i < 2; ++i) {
@@ -5755,10 +5712,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                     .MaxStep = maxStep,
                     .Volatile = true,
                 });
-        }
 
-        Cout << "========= Rewrite readsets into decision unknown =========\n";
-        {
+            Cout << "========= Rewrite readsets into decision unknown =========\n";
             runtime.WaitFor("blocked readsets", [&]{ return blockedReadSets.size() >= 2; });
             UNIT_ASSERT_VALUES_EQUAL(blockedReadSets.size(), 2u);
 
@@ -5767,51 +5722,15 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 msg->Record.ClearReadSet();
             }
             blockedReadSets.Unblock();
-        }
 
-        Cout << "========= Check the final aborted results =========\n";
-        for (int i = 0; i < 2; ++i) {
-            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
-            UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
-                "Final ABORTED volatile write result must carry the cookie of the request");
-        }
-    }
-
-    // Replies to writes that fail during operation parsing must carry the cookie
-    Y_UNIT_TEST(ParseErrorWriteResultCarriesCookie) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
-
-        auto [runtime, server, sender] = TestCreateServer(serverSettings);
-
-        TShardedTableOptions opts;
-        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
-        const ui64 shard = shards.at(0);
-        const auto& columns = opts.Columns_;
-
-        const ui64 txId = 1002;
-        const ui64 cookie = 0xC0FFEE11;
-
-        Cout << "========= Send a write with an unknown txmode and a cookie =========\n";
-        {
-            auto request = MakeWriteRequestOneKeyValue(
-                txId,
-                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
-                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-                tableId, columns, 1, 11);
-            request->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
-
-            runtime.SendToPipe(shard, sender, request.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
-
-            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-            UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
-                "Parse error result must carry the cookie of the request");
+            Cout << "========= Check the final aborted results =========\n";
+            for (int i = 0; i < 2; ++i) {
+                auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+                UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
+                    "Final ABORTED volatile write result must carry the cookie of the request");
+            }
         }
     }
 

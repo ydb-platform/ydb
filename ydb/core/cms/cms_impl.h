@@ -334,6 +334,15 @@ private:
     void SubscribeForConfig(const TActorContext &ctx);
     bool IsNbs2MaintenanceChecksEnabled(const TActorContext &ctx) const;
     void AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const;
+    TDuration GetPermissionDuration(const NKikimrCms::TPermissionRequest &request,
+        const NKikimrCms::TAction &action) const;
+    // Prepare a sorted, unique batch after tenant expansion and before local
+    // permission checks. Does not validate actions; an empty result does not
+    // imply that the request is valid.
+    bool CollectNbs2MaintenanceNodes(const NKikimrCms::TPermissionRequest &request,
+        TVector<ui32> &nodeIds,
+        TErrorInfo &error,
+        const TActorContext &ctx) const;
     bool CheckPermissionRequest(const NKikimrCms::TPermissionRequest &request,
         NKikimrCms::TPermissionResponse &response,
         NKikimrCms::TPermissionRequest &scheduled,

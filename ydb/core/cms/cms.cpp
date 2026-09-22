@@ -31,6 +31,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
+#include <util/generic/set.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/system/hostname.h>
@@ -320,6 +321,85 @@ void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
         info->SetHostMarkers(entry.first, entry.second);
 }
 
+TDuration TCms::GetPermissionDuration(const TPermissionRequest &request, const TAction &action) const
+{
+    if (action.HasDuration()) {
+        return TDuration::MicroSeconds(action.GetDuration());
+    }
+    if (request.HasDuration()) {
+        return TDuration::MicroSeconds(request.GetDuration());
+    }
+    return State->Config.DefaultPermissionDuration;
+}
+
+bool TCms::CollectNbs2MaintenanceNodes(const TPermissionRequest &request,
+                                       TVector<ui32> &nodeIds,
+                                       TErrorInfo &error,
+                                       const TActorContext &ctx) const
+{
+    nodeIds.clear();
+    if (!ClusterInfo || ClusterInfo->IsOutdated()) {
+        error.Code = TStatus::ERROR_TEMP;
+        error.Reason = "Cannot collect cluster state";
+        return false;
+    }
+
+    TSet<ui32> nodes;
+    TDuration horizon = TDuration::Zero();
+    for (const auto &action : request.GetActions()) {
+        switch (action.GetType()) {
+        case TAction::SHUTDOWN_HOST:
+        case TAction::REBOOT_HOST:
+        case TAction::RESTART_SERVICES:
+            break;
+        default:
+            continue;
+        }
+
+        if (action.HasTenant()) {
+            error.Code = TStatus::ERROR;
+            error.Reason = "Tenant actions must be expanded before collecting maintenance nodes";
+            return false;
+        }
+
+        const auto items = ClusterInfo->FindLockedItems(action, &ctx);
+        if (items.empty()) {
+            continue;
+        }
+        for (const auto *item : items) {
+            // For the action types above FindLockedItems returns only nodes.
+            nodes.insert(static_cast<const TNodeInfo *>(item)->NodeId);
+        }
+
+        // Use the same interval as CMS conflict checks. One DBSC batch must
+        // cover every action, including those deferred by local quotas.
+        horizon = Max(horizon, TDuration::MicroSeconds(action.GetDuration())
+            + GetPermissionDuration(request, action));
+    }
+
+    if (nodes.empty()) {
+        return true;
+    }
+
+    const TInstant now = ctx.Now();
+    for (const auto &entry : ClusterInfo->AllNodes()) {
+        const auto &node = *entry.second;
+        TErrorInfo lockError;
+        // An issued permission may already be in use, regardless of priority
+        // or the node's physical state. Keep own permissions on refresh too.
+        // For other restrictions reuse CMS time and scheduling rules without
+        // changing the snapshot's PriorityToCheck or simulating new locks.
+        if (!node.Locks.empty()
+            || node.IsLocked(lockError, State->Config.DefaultRetryTime, now, horizon, request.GetPriority()))
+        {
+            nodes.insert(node.NodeId);
+        }
+    }
+
+    nodeIds.assign(nodes.begin(), nodes.end());
+    return true;
+}
+
 namespace {
     THashMap<NKikimrCms::TStatus::ECode, ui32> BuildCodesRateMap(std::initializer_list<NKikimrCms::TStatus::ECode> l) {
         ui32 nextCodeRate = 0;
@@ -424,13 +504,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     };
 
     auto processAction = [&](const TAction &action, bool allowDefer) -> EActionResult {
-        TDuration permissionDuration = State->Config.DefaultPermissionDuration;
-        if (request.HasDuration())
-            permissionDuration = TDuration::MicroSeconds(request.GetDuration());
-        if (action.HasDuration())
-            permissionDuration = TDuration::MicroSeconds(action.GetDuration());
-
-        TActionOptions opts(permissionDuration);
+        TActionOptions opts(GetPermissionDuration(request, action));
         opts.TenantPolicy = request.GetTenantPolicy();
         opts.AvailabilityMode = request.GetAvailabilityMode();
         opts.PartialPermissionAllowed = allowPartial;

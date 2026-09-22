@@ -2129,7 +2129,7 @@ protected:
 
     void ProcessStreamingQueryCounters() {
         const auto context = TasksGraph.GetMeta().UserRequestContext;
-        if (!CheckpointCoordinatorId || !AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() || !context || context->StreamingQueryPath.empty()) {
+        if (!AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() || !context || context->StreamingQueryPath.empty()) {
             return;
         }
         if (!StreamingQueryCounters) {

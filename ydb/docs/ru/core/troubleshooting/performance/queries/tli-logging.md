@@ -30,7 +30,7 @@ log_config:
 
 ## Структура логов
 
-Когда происходит TLI, сервер записывает четыре записи — по одной от каждого компонента для каждой из сторон конфликта.
+Когда происходит TLI, сервер записывает в лог записи от каждого компонента для каждой из сторон конфликта. Количество записей зависит от количества запросов в транзакциях.
 
 **Пример сценария:**
 
@@ -68,7 +68,7 @@ component=DataShard tabletId=<tablet-id> message="Write transaction was a victim
 
 **Лог жертвы (SessionActor):**
 
-Для одной транзакции в лог пишется две записи:
+В этом примере SessionActor записывает две записи — по одной на каждый запрос транзакции-жертвы:
 
 ```text
 component=SessionActor message="Query was a victim of broken locks" victimTxSpanId=1111111111111111 querySpanId=1111111111111111 queryText="SELECT * FROM Orders WHERE OrderId = 42"

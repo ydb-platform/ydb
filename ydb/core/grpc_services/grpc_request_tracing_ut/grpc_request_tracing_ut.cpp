@@ -8,6 +8,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/protos/draft/datastreams.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>

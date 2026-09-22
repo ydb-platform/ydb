@@ -142,7 +142,6 @@ namespace NActors {
         void Initialize() override;
         i16 FindPoolForWorker(TSharedExecutorThreadCtx& thread, ui64 revolvingReadCounter);
         TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
-        bool ShouldRescheduleCapturedActivation(TWorkerId workerId);
 
         void SwitchToPool(i16 poolId, NHPTimer::STime hpNow);
 

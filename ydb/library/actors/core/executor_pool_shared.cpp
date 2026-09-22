@@ -334,14 +334,6 @@ namespace NActors {
         return nullptr;
     }
 
-    bool TSharedExecutorPool::ShouldRescheduleCapturedActivation(TWorkerId workerId) {
-        if (!HasWakerPools) {
-            return false;
-        }
-        const EThreadState state = Threads[workerId].GetState<EThreadState>();
-        return state == EThreadState::Blocking || IsNeedToBeWaker(state);
-    }
-
     TMailbox* TSharedExecutorPool::GetReadyActivationWaker(ui64 revolvingCounter) {
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard;
         const TWorkerId workerId = TlsThreadContext->WorkerId();

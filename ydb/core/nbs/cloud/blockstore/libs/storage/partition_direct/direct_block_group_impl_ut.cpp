@@ -110,6 +110,154 @@ NWilson::TTraceId CreateTraceId()
 
 Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 {
+    Y_UNIT_TEST_F(ShouldAllocateDDiskWithQuorum, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_shared<TStorageTransportMock>());
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        auto enoughDDisks = TVChunkConfig::MakeDefault(
+            0,
+            DirectBlockGroupHostCount,
+            DefaultPrimaryCount);
+        const auto spare =
+            RunOnExecutor(
+                executor,
+                [&] { return dbg->AllocateDDiskForPromote(enoughDDisks); })
+                .GetValue(WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(THostIndex(3), spare);
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->CommitDDiskPromotion(enoughDDisks);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        auto noCandidate = TVChunkConfig::MakeDefault(
+            1,
+            DirectBlockGroupHostCount,
+            DefaultPrimaryCount);
+        noCandidate.DisableHost(0);
+        noCandidate.DisableHost(3);
+        noCandidate.DisableHost(4);
+        const auto impossible =
+            RunOnExecutor(
+                executor,
+                [&] { return dbg->AllocateDDiskForPromote(noCandidate); })
+                .GetValue(WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(InvalidHostIndex, impossible);
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldReserveDifferentHostsForConcurrentPromotions,
+        TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_shared<TStorageTransportMock>());
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        auto first = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            *Service,
+            0);
+        auto second = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            *Service,
+            DirectBlockGroupHostCount);
+        auto existing = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            *Service,
+            1);
+        WaitDirtyMapReady(executor, first);
+        WaitDirtyMapReady(executor, second);
+        WaitDirtyMapReady(executor, existing);
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                first->SetHostState(0, EHostState::Offline);
+                second->SetHostState(0, EHostState::Offline);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(2, Service->UpdateConfigRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostRole::Primary,
+            Service->UpdateConfigRequests[0].Config.GetDDiskRole(4));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostRole::Primary,
+            Service->UpdateConfigRequests[1].Config.GetDDiskRole(3));
+
+        auto requests = std::move(Service->UpdateConfigRequests);
+        Service->UpdateConfigRequests.clear();
+        requests[0].Promise.SetValue(EPersistResult::Success);
+        DrainExecutor(executor);
+
+        auto third = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            *Service,
+            2 * DirectBlockGroupHostCount);
+        WaitDirtyMapReady(executor, third);
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                third->SetHostState(0, EHostState::Offline);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        // The committed reservation is gone; only the second promotion is
+        // still pending, so host 4 is currently less loaded than host 3.
+        bool foundThirdPromotion = false;
+        for (const auto& request: Service->UpdateConfigRequests) {
+            if (request.Config.GetVChunkIndex() ==
+                2 * DirectBlockGroupHostCount)
+            {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    EHostRole::Primary,
+                    request.Config.GetDDiskRole(4));
+                foundThirdPromotion = true;
+            }
+        }
+        UNIT_ASSERT(foundThirdPromotion);
+
+        requests[1].Promise.SetValue(EPersistResult::Success);
+        for (auto& request: Service->UpdateConfigRequests) {
+            request.Promise.SetValue(EPersistResult::Success);
+        }
+        Service->UpdateConfigRequests.clear();
+        DrainExecutor(executor);
+
+        first->Stop().GetValue(WaitTimeout);
+        second->Stop().GetValue(WaitTimeout);
+        existing->Stop().GetValue(WaitTimeout);
+        third->Stop().GetValue(WaitTimeout);
+    }
+
     Y_UNIT_TEST_F(ShouldIncludeCurrentFreshDDisksInMonSnapshot, TDBGFixture)
     {
         auto executor = MakeExecutor();

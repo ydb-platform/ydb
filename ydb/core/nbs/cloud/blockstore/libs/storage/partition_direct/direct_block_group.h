@@ -116,6 +116,14 @@ public:
 
     virtual void Register(TVChunkWeakPtr vChunk) = 0;
 
+    // Reserves the least loaded enabled host without a DDisk in config.
+    // Returns InvalidHostIndex when no host is available.
+    virtual THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) = 0;
+
+    // Releases the reservation after config persistence succeeds or is
+    // canceled.
+    virtual void CommitDDiskPromotion(const TVChunkConfig& config) = 0;
+
     virtual TExecutorPtr GetExecutor() = 0;
 
     virtual TArenaAllocatorPoolPtr GetArenaAllocatorPool()

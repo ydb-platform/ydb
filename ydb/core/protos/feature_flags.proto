@@ -405,4 +405,7 @@ message TFeatureFlags {
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
     optional bool EnableIamDelegationSecrets = 336 [default = false]; // YDBFEATURES-144
     optional bool EnableStreamingQueryStateRecompute = 337 [default = false];
+    // Enables CDC schema records for newly created asynchronous replication streams.
+    // Existing streams retain their legacy data-only protocol.
+    optional bool EnableAsyncReplicationSchemaChanges = 338 [default = false];
 }

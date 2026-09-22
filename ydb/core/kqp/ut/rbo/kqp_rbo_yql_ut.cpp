@@ -731,7 +731,7 @@ FROM (
 
     Y_UNIT_TEST(InsertUpdate) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(trueM);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         

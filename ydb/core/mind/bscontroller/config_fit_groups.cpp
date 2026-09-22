@@ -13,6 +13,7 @@ namespace NKikimr {
             const bool IgnoreGroupSanityChecks;
             const bool IgnoreGroupFailModelChecks;
             const bool IgnoreGroupLayoutChecks;
+            const bool RequireCorrectLayout;
             const bool IgnoreDegradedGroupsChecks;
             const bool IgnoreVSlotQuotaCheck;
             const bool AllowUnusableDisks;
@@ -34,12 +35,13 @@ namespace NKikimr {
                     std::deque<ui64>& expectedSlotSize, const TVector<TGroupId>& groupsToProcess,
                     ui32 pdiskSpaceMarginPromille,
                     const TBoxStoragePoolId& storagePoolId, const TStoragePoolInfo& storagePool,
-                    NKikimrBlobStorage::TConfigResponse::TStatus& status, TVSlotReadyTimestampQ& vslotReadyTimestampQ)
+                    NKikimrBlobStorage::TConfigResponse::TStatus& status, TVSlotReadyTimestampQ& vslotReadyTimestampQ, bool requireCorrectLayout)
                 : State(state)
                 , AvailabilityDomainId(availabilityDomainId)
                 , IgnoreGroupSanityChecks(cmd.GetIgnoreGroupSanityChecks())
                 , IgnoreGroupFailModelChecks(cmd.GetIgnoreGroupFailModelChecks())
                 , IgnoreGroupLayoutChecks(cmd.GetIgnoreGroupLayoutChecks())
+                , RequireCorrectLayout(requireCorrectLayout)
                 , IgnoreDegradedGroupsChecks(cmd.GetIgnoreDegradedGroupsChecks())
                 , IgnoreVSlotQuotaCheck(cmd.GetIgnoreVSlotQuotaCheck())
                 , AllowUnusableDisks(cmd.GetAllowUnusableDisks())
@@ -420,9 +422,14 @@ namespace NKikimr {
 
                         ui32 groupSizeInUnits = groupInfo->GroupSizeInUnits;
 
-                        if ((State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1
-                             && hasMissingSlots && !layoutIsValid && !hasExplicitTarget)
-                            || (replacedSlots.empty() && sanitizingRequest)) {
+                        const bool sanitizeOnReassignment = State.Self.IsGroupLayoutSanitizerEnabled()
+                                                            && !IgnoreGroupLayoutChecks
+                                                            && replacedSlots.size() == 1
+                                                            && hasMissingSlots
+                                                            && !layoutIsValid
+                                                            && !hasExplicitTarget;
+                        const bool sanitizeOnRequest = replacedSlots.empty() && sanitizingRequest;
+                        if (sanitizeOnReassignment || sanitizeOnRequest) {
 
                             YDB_LOG_INFO_COMP(BS_CONTROLLER, "Attempt to sanitize group layout",
                                 {"marker", "BSCFG01"},
@@ -504,7 +511,7 @@ namespace NKikimr {
                     State.GroupFailureModelChanged.insert(groupId);
 
                     if (replacedSlots) {
-                        if (!IgnoreGroupLayoutChecks && !groupInfo->LayoutCorrect) {
+                        if (RequireCorrectLayout && !IgnoreGroupLayoutChecks && !groupInfo->LayoutCorrect) {
                             throw TExGroupLayoutIncorrect(groupId.GetRawId());
                         }
                         if (!IgnoreGroupFailModelChecks) {
@@ -836,7 +843,7 @@ namespace NKikimr {
 
         void TBlobStorageController::FitGroupsForUserConfig(TConfigState& state, ui32 availabilityDomainId,
                 const NKikimrBlobStorage::TConfigRequest& cmd, std::deque<ui64> expectedSlotSize,
-                NKikimrBlobStorage::TConfigResponse::TStatus& status) {
+                NKikimrBlobStorage::TConfigResponse::TStatus& status, bool requireCorrectLayout) {
             Y_DEFER {
                 // reset Fit options so they do not affect further commands
                 state.Fit.OnlyToLessOccupiedPDisk = false;
@@ -862,7 +869,7 @@ namespace NKikimr {
                 });
 
                 TGroupFitter fitter(state, availabilityDomainId, cmd, expectedSlotSize, groupIds, PDiskSpaceMarginPromille,
-                    storagePoolId, storagePool, status, VSlotReadyTimestampQ);
+                    storagePoolId, storagePool, status, VSlotReadyTimestampQ, requireCorrectLayout);
 
                 ui32 numActualGroups = 0;
 
@@ -946,7 +953,7 @@ namespace NKikimr {
                     auto& [numGroups, storagePoolId] = filterMap.at(identifier);
                     const auto& storagePool = state.StoragePools.Get().at(storagePoolId);
                     TGroupFitter fitter(state, availabilityDomainId, cmd, expectedSlotSize, {}, PDiskSpaceMarginPromille,
-                        storagePoolId, storagePool, status, VSlotReadyTimestampQ);
+                        storagePoolId, storagePool, status, VSlotReadyTimestampQ, requireCorrectLayout);
                     fitter.CheckReserve(numGroups, GroupReserveMin, GroupReservePart);
                 }
             }

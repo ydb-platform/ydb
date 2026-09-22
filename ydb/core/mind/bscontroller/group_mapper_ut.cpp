@@ -970,7 +970,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         UNIT_ASSERT_VALUES_EQUAL(reassign(TGroupMapper::TForceVDiskOnPDisk{TPDiskId(1, 2)}, false, 2), TPDiskId(1, 2));
     }
 
-    Y_UNIT_TEST(LayoutOverridePreservesTargetPolicies) {
+    void CheckLayoutOverridePreservesTargetPolicies(bool explicitTarget) {
         TGroupMapper::TPlacementSnapshot snapshot;
         TGroupMapper::TReassignmentRequest request;
         request.GroupId = 1;
@@ -994,7 +994,14 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                 });
             }
         }
-        request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDiskOnPDisk{TPDiskId(9, 1)};
+        auto setReassignment = [&] {
+            if (explicitTarget) {
+                request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDiskOnPDisk{TPDiskId(9, 1)};
+            } else {
+                request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDisk{};
+            }
+        };
+        setReassignment();
         auto reassign = [&](TGroupMapper::TOptions options = {}) {
             return TGroupMapper::PlanGroupReassignment(
                 TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block, 1, 8, 1),
@@ -1030,13 +1037,107 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         request.ForbiddenPDisks.clear();
         request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDiskOnPDisk{TPDiskId(2, 1)};
         UNIT_ASSERT(!reassign().Success);
+        request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDisk{.RequireSameNode = true};
+        UNIT_ASSERT(!reassign().Success);
 
-        request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDiskOnPDisk{TPDiskId(9, 1)};
+        setReassignment();
         request.IgnoreGroupLayoutChecks = false;
         target.Location = MakeTestLocation(9);
         const auto repaired = reassign();
         UNIT_ASSERT_C(repaired.Success, repaired.Error.ErrorMessage);
         UNIT_ASSERT(repaired.LayoutCorrect);
+
+        auto spare = target;
+        spare.PDiskId = TPDiskId(10, 1);
+        spare.Location = MakeTestLocation(10);
+        snapshot.PDisks.push_back(std::move(spare));
+        request.IgnoreGroupLayoutChecks = true;
+        request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDiskOnPDisk{TPDiskId(9, 1)};
+        request.VDisks.back().Reassignment = TGroupMapper::TReplaceVDiskOnPDisk{TPDiskId(9, 1)};
+        UNIT_ASSERT(!reassign().Success);
+
+        snapshot.PDisks[8].Location = MakeTestLocation(9, 2);
+        request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDisk{};
+        const auto mixed = reassign();
+        UNIT_ASSERT_C(mixed.Success, mixed.Error.ErrorMessage);
+        UNIT_ASSERT_VALUES_EQUAL(mixed.Group[0][0][0], TPDiskId(10, 1));
+        UNIT_ASSERT_VALUES_EQUAL(mixed.Group[0][7][0], TPDiskId(9, 1));
+        UNIT_ASSERT(!mixed.LayoutCorrect);
+
+        request.VDisks.back().Reassignment = TGroupMapper::TKeepVDisk{};
+        snapshot.PDisks.back().NumSlots = 1;
+        const auto preferred = reassign();
+        UNIT_ASSERT_C(preferred.Success, preferred.Error.ErrorMessage);
+        UNIT_ASSERT_VALUES_EQUAL(preferred.Group[0][0][0], TPDiskId(10, 1));
+        UNIT_ASSERT(preferred.LayoutCorrect);
+
+        snapshot.PDisks[8].PDiskId = TPDiskId(8, 2);
+        snapshot.PDisks[8].Location = MakeTestLocation(8);
+        snapshot.PDisks.back().Location = MakeTestLocation(10, 2);
+        request.VDisks.back().Reassignment = TGroupMapper::TReplaceVDisk{.RequireSameNode = true};
+        const auto local = reassign();
+        UNIT_ASSERT_C(local.Success, local.Error.ErrorMessage);
+        UNIT_ASSERT_VALUES_EQUAL(local.Group[0][0][0], TPDiskId(10, 1));
+        UNIT_ASSERT_VALUES_EQUAL(local.Group[0][7][0], TPDiskId(8, 2));
+        UNIT_ASSERT(!local.LayoutCorrect);
+    }
+
+    Y_UNIT_TEST(LayoutOverridePreservesTargetPolicies) {
+        CheckLayoutOverridePreservesTargetPolicies(true);
+    }
+
+    Y_UNIT_TEST(LayoutOverridePreservesAutomaticPlacementPolicies) {
+        CheckLayoutOverridePreservesTargetPolicies(false);
+    }
+
+    Y_UNIT_TEST(LayoutOverrideCanReplaceWholeRealmOrGroup) {
+        for (ui32 numReplaced : {3u, 9u}) {
+            TGroupMapper::TPlacementSnapshot snapshot;
+            TGroupMapper::TReassignmentRequest request;
+            request.GroupId = 1;
+            request.GroupGeneration = 1;
+            for (ui32 nodeId = 1; nodeId <= 9 + numReplaced; ++nodeId) {
+                NActorsInterconnect::TNodeLocation location;
+                location.SetDataCenter(ToString(nodeId <= 9 ? (nodeId - 1) / 3 : 1));
+                location.SetRack(ToString(nodeId <= 9 ? nodeId : 4));
+                snapshot.PDisks.push_back({
+                    .PDiskId = TPDiskId(nodeId, 1),
+                    .Location = TNodeLocation(location),
+                    .NumSlots = nodeId <= 9 ? 1u : 0u,
+                    .MaxSlots = 2,
+                    .SlotSizeInUnits = 1,
+                    .Operational = true,
+                });
+                if (nodeId <= 9) {
+                    auto& disk = request.VDisks.emplace_back();
+                    disk.VDiskId = TVDiskIdShort((nodeId - 1) / 3, (nodeId - 1) % 3, 0);
+                    disk.PDiskId = TPDiskId(nodeId, 1);
+                    if (nodeId <= numReplaced) {
+                        disk.Reassignment = TGroupMapper::TReplaceVDisk{};
+                    }
+                }
+            }
+            auto reassign = [&] {
+                return TGroupMapper::PlanGroupReassignment(
+                    TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1),
+                    {}, snapshot, request);
+            };
+            UNIT_ASSERT(!reassign().Success);
+            request.IgnoreGroupLayoutChecks = true;
+            const auto outcome = reassign();
+            UNIT_ASSERT_C(outcome.Success, outcome.Error.ErrorMessage);
+            UNIT_ASSERT(!outcome.LayoutCorrect);
+            TSet<TPDiskId> used;
+            TGroupMapper::Traverse(outcome.Group, [&](TVDiskIdShort id, TPDiskId pdiskId) {
+                const ui32 oldNode = id.FailRealm * 3 + id.FailDomain + 1;
+                UNIT_ASSERT(used.insert(pdiskId).second);
+                if (oldNode <= numReplaced) {
+                    UNIT_ASSERT(pdiskId.NodeId > 9);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(pdiskId, TPDiskId(oldNode, 1));
+                }
+            });
+        }
     }
 
     Y_UNIT_TEST(ReassignmentRequiredSpaceFromUntouchedVDiskState) {

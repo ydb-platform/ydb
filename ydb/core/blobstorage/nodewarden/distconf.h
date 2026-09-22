@@ -519,6 +519,7 @@ namespace NKikimr::NStorage {
             bool ConvertToDonor = false;
             bool IgnoreVSlotQuotaCheck = false;
             bool IgnoreGroupLayoutChecks = false;
+            bool RequireCorrectLayout = true;
             bool AllowUnusableDisks = false;
             bool SettleOnlyOnOperationalDisks = false;
             bool IsSelfHealReasonDecommit = false;

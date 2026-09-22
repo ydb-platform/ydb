@@ -641,9 +641,9 @@ namespace NKikimr::NStorage {
             throw TExConfigError() << "group allocation failed Error# " << outcome.Error.ErrorMessage
                 << " groupDefinition# " << dumpGroupDefinition();
         }
-        if (!params.IgnoreGroupLayoutChecks && !outcome.LayoutCorrect) {
+        if (params.RequireCorrectLayout && !params.IgnoreGroupLayoutChecks && !outcome.LayoutCorrect) {
             throw TExConfigError() << "Group layout is incorrect GroupId# " << params.GroupId
-                << "; set IgnoreGroupLayoutChecks to allow this reassignment";
+                                   << "; set IgnoreGroupLayoutChecks to allow this reassignment";
         }
 
         auto *sSet = bsConfig->MutableServiceSet();

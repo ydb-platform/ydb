@@ -54,6 +54,7 @@ namespace NKikimr::NStorage {
             .ConvertToDonor = command.GetConvertToDonor(),
             .IgnoreVSlotQuotaCheck = command.GetIgnoreVSlotQuotaCheck(),
             .IgnoreGroupLayoutChecks = command.GetIgnoreGroupLayoutChecks(),
+            .RequireCorrectLayout = !command.GetFromSelfHeal(),
             .AllowUnusableDisks = command.GetAllowUnusableDisks(),
             .SettleOnlyOnOperationalDisks = command.GetSettleOnlyOnOperationalDisks(),
             .IsSelfHealReasonDecommit = command.GetIsSelfHealReasonDecommit(),

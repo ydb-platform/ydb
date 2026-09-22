@@ -190,7 +190,6 @@ namespace NKikimr::NBsController {
                 cmd->SetSettleOnlyOnOperationalDisks(true);
                 cmd->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
                 cmd->SetFromSelfHeal(true);
-                cmd->SetIgnoreGroupLayoutChecks(true);
                 cmd->SetPreferLessOccupiedRack(PreferLessOccupiedRack);
                 cmd->SetWithAttentionToReplication(WithAttentionToReplication);
                 cmd->SetUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
@@ -209,7 +208,6 @@ namespace NKikimr::NBsController {
                 request->SetIgnoreDegradedGroupsChecks(IgnoreDegradedGroupsChecks);
             }
             request->SetAllowUnusableDisks(true);
-            request->SetIgnoreGroupLayoutChecks(true);
             if (VDiskToReplace) {
                 ev->SelfHeal = true;
                 auto *cmd = request->AddCommand()->MutableReassignGroupDisk();

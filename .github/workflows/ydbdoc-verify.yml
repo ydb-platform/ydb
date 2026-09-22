@@ -1,5 +1,5 @@
 # doc_verify на translation PR (ветка в upstream или в fork).
-# QA = тот же пайплайн, что после doc_translate (@v1.0.1).
+# QA = тот же пайплайн, что после doc_translate (@v1.1.0).
 
 name: ydbdoc-review (doc_verify label)
 
@@ -36,7 +36,7 @@ jobs:
             core.setOutput('sha', match[1]);
 
       - name: Verify translation PR
-        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.0.1
+        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.1.0
         with:
           mode: verify
           pr: ${{ github.event.pull_request.number }}

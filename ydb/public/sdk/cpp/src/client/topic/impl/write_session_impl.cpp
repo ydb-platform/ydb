@@ -1097,7 +1097,8 @@ void TWriteSessionImpl::InitImpl() {
 }
 
 // Called under lock. Invokes Processor->Write, which is assumed to be deadlock-safe
-void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&& req) {
+void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&& req,
+                                             size_t requestMemoryUsage) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     Y_ASSERT(Processor);
@@ -1105,9 +1106,10 @@ void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&&
         return;
     }
     auto callback = [cbContext = SelfContext,
-                     connectionGeneration = ConnectionGeneration](NYdbGrpc::TGrpcStatus&& grpcStatus) {
+                     connectionGeneration = ConnectionGeneration,
+                     requestMemoryUsage](NYdbGrpc::TGrpcStatus&& grpcStatus) {
         if (auto self = cbContext->LockShared()) {
-            self->OnWriteDone(std::move(grpcStatus), connectionGeneration);
+            self->OnWriteDone(std::move(grpcStatus), connectionGeneration, requestMemoryUsage);
         }
     };
 
@@ -1139,22 +1141,36 @@ void TWriteSessionImpl::ReadFromProcessor() {
     prc->Read(ServerMessage.get(), std::move(callback));
 }
 
-void TWriteSessionImpl::OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration) {
+void TWriteSessionImpl::OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration,
+                                    size_t requestMemoryUsage) {
     THandleResult handleResult;
+    bool readyToAccept = false;
     {
         std::lock_guard guard(Lock);
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: OnWriteDone " << status.ToDebugString());
+        const bool wasOk = MemoryUsage <= Settings.MaxMemoryUsage_;
+        if (requestMemoryUsage) {
+            Y_ABORT_UNLESS(WriteRequestsMemoryUsage >= requestMemoryUsage);
+            WriteRequestsMemoryUsage -= requestMemoryUsage;
+            OnMemoryUsageChangedImpl(-static_cast<i64>(requestMemoryUsage));
+        }
+
         if (connectionGeneration != ConnectionGeneration) {
-            return; // Message from previous connection. Ignore.
-        }
-        if (Aborting) {
-            return;
-        }
-        if(!status.Ok()) {
+            if (requestMemoryUsage && !Aborting) {
+                SendImpl();
+            }
+        } else if (!Aborting && !status.Ok()) {
             handleResult = OnErrorImpl(status);
+        } else if (!Aborting && requestMemoryUsage) {
+            SendImpl();
         }
+        readyToAccept = requestMemoryUsage && !Aborting && !wasOk
+            && MemoryUsage <= Settings.MaxMemoryUsage_;
     }
     ProcessHandleResult(handleResult);
+    if (readyToAccept) {
+        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
+    }
 }
 
 void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration) {
@@ -1991,7 +2007,8 @@ void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB.
-    while (IsReadyToSendNextImpl()) {
+    while (IsReadyToSendNextImpl()
+           && (WriteRequestsMemoryUsage == 0 || WriteRequestsMemoryUsage < Settings.MaxMemoryUsage_)) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
 
@@ -2042,7 +2059,11 @@ void TWriteSessionImpl::SendImpl() {
                 << OriginalMessagesToSend.size() << " left), first sequence number is "
                 << writeRequest->messages(0).seq_no()
         );
-        Processor->Write(std::move(clientMessage));
+        const size_t requestMemoryUsage = clientMessage.SpaceUsedLong();
+        Y_ABORT_UNLESS(std::numeric_limits<size_t>::max() - WriteRequestsMemoryUsage >= requestMemoryUsage);
+        WriteRequestsMemoryUsage += requestMemoryUsage;
+        OnMemoryUsageChangedImpl(static_cast<i64>(requestMemoryUsage));
+        WriteToProcessorImpl(std::move(clientMessage), requestMemoryUsage);
     }
 }
 

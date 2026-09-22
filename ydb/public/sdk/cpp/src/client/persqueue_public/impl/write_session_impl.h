@@ -345,9 +345,9 @@ private:
     void DoConnect(const TDuration& delay, const std::string& endpoint);
     void InitImpl();
     void ReadFromProcessor(); // Assumes that we're under lock.
-    void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock.
+    void WriteToProcessorImpl(TClientMessage&& req, size_t requestMemoryUsage = 0); // Assumes that we're under lock.
     void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
-    void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration);
+    void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration, size_t requestMemoryUsage);
     TProcessSrvMessageResult ProcessServerMessageImpl();
     TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
     TBuffer CompressBufferImpl(std::vector<std::string_view>& data, ECodec codec, i32 level);
@@ -406,6 +406,7 @@ private:
     IExecutor::TPtr Executor;
     IExecutor::TPtr CompressionExecutor;
     size_t MemoryUsage = 0; //!< Estimated amount of memory used
+    size_t WriteRequestsMemoryUsage = 0;
     bool FirstTokenSent = false;
 
     TMessageBatch CurrentBatch;

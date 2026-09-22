@@ -1,3 +1,5 @@
+* Fixed Topic and PersQueue write-session memory accounting to include queued data protobufs until transport completion.
+
 * Added `Float16` and `BFloat16` vector index types.
 
 ## v3.23.0

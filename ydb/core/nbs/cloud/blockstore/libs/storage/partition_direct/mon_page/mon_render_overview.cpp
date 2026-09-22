@@ -18,6 +18,7 @@
 #include <util/string/builder.h>
 
 #include <array>
+#include <cmath>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -46,7 +47,23 @@ struct TDbgHeaderCell
 struct TDefaultConfigEntry
 {
     TVChunkConfig Config;
-    size_t VChunkCount = 0;
+    size_t TouchedVChunkCount = 0;
+    size_t ConfiguredVChunkCount = 0;
+};
+
+// DDisk placements by host for all configured and touched VChunks in one DBG.
+struct TDbgDDiskCounts
+{
+    TVector<size_t> Configured;
+    TVector<size_t> Touched;
+};
+
+// Minimum DDisk moves needed for an even host distribution and their share.
+struct TDDiskImbalance
+{
+    size_t Moves = 0;
+    size_t TotalDDiskCount = 0;
+    ui32 Percent = 0;
 };
 
 using TDbgConfigHeaders = std::array<TDbgHeaderCell, VChunkPerRegionCount>;
@@ -99,6 +116,12 @@ public:
         return GrandTotal;
     }
 
+    // Returns DDisk placements for each DBG, indexed by DBG id.
+    const TVector<TDbgDDiskCounts>& GetDDiskCounts() const
+    {
+        return DDiskCounts;
+    }
+
 private:
     void FillDefaultConfigs(
         size_t regionCount,
@@ -125,6 +148,7 @@ private:
     TDbgConfigRow ColumnTotals;
     TDbgTableCell GrandTotal;
     TDefaultConfigCache DefaultConfigs;
+    TVector<TDbgDDiskCounts> DDiskCounts;
 };
 
 enum class EDbgConfigCellKind
@@ -162,6 +186,49 @@ TCountAndSize GetPBuffersUsage(const TVector<TDbgSnapshot>& dbgs)
     return result;
 }
 
+// Chooses the hosts that keep the extra DDisk in an even integer distribution
+// so that the number of moved DDisks is minimal.
+TDDiskImbalance CalculateDDiskImbalance(const TVector<size_t>& counts)
+{
+    const size_t hostCount = counts.size();
+    if (hostCount < DirectBlockGroupHostCount) {
+        return {};
+    }
+
+    size_t ddiskCount = 0;
+    for (const size_t count: counts) {
+        ddiskCount += count;
+    }
+    if (ddiskCount == 0) {
+        return {};
+    }
+
+    const size_t baseCount = ddiskCount / hostCount;
+    const size_t extraHosts = ddiskCount % hostCount;
+    size_t excess = 0;
+    size_t hostsAboveBase = 0;
+    for (const size_t count: counts) {
+        if (count > baseCount) {
+            excess += count - baseCount;
+            ++hostsAboveBase;
+        }
+    }
+
+    const size_t moves = excess - Min(extraHosts, hostsAboveBase);
+    return {
+        .Moves = moves,
+        .TotalDDiskCount = ddiskCount,
+        .Percent = static_cast<ui32>(std::lround(100.0 * moves / ddiskCount)),
+    };
+}
+
+TString FormatDDiskImbalance(const TDDiskImbalance& imbalance)
+{
+    return TStringBuilder() << " need move " << imbalance.Moves << " of "
+                            << imbalance.TotalDDiskCount << " DDisks ("
+                            << imbalance.Percent << "%)";
+}
+
 // static
 TDbgConfigTableData TDbgConfigTableData::BuildAndFill(
     const TVector<TDbgSnapshot>& dbgs,
@@ -172,15 +239,22 @@ TDbgConfigTableData TDbgConfigTableData::BuildAndFill(
 {
     TDbgConfigTableData result;
     result.DefaultConfigs.resize(dbgs.size());
+    result.DDiskCounts.resize(dbgs.size());
     for (const auto& dbg: dbgs) {
         Y_ABORT_UNLESS(dbg.Index < dbgs.size());
         result.Headers[dbg.Index % VChunkPerRegionCount].DbgIds.push_back(
             dbg.Index);
         result.DefaultConfigs[dbg.Index] = BuildDefaultConfigCache(dbg);
+        result.DDiskCounts[dbg.Index].Configured.resize(dbg.Connections.size());
+        result.DDiskCounts[dbg.Index].Touched.resize(dbg.Connections.size());
         for (const auto& connection: dbg.Connections) {
             result.Table[connection.DDiskId.NodeId];
             result.Table[connection.PBufferId.NodeId];
         }
+    }
+
+    if (dbgs.empty()) {
+        return result;
     }
 
     result.FillDefaultConfigs(
@@ -205,13 +279,22 @@ void TDbgConfigTableData::FillDefaultConfigs(
     for (ui32 regionIndex = 0; regionIndex < regionCount; ++regionIndex) {
         const auto touchedVChunks =
             touchedProvider.GetTouchedVChunks(regionIndex);
-        Y_FOR_EACH_BIT(vChunkIndexInRegion, touchedVChunks)
+        for (size_t vChunkIndexInRegion = 0;
+             vChunkIndexInRegion < VChunkPerRegionCount;
+             ++vChunkIndexInRegion)
         {
             const TVChunkId vChunkId =
                 GetVChunkIndex(regionIndex, vChunkIndexInRegion);
             const TDbgId dbgId =
                 GetDirectBlockGroupIndex(vChunkId, directBlockGroupCount);
-            ++GetDefaultConfig(dbgId, vChunkId).VChunkCount;
+            if (dbgId >= DefaultConfigs.size()) {
+                continue;
+            }
+            auto& entry = GetDefaultConfig(dbgId, vChunkId);
+            ++entry.ConfiguredVChunkCount;
+            if (touchedVChunks[vChunkIndexInRegion]) {
+                ++entry.TouchedVChunkCount;
+            }
         }
     }
 }
@@ -224,18 +307,29 @@ void TDbgConfigTableData::ApplyRealConfigs(
 {
     for (const auto& [vChunkId, config]: vChunkConfigs) {
         Y_ABORT_UNLESS(vChunkId == config.GetVChunkIndex());
+        const TDbgId dbgId =
+            GetDirectBlockGroupIndex(vChunkId, directBlockGroupCount);
+        auto& entry = GetDefaultConfig(dbgId, vChunkId);
+        Y_ABORT_UNLESS(entry.ConfiguredVChunkCount != 0);
+        --entry.ConfiguredVChunkCount;
+
+        Y_ABORT_UNLESS(dbgId < dbgs.size() && dbgs[dbgId].Index == dbgId);
+        const auto& dbg = dbgs[dbgId];
+        for (THostIndex host = 0;
+             host < Min(config.GetHostCount(), dbg.Connections.size());
+             ++host)
+        {
+            if (config.GetDDiskRole(host) != EHostRole::None) {
+                ++DDiskCounts[dbgId].Configured[host];
+            }
+        }
+
         if (!touchedProvider.Get(vChunkId)) {
             continue;
         }
 
-        const TDbgId dbgId =
-            GetDirectBlockGroupIndex(vChunkId, directBlockGroupCount);
-        auto& entry = GetDefaultConfig(dbgId, vChunkId);
-        Y_ABORT_UNLESS(entry.VChunkCount != 0);
-        --entry.VChunkCount;
-
-        Y_ABORT_UNLESS(dbgId < dbgs.size() && dbgs[dbgId].Index == dbgId);
-        const auto& dbg = dbgs[dbgId];
+        Y_ABORT_UNLESS(entry.TouchedVChunkCount != 0);
+        --entry.TouchedVChunkCount;
         const auto* freshDDisks = dbg.FreshDDisks.FindPtr(vChunkId);
         const size_t columnIndex = dbg.Index % VChunkPerRegionCount;
         const auto disabledHosts = config.GetDisabledHosts();
@@ -245,6 +339,7 @@ void TDbgConfigTableData::ApplyRealConfigs(
         {
             const auto& connection = dbg.Connections[host];
             if (config.GetDDiskRole(host) != EHostRole::None) {
+                ++DDiskCounts[dbgId].Touched[host];
                 const bool fresh =
                     (freshDDisks != nullptr) && freshDDisks->Get(host);
                 const auto state =
@@ -268,7 +363,9 @@ void TDbgConfigTableData::TransferDefaultConfigsToTable(
         Y_ABORT_UNLESS(dbg.Index < DefaultConfigs.size());
         const size_t columnIndex = dbg.Index % VChunkPerRegionCount;
         for (const auto& entry: DefaultConfigs[dbg.Index]) {
-            if (entry.VChunkCount == 0) {
+            if (entry.TouchedVChunkCount == 0 &&
+                entry.ConfiguredVChunkCount == 0)
+            {
                 continue;
             }
 
@@ -279,14 +376,18 @@ void TDbgConfigTableData::TransferDefaultConfigsToTable(
             {
                 const auto& connection = dbg.Connections[host];
                 if (config.GetDDiskRole(host) != EHostRole::None) {
+                    DDiskCounts[dbg.Index].Configured[host] +=
+                        entry.ConfiguredVChunkCount;
+                    DDiskCounts[dbg.Index].Touched[host] +=
+                        entry.TouchedVChunkCount;
                     const auto state =
                         config.GetHostHumanReadableState(host, false);
                     Table[connection.DDiskId.NodeId][columnIndex]
-                        .DDiskStates[state] += entry.VChunkCount;
+                        .DDiskStates[state] += entry.TouchedVChunkCount;
                 }
                 if (config.GetPBufferRole(host) != EHostRole::None) {
                     Table[connection.PBufferId.NodeId][columnIndex]
-                        .PBufferCount += entry.VChunkCount;
+                        .PBufferCount += entry.TouchedVChunkCount;
                 }
             }
         }
@@ -346,21 +447,12 @@ TDefaultConfigEntry& TDbgConfigTableData::GetDefaultConfig(
 void RenderDbgConfigHeader(
     IOutputStream& str,
     ui64 tabletId,
-    const TDbgHeaderCell& cell)
+    TDbgId dbgIndex,
+    ui32 touchedImbalancePercent)
 {
-    if (cell.DbgIds.empty()) {
-        str << "-";
-        return;
-    }
-
-    for (size_t i = 0; i < cell.DbgIds.size(); ++i) {
-        if (i != 0) {
-            str << "<br>";
-        }
-        const TDbgId dbgIndex = cell.DbgIds[i];
-        str << "<a href='?TabletID=" << tabletId << "&page=dbg&dbg=" << dbgIndex
-            << "'>DBG #" << dbgIndex << "</a>";
-    }
+    str << "<a href='?TabletID=" << tabletId << "&page=dbg&dbg=" << dbgIndex
+        << "'>DBG #" << dbgIndex << "</a> Imb: " << touchedImbalancePercent
+        << "%";
 }
 
 bool IsEmpty(const TDbgTableCell& cell)
@@ -470,6 +562,11 @@ void RenderDbgConfigTable(
     }
     Sort(nodeIds);
 
+    size_t headerRowCount = 0;
+    for (const auto& cell: tableData.GetHeaders()) {
+        headerRowCount = Max(headerRowCount, cell.DbgIds.size());
+    }
+
     HTML (str) {
         TAG (TH3) {
             str << "Direct Block Group config";
@@ -482,20 +579,48 @@ void RenderDbgConfigTable(
         }
         TABLE_CLASS ("table table-condensed table-bordered") {
             TABLEHEAD () {
-                TABLER () {
-                    TABLEH () {
-                        str << "Node";
-                    }
-                    for (const auto& headerCell: tableData.GetHeaders()) {
-                        TABLEH () {
-                            RenderDbgConfigHeader(
-                                str,
-                                tabletInfo.TabletId,
-                                headerCell);
+                for (size_t headerRow = 0; headerRow < headerRowCount;
+                     ++headerRow)
+                {
+                    TABLER () {
+                        if (headerRow == 0) {
+                            str << "<th rowspan=\"" << headerRowCount
+                                << "\">Node</th>";
                         }
-                    }
-                    TABLEH () {
-                        str << "Total";
+                        for (const auto& headerCell: tableData.GetHeaders()) {
+                            if (headerRow < headerCell.DbgIds.size()) {
+                                const TDbgId dbgId =
+                                    headerCell.DbgIds[headerRow];
+                                const auto& counts =
+                                    tableData.GetDDiskCounts()[dbgId];
+                                const auto configuredImbalance =
+                                    CalculateDDiskImbalance(counts.Configured);
+                                const auto touchedImbalance =
+                                    CalculateDDiskImbalance(counts.Touched);
+                                const TString tooltip =
+                                    TStringBuilder()
+                                    << "Config: "
+                                    << FormatDDiskImbalance(configuredImbalance)
+                                    << "&#10;Touched: "
+                                    << FormatDDiskImbalance(touchedImbalance);
+                                TABLEH_ATTRS({{"title", tooltip}})
+                                {
+                                    RenderDbgConfigHeader(
+                                        str,
+                                        tabletInfo.TabletId,
+                                        dbgId,
+                                        touchedImbalance.Percent);
+                                }
+                            } else {
+                                TABLEH () {
+                                    str << "-";
+                                }
+                            }
+                        }
+                        if (headerRow == 0) {
+                            str << "<th rowspan=\"" << headerRowCount
+                                << "\">Total</th>";
+                        }
                     }
                 }
             }

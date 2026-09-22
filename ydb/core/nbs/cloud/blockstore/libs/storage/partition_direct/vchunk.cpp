@@ -1246,6 +1246,7 @@ void TVChunk::OnConfigPersisted(
     BlocksDirtyMap->StatePersisted(stateGeneration);
     PersistedFreshDDisks = freshDDisks;
     ApplyConfig(config, message);
+    DirectBlockGroup->CommitDDiskPromotion(config);
     StartPersist();
     DemoteUnavailableHostsIfNeeded();
 }

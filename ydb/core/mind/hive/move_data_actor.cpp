@@ -70,7 +70,7 @@ public:
         ++MoveDataInFlight;
         ++SentCount;
         Hive->OnShrinkMoveDataSent(MoveDataInFlight, Queued());
-        YDB_LOG_INFO("ShrinkPool: MoveData sent",
+        YDB_LOG_NOTICE("ShrinkPool: MoveData sent",
             {"pool", PoolName},
             {"tablet", tablet},
             {"sent", SentCount},
@@ -101,7 +101,7 @@ public:
                 NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
                 --MoveDataInFlight;
                 Hive->OnShrinkMoveDataAnswered(MoveDataInFlight, Queued());
-                YDB_LOG_INFO("ShrinkPool: MoveData answered",
+                YDB_LOG_NOTICE("ShrinkPool: MoveData answered",
                     {"pool", PoolName},
                     {"tablet", tablet},
                     {"status", (ui32)ev->Get()->Record.GetStatus()},
@@ -138,7 +138,7 @@ public:
                 NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
                 --MoveDataInFlight;
                 Hive->OnShrinkMoveDataRetried();
-                YDB_LOG_INFO("ShrinkPool: MoveData retried",
+                YDB_LOG_NOTICE("ShrinkPool: MoveData retried",
                     {"pool", PoolName},
                     {"tablet", tablet});
                 SendMoveData(i, tablet);

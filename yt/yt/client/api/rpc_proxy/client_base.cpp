@@ -38,6 +38,8 @@
 
 #include <yt/yt/core/net/address.h>
 
+#include <yt/yt/core/profiling/timing.h>
+
 #include <yt/yt/core/ytree/attribute_filter.h>
 
 #include <yt/yt/core/yson/protobuf_helpers.h>
@@ -787,6 +789,8 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     const TRichYPath& path,
     const TTableReaderOptions& options)
 {
+    NProfiling::TWallTimer totalTimer;
+
     auto proxy = CreateApiServiceProxy();
     PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
     auto req = proxy.ReadTable();
@@ -797,8 +801,8 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     req->Annotate().With(MakeReadTableRequestTags(path, *req));
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
-        .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
-            return NRpcProxy::CreateTableReader(std::move(inputStream));
+        .AsUnique().Apply(BIND([totalTimer] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
+            return NRpcProxy::CreateTableReader(std::move(inputStream), totalTimer);
         }));
 }
 

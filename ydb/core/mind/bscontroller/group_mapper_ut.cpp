@@ -970,6 +970,65 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         UNIT_ASSERT_VALUES_EQUAL(reassign(TGroupMapper::TForceVDiskOnPDisk{TPDiskId(1, 2)}, false, 2), TPDiskId(1, 2));
     }
 
+    Y_UNIT_TEST(ReassignmentPrioritizesLayoutThenLocalityThenOperationalDisks) {
+        TGroupMapper::TPlacementSnapshot snapshot;
+        TGroupMapper::TReassignmentRequest request;
+        request.GroupId = 1;
+        request.GroupGeneration = 1;
+        request.TryToRelocateLocallyFirst = true;
+        request.IgnoreGroupLayoutChecks = true;
+        for (ui32 nodeId = 1; nodeId <= 9; ++nodeId) {
+            snapshot.PDisks.push_back({
+                .PDiskId = TPDiskId(nodeId, 1),
+                .Location = MakeTestLocation(nodeId),
+                .NumSlots = nodeId <= 8 ? 1u : 0u,
+                .MaxSlots = 2,
+                .SlotSizeInUnits = 1,
+                .Operational = true,
+            });
+            if (nodeId <= 8) {
+                request.VDisks.push_back({
+                    .VDiskId = TVDiskIdShort(0, nodeId - 1, 0),
+                    .PDiskId = TPDiskId(nodeId, 1),
+                });
+            }
+        }
+        auto local = snapshot.PDisks.front();
+        local.PDiskId = TPDiskId(1, 2);
+        local.NumSlots = 0;
+        local.Operational = false;
+        snapshot.PDisks.push_back(std::move(local));
+        request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDisk{};
+        auto reassign = [&](bool onlyOperational = false) {
+            return TGroupMapper::PlanGroupReassignment(
+                TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block, 1, 8, 1),
+                {.SettleOnlyOnOperationalDisks = onlyOperational}, snapshot, request);
+        };
+        auto checkPlacement = [&](bool onlyOperational, TPDiskId expected, bool layoutCorrect) {
+            const auto outcome = reassign(onlyOperational);
+            UNIT_ASSERT_C(outcome.Success, outcome.Error.ErrorMessage);
+            UNIT_ASSERT_VALUES_EQUAL(outcome.Group[0][0][0], expected);
+            UNIT_ASSERT_VALUES_EQUAL(outcome.LayoutCorrect, layoutCorrect);
+        };
+
+        checkPlacement(false, TPDiskId(1, 2), true);
+        checkPlacement(true, TPDiskId(9, 1), true);
+        request.TryToRelocateLocallyFirst = false;
+        checkPlacement(false, TPDiskId(9, 1), true);
+
+        request.TryToRelocateLocallyFirst = true;
+        snapshot.PDisks.front().Location = MakeTestLocation(1, 2);
+        snapshot.PDisks.back().Location = MakeTestLocation(1, 2);
+        snapshot.PDisks.back().Operational = true;
+        snapshot.PDisks[8].Operational = false;
+        checkPlacement(false, TPDiskId(9, 1), true);
+        checkPlacement(true, TPDiskId(1, 2), false);
+
+        request.IgnoreGroupLayoutChecks = false;
+        UNIT_ASSERT(!reassign(true).Success);
+        checkPlacement(false, TPDiskId(9, 1), true);
+    }
+
     void CheckLayoutOverridePreservesTargetPolicies(bool explicitTarget) {
         TGroupMapper::TPlacementSnapshot snapshot;
         TGroupMapper::TReassignmentRequest request;

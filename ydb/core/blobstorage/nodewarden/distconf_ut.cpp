@@ -1175,8 +1175,8 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         UNIT_ASSERT(params.ForbiddenPDisks.contains(NBsController::TPDiskId(9, 3)));
         UNIT_ASSERT(params.ConvertToDonor);
         UNIT_ASSERT(!params.IgnoreVSlotQuotaCheck);
-        UNIT_ASSERT(params.IgnoreGroupLayoutChecks);
-        UNIT_ASSERT(!params.RequireCorrectLayout);
+        UNIT_ASSERT(params.LayoutPolicy.AllowsRelaxedPlacement());
+        UNIT_ASSERT(params.LayoutPolicy.Accepts(false));
         UNIT_ASSERT(params.AllowUnusableDisks);
         UNIT_ASSERT(!params.SettleOnlyOnOperationalDisks);
         UNIT_ASSERT(params.IsSelfHealReasonDecommit);
@@ -1188,9 +1188,17 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         UNIT_ASSERT_VALUES_EQUAL(params.Reassignments, &reassignments);
 
         command.SetFromSelfHeal(false);
+        command.SetIgnoreGroupLayoutChecks(false);
         params = NStorage::TDistributedConfigKeeper::BuildStaticGroupReassignParams(&config, &baseConfig, command,
                                                                                     group, serviceSet, &reassignments);
-        UNIT_ASSERT(params.RequireCorrectLayout);
+        UNIT_ASSERT(!params.LayoutPolicy.AllowsRelaxedPlacement());
+        UNIT_ASSERT(!params.LayoutPolicy.Accepts(false));
+
+        command.SetFromSelfHeal(true);
+        params = NStorage::TDistributedConfigKeeper::BuildStaticGroupReassignParams(&config, &baseConfig, command,
+                                                                                    group, serviceSet, &reassignments);
+        UNIT_ASSERT(!params.LayoutPolicy.AllowsRelaxedPlacement());
+        UNIT_ASSERT(params.LayoutPolicy.Accepts(false));
     }
 
     Y_UNIT_TEST(AllocateStaticGroupTargetSpaceCheck) {
@@ -2203,8 +2211,8 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             .ForbiddenPDisks = std::move(forbid),
             .BaseConfig = &s.BaseConfig,
             .IgnoreVSlotQuotaCheck = true,
-            .IgnoreGroupLayoutChecks = options.IgnoreGroupLayoutChecks,
-            .RequireCorrectLayout = options.RequireCorrectLayout,
+            .LayoutPolicy = NBsController::TGroupLayoutPolicy::FromFlags(options.IgnoreGroupLayoutChecks,
+                                                                         options.RequireCorrectLayout),
             .AllowUnusableDisks = options.AllowUnusableDisks,
             .SettleOnlyOnOperationalDisks = options.SettleOnlyOnOperationalDisks,
             .PreferLessOccupiedRack = options.PreferLessOccupiedRack,

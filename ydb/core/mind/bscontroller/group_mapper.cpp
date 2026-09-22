@@ -1335,14 +1335,19 @@ namespace NKikimr::NBsController {
             }
         }
 
-        bool ReassignGroup(const TGroupMapper::TReassignmentRequest& request, TGroupMapper::TReassignmentOutcome& outcome,
-                           bool settleOnlyOnOperationalDisks) {
-            outcome = {};
-            auto& error = outcome.Error;
+        struct TReassignmentAllocation {
+            TGroupDefinition Group;
+            TGroupConstraintsDefinition SoftConstraints;
+            TGroupConstraintsDefinition HardConstraints;
+            THashMap<TVDiskIdShort, TPDiskId> ReplacedDisks;
+        };
 
-            TGroupDefinition group;
-            TGroupConstraintsDefinition softConstraints;
-            TGroupConstraintsDefinition hardConstraints;
+        bool PrepareReassignment(const TGroupMapper::TReassignmentRequest& request, TReassignmentAllocation& allocation,
+                                 TGroupMapperError& error) {
+            auto& group = allocation.Group;
+            auto& softConstraints = allocation.SoftConstraints;
+            auto& hardConstraints = allocation.HardConstraints;
+            auto& replacedDisks = allocation.ReplacedDisks;
             Y_ABORT_UNLESS(Geom.ResizeGroup(group));
             Y_ABORT_UNLESS(Geom.ResizeGroup(softConstraints));
             Y_ABORT_UNLESS(Geom.ResizeGroup(hardConstraints));
@@ -1352,7 +1357,6 @@ namespace NKikimr::NBsController {
             const ui32 totalVDisks = Geom.GetNumFailRealms() * numFailDomains * numVDisks;
             TVector<bool> seen(totalVDisks);
             ui32 numSeen = 0;
-            THashMap<TVDiskIdShort, TPDiskId> replacedDisks;
 
             for (const auto& disk : request.VDisks) {
                 const auto& id = disk.VDiskId;
@@ -1418,41 +1422,57 @@ namespace NKikimr::NBsController {
                     soft.PDiskId = hard.PDiskId;
                 }
             });
-            const i64 requiredSpace = TGroupMapper::CalculateRequiredSpace(request.VDisks, request.MinimumRequiredSpace);
+            return true;
+        }
 
-            auto allocate = [&](TGroupConstraintsDefinition& constraints, bool ignoreGroupLayoutChecks) {
-                bool allocated = AllocateGroup(request.GroupId, group, constraints, replacedDisks, request.ForbiddenPDisks,
-                                               request.GroupSizeInUnits, requiredSpace, true, request.BridgePileId, error,
-                                               ignoreGroupLayoutChecks);
-                if (!allocated && !settleOnlyOnOperationalDisks) {
-                    allocated = AllocateGroup(request.GroupId, group, constraints, replacedDisks, request.ForbiddenPDisks,
-                                              request.GroupSizeInUnits, requiredSpace, false, request.BridgePileId, error,
-                                              ignoreGroupLayoutChecks);
+        bool TryAllocateReassignment(const TGroupMapper::TReassignmentRequest& request, TReassignmentAllocation& allocation,
+                                     i64 requiredSpace, bool settleOnlyOnOperationalDisks, TGroupMapperError& error) {
+            for (bool ignoreLayout : {false, true}) {
+                if (ignoreLayout && !request.IgnoreGroupLayoutChecks) {
+                    break;
                 }
-                return allocated;
-            };
+                for (auto *constraints : {&allocation.SoftConstraints, &allocation.HardConstraints}) {
+                    for (bool requireOperational : {true, false}) {
+                        if (!requireOperational && settleOnlyOnOperationalDisks) {
+                            break;
+                        }
+                        if (AllocateGroup(request.GroupId, allocation.Group, *constraints, allocation.ReplacedDisks,
+                                          request.ForbiddenPDisks, request.GroupSizeInUnits, requiredSpace, requireOperational,
+                                          request.BridgePileId, error, ignoreLayout)) {
+                            return true;
+                        }
+                    }
+                    if (!request.TryToRelocateLocallyFirst) {
+                        break;
+                    }
+                }
+            }
+            return false;
+        }
 
-            auto allocateWithLocalityPolicy = [&](bool ignoreGroupLayoutChecks) {
-                return allocate(softConstraints, ignoreGroupLayoutChecks)
-                       || (request.TryToRelocateLocallyFirst && allocate(hardConstraints, ignoreGroupLayoutChecks));
-            };
-            const bool allocated = allocateWithLocalityPolicy(false)
-                                   || (request.IgnoreGroupLayoutChecks && allocateWithLocalityPolicy(true));
-            if (allocated) {
-                error = {};
+        bool ReassignGroup(const TGroupMapper::TReassignmentRequest& request, TGroupMapper::TReassignmentOutcome& outcome,
+                           bool settleOnlyOnOperationalDisks) {
+            outcome = {};
+            TReassignmentAllocation allocation;
+            if (!PrepareReassignment(request, allocation, outcome.Error)) {
+                return false;
+            }
+            outcome.RequiredSpace = TGroupMapper::CalculateRequiredSpace(request.VDisks, request.MinimumRequiredSpace);
+            outcome.Success = TryAllocateReassignment(request, allocation, outcome.RequiredSpace,
+                                                      settleOnlyOnOperationalDisks, outcome.Error);
+            if (outcome.Success) {
+                outcome.Error = {};
                 const TBlobStorageGroupInfo::TTopology topology(Geom.GetType(), Geom.GetNumFailRealms(),
                                                                Geom.GetNumFailDomainsPerFailRealm(), Geom.GetNumVDisksPerFailDomain(), true);
                 TGroupLayout layout(topology);
-                TGroupMapper::Traverse(group, [&](TVDiskIdShort id, TPDiskId pdiskId) {
+                TGroupMapper::Traverse(allocation.Group, [&](TVDiskIdShort id, TPDiskId pdiskId) {
                     const auto& pdisk = PDisks.at(pdiskId);
                     layout.AddDisk(pdisk.Position, topology.GetOrderNumber(id), pdisk.Decommitted);
                 });
                 outcome.LayoutCorrect = layout.IsCorrect();
             }
-            outcome.Group = std::move(group);
-            outcome.RequiredSpace = requiredSpace;
-            outcome.Success = allocated;
-            return allocated;
+            outcome.Group = std::move(allocation.Group);
+            return outcome.Success;
         }
 
         TMisplacedVDisks FindMisplacedVDisks(const TGroupDefinition& groupDefinition, ui32 groupSizeInUnits) {

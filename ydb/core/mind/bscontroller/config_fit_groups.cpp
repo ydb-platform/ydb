@@ -12,8 +12,7 @@ namespace NKikimr {
             const ui32 AvailabilityDomainId;
             const bool IgnoreGroupSanityChecks;
             const bool IgnoreGroupFailModelChecks;
-            const bool IgnoreGroupLayoutChecks;
-            const bool RequireCorrectLayout;
+            const TGroupLayoutPolicy LayoutPolicy;
             const bool IgnoreDegradedGroupsChecks;
             const bool IgnoreVSlotQuotaCheck;
             const bool AllowUnusableDisks;
@@ -40,8 +39,7 @@ namespace NKikimr {
                 , AvailabilityDomainId(availabilityDomainId)
                 , IgnoreGroupSanityChecks(cmd.GetIgnoreGroupSanityChecks())
                 , IgnoreGroupFailModelChecks(cmd.GetIgnoreGroupFailModelChecks())
-                , IgnoreGroupLayoutChecks(cmd.GetIgnoreGroupLayoutChecks())
-                , RequireCorrectLayout(requireCorrectLayout)
+                , LayoutPolicy(TGroupLayoutPolicy::FromFlags(cmd.GetIgnoreGroupLayoutChecks(), requireCorrectLayout))
                 , IgnoreDegradedGroupsChecks(cmd.GetIgnoreDegradedGroupsChecks())
                 , IgnoreVSlotQuotaCheck(cmd.GetIgnoreVSlotQuotaCheck())
                 , AllowUnusableDisks(cmd.GetAllowUnusableDisks())
@@ -232,18 +230,10 @@ namespace NKikimr {
             }
 
             void CheckExistingGroup(TGroupId groupId, bool allocate) {
-                ////////////////////////////////////////////////////////////////////////////////////////////////////////
-                // extract TGroupInfo for specified group
-                ////////////////////////////////////////////////////////////////////////////////////////////////////////
                 const TGroupInfo *groupInfo = State.Groups.Find(groupId);
                 if (!groupInfo) {
                     throw TExFitGroupError() << "GroupId# " << groupId << " not found";
                 }
-
-                TGroupMapper::TGroupDefinition group;
-                TVector<TGroupMapper::TVDiskPlacement> groupDisks;
-                bool layoutIsValid = true;
-                bool hasExplicitTarget = false;
 
                 if (allocate) {
                     TGroupInfo *groupInfo = State.Groups.FindForUpdate(groupId);
@@ -253,347 +243,328 @@ namespace NKikimr {
                     groupInfo->VDisksInGroup.resize(groupInfo->Topology->GetTotalVDisksNum());
 
                     // TODO(alexvru): calculate required space
+                    TGroupMapper::TGroupDefinition group;
                     Geometry.ResizeGroup(group);
                     AllocateOrSanitizeGroup(groupId, group, {}, {}, groupInfo->GroupSizeInUnits, Min<i64>(),
                         groupInfo->BridgePileId, &TGroupGeometryInfo::AllocateGroup);
-
                     CreateVSlotsForGroup(groupInfo, group, {});
                     return;
                 }
 
-                auto getGroup = [&]() -> TGroupMapper::TGroupDefinition& {
-                    if (!group) {
-                        NLayoutChecker::TDomainMapper domainMapper;
-                        std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition> pdiskLocations;
-
-                        Geometry.ResizeGroup(group);
-                        for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
-                            const TPDiskId& pdiskId = vslot->VSlotId.ComprisingPDiskId();
-                            group[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = pdiskId;
-                            const auto loc = State.HostRecords->GetLocation(pdiskId.NodeId);
-
-                            pdiskLocations[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper, loc,
-                                vslot->PDisk->DiskScope, pdiskId, Geometry);
-                        }
-
-                        TString errorReason;
-                        if (!CheckLayoutByGroupDefinition(group, pdiskLocations, Geometry,
-                                State.Self.AllowMultipleRealmsOccupation, errorReason)) {
-                            layoutIsValid = false;
-                        }
-                    }
-
-                    return group;
-                };
-
-                // a set of preserved slots (which are not changed during this transaction)
-                TMap<TVDiskID, TVSlotId> preservedSlots;
-
-                // mapping for audit log
-                TMap<TVDiskIdShort, TVSlotId> replacedSlots;
-
-                bool sanitizingRequest = (State.SanitizingRequests.find(groupId) != State.SanitizingRequests.end());
-
-                ////////////////////////////////////////////////////////////////////////////////////////////////////////
-                // scan through all VSlots and find matching PDisks
-                ////////////////////////////////////////////////////////////////////////////////////////////////////////
-                // create topology for group
-                auto& topology = *groupInfo->Topology;
-                // fill in vector of failed disks (that are not fully operational)
-                TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
-                auto& checker = *topology.QuorumChecker;
-                for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
-                    if (!vslot->IsOperational()) {
-                        failed |= {&topology, vslot->GetShortVDiskId()};
-                    }
-
-                    const auto it = State.ExplicitReconfigureMap.find(vslot->VSlotId);
-                    bool replace = it != State.ExplicitReconfigureMap.end();
-                    const TPDiskId targetPDiskId = replace ? it->second : TPDiskId();
-                    hasExplicitTarget |= targetPDiskId != TPDiskId();
-
-                    if (!replace) {
-                        // check status
-                        switch (vslot->PDisk->Status) {
-                            case NKikimrBlobStorage::EDriveStatus::ACTIVE:
-                                // nothing to do, it's okay
-                                break;
-
-                            case NKikimrBlobStorage::EDriveStatus::INACTIVE:
-                                // nothing to do as well, new groups are not created on this drive, but existing ones continue
-                                // to function as expected
-                                break;
-
-                            case NKikimrBlobStorage::EDriveStatus::BROKEN:
-                                // reconfigure group
-                                replace = true;
-                                break;
-
-                            case NKikimrBlobStorage::EDriveStatus::FAULTY:
-                            case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
-                                // groups are moved out asynchronously
-                                break;
-
-                            default:
-                                Y_ABORT("unexpected drive status");
-                        }
-                    }
-
-                    auto& disk = groupDisks.emplace_back();
-                    disk.VDiskId = vslot->GetShortVDiskId();
-                    disk.PDiskId = vslot->VSlotId.ComprisingPDiskId();
-                    if (vslot->Metrics.HasAllocatedSize()) {
-                        disk.AllocatedSize = static_cast<i64>(vslot->Metrics.GetAllocatedSize());
-                    }
-                    if (replace) {
-                        if (targetPDiskId == TPDiskId()) {
-                            disk.Reassignment = TGroupMapper::TReplaceVDisk{
-                                .RequireSameNode = State.Self.UseSelfHealLocalPolicy
-                                                   && it != State.ExplicitReconfigureMap.end(),
-                            };
-                        } else if (IgnoreGroupSanityChecks) {
-                            disk.Reassignment = TGroupMapper::TForceVDiskOnPDisk{targetPDiskId};
-                        } else {
-                            disk.Reassignment = TGroupMapper::TReplaceVDiskOnPDisk{targetPDiskId};
-                        }
-                    }
-
-                    if (replace) {
-                        auto& g = getGroup();
-                        if (targetPDiskId != TPDiskId() && IgnoreGroupSanityChecks) {
-                            // Preserve the broad legacy allocator override. The final layout is checked separately.
-                            g[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = targetPDiskId;
-                        } else {
-                            // Explicit target PDisk must go through the same allocation checks as automatically
-                            // selected candidates, so leave the slot empty and express the manual choice as a hard
-                            // constraint.
-                            g[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = TPDiskId();
-                        }
-                        replacedSlots.emplace(vslot->GetShortVDiskId(), vslot->VSlotId);
-                    } else {
-                        preservedSlots.emplace(vslot->GetVDiskId(), vslot->VSlotId);
-                    }
-                }
-
-                i64 requiredSpace = Min<i64>();
-
+                auto reassignment = PrepareGroupReassignment(*groupInfo);
+                const bool sanitizingRequest = State.SanitizingRequests.contains(groupId);
                 if (sanitizingRequest) {
-                    if (checker.OneStepFromDegradedOrWorse(failed)) {
+                    if (groupInfo->Topology->QuorumChecker->OneStepFromDegradedOrWorse(reassignment.Failed)) {
                         throw TExFitGroupError() << "Sanitizing requst was blocked, group is one step from DEGRADED or worse";
                     }
                     if (groupInfo->VDisksInGroup.empty()) {
                         throw TExFitGroupError() << "Group has been decommitted and cannot be sanitized";
                     }
-                    getGroup();
                 }
 
-                if (group) {
-                    TGroupInfo *groupInfo = State.Groups.FindForUpdate(groupId);
-
-                    // we have something changed in the group; initiate remapping
-                    bool hasMissingSlots = false;
-                    bool adjustSpaceAvailable = false;
-                    for (const auto& realm : group) {
-                        for (const auto& domain : realm) {
-                            for (const TPDiskId& pdisk : domain) {
-                                if (pdisk == TPDiskId()) {
-                                    hasMissingSlots = true;
-                                }
-                            }
-                        }
-                    }
-                    if (hasMissingSlots || !IgnoreGroupSanityChecks) {
-                        TGroupMapper::TForbiddenPDisks forbid;
-                        for (const auto& vslot : groupInfo->VDisksInGroup) {
-                            const TVDiskIdShort vdiskId = vslot->GetShortVDiskId();
-                            for (const TVSlotId& vslotId : vslot->Donors) {
-                                if (group[vdiskId.FailRealm][vdiskId.FailDomain][vdiskId.VDisk] == TPDiskId()) {
-                                    forbid.insert(vslotId.ComprisingPDiskId());
-                                }
-                            }
-                        }
-                        for (const auto& vslotId : groupInfo->VSlotsBeingDeleted) {
-                            const TVSlotInfo *vslot = State.VSlots.Find(vslotId);
-                            const TVDiskIdShort& vdiskId = vslot->GetShortVDiskId();
-                            if (group[vdiskId.FailRealm][vdiskId.FailDomain][vdiskId.VDisk] == TPDiskId()) {
-                                forbid.insert(vslotId.ComprisingPDiskId());
-                            }
-                        }
-
-                        ui32 groupSizeInUnits = groupInfo->GroupSizeInUnits;
-
-                        const bool sanitizeOnReassignment = State.Self.IsGroupLayoutSanitizerEnabled()
-                                                            && !IgnoreGroupLayoutChecks
-                                                            && replacedSlots.size() == 1
-                                                            && hasMissingSlots
-                                                            && !layoutIsValid
-                                                            && !hasExplicitTarget;
-                        const bool sanitizeOnRequest = replacedSlots.empty() && sanitizingRequest;
-                        if (sanitizeOnReassignment || sanitizeOnRequest) {
-
-                            YDB_LOG_INFO_COMP(BS_CONTROLLER, "Attempt to sanitize group layout",
-                                {"marker", "BSCFG01"},
-                                {"groupId", groupId});
-                            // Use group layout sanitizing algorithm on direct requests or when initial group layout is invalid
-                            requiredSpace = TGroupMapper::CalculateRequiredSpace(groupDisks);
-                            auto result = AllocateOrSanitizeGroup(groupId, group, {}, std::move(forbid), groupSizeInUnits, requiredSpace,
-                                groupInfo->BridgePileId, &TGroupGeometryInfo::SanitizeGroup);
-
-                            if (replacedSlots.empty()) {
-                                // update information about replaced disks
-                                for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
-                                    if (vslot->GetShortVDiskId() == result.first) {
-                                        auto it = preservedSlots.find(vslot->GetVDiskId());
-                                        Y_ABORT_UNLESS(it != preservedSlots.end());
-                                        preservedSlots.erase(it);
-                                        replacedSlots.emplace(result.first, vslot->VSlotId);
-                                        break;
-                                    }
-                                }
-                            }
-                        } else {
-                            TGroupMapper::TReassignmentRequest request;
-                            request.GroupId = groupId.GetRawId();
-                            request.GroupGeneration = groupInfo->Generation;
-                            request.VDisks = std::move(groupDisks);
-                            request.ForbiddenPDisks = std::move(forbid);
-                            request.GroupSizeInUnits = groupSizeInUnits;
-                            request.TryToRelocateLocallyFirst = State.Self.TryToRelocateBrokenDisksLocallyFirst;
-                            request.IgnoreGroupLayoutChecks = IgnoreGroupLayoutChecks;
-                            request.BridgePileId = groupInfo->BridgePileId;
-
-                            EnsureGroupMapper();
-                            auto outcome = Mapper->PlanGroupReassignment(std::move(request));
-                            if (!outcome.Success) {
-                                TExFitGroupError errorException;
-                                errorException << "failed to allocate group: " << outcome.Error.ErrorMessage;
-                                errorException.GroupMapperError = std::move(outcome.Error);
-                                throw errorException;
-                            }
-                            requiredSpace = outcome.RequiredSpace;
-                            group = std::move(outcome.Group);
-                        }
-                        if (!IgnoreVSlotQuotaCheck) {
-                            adjustSpaceAvailable = true;
-                            for (const auto& [pos, vslotId] : replacedSlots) {
-                                const TPDiskId& pdiskId = group[pos.FailRealm][pos.FailDomain][pos.VDisk];
-                                const TPDiskInfo *pdisk = State.PDisks.Find(pdiskId);
-                                if (requiredSpace != Min<i64>() && !pdisk->SlotSpaceEnforced(State.Self)) {
-                                    Mapper->AdjustSpaceAvailable(pdiskId, -requiredSpace);
-                                }
-                            }
-                        }
-                    }
-
-                    // make list of donors and dispose unused slots
-                    std::vector<TVSlotId> donors;
-                    for (const auto& [vdiskId, vslotId] : replacedSlots) {
-                        const bool suppressDonorMode = State.SuppressDonorMode.contains(vslotId);
-                        if (State.DonorMode && !suppressDonorMode && !State.UncommittedVSlots.count(vslotId)) {
-                            donors.push_back(vslotId);
-                        } else {
-                            if (adjustSpaceAvailable) {
-                                const TVSlotInfo *slot = State.VSlots.Find(vslotId);
-                                Y_ABORT_UNLESS(slot);
-                                if (!slot->PDisk->SlotSpaceEnforced(State.Self)) {
-                                    // mark the space from destroyed slot as available
-                                    Mapper->AdjustSpaceAvailable(vslotId.ComprisingPDiskId(), slot->Metrics.GetAllocatedSize());
-                                }
-                            }
-
-                            State.DestroyVSlot(vslotId);
-                        }
-                    }
-
-                    // create slots for the new group
-                    auto newSlots = CreateVSlotsForGroup(groupInfo, group, preservedSlots);
-                    State.GroupContentChanged.insert(groupId);
-                    State.GroupFailureModelChanged.insert(groupId);
-
-                    if (replacedSlots) {
-                        if (RequireCorrectLayout && !IgnoreGroupLayoutChecks && !groupInfo->LayoutCorrect) {
-                            throw TExGroupLayoutIncorrect(groupId.GetRawId());
-                        }
-                        if (!IgnoreGroupFailModelChecks) {
-                            // process only groups with changed content; check the failure model
-                            if (!checker.CheckFailModelForGroup(failed)) {
-                                throw TExMayLoseData(groupId.GetRawId());
-                            } else if (!IgnoreDegradedGroupsChecks && checker.IsDegraded(failed)) {
-                                throw TExMayGetDegraded(groupId.GetRawId());
-                            }
-                        }
-
-                        for (const TVSlotInfo *slot : groupInfo->VDisksInGroup) {
-                            const TVDiskIdShort pos(slot->RingIdx, slot->FailDomainIdx, slot->VDiskIdx);
-                            if (const auto it = replacedSlots.find(pos); it != replacedSlots.end()) {
-                                TVSlotId fromVSlotId = it->second;
-                                TVSlotId toVSlotId = slot->VSlotId;
-
-                                TPDiskId fromPDiskId = fromVSlotId.ComprisingPDiskId();
-                                TPDiskId toPDiskId = toVSlotId.ComprisingPDiskId();
-
-                                auto *fromPDisk = State.PDisks.Find(fromPDiskId);
-                                auto *toPDisk = State.PDisks.Find(toPDiskId);
-
-                                if (State.Fit.OnlyToLessOccupiedPDisk && fromPDisk && toPDisk) {
-                                    size_t fromPDiskSlots = fromPDisk->VSlotsOnPDisk.size() - 1; // -1 because we are removing the slot
-                                    size_t toPDiskSlots = toPDisk->VSlotsOnPDisk.size();
-                                    if (toPDiskSlots > fromPDiskSlots) {
-                                        throw TExReassignNotViable() << "Reassignment from PDisk# " << fromPDiskId
-                                            << " to PDisk# " << toPDiskId
-                                            << " is not allowed with OnlyToLessOccupiedPDisk=true, target PDisk will have " << toPDiskSlots
-                                            << " slot(s), while source PDisk will have " << fromPDiskSlots << " slot(s)";
-                                    }
-                                }
-
-                                auto *item = Status.AddReassignedItem();
-                                VDiskIDFromVDiskID(TVDiskID(groupInfo->ID, groupInfo->Generation, pos), item->MutableVDiskId());
-
-                                Serialize(item->MutableFrom(), fromVSlotId);
-                                Serialize(item->MutableTo(), toVSlotId);
-                                if (fromPDisk) {
-                                    item->SetFromFqdn(std::get<0>(fromPDisk->HostId));
-                                    item->SetFromPath(fromPDisk->Path);
-                                }
-                                if (toPDisk) {
-                                    item->SetToFqdn(std::get<0>(toPDisk->HostId));
-                                    item->SetToPath(toPDisk->Path);
-                                }
-                            }
-                        }
-
-                        auto makeReplacements = [&] {
-                            TStringBuilder s;
-                            s << "[";
-                            bool first = true;
-                            for (const auto& kv : replacedSlots) {
-                                s << (std::exchange(first, false) ? "" : " ")
-                                    << "{" << kv.first << " from# " << kv.second << " to# "
-                                    << group[kv.first.FailRealm][kv.first.FailDomain][kv.first.VDisk] << "}";
-                            }
-                            return static_cast<TString>(s << "]");
-                        };
-                        YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "ReconfigGroup",
-                            {"marker", "BSCA04"},
-                            {"uniqueId", State.UniqueId},
-                            {"groupId", groupInfo->ID},
-                            {"groupGeneration", groupInfo->Generation},
-                            {"replacements", makeReplacements()});
-                    }
-
-                    for (const TVSlotId& vslotId : donors) {
-                        TVSlotInfo *mutableSlot = State.VSlots.FindForUpdate(vslotId);
-                        Y_ABORT_UNLESS(mutableSlot);
-                        const auto it = newSlots.find(mutableSlot->GetShortVDiskId());
-                        Y_ABORT_UNLESS(it != newSlots.end());
-                        mutableSlot->MakeDonorFor(it->second);
-                    }
+                if (!reassignment.ReplacedSlots.empty() || sanitizingRequest) {
+                    TGroupInfo *mutableGroup = State.Groups.FindForUpdate(groupId);
+                    auto placement = SelectGroupPlacement(*mutableGroup, reassignment, sanitizingRequest);
+                    ApplyGroupReassignment(mutableGroup, reassignment, placement);
                 }
-
                 State.CheckConsistency();
             }
 
         private:
+            struct TGroupReassignment {
+                TVector<TGroupMapper::TVDiskPlacement> Disks;
+                TMap<TVDiskID, TVSlotId> PreservedSlots;
+                TMap<TVDiskIdShort, TVSlotId> ReplacedSlots;
+                TBlobStorageGroupInfo::TGroupVDisks Failed;
+                bool HasExplicitTarget = false;
+
+                explicit TGroupReassignment(const TBlobStorageGroupInfo::TTopology *topology)
+                    : Failed(topology)
+                {}
+            };
+
+            struct TGroupPlacement {
+                TGroupMapper::TGroupDefinition Group;
+                i64 RequiredSpace = Min<i64>();
+                bool AccountSpace = false;
+            };
+
+            TGroupReassignment PrepareGroupReassignment(const TGroupInfo& groupInfo) const {
+                TGroupReassignment result(groupInfo.Topology.get());
+                for (const TVSlotInfo *vslot : groupInfo.VDisksInGroup) {
+                    if (!vslot->IsOperational()) {
+                        result.Failed |= {groupInfo.Topology.get(), vslot->GetShortVDiskId()};
+                    }
+
+                    const auto it = State.ExplicitReconfigureMap.find(vslot->VSlotId);
+                    bool replace = it != State.ExplicitReconfigureMap.end();
+                    const TPDiskId targetPDiskId = replace ? it->second : TPDiskId();
+                    result.HasExplicitTarget |= targetPDiskId != TPDiskId();
+                    if (!replace) {
+                        switch (vslot->PDisk->Status) {
+                            case NKikimrBlobStorage::EDriveStatus::ACTIVE:
+                            case NKikimrBlobStorage::EDriveStatus::INACTIVE:
+                            case NKikimrBlobStorage::EDriveStatus::FAULTY:
+                            case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
+                                break;
+                            case NKikimrBlobStorage::EDriveStatus::BROKEN:
+                                replace = true;
+                                break;
+                            default:
+                                Y_ABORT("unexpected drive status");
+                        }
+                    }
+
+                    auto& disk = result.Disks.emplace_back();
+                    disk.VDiskId = vslot->GetShortVDiskId();
+                    disk.PDiskId = vslot->VSlotId.ComprisingPDiskId();
+                    if (vslot->Metrics.HasAllocatedSize()) {
+                        disk.AllocatedSize = static_cast<i64>(vslot->Metrics.GetAllocatedSize());
+                    }
+                    if (!replace) {
+                        result.PreservedSlots.emplace(vslot->GetVDiskId(), vslot->VSlotId);
+                        continue;
+                    }
+
+                    if (targetPDiskId == TPDiskId()) {
+                        disk.Reassignment = TGroupMapper::TReplaceVDisk{
+                            .RequireSameNode = State.Self.UseSelfHealLocalPolicy
+                                               && it != State.ExplicitReconfigureMap.end(),
+                        };
+                    } else if (IgnoreGroupSanityChecks) {
+                        disk.Reassignment = TGroupMapper::TForceVDiskOnPDisk{targetPDiskId};
+                    } else {
+                        disk.Reassignment = TGroupMapper::TReplaceVDiskOnPDisk{targetPDiskId};
+                    }
+                    result.ReplacedSlots.emplace(disk.VDiskId, vslot->VSlotId);
+                }
+                return result;
+            }
+
+            TGroupMapper::TForbiddenPDisks CollectForbiddenPDisks(const TGroupInfo& groupInfo,
+                                                                  const TGroupMapper::TGroupDefinition& group) const {
+                auto needsPlacement = [&](TVDiskIdShort id) {
+                    return group[id.FailRealm][id.FailDomain][id.VDisk] == TPDiskId();
+                };
+                TGroupMapper::TForbiddenPDisks forbidden;
+                for (const TVSlotInfo *vslot : groupInfo.VDisksInGroup) {
+                    if (needsPlacement(vslot->GetShortVDiskId())) {
+                        for (const TVSlotId& donor : vslot->Donors) {
+                            forbidden.insert(donor.ComprisingPDiskId());
+                        }
+                    }
+                }
+                for (const TVSlotId& id : groupInfo.VSlotsBeingDeleted) {
+                    const TVSlotInfo *vslot = State.VSlots.Find(id);
+                    if (needsPlacement(vslot->GetShortVDiskId())) {
+                        forbidden.insert(id.ComprisingPDiskId());
+                    }
+                }
+                return forbidden;
+            }
+
+            TGroupPlacement SelectGroupPlacement(const TGroupInfo& groupInfo, TGroupReassignment& reassignment,
+                                                 bool sanitizingRequest) {
+                TGroupPlacement placement;
+                auto& group = placement.Group;
+                Geometry.ResizeGroup(group);
+                NLayoutChecker::TDomainMapper domainMapper;
+                std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition> pdiskLocations;
+                for (const TVSlotInfo *vslot : groupInfo.VDisksInGroup) {
+                    const TPDiskId pdiskId = vslot->VSlotId.ComprisingPDiskId();
+                    group[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = pdiskId;
+                    pdiskLocations[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(
+                        domainMapper, State.HostRecords->GetLocation(pdiskId.NodeId), vslot->PDisk->DiskScope, pdiskId, Geometry);
+                }
+                TString errorReason;
+                const bool layoutIsValid = CheckLayoutByGroupDefinition(group, pdiskLocations, Geometry,
+                                                                        State.Self.AllowMultipleRealmsOccupation, errorReason);
+                for (const auto& disk : reassignment.Disks) {
+                    auto& pdiskId = group[disk.VDiskId.FailRealm][disk.VDiskId.FailDomain][disk.VDiskId.VDisk];
+                    if (const auto *force = std::get_if<TGroupMapper::TForceVDiskOnPDisk>(&disk.Reassignment)) {
+                        pdiskId = force->PDiskId;
+                    } else if (!std::holds_alternative<TGroupMapper::TKeepVDisk>(disk.Reassignment)) {
+                        pdiskId = TPDiskId();
+                    }
+                }
+
+                bool hasMissingSlots = false;
+                TGroupMapper::Traverse(group, [&](TVDiskIdShort, TPDiskId pdiskId) {
+                    hasMissingSlots |= pdiskId == TPDiskId();
+                });
+                if (!hasMissingSlots && IgnoreGroupSanityChecks) {
+                    return placement;
+                }
+
+                auto forbidden = CollectForbiddenPDisks(groupInfo, group);
+                const bool sanitizeOnReassignment = State.Self.IsGroupLayoutSanitizerEnabled()
+                                                    && !LayoutPolicy.AllowsRelaxedPlacement()
+                                                    && reassignment.ReplacedSlots.size() == 1
+                                                    && hasMissingSlots
+                                                    && !layoutIsValid
+                                                    && !reassignment.HasExplicitTarget;
+                const bool sanitizeOnRequest = reassignment.ReplacedSlots.empty() && sanitizingRequest;
+                if (sanitizeOnReassignment || sanitizeOnRequest) {
+                    YDB_LOG_INFO_COMP(BS_CONTROLLER, "Attempt to sanitize group layout",
+                        {"marker", "BSCFG01"},
+                        {"groupId", groupInfo.ID});
+                    placement.RequiredSpace = TGroupMapper::CalculateRequiredSpace(reassignment.Disks);
+                    auto result = AllocateOrSanitizeGroup(groupInfo.ID, group, {}, std::move(forbidden), groupInfo.GroupSizeInUnits,
+                                                          placement.RequiredSpace, groupInfo.BridgePileId, &TGroupGeometryInfo::SanitizeGroup);
+                    if (reassignment.ReplacedSlots.empty()) {
+                        for (const TVSlotInfo *vslot : groupInfo.VDisksInGroup) {
+                            if (vslot->GetShortVDiskId() == result.first) {
+                                auto it = reassignment.PreservedSlots.find(vslot->GetVDiskId());
+                                Y_ABORT_UNLESS(it != reassignment.PreservedSlots.end());
+                                reassignment.PreservedSlots.erase(it);
+                                reassignment.ReplacedSlots.emplace(result.first, vslot->VSlotId);
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    TGroupMapper::TReassignmentRequest request;
+                    request.GroupId = groupInfo.ID.GetRawId();
+                    request.GroupGeneration = groupInfo.Generation;
+                    request.VDisks = std::move(reassignment.Disks);
+                    request.ForbiddenPDisks = std::move(forbidden);
+                    request.GroupSizeInUnits = groupInfo.GroupSizeInUnits;
+                    request.TryToRelocateLocallyFirst = State.Self.TryToRelocateBrokenDisksLocallyFirst;
+                    request.IgnoreGroupLayoutChecks = LayoutPolicy.AllowsRelaxedPlacement();
+                    request.BridgePileId = groupInfo.BridgePileId;
+
+                    EnsureGroupMapper();
+                    auto outcome = Mapper->PlanGroupReassignment(std::move(request));
+                    if (!outcome.Success) {
+                        TExFitGroupError errorException;
+                        errorException << "failed to allocate group: " << outcome.Error.ErrorMessage;
+                        errorException.GroupMapperError = std::move(outcome.Error);
+                        throw errorException;
+                    }
+                    placement.RequiredSpace = outcome.RequiredSpace;
+                    group = std::move(outcome.Group);
+                }
+                placement.AccountSpace = !IgnoreVSlotQuotaCheck;
+                return placement;
+            }
+
+            void ApplyGroupReassignment(TGroupInfo *groupInfo, const TGroupReassignment& reassignment,
+                                        const TGroupPlacement& placement) {
+                const auto& group = placement.Group;
+                if (placement.AccountSpace) {
+                    for (const auto& [pos, vslotId] : reassignment.ReplacedSlots) {
+                        const TPDiskId pdiskId = group[pos.FailRealm][pos.FailDomain][pos.VDisk];
+                        const TPDiskInfo *pdisk = State.PDisks.Find(pdiskId);
+                        if (placement.RequiredSpace != Min<i64>() && !pdisk->SlotSpaceEnforced(State.Self)) {
+                            Mapper->AdjustSpaceAvailable(pdiskId, -placement.RequiredSpace);
+                        }
+                    }
+                }
+
+                std::vector<TVSlotId> donors;
+                for (const auto& [vdiskId, vslotId] : reassignment.ReplacedSlots) {
+                    const bool suppressDonorMode = State.SuppressDonorMode.contains(vslotId);
+                    if (State.DonorMode && !suppressDonorMode && !State.UncommittedVSlots.count(vslotId)) {
+                        donors.push_back(vslotId);
+                    } else {
+                        if (placement.AccountSpace) {
+                            const TVSlotInfo *slot = State.VSlots.Find(vslotId);
+                            Y_ABORT_UNLESS(slot);
+                            if (!slot->PDisk->SlotSpaceEnforced(State.Self)) {
+                                Mapper->AdjustSpaceAvailable(vslotId.ComprisingPDiskId(), slot->Metrics.GetAllocatedSize());
+                            }
+                        }
+                        State.DestroyVSlot(vslotId);
+                    }
+                }
+
+                auto newSlots = CreateVSlotsForGroup(groupInfo, group, reassignment.PreservedSlots);
+                State.GroupContentChanged.insert(groupInfo->ID);
+                State.GroupFailureModelChanged.insert(groupInfo->ID);
+                if (!reassignment.ReplacedSlots.empty()) {
+                    if (!LayoutPolicy.Accepts(groupInfo->LayoutCorrect)) {
+                        throw TExGroupLayoutIncorrect(groupInfo->ID.GetRawId());
+                    }
+                    if (!IgnoreGroupFailModelChecks) {
+                        const auto& checker = *groupInfo->Topology->QuorumChecker;
+                        if (!checker.CheckFailModelForGroup(reassignment.Failed)) {
+                            throw TExMayLoseData(groupInfo->ID.GetRawId());
+                        } else if (!IgnoreDegradedGroupsChecks && checker.IsDegraded(reassignment.Failed)) {
+                            throw TExMayGetDegraded(groupInfo->ID.GetRawId());
+                        }
+                    }
+                    CheckAndReportReassignment(groupInfo, reassignment.ReplacedSlots, group);
+                }
+
+                for (const TVSlotId& vslotId : donors) {
+                    TVSlotInfo *mutableSlot = State.VSlots.FindForUpdate(vslotId);
+                    Y_ABORT_UNLESS(mutableSlot);
+                    const auto it = newSlots.find(mutableSlot->GetShortVDiskId());
+                    Y_ABORT_UNLESS(it != newSlots.end());
+                    mutableSlot->MakeDonorFor(it->second);
+                }
+            }
+
+            void CheckAndReportReassignment(const TGroupInfo *groupInfo, const TMap<TVDiskIdShort, TVSlotId>& replacedSlots,
+                                            const TGroupMapper::TGroupDefinition& group) {
+                for (const TVSlotInfo *slot : groupInfo->VDisksInGroup) {
+                    const TVDiskIdShort pos(slot->RingIdx, slot->FailDomainIdx, slot->VDiskIdx);
+                    if (const auto it = replacedSlots.find(pos); it != replacedSlots.end()) {
+                        TVSlotId fromVSlotId = it->second;
+                        TVSlotId toVSlotId = slot->VSlotId;
+
+                        TPDiskId fromPDiskId = fromVSlotId.ComprisingPDiskId();
+                        TPDiskId toPDiskId = toVSlotId.ComprisingPDiskId();
+
+                        auto *fromPDisk = State.PDisks.Find(fromPDiskId);
+                        auto *toPDisk = State.PDisks.Find(toPDiskId);
+
+                        if (State.Fit.OnlyToLessOccupiedPDisk && fromPDisk && toPDisk) {
+                            size_t fromPDiskSlots = fromPDisk->VSlotsOnPDisk.size() - 1; // -1 because we are removing the slot
+                            size_t toPDiskSlots = toPDisk->VSlotsOnPDisk.size();
+                            if (toPDiskSlots > fromPDiskSlots) {
+                                throw TExReassignNotViable() << "Reassignment from PDisk# " << fromPDiskId
+                                                             << " to PDisk# " << toPDiskId
+                                                             << " is not allowed with OnlyToLessOccupiedPDisk=true, target PDisk will have " << toPDiskSlots
+                                                             << " slot(s), while source PDisk will have " << fromPDiskSlots << " slot(s)";
+                            }
+                        }
+
+                        auto *item = Status.AddReassignedItem();
+                        VDiskIDFromVDiskID(TVDiskID(groupInfo->ID, groupInfo->Generation, pos), item->MutableVDiskId());
+
+                        Serialize(item->MutableFrom(), fromVSlotId);
+                        Serialize(item->MutableTo(), toVSlotId);
+                        if (fromPDisk) {
+                            item->SetFromFqdn(std::get<0>(fromPDisk->HostId));
+                            item->SetFromPath(fromPDisk->Path);
+                        }
+                        if (toPDisk) {
+                            item->SetToFqdn(std::get<0>(toPDisk->HostId));
+                            item->SetToPath(toPDisk->Path);
+                        }
+                    }
+                }
+
+                auto makeReplacements = [&] {
+                    TStringBuilder s;
+                    s << "[";
+                    bool first = true;
+                    for (const auto& kv : replacedSlots) {
+                        s << (std::exchange(first, false) ? "" : " ")
+                          << "{" << kv.first << " from# " << kv.second << " to# "
+                          << group[kv.first.FailRealm][kv.first.FailDomain][kv.first.VDisk] << "}";
+                    }
+                    return static_cast<TString>(s << "]");
+                };
+                YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "ReconfigGroup",
+                    {"marker", "BSCA04"},
+                    {"uniqueId", State.UniqueId},
+                    {"groupId", groupInfo->ID},
+                    {"groupGeneration", groupInfo->Generation},
+                    {"replacements", makeReplacements()});
+            }
+
             void EnsureGroupMapper() {
                 if (!Mapper) {
                     Mapper.emplace(Geometry, TGroupMapper::TOptions{

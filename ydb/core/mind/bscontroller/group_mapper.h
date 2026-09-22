@@ -14,6 +14,31 @@ namespace NKikimr {
 
         class TGroupGeometryInfo;
 
+        struct TGroupLayoutPolicy {
+            enum class EMode {
+                RequireCorrect,
+                PreserveConstraints,
+                IgnoreConstraints,
+            };
+
+            EMode Mode = EMode::RequireCorrect;
+
+            static TGroupLayoutPolicy FromFlags(bool ignoreChecks, bool requireCorrect) {
+                if (ignoreChecks) {
+                    return {EMode::IgnoreConstraints};
+                }
+                return {requireCorrect ? EMode::RequireCorrect : EMode::PreserveConstraints};
+            }
+
+            bool AllowsRelaxedPlacement() const {
+                return Mode == EMode::IgnoreConstraints;
+            }
+
+            bool Accepts(bool layoutCorrect) const {
+                return layoutCorrect || Mode != EMode::RequireCorrect;
+            }
+        };
+
         struct TGroupMapperError {
             struct TStats {
                 TString Domain;

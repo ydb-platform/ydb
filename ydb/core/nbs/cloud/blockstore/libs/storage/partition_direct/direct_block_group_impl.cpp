@@ -277,6 +277,7 @@ NThreading::TFuture<void> TDirectBlockGroup::Run(
     IPartitionDirectService* service)
 {
     Service = service;
+    Oracle.SetDiskStateProvider(service);
 
     ScheduleOracleThinking();
 

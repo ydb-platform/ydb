@@ -582,7 +582,7 @@ TWriteRequestExecutorPtr CreateWriteRequestExecutor(
         logTitle,
         vChunkConfig,
         std::move(directBlockGroup),
-        bundle);
+        std::move(bundle));
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

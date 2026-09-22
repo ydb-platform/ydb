@@ -116,7 +116,11 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfModule::GetColumnDescription() 
         makeCol(ManifestColName, "Json"),
         makeCol(VersionColName, "Uint64"),
         makeCol(ChunkCountColName, "Uint64"),
+        makeCol(CompileStatusColName, "Utf8"),
+        makeCol(CompileErrorColName, "Utf8"),
         makeCol(CreatedAtColName, "Timestamp"),
+        makeCol(CompileStartedAtColName, "Timestamp"),
+        makeCol(CompileFinishedAtColName, "Timestamp"),
     };
 }
 

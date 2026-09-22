@@ -2450,7 +2450,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         TTableClient client(env.GetDriver());
 
         auto it = client.StreamExecuteScanQuery(R"(
-            SELECT Uid, Name, ModuleType, CreatedAt
+            SELECT Uid, Name, ModuleType, CompileStatus
             FROM `/Root/.sys/udf_modules`;
         )").GetValueSync();
 

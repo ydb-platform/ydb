@@ -36,7 +36,13 @@ public:
     static inline const TString ManifestColName = "manifest"; // Json
     static inline const TString VersionColName = "version"; // Uint64
     static inline const TString ChunkCountColName = "chunk_count"; // Uint64
+    // Kept temporarily for the existing .sys/udf_modules contract. Compilation
+    // state is no longer written here; authoritative state lives in artifacts.
+    static inline const TString CompileStatusColName = "compile_status"; // Utf8
+    static inline const TString CompileErrorColName = "compile_error"; // Utf8
     static inline const TString CreatedAtColName = "created_at"; // Timestamp
+    static inline const TString CompileStartedAtColName = "compile_started_at"; // Timestamp
+    static inline const TString CompileFinishedAtColName = "compile_finished_at"; // Timestamp
 
 private:
     YDB_ACCESSOR_DEF(TString, Uid);

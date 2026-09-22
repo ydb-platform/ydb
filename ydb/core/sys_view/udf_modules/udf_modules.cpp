@@ -32,7 +32,11 @@ struct TEvPrivate {
         ui64 Version = 0;
         ui64 Size = 0;
         ui64 ChunkCount = 0;
+        TString CompileStatus;
+        TString CompileError;
         TInstant CreatedAt;
+        TInstant CompileStartedAt;
+        TInstant CompileFinishedAt;
         TString Manifest;
     };
 
@@ -66,7 +70,9 @@ private:
     void OnRunQuery() final {
         const TString sql = TStringBuilder()
             << "SELECT "
-            << "uid, md5, name, type, version, size, chunk_count, created_at, "
+            << "uid, md5, name, type, version, size, chunk_count, "
+            << "compile_status, compile_error, "
+            << "created_at, compile_started_at, compile_finished_at, "
             << "CAST(manifest AS Utf8) AS manifest "
             << "FROM `" << ModulesTablePath_ << "` "
             << "ORDER BY uid " << (Reverse_ ? "DESC" : "ASC") << ";";
@@ -106,8 +112,20 @@ private:
             if (auto value = parser.ColumnParser("chunk_count").GetOptionalUint64()) {
                 row.ChunkCount = *value;
             }
+            if (auto value = parser.ColumnParser("compile_status").GetOptionalUtf8()) {
+                row.CompileStatus = *value;
+            }
+            if (auto value = parser.ColumnParser("compile_error").GetOptionalUtf8()) {
+                row.CompileError = *value;
+            }
             if (auto value = parser.ColumnParser("created_at").GetOptionalTimestamp()) {
                 row.CreatedAt = *value;
+            }
+            if (auto value = parser.ColumnParser("compile_started_at").GetOptionalTimestamp()) {
+                row.CompileStartedAt = *value;
+            }
+            if (auto value = parser.ColumnParser("compile_finished_at").GetOptionalTimestamp()) {
+                row.CompileFinishedAt = *value;
             }
             if (auto value = parser.ColumnParser("manifest").GetOptionalUtf8()) {
                 row.Manifest = *value;
@@ -218,9 +236,25 @@ private:
                 insert({TSchema::ChunkCount::ColumnId, [](const TEvPrivate::TModuleRow& row) {
                     return TCell::Make<ui64>(row.ChunkCount);
                 }});
+                insert({TSchema::CompileStatus::ColumnId, [](const TEvPrivate::TModuleRow& row) {
+                    return TCell(row.CompileStatus.data(), row.CompileStatus.size());
+                }});
+                insert({TSchema::CompileError::ColumnId, [](const TEvPrivate::TModuleRow& row) {
+                    return TCell(row.CompileError.data(), row.CompileError.size());
+                }});
                 insert({TSchema::CreatedAt::ColumnId, [](const TEvPrivate::TModuleRow& row) {
                     return row.CreatedAt
                         ? TCell::Make<ui64>(row.CreatedAt.MicroSeconds())
+                        : TCell();
+                }});
+                insert({TSchema::CompileStartedAt::ColumnId, [](const TEvPrivate::TModuleRow& row) {
+                    return row.CompileStartedAt
+                        ? TCell::Make<ui64>(row.CompileStartedAt.MicroSeconds())
+                        : TCell();
+                }});
+                insert({TSchema::CompileFinishedAt::ColumnId, [](const TEvPrivate::TModuleRow& row) {
+                    return row.CompileFinishedAt
+                        ? TCell::Make<ui64>(row.CompileFinishedAt.MicroSeconds())
                         : TCell();
                 }});
                 insert({TSchema::Manifest::ColumnId, [](const TEvPrivate::TModuleRow& row) {

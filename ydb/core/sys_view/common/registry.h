@@ -955,7 +955,11 @@ struct Schema : NIceDb::Schema {
         struct Version           : Column<5, NScheme::NTypeIds::Uint64> {};
         struct Size              : Column<6, NScheme::NTypeIds::Uint64> {};
         struct ChunkCount        : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct CompileStatus     : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct CompileError      : Column<9, NScheme::NTypeIds::Utf8> {};
         struct CreatedAt         : Column<10, NScheme::NTypeIds::Timestamp> {};
+        struct CompileStartedAt  : Column<11, NScheme::NTypeIds::Timestamp> {};
+        struct CompileFinishedAt : Column<12, NScheme::NTypeIds::Timestamp> {};
         struct Manifest          : Column<13, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Uid>;
@@ -967,7 +971,11 @@ struct Schema : NIceDb::Schema {
             Version,
             Size,
             ChunkCount,
+            CompileStatus,
+            CompileError,
             CreatedAt,
+            CompileStartedAt,
+            CompileFinishedAt,
             Manifest>;
     };
 };

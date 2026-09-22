@@ -367,7 +367,9 @@ jobs:
         with:
           repository: ${{ needs.detect.outputs.checkout_repository }}
           ref: ${{ needs.detect.outputs.checkout_sha }}
-          fetch-depth: 0
+          # Build/upload needs only the pinned tree; merge-base history is used
+          # separately in detect. Avoid fetching every branch and tag per suite.
+          fetch-depth: 1
           allow-unsafe-pr-checkout: true
           persist-credentials: false
 

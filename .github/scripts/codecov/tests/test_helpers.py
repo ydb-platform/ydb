@@ -608,6 +608,42 @@ class OverlayTrustedCodecovCiTest(unittest.TestCase):
 
 
 class WorkflowContractTest(unittest.TestCase):
+    def test_measured_checkout_is_shallow_but_pr_detection_keeps_history(self) -> None:
+        path = GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        proc = subprocess.run(
+            [
+                "ruby",
+                "-rjson",
+                "-ryaml",
+                "-e",
+                "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false))",
+                str(path),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        jobs = json.loads(proc.stdout)["jobs"]
+        measured = next(
+            step for step in jobs["coverage"]["steps"]
+            if step.get("name") == "Checkout measured code"
+        )["with"]
+        self.assertEqual(measured["fetch-depth"], 1)
+        self.assertEqual(measured["ref"], "${{ needs.detect.outputs.checkout_sha }}")
+        self.assertEqual(
+            measured["repository"], "${{ needs.detect.outputs.checkout_repository }}"
+        )
+        self.assertIs(measured["persist-credentials"], False)
+        detection = next(
+            step for step in jobs["detect"]["steps"]
+            if step.get("name") == "Checkout trusted detection helpers from workflow source"
+        )["with"]
+        self.assertEqual(
+            detection["fetch-depth"],
+            "${{ github.event_name == 'pull_request_target' && '0' || '1' }}",
+        )
+        self.assertEqual(detection["ref"], "${{ github.workflow_sha }}")
+
     def test_codecov_flag_paths_match_suite_owned_prefixes(self) -> None:
         path = GITHUB_DIR / "codecov.yml"
         proc = subprocess.run(

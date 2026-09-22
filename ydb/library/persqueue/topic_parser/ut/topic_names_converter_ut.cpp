@@ -1,4 +1,5 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NPersQueue::NTests {

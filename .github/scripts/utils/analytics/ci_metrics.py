@@ -706,9 +706,10 @@ def metrics_from_workflow_run(run: Dict[str, Any], jobs: List[Dict[str, Any]]) -
     run_attempt = _as_uint(run.get("run_attempt"))
     html_url = run.get("html_url")
     branch = run.get("head_branch")
+    pr_number = None
     if event_name in ("pull_request", "pull_request_target"):
         branch = run.get("base_branch") or _first_pr_base(run) or branch
-    pr_number = _first_pr_number(run)
+        pr_number = _first_pr_number(run)
 
     rows: List[Dict[str, Any]] = []
     for job in jobs:

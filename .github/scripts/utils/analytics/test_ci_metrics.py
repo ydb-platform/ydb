@@ -249,6 +249,52 @@ class WorkflowRunMetricsTest(unittest.TestCase):
         queue_row = next(row for row in rows if row["name"] == "queue")
         self.assertEqual(queue_row["value"], 3 * 60 * 1000)
 
+    def test_pr_without_pulls_keeps_head_branch(self):
+        run = {
+            "id": 2,
+            "event": "pull_request_target",
+            "name": "PR-check",
+            "head_sha": "abc",
+            "head_branch": "feature",
+            "created_at": "2026-09-21T10:00:00Z",
+        }
+        jobs = [
+            {
+                "id": 3,
+                "name": "Build and test relwithdebinfo",
+                "created_at": "2026-09-21T10:00:00Z",
+                "started_at": "2026-09-21T10:01:00Z",
+                "completed_at": "2026-09-21T10:02:00Z",
+                "conclusion": "success",
+            }
+        ]
+        rows = metrics_from_workflow_run(run, jobs)
+        self.assertTrue(all(row.get("branch") == "feature" for row in rows))
+
+    def test_push_ignores_associated_pull_requests(self):
+        run = {
+            "id": 1,
+            "event": "push",
+            "name": "PR-check",
+            "head_sha": "abc",
+            "head_branch": "main",
+            "created_at": "2026-09-21T10:00:00Z",
+            "pull_requests": [{"number": 10, "base": {"ref": "main"}}],
+        }
+        jobs = [
+            {
+                "id": 2,
+                "name": "Postcommit · Build and test relwithdebinfo",
+                "created_at": "2026-09-21T10:00:00Z",
+                "started_at": "2026-09-21T10:03:00Z",
+                "completed_at": "2026-09-21T10:04:00Z",
+                "conclusion": "success",
+            }
+        ]
+        rows = metrics_from_workflow_run(run, jobs)
+        self.assertTrue(all(row.get("pr_number") is None for row in rows))
+        self.assertTrue(all(row.get("branch") == "main" for row in rows))
+
 
 class SchemaTest(unittest.TestCase):
     def test_create_sql_has_pk_and_ttl(self):

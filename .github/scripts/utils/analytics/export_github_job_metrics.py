@@ -140,6 +140,53 @@ def list_run_jobs(org: str, repo: str, run_id: int, per_page: int = 100) -> List
     return jobs
 
 
+def pull_refs_from_commit_pulls(pulls: Any) -> List[Dict[str, Any]]:
+    """Keep number + target branch from GET /commits/{sha}/pulls."""
+    refs: List[Dict[str, Any]] = []
+    if not isinstance(pulls, list):
+        return refs
+    for pull in pulls:
+        if not isinstance(pull, dict):
+            continue
+        base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
+        refs.append({"number": pull.get("number"), "base": {"ref": base.get("ref")}})
+    return refs
+
+
+def pull_requests_have_target(pulls: Any) -> bool:
+    if not isinstance(pulls, list):
+        return False
+    for pull in pulls:
+        if not isinstance(pull, dict):
+            continue
+        base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
+        if base.get("ref"):
+            return True
+    return False
+
+
+def attach_pull_requests(org: str, repo: str, run: Dict[str, Any]) -> Dict[str, Any]:
+    """Recover PR target branch from the head SHA when the run payload omits it."""
+    if run.get("event") not in ("pull_request", "pull_request_target"):
+        return run
+    if pull_requests_have_target(run.get("pull_requests")):
+        return run
+    sha = run.get("head_sha")
+    if not sha:
+        return run
+    try:
+        pulls = github_get(f"https://api.github.com/repos/{org}/{repo}/commits/{quote(str(sha))}/pulls")
+    except Exception as exc:  # noqa: BLE001 — keep exporting the run
+        print(f"Warning: commit pulls for {sha}: {exc}")
+        return run
+    refs = pull_refs_from_commit_pulls(pulls)
+    if not refs:
+        return run
+    enriched = dict(run)
+    enriched["pull_requests"] = refs
+    return enriched
+
+
 def collect_rows(org: str, repo: str, workflow: str, created_since: datetime) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     run_count = 0
@@ -152,7 +199,7 @@ def collect_rows(org: str, repo: str, workflow: str, created_since: datetime) ->
         except Exception as exc:  # noqa: BLE001 — keep exporting other runs
             print(f"Warning: failed to list jobs for run {run_id}: {exc}")
             continue
-        rows.extend(metrics_from_workflow_run(run, jobs))
+        rows.extend(metrics_from_workflow_run(attach_pull_requests(org, repo, run), jobs))
         run_count += 1
         if run_count % 20 == 0:
             print(f"Collected {len(rows)} metric rows from {run_count} runs...")

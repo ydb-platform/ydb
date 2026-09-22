@@ -57,9 +57,12 @@ void TWriteSessionsQuoterTest::Notify(const TBucketKey& key) {
     const auto edge = Runtime.AllocateEdgeActor();
     Runtime.Send(new IEventHandle(MakeWriteSessionsQuoterId(), edge,
         new TEvQuoter::TEvNotify(key.Topic, key.Partition, key.Generation)));
-    auto reply = Runtime.GrabEdgeEvent<TEvQuoter::TEvQuoterInitialized>(edge, TDuration::MilliSeconds(10));
-    UNIT_ASSERT(reply);
-    UNIT_ASSERT_VALUES_EQUAL(reply->Sender, Quoter);
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([edge](IEventHandle& event) {
+        return event.Sender == edge && event.GetTypeRewrite() == TEvQuoter::TEvNotify::EventType;
+    });
+    UNIT_ASSERT(Runtime.DispatchEvents(options, TDuration::Seconds(1)));
+    ExpectReplies(edge, 0);
 }
 
 void TWriteSessionsQuoterTest::Remove(const TBucketKey& key) {
@@ -112,8 +115,9 @@ void TWriteSessionsQuoterTest::CheckIndependentBucket(const TBucketKey& other) {
 
 Y_UNIT_TEST_SUITE(TWriteSessionsQuoterTests) {
 
-Y_UNIT_TEST_F(AcknowledgesNotificationViaLocalService, TWriteSessionsQuoterTest) {
+Y_UNIT_TEST_F(RegistersBucketViaLocalServiceWithoutReply, TWriteSessionsQuoterTest) {
     Notify();
+    ExpectReplies(Acquire(), 1);
 }
 
 Y_UNIT_TEST_F(GrantsOnlyConfiguredInitialBurst, TWriteSessionsQuoterTest) {

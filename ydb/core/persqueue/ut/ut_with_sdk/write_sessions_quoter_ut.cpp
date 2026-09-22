@@ -1,4 +1,3 @@
-#include <ydb/core/persqueue/public/write_sessions_quoter/quoter.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -17,12 +16,6 @@ void CheckConcurrentWriteSessions(ui32 rps, bool directWrite, size_t sessionCoun
     serverSettings.PQConfig.SetWriteSessionsInitRps(rps);
     TTopicSdkTestSetup setup("WriteSessionsQuoter", serverSettings, false);
 
-    // TServer does not run the production service initializers.
-    auto& runtime = setup.GetRuntime();
-    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
-        const auto quoter = runtime.Register(CreateWriteSessionsQuoter(), node);
-        runtime.RegisterService(MakeWriteSessionsQuoterId(), quoter, node);
-    }
     setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
     if (restartTablet) {
         setup.GetServer().KillTopicPqTablets(setup.GetFullTopicPath());

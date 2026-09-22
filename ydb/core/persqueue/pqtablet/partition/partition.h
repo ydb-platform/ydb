@@ -813,7 +813,7 @@ private:
 
 private:
     ui32 TabletGeneration;
-    bool WriteSessionsQuoterRegistered = false;
+    bool WriteSessionsQuoterNotified = false;
     const TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;

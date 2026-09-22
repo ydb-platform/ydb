@@ -321,12 +321,44 @@ namespace NKikimr {
 
             ////////////////////////////////////////////////////////////////////////
 
+            // What this job is expected to cost and to give back, in chunks. The compaction
+            // broker needs a number to hand out before the job starts: the chunks it will
+            // allocate are what several VDisks on one PDisk are competing for, and the
+            // chunks it releases are what makes it worth admitting at all.
+            struct TSpaceForecast {
+                bool Valid = false;
+                ui32 OutputChunks = 0;      // chunks this job will allocate
+                ui32 InputChunks = 0;       // index chunks it releases once it commits
+                ui64 HugeGarbageBytes = 0;  // huge-blob garbage it makes collectable
+
+                void Clear() {
+                    *this = {};
+                }
+
+                // Worth running even though it costs space, as opposed to merely tidy.
+                i64 NetChunks() const {
+                    return i64(InputChunks) - i64(OutputChunks);
+                }
+
+                TString ToString() const {
+                    if (!Valid) {
+                        return "{unknown}";
+                    }
+                    TStringStream str;
+                    str << "{OutputChunks# " << OutputChunks
+                        << " InputChunks# " << InputChunks
+                        << " HugeGarbageBytes# " << HugeGarbageBytes << "}";
+                    return str.Str();
+                }
+            };
+
             EAction Action;
             TDeleteSsts DeleteSsts;
             TMoveSsts MoveSsts;
             TCompactSsts CompactSsts;
             bool IsFullCompaction = false;
             ESelectStrategy SelectStrategy = ESelectStrategy::None;
+            TSpaceForecast Forecast;
             // this field contains
             // * original std::optional<TFullCompactionAttrs>
             // * if 'first' was set, than result of full compaction: second=true -- full compaction has been finished
@@ -344,6 +376,7 @@ namespace NKikimr {
                 CompactSsts.Clear();
                 IsFullCompaction = false;
                 SelectStrategy = ESelectStrategy::None;
+                Forecast.Clear();
                 FullCompactionInfo.first.reset();
                 FullCompactionInfo.second = false;
             }
@@ -387,6 +420,9 @@ namespace NKikimr {
                 str << "{" << ActionToStr(Action);
                 if (auto *ptr = GetPtr()) {
                     ptr->Output(str);
+                }
+                if (Forecast.Valid) {
+                    str << " Forecast# " << Forecast.ToString();
                 }
                 str << "}";
                 return str.Str();

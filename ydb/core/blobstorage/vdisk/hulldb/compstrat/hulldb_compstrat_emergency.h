@@ -303,6 +303,12 @@ namespace NKikimr {
                         {"budget", Params.FreeChunksBudget});
                 }
                 ApplyBest();
+                // The scan already measured this candidate exactly; hand those numbers to
+                // the broker rather than letting the generic estimator redo them coarsely.
+                Task->Forecast.Valid = true;
+                Task->Forecast.OutputChunks = Best.OutputChunks;
+                Task->Forecast.InputChunks = Best.InputChunks;
+                Task->Forecast.HugeGarbageBytes = Best.HugeGarbage;
                 return ActCompactSsts;
             }
         };

@@ -87,6 +87,7 @@ public:
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
         , LastCurrentQueryStatsPublishAt(startedAt)
+        , CurrentQueryStatsInterval(ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
         , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
         , RuntimeParameterSizeLimitSatisfied(runtimeParameterSizeLimit > 0)
@@ -203,6 +204,7 @@ public:
     TString ClientAddress;
     NActors::TMonotonic StartedAt;
     NActors::TMonotonic LastCurrentQueryStatsPublishAt;
+    TDuration CurrentQueryStatsInterval;
     bool CompilationRunning = false;
 
     THashMap<NKikimr::TTableId, ui64> TableVersions;

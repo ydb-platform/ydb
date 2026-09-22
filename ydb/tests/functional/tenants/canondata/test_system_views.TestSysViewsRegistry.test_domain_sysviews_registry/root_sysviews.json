@@ -1010,7 +1010,7 @@
         "type": "Uint64?"
       },
       {
-        "name": "ReadIngressBytesPerSec",
+        "name": "ReadIngressBytesPerInterval",
         "type": "Uint64?"
       }
     ],

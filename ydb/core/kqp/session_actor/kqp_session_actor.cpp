@@ -2555,10 +2555,7 @@ public:
         }
         if (!QueryState->CurrentQueryStatsPublishScheduled) {
             QueryState->CurrentQueryStatsPublishScheduled = true;
-            const auto interval = QueryState->CurrentQueryStatsSequenceNo == 0
-                ? TDuration::Seconds(1)
-                : TDuration::Seconds(5);
-            Schedule(interval, new TEvents::TEvWakeup(QueryState->QueryId));
+            Schedule(QueryState->CurrentQueryStatsInterval, new TEvents::TEvWakeup(QueryState->QueryId));
         }
     }
 
@@ -2570,11 +2567,7 @@ public:
         QueryState->CurrentQueryStatsPublishScheduled = false;
         if (auto current = QueryState->CurrentQueryStats.Get()) {
             const auto now = TMonotonic::Now();
-            const auto elapsed = now - QueryState->LastCurrentQueryStatsPublishAt;
-            if (elapsed != TDuration::Zero()) {
-                current->ReadIngressBytesPerSec = (current->ReadIngressBytes - QueryState->LastPublishedReadIngressBytes)
-                    * TDuration::Seconds(1).MicroSeconds() / elapsed.MicroSeconds();
-            }
+            current->ReadIngressBytesPerInterval = current->ReadIngressBytes - QueryState->LastPublishedReadIngressBytes;
             QueryState->LastPublishedReadIngressBytes = current->ReadIngressBytes;
             QueryState->LastCurrentQueryStatsPublishAt = now;
             Send(QueryState->Sender, new TEvKqp::TEvCurrentQueryStats(SessionId, QueryState->ProxyRequestId,

@@ -2998,6 +2998,8 @@ message TColumnShardConfig {
     optional string ScanDefaultPool = 75;
     // Actor-system pool for compaction conveyor tasks: "User" or "Batch". Unset is User.
     optional string CompactionDefaultPool = 76;
+    optional uint32 OrphanWriteLockTimeoutSeconds = 77 [default = 86400];
+    optional uint32 OrphanWriteLockRecoveryGracePeriodSeconds = 78 [default = 300];
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

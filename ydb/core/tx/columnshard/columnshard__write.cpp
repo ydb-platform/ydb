@@ -449,6 +449,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
             if (!lockInfo) {
                 sendError("missing lock for commit: " + ::ToString(commitOperation->GetLockId()),
                     NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0, 0, "CommitWriteLock", true);
+            } else if (lockInfo->NeedsAborting() && !lockInfo->IsTxIdAssigned()) {
+                sendError("lock is being aborted: " + ::ToString(commitOperation->GetLockId()),
+                    NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, 0, 0, "CommitWriteLock", true);
             } else {
                 THashSet<TSchemeShardLocalPathId> schemeShardLocalPathIds;
                 for (const auto& op : lockInfo->GetWriteOperations()) {

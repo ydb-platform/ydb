@@ -60,6 +60,7 @@ private:
     YDB_READONLY_DEF(TInstant, CreatedAt);
     YDB_READONLY_DEF(TOperationWriteId, WriteId);
     YDB_READONLY(ui64, LockId, 0);
+    YDB_ACCESSOR(ui32, LockNodeId, 0);
     YDB_READONLY(ui64, Cookie, 0);
     YDB_READONLY_DEF(std::vector<TInsertWriteId>, InsertWriteIds);
     YDB_ACCESSOR(EOperationBehaviour, Behaviour, EOperationBehaviour::Undefined);

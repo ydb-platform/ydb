@@ -10,11 +10,10 @@ message TBlockField {
 }
 
 message TDDiskState {
-    TBlockField Ahead = 1;
     TBlockField Behind = 2;
 }
 
 message TDirtyMapState {
-    // The map of ahead and behind blocks.
+    // The map of behind blocks.
     repeated TDDiskState DDiskStates = 2;
 }

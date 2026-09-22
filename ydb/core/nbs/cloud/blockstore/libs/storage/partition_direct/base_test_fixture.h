@@ -123,15 +123,15 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         return vchunk.DirtyMapReady.HasValue();
     }
 
-    static bool IsDirtyMapStatePersisting(TVChunk& vchunk)
+    static bool IsPersisting(TVChunk& vchunk)
     {
-        return vchunk.DirtyMapStatePersisting;
+        return vchunk.Persisting;
     }
 
     // Must be invoked on the vchunk's executor thread.
-    static void InvokePersistDirtyMap(TVChunk& vchunk)
+    static void InvokeStartPersist(TVChunk& vchunk)
     {
-        vchunk.DoPersistDirtyMap();
+        vchunk.StartPersist();
     }
 
     // Must be invoked on the vchunk's executor thread.

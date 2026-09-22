@@ -15,6 +15,7 @@
 
 #include <util/string/join.h>
 
+#include <iterator>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -118,6 +119,8 @@ namespace {
     }
 
     void FinishHullComponent(TComponentState& component, ui64 chunkSize) {
+        // ChunkCount contains only dedicated chunks. Shared stripe chunks are
+        // represented by the component-owned extents in StripedBytes instead.
         component.AllocatedBytes = component.ChunkCount * chunkSize + component.StripedBytes;
         const ui64 accountedBytes = component.Breakdown.TotalBytes();
         if (accountedBytes < component.AllocatedBytes) {
@@ -288,6 +291,7 @@ namespace {
                 HullCtx->AllowKeepFlags,
                 true,
                 MaxHugeReferencesPerKey,
+                PDiskCtx->Dsk->AppendBlockSize,
                 HugeBlobCtx.get(),
                 MinHugeBlobInBytes);
 
@@ -594,7 +598,10 @@ namespace {
             if (ScanStarted || std::exchange(StripeChunksReceived, true)) {
                 return;
             }
-            StripeChunks.insert(ev->Get()->StripeChunks.begin(), ev->Get()->StripeChunks.end());
+            auto& chunks = ev->Get()->StripeChunks;
+            StripeChunks = std::unordered_set<TChunkIdx>(
+                std::make_move_iterator(chunks.begin()),
+                std::make_move_iterator(chunks.end()));
             SourceReceived();
         }
 

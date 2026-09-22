@@ -62,7 +62,7 @@ namespace NKikimr::NVDiskSpaceReport {
         void AddIfLastKey(
                 const TKey& key,
                 const TLevelSegment<TKey, TMemRec>* sst,
-                ui32 appendBlockSize = 1)
+                ui32 appendBlockSize)
         {
             if (!sst) {
                 return;
@@ -142,6 +142,7 @@ namespace NKikimr::NVDiskSpaceReport {
             bool allowKeepFlags,
             bool allowGarbageCollection,
             size_t maxHugeRefsPerKey,
+            ui32 appendBlockSize,
             const THugeBlobCtx* hugeBlobCtx = nullptr,
             ui32 minHugeBlobInBytes = 0);
 
@@ -217,6 +218,7 @@ namespace NKikimr::NVDiskSpaceReport {
         const bool AllowKeepFlags;
         const bool AllowGarbageCollection;
         const size_t MaxHugeRefsPerKey;
+        const ui32 AppendBlockSize;
         const THugeBlobCtx* const HugeBlobCtx;
         const ui32 MinHugeBlobInBytes;
 

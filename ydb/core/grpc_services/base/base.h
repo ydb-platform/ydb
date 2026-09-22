@@ -34,9 +34,6 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/stream/str.h>
 
-#include <atomic>
-#include <mutex>
-
 namespace NKikimrScheme {
     class TEvDescribeSchemeResult;
 }
@@ -344,7 +341,6 @@ public:
 
 class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
-    virtual void CountRequestPath(TStringBuf) const {}
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
 };
@@ -469,6 +465,7 @@ struct TRequestAuxSettings {
     TAuditMode AuditMode = {};
     NJaegerTracing::ERequestType RequestType = NJaegerTracing::ERequestType::UNSPECIFIED;
     EEmptyDatabaseMode EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseForbidden;
+    const TAppData* AppData = nullptr;
 };
 
 class TGRpcRequestProxySimple;
@@ -485,10 +482,10 @@ class IRequestProxyCtx
 private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
 public:
+    explicit IRequestProxyCtx(const TAppData* appData = nullptr);
     virtual ~IRequestProxyCtx() = default;
 
     const TMaybe<TString> GetDatabaseName() const override;
-    void InitRequestPaths(const TString& clusterRoot, bool relativePathsEnabled, NMonitoring::TDynamicCounterPtr counters);
 
     // auth
     virtual const TMaybe<TString> GetYdbToken() const = 0;
@@ -516,8 +513,8 @@ public:
     virtual bool Validate(TString& error) = 0;
 
     // counters
-    void InitPathCounters(NMonitoring::TDynamicCounterPtr counters);
-    void CountRequestPath(TStringBuf path) const override;
+    void CountRequestPaths() const;
+    void CountDatabasePath(TStringBuf path) const;
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
     virtual IGRpcProxyCounters::TPtr GetCounters() const = 0;
     virtual void UseDatabase(const TString& database) = 0;
@@ -554,17 +551,16 @@ public:
     virtual TString GetRpcMethodName() const = 0;
 
 protected:
+    void InitRootPath(const TAppData* appData);
     TMaybe<TString> ResolveDatabaseName(const TMaybe<TString>& database) const;
     virtual void CountRequestBodyPaths() const {}
+    virtual NYdbGrpc::ICounterBlock* GetRequestCounters() const { return nullptr; }
+    mutable TMaybe<TString> DatabaseName;
 
 private:
-    TString ClusterRoot_;
+    TString RootPath;
     bool RelativePathsEnabled_ = false;
-    std::atomic<bool> PathsInitialized_{false};
-    mutable std::once_flag DatabaseNameOnce_;
-    mutable TMaybe<TString> ResolvedDatabaseName_;
-    NMonitoring::TDynamicCounters::TCounterPtr RelativePathCounter_;
-    mutable std::atomic<bool> RelativePathCounted_{false};
+    mutable bool RelativeDatabaseCounted_ = false;
 };
 
 // Request context
@@ -650,12 +646,13 @@ class TRefreshTokenImpl
 public:
     TRefreshTokenImpl(const TString& token, const TString& database, const TString& peerName, const TString& traceId, TActorId from)
         : Token_(token)
-        , Database_(database)
         , PeerName_(peerName)
         , From_(from)
         , TraceId_(traceId)
         , State_(true)
-    { }
+    {
+        DatabaseName = database;
+    }
 
     const TMaybe<TString> GetYdbToken() const override {
         return Token_;
@@ -677,10 +674,6 @@ public:
 
     bool HasClientCapability(const TString&) const override {
         return false;
-    }
-
-    const TMaybe<TString> GetDatabaseName() const override {
-        return Database_;
     }
 
     const NYdbGrpc::TAuthState& GetAuthState() const override {
@@ -844,7 +837,6 @@ public:
 
 private:
     const TString Token_;
-    const TString Database_;
     const TString PeerName_;
     const TActorId From_;
     const TString TraceId_;
@@ -917,7 +909,8 @@ public:
     using IStreamCtx = NGRpcServer::IGRpcStreamingContext<TRequest, TResponse>;
 
     TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx, TRequestAuxSettings auxSettings = {})
-        : Ctx_(ctx)
+        : IRequestProxyCtx(auxSettings.AppData)
+        , Ctx_(ctx)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
         , AuxSettings(std::move(auxSettings))
     {
@@ -1030,6 +1023,10 @@ public:
 
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
+    }
+
+    NYdbGrpc::ICounterBlock* GetRequestCounters() const override {
+        return Ctx_->GetCounterBlock();
     }
 
     TVector<TStringBuf> FindClientCertPropertyValues() const override {
@@ -1394,7 +1391,7 @@ public:
     void CountRequestBodyPaths() const override {
         if constexpr (std::is_same_v<TReq, Ydb::Discovery::ListEndpointsRequest>) {
             if (const auto* request = dynamic_cast<const TRequest*>(GetRequest())) {
-                this->CountRequestPath(request->database());
+                this->CountDatabasePath(request->database());
             }
         }
     }
@@ -1405,6 +1402,10 @@ public:
 
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
+    }
+
+    NYdbGrpc::ICounterBlock* GetRequestCounters() const override {
+        return Ctx_->GetCounterBlock();
     }
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
@@ -1730,7 +1731,9 @@ public:
         : TBase(ctx)
         , PassMethod(std::forward<TCallback>(cb))
         , AuxSettings(std::move(auxSettings))
-    { }
+    {
+        this->InitRootPath(AuxSettings.AppData);
+    }
 
     void Pass(const IFacilityProvider& facility) override {
         try {
@@ -1816,10 +1819,12 @@ public:
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
-    TGRpcRequestWrapper(NYdbGrpc::IRequestContextBase* ctx)
+    TGRpcRequestWrapper(NYdbGrpc::IRequestContextBase* ctx, const TAppData* appData = nullptr)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
             TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
-    { }
+    {
+        this->InitRootPath(appData);
+    }
 
     TRateLimiterMode GetRlMode() const override {
         return RateLimitMode;
@@ -1937,8 +1942,10 @@ public:
         NActors::TActorId sender,
         TAuditMode auditMode,
         TString peerName,
-        TString requestId)
-        : Database(database)
+        TString requestId,
+        const TAppData* appData = nullptr)
+        : IRequestProxyCtx(appData)
+        , Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
         , AuthState(true)
@@ -1977,7 +1984,7 @@ public:
         if (status == Ydb::StatusIds::SUCCESS) {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
-                    Database,
+                    GetDatabaseName().GetOrElse(TString()),
                     YdbToken,
                     UserToken,
                     GetAuditLogParts()
@@ -2032,7 +2039,7 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
-        Database = database;
+        DatabaseName = database;
     }
 
     void SetRespHook(TRespHook&& /*hook*/) override {

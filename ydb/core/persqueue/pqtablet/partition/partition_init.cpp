@@ -1214,7 +1214,7 @@ void TInitFieldsStep::Execute(const TActorContext &ctx) {
 //
 
 TNotifyWriteSessionsQuoterStep::TNotifyWriteSessionsQuoterStep(TInitializer* initializer)
-    : TInitializerStep(initializer, "TNotifyWriteSessionsQuoterStep", true) {
+    : TInitializerStep(initializer, "TNotifyWriteSessionsQuoterStep", false) {
 }
 
 void TNotifyWriteSessionsQuoterStep::QuoterInitialized(const TActorContext& ctx) {

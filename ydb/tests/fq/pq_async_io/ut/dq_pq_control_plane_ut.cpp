@@ -416,6 +416,154 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         UNIT_ASSERT_VALUES_EQUAL(Client->Calls.load(), 2);
     }
 
+    Y_UNIT_TEST_TWIN_F(RetriesFatalErrorOnUndelivery, InitiallySuccessful, TFixture) {
+        Client->ThrowOnDescribe = !InitiallySuccessful;
+        if constexpr (InitiallySuccessful) {
+            CompleteDescription();
+        }
+        const auto reader = Request(MakeRequest(), 71);
+        auto response = Runtime.GrabEdgeEvent<TEvResult>(reader);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(),
+            InitiallySuccessful ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::INTERNAL_ERROR);
+
+        TString fatalError;
+        for (ui32 attempt = 0; attempt < 3; ++attempt) {
+            Runtime.Send(new IEventHandle(ControlPlaneId, reader,
+                new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
+            response = Runtime.GrabEdgeEvent<TEvResult>(reader);
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 71);
+            const auto& record = response->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(),
+                InitiallySuccessful ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::INTERNAL_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(record.IssuesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(record.PartitionsSize(), 0);
+            if (attempt == 0) {
+                fatalError = record.SerializeAsString();
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(record.SerializeAsString(), fatalError);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(Client->Calls.load(), 1);
+    }
+
+    Y_UNIT_TEST_F(RetriesFatalRepliesIndependentlyForRequestCookies, TFixture) {
+        Client->ThrowOnDescribe = true;
+        const auto reader = Request(MakeRequest(), 71);
+        const auto first = Runtime.GrabEdgeEvent<TEvResult>(reader);
+        UNIT_ASSERT(first);
+        const auto fatalError = first->Get()->Record.SerializeAsString();
+
+        auto event = MakeHolder<TPqControlPlaneEvents::TEvDescribeConsumer>();
+        event->Record = MakeRequest();
+        Runtime.Send(new IEventHandle(ControlPlaneId, reader, event.Release(), 0, 72));
+        const auto second = Runtime.GrabEdgeEvent<TEvResult>(reader);
+        UNIT_ASSERT(second);
+        UNIT_ASSERT_VALUES_EQUAL(second->Cookie, 72);
+
+        for (ui64 cookie : {71, 72}) {
+            Runtime.Send(new IEventHandle(ControlPlaneId, reader,
+                new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, cookie));
+        }
+        THashSet<ui64> cookies;
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto response = Runtime.GrabEdgeEvent<TEvResult>(reader);
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.SerializeAsString(), fatalError);
+            UNIT_ASSERT(cookies.insert(response->Cookie).second);
+        }
+        UNIT_ASSERT(cookies.contains(71));
+        UNIT_ASSERT(cookies.contains(72));
+        UNIT_ASSERT_VALUES_EQUAL(Client->Calls.load(), 1);
+    }
+
+    Y_UNIT_TEST_F(LateUndeliveredResponseGetsOriginalFatalError, TFixture) {
+        CompleteDescription();
+        const auto first = Request(MakeRequest(), 71);
+        const auto second = Request(MakeRequest(), 72);
+        CheckResponse(first, 0, 71);
+        CheckResponse(second, 0, 72);
+
+        Runtime.Send(new IEventHandle(ControlPlaneId, first,
+            new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
+        const auto firstError = Runtime.GrabEdgeEvent<TEvResult>(first);
+        UNIT_ASSERT(firstError);
+        UNIT_ASSERT_VALUES_EQUAL(firstError->Get()->Record.GetStatus(), Ydb::StatusIds::UNAVAILABLE);
+
+        Runtime.Send(new IEventHandle(ControlPlaneId, second,
+            new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 72));
+        const auto secondError = Runtime.GrabEdgeEvent<TEvResult>(second);
+        UNIT_ASSERT(secondError);
+        UNIT_ASSERT_VALUES_EQUAL(secondError->Cookie, 72);
+        UNIT_ASSERT_VALUES_EQUAL(secondError->Get()->Record.SerializeAsString(), firstError->Get()->Record.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(Client->Calls.load(), 1);
+    }
+
+    Y_UNIT_TEST(FatalErrorRetriesAreCoalescedAndContinueUntilPoison) {
+        TTestActorRuntime runtime;
+        InitializeRuntime(runtime);
+        const NYdb::TDriver driver{NYdb::TDriverConfig()};
+        const auto client = MakeIntrusive<TTopicClient>();
+        client->Observer = runtime.AllocateEdgeActor();
+        client->ThrowOnDescribe = true;
+        const auto controlPlane = runtime.Register(CreateDqPqControlPlaneActor(
+            driver, std::make_shared<TCredentialsFactory>(), MakeIntrusive<TGateway>(client), {}));
+        const auto reader = runtime.AllocateEdgeActor();
+        const auto barrier = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(controlPlane, reader, new TPqControlPlaneEvents::TEvDescribeConsumer(), 0, 71));
+        const auto original = runtime.GrabEdgeEvent<TEvResult>(reader);
+        UNIT_ASSERT(original);
+        UNIT_ASSERT_VALUES_EQUAL(original->Get()->Record.GetStatus(), Ydb::StatusIds::INTERNAL_ERROR);
+
+        // Hold timers so duplicate failures are processed before a retry fires.
+        std::vector<THolder<IEventHandle>> retries;
+        runtime.SetScheduledEventFilter([&](auto&, auto& event, TDuration delay, auto&) {
+            if (event->Recipient == controlPlane) {
+                UNIT_ASSERT(delay > TDuration::Zero());
+                UNIT_ASSERT(delay <= TDuration::Seconds(1));
+                retries.emplace_back(event.Release());
+                return true;
+            }
+            return false;
+        });
+
+        for (ui32 attempt = 0; attempt < 20; ++attempt) {
+            for (ui32 duplicate = 0; duplicate < 2; ++duplicate) {
+                runtime.Send(new IEventHandle(controlPlane, reader,
+                    new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
+            }
+            runtime.Send(new IEventHandle(controlPlane, barrier, new TPqControlPlaneEvents::TEvDescribeConsumer()));
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvResult>(barrier));
+            UNIT_ASSERT_VALUES_EQUAL(retries.size(), 1);
+            runtime.Send(retries.back().Release());
+            retries.clear();
+            const auto response = runtime.GrabEdgeEvent<TEvResult>(reader);
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 71);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.SerializeAsString(), original->Get()->Record.SerializeAsString());
+        }
+
+        runtime.Send(new IEventHandle(controlPlane, reader,
+            new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
+        runtime.Send(new IEventHandle(controlPlane, barrier, new TPqControlPlaneEvents::TEvDescribeConsumer()));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvResult>(barrier));
+        UNIT_ASSERT_VALUES_EQUAL(retries.size(), 1);
+
+        // A pending retry must not revive the actor after its owner stops it.
+        runtime.Send(new IEventHandle(controlPlane, reader, new TEvents::TEvPoison()));
+        runtime.Send(retries.back().Release());
+        retries.clear();
+        runtime.Send(new IEventHandle(controlPlane, reader, new TPqControlPlaneEvents::TEvDescribeConsumer(),
+            IEventHandle::FlagTrackDelivery, 72));
+        const auto undelivered = runtime.GrabEdgeEvent<TEvents::TEvUndelivered>(reader);
+        UNIT_ASSERT(undelivered);
+        UNIT_ASSERT_VALUES_EQUAL(undelivered->Cookie, 72);
+        UNIT_ASSERT_VALUES_EQUAL(undelivered->Get()->Reason, TEvents::TEvUndelivered::ReasonActorUnknown);
+        UNIT_ASSERT(retries.empty());
+        UNIT_ASSERT_VALUES_EQUAL(client->Calls.load(), 1);
+    }
+
     Y_UNIT_TEST(DisconnectedReaderFailsPendingAndFutureRequests) {
         TTestActorRuntime runtime(2, true);
         InitializeRuntime(runtime);
@@ -455,7 +603,16 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
             NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), Ydb::Topic::DescribeConsumerResult{}));
         CheckUnavailableResponse(runtime, request("pending-topic", 14), 14, error);
         CheckUnavailableResponse(runtime, request("ready-topic", 15), 15, error);
-        CheckUnavailableResponse(runtime, request("new-topic", 16, 1), 16, error);
+        const auto newRemoteReader = request("new-topic", 16, 1);
+        CheckUnavailableResponse(runtime, newRemoteReader, 16, error);
+
+        // Further disconnects in the fatal state retry every error reply on that
+        // node, including replies to requests received after the first failure.
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            runtime.DisconnectNodes(0, 1);
+            CheckUnavailableResponse(runtime, remotePendingReader, 13, error);
+            CheckUnavailableResponse(runtime, newRemoteReader, 16, error);
+        }
         UNIT_ASSERT_VALUES_EQUAL(client->Calls.load(), 3);
     }
 

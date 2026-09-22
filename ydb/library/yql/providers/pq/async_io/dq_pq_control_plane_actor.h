@@ -6,6 +6,10 @@
 
 namespace NYql::NDq {
 
+// Query-scoped coordinator for PQ readers: coalesces and caches consumer descriptions
+// per connection, returning offsets only for the requested partitions. Fatal failures
+// fail pending and future requests; error delivery is retried with backoff on transport
+// failures. The query owner stops the actor with TEvPoison.
 NActors::IActor* CreateDqPqControlPlaneActor(
     NYdb::TDriver driver,
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory,

@@ -13,11 +13,13 @@ SRCS(
 
 PEERDIR(
     library/cpp/protobuf/interop
+    library/cpp/retry
     ydb/core/fq/libs/graph_params/proto
     ydb/core/fq/libs/protos
     ydb/core/fq/libs/row_dispatcher
     ydb/library/accessor
     ydb/library/actors/log_backend
+    ydb/library/services
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/pq/common

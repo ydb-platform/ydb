@@ -2,11 +2,11 @@
 
 #include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/abstract.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections/abstract.h>
 
 #include <util/string/builder.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NTrivial {
 
 ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
     const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/)
@@ -112,4 +112,4 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
     return ESourceAction::ProvideNext;
 }
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NTrivial

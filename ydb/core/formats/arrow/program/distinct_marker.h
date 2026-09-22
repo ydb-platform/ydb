@@ -18,7 +18,7 @@ private:
 
 public:
     explicit TDistinctMarkerProcessor(const ui32 keyColumnId)
-        : TBase({ TColumnChainInfo(keyColumnId) }, {}, EProcessorType::Filter)
+        : TBase({ TColumnChainInfo(keyColumnId) }, {}, EProcessorType::DistinctMarker)
         , KeyColumnId(keyColumnId)
     {
         AFL_VERIFY(KeyColumnId);

@@ -336,9 +336,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g2' class='selectable'><title>Stage 0</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Sort: cntrycode</title><text x='36' y='13' class='texts clipped'>Sort: cntrycode</text>
 </g>
@@ -355,9 +355,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g4' class='selectable'><title>Stage 0</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: SUM(1),SUM(c_acctbal), Group By: cntrycode</title><text x='36' y='13' class='texts clipped'>Aggregate: SUM(1),SUM(c_acctbal), Group By: cntrycode</text>
 </g>
@@ -377,9 +377,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g6' class='selectable'><title>Stage 0</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>LeftOnlyJoin (Grace): j.c_custkey = o.o_custkey</title><text x='36' y='13' class='texts clipped'>LeftOnlyJoin (Grace): j.c_custkey = o.o_custkey</text>
 </g>
@@ -396,9 +396,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g8' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Filter: c.c_acctbal &gt; a.a</title><text x='47' y='13' class='texts clipped'>Filter: c.c_acctbal &gt; a.a</text>
 </g>
@@ -418,9 +418,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g10' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>CrossJoin: </title><text x='47' y='13' class='texts clipped'>CrossJoin: </text>
 </g>
@@ -437,9 +437,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='34' width='1280' height='34' x='0' y='3'>
 <g data-group='g12' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>customer: </title><text x='58' y='13' class='texts clipped'>customer: </text>
 </g>
@@ -458,9 +458,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g14' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: </title><text x='58' y='13' class='texts clipped'>Aggregate: </text>
 </g>
@@ -477,9 +477,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g16' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Limit: 1</title><text x='58' y='13' class='texts clipped'>Limit: 1</text>
 </g>
@@ -496,9 +496,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g18' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: </title><text x='58' y='13' class='texts clipped'>Aggregate: </text>
 </g>
@@ -515,9 +515,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g20' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Filter: Substring == "31" Or Substring == "29" Or Substring == "30" Or Substring == "26" Or Substring == "28" Or Substring == "25" Or Substring == "15" And c_acctbal &gt; "0.00"</title><text x='58' y='13' class='texts clipped'>Filter: Substring == "31" Or Substring == "29" Or Substring == "30" Or Substring == "26" Or Substring == "28" Or Substring == "25" Or Substring == "15" And c_acctbal &gt; "0.00"</text>
 </g>
@@ -534,9 +534,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='34' width='1280' height='34' x='0' y='3'>
 <g data-group='g22' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>customer: </title><text x='58' y='13' class='texts clipped'>customer: </text>
 </g>
@@ -585,9 +585,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='34' width='1280' height='34' x='0' y='3'>
 <g data-group='g24' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>orders: </title><text x='47' y='13' class='texts clipped'>orders: </text>
 </g>
@@ -620,8 +620,8 @@
 <g id='columnHeaders'>
 <svg width='1280' height='18' x='0' y='0'>
 <rect x='0' y='0' width='298' height='18' class='columns'/>
-<rect x='301' y='0' width='64' height='18' class='columns'/>
-<rect x='368' y='0' width='30' height='18' class='columns'/>
+<rect x='301' y='0' width='54' height='18' class='columns'/>
+<rect x='358' y='0' width='40' height='18' class='columns'/>
 <rect x='401' y='0' width='200' height='18' class='columns'/>
 <rect x='604' y='0' width='676' height='18' class='columns'/>
 <text x='2' y='13' class='texts'>Stages and Operators</text>

@@ -469,9 +469,7 @@ bool TPartitionActor::OnRenderAppHtmlPage(
     }
 
     if (page == EMonPage::Latency || page == EMonPage::Memory) {
-        if (page == EMonPage::Memory) {
-            data.FastPathServiceInfo = FastPathService->GetMonInfo();
-        }
+        data.FastPathServiceInfo = FastPathService->GetMonInfo();
         FastPathService->GatherMonSnapshots(std::nullopt)
             .Subscribe(
                 [data = std::move(data),

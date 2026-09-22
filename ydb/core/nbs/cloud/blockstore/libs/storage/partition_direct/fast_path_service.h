@@ -47,6 +47,7 @@ private:
 
     TLogTitle LogTitle;
     std::atomic<ui64> SequenceGenerator;
+    std::atomic<size_t> InflightWriteCount{0};
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
     TDuration TraceSamplePeriod;
@@ -117,7 +118,9 @@ public:
         TDuration delay,
         NYdb::NBS::TCallback callback) override;
 
-    TPersistResultFuture UpdateVChunkConfig(const TVChunkConfig& cfg) override;
+    TPersistResultFuture UpdateVChunkState(
+        const TVChunkConfig& cfg,
+        TDirtyMapStateProto state) override;
 
     TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,
@@ -134,7 +137,12 @@ public:
         size_t hostIndex,
         ui32 dbgConnectionsConfigGeneration) override;
 
-    ui64 GenerateLsn() override;
+    ui64 OnWriteStarted() override;
+
+    void OnWriteFinished() override;
+
+    // IDiskStateProvider implementation
+    size_t GetInflightWriteCount() const override;
 
     void StopTablet(const TString& reason) override;
 

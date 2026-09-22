@@ -674,15 +674,20 @@ Y_UNIT_TEST_SUITE(KqpService) {
         auto driver = kikimr.GetDriver();
 
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        auto kqpCounters = counters.GetKqpCounters();
+        auto patternEvictions = kqpCounters->GetCounter("PatternCache/Evictions", /*derivative=*/true);
+        auto compiledCodeEvictions = kqpCounters->GetCounter("PatternCache/CompiledCodeEvictions", /*derivative=*/true);
 
         static constexpr i64 AsyncPatternCompilationUniqueRequestsSize = 5;
 
+        // A pattern that has lost its compiled code is not queued for compilation over and over again, so waiting for
+        // more compilations than there are unique programs would never finish.
         auto async_compilation_condition = [&]() {
             if (useCache) {
                 if (asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::On) {
                     return *counters.CompiledComputationPatterns != AsyncPatternCompilationUniqueRequestsSize;
                 } else if (asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::OnWithLimit) {
-                    return *counters.CompiledComputationPatterns < AsyncPatternCompilationUniqueRequestsSize * 4;
+                    return *counters.CompiledComputationPatterns < AsyncPatternCompilationUniqueRequestsSize;
                 }
             }
 
@@ -746,11 +751,31 @@ Y_UNIT_TEST_SUITE(KqpService) {
             }
         }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
 
-        if (useCache) {
+        if (useCache && useAsyncPatternCompilation) {
+            // Only the same few programs are executed over and over, and 10 MB is plenty of room for their patterns,
+            // so all of them settle in the cache: none is ever pushed out and built again from scratch.
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(*patternEvictions), 0);
+
             if (asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::On) {
-                UNIT_ASSERT(*counters.CompiledComputationPatterns == AsyncPatternCompilationUniqueRequestsSize);
+                // Nothing takes the compiled code away, so every pattern is compiled exactly once.
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(*counters.CompiledComputationPatterns),
+                                         AsyncPatternCompilationUniqueRequestsSize);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(*compiledCodeEvictions), 0);
             } else if (asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::OnWithLimit) {
-                UNIT_ASSERT(*counters.CompiledComputationPatterns >= AsyncPatternCompilationUniqueRequestsSize);
+                const i64 compilations = *counters.CompiledComputationPatterns;
+                const i64 codeEvictions = *compiledCodeEvictions;
+
+                // The compiled code budget is deliberately too small to hold all of the patterns, so some of them do
+                // lose their code ...
+                UNIT_ASSERT_GE(codeEvictions, 1);
+
+                // ... but giving the code up is the whole point of the limit, so it is not earned back again and
+                // again: every pattern is compiled exactly once, however long the test runs.
+                UNIT_ASSERT_VALUES_EQUAL(compilations, AsyncPatternCompilationUniqueRequestsSize);
+
+                // Which bounds the churn as well: a pattern can only lose the code it has earned, and it earns it
+                // exactly once per compilation. Both numbers settle instead of growing with the iteration count.
+                UNIT_ASSERT_LE(codeEvictions, compilations);
             }
         }
     }

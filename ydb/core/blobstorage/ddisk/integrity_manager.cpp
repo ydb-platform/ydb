@@ -1176,6 +1176,16 @@ ui64 TIntegrityManager::GetIntegrityChunkGeneration(TChunkIdx chunkIdx) const {
     return it != IntegrityChunks.end() ? it->second.Generation : 0;
 }
 
+std::vector<TChunkIdx> TIntegrityManager::GetIntegrityChunkIdxs() const {
+    std::vector<TChunkIdx> chunks;
+    chunks.reserve(IntegrityChunks.size());
+    for (const auto& [chunkIdx, info] : IntegrityChunks) {
+        Y_UNUSED(info);
+        chunks.push_back(chunkIdx);
+    }
+    return chunks;
+}
+
 bool TIntegrityManager::IsIntegrityChunkFormatted(TChunkIdx chunkIdx) const {
     const auto it = IntegrityChunks.find(chunkIdx);
     return it != IntegrityChunks.end() && it->second.State == EChunkState::Ready;

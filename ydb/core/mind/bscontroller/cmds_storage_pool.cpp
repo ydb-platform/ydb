@@ -640,7 +640,7 @@ namespace NKikimr::NBsController {
                     x->SetGuid(pdisk.Guid);
                     x->SetNumStaticSlots(pdisk.StaticSlotUsage);
                     x->SetDriveStatus(NKikimrBlobStorage::EDriveStatus::ACTIVE);
-                    x->SetExpectedSlotCount(pdisk.GetEffectiveExpectedSlotCount());
+                    x->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
                     x->SetExpectedSlotSize(pdisk.GetEffectiveExpectedSlotSize());
                     x->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE);
                     if (pdisk.PDiskMetrics) {

@@ -124,7 +124,9 @@ std::optional<TKeyMatch> MatchKeyPrefix(const TOpJoin& join, const TOpRead& read
     }
 
     THashMap<TString, TLookupKey> keyByColumn;
-    for (const auto& [leftIU, rightIU] : join.JoinKeys) {
+    for (const auto& joinKey : join.JoinKeys) {
+        const auto& leftIU = joinKey.Left;
+        const auto& rightIU = joinKey.Right;
         const auto it = readColumnByIU.find(rightIU);
         Y_ENSURE(it != readColumnByIU.end(), "Cannot find a join key in input columns.");
         const auto column = it->second;
@@ -238,6 +240,10 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         return input;
     }
 
+    if (HasEqualNullsKey(join->JoinKeys)) {
+        return input;
+    }
+
     // Not supported for join with join filters.
     if (join->JoinKeys.empty() || !join->JoinFilters.empty()) {
         return input;
@@ -270,8 +276,8 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
             const auto table = TKqpTable(read->GetTable());
             const auto& mainTableDesc = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, table.Path().Value());
             THashSet<TString> rightJoinKeys;
-            for (const auto& [leftKey, rightKey] : join->JoinKeys) {
-                rightJoinKeys.insert(rightKey.GetColumnName());
+            for (const auto& joinKey : join->JoinKeys) {
+                rightJoinKeys.insert(joinKey.Right.GetColumnName());
             }
 
             if (auto index = TryToFindBestIndexForRightSide(mainTableDesc, read->Columns, rightJoinKeys)) {
@@ -365,7 +371,7 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         prefix = std::move(keyPrefix);
     }
 
-    TVector<std::pair<TInfoUnit, TInfoUnit>> residualJoinKeys;
+    TVector<TJoinKey> residualJoinKeys;
     residualJoinKeys.reserve(keys->ResidualKeys.size());
     for (const auto& key : keys->ResidualKeys) {
         residualJoinKeys.emplace_back(key.LeftIU, key.RightIU);

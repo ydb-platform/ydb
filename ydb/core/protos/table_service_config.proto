@@ -593,7 +593,7 @@ message TTableServiceConfig {
 
     // Cluster default for window functions v2 (partition + sort via WideSort/Chopper instead of SqueezeToDict).
     // Overridable per query via PRAGMA ydb.WindowFunctionsV2.
-    optional bool EnableWindowFunctionsV2 = 148 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableWindowFunctionsV2 = 148 [default = true, (InvalidateCompileCache) = true];
 
     // When true, block hash join keys use IS NOT DISTINCT FROM (NULL matches NULL).
     optional bool EnableBlockHashJoinEqualNulls = 149 [default = false, (InvalidateCompileCache) = true];

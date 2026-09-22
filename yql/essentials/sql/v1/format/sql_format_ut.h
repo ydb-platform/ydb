@@ -373,6 +373,12 @@ Y_UNIT_TEST(DropTable) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(TtlTieringObjectKeyPrefix) {
+    TSetup setup;
+    setup.Run({{"alter table t set ttl interval('P1D') to external data source `eds`.`archive/data` on ts",
+                "ALTER TABLE t\n\tSET ttl interval('P1D') TO EXTERNAL DATA SOURCE `eds`.`archive/data` ON ts\n;\n"}});
+}
+
 Y_UNIT_TEST(CreateTable) {
     TCases cases = {
         {"create table user(user int32)", "CREATE TABLE user (\n\tuser int32\n);\n"},

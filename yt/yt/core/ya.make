@@ -45,7 +45,6 @@ SRCS(
     compression/stream.cpp
     compression/lz.cpp
     compression/lzma.cpp
-    compression/public.cpp
     compression/snappy.cpp
     compression/zlib.cpp
     compression/zstd.cpp

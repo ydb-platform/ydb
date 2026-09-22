@@ -12,8 +12,8 @@ TIntrusivePtr<TOpAggregate> MakeDomainProjection(const TIntrusivePtr<IOperator>&
 bool HasFreeCorrelation(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& correlatedColumns);
 bool IsNullableIU(const TIntrusivePtr<IOperator>& input, const TInfoUnit& iu);
 // Here we want to support semantics where null == null.
-TVector<std::pair<TInfoUnit, TInfoUnit>> MakeNullSafeJoinKeys(TIntrusivePtr<IOperator>& leftInput, TIntrusivePtr<IOperator>& rightInput,
-                                                              const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, TPositionHandle pos, TRBOContext& ctx,
+TVector<TJoinKey> MakeNullSafeJoinKeys(TIntrusivePtr<IOperator>& leftInput, TIntrusivePtr<IOperator>& rightInput,
+                                                              const TVector<TJoinKey>& joinKeys, TPositionHandle pos, TRBOContext& ctx,
                                                               TPlanProps& props, TInfoUnitSet& usedIUs);
 } // namespace NKqp
 } // namespace NKikimr

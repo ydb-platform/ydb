@@ -1,7 +1,7 @@
 #include "kqp_write_actor.h"
 
-#include "kqp_buffer_lookup_actor.h"
 #include "kqp_buffer_lock_actor.h"
+#include "kqp_buffer_lookup_actor.h"
 #include "kqp_write_actor_settings.h"
 #include "kqp_write_table.h"
 
@@ -16,6 +16,8 @@
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
@@ -24,10 +26,8 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
-#include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/public/write_id.h>
+#include <ydb/core/tx/tx.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -3262,12 +3262,6 @@ private:
             }
 
             const bool outOfMemory = GetFreeSpace() <= 0;
-            if (outOfMemory) {
-                WaitingForTableActor = true;
-            } else if (WaitingForTableActor) {
-                ResumeExecution();
-            }
-
             if (outOfMemory && !Settings.GetEnableStreamWrite()) {
                 RuntimeError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
@@ -3280,6 +3274,14 @@ private:
 
             if (!WriteTableActor->IsClosed() && (outOfMemory || CheckpointInProgress)) {
                 WriteTableActor->FlushBuffers();
+            }
+
+            // Flushing column batches can increase their accounted memory.
+            // Decide whether to resume only after that memory change.
+            if (GetFreeSpace() <= 0) {
+                WaitingForTableActor = true;
+            } else if (WaitingForTableActor) {
+                ResumeExecution();
             }
 
             if (Closed || outOfMemory || CheckpointInProgress) {
@@ -3657,6 +3659,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, HandleRollback);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleRollback);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleRollback);
 
@@ -5518,6 +5521,11 @@ public:
     void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
         Rollback(std::move(ev->TraceId), /* waitForResult */ true);
+    }
+
+    void HandleRollback(TEvKqpBuffer::TEvRollback::TPtr& ev) {
+        // A timeout can replace the executer while rollback is in progress.
+        ExecuterActorId = ev->Get()->ExecuterActorId;
     }
 
     void OnAllTasksFinised() {

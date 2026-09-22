@@ -100,17 +100,15 @@ private:
     // AddHostInFlight.
     std::optional<TRemoveHostInFlight> RemoveHostInFlight;
 
-    // Batch persisting of vchunk configs.
-    bool ExecutingUpdateVChunkConfig = false;
-    TVector<TPersistResultPromise> ExecutingUpdateVChunkConfigPromises;
-    TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests
-        PendingUpdateVChunkConfigRequests;
-
-    // Batch persisting of ahead and behind fields.
-    bool ExecutingUpdateDirtyMapState = false;
-    TVector<TPersistResultPromise> ExecutingUpdateDirtyMapStatePromises;
-    TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests
-        PendingUpdateDirtyMapStateRequests;
+    // Batch persisting of vChunk configs and behind fields. Both kinds of
+    // updates share one queue so a combined update cannot overwrite a newer
+    // dirty-map state.
+    bool ExecutingUpdateVChunkState = false;
+    TVector<TPersistResultPromise> ExecutingUpdateVChunkStatePromises;
+    TTxPartition::TUpdateVChunkState::TUpdateStateRequests
+        PendingUpdateVChunkStateRequests;
+    // Persisted vchunk config overrides, keyed by vchunk index.
+    TVChunkConfigs VChunkConfigs;
 
     // A bit is set after its vchunk is touched and is never cleared.
     TTouchedVChunks TouchedVChunks;
@@ -241,12 +239,20 @@ private:
         const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void EnqueueUpdateVChunkState(
+        TTxPartition::TUpdateVChunkState::TUpdateStateRequest request,
+        const NActors::TActorContext& ctx);
+
     void HandleSetVChunkTouched(
         const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceReady(
         const TEvPartitionDirectPrivate::TEvFastPathServiceReady::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleRenderMonPage(
+        const TEvPartitionDirectPrivate::TEvRenderMonPage::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceShutdown(

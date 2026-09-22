@@ -26,6 +26,10 @@ namespace NKikimr {
 ///   TEvChunkKeeperFreeResult when sent in-between these events
 /// - Fails if and only if chunk keeper is disabled
 ///
+/// 4. TEvChunkKeeperSpaceStat
+/// - Returns committed chunk counts grouped by subsystem
+/// - Returns ERROR when ChunkKeeper is disabled or terminating
+///
 /// Simultaneous allocation and/or deallocation requests in the same subsystem
 /// are not allowed
 ///
@@ -96,6 +100,29 @@ struct TEvChunkKeeperDiscoverResult : TEventLocal<TEvChunkKeeperDiscoverResult,
             TString errorReason = "");
 
     TString ToString() const;
+};
+
+struct TEvChunkKeeperSpaceStat
+    : TEventLocal<TEvChunkKeeperSpaceStat, TEvBlobStorage::EvChunkKeeperSpaceStat>
+{};
+
+struct TEvChunkKeeperSpaceStatResult
+    : TEventLocal<TEvChunkKeeperSpaceStatResult, TEvBlobStorage::EvChunkKeeperSpaceStatResult>
+{
+    struct TSubsystemStat {
+        ui32 Subsystem = 0;
+        ui64 CommittedChunkCount = 0;
+    };
+
+    NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
+    TString ErrorReason;
+    std::vector<TSubsystemStat> Subsystems;
+
+    TEvChunkKeeperSpaceStatResult() = default;
+    TEvChunkKeeperSpaceStatResult(NKikimrProto::EReplyStatus status, TString errorReason = {})
+        : Status(status)
+        , ErrorReason(std::move(errorReason))
+    {}
 };
 
 } // namespace NKikimr

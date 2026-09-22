@@ -17,16 +17,18 @@ class TComplexSchema;
 using TTupleSchema = TComplexSchema<EWireType::Tuple>;
 using TVariant8Schema = TComplexSchema<EWireType::Variant8>;
 using TVariant16Schema = TComplexSchema<EWireType::Variant16>;
+using TVariantVarSchema = TComplexSchema<EWireType::VariantVar>;
 using TRepeatedVariant8Schema = TComplexSchema<EWireType::RepeatedVariant8>;
 using TRepeatedVariant16Schema = TComplexSchema<EWireType::RepeatedVariant16>;
+using TRepeatedBlockVarSchema = TComplexSchema<EWireType::RepeatedBlockVar>;
 
 using TTupleSchemaPtr = std::shared_ptr<TTupleSchema>;
 using TVariant8SchemaPtr = std::shared_ptr<TVariant8Schema>;
 using TVariant16SchemaPtr = std::shared_ptr<TVariant16Schema>;
+using TVariantVarSchemaPtr = std::shared_ptr<TVariantVarSchema>;
 using TRepeatedVariant8SchemaPtr = std::shared_ptr<TRepeatedVariant8Schema>;
 using TRepeatedVariant16SchemaPtr = std::shared_ptr<TRepeatedVariant16Schema>;
-
-
+using TRepeatedBlockVarSchemaPtr = std::shared_ptr<TRepeatedBlockVarSchema>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -41,6 +43,7 @@ public:
     const TString& GetName() const;
 
     virtual const TSkiffSchemaList& GetChildren() const;
+    virtual i64 GetSize() const;
 
 protected:
     explicit TSkiffSchema(EWireType type);
@@ -71,10 +74,24 @@ class TComplexSchema
 public:
     explicit TComplexSchema(TSkiffSchemaList elements);
 
-    virtual const TSkiffSchemaList& GetChildren() const override;
+    const TSkiffSchemaList& GetChildren() const override;
 
 private:
     const TSkiffSchemaList Elements_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TStringFixedSchema
+    : public TSkiffSchema
+{
+public:
+    explicit TStringFixedSchema(i64 size);
+
+    i64 GetSize() const override;
+
+private:
+    const i64 Size_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -84,11 +101,14 @@ TString GetShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema);
 void PrintShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, IOutputStream* out);
 
 std::shared_ptr<TSimpleTypeSchema> CreateSimpleTypeSchema(EWireType type);
+std::shared_ptr<TStringFixedSchema> CreateStringFixedSchema(i64 size);
 std::shared_ptr<TTupleSchema> CreateTupleSchema(TSkiffSchemaList children);
 std::shared_ptr<TVariant8Schema> CreateVariant8Schema(TSkiffSchemaList children);
 std::shared_ptr<TVariant16Schema> CreateVariant16Schema(TSkiffSchemaList children);
+std::shared_ptr<TVariantVarSchema> CreateVariantVarSchema(TSkiffSchemaList children);
 std::shared_ptr<TRepeatedVariant8Schema> CreateRepeatedVariant8Schema(TSkiffSchemaList children);
 std::shared_ptr<TRepeatedVariant16Schema> CreateRepeatedVariant16Schema(TSkiffSchemaList children);
+std::shared_ptr<TRepeatedBlockVarSchema> CreateRepeatedBlockVarSchema(TSkiffSchemaList children);
 
 ////////////////////////////////////////////////////////////////////////////////
 

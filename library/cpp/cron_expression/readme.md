@@ -82,7 +82,7 @@ Other details
 Usage
 -----
 
-TCronExpression has a constuctor from cron expression. Then has two methods: CronNext(TInstant), CronPrev(TInstant), which returnes next (previous) appropriate date from given.
+TCronExpression has a constructor from cron expression. Then has two methods: CronNext(TInstant), CronPrev(TInstant), which returns next (previous) appropriate date from given.
 
 Examples of supported expressions
 ---------------------------------

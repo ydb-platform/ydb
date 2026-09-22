@@ -194,7 +194,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             return;
         }
 
-        ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleTraversal());
+        ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleForceTraversal());
     }
 };
 

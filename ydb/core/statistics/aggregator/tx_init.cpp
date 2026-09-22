@@ -294,7 +294,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->Schedule(Self->GetPropagateInterval(), new TEvPrivate::TEvPropagate());
 
         if (Self->EnableColumnStatistics) {
-            Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+            Self->StartTraversalScheduler();
             Self->Schedule(Self->AnalyzeDeadlinePeriod, new TEvPrivate::TEvAnalyzeDeadline());
         } else {
             YDB_LOG_WARN("TTxInit::Complete. EnableColumnStatistics=false",

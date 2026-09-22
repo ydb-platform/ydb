@@ -2772,12 +2772,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto relativeConfig = driver.GetConfig();
         relativeConfig.SetDatabase("tenant");
         auto relativeDriver = TDriver(relativeConfig);
-        CreateRestoreLambda(relativeDriver, pathToBackup, "./restoration/point")();
+        CreateRestoreLambda(relativeDriver, pathToBackup, "restoration/point")();
         CompareResults(
             ExecuteQuery(session, "SELECT * FROM `/Root/tenant/view`;"),
             ExecuteQuery(session, "SELECT * FROM `/Root/tenant/restoration/point/view`;")
         );
-        CreateRestoreLambda(relativeDriver, pathToBackup, "./")();
+        CreateRestoreLambda(relativeDriver, pathToBackup, "/Root/tenant")();
 
         NDump::TClient backupClient(relativeDriver);
         UNIT_ASSERT_VALUES_EQUAL(backupClient.Restore(pathToBackup, "").GetStatus(), EStatus::BAD_REQUEST);

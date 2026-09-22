@@ -45,15 +45,13 @@ namespace NConsoleClient {
     }
 
     void AdjustPath(TString& path, const TClientCommand::TConfig& config) {
-        if (!path.StartsWith('/') && config.Path) {
-            path = config.Path + '/' + path;
+        const auto& base = config.Path ? config.Path : config.Database;
+        if (!path.StartsWith('/') && (config.Path || base.StartsWith('/'))) {
+            path = base + '/' + path;
         }
 
-        // The server knows the cluster root and resolves database-relative paths.
+        // Only the server can resolve a relative database against the cluster root.
         path = NormalizePath(path);
-        while (path.StartsWith("./")) {
-            path = path.substr(2);
-        }
     }
 
 }

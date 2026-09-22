@@ -152,7 +152,9 @@ private:
         }
 
         const TString database = RequestEvent->GetDatabaseName().GetOrElse("");
-        KesusPath = RequestEvent->GetDatabaseRelativePath(StartRequest->Record.session_start().path());
+        const auto& path = StartRequest->Record.session_start().path();
+        RequestEvent->CountRequestPath(path);
+        KesusPath = RequestEvent->GetDatabaseRelativePath(path);
 
         auto resolve = MakeHolder<TEvKesusProxy::TEvResolveKesusProxy>(database, KesusPath);
         if (!Send(MakeKesusProxyServiceId(), resolve.Release())) {
@@ -308,6 +310,7 @@ private:
                 return;
             }
             case TRequest::kSessionStart: {
+                RequestEvent->CountRequestPath(request.session_start().path());
                 return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Session cannot be started twice");
             }
             case TRequest::kSessionStop: {

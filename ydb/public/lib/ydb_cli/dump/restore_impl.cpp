@@ -458,14 +458,11 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
             return result;
         }
 
-        const auto resolvePath = [](TStringBuf base, TStringBuf path) -> TString {
-            if (path.StartsWith('/')) {
-                return TString(path);
-            }
-            return Join('/', base, path);
-        };
-        const TString databasePath = resolvePath(ClusterRootPath, DriverConfig.GetDatabase());
-        dbRestorePath = resolvePath(databasePath, dbRestorePath);
+        TString databasePath(DriverConfig.GetDatabase());
+        if (!databasePath.StartsWith('/')) {
+            databasePath = Join('/', ClusterRootPath, databasePath);
+        }
+        dbRestorePath = Join('/', databasePath, dbRestorePath);
     }
     dbRestorePath = NConsoleClient::NormalizePath(dbRestorePath);
     if (dbRestorePath.empty()) {

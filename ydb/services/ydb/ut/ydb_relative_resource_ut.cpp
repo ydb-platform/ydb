@@ -1,13 +1,16 @@
 #include "../ydb_common_ut.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -116,6 +119,76 @@ void AssertReadTable(NYdb::NTable::TSession& session, const TString& path, const
 } // namespace
 
 Y_UNIT_TEST_SUITE(YdbRelativeResourcePaths) {
+
+Y_UNIT_TEST_TWIN(FlagControlsPathsButNotMonitoring, enableRelativePaths) {
+    NKikimrConfig::TAppConfig config;
+    config.MutableFeatureFlags()->SetEnableRelativePaths(enableRelativePaths);
+    TKikimrWithGrpcAndRootSchema server(config);
+    const TString endpoint = TStringBuilder() << "localhost:" << server.GetPort();
+    TDriver driver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root"));
+    NYdb::NScheme::TSchemeClient schemeClient(driver);
+    AssertSuccess(schemeClient.MakeDirectory("/Root/path").GetValueSync());
+
+    auto stub = Ydb::Scheme::V1::SchemeService::NewStub(
+        grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials()));
+    for (const TStringBuf path : {TStringBuf("/Root/path"), TStringBuf("Root/path")}) {
+        grpc::ClientContext context;
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+        context.AddMetadata("x-ydb-database", "/Root");
+        Ydb::Scheme::DescribePathRequest request;
+        request.set_path(TString(path));
+        Ydb::Scheme::DescribePathResponse response;
+        const auto status = stub->DescribePath(&context, request, &response);
+        UNIT_ASSERT_C(status.ok(), status.error_message());
+        const auto expected = enableRelativePaths && !path.StartsWith('/')
+            ? Ydb::StatusIds::SCHEME_ERROR : Ydb::StatusIds::SUCCESS;
+        UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), expected, response.DebugString());
+    }
+    auto methodCounters = GetServiceCounters(server.GetServer().GetRuntime()->GetAppData().Counters, "grpc")
+        ->GetSubgroup("method", "Ydb.Scheme.V1.SchemeService/DescribePath");
+    UNIT_ASSERT_VALUES_EQUAL(methodCounters
+        ->GetNamedCounter("name", "api.grpc.request.relative_path_count", true)->Val(), 1);
+}
+
+Y_UNIT_TEST_TWIN(RateLimiterCoordinationPathsRespectFlag, enableRelativePaths) {
+    NKikimrConfig::TAppConfig config;
+    config.MutableFeatureFlags()->SetEnableRelativePaths(enableRelativePaths);
+    TKikimrWithGrpcAndRootSchema server(config);
+    const TString endpoint = TStringBuilder() << "localhost:" << server.GetPort();
+    TDriver driver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root"));
+    NCoordination::TClient coordinationClient(driver);
+    AssertSuccess(coordinationClient.CreateNode("/Root/limiter").GetValueSync());
+    NRateLimiter::TRateLimiterClient rateLimiterClient(driver);
+
+    for (const std::string path : {"/Root/limiter", "limiter"}) {
+        const auto created = rateLimiterClient.CreateResource(path, "quota",
+            NRateLimiter::TCreateResourceSettings().MaxUnitsPerSecond(1000)).GetValueSync();
+        if (!enableRelativePaths && path == "limiter") {
+            UNIT_ASSERT_VALUES_EQUAL(created.GetStatus(), EStatus::BAD_REQUEST);
+            continue;
+        }
+        AssertSuccess(created);
+        AssertSuccess(rateLimiterClient.AlterResource(path, "quota",
+            NRateLimiter::TAlterResourceSettings().MaxUnitsPerSecond(2000)).GetValueSync());
+        const auto described = rateLimiterClient.DescribeResource(path, "quota").GetValueSync();
+        AssertSuccess(described);
+        UNIT_ASSERT_VALUES_EQUAL(described.GetResourcePath(), "quota");
+        const auto listed = rateLimiterClient.ListResources(path, "", NRateLimiter::TListResourcesSettings().Recursive(true)).GetValueSync();
+        AssertSuccess(listed);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetResourcePaths().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetResourcePaths().front(), "quota");
+        AssertSuccess(rateLimiterClient.AcquireResource(path, "quota",
+            NRateLimiter::TAcquireResourceSettings().Amount(1)
+                .OperationTimeout(TDuration::Seconds(30)).CancelAfter(TDuration::Seconds(20))).GetValueSync());
+        AssertSuccess(rateLimiterClient.DropResource(path, "quota").GetValueSync());
+    }
+
+    auto methodCounters = GetServiceCounters(server.GetServer().GetRuntime()->GetAppData().Counters, "grpc")
+        ->GetSubgroup("method", "Ydb.RateLimiter.V1.RateLimiterService/CreateResource");
+    // The relative request is counted even when the feature is off and it is rejected.
+    UNIT_ASSERT_VALUES_EQUAL(methodCounters
+        ->GetNamedCounter("name", "api.grpc.request.relative_path_count", true)->Val(), 1);
+}
 
 Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     TKikimrWithGrpcAndRootSchema server({}, {}, {}, false, nullptr, [](auto& settings) {
@@ -454,7 +527,7 @@ Y_UNIT_TEST_TWIN(NestedDatabaseResourcePaths, RepeatedRoot) {
         TDriver spellingDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase(spelling)
             .SetDiscoveryMode(EDiscoveryMode::Sync));
         NYdb::NScheme::TSchemeClient spellingScheme(spellingDriver);
-        AssertSuccess(spellingScheme.ListDirectory(".").GetValueSync());
+        AssertSuccess(spellingScheme.ListDirectory("mydb").GetValueSync());
         NYdb::NTable::TTableClient spellingTable(spellingDriver);
         for (ui32 iteration = 0; iteration < 3; ++iteration) {
             const auto tableSessionResult = spellingTable.CreateSession().GetValueSync();

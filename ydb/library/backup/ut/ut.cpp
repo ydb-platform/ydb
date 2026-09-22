@@ -732,7 +732,6 @@ Y_UNIT_TEST(PathParseTest) {
 
 Y_UNIT_TEST(BackupMetadataPaths) {
     for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
-        {".", "/Root/mydb"},
         {"", "/Root/mydb"},
         {"table", "/Root/mydb/table"},
         {"mydb/table", "/Root/mydb/mydb/table"},
@@ -744,7 +743,7 @@ Y_UNIT_TEST(BackupMetadataPaths) {
     }) {
         UNIT_ASSERT_VALUES_EQUAL_C(ResolveBackupPath("/Root/mydb", path), expected, path);
     }
-    UNIT_ASSERT_VALUES_EQUAL(ResolveBackupPath("/Root/Root/mydb", "."), "/Root/Root/mydb");
+    UNIT_ASSERT_VALUES_EQUAL(ResolveBackupPath("/Root/Root/mydb", ""), "/Root/Root/mydb");
     UNIT_CHECK_GENERATED_EXCEPTION(ResolveBackupPath("mydb", "table"), yexception);
 }
 

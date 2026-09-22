@@ -397,7 +397,8 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
         topicConverterFactory
     );
 
-    auto topicsToConverter = topicHandler->GetReadTopicsList(topicsToResolve, false, Context->DatabasePath);
+    auto topicsToConverter = topicHandler->GetReadTopicsList(topicsToResolve, false, Context->DatabasePath,
+        NKikimr::AppData()->FeatureFlags.GetEnableRelativePaths());
     if (!topicsToConverter.IsValid) {
         YDB_LOG_CRIT("Commit offsets failed. topicsToConverter is not valid",
             {LogPrefix()});

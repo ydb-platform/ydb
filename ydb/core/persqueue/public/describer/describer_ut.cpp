@@ -280,11 +280,11 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         ExecuteDDL(*setup, "CREATE TOPIC topic1");
 
         auto& runtime = setup->GetRuntime();
-        StartDescribe(runtime, {"/Root//topic1/"});
+        StartDescribe(runtime, {"/Root/topic1"});
         auto topics = WaitResult(runtime);
 
-        UNIT_ASSERT(topics.contains("/Root//topic1/"));
-        auto& topicInfo = topics["/Root//topic1/"];
+        UNIT_ASSERT(topics.contains("/Root/topic1"));
+        auto& topicInfo = topics["/Root/topic1"];
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/topic1");
     }

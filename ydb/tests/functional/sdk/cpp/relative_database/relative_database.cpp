@@ -100,7 +100,7 @@ TEST(RelativeDatabase, RepeatedSessionsAndSlashlessResources) {
         SCOPED_TRACE(spelling);
         auto spellingDriver = makeDriver(spelling);
         NScheme::TSchemeClient spellingScheme(spellingDriver);
-        Success(spellingScheme.ListDirectory("."));
+        Success(spellingScheme.ListDirectory(root));
         NTable::TTableClient spellingTable(spellingDriver);
         for (size_t iteration = 0; iteration < 3; ++iteration) {
             auto session = Success(spellingTable.CreateSession()).GetSession();

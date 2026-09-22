@@ -211,10 +211,8 @@ Y_UNIT_TEST_SUITE(Path) {
             {"mydb", "/ru/mydb"},
             {"ru/mydb", "/ru/ru/mydb"},
             {"ru", "/ru/ru"},
-            {"mydb//nested/", "/ru/mydb/nested"},
             {"/ru/mydb", "/ru/mydb"},
             {"/other/mydb", "/other/mydb"},
-            {"//other//mydb/", "//other//mydb/"},
             {"/", "/"},
             {"", ""},
         };
@@ -261,11 +259,6 @@ Y_UNIT_TEST_SUITE(Path) {
     Y_UNIT_TEST(ResolveResourcePath) {
         for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
             {"dir/table", "/Root/mydb/dir/table"},
-            {"./dir/table", "/Root/mydb/dir/table"},
-            {"./Root/table", "/Root/mydb/Root/table"},
-            {"././Root/table", "/Root/mydb/Root/table"},
-            {"./", "/Root/mydb"},
-            {"./.", "/Root/mydb"},
             {"/Root/mydb/table", "/Root/mydb/table"},
             {"Root/mydb/table", "/Root/mydb/Root/mydb/table"},
             {"mydb/table", "/Root/mydb/mydb/table"},
@@ -274,10 +267,8 @@ Y_UNIT_TEST_SUITE(Path) {
             {"Root/mydb2/table", "/Root/mydb/Root/mydb2/table"},
             {"Root/other/table", "/Root/mydb/Root/other/table"},
             {"Root", "/Root/mydb/Root"},
-            {"Root//mydb/dir//table/", "/Root/mydb/Root/mydb/dir/table"},
             {"/Root/mydb/Root/table", "/Root/mydb/Root/table"},
             {"/Other/table", "/Other/table"},
-            {".", "/Root/mydb"},
             {"", ""},
         }) {
             const auto result = ResolvePathToDatabase("/Root/mydb", path);
@@ -310,10 +301,6 @@ Y_UNIT_TEST_SUITE(Path) {
 
     Y_UNIT_TEST(ResolveResourcePathWithoutDatabase) {
         UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "dir/table"), "/dir/table");
-        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "./dir/table"), "/./dir/table");
-        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "./Root/table"), "/./Root/table");
-        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "./"), "/.");
-        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "./."), "/./.");
         UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "Root/table"), "/Root/table");
         UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "/Root/table"), "/Root/table");
         UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", ""), "");

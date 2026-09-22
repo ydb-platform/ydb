@@ -388,21 +388,23 @@ template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
     InitSpan = GenerateInitSpan();
     THolder<TEvWriteInit> event(ev->Release());
+    const auto& init = event->Request.init_request();
+    TString topic_path = [&init]() {
+        if constexpr (Protocol == EProtocol::PQv1) {
+            return init.topic();
+        } else {
+            return init.path();
+        }
+    }();
+    Request->CountRequestPath(topic_path);
 
     if (State != ES_CREATED) {
         //answer error
         CloseSession("got second init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
-    InitRequest = event->Request.init_request();
+    InitRequest = init;
 
-    TString topic_path = [this]() {
-        if constexpr (Protocol == EProtocol::PQv1) {
-            return InitRequest.topic();
-        } else {
-            return InitRequest.path();
-        }
-    }();
     if (topic_path.empty()) {
         CloseSession("no topic in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
@@ -441,7 +443,8 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
         }
     }
 
-    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"));
+    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"),
+        AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
     if (!DiscoveryConverter->IsValid()) {
         CloseSession(
                 TStringBuilder() << "topic " << topic_path << " could not be recognized: " << DiscoveryConverter->GetReason(),

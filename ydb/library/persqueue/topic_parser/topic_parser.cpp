@@ -113,12 +113,12 @@ TString MakeConsumerPath(const TString& consumer) {
     return res;
 }
 
-TDiscoveryConverterPtr TDiscoveryConverter::ForFstClass(const TString& topic, const TString& database) {
+TDiscoveryConverterPtr TDiscoveryConverter::ForFstClass(const TString& topic, const TString& database, bool enableRelativePaths) {
     auto* res = new TDiscoveryConverter();
     res->FstClass = true;
     res->Database = database;
     res->OriginalTopic = topic;
-    res->BuildFstClassNames();
+    res->BuildFstClassNames(enableRelativePaths);
     return TDiscoveryConverterPtr(res);
 }
 
@@ -201,7 +201,8 @@ TDiscoveryConverter::TDiscoveryConverter(bool firstClass,
     if (FstClass) {
         // No legacy names required;
         OriginalTopic = pqTabletConfig.GetTopicPath();
-        BuildFstClassNames();
+        // Persisted tablet paths are not client input; retain their legacy interpretation.
+        BuildFstClassNames(false);
         return;
     } else {
         BuildForFederation(*Database, path);
@@ -218,7 +219,7 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
         // No legacy names required;
         OriginalTopic = topicPath;
         Database = databaseBuf;
-        BuildFstClassNames();
+        BuildFstClassNames(false);
         return;
     }
     bool isRootDb = databaseBuf.empty();
@@ -292,9 +293,24 @@ TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
     return TTopicConverterPtr(res);
 }
 
-void TDiscoveryConverter::BuildFstClassNames() {
-    PrimaryPath = NKikimr::ResolvePathToDatabase(
-        NKikimr::CanonizePath(Database.GetOrElse(TString())), OriginalTopic);
+void TDiscoveryConverter::BuildFstClassNames(bool enableRelativePaths) {
+    if (enableRelativePaths) {
+        PrimaryPath = NKikimr::ResolvePathToDatabase(
+            NKikimr::CanonizePath(Database.GetOrElse(TString())), OriginalTopic);
+    } else {
+        TStringBuf normTopic(OriginalTopic);
+        normTopic.SkipPrefix("/");
+        if (Database.Defined()) {
+            TStringBuf normDb(*Database);
+            normDb.SkipPrefix("/");
+            normDb.ChopSuffix("/");
+            normTopic.SkipPrefix(normDb);
+            normTopic.SkipPrefix("/");
+            PrimaryPath = NKikimr::JoinPath({TString(normDb), TString(normTopic)});
+        } else {
+            PrimaryPath = TString(normTopic);
+        }
+    }
     if (!Database.Defined()) {
         Database = "";
     }
@@ -884,11 +900,11 @@ void TTopicsListController::UpdateClusters(const TVector<TString>& clusters) {
 }
 
 TTopicsToConverter TTopicsListController::GetReadTopicsList(
-        const THashSet<TString>& clientTopics, bool onlyLocal, const TString& database) const
+        const THashSet<TString>& clientTopics, bool onlyLocal, const TString& database, bool enableRelativePaths) const
 {
     TTopicsToConverter result;
     auto PutTopic = [&] (const TString& topic, const TString& dc) {
-        auto converter = ConverterFactory->MakeDiscoveryConverter(topic, {}, dc, database);
+        auto converter = ConverterFactory->MakeDiscoveryConverter(topic, {}, dc, database, enableRelativePaths);
         if (!converter->IsValid()) {
             result.IsValid = false;
             result.Reason = TStringBuilder() << "Invalid topic format in init request: '" << converter->GetOriginalTopic()
@@ -916,10 +932,10 @@ TTopicsToConverter TTopicsListController::GetReadTopicsList(
 }
 
 TDiscoveryConverterPtr TTopicsListController::GetWriteTopicConverter(
-        const TString& clientName, const TString& database
+        const TString& clientName, const TString& database, bool enableRelativePaths
 ) {
     return ConverterFactory->MakeDiscoveryConverter(clientName, true,
-                                                    ConverterFactory->GetLocalCluster(), database);
+                                                    ConverterFactory->GetLocalCluster(), database, enableRelativePaths);
 }
 
 TConverterFactoryPtr TTopicsListController::GetConverterFactory() const {

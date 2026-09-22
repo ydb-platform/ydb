@@ -64,7 +64,8 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
         topicsToResolve.insert(t.path());
     }
     auto topicsList = TopicsHandler.GetReadTopicsList(
-            topicsToResolve, readOnlyLocal, Request().GetDatabaseName().GetOrElse(TString())
+            topicsToResolve, readOnlyLocal, Request().GetDatabaseName().GetOrElse(TString()),
+            AppData(ctx)->FeatureFlags.GetEnableRelativePaths()
     );
     if (!topicsList.IsValid) {
         return AnswerError(

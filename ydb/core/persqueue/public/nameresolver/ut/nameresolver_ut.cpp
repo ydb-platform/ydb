@@ -227,7 +227,6 @@ Y_UNIT_TEST_F(FccResourcePathsUseDatabaseAndLeadingSlash, TNameResolverFixture) 
             {"/Root/other/topic", "/Root/other/topic"},
             {"/Root2/topic", "/Root2/topic"},
             {"/Root/LbCommunal/account/topic", "/Root/LbCommunal/account/topic"},
-            {".", canonicalDatabase},
         };
         for (const auto& [name, expected] : cases) {
             const auto resolved = OkFull(ResolveName(database, name));
@@ -235,6 +234,14 @@ Y_UNIT_TEST_F(FccResourcePathsUseDatabaseAndLeadingSlash, TNameResolverFixture) 
             UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, canonicalDatabase);
         }
     }
+}
+
+Y_UNIT_TEST_F(DisabledRelativePathsPreserveLegacyFccNames, TNameResolverFixture) {
+    ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(false);
+    for (const TStringBuf name : {"topic", "Root/Db/topic", "/Root/Db/topic"}) {
+        UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, name)), "/Root/Db/topic");
+    }
+    UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/other/topic")), "/Root/Db/other/topic");
 }
 
 Y_UNIT_TEST_F(FccTreatsConfiguredRootNameAsRelative, TNameResolverFixture) {

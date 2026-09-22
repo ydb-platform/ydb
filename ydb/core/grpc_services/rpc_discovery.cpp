@@ -47,8 +47,11 @@ public:
     void Bootstrap() {
         // request endpoints
         const TString& database = Request->GetProtoRequest()->database();
+        const TString resolvedDatabase = AppData()->FeatureFlags.GetEnableRelativePaths()
+            ? PrependClusterRootIfNeeded(TString("/") + AppData()->DomainsInfo->GetDomain()->Name, database)
+            : database;
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
-            PrependClusterRootIfNeeded(TString("/") + AppData()->DomainsInfo->GetDomain()->Name, database),
+            resolvedDatabase,
             Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
             SelfId(), CacheId));
 

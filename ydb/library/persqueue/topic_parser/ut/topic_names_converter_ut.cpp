@@ -68,6 +68,18 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
+    Y_UNIT_TEST_TWIN(FirstClassPathsRespectFeatureFlag, enableRelativePaths) {
+        TTopicNamesConverterFactory factory(true, "/Root/PQ", "");
+        auto converter = factory.MakeDiscoveryConverter("Root/Db/topic", {}, "", "/Root/Db", enableRelativePaths);
+        UNIT_ASSERT_C(converter->IsValid(), converter->GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(),
+            enableRelativePaths ? "/Root/Db/Root/Db/topic" : "/Root/Db/topic");
+        converter = factory.MakeDiscoveryConverter("/other/topic", {}, "", "/Root/Db", enableRelativePaths);
+        UNIT_ASSERT_C(converter->IsValid(), converter->GetReason());
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(),
+            enableRelativePaths ? "/other/topic" : "/Root/Db/other/topic");
+    }
+
     Y_UNIT_TEST(FullLegacyNames) {
 
         TConverterTestWrapper wrapper(false, "/Root/PQ", TString("dc1"));
@@ -376,6 +388,11 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
         UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetTopicForSrcIdHash(), "lb/database/my-stream");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "my-stream");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "my-stream");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "/lb/database/my-stream");
+        // Persisted full paths without '/' must not become database-relative.
+        pqConfig.SetTopicPath("lb/database/my-stream");
+        wrapper.SetConverter(pqConfig);
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/lb/database/my-stream");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "/lb/database/my-stream");
     }
     Y_UNIT_TEST(PathFromDiscoveryConverter) {

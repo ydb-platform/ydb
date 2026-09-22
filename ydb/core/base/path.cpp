@@ -175,11 +175,11 @@ bool IsPathUnderDatabase(TStringBuf database, TStringBuf path) {
 
 } // namespace
 
-TString PrependClusterRootIfNeeded(TStringBuf clusterRoot, TStringBuf path) {
-    if (path.empty() || path.StartsWith('/')) {
-        return TString{path};
+TString PrependClusterRootIfNeeded(TStringBuf domainRoot, TStringBuf databasePath) {
+    if (databasePath.empty() || databasePath.StartsWith('/')) {
+        return TString{databasePath};
     }
-    return NormalizePathJoin(clusterRoot, path);
+    return TStringBuilder() << domainRoot << '/' << databasePath;
 }
 
 TString NormalizePath(TStringBuf database, TStringBuf path) {
@@ -200,12 +200,7 @@ TString ResolvePathToDatabase(TStringBuf database, TStringBuf path) {
     if (path.empty() || path.StartsWith('/')) {
         return TString{path};
     }
-    while (!database.empty() && path.SkipPrefix("./")) {
-    }
-    if (path == "." && !database.empty()) {
-        return CanonizePath(TString{database});
-    }
-    return NormalizePathJoin(database, path);
+    return TStringBuilder() << database << '/' << path;
 }
 
 ui32 CanonizedPathLen(const TVector<TString>& path) {

@@ -334,7 +334,7 @@ std::expected<TResolvedName, TString> ResolveName(
     const TStringBuf databaseNorm = StripSlashes(database);
     const TStringBuf lbRoot = StripSlashes(pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot());
 
-    if (!isFederation) {
+    if (!isFederation && AppData()->FeatureFlags.GetEnableRelativePaths()) {
         // Resolve the original path before stripping any database or federation prefix.
         // Only paths starting with '/' are absolute.
         TString path = name.empty()
@@ -347,7 +347,7 @@ std::expected<TResolvedName, TString> ResolveName(
     const TStringBuf pqPrefix = StripSlashes(pqConfig.GetRoot());
 
     // Reject trailing '/' before stripping PQ/database prefixes (exact PQ root is "/").
-    if (topicName.EndsWith("/")) {
+    if (isFederation && topicName.EndsWith("/")) {
         return Fail("Invalid topic path or trailing '/'");
     }
 
@@ -357,7 +357,7 @@ std::expected<TResolvedName, TString> ResolveName(
     // /Root/test_db/topic with PQ Root=/Root becomes test_db/topic and rejoins as
     // /Root/test_db/test_db/topic.
     bool strippedPqPrefix = false;
-    const bool underPq = !pqPrefix.empty() && IsPathPrefix(topicName, pqPrefix);
+    const bool underPq = isFederation && !pqPrefix.empty() && IsPathPrefix(topicName, pqPrefix);
     const bool databaseUnderPq = !databaseNorm.empty()
         && databaseNorm != pqPrefix
         && IsPathPrefix(databaseNorm, pqPrefix);
@@ -390,6 +390,10 @@ std::expected<TResolvedName, TString> ResolveName(
     auto wrap = [&](TString path) {
         return MakeResolved(std::move(path), database, databaseNorm, lbRoot, isFederation);
     };
+
+    if (!isFederation) {
+        return wrap(JoinWithDatabase(database, databaseNorm, topicName));
+    }
 
     // Federation mode.
     if (!BasicNameChecks(name)) {

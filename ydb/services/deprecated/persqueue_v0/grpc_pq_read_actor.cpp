@@ -764,7 +764,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         }
     }
     TopicsList = TopicsHandler.GetReadTopicsList(
-            topicsToResolve, ReadOnlyLocal, Database
+            topicsToResolve, ReadOnlyLocal, Database, AppData(ctx)->FeatureFlags.GetEnableRelativePaths()
     );
     if (!TopicsList.IsValid) {
         return CloseSession(

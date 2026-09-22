@@ -1,6 +1,7 @@
 #pragma once
 
 #include "iface.h"
+#include "request_paths.h"
 
 #include <grpcpp/support/byte_buffer.h>
 #include <grpcpp/support/slice.h>
@@ -34,6 +35,9 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/stream/str.h>
+
+#include <atomic>
+#include <mutex>
 
 namespace NKikimrScheme {
     class TEvDescribeSchemeResult;
@@ -342,11 +346,10 @@ public:
 
 class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
+    virtual void CountRequestPath(TStringBuf) const {}
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
-    TString GetDatabaseRelativePath(TStringBuf path) const {
-        return NKikimr::ResolvePathToDatabase(GetDatabaseName().GetOrElse(TString()), path);
-    }
+    TString GetDatabaseRelativePath(TStringBuf path) const;
 };
 
 class IRequestCtxBase
@@ -487,6 +490,9 @@ private:
 public:
     virtual ~IRequestProxyCtx() = default;
 
+    const TMaybe<TString> GetDatabaseName() const override;
+    void InitRequestPaths(const TString& clusterRoot, bool relativePathsEnabled, NMonitoring::TDynamicCounterPtr counters);
+
     // auth
     virtual const TMaybe<TString> GetYdbToken() const = 0;
     virtual void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) = 0;
@@ -513,6 +519,8 @@ public:
     virtual bool Validate(TString& error) = 0;
 
     // counters
+    void InitPathCounters(NMonitoring::TDynamicCounterPtr counters);
+    void CountRequestPath(TStringBuf path) const override;
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
     virtual IGRpcProxyCounters::TPtr GetCounters() const = 0;
     virtual void UseDatabase(const TString& database) = 0;
@@ -547,6 +555,19 @@ public:
     }
 
     virtual TString GetRpcMethodName() const = 0;
+
+protected:
+    TMaybe<TString> ResolveDatabaseName(const TMaybe<TString>& database) const;
+    virtual void CountRequestBodyPaths() const {}
+
+private:
+    TString ClusterRoot_;
+    bool RelativePathsEnabled_ = false;
+    std::atomic<bool> PathsInitialized_{false};
+    mutable std::once_flag DatabaseNameOnce_;
+    mutable TMaybe<TString> ResolvedDatabaseName_;
+    NMonitoring::TDynamicCounters::TCounterPtr RelativePathCounter_;
+    mutable std::atomic<bool> RelativePathCounted_{false};
 };
 
 // Request context
@@ -947,11 +968,6 @@ public:
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
-        const auto database = ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
-        return database && !database->empty() && DatabaseName_ ? DatabaseName_ : database;
-    }
-
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
         auto& s = Ctx_->GetAuthState();
         s.State = state;
@@ -1016,7 +1032,6 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
-        DatabaseName_ = database;
         Ctx_->UseDatabase(database);
     }
 
@@ -1153,7 +1168,6 @@ public:
 
 private:
     TIntrusivePtr<IStreamCtx> Ctx_;
-    TMaybe<TString> DatabaseName_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager_;
@@ -1301,11 +1315,6 @@ public:
         return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
-        const auto database = ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
-        return database && !database->empty() && DatabaseName ? DatabaseName : database;
-    }
-
     TString GetRpcMethodName() const override {
         return Ctx_->GetRpcMethodName();
     }
@@ -1385,12 +1394,20 @@ public:
         Counters = counters;
     }
 
+    void CountRequestBodyPaths() const override {
+        if (const auto* request = dynamic_cast<const TRequest*>(GetRequest())) {
+            if constexpr (std::is_same_v<TReq, Ydb::Discovery::ListEndpointsRequest>) {
+                this->CountRequestPath(request->database());
+            }
+            CountSchemaRequestPaths(*this, *request);
+        }
+    }
+
     IGRpcProxyCounters::TPtr GetCounters() const override {
         return Counters;
     }
 
     void UseDatabase(const TString& database) override {
-        DatabaseName = database;
         Ctx_->UseDatabase(database);
     }
 
@@ -1639,7 +1656,6 @@ protected:
     NWilson::TSpan Span_;
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
-    TMaybe<TString> DatabaseName;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager;
@@ -2065,7 +2081,7 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        return Database ? TMaybe<TString>(Database) : Nothing();
+        return ResolveDatabaseName(Database ? TMaybe<TString>(Database) : Nothing());
     }
 
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {

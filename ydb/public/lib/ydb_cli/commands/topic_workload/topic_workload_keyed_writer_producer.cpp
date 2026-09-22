@@ -41,7 +41,7 @@ std::string TTopicWorkloadKeyedWriterProducer::GetKey() const
 }
 
 void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
-                                             std::optional<NYdb::NTable::TTransaction> transaction)
+                                             NYdb::NTable::TTransaction* transaction)
 {
     Y_ASSERT(Producer_);
 
@@ -57,8 +57,8 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
     writeMessage.CreateTimestamp(enqueueTimestamp);
     writeMessage.MessageMeta(NYdb::NConsoleClient::NTopicWorkloadWriterInternal::MakeKeyMeta(key));
 
-    if (transaction.has_value()) {
-        writeMessage.Tx(transaction.value());
+    if (transaction) {
+        writeMessage.Tx(*transaction);
     }
 
     auto result = Producer_->Write(std::move(writeMessage));

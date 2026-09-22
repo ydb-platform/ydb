@@ -27,7 +27,7 @@ void TTopicWorkloadWriterProducer::SetWriteSession(std::shared_ptr<NYdb::NTopic:
 }
 
 void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
-                                        std::optional<NYdb::NTable::TTransaction> transaction) {
+                                        NYdb::NTable::TTransaction* transaction) {
     Y_ASSERT(WriteSession_);
 
     TString data = GetGeneratedMessage();
@@ -40,8 +40,8 @@ void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
     writeMessage.CreateTimestamp(createTimestamp);
     writeMessage.MessageMeta(std::move(meta));
 
-    if (transaction.has_value()) {
-        writeMessage.Tx(transaction.value());
+    if (transaction) {
+        writeMessage.Tx(*transaction);
     }
 
     WriteSession_->Write(std::move(*ContinuationToken_), std::move(writeMessage));

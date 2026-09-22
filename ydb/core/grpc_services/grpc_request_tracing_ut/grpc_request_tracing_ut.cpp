@@ -1,6 +1,5 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_services/grpc_request_check_actor.h>
@@ -788,8 +787,8 @@ Y_UNIT_TEST_TWIN(DatabaseAndResourceCountersAreIndependent, relativePathsEnabled
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), database);
             ctx->CounterBlock = NGRpcService::CreateCounterCb(counters, nullptr)("table", "RenameTables");
-            TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {},
-                {.AppData = &runtime.GetAppData()});
+            TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+            request.InitRootPath(&runtime.GetAppData());
             Ydb::Table::RenameTablesRequest proto;
             auto* item = proto.add_tables();
             item->set_source_path(path);
@@ -922,6 +921,8 @@ Y_UNIT_TEST_TWIN(InternalDatabaseResolutionRespectsFlag, relativePathsEnabled) {
     NGRpcService::TRefreshTokenGenericRequest emptyRefresh("", "", "", "", {});
     const TString expected = relativePathsEnabled ? "/Root/mydb" : "mydb";
     runtime.GetAppData().FeatureFlags.SetEnableRelativePaths(!relativePathsEnabled);
+    refresh.InitRootPath(&runtime.GetAppData());
+    emptyRefresh.InitRootPath(&runtime.GetAppData());
     UNIT_ASSERT_VALUES_EQUAL(request->GetDatabaseName().GetRef(), expected);
     // Refresh keeps the database selected by the original stream, even if the flag changed.
     UNIT_ASSERT_VALUES_EQUAL(refresh.GetDatabaseName().GetRef(), "Root/mydb");

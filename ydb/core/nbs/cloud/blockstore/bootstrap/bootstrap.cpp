@@ -93,6 +93,10 @@ void TNbsService::Stop()
     }
     VhostServer->Stop();
     Scheduler->Stop();
+    // Join NBS threads while TActorSystem is still alive. The pool used to
+    // live until static destruction, so a queued flush could log through the
+    // freed actor system (YDBBUGS-790).
+    ExecutorPool.Stop();
 }
 
 const NKikimrConfig::TNbsConfig& TNbsService::GetConfig() const

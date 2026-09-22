@@ -18,6 +18,11 @@ TExecutorPool::TExecutorPool(ui32 executorCount)
 
 TExecutorPool::~TExecutorPool()
 {
+    Stop();
+}
+
+void TExecutorPool::Stop()
+{
     for (const auto& executor: Executors) {
         executor->Stop();
     }

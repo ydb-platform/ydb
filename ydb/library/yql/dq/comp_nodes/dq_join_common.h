@@ -268,7 +268,7 @@ struct TFutureTableData {
 struct TTableAndSomeData {
     NJoinTable::TNeumannJoinTable Table;
     TMKQLDeque<TFuturePage> Futures;
-    TMKQLDeque<TMKQLVector<ui8>*> GridFutureMatchFlags;
+    TMKQLDeque<TMKQLVector<ui8>*> FutureMatchFlags;
     std::optional<TPackResult> CurrentProbePack;
     TMKQLVector<ui8>* CurrentMatchFlags = nullptr;
     ui32 ProbeResumeIndex = 0;
@@ -419,8 +419,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         return Join.Preserved == ESide::Probe && (Join.Kind == EJoinKind::Left || LeftSemiOrOnly(Join.Kind));
     }
 
-    static constexpr bool NeedsGridProbeMatchState() {
-        return IsGrid && PreservedRowsInProbeStream();
+    static constexpr bool NeedsProbeMatchState() {
+        return PreservedRowsInProbeStream();
     }
 
     struct Init {};
@@ -481,10 +481,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         // Cursor of the post-probe scan over preserved rows left in the in-memory tables
         int PreservedBucketIndex = 0;
         size_t PreservedResumeIndex = 0;
+        bool ProbeRowMatched = false;
         // Grid only: build table the current probe row stopped at, and the bucket keeping the probe stream
         int GridBuildBucket = 0;
         std::optional<int> GridProbeBucket;
-        bool GridProbeRowMatched = false;
     };
 
     using DumpedBuckets = std::unordered_map<int, TSpilledBucket>;
@@ -601,7 +601,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             if (!table || table->Empty()) {
                 continue;
             }
-            if (!lookupToTable(*table, probeRow, state.BuildCursor, state.GridProbeRowMatched, false)) {
+            if (!lookupToTable(*table, probeRow, state.BuildCursor, state.ProbeRowMatched, false)) {
                 return false;
             }
             if (isFull()) {
@@ -611,16 +611,15 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         }
         state.GridBuildBucket = 0;
         if (state.GridProbeBucket) {
-            if constexpr (NeedsGridProbeMatchState()) {
+            if constexpr (NeedsProbeMatchState()) {
                 state.Spiller.AddRow({.Val = probeRow, .Side = ESide::Probe, .BucketIndex = *state.GridProbeBucket},
-                                     state.GridProbeRowMatched);
+                                     state.ProbeRowMatched);
             } else {
                 state.Spiller.AddRow({.Val = probeRow, .Side = ESide::Probe, .BucketIndex = *state.GridProbeBucket});
             }
         } else {
-            finishProbeRow(probeRow, state.GridProbeRowMatched);
+            finishProbeRow(probeRow, state.ProbeRowMatched);
         }
-        state.GridProbeRowMatched = false;
         return true;
     }
 
@@ -846,18 +845,24 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         int bucketIndex = Settings.BucketIndex(tuple);
                         bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
                         if (thisBucketSpilled) {
-                            state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
+                            if constexpr (NeedsProbeMatchState()) {
+                                state.Spiller.AddRow(
+                                    {.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex},
+                                    state.ProbeRowMatched);
+                            } else {
+                                state.Spiller.AddRow(
+                                    {.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
+                            }
                         } else {
                             TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
                             MKQL_ENSURE(thisTable, "sanity check");
-                            // A non-zero cursor means this probe already emitted a match on a previous call.
-                            bool found = state.BuildCursor > 0;
-                            if (!lookupToTable(*thisTable, tuple, state.BuildCursor, found, true)) {
+                            if (!lookupToTable(*thisTable, tuple, state.BuildCursor, state.ProbeRowMatched, true)) {
                                 state.ResumeIndex = idx - 1;
                                 return EFetchResult::One;
                             }
                         }
                     }
+                    state.ProbeRowMatched = false;
                     if (isFull()) {
                         state.ResumeIndex = idx;
                         return EFetchResult::One;
@@ -928,10 +933,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     while (table->Futures.size() < MinFuturesInBuffer && !currentProbe.empty()) {
                         const ISpiller::TKey key = *GetBackOrNull(currentProbe);
                         table->Futures.push_back(keepProbeBlobs ? Spiller_->Get(key) : Spiller_->Extract(key));
-                        if constexpr (NeedsGridProbeMatchState()) {
+                        if constexpr (NeedsProbeMatchState()) {
                             auto it = state.ProbeMatchFlags.find(key);
                             MKQL_ENSURE(it != state.ProbeMatchFlags.end(), "missing probe page match state");
-                            table->GridFutureMatchFlags.push_back(&it->second);
+                            table->FutureMatchFlags.push_back(&it->second);
                         }
                     }
                     if (table->CurrentProbePack.has_value()) {
@@ -941,21 +946,21 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                 continue;
                             }
                             bool matched = false;
-                            if constexpr (NeedsGridProbeMatchState()) {
+                            if constexpr (NeedsProbeMatchState()) {
                                 MKQL_ENSURE(table->CurrentMatchFlags, "missing probe page match state");
                                 MKQL_ENSURE(std::ssize(*table->CurrentMatchFlags) == table->CurrentProbePack->NTuples,
-                                            "missing match state for keyless preserved probe rows");
+                                            "missing match state for preserved probe rows");
                                 matched = (*table->CurrentMatchFlags)[idx - 1];
                             }
                             if (!lookupToTable(table->Table, probeTuple, table->BuildCursor, matched,
                                                !IsGrid || state.SelectedPair->IsLastPair)) {
-                                if constexpr (NeedsGridProbeMatchState()) {
+                                if constexpr (NeedsProbeMatchState()) {
                                     (*table->CurrentMatchFlags)[idx - 1] = matched;
                                 }
                                 table->ProbeResumeIndex = idx - 1;
                                 return EFetchResult::One;
                             }
-                            if constexpr (NeedsGridProbeMatchState()) {
+                            if constexpr (NeedsProbeMatchState()) {
                                 (*table->CurrentMatchFlags)[idx - 1] = matched;
                             }
                             if (isFull()) {
@@ -977,11 +982,11 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     } else {
                         if (table->Futures.front().IsReady()) {
                             table->CurrentProbePack = GetPage(*GetFrontOrNull(table->Futures), ESide::Probe);
-                            if constexpr (NeedsGridProbeMatchState()) {
-                                MKQL_ENSURE(!table->GridFutureMatchFlags.empty(),
+                            if constexpr (NeedsProbeMatchState()) {
+                                MKQL_ENSURE(!table->FutureMatchFlags.empty(),
                                             "missing queued probe page match state");
-                                table->CurrentMatchFlags = table->GridFutureMatchFlags.front();
-                                table->GridFutureMatchFlags.pop_front();
+                                table->CurrentMatchFlags = table->FutureMatchFlags.front();
+                                table->FutureMatchFlags.pop_front();
                             }
                             table->ProbeResumeIndex = 0;
                         } else {

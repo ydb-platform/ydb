@@ -92,7 +92,7 @@ public:
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
-        , EnableNewRBO(tableServiceConfig.GetEnableNewRBO())
+        , EnableNewRBO(tableServiceConfig.GetEnableNewRBO() && !queryId.Settings.IsAnalyze)
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
     {
@@ -111,7 +111,8 @@ public:
 
         config->ApplyServiceConfig(tableServiceConfig);
 
-        // This is either the default setting or the explicit exclusion of a new RBO when compilation fails and recompilation is attempted.
+        // ANALYZE scans use UDAF factories unsupported by new RBO. Select the
+        // YQL optimizer on their first attempt, as well as on fallback retries.
         config->SetEnableNewRBO(EnableNewRBO);
 
         if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
@@ -386,8 +387,10 @@ private:
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
         prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings.RuntimeParameterSizeLimit;
         prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings.RuntimeParameterSizeLimitSatisfied;
-        // For NEW RBO YqlSelect is force.
-        if (EnableNewRBO) {
+        // Internal ANALYZE scans require legacy translation; new RBO forces YqlSelect.
+        if (QueryId.Settings.IsAnalyze) {
+            prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Disable;
+        } else if (EnableNewRBO) {
             prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
         }
         prepareSettings.UsePessimisticLocks = UsePessimisticLocks;

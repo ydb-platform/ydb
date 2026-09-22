@@ -1862,7 +1862,7 @@ TString TDirectBlockGroup::ValidateRemoveHost(THostIndex hostIndex) const
         }
         // Removal is irreversible, so every vchunk must keep a quorum of
         // healthy ddisks. The disabled host is not in that set already.
-        const auto healthyCount = cfg.GetHealthyDDisks().Count();
+        const auto healthyCount = vChunk->GetHealthyDDisks().Count();
         if (healthyCount < QuorumDirectBlockGroupHostCount) {
             return TStringBuilder()
                    << "vchunk " << cfg.GetVChunkIndex() << " has "
@@ -2145,17 +2145,27 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
     }
 
     auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
-    TVChunkConfigs vChunkConfigs;
     TDirtyMapStats dirtyMapStats;
+    TCountAndSize pBuffersUsage;
+    THashMap<ui32, THostMask> freshDDisks;
 
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
-            vChunkConfigs[vChunk->GetConfig().GetVChunkIndex()] =
-                vChunk->GetConfig();
-
+            THostMask fresh;
             for (THostIndex host = 0; host < GetHostCount(); ++host) {
-                hostsStat[host].DirtyMapStats.Aggregate(
-                    vChunk->GetDirtyMapHostStats(host));
+                const auto hostStats = vChunk->GetDirtyMapHostStats(host);
+                hostsStat[host].DirtyMapStats.Aggregate(hostStats);
+                pBuffersUsage += hostStats.PBuffersUsage;
+                if (hostStats.FreshTotalBytes != 0 ||
+                    hostStats.RottenTotalBytes != 0)
+                {
+                    fresh.Set(host);
+                }
+            }
+            if (!fresh.Empty()) {
+                freshDDisks.emplace(
+                    vChunk->GetConfig().GetVChunkIndex(),
+                    fresh);
             }
             dirtyMapStats.Aggregate(vChunk->GetDirtyMapStats());
         }
@@ -2166,10 +2176,11 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .VChunkCount = VChunks.size(),
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
-        .VChunkConfigs = std::move(vChunkConfigs),
+        .FreshDDisks = std::move(freshDDisks),
         .MemoryStats = ArenaAllocatorPool->GetMemoryStats(),
         .DetailedMemoryStats = ArenaAllocatorPool->GetDetailedStat(),
         .DirtyMapStats = dirtyMapStats,
+        .PBuffersUsage = pBuffersUsage,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };
 }

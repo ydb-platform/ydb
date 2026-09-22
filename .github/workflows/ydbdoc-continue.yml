@@ -43,6 +43,8 @@ jobs:
           echo "YDBDOC_YDB_SA_KEY_FILE=$RUNNER_TEMP/ydb-sa.json" >> "$GITHUB_ENV"
 
       - name: Continue translation with operator feedback
+        # TODO(ydbdoc-review-ng): migrate after the original operator-feedback
+        # doc_continue contract is restored and independently accepted.
         uses: ydb-platform/ydbdoc-review@v0.1.0
         with:
           mode: continue

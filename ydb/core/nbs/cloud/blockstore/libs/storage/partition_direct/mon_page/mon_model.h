@@ -12,6 +12,7 @@
 
 #include <ydb/core/mind/bscontroller/types.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
@@ -63,6 +64,8 @@ struct TTabletInfo
     ui64 VChunkSize = 0;
     ui32 VolumeDirectBlockGroupCount = 0;
     size_t TouchedVChunkCount = 0;
+    size_t TouchedEnabledDDiskCount = 0;
+    size_t TouchedDisabledDDiskCount = 0;
     TString DiskId;
     TString State;   // "INIT" / "WORK"
 };
@@ -94,10 +97,12 @@ struct TDbgSnapshot
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
-    TVChunkConfigs VChunkConfigs;
+    // Current Fresh DDisks for vchunks that have any.
+    THashMap<ui32, THostMask> FreshDDisks;
     TArenaPoolStats MemoryStats;
     TArenaAllocatorStats DetailedMemoryStats;
     TDirtyMapStats DirtyMapStats;
+    TCountAndSize PBuffersUsage;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;
 };
@@ -140,8 +145,6 @@ struct TLocalDbContents
     std::optional<TString> VolumeConfig;
     std::optional<TString> DirectBlockGroupsConnections;
     std::optional<TString> AddHostInProgress;
-    // Persisted per-vchunk overrides.
-    TVChunkConfigs VChunkConfigs;
 };
 
 struct TMonPageData

@@ -4216,6 +4216,7 @@ const renderRun=(...args)=>{rendered=args};
         script = web._JS[web._JS.index("async function refreshEditorActivity(") : web._JS.index("function runDisplay(")]
         script += """
 const assert=require('node:assert/strict'),location={hash:'#new'};
+const editor={model:{profiles:[]}};
 let editorHost='sas',button={textContent:'Start run'},resolve;
 const document={querySelector:()=>button};
 const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Promise(done=>{resolve=done})};
@@ -4227,6 +4228,18 @@ const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Prom
   assert.equal(button.textContent,'Start run');
   pending=refreshEditorActivity();resolve({queued:1});await pending;
   assert.equal(button.textContent,'Add to queue');
+  pending=refreshEditorActivity();resolve({queued:0});await pending;
+  assert.equal(button.textContent,'Start run');
+  editor.model.profiles=[{distributed_config:{mode:'deploy'}}];
+  pending=refreshEditorActivity();resolve({queued:0});await pending;
+  assert.equal(button.textContent,'Deploy cluster');
+  pending=refreshEditorActivity();resolve({active_run_id:'busy'});await pending;
+  assert.equal(button.textContent,'Add to queue');
+  pending=refreshEditorActivity();resolve({queued:1});await pending;
+  assert.equal(button.textContent,'Add to queue');
+  pending=refreshEditorActivity();resolve({queued:0});await pending;
+  assert.equal(button.textContent,'Deploy cluster');
+  editor.model.profiles=[];
   pending=refreshEditorActivity();resolve({queued:0});await pending;
   assert.equal(button.textContent,'Start run');
 })().catch(error=>{console.error(error);process.exitCode=1});

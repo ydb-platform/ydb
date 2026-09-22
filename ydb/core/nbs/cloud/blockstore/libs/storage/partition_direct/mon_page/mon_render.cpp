@@ -162,9 +162,6 @@ void RenderVChunk(IOutputStream& str, const TMonPageData& data)
                     TABLEH () {
                         str << "Enabled";
                     }
-                    TABLEH () {
-                        str << "Watermark";
-                    }
                 }
             }
             TABLEBODY () {
@@ -183,14 +180,6 @@ void RenderVChunk(IOutputStream& str, const TMonPageData& data)
                         }
                         TABLED () {
                             str << (disabled.Get(host) ? "no" : "yes");
-                        }
-                        TABLED () {
-                            const auto watermark = config.GetWatermark(host);
-                            if (watermark) {
-                                str << *watermark;
-                            } else {
-                                str << "-";
-                            }
                         }
                     }
                 }
@@ -1054,7 +1043,10 @@ void RenderLatency(IOutputStream& str, const TMonPageData& data)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString RenderMonPage(const TMonPageData& data)
+TString RenderMonPage(
+    const TMonPageData& data,
+    const TVChunkConfigs& vChunkConfigs,
+    const ITouchedProvider& touchedProvider)
 {
     TStringStream str;
 
@@ -1072,7 +1064,7 @@ TString RenderMonPage(const TMonPageData& data)
 
     switch (data.Page) {
         case EMonPage::Overview:
-            RenderOverview(str, data);
+            RenderOverview(str, data, vChunkConfigs, touchedProvider);
             break;
         case EMonPage::Dbg:
             RenderDbg(str, data);
@@ -1082,7 +1074,7 @@ TString RenderMonPage(const TMonPageData& data)
             break;
         case EMonPage::LocalDb:
             if (data.LocalDb) {
-                RenderLocalDb(str, *data.LocalDb);
+                RenderLocalDb(str, *data.LocalDb, vChunkConfigs);
             }
             break;
         case EMonPage::VChunk:

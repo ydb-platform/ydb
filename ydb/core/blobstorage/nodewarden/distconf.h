@@ -98,6 +98,8 @@ namespace NKikimr::NStorage {
                EvRetryCollectConfigsAndPropose,
                EvRetryPersistConfig,
                EvFlushRetroTraceBatch,
+               EvRootProbeTimeout,
+               EvBindingTimeout,
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
@@ -277,11 +279,14 @@ namespace NKikimr::NStorage {
         bool StorageConfigLoaded = false;
 
         // outgoing binding
+        static constexpr TDuration BindRequestTimeout = TDuration::Seconds(3);
         std::optional<TBinding> Binding;
+        std::optional<TBinding> RootProbe;
         ui64 BindingCookie = RandomNumber<ui64>();
         TBindQueue BindQueue;
         TBindQueue RevBindQueue;
         TBindQueue OtherPilesBindQueue;
+        ui32 NextBindQueue = 0;
         bool Scheduled = false;
 
         // unbound-state diagnostic
@@ -339,7 +344,6 @@ namespace NKikimr::NStorage {
         ui64 ScepterCounter = 1; // increased every time Scepter gets changed
         TString ErrorReason;
         std::optional<TString> CurrentSelfAssemblyUUID;
-        bool MajorityOfNodesConnected = false;
         bool GlobalQuorum = false;
         bool QuorumValid = false;
 
@@ -437,6 +441,13 @@ namespace NKikimr::NStorage {
         void IssueNextBindRequest();
         void StartBinding(ui32 nodeId);
         void BindToSession(TActorId sessionId);
+        bool HasStaticGroupConfig() const;
+        void StartRootProbe(ui32 nodeId);
+        void SendRootProbe(TActorId sessionId);
+        void AbortRootProbe();
+        void HandleRootProbeTimeout(STATEFN_SIG);
+        void HandleBindingTimeout(STATEFN_SIG);
+        void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev);
         void Handle(TEvInterconnect::TEvNodeConnected::TPtr ev);
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev);
         void HandleDisconnect(ui32 nodeId, TActorId sessionId);
@@ -451,6 +462,7 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
 
+        TBindQueue *GetBindQueue(ui32 nodeId);
         bool UpdateBound(ui32 refererNodeId, TNodeIdentifier nodeId, const TStorageConfigMeta& meta, TEvNodeConfigPush *msg);
         void DeleteBound(ui32 refererNodeId, const TNodeIdentifier& nodeId, TEvNodeConfigPush *msg);
         void Handle(TEvNodeConfigPush::TPtr ev);
@@ -463,7 +475,7 @@ namespace NKikimr::NStorage {
         // Root node operation
 
         void UpdateQuorums();
-        void CheckRootNodeStatus();
+        void ReconcileNodeRole();
         void HandleRetryCollectConfigsAndPropose(STATEFN_SIG);
         void BecomeRoot();
         void UnbecomeRoot();
@@ -538,6 +550,7 @@ namespace NKikimr::NStorage {
         void Perform(TEvGather::TDemandRetroTrace *response, const TEvScatter::TDemandRetroTrace& request, TScatterTask& task);
 
         void SwitchToError(const TString& reason);
+        void StopRootActivities(const TString& reason);
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev);

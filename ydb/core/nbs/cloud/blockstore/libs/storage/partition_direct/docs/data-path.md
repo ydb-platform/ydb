@@ -102,10 +102,11 @@ additional **direct** writes, first to eligible handoffs and then, when
 needed, to desired hosts. Requested/completed/failed masks prevent counting
 one destination twice. The request timeout bounds the client operation.
 
-Late successful responses still matter after the client reply: they identify
-extra PB copies that need cleanup. `ReplyOrNotifyBelated`,
-`TVChunk::OnBelatedWriteBlocksResponse`, and the belated erase queue implement that
-path. Changes to timeout handling must preserve it.
+Late successful responses still matter after the client reply, even when the
+quorum was never reached: they identify extra PB copies that need cleanup.
+`MaybeReplyOrNotifyBelated`, `TVChunk::OnBelatedWriteBlocksResponse`, and the
+belated erase queue implement that path. Changes to timeout handling must
+preserve it.
 
 The proto enum's zero value is `IndirectWrite`; the C++ fallback for an absent
 configuration field is `DirectWrite`. Inspect the effective config rather
@@ -133,9 +134,9 @@ writes and incomplete records found during recovery are distinct states.
 
 DDisk masks normally contain desired, enabled hosts that can read the whole
 range. [TDDiskState::CanReadFromDDisk](../dirty_map/ddisk_state.cpp) rejects
-disabled DDisks, ranges beyond a fresh disk's watermark, and ranges marked
-outdated in its behind map. The ahead map helps repair accounting but does
-not currently make above-watermark ranges eligible for this read check.
+disabled DDisks and ranges outside the continuous prefix before the first
+Behind range. A successful flush can extend this prefix by removing its range
+from Behind.
 PB masks start from confirmed replicas and also exclude disabled hosts.
 If filtering empties the mask, `MakeReadRangeHint` currently falls back to
 the desired DDisk host positions, keeping the hint's original PB/DDisk source

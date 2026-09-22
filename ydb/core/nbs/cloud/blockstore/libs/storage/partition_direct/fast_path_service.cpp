@@ -117,7 +117,7 @@ TVector<TRegionPtr> CreateRegions(
             i,
             directBlockGroups,
             vChunkConfigs,
-            touchedProvider->GetTouchedVChunks(i * VChunkPerRegionCount),
+            touchedProvider->GetTouchedVChunks(i),
             dirtyMapStates,
             storageConfig.GetSyncRequestsBatchSize(),
             blockSize,
@@ -434,11 +434,14 @@ void TFastPathService::ScheduleAfterDelay(
         std::move(callback));
 }
 
-TPersistResultFuture TFastPathService::UpdateVChunkConfig(
-    const TVChunkConfig& cfg)
+TPersistResultFuture TFastPathService::UpdateVChunkState(
+    const TVChunkConfig& cfg,
+    TDirtyMapStateProto state)
 {
     auto event =
-        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(cfg);
+        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(
+            cfg,
+            std::move(state));
     auto result = event->UpdateCompleted.GetFuture();
     ActorSystem->Send(PartitionActorId, event.release());
     return result;

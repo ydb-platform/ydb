@@ -336,9 +336,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g2' class='selectable'><title>Stage 0</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Limit: 10</title><text x='36' y='13' class='texts clipped'>Limit: 10</text>
 </g>
@@ -357,9 +357,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g4' class='selectable'><title>Stage 0</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>TopSort: Limit: 10, TopSortBy: c desc nulls first</title><text x='36' y='13' class='texts clipped'>TopSort: Limit: 10, TopSortBy: c desc nulls first</text>
 </g>
@@ -381,9 +381,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g6' class='selectable'><title>Stage 0</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>UnionAll: </title><text x='36' y='13' class='texts clipped'>UnionAll: </text>
 </g>
@@ -403,9 +403,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g8' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>UnionAll: </title><text x='47' y='13' class='texts clipped'>UnionAll: </text>
 </g>
@@ -425,9 +425,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g10' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>UnionAll: </title><text x='58' y='13' class='texts clipped'>UnionAll: </text>
 </g>
@@ -444,9 +444,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g12' class='selectable'><title>Stage 0</title>
 <rect x='33' y='0' width='265' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := __intermediate___kqp_agg_result_agg_col_0, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_0_0 &lt;- __intermediate___kqp_agg_result_agg_col_0]: </title><text x='69' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := __intermediate___kqp_agg_result_agg_col_0, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_0_0 &lt;- __intermediate___kqp_agg_result_agg_col_0]: </text>
 </g>
@@ -463,9 +463,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g14' class='selectable'><title>Stage 0</title>
 <rect x='33' y='0' width='265' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: __intermediate___kqp_agg_result_agg_col_0: sum(clickbench/hits.AdvEngineID), Group By: RegionID</title><text x='69' y='13' class='texts clipped'>Aggregate: __intermediate___kqp_agg_result_agg_col_0: sum(clickbench/hits.AdvEngineID), Group By: RegionID</text>
 </g>
@@ -484,9 +484,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g16' class='selectable'><title>Stage 0</title>
 <rect x='33' y='0' width='265' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </title><text x='69' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </text>
 </g>
@@ -503,9 +503,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g18' class='selectable'><title>Stage 0</title>
 <rect x='33' y='0' width='265' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>TableFullScan: </title><text x='69' y='13' class='texts clipped'>TableFullScan: </text>
 </g>
@@ -522,9 +522,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='34' width='1280' height='34' x='0' y='3'>
 <g data-group='g20' class='selectable'><title>Stage E</title>
 <rect x='33' y='0' width='265' height='100%' class='clone'/>
-<rect x='301' y='0' width='64' height='100%' class='clone'/>
+<rect x='301' y='0' width='54' height='100%' class='clone'/>
 <rect x='401' y='0' width='200' height='100%' class='clone'/>
-<rect x='368' y='0' width='30' height='100%' class='clone'/>
+<rect x='358' y='0' width='40' height='100%' class='clone'/>
 <rect x='604' y='0' width='676' height='100%' class='clone'/>
 <g><title>TableFullScan: hits(AdvEngineID, RegionID, ResolutionWidth, UserID)</title><text x='69' y='13' class='texts clipped'>TableFullScan: hits(AdvEngineID, RegionID, ResolutionWidth, UserID)</text>
 </g>
@@ -563,9 +563,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g22' class='selectable'><title>Stage 0</title>
 <rect x='33' y='0' width='265' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := __intermediate___kqp_agg_result_agg_col_2, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2_0 &lt;- __intermediate___kqp_agg_result_agg_col_2]: </title><text x='69' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := __intermediate___kqp_agg_result_agg_col_2, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2_0 &lt;- __intermediate___kqp_agg_result_agg_col_2]: </text>
 </g>
@@ -582,9 +582,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g24' class='selectable'><title>Stage 0</title>
 <rect x='33' y='0' width='265' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: __intermediate___kqp_agg_result_agg_col_2: count(__kqp_agg_input_agg_expr_1), Group By: RegionID</title><text x='69' y='13' class='texts clipped'>Aggregate: __intermediate___kqp_agg_result_agg_col_2: count(__kqp_agg_input_agg_expr_1), Group By: RegionID</text>
 </g>
@@ -603,9 +603,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g26' class='selectable'><title>Stage 0</title>
 <rect x='33' y='0' width='265' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </title><text x='69' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </text>
 </g>
@@ -622,9 +622,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g28' class='selectable'><title>Stage 0</title>
 <rect x='33' y='0' width='265' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>TableFullScan: </title><text x='69' y='13' class='texts clipped'>TableFullScan: </text>
 </g>
@@ -641,9 +641,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='34' width='1280' height='34' x='0' y='3'>
 <g data-group='g30' class='selectable'><title>Stage E</title>
 <rect x='33' y='0' width='265' height='100%' class='clone'/>
-<rect x='301' y='0' width='64' height='100%' class='clone'/>
+<rect x='301' y='0' width='54' height='100%' class='clone'/>
 <rect x='401' y='0' width='200' height='100%' class='clone'/>
-<rect x='368' y='0' width='30' height='100%' class='clone'/>
+<rect x='358' y='0' width='40' height='100%' class='clone'/>
 <rect x='604' y='0' width='676' height='100%' class='clone'/>
 <g><title>TableFullScan: hits(AdvEngineID, RegionID, ResolutionWidth, UserID)</title><text x='69' y='13' class='texts clipped'>TableFullScan: hits(AdvEngineID, RegionID, ResolutionWidth, UserID)</text>
 </g>
@@ -687,9 +687,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g32' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := __intermediate___kqp_agg_result_agg_col_3, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3_0 &lt;- __intermediate___kqp_agg_result_agg_col_3]: </title><text x='58' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := __intermediate___kqp_agg_result_agg_col_3, __intermediate___kqp_agg_result_agg_col_4 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3_0 &lt;- __intermediate___kqp_agg_result_agg_col_3]: </text>
 </g>
@@ -706,9 +706,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g34' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: __intermediate___kqp_agg_result_agg_col_3: avg(clickbench/hits.ResolutionWidth), Group By: RegionID</title><text x='58' y='13' class='texts clipped'>Aggregate: __intermediate___kqp_agg_result_agg_col_3: avg(clickbench/hits.ResolutionWidth), Group By: RegionID</text>
 </g>
@@ -727,9 +727,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g36' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </title><text x='58' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </text>
 </g>
@@ -746,9 +746,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g38' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>TableFullScan: </title><text x='58' y='13' class='texts clipped'>TableFullScan: </text>
 </g>
@@ -765,9 +765,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='34' width='1280' height='34' x='0' y='3'>
 <g data-group='g40' class='selectable'><title>Stage E</title>
 <rect x='22' y='0' width='276' height='100%' class='clone'/>
-<rect x='301' y='0' width='64' height='100%' class='clone'/>
+<rect x='301' y='0' width='54' height='100%' class='clone'/>
 <rect x='401' y='0' width='200' height='100%' class='clone'/>
-<rect x='368' y='0' width='30' height='100%' class='clone'/>
+<rect x='358' y='0' width='40' height='100%' class='clone'/>
 <rect x='604' y='0' width='676' height='100%' class='clone'/>
 <g><title>TableFullScan: hits(AdvEngineID, RegionID, ResolutionWidth, UserID)</title><text x='58' y='13' class='texts clipped'>TableFullScan: hits(AdvEngineID, RegionID, ResolutionWidth, UserID)</text>
 </g>
@@ -811,9 +811,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g42' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := __intermediate___kqp_agg_result_agg_col_4, __intermediate___kqp_agg_result_agg_col_4_0 &lt;- __intermediate___kqp_agg_result_agg_col_4]: </title><text x='47' y='13' class='texts clipped'>Map [__intermediate___kqp_agg_result_agg_col_0 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_2 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_3 := &lt;expr&gt;, __intermediate___kqp_agg_result_agg_col_4 := __intermediate___kqp_agg_result_agg_col_4, __intermediate___kqp_agg_result_agg_col_4_0 &lt;- __intermediate___kqp_agg_result_agg_col_4]: </text>
 </g>
@@ -830,9 +830,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g44' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: __intermediate___kqp_agg_result_agg_col_4: count(clickbench/hits.UserID), Group By: RegionID</title><text x='47' y='13' class='texts clipped'>Aggregate: __intermediate___kqp_agg_result_agg_col_4: count(clickbench/hits.UserID), Group By: RegionID</text>
 </g>
@@ -851,9 +851,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g46' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: _intermediate_RegionID: distinct(RegionID), _intermediate_clickbench/hits.UserID: distinct(clickbench/hits.UserID), Group By: RegionID, clickbench/hits.UserID</title><text x='47' y='13' class='texts clipped'>Aggregate: _intermediate_RegionID: distinct(RegionID), _intermediate_clickbench/hits.UserID: distinct(clickbench/hits.UserID), Group By: RegionID, clickbench/hits.UserID</text>
 </g>
@@ -872,9 +872,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g48' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </title><text x='47' y='13' class='texts clipped'>Map [__kqp_agg_input_agg_expr_1 := &lt;expr&gt;]: </text>
 </g>
@@ -891,9 +891,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g50' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>TableFullScan: </title><text x='47' y='13' class='texts clipped'>TableFullScan: </text>
 </g>
@@ -910,9 +910,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='34' width='1280' height='34' x='0' y='3'>
 <g data-group='g52' class='selectable'><title>Stage E</title>
 <rect x='11' y='0' width='287' height='100%' class='clone'/>
-<rect x='301' y='0' width='64' height='100%' class='clone'/>
+<rect x='301' y='0' width='54' height='100%' class='clone'/>
 <rect x='401' y='0' width='200' height='100%' class='clone'/>
-<rect x='368' y='0' width='30' height='100%' class='clone'/>
+<rect x='358' y='0' width='40' height='100%' class='clone'/>
 <rect x='604' y='0' width='676' height='100%' class='clone'/>
 <g><title>TableFullScan: hits(AdvEngineID, RegionID, ResolutionWidth, UserID)</title><text x='47' y='13' class='texts clipped'>TableFullScan: hits(AdvEngineID, RegionID, ResolutionWidth, UserID)</text>
 </g>
@@ -970,8 +970,8 @@
 <g id='columnHeaders'>
 <svg width='1280' height='18' x='0' y='0'>
 <rect x='0' y='0' width='298' height='18' class='columns'/>
-<rect x='301' y='0' width='64' height='18' class='columns'/>
-<rect x='368' y='0' width='30' height='18' class='columns'/>
+<rect x='301' y='0' width='54' height='18' class='columns'/>
+<rect x='358' y='0' width='40' height='18' class='columns'/>
 <rect x='401' y='0' width='200' height='18' class='columns'/>
 <rect x='604' y='0' width='676' height='18' class='columns'/>
 <text x='2' y='13' class='texts'>Stages and Operators</text>

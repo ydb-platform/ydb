@@ -12,7 +12,7 @@ public:
 
     ui64 GetConsumption() const;
 
-    void SetConsumption(ui64 consumption);
+    void SetReport(TConsumerReport report) override;
 
 private:
     const std::weak_ptr<TMemTableMemoryConsumersCollection> Collection;

@@ -98,6 +98,8 @@ TString Id(const TRule_an_id_hint& node, TTranslation& ctx);
 
 TString Id(const TRule_an_id_pure& node, TTranslation& ctx);
 
+TViewDescription Id(const TRule_view_name& node, TTranslation& ctx);
+
 template <typename TRule>
 inline TIdentifier IdEx(const TRule& node, TTranslation& ctx) {
     const TString name(Id(node, ctx));

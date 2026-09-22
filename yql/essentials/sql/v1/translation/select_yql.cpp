@@ -1,6 +1,7 @@
 #include "select_yql.h"
 
 #include "context.h"
+#include "source.h"
 
 #include <util/generic/overloaded.h>
 #include <util/generic/scope.h>
@@ -37,7 +38,7 @@ public:
         TNodePtr source = BuildDataSource();
         TNodePtr key = BuildKey(ctx);
 
-        if (!source->Init(ctx, src) || !key->Init(ctx, src)) {
+        if (!key || !source->Init(ctx, src) || !key->Init(ctx, src)) {
             return false;
         }
 
@@ -75,6 +76,10 @@ private:
 
         auto cluster = ToDeferredAtom(Cluster, ctx);
         auto key = ToDeferredAtom(Key, ctx);
+        if (!View.empty()) {
+            TNodePtr tableKey = BuildTableKey(Pos_, Service, cluster, key, View);
+            return tableKey->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::INPUT);
+        }
 
         TNodePtr prefixed = ctx.GetPrefixedPath(Service, cluster, key);
         YQL_ENSURE(prefixed);

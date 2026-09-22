@@ -89,6 +89,7 @@ struct TYqlTableRefArgs {
     TString Service;
     TDeferredAtom Cluster;
     TDeferredAtom Key;
+    TViewDescription View;
     bool IsAnonymous = false;
 };
 

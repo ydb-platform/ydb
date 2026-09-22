@@ -271,6 +271,161 @@ Y_UNIT_TEST(FromTableWithImmediateCluster) {
     UNIT_ASSERT_STRING_CONTAINS(program, R"('((Right! yql_read0) '"Input" '()))");
 }
 
+Y_UNIT_TEST(FromTableViewWithoutClusterIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        SELECT * FROM Input VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "No cluster name given and no default cluster is selected");
+}
+
+Y_UNIT_TEST(FromPrimaryTableView) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE ydb;
+        SELECT Input.x FROM Input VIEW PRIMARY KEY;
+    )sql", settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+
+    TWordCountHive counts = {"YqlSelect", "Read!"};
+    TString program = VerifyProgram(result, counts);
+    UNIT_ASSERT_VALUES_EQUAL(counts["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(counts["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"((Key '('table (String '"Input")) '('primary_view)))");
+}
+
+Y_UNIT_TEST(PrimaryTableViewRejectedForYt) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT x FROM plato.Input VIEW PRIMARY KEY;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "primary view is not supported for yt tables");
+}
+
+Y_UNIT_TEST(NamedTableViewOnPathBindUsesReferencePosition) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(USE plato;
+$table = "Input";
+SELECT * FROM $table VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+
+    const NYql::TAstNode* read = FindNodeByChildAtomContent(result.Root, 0, "Read!");
+    UNIT_ASSERT(read);
+    UNIT_ASSERT_VALUES_EQUAL(read->GetPosition().Row, 3);
+    UNIT_ASSERT_VALUES_EQUAL(read->GetPosition().Column, 15);
+}
+
+Y_UNIT_TEST(FromPathBindViewWithoutClusterIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        $table = "Input";
+        SELECT * FROM $table VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "No cluster name given and no default cluster is selected");
+}
+
+Y_UNIT_TEST(AnonymousPathBindWithViewIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $table = "Input";
+        SELECT * FROM @$table VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "View is not supported for anonymous tables");
+}
+
+Y_UNIT_TEST(ViewOverNamedSourceIsUnsupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        $x = SELECT 1 AS a;
+        SELECT a FROM $x VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "YqlSelect unsupported: VIEW for bind_parameter");
+}
+
+Y_UNIT_TEST(UnknownClusterOverNamedSourceIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        $x = SELECT 1 AS a;
+        SELECT a FROM bogus_cluster.$x;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "Unknown cluster: bogus_cluster");
+}
+
+Y_UNIT_TEST(CallOverNamedSourceIsUnsupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        $x = SELECT 1 AS a;
+        SELECT a FROM $x();
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "YqlSelect unsupported: bind_parameter call");
+}
+
+Y_UNIT_TEST(ViewOnPathBindCallIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $table = "Input";
+        SELECT * FROM $table() VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "View is not supported for subqueries");
+}
+
+Y_UNIT_TEST(ViewOnNamedSourceCallIsRejected) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        $x = SELECT 1;
+        SELECT * FROM $x() VIEW test_view;
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "View is not supported for subqueries");
+}
+
 Y_UNIT_TEST(FromQuotedTableWithImmediateCluster) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;

@@ -1593,12 +1593,13 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
         return false;
     }
-    WriteNewSizeFull += p.Msg.SourceId.size() + p.Msg.Data.size();
+    const size_t writeSize = p.Msg.SourceId.size() + p.Msg.Data.size();
+    WriteNewSizeFull += writeSize;
     WriteNewSizeUncompressedFull += p.Msg.UncompressedSize + p.Msg.SourceId.size();
     if (!p.Internal) {
-        WriteNewSize += p.Msg.SourceId.size() + p.Msg.Data.size();
+        WriteNewSize += writeSize;
         WriteNewSizeUncompressed += p.Msg.UncompressedSize + p.Msg.SourceId.size();
-        WriteNewSizeInternal += p.Msg.External ? 0 : (p.Msg.SourceId.size() + p.Msg.Data.size());
+        WriteNewSizeInternal += p.Msg.External ? 0 : writeSize;
     }
     if (p.Msg.PartNo == 0 && !p.Internal) {
         ++WriteNewMessages;

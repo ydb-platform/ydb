@@ -2,13 +2,22 @@
 import logging
 import os
 import pytest
-import time
 from typing import Generator, Self
 
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.compatibility.fixtures import (
+    MixedClusterFixture,
+    RestartToAnotherVersionFixture,
+    RollingUpgradeAndDowngradeFixture,
+)
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
-from ydb.tests.fq.streaming_common.common import YdbClient
+from ydb.tests.fq.streaming_common.common import (
+    MessageAcceptor,
+    YdbClient,
+    read_and_check_data,
+    wait_completed_checkpoints,
+)
+from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +33,7 @@ class StreamingTestBase:
         extra_feature_flags = [
             "enable_external_data_sources",
             "enable_streaming_queries",
+            "enable_streaming_queries_counters",
             "enable_shared_reading_in_streaming_queries",
         ]
 
@@ -103,8 +113,9 @@ class StreamingTestBase:
 
     def create_streaming_query(self: Self) -> None:
         logger.debug("create_streaming_query")
+        self.query_name = "my_queries/query_name"
         self.ydb_client.query(f"""
-            CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+            CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
             $precompute_data = SELECT value FROM table_name LIMIT 1;
 
             $input = (
@@ -140,8 +151,9 @@ class StreamingTestBase:
 
     def create_simple_streaming_query(self: Self) -> None:
         logger.debug("create_simple_streaming_query")
+        self.query_name = "my_queries/query_name"
         self.ydb_client.query(f"""
-            CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+            CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
             $precompute_data = SELECT value FROM table_name LIMIT 1;
 
             $input = (
@@ -161,20 +173,35 @@ class StreamingTestBase:
             END DO;
         """)
 
-    def do_write_read(self: Self, input_data: list[str], expected: list[str]) -> None:
+    def wait_query_checkpoint(self: Self) -> None:
+        wait_completed_checkpoints(
+            self.cluster,
+            f"{self.database_path.rstrip('/')}/{self.query_name}",
+            timeout=plain_or_under_sanitizer_wrapper(120, 300),
+            checkpoints_count=1,
+        )
+
+    def do_write_read(self: Self, input_data: list[str], acceptor: MessageAcceptor) -> None:
         logger.debug("do_write_read")
-        time.sleep(2)
+        self.wait_query_checkpoint()
 
         logger.debug("write data to stream")
         self.ydb_client.topic_write(self.input_topic, input_data)
 
-        logger.debug("read data from stream")
-        actual = self.ydb_client.topic_read_until(self.output_topic, self.consumer_name, len(expected))
-        if len(actual) != len(expected):
-            actual = actual[-len(expected):]  # deduplication disabled
-        assert sorted(actual) == sorted(expected)
+        endpoint = f"localhost:{self.cluster.nodes[1].port}"
+        read_and_check_data(
+            self,
+            f"{self.database_path.rstrip('/')}/{self.query_name}",
+            acceptor,
+            endpoint,
+            self.database_path,
+            self.consumer_name,
+            self.output_topic,
+        )
 
-    def do_test_part1(self: Self) -> None:
+        self.wait_query_checkpoint()
+
+    def do_test_part1(self: Self, acceptor: MessageAcceptor) -> None:
         suffix = 'value1'
         input_data = [
             '{"time": "2025-01-01T00:00:00.000000Z", "level": "error", "host": "host-1"}',
@@ -183,24 +210,32 @@ class StreamingTestBase:
             '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-2"}',
             '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"}',
         ]
-        expected = [
-            '{"error_count":1,"host":"host-2","ts":"2025-01-01T00:00:00Z"}' + suffix,
-            '{"error_count":2,"host":"host-1","ts":"2025-01-01T00:00:00Z"}' + suffix,
-        ]
-        self.do_write_read(input_data, expected)
+        acceptor.accept(
+            ['{"error_count":1,"host":"host-2","ts":"2025-01-01T00:00:00Z"}' + suffix],
+            ordered_group=2,
+        )
+        acceptor.accept(
+            ['{"error_count":2,"host":"host-1","ts":"2025-01-01T00:00:00Z"}' + suffix],
+            ordered_group=1,
+        )
+        self.do_write_read(input_data, acceptor)
 
-    def do_test_part2(self: Self) -> None:
+    def do_test_part2(self: Self, acceptor: MessageAcceptor) -> None:
         suffix = 'value1'
         input_data = [
             '{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-2"}',
             '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-1"}',
             '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-2"}',
         ]
-        expected = [
-            '{"error_count":2,"host":"host-2","ts":"2025-01-01T00:10:00Z"}' + suffix,
-            '{"error_count":1,"host":"host-1","ts":"2025-01-01T00:10:00Z"}' + suffix,
-        ]
-        self.do_write_read(input_data, expected)
+        acceptor.accept(
+            ['{"error_count":2,"host":"host-2","ts":"2025-01-01T00:10:00Z"}' + suffix],
+            ordered_group=2,
+        )
+        acceptor.accept(
+            ['{"error_count":1,"host":"host-1","ts":"2025-01-01T00:10:00Z"}' + suffix],
+            ordered_group=1,
+        )
+        self.do_write_read(input_data, acceptor)
 
 
 class TestWatermarksMixedCluster(StreamingTestBase, MixedClusterFixture):
@@ -213,8 +248,9 @@ class TestWatermarksMixedCluster(StreamingTestBase, MixedClusterFixture):
     def test_mixed_cluster(self: Self, external: bool) -> None:
         self.create_objects(external)
         self.create_streaming_query()
-        self.do_test_part1()
-        self.do_test_part2()
+        acceptor = MessageAcceptor()
+        self.do_test_part1(acceptor)
+        self.do_test_part2(acceptor)
 
 
 class TestWatermarksRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVersionFixture):
@@ -227,9 +263,11 @@ class TestWatermarksRestartToAnotherVersion(StreamingTestBase, RestartToAnotherV
     def test_restart_to_another_version(self: Self, external: bool) -> None:
         self.create_objects(external)
         self.create_streaming_query()
-        self.do_test_part1()
+        acceptor = MessageAcceptor()
+        self.do_test_part1(acceptor)
         self.change_cluster_version()
-        self.do_test_part2()
+        acceptor.reset()
+        self.do_test_part2(acceptor)
 
 
 class TestWatermarksRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeAndDowngradeFixture):
@@ -243,13 +281,14 @@ class TestWatermarksRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgrade
         self.create_objects(external)
         self.create_simple_streaming_query()
         suffix = 'value1'
+        acceptor = MessageAcceptor()
 
         for i, _ in enumerate(self.roll()):
             input_data = [
                 f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}',
             ]
-            expected = [
-                f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}' + suffix,
-            ]
-            self.do_write_read(input_data, expected)
-            time.sleep(0.5)
+            acceptor.reset()
+            acceptor.accept(
+                [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}' + suffix],
+            )
+            self.do_write_read(input_data, acceptor)

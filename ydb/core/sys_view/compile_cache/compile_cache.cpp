@@ -183,6 +183,7 @@ private:
             bool isDatabaseAdmin = AppData()->FeatureFlags.GetEnableDatabaseAdmin()
                 && IsDatabaseAdministrator(UserToken.Get(), DatabaseOwner);
             IsAdmin = isClusterAdmin || isDatabaseAdmin;
+            IsMetadataUser = UserToken->GetUserSID() == NACLib::TSystemUsers::Metadata().GetUserSID();
         }
 
         if (!MissingSchemaColumns.empty()) {
@@ -469,7 +470,7 @@ private:
 
         // Internal compile cache warmup fetches queries on behalf of all users
         // in this database using the metadata system token.
-        if (UserToken->GetUserSID() == NACLib::TSystemUsers::Metadata().GetUserSID()) {
+        if (IsMetadataUser) {
             return true;
         }
 
@@ -551,6 +552,7 @@ private:
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IsAdmin = false;
+    bool IsMetadataUser = false;
 
     static constexpr TDuration NodeRequestTimeout = TDuration::Seconds(10);
 

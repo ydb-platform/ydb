@@ -16,6 +16,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NKqp {
 
@@ -532,43 +534,135 @@ namespace {
             VerifyQueriesServedFromCache(kikimr, env.UserSids, env.IsThreadLocked);
         }
 
-        Y_UNIT_TEST(WarmupLoadsOtherUsersQueriesWithRestrictedAdmins) {
+        Y_UNIT_TEST_TWIN(WarmupLoadsOtherUsersQueriesWithRestrictedAdmins, LegacyMetadata) {
             TWarmupTestParams params;
             params.UseRealThreads = false;
-            params.UserSids = {"user0", "user1"};
-
+            params.FillCache = false;
+            params.FillImplicitParams = false;
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
-            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
-            UNIT_ASSERT(env.ExpectedUniqueCount > 0);
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            GrantPermissions(kikimr, "/Root/KeyValue", {"user0", "warmup-readers"}, true);
 
-            kikimr.RunCall([&] {
-                auto schemeClient = kikimr.GetSchemeClient();
-                for (const auto& userSid : params.UserSids) {
-                    auto result = schemeClient.ModifyPermissions("/Root",
-                        NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
-                            NYdb::NScheme::TPermissions(userSid + "@builtin",
-                                {"ydb.database.connect", "ydb.granular.describe_schema", "ydb.granular.select_row"})))
-                        .ExtractValueSync();
-                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                }
-                return true;
-            });
+            const TString userSid = "user1@builtin";
+            const TVector<NACLib::TSID> groups = {
+                "warmup-readers@builtin", "another-group@builtin", "all-users@well-known"};
+            const TString credential = "original-credential-must-not-be-cached";
+            const NACLib::TUserToken originalToken(credential, userSid, groups);
+            // Required for access to the default resource pool.
+            const NACLib::TUserToken tokenWithoutGroups(userSid, {"all-users@well-known"});
+            const NACLib::TUserToken directAccessToken("user0@builtin", {"all-users@well-known"});
+            const TString query = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = 42u;";
 
-            // Configure every scan node, without racing actor threads. Neither
-            // metadata@system nor the client users are cluster/database admins.
+            auto execute = [&](ui32 nodeIndex, const NACLib::TUserToken& token) {
+                auto edge = runtime.AllocateEdgeActor(nodeIndex);
+                auto event = std::make_unique<TEvKqp::TEvQueryRequest>();
+                event->Record.SetUserToken(token.SerializeAsString());
+                auto& request = *event->Record.MutableRequest();
+                request.SetDatabase("/Root");
+                request.SetQuery(query);
+                request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+                request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+                request.SetSyntax(Ydb::Query::SYNTAX_YQL_V1);
+                request.MutableQueryCachePolicy()->set_keep_in_cache(true);
+                request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+                request.MutableTxControl()->set_commit_tx(true);
+                runtime.Send(new IEventHandle(MakeKqpProxyID(runtime.GetNodeId(nodeIndex)), edge,
+                    event.release()), nodeIndex);
+                auto response = runtime.GrabEdgeEvent<TEvKqp::TEvQueryResponse>(edge, TDuration::Seconds(10));
+                UNIT_ASSERT(response);
+                return response->Get()->Record.GetYdbStatus();
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(execute(1, originalToken), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(execute(1, directAccessToken), Ydb::StatusIds::SUCCESS);
+            VerifyLocalCacheContainsUsers(runtime, 1, "/Root", {"user0", "user1"});
+            const auto coldCache = GetLocalCacheUserSids(runtime, 0, "/Root");
+            UNIT_ASSERT(!coldCache.contains(userSid));
+            UNIT_ASSERT(!coldCache.contains(directAccessToken.GetUserSID()));
+            UNIT_ASSERT(execute(0, tokenWithoutGroups) != Ydb::StatusIds::SUCCESS);
+
             for (ui32 node = 0; node < params.NodeCount; ++node) {
-                auto& appData = env.Runtime.GetAppData(node);
-                appData.AdministrationAllowedSIDs = {"root@builtin"};
-                appData.FeatureFlags.SetEnableDatabaseAdmin(false);
+                runtime.GetAppData(node).AdministrationAllowedSIDs = {"root@builtin"};
+                runtime.GetAppData(node).FeatureFlags.SetEnableDatabaseAdmin(false);
             }
 
+            // Keep discovery deterministic by selecting the seeded peer.
+            const auto peersObserver = runtime.AddObserver<TEvKqp::TEvListProxyNodesResponse>(
+                [&](TEvKqp::TEvListProxyNodesResponse::TPtr& event) {
+                    event->Get()->ProxyNodes = {runtime.GetNodeId(1)};
+                });
+
+            const auto metadataObserver = runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesResponse>(
+                [&](TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& event) {
+                    for (auto& entry : *event->Get()->Record.MutableCacheCacheQueries()) {
+                        if (entry.GetUserSID() != userSid) {
+                            continue;
+                        }
+                        UNIT_ASSERT(!entry.GetMetaInfo().Contains(credential));
+                        if constexpr (LegacyMetadata) {
+                            NJson::TJsonValue metadata;
+                            UNIT_ASSERT(NJson::ReadJsonTree(entry.GetMetaInfo(), &metadata));
+                            metadata.EraseValue("user_group_sids");
+                            entry.SetMetaInfo(NJson::WriteJson(metadata, false));
+                        }
+                    }
+                });
+
+            size_t prepares = 0;
+            const auto observer = runtime.AddObserver<TEvKqp::TEvQueryRequest>(
+                [&](TEvKqp::TEvQueryRequest::TPtr& event) {
+                    const auto& request = event->Get()->Record.GetRequest();
+                    if (!request.GetIsWarmupCompilation()
+                            || event->Recipient != MakeKqpProxyID(runtime.GetNodeId(0))) {
+                        return;
+                    }
+                    const NACLib::TUserToken token(event->Get()->Record.GetUserToken());
+                    if (token.GetUserSID() != userSid) {
+                        return;
+                    }
+                    ++prepares;
+                    UNIT_ASSERT_STRING_CONTAINS(request.GetQuery(), "/Root/KeyValue");
+                    if constexpr (LegacyMetadata) {
+                        UNIT_ASSERT(token.GetGroupSIDs().empty());
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(token.GetGroupSIDs().size(), groups.size());
+                        for (const auto& group : groups) {
+                            UNIT_ASSERT(token.IsExist(group));
+                        }
+                    }
+                    UNIT_ASSERT(token.GetOriginalUserToken().empty());
+                    UNIT_ASSERT(!event->Get()->Record.GetUserToken().Contains(credential));
+                });
+
+            TWarmupTestEnv env{kikimr, runtime, true, 0, params.NodeCount, {}, 0};
             TKqpWarmupConfig config;
-            auto complete = RunWarmup(env, config, config.HardDeadline);
+            auto complete = RunWarmup(env, config, config.HardDeadline, /* waitBootstrap */ true);
             UNIT_ASSERT(complete);
             UNIT_ASSERT_C(complete->Get()->Success, complete->Get()->Message);
-            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, env.ExpectedUniqueCount);
-            VerifyLocalCacheContainsUsers(env.Runtime, env.NodeId, "/Root", env.UserSids);
-            VerifyQueriesServedFromCache(kikimr, env.UserSids, env.IsThreadLocked);
+            UNIT_ASSERT_VALUES_EQUAL_C(prepares, 1, complete->Get()->Message
+                << ", loaded=" << complete->Get()->EntriesLoaded << ", failed=" << complete->Get()->EntriesFailed);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, LegacyMetadata ? 1 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, LegacyMetadata ? 1 : 0);
+            const auto warmedCache = GetLocalCacheUserSids(runtime, 0, "/Root");
+            UNIT_ASSERT(warmedCache.contains(directAccessToken.GetUserSID()));
+            if constexpr (LegacyMetadata) {
+                UNIT_ASSERT(!warmedCache.contains(userSid));
+            } else {
+                UNIT_ASSERT(warmedCache.contains(userSid));
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(execute(0, originalToken), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(execute(0, tokenWithoutGroups) != Ydb::StatusIds::SUCCESS);
+
+            kikimr.RunCall([&] {
+                auto result = kikimr.GetSchemeClient().ModifyPermissions("/Root",
+                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
+                        NYdb::NScheme::TPermissions("user0@builtin",
+                            {"ydb.database.connect", "ydb.granular.describe_schema", "ydb.granular.select_row"})))
+                    .ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                return true;
+            });
 
             auto result = ExecuteQueryWithCache(kikimr, "user0",
                 "SELECT UserSID FROM `/Root/.sys/compile_cache_queries`", env.IsThreadLocked);
@@ -576,9 +670,9 @@ namespace {
             TResultSetParser parser(result.GetResultSet(0));
             size_t rows = 0;
             while (parser.TryNextRow()) {
-                auto userSid = parser.ColumnParser("UserSID").GetOptionalUtf8();
-                UNIT_ASSERT(userSid);
-                UNIT_ASSERT_VALUES_EQUAL(*userSid, "user0@builtin");
+                auto sid = parser.ColumnParser("UserSID").GetOptionalUtf8();
+                UNIT_ASSERT(sid);
+                UNIT_ASSERT_VALUES_EQUAL(*sid, directAccessToken.GetUserSID());
                 ++rows;
             }
             UNIT_ASSERT(rows > 0);
@@ -1511,4 +1605,3 @@ namespace {
     } // Y_UNIT_TEST_SUITE(KqpWarmup)
 
 } // namespace NKikimr::NKqp
-

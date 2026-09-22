@@ -700,6 +700,13 @@ private:
             }
         }
         meta["parameters"] = parameters;
+        if (UserToken && !UserToken->GetUserSID().empty()) {
+            NJson::TJsonValue groups(NJson::JSON_ARRAY);
+            for (const auto& sid : UserToken->GetGroupSIDs()) {
+                groups.AppendValue(sid);
+            }
+            meta["user_group_sids"] = std::move(groups);
+        }
         return meta;
     }
 

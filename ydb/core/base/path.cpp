@@ -175,7 +175,7 @@ bool IsPathUnderDatabase(TStringBuf database, TStringBuf path) {
 
 } // namespace
 
-TString PrependClusterRootIfNeeded(TStringBuf domainRoot, TStringBuf databasePath) {
+TString PrependDomainIfNeeded(TStringBuf domainRoot, TStringBuf databasePath) {
     if (databasePath.empty() || databasePath.StartsWith('/')) {
         return TString{databasePath};
     }

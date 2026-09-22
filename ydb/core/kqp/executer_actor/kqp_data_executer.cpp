@@ -9,27 +9,27 @@
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/kqp/common/buffer/events.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
-#include <ydb/core/kqp/common/kqp_tx.h>
-#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/data_events/common/error_codes.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/persqueue/events/global.h>
 
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
-#include <ydb/library/wilson_ids/wilson.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -713,8 +713,16 @@ private:
                     return;
                 }
 
-                for (const auto& [taskParam, controlPlaneSettings] : stage.GetStageControlPlaneActors()) {
-                    YQL_ENSURE(stageInfo.Meta.ControlPlaneActors.emplace(taskParam, Register(AsyncIoFactory->CreateDqControlPlane({.Type = controlPlaneSettings.GetType(), .TxId = dqTxId}))).second);
+                if (!stage.GetStageControlPlaneActors().empty()) {
+                    THashMap<TString, TString> secureParams;
+                    TasksGraph.FillExternalSourceSecureParams(secureParams, stage);
+                    for (const auto& [taskParam, controlPlaneSettings] : stage.GetStageControlPlaneActors()) {
+                        YQL_ENSURE(stageInfo.Meta.ControlPlaneActors.emplace(taskParam, Register(AsyncIoFactory->CreateDqControlPlane({
+                            .Type = controlPlaneSettings.GetType(),
+                            .TxId = dqTxId,
+                            .SecureParams = secureParams,
+                        }))).second, "Duplicate control-plane actor task parameter: " << taskParam);
+                    }
                 }
             }
         }

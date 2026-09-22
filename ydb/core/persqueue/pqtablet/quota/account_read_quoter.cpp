@@ -67,7 +67,7 @@ void TBasicAccountQuoter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorCont
         ReplyPersQueueError(
             TabletActorId, ctx, TabletId, TopicConverter->GetPrimaryPath(), Partition, Counters, NKikimrServices::PQ_RATE_LIMITER,
             cookie, NPersQueue::NErrorCode::INITIALIZING,
-            TStringBuilder() << "Tablet is restarting, topic " << TopicConverter->GetClientsideName() << " (ReadInfo) cookie " << cookie
+            TStringBuilder() << "Tablet is restarting, topic " << TopicConverter->GetPrimaryPath() << " (ReadInfo) cookie " << cookie
         );
     }
     Die(ctx);

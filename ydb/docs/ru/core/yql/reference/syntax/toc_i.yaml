@@ -1,5 +1,6 @@
 items:
 - { name: Обзор,                        href: index.md }
+- { name: Условные обозначения синтаксиса команд YQL, href: syntax-conventions.md }
 - { name: Лексическая структура,        href: lexer.md }
 - { name: Выражения,                    href: expressions.md }
 - { name: ACTION,                       href: action.md }

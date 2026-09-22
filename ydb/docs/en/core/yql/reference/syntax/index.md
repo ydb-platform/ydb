@@ -1,5 +1,6 @@
 # List of articles on YQL syntax
 
+* [YQL command syntax conventions](syntax-conventions.md)
 * [Lexical structure](lexer.md)
 * [Expressions](expressions.md)
 

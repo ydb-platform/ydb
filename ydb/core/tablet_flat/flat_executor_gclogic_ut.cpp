@@ -515,7 +515,7 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
 
         TExecutorGCLogic gcLogic(info, MakeGCCookies(*info), flags);
 
-        // Put a DoNotKeep blob at generation 50 (inside [10, 100)) into Created.
+        // Put a Keep blob at generation 50 (inside [10, 100)) into Created.
         TGCBlobDelta delta;
         delta.Created.push_back(HistoryCutterUtBlob(tabletId, 50, 0));
 

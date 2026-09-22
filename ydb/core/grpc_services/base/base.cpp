@@ -48,7 +48,7 @@ TMaybe<TString> IRequestProxyCtx::ResolveDatabaseName(const TMaybe<TString>& dat
         return database;
     }
     std::call_once(DatabaseNameOnce_, [&] {
-        ResolvedDatabaseName_ = PrependClusterRootIfNeeded(ClusterRoot_, *database);
+        ResolvedDatabaseName_ = PrependDomainIfNeeded(ClusterRoot_, *database);
     });
     return ResolvedDatabaseName_;
 }

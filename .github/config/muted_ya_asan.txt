@@ -77,6 +77,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore+EqualNullsJoinKeys
+ydb/core/kqp/ut/rbo KqpRboYql.DistinctShuffleEliminationTPCHQ4-CompositePartitionKey
 ydb/core/kqp/ut/rbo KqpRboYql.Limit+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.Limit-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
@@ -225,6 +226,7 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.MultipleCDC
 ydb/core/persqueue/public/describer/ut TDescriberTests.NotTopicWithDescribeAccess
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashInName
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithEmptyDatabaseAbsolutePath
+ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootAbsoluteDatabasePrefixedPath
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootIgnoredForFirstClassCitizen
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootMultipleAccounts
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootNotFound
@@ -308,6 +310,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToBuild_Ra
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.EmptyEmbeddingSkipped
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.MainToBuild
+ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.MainToBuildWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.MainToPostingWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BadRequest

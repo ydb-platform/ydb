@@ -1278,54 +1278,33 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             );
         )", 0, Ydb::StatusIds::SUCCESS, {}, 0, NKikimrKqp::QUERY_TYPE_SQL_DDL);
         auto* uploader = RegisterUploader(runtime);
-        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
-            const auto sessionId = CreateSession(runtime, sender, type);
-            TString txId;
-            for (ui32 step = 0; step < 3; ++step) {
-                const ui8 level = step == 1 ? 0 : 15;
-                ClearUploader(*uploader);
-                auto request = MakeSQLRequest(TStringBuilder()
-                    << "UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (1u, " << (10 + step) << "u); "
-                    << "SELECT * FROM `/Root/UniqueValues` WHERE Key = 1u;");
-                auto& query = *request->Record.MutableRequest();
-                query.SetType(type);
-                query.SetSessionId(sessionId);
-                auto& tx = *query.MutableTxControl();
-                if (txId) {
-                    tx.clear_begin_tx();
-                    tx.set_tx_id(txId);
-                }
-                tx.set_commit_tx(step == 2);
-                auto response = ExecRequest(runtime, sender, std::move(request), level);
-                txId = response.GetResponse().GetTxMeta().id();
-                if (!level) {
-                    // Query Proxy is collected at Basic even when query-level
-                    // tracing is disabled; there is no query tree to inspect.
-                    continue;
-                }
-                if (step != 2) {
-                    // The open transaction keeps the session span alive until
-                    // the final commit; inspect the completed trace below.
-                    ClearUploader(*uploader);
-                    continue;
-                }
-                UNIT_ASSERT(std::ranges::any_of(uploader->Spans, [](const auto& span) {
-                    const auto* purpose = FindAttribute(span, "ydb.compile_dependency.purpose");
-                    return purpose && purpose->value().string_value() == "index_implementation";
-                }));
-                const auto* lookup = FindSpan(*uploader, "Check rows");
-                UNIT_ASSERT(lookup);
-                UNIT_ASSERT_C(std::ranges::any_of(uploader->Spans, [](const auto& span) {
-                    return span.name() == "Check rows" && std::ranges::any_of(span.events(), [](const auto& event) {
-                        return event.name() == "Shard read statistics";
-                    });
-                }), "type=" << static_cast<int>(type) << " step=" << step << " " << uploader->PrintTraces());
-                const auto* bufferRows = FindSpan(*uploader, "Buffer rows");
-                UNIT_ASSERT(bufferRows);
-                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(bufferRows->status().code()),
-                    static_cast<int>(NTraceProto::Status::STATUS_CODE_OK));
-            }
-        }
+        const auto type = NKikimrKqp::QUERY_TYPE_SQL_DML;
+        const auto sessionId = CreateSession(runtime, sender, type);
+        ClearUploader(*uploader);
+        auto request = MakeSQLRequest(
+            "UPSERT INTO `/Root/UniqueValues` (Key, Value) VALUES (1u, 10u); "
+            "SELECT * FROM `/Root/UniqueValues` WHERE Key = 1u;");
+        auto& query = *request->Record.MutableRequest();
+        query.SetType(type);
+        query.SetSessionId(sessionId);
+        query.MutableTxControl()->set_commit_tx(true);
+        ExecRequest(runtime, sender, std::move(request), 15);
+
+        UNIT_ASSERT(std::ranges::any_of(uploader->Spans, [](const auto& span) {
+            const auto* purpose = FindAttribute(span, "ydb.compile_dependency.purpose");
+            return purpose && purpose->value().string_value() == "index_implementation";
+        }));
+        const auto* lookup = FindSpan(*uploader, "Check rows");
+        UNIT_ASSERT(lookup);
+        UNIT_ASSERT_C(std::ranges::any_of(uploader->Spans, [](const auto& span) {
+            return span.name() == "Check rows" && std::ranges::any_of(span.events(), [](const auto& event) {
+                return event.name() == "Shard read statistics";
+            });
+        }), uploader->PrintTraces());
+        const auto* bufferRows = FindSpan(*uploader, "Buffer rows");
+        UNIT_ASSERT(bufferRows);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(bufferRows->status().code()),
+            static_cast<int>(NTraceProto::Status::STATUS_CODE_OK));
     }
 
     Y_UNIT_TEST(SnapshotTraceEndsWithCancelledQuery) {

@@ -138,6 +138,7 @@ private:
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
+        requestBaseCtx->InitRequestPaths(RootDatabase, AppData(ctx)->FeatureFlags.GetEnableRelativePaths(), AppData(ctx)->Counters);
         requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer);
 
         LogRequest(event);
@@ -154,12 +155,6 @@ private:
         MaybeStartTracing(event);
 
         if (IsAuthStateOK(*requestBaseCtx)) {
-            if (const auto database = requestBaseCtx->GetDatabaseName(); database) {
-                const auto normalizedDatabase = PrependClusterRootIfNeeded(RootDatabase, *database);
-                if (normalizedDatabase != *database) {
-                    requestBaseCtx->UseDatabase(normalizedDatabase);
-                }
-            }
             Handle(event, ctx);
             return;
         }
@@ -197,7 +192,7 @@ private:
             }
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
-                databaseName = CanonizePath(PrependClusterRootIfNeeded(RootDatabase, maybeDatabaseName.GetRef()));
+                databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
                 if (!std::is_same_v<TEvent, TEvHttpRequestAuthAndCheck>) { // TEvHttpRequestAuthAndCheck is allowed to be processed without database
                     Counters->IncEmptyDatabaseNameCounter();

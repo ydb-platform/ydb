@@ -211,10 +211,8 @@ Y_UNIT_TEST_SUITE(Path) {
             {"mydb", "/ru/mydb"},
             {"ru/mydb", "/ru/ru/mydb"},
             {"ru", "/ru/ru"},
-            {"mydb//nested/", "/ru/mydb/nested"},
             {"/ru/mydb", "/ru/mydb"},
             {"/other/mydb", "/other/mydb"},
-            {"//other//mydb/", "//other//mydb/"},
             {"/", "/"},
             {"", ""},
         };

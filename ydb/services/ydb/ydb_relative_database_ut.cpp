@@ -59,6 +59,20 @@ void AssertSuccess(const TResult& result) {
 
 Y_UNIT_TEST_SUITE(YdbRelativeDatabase) {
 
+Y_UNIT_TEST(DisabledFlagPreservesLegacyDatabaseNames) {
+    NKikimrConfig::TAppConfig config;
+    config.MutableFeatureFlags()->SetEnableRelativePaths(false);
+    TKikimrWithGrpcAndRootSchema server(config);
+    auto channel = grpc::CreateChannel(
+        TStringBuilder() << "localhost:" << server.GetPort(), grpc::InsecureChannelCredentials());
+    auto stub = Ydb::Discovery::V1::DiscoveryService::NewStub(channel);
+    for (const TStringBuf token : {TStringBuf(), TStringBuf("root@builtin")}) {
+        // Legacy slashless full path names /Root, not /Root/Root.
+        AssertDiscoveryStatus(ListEndpoints(*stub, "Root", "Root", true, token));
+        AssertDiscoveryStatus(ListEndpoints(*stub, "/Root", "/Root", true, token));
+    }
+}
+
 Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     TKikimrWithGrpcAndRootSchema server({}, {}, {}, false, nullptr, [](auto& settings) {
         settings.StoragePoolTypes.clear();

@@ -1794,6 +1794,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     UNIT_ASSERT_C(ast->find(stringContainsIgnoreCaseKernel) != std::string::npos,
                         TStringBuilder() << "String UDF path missing with pragma off. Query: " << query << " AST: " << *ast);
                 }
+                const auto& expectedKernel = expectFastKernel ? fastContainsIgnoreCaseKernel : stringContainsIgnoreCaseKernel;
+                const auto plan = res.GetStats()->GetPlan();
+                UNIT_ASSERT_C(plan->find(Sprintf("Udf(%s)(", expectedKernel.c_str())) != std::string::npos,
+                    TStringBuilder() << "UDF filter is not formatted. Query: " << query << " Plan: " << *plan);
                 CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResults[i]);
             }
         };

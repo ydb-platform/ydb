@@ -282,7 +282,8 @@ protected:
                 {"attempt", backoff.GetIteration() + 1}
             );
             if (!backoff.HasMore()) {
-                throw TIamCallError(retryableStatus, retryableGrpcCode) << method << " failed after " << Settings.MaxRetries << " attempts: " << retryableError;
+                // MaxRetries = 0 still makes the one attempt
+                throw TIamCallError(retryableStatus, retryableGrpcCode) << method << " failed after " << Max<ui32>(Settings.MaxRetries, 1) << " attempts: " << retryableError;
             }
             co_await NActors::AsyncSleepFor(backoff.Next());
         }

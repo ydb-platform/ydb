@@ -83,4 +83,33 @@ TString TIamDelegationSettings::ValidateForDelegation() const {
     return {};
 }
 
+// The delegated token service talks to the token service only: the control plane, Resource Manager and
+// the operation polling belong to the delegation service.
+bool TIamDelegationSettings::SameForTokenService(const TIamDelegationSettings& other) const {
+    auto mine = *this;
+    auto theirs = other;
+    for (auto* settings : {&mine, &theirs}) {
+        settings->ServiceControlEndpoint.clear();
+        settings->ResourceManagerEndpoint.clear();
+        settings->ReferrerType.clear();
+        settings->OperationPollInterval = TDuration::Zero();
+        settings->OperationPollTimeout = TDuration::Zero();
+    }
+    return mine == theirs;
+}
+
+// The delegation service talks to the control plane and Resource Manager: the token service endpoint and
+// the token cache parameters belong to the delegated token service.
+bool TIamDelegationSettings::SameForDelegationService(const TIamDelegationSettings& other) const {
+    auto mine = *this;
+    auto theirs = other;
+    for (auto* settings : {&mine, &theirs}) {
+        settings->TokenServiceEndpoint.clear();
+        settings->TokenRefreshMargin = TDuration::Zero();
+        settings->MaxTokenCacheLifetime = TDuration::Zero();
+        settings->IdleKeyTtl = TDuration::Zero();
+    }
+    return mine == theirs;
+}
+
 } // namespace NKikimr::NIamDelegation

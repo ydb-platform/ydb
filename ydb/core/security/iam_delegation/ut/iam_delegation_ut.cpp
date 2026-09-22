@@ -904,6 +904,14 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
         UNIT_ASSERT_VALUES_EQUAL(failed.Status, Ydb::StatusIds::UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(failed.Issues.ToOneLineString(), "failed after 1 attempts");
         UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 4u);
+
+        // MaxRetries = 0 still makes the one attempt, and the error says so
+        f.Settings.MaxRetries = 0;
+        const auto none = f.Runtime->Register(CreateIamDelegationService(f.Settings, CreateStaticSystemTokenSource("ssa-token")));
+        const auto failedToo = f.Setup(none, f.Spec());
+        UNIT_ASSERT_VALUES_EQUAL(failedToo.Status, Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_STRING_CONTAINS(failedToo.Issues.ToOneLineString(), "failed after 1 attempts");
+        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 5u);
     }
 
     Y_UNIT_TEST(RevokePollsOperation) {
@@ -1585,8 +1593,8 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
     }
 
     // The services follow the configuration at runtime: a config notification with the missing endpoint starts
-    // the delegation service next to the token service already running (each registered once), and one that
-    // turns the flag off stops both.
+    // the delegation service next to the token service already running (each registered once), one that
+    // turns the flag off stops both, and one that changes IamConfig restarts the service whose settings changed.
     Y_UNIT_TEST(ConfigNotificationStartsAndStopsTheServices) {
         TPortManager portManager;
         auto iam = FullIamConfig();
@@ -1637,6 +1645,45 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         featureFlags.SetEnableIamDelegationSecrets(true);
         notify(featureFlags, FullIamConfig());
         WaitUntil([&]() { return registered(MakeIamDelegatedTokenServiceId()) && registered(MakeIamDelegationServiceId()); }, "the services to start again");
+
+        // A changed IamConfig restarts the service whose settings changed, since an actor keeps the settings it was
+        // created with; the other service keeps its actor. The proxy re-initializes the services in the notification
+        // handler right after acknowledging, so a request it has answered afterwards proves the re-initialization
+        // ran (FIFO) and the registrations are final.
+        const auto settled = [&]() {
+            runtime->Send(new IEventHandle(proxy, sender, new NKqp::TEvKqp::TEvCreateSessionRequest()));
+            UNIT_ASSERT(runtime->GrabEdgeEvent<NKqp::TEvKqp::TEvCreateSessionResponse>(sender, TDuration::Seconds(120)));
+        };
+        const auto gone = [&](const TActorId& actor) {
+            const auto probe = runtime->AllocateEdgeActor();
+            runtime->Send(new IEventHandle(actor, probe, new TEvents::TEvWakeup(), IEventHandle::FlagTrackDelivery));
+            UNIT_ASSERT(runtime->GrabEdgeEvent<TEvents::TEvUndelivered>(probe, TDuration::Seconds(120)));
+        };
+        const auto tokenService1 = runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0);
+        const auto delegationService1 = runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0);
+
+        auto changed = FullIamConfig();
+        changed.SetTokenServiceEndpoint("localhost:2"); // used by the token service only
+        notify(featureFlags, changed);
+        settled();
+        const auto tokenService2 = runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0);
+        UNIT_ASSERT(tokenService2 && tokenService2 != tokenService1);
+        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0), delegationService1);
+        gone(tokenService1);
+
+        changed.SetServiceControlEndpoint("localhost:2"); // used by the delegation service only
+        notify(featureFlags, changed);
+        settled();
+        const auto delegationService2 = runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0);
+        UNIT_ASSERT(delegationService2 && delegationService2 != delegationService1);
+        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0), tokenService2);
+        gone(delegationService1);
+
+        // the same settings again change nothing
+        notify(featureFlags, changed);
+        settled();
+        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0), tokenService2);
+        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0), delegationService2);
     }
 
     Y_UNIT_TEST(BothWithIdentityFromTheReplicationSection) {

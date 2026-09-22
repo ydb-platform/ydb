@@ -39,6 +39,13 @@ struct TIamDelegationSettings {
     TDuration MaxTokenCacheLifetime = TDuration::Hours(1);
     TDuration IdleKeyTtl = TDuration::Minutes(10); // a key nobody asked for during this time is dropped
 
+    // An actor keeps the settings it was created with, so on a config notification the KQP proxy restarts
+    // a service whose settings changed. Only the fields a service uses count: adding the control plane
+    // endpoint, say, starts the delegation service without restarting the delegated token service.
+    bool operator==(const TIamDelegationSettings&) const = default;
+    bool SameForTokenService(const TIamDelegationSettings& other) const;
+    bool SameForDelegationService(const TIamDelegationSettings& other) const;
+
     static TIamDelegationSettings FromConfig(const NKikimrConfig::TIamConfig& iamConfig);
 
     // The same, with the identity of YDB and the token service taken from replication_config.iam_service_control

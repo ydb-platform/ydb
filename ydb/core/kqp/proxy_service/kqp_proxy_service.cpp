@@ -2134,22 +2134,30 @@ private:
     // setting a delegation up also needs the IAM control plane, so a cluster configured without the
     // control plane endpoint keeps reading the delegation secrets it already has and only loses the
     // ability to create new ones. Runs at bootstrap and on every config notification: the services
-    // follow the feature flag and IamConfig at runtime, a service missing so far is started once its
-    // configuration is complete, and both are stopped when the flag is turned off.
+    // follow the feature flag and IamConfig at runtime. A service missing so far is started once its
+    // configuration is complete, both are stopped when the flag is turned off, and since an actor keeps
+    // the settings it was created with, a service whose settings changed is restarted.
     void InitIamDelegationServices() {
         if (!FeatureFlags.GetEnableIamDelegationSecrets()) {
-            StopIamDelegationServices();
-            return;
-        }
-        if (IamDelegatedTokenService && IamDelegationService) {
+            StopIamDelegationServices("EnableIamDelegationSecrets is off");
             return;
         }
         try {
             const auto settings = NIamDelegation::TIamDelegationSettings::FromConfig(IamConfig, AppData()->ReplicationConfig);
+            if (IamDelegatedTokenService && !settings.SameForTokenService(IamDelegationSettings)) {
+                StopIamDelegatedTokenService("the settings of the delegated token service changed");
+            }
+            if (IamDelegationService && !settings.SameForDelegationService(IamDelegationSettings)) {
+                StopIamDelegationService("the settings of the delegation service changed");
+            }
+            if (IamDelegatedTokenService && IamDelegationService) {
+                return;
+            }
             if (const TString error = settings.Validate()) {
                 WarnIamDelegationOnce("IAM delegation services are not started", error);
                 return;
             }
+            IamDelegationSettings = settings;
             const auto& metadata = AppData()->AuthConfig.GetLocalMetadataService();
             auto tokenSource = NIamDelegation::CreateVmMetadataSystemTokenSource(
                 AppData()->AuthConfig.HasLocalMetadataService() ? metadata.GetHost() : TString(), metadata.GetPort());
@@ -2172,19 +2180,28 @@ private:
         }
     }
 
-    void StopIamDelegationServices() {
+    void StopIamDelegationServices(const TString& reason) {
+        StopIamDelegationService(reason);
+        StopIamDelegatedTokenService(reason);
+        IamDelegationWarning.clear();
+    }
+
+    void StopIamDelegationService(const TString& reason) {
         if (IamDelegationService) {
             TActivationContext::ActorSystem()->RegisterLocalService(NIamDelegation::MakeIamDelegationServiceId(), TActorId());
             Send(IamDelegationService, new TEvents::TEvPoison());
             IamDelegationService = TActorId();
+            YDB_LOG_INFO("IAM delegation service stopped", {"reason", reason});
         }
+    }
+
+    void StopIamDelegatedTokenService(const TString& reason) {
         if (IamDelegatedTokenService) {
             TActivationContext::ActorSystem()->RegisterLocalService(NIamDelegation::MakeIamDelegatedTokenServiceId(), TActorId());
             Send(IamDelegatedTokenService, new TEvents::TEvPoison());
             IamDelegatedTokenService = TActorId();
-            YDB_LOG_INFO("IAM delegation services stopped: EnableIamDelegationSecrets is off");
+            YDB_LOG_INFO("IAM delegated token service stopped", {"reason", reason});
         }
-        IamDelegationWarning.clear();
     }
 
     // The same configuration problem is reported once, not on every config notification.
@@ -2277,6 +2294,7 @@ private:
     TActorId IamDelegationService;
     TActorId IamDelegatedTokenService;
     TString IamDelegationWarning; // the reason of the last warning about the IAM delegation services
+    NIamDelegation::TIamDelegationSettings IamDelegationSettings; // the settings the running IAM delegation services were created with
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

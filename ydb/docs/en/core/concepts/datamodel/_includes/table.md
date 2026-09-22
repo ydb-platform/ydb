@@ -169,6 +169,25 @@ The “monotonic key + defaults” scenario is in the [table above](#default_aut
 
 {% endcut %}
 
+{% cut "Example: explicit AUTO_PARTITIONING_* settings" %}
+
+If defaults are not enough for the `orders` table, set partitioning parameters explicitly. Specific values depend on workload and cluster topology — see [partition count guides](#default_auto_sharding_heuristics) and [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md).
+
+```yql
+ALTER TABLE orders SET (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min_partitions>,
+    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = <max_partitions>
+);
+```
+
+Where:
+
+- `<min_partitions>` — minimum partition count ([`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count)).
+- `<max_partitions>` — upper bound on partition count ([`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](#auto_partitioning_max_partitions_count)).
+
+{% endcut %}
+
 ### Reading Data from Replicas {#read_only_replicas}
 
 When executing queries in {{ ydb-short-name }}, the actual execution of a query to each partition is performed at a single point that serves the distributed transaction protocol. However, thanks to storing data on shared storage, it is possible to launch one or more replicas of a partition without allocating additional storage space — the data is already stored replicated, and more than one reader can be served (but the writer is still strictly one at any given moment).

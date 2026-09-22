@@ -166,6 +166,25 @@ CREATE TABLE orders (
 
 {% endcut %}
 
+{% cut "Пример: явные настройки AUTO_PARTITIONING_*" %}
+
+Если для таблицы `orders` дефолтов недостаточно, задайте параметры партиционирования явно. Конкретные значения зависят от нагрузки и топологии кластера — см. [ориентиры по числу партиций](#default_auto_sharding_heuristics) и [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md).
+
+```yql
+ALTER TABLE orders SET (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min_partitions>,
+    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = <max_partitions>
+);
+```
+
+Где:
+
+- `<min_partitions>` — минимальное число партиций ([`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count)).
+- `<max_partitions>` — верхняя граница числа партиций ([`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](#auto_partitioning_max_partitions_count)).
+
+{% endcut %}
+
 ### Чтение с реплик {#read_only_replicas}
 
 При выполнении запросов в {{ ydb-short-name }} фактическое выполнение запроса к каждой партиции осуществляется в единой точке, обслуживающей протокол распределенных транзакций. Но благодаря хранению данных на разделяемом хранилище возможен запуск одной или нескольких реплик партиции, без выделения дополнительного места на сторадже — данные уже хранятся реплицированно и возможно обслуживание более одного читателя (но писатель при этом все еще в каждый момент строго один).

@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/testlib/actors
     ydb/library/grpc/server
     ydb/library/grpc/server/actors
+    ydb/public/sdk/cpp/src/client/resources
 )
 
 YQL_LAST_ABI_VERSION()

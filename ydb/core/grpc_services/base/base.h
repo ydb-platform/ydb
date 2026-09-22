@@ -1776,9 +1776,17 @@ using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false, Runtime
 template <typename TReq, typename TResp, bool IsOperation, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
 class TGrpcRequestCallNoAuth : public TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits> {
 public:
-    using TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits>::TGrpcRequestCall;
+    using TBaseCall = TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits>;
+    using TBaseCall::TBaseCall;
 
     const NYdbGrpc::TAuthState& GetAuthState() const override {
+        const auto& state = TBaseCall::GetAuthState();
+        // Skip the check actor for anonymous calls. If a token was provided and
+        // the check already finished, keep the real state so AS_FAIL becomes
+        // UNAUTHENTICATED instead of being retried forever.
+        if (state.State != NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
+            return state;
+        }
         static NYdbGrpc::TAuthState noAuthState(false);
         return noAuthState;
     }

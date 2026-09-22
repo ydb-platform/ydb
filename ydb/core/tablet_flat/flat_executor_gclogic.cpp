@@ -26,6 +26,13 @@ TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, 
     , ConfirmedOnSendStep(0)
     , AllowGarbageCollection(false)
 {
+    for (const auto& channel : TabletStorageInfo->Channels) {
+        // Reassigned data channels need GC even when they have never had blobs.
+        // Channel 0 is collected by the system tablet's log GC.
+        if (channel.Channel != 0 && channel.History.size() > 1) {
+            ChannelInfo.try_emplace(channel.Channel);
+        }
+    }
 }
 
 void TExecutorGCLogic::WriteToLog(TLogCommit &commit) {
@@ -155,11 +162,22 @@ TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGar
                 record.SetChannel(channelId);
                 record.SetFromGeneration(historyEntry->FromGeneration);
                 record.SetGroupID(historyEntry->GroupID);
+                LOG_DEBUG_S(ctx, NKikimrServices::TABLET_EXECUTOR,
+                    "Cutting channel history after hard GC"
+                    << " tablet " << TabletStorageInfo->TabletID
+                    << " channel " << channelId
+                    << " from generation " << historyEntry->FromGeneration
+                    << " group " << historyEntry->GroupID);
                 ctx.Send(launcher, request.Release());
             }
             channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::Cut;
         }
     } else {
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_EXECUTOR,
+            "GC failed, resetting channel history cut"
+            << " tablet " << TabletStorageInfo->TabletID
+            << " channel " << channelId
+            << " status " << ev->Status);
         channel.OnCollectGarbageFailure();
         channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::None;
     }
@@ -204,7 +222,20 @@ void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
     }
     for (auto channelId : ChannelsToCutHistory) {
         auto& channel = ChannelInfo[channelId];
+        if (channel.PendingRetry || channel.FailCount) {
+            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_EXECUTOR,
+                "Deferring channel history cut until GC retry"
+                << " tablet " << TabletStorageInfo->TabletID
+                << " channel " << channelId);
+            continue;
+        }
         auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_EXECUTOR,
+            "Checking nominated channel history"
+            << " tablet " << TabletStorageInfo->TabletID
+            << " channel " << channelId
+            << " cuttable entries " << historyToCut.size()
+            << (historyToCut.empty() ? " (history is pinned, uncertain or has no obsolete entries)" : ""));
         std::unordered_set<ui32> seenGroups;
         auto& channelHistory = TabletStorageInfo->Channels[channelId].History;
         auto allHistoryIt = channelHistory.begin();
@@ -216,6 +247,12 @@ void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
             if (!seenGroups.contains(historyEntry->GroupID)) {
                 // we can cut this entry AND entries before it do not use same group
                 // we can put a hard barrier on it
+                LOG_DEBUG_S(ctx, NKikimrServices::TABLET_EXECUTOR,
+                    "Sending hard GC for channel history cut"
+                    << " tablet " << TabletStorageInfo->TabletID
+                    << " channel " << channelId
+                    << " group " << historyEntry->GroupID
+                    << " barrier " << (historyEntry + 1)->FromGeneration - 1 << ":" << Max<ui32>());
                 channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, historyEntry->GroupID, Generation, true, TGCTime{(historyEntry + 1)->FromGeneration - 1, Max<ui32>()});
             }
             channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::SentBarrier;
@@ -445,6 +482,9 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
 ui64 TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
     if (GcWaitFor > 0)
         return 0;
+    // A retry is already scheduled; proceeding would cancel the backoff.
+    if (PendingRetry)
+        return 0;
     ui64 droppedMarks = 0;
 
     MinUncollectedTime = uncommittedTime;
@@ -558,16 +598,21 @@ ui64 TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
 }
 
 bool TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {
-    if (--GcWaitFor || !CollectSent)
+    if (--GcWaitFor || FailCount)
         return false;
 
-    auto it = CommittedDelta.upper_bound(CollectSent);
-    if (it != CommittedDelta.begin()) {
-        CommittedDelta.erase(CommittedDelta.begin(), it);
+    // A hard-barrier-only batch also completes a history cut, but must not
+    // advance the soft GC barrier or discard any pending GC marks.
+    if (CollectSent) {
+        auto it = CommittedDelta.upper_bound(CollectSent);
+        if (it != CommittedDelta.begin()) {
+            CommittedDelta.erase(CommittedDelta.begin(), it);
+        }
+
+        CollectSent.Clear();
+        CommitedGcBarrier = KnownGcBarrier;
     }
 
-    CollectSent.Clear();
-    CommitedGcBarrier = KnownGcBarrier;
     TryCounter = 0;
     BackoffTimer.Reset();
     return true;
@@ -592,6 +637,7 @@ TDuration TExecutorGCLogic::TChannelInfo::TryScheduleGcRequestRetries() {
 
 void TExecutorGCLogic::TChannelInfo::RetryGcRequests(const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
     if (PendingRetry) {
+        PendingRetry = false;
         SendCollectGarbage(MinUncollectedTime, tabletStorageInfo, channel, generation, ctx);
     }
 }

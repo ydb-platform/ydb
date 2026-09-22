@@ -1,5 +1,6 @@
 #include "flat_executor_gclogic.h"
 #include "flat_sausage_grind.h"
+#include <ydb/core/base/tablet.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -52,6 +53,128 @@ public:
 private:
     TExecutorGCLogic* const Logic;
     const NActors::TActorId Done;
+};
+
+class TGCActionDriver : public NActors::TActorBootstrapped<TGCActionDriver> {
+public:
+    TGCActionDriver(std::function<void(const TActorContext&)> action, TActorId done)
+        : Action(std::move(action)), Done(done) {}
+
+    void Bootstrap(const TActorContext& ctx) {
+        Action(ctx);
+        ctx.Send(Done, new TEvents::TEvWakeup());
+        Die(ctx);
+    }
+
+private:
+    const std::function<void(const TActorContext&)> Action;
+    const TActorId Done;
+};
+
+struct THistoryCutEnv {
+    static constexpr ui64 TabletId = 61;
+    static constexpr ui32 Channel = 2;
+    static constexpr ui32 Generation = 20;
+
+    struct TCollect {
+        TActorId Recipient;
+        ui32 Channel;
+        ui32 Counter;
+        bool Hard;
+        ui32 BarrierGeneration;
+        ui32 BarrierStep;
+    };
+
+    TTestBasicRuntime Runtime{1};
+    TIntrusivePtr<TTabletStorageInfo> Info = new TTabletStorageInfo(TabletId, TTabletTypes::Dummy);
+    THolder<TExecutorGCLogic> Logic;
+    TVector<TCollect> Collects;
+    TVector<std::pair<ui32, ui32>> Cuts;
+    TActorId Edge;
+    ui32 Step = 0;
+
+    THistoryCutEnv() {
+        TAutoPtr<TAppPrepare> app = new TAppPrepare();
+        app->FeatureFlags.SetEnableCutHistory(true);
+        Runtime.Initialize(app->Unwrap());
+        Edge = Runtime.AllocateEdgeActor();
+        for (ui32 ch = 0; ch <= Channel; ++ch) {
+            Info->Channels.emplace_back();
+            Info->Channels.back().Channel = ch;
+            Info->Channels.back().History.emplace_back(0, 101);
+        }
+        // Channel 0 belongs to the tablet's log GC, not the executor's data GC.
+        Info->Channels[0].History.emplace_back(10, 102);
+        Info->Channels[Channel].History.emplace_back(10, 102);
+        Runtime.RegisterService(MakeBlobStorageProxyID(101), Edge);
+        Runtime.RegisterService(MakeBlobStorageProxyID(102), Edge);
+        Logic = MakeHolder<TExecutorGCLogic>(Info, MakeGCCookies(*Info, Generation));
+        Logic->FollowersSyncComplete(true);
+        Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+                const auto* gc = ev->Get<TEvBlobStorage::TEvCollectGarbage>();
+                Collects.push_back({ev->Recipient, gc->Channel, gc->PerGenerationCounter,
+                    gc->Hard, gc->CollectGeneration, gc->CollectStep});
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
+                const auto& record = ev->Get<TEvTablet::TEvCutTabletHistory>()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetTabletID(), TabletId);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetChannel(), Channel);
+                Cuts.emplace_back(record.GetFromGeneration(), record.GetGroupID());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+    }
+
+    void Execute(std::function<void(const TActorContext&)> action) {
+        Runtime.Register(new TGCActionDriver(std::move(action), Edge));
+        Runtime.GrabEdgeEvent<TEvents::TEvWakeup>(Edge);
+    }
+
+    void Snapshot() {
+        NKikimrExecutorFlat::TLogSnapshot snap;
+        Logic->SnapToLog(snap, ++Step);
+        Execute([&](const TActorContext& ctx) {
+            Logic->OnCommitLog(Step, Step, ctx);
+            Logic->Confirm(ctx);
+        });
+    }
+
+    TDuration Reply(size_t index, NKikimrProto::EReplyStatus status = NKikimrProto::OK) {
+        const auto request = Collects.at(index);
+        TDuration retry;
+        Execute([&](const TActorContext& ctx) {
+            TAutoPtr<IEventHandle> handle(new IEventHandle(ctx.SelfID, ctx.SelfID,
+                new TEvBlobStorage::TEvCollectGarbageResult(status, TabletId, Generation,
+                    request.Counter, request.Channel)));
+            auto result = IEventHandle::Downcast<TEvBlobStorage::TEvCollectGarbageResult>(std::move(handle));
+            retry = Logic->OnCollectGarbageResult(result, ctx, Edge);
+        });
+        return retry;
+    }
+
+    void RestoreBarrier() {
+        TGCLogEntry snapshot(TGCTime(Generation, 0));
+        Logic->ApplyLogSnapshot(snapshot, {{Channel, ui64(Generation) << 32}});
+    }
+
+    void CheckHardBarrier(size_t index) {
+        UNIT_ASSERT_C(index < Collects.size(), "missing hard barrier for unused channel");
+        const auto& gc = Collects[index];
+        UNIT_ASSERT(gc.Hard);
+        UNIT_ASSERT_VALUES_EQUAL(gc.Channel, Channel);
+        UNIT_ASSERT_VALUES_EQUAL(gc.Recipient, MakeBlobStorageProxyID(101));
+        UNIT_ASSERT_VALUES_EQUAL(gc.BarrierGeneration, 9);
+        UNIT_ASSERT_VALUES_EQUAL(gc.BarrierStep, Max<ui32>());
+    }
+
+    void CheckCut() {
+        UNIT_ASSERT_VALUES_EQUAL(Cuts.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(Cuts[0].first, 0);
+        UNIT_ASSERT_VALUES_EQUAL(Cuts[0].second, 101);
+    }
 };
 
 } // namespace
@@ -167,6 +290,153 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorGC) {
 
 
 Y_UNIT_TEST_SUITE(THistoryCutter) {
+    Y_UNIT_TEST(UnusedChannelHistoryIsCut) {
+        THistoryCutEnv env;
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Collects.size(), 2,
+            "unused data channel must initialize GC on both historical groups");
+        for (const auto& gc : env.Collects) {
+            UNIT_ASSERT_VALUES_EQUAL(gc.Channel, THistoryCutEnv::Channel);
+            UNIT_ASSERT(!gc.Hard);
+            UNIT_ASSERT_VALUES_EQUAL(gc.BarrierGeneration, THistoryCutEnv::Generation);
+            UNIT_ASSERT_VALUES_EQUAL(gc.BarrierStep, 0);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects[0].Recipient, MakeBlobStorageProxyID(101));
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects[1].Recipient, MakeBlobStorageProxyID(102));
+        env.Reply(0);
+        // A snapshot while one group is still outstanding must not nominate a cut.
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        UNIT_ASSERT(env.Cuts.empty());
+        env.Reply(1);
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 3);
+        env.CheckHardBarrier(2);
+        UNIT_ASSERT(env.Cuts.empty());
+        env.Reply(2);
+        env.CheckCut();
+    }
+
+    Y_UNIT_TEST(HardBarrierWithoutSoftGcCompletesCut) {
+        THistoryCutEnv env;
+        env.RestoreBarrier();
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 1);
+        env.CheckHardBarrier(0);
+        UNIT_ASSERT(env.Cuts.empty());
+        env.Reply(0);
+        env.CheckCut();
+    }
+
+    Y_UNIT_TEST(UsedChannelWaitsForCollectionBeforeCut) {
+        THistoryCutEnv env;
+        TGCBlobDelta delta;
+        delta.Created.push_back(HistoryCutterUtBlob(THistoryCutEnv::TabletId, 15, THistoryCutEnv::Channel));
+        TGCLogEntry entry(TGCTime(15, 0), delta);
+        env.Logic->ApplyLogEntry(entry);
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        env.Reply(0);
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        UNIT_ASSERT(env.Cuts.empty());
+        env.Reply(1);
+        env.Snapshot();
+        env.CheckHardBarrier(2);
+        env.Reply(2);
+        env.CheckCut();
+    }
+
+    Y_UNIT_TEST(LiveBlobRemainsPinnedAfterSoftGc) {
+        THistoryCutEnv env;
+        const auto blob = HistoryCutterUtBlob(THistoryCutEnv::TabletId, 5, THistoryCutEnv::Channel);
+        env.Logic->HistoryCutter.SeenBlob(blob);
+        TGCBlobDelta delta;
+        delta.Created.push_back(blob);
+        TGCLogEntry entry(TGCTime(5, 0), delta);
+        env.Logic->ApplyLogEntry(entry);
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        env.Reply(0);
+        env.Reply(1);
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        UNIT_ASSERT(env.Cuts.empty());
+        UNIT_ASSERT(env.Logic->HistoryCutter.GetHistoryToCut(THistoryCutEnv::Channel).empty());
+    }
+
+    Y_UNIT_TEST(UnusedChannelRetriesFailedSoftGcBeforeCut) {
+        THistoryCutEnv env;
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        UNIT_ASSERT(!env.Reply(0, NKikimrProto::ERROR));
+        UNIT_ASSERT(env.Reply(1));
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        UNIT_ASSERT(env.Cuts.empty());
+        env.Execute([&](const TActorContext& ctx) {
+            env.Logic->RetryGcRequests(THistoryCutEnv::Channel, ctx);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 4);
+        UNIT_ASSERT(!env.Collects[2].Hard);
+        UNIT_ASSERT(!env.Collects[3].Hard);
+        env.Reply(2);
+        env.Reply(3);
+        env.Snapshot();
+        env.CheckHardBarrier(4);
+        env.Reply(4);
+        env.CheckCut();
+    }
+
+    Y_UNIT_TEST(HardBarrierRetryPreservesBackoff) {
+        THistoryCutEnv env;
+        env.RestoreBarrier();
+        env.Snapshot();
+        env.CheckHardBarrier(0);
+        UNIT_ASSERT(env.Reply(0, NKikimrProto::ERROR));
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Collects.size(), 1,
+            "snapshot must not send hard barriers during GC backoff");
+        UNIT_ASSERT(env.Cuts.empty());
+        env.Execute([&](const TActorContext& ctx) {
+            env.Logic->RetryGcRequests(THistoryCutEnv::Channel, ctx);
+        });
+        env.Snapshot();
+        env.CheckHardBarrier(1);
+        env.Reply(1);
+        env.CheckCut();
+    }
+
+    Y_UNIT_TEST(FailedHardBarrierBatchDoesNotCutOnLastSuccess) {
+        THistoryCutEnv env;
+        env.Info->Channels[THistoryCutEnv::Channel].History.emplace(
+            env.Info->Channels[THistoryCutEnv::Channel].History.begin() + 1, 5, 103);
+        env.Runtime.RegisterService(MakeBlobStorageProxyID(103), env.Edge);
+        env.RestoreBarrier();
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        UNIT_ASSERT(env.Collects[0].Hard);
+        UNIT_ASSERT(env.Collects[1].Hard);
+        UNIT_ASSERT(!env.Reply(0, NKikimrProto::ERROR));
+        UNIT_ASSERT(env.Reply(1));
+        UNIT_ASSERT(env.Cuts.empty());
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        env.Execute([&](const TActorContext& ctx) {
+            env.Logic->RetryGcRequests(THistoryCutEnv::Channel, ctx);
+        });
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 4);
+        env.Reply(2);
+        UNIT_ASSERT(env.Cuts.empty());
+        env.Reply(3);
+        UNIT_ASSERT_VALUES_EQUAL(env.Cuts.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(env.Cuts[0].first, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.Cuts[0].second, 101);
+        UNIT_ASSERT_VALUES_EQUAL(env.Cuts[1].first, 5);
+        UNIT_ASSERT_VALUES_EQUAL(env.Cuts[1].second, 103);
+    }
+
     Y_UNIT_TEST(TestHistoryCutter) {
         TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(1, TTabletTypes::Dummy);
         info->Channels.emplace_back();

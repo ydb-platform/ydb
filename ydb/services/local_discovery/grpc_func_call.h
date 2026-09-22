@@ -30,9 +30,7 @@ public:
         : TBase(ctx)
         , PassMethod(cb)
         , AuxSettings(std::move(auxSettings))
-    {
-        this->InitRootPath(AuxSettings.AppData);
-    }
+    { }
 
     void Pass(const IFacilityProvider& facility) override {
         PassMethod(std::move(std::unique_ptr<IRequestOpCtx>(this)), facility);

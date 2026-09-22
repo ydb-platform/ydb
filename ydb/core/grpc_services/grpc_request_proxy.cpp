@@ -138,6 +138,7 @@ private:
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
+        requestBaseCtx->InitRootPath(AppData(ctx));
         // Fill the lazy cache on the owning actor before handing the request to other consumers.
         const auto maybeDatabaseName = requestBaseCtx->GetDatabaseName();
         requestBaseCtx->CountRequestPaths();

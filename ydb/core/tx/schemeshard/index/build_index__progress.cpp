@@ -698,6 +698,51 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildSequencePropose(
     return propose;
 }
 
+bool CheckSequences(TSchemeShard* ss, const TIndexBuildInfo& buildInfo, bool shouldExist) {
+    for (const auto& col : buildInfo.BuildColumns) {
+        if (col.IsFromSequence()) {
+            auto seqPath = TPath::Init(buildInfo.TablePathId, ss).Dive(col.DefaultFromSequence);
+            if (shouldExist != (seqPath.IsResolved() && !seqPath.IsDeleted())) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateDropSequencePropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building CreateDropSequencePropose");
+    Y_ENSURE(buildInfo.HasFromSequenceBuildColumn());
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.CreateBuildSequenceTxId), ss->TabletID());
+
+    auto tablePath = TPath::Init(buildInfo.TablePathId, ss);
+
+    for (const auto& colInfo : buildInfo.BuildColumns) {
+        if (!colInfo.IsFromSequence()) {
+            continue;
+        }
+        auto seqPath = TPath::Init(buildInfo.TablePathId, ss).Dive(colInfo.DefaultFromSequence);
+        if (!seqPath.IsResolved() || seqPath.IsDeleted()) {
+            continue;
+        }
+        // Drop the old sequence if it's left from a failed build attempt
+        auto& drop = *propose->Record.AddTransaction();
+        drop.SetOperationType(NKikimrSchemeOp::ESchemeOpDropSequence);
+        drop.SetInternal(true);
+        drop.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+        drop.SetWorkingDir(tablePath.PathString());
+        drop.MutableDrop()->SetName(colInfo.DefaultFromSequence);
+    }
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "CreateDropSequencePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
@@ -3197,11 +3242,23 @@ public:
             if (buildInfo.CreateBuildSequenceTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.CreateBuildSequenceTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), CreateBuildSequencePropose(Self, buildInfo), 0, ui64(BuildId));
+                if (!CheckSequences(Self, buildInfo, false)) {
+                    Send(Self->SelfId(), CreateDropSequencePropose(Self, buildInfo), 0, ui64(BuildId));
+                } else {
+                    Send(Self->SelfId(), CreateBuildSequencePropose(Self, buildInfo), 0, ui64(BuildId));
+                }
             } else if (!buildInfo.CreateBuildSequenceTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.CreateBuildSequenceTxId)));
             } else {
-                ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
+                buildInfo.CreateBuildSequenceTxId = {};
+                buildInfo.CreateBuildSequenceTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.CreateBuildSequenceTxDone = false;
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexCreateBuildSequenceTx(db, buildInfo);
+                if (CheckSequences(Self, buildInfo, true)) {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
+                }
+                // If we just dropped previous sequences, re-allocate txID and recreate them
                 Progress(BuildId);
             }
             break;

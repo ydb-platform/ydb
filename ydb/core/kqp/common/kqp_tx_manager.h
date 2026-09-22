@@ -44,6 +44,14 @@ public:
     virtual void AddTopicsToShards() = 0;
     virtual bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock, ui64 querySpanId = 0, ui64 deferredVictimQuerySpanId = 0) = 0;
 
+    // A split/merge removed shard `fromShardId` (its tablet is gone): move its participant
+    // state to the shards that now cover its key range. Locks keep DataShard == `fromShardId`
+    // (ancestor locks of the targets, validated by ValidateLocks(allowAncestorLocks)).
+    // Targets must exactly cover the removed shard's range (computed by the caller
+    // from the partitionings) — a wrong target does not hold the transferred lock
+    // and would break the commit.
+    virtual void MoveShardTo(ui64 fromShardId, const TVector<ui64>& toShardIds) = 0;
+
     virtual void BreakLock(ui64 shardId) = 0;
     virtual TVector<NKikimrDataEvents::TLock> GetLocks() const = 0;
     virtual TVector<NKikimrDataEvents::TLock> GetLocks(ui64 shardId) const = 0;

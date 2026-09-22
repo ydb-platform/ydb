@@ -191,6 +191,50 @@ public:
         return true;
     }
 
+    // A shard removed by a split/merge had its participant state moved to every shard
+    // covering its range 
+    void MoveShardTo(ui64 fromShardId, const TVector<ui64>& toShardIds) override {
+        AFL_ENSURE(State == ETransactionState::COLLECTING);
+        AFL_ENSURE(!toShardIds.empty());
+        // The removed shard's tablet id is gone: GetDeletedShards only returns shards
+        // absent from the new partitioning, so the targets cannot contain it. A target
+        // equal to the removed shard would corrupt the participant state on the erase
+        // below — fail closed.
+        AFL_ENSURE(!FindPtr(toShardIds, fromShardId));
+        auto fromIt = ShardsInfo.find(fromShardId);
+        AFL_ENSURE(fromIt != ShardsInfo.end());
+        auto& from = fromIt->second;
+        AFL_ENSURE(from.State == EShardState::PROCESSING);
+        AFL_ENSURE(!from.IsOlap);
+
+        for (const ui64 toShardId : toShardIds) {
+            // MoveShard to may be called for toShardIds several times in case of merge.
+            auto [toIt, inserted] = ShardsInfo.try_emplace(toShardId);
+            auto& to = toIt->second;
+            to.IsOlap = from.IsOlap;
+            // A merge may transfer several removed shards onto the same target:
+            // merge the flags instead of overwriting, or an earlier shard's
+            // flag (e.g. READ, used to build SendingShards in StartPrepare)
+            // would be lost.
+            to.Flags |= from.Flags;
+            to.Pathes.insert(from.Pathes.begin(), from.Pathes.end());
+            for (const ui64 querySpanId : from.BreakerQuerySpanIds) {
+                AddBreakerQuerySpanId(to, querySpanId);
+            }
+            for (const auto& [key, lockInfo] : from.Locks) {
+                if (auto existing = to.Locks.FindPtr(key)) {
+                    // TODO: What if shards merged back after split???
+                    AFL_ENSURE(existing->Lock.MergeWriteSeqNums(lockInfo.Lock.Proto));
+                } else {
+                    to.Locks.emplace(key, lockInfo);
+                }
+            }
+            ShardsIds.insert(toShardId);
+        }
+        ShardsIds.erase(fromShardId);
+        ShardsInfo.erase(fromIt);
+    }
+
     void BreakLock(ui64 shardId) override {
         if (LocksIssue) {
             return;

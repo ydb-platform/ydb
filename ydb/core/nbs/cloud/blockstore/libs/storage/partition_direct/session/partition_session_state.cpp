@@ -26,18 +26,8 @@ NProto::TError PartitionStopped()
 
 }   // namespace
 
-// The actor publishes identity and its handler together, never in separate
-// steps.
-struct TPartitionSessionState::TSnapshot
-{
-    bool Stopped = false;
-    TString ClientId;
-    TString SessionId;
-    IDeviceHandlerPtr Handler;
-};
-
 // static
-TResultOrError<std::shared_ptr<TPartitionSessionState>>
+TResultOrError<TIntrusivePtr<TPartitionSessionState>>
 TPartitionSessionState::Create(
     const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
     IStoragePtr storage,
@@ -62,11 +52,14 @@ TPartitionSessionState::Create(
             E_ARGUMENT,
             "Missing or inconsistent partition backend");
     }
-    return std::shared_ptr<TPartitionSessionState>(new TPartitionSessionState(
+    return TIntrusivePtr<TPartitionSessionState>(new TPartitionSessionState(
         volumeMetadata,
         std::move(storage),
         std::move(ioGeometry)));
 }
+
+TPartitionSessionState::TPartitionSessionState(
+    const TPartitionSessionState& other) = default;
 
 TPartitionSessionState::~TPartitionSessionState() = default;
 
@@ -83,26 +76,24 @@ const TString& TPartitionSessionState::GetRegistrationId() const
 
 TResultOrError<TString> TPartitionSessionState::Mount(const TString& clientId)
 {
-    const auto snapshot = Snapshot.atomic_load();
-    if (snapshot->Stopped) {
+    if (Stopped) {
         return PartitionStopped();
     }
     if (clientId.empty()) {
         return MakeError(E_ARGUMENT, "MountVolume requires ClientId");
     }
-    if (snapshot->Handler) {
-        if (snapshot->ClientId != clientId) {
+    if (Handler) {
+        if (ClientId != clientId) {
             return MakeError(
                 E_BS_MOUNT_CONFLICT,
                 "NBS2 disk is mounted by another client");
         }
-        return snapshot->SessionId;
+        return SessionId;
     }
 
-    auto next = std::make_unique<TSnapshot>();
-    next->ClientId = clientId;
-    next->SessionId = CreateGuidAsString();
-    next->Handler = CreateDefaultDeviceHandlerFactory()->CreateDeviceHandler({
+    ClientId = clientId;
+    SessionId = CreateGuidAsString();
+    Handler = CreateDefaultDeviceHandlerFactory()->CreateDeviceHandler({
         .Storage = Storage,
         .DiskId = IoGeometry->DiskId,
         .ClientId = clientId,
@@ -112,38 +103,38 @@ TResultOrError<TString> TPartitionSessionState::Mount(const TString& clientId)
         .VChunkSize = IoGeometry->VChunkSize,
         .StorageMediaKind = NProto::STORAGE_MEDIA_SSD,
     });
-    const TString sessionId = next->SessionId;
-    Snapshot.atomic_store(TTrueAtomicSharedPtr<TSnapshot>(next.release()));
-    return sessionId;
+    return SessionId;
 }
 
 NProto::TError TPartitionSessionState::Unmount(
     const TString& clientId,
     const TString& sessionId)
 {
-    const auto snapshot = Snapshot.atomic_load();
-    if (snapshot->Stopped) {
+    if (Stopped) {
         return PartitionStopped();
     }
     if (clientId.empty() || sessionId.empty()) {
         return InvalidSession();
     }
-    if (!snapshot->Handler) {
+    if (!Handler) {
         return MakeError(S_ALREADY, "NBS2 disk has no active session");
     }
-    if (snapshot->ClientId != clientId || snapshot->SessionId != sessionId) {
+    if (ClientId != clientId || SessionId != sessionId) {
         return InvalidSession();
     }
-    Snapshot.atomic_store(TTrueAtomicSharedPtr<TSnapshot>(new TSnapshot()));
+    ClientId.clear();
+    SessionId.clear();
+    Handler.reset();
     return {};
 }
 
 void TPartitionSessionState::Stop()
 {
     StorageGate->Detach();
-    auto next = std::make_unique<TSnapshot>();
-    next->Stopped = true;
-    Snapshot.atomic_store(TTrueAtomicSharedPtr<TSnapshot>(next.release()));
+    Stopped = true;
+    ClientId.clear();
+    SessionId.clear();
+    Handler.reset();
 }
 
 TResultOrError<TPartitionIoBackend> TPartitionSessionState::AcquireIoBackend(
@@ -152,30 +143,28 @@ TResultOrError<TPartitionIoBackend> TPartitionSessionState::AcquireIoBackend(
 {
     // TODO: Persist session/writer state and coordinate revocation with already
     // admitted writes before enabling writer handoff or restart recovery.
-    const auto snapshot = Snapshot.atomic_load();
-    if (snapshot->Stopped) {
+    if (Stopped) {
         return PartitionStopped();
     }
-    if (clientId.empty() || sessionId.empty() || !snapshot->Handler ||
-        snapshot->ClientId != clientId || snapshot->SessionId != sessionId)
+    if (clientId.empty() || sessionId.empty() || !Handler ||
+        ClientId != clientId || SessionId != sessionId)
     {
         return InvalidSession();
     }
-    return TPartitionIoBackend{snapshot->Handler, IoGeometry};
+    return TPartitionIoBackend{Handler, IoGeometry};
 }
 
 TPartitionSessionState::TPartitionSessionState(
     const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
     IStoragePtr storage,
     TVolumeConfigPtr ioGeometry)
-    : VolumeMetadata(
-          std::make_unique<NKikimrBlockStore::TVolumeConfig>(volumeMetadata))
+    : VolumeMetadata(std::make_shared<const NKikimrBlockStore::TVolumeConfig>(
+          volumeMetadata))
     , IoGeometry(std::move(ioGeometry))
     , RegistrationId(CreateGuidAsString())
     , StorageGate(std::make_shared<TStorageGate>(std::move(storage)))
     , Storage(CreateOverlappedRequestsGuardStorageWrapper(
           CreateSplitRequestsStorageWrapper(StorageGate)))
-    , Snapshot(new TSnapshot())
 {}
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/events.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_control.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_state.h>
 
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
@@ -33,14 +34,15 @@ class TTestPartitionSessionActor final
     : public NActors::TActorBootstrapped<TTestPartitionSessionActor>
 {
 public:
-    explicit TTestPartitionSessionActor(
-        std::shared_ptr<TPartitionSessionState> state)
+    explicit TTestPartitionSessionActor(TPartitionSessionStateHolderPtr state)
         : State(std::move(state))
     {}
 
     ~TTestPartitionSessionActor() override
     {
-        State->Stop();
+        auto next = MakeIntrusive<TPartitionSessionState>(*State->AtomicLoad());
+        next->Stop();
+        State->AtomicStore(next);
     }
 
     void Bootstrap()
@@ -61,29 +63,37 @@ private:
     void HandleMount(TEvPartitionSession::TEvMount::TPtr& ev)
     {
         auto* request = ev->Get();
-        request->Result.SetValue(
-            request->RegistrationId == State->GetRegistrationId()
-                ? State->Mount(request->ClientId)
-                : TResultOrError<TString>(MakeError(E_REJECTED)));
+        const auto current = State->AtomicLoad();
+        auto next = MakeIntrusive<TPartitionSessionState>(*current);
+        auto result = next->Mount(request->ClientId);
+        if (!HasError(result)) {
+            State->AtomicStore(next);
+        }
+        request->Result.SetValue(std::move(result));
     }
 
     void HandleUnmount(TEvPartitionSession::TEvUnmount::TPtr& ev)
     {
         auto* request = ev->Get();
-        request->Result.SetValue(
-            request->RegistrationId == State->GetRegistrationId()
-                ? State->Unmount(request->ClientId, request->SessionId)
-                : MakeError(E_REJECTED));
+        const auto current = State->AtomicLoad();
+        auto next = MakeIntrusive<TPartitionSessionState>(*current);
+        auto result = next->Unmount(request->ClientId, request->SessionId);
+        if (!HasError(result)) {
+            State->AtomicStore(next);
+        }
+        request->Result.SetValue(std::move(result));
     }
 
     void HandleStop(TEvStopSession::TPtr& ev)
     {
-        State->Stop();
+        auto next = MakeIntrusive<TPartitionSessionState>(*State->AtomicLoad());
+        next->Stop();
+        State->AtomicStore(next);
         ev->Get()->Done.SetValue();
         PassAway();
     }
 
-    const std::shared_ptr<TPartitionSessionState> State;
+    const TPartitionSessionStateHolderPtr State;
 };
 
 }   // namespace
@@ -126,13 +136,17 @@ TResultOrError<TString> TFrontendTestEnv::RegisterVolume(
     if (HasError(created)) {
         return created.GetError();
     }
-    auto state = created.ExtractResult();
+    auto state =
+        std::make_shared<TPartitionSessionStateHolder>(created.ExtractResult());
     const auto actorId =
         Actors->Register(new TTestPartitionSessionActor(state));
-    auto registration =
-        Facade->RegisterVolume(Actors->GetActorSystem(0), actorId, state);
+    auto registration = Facade->RegisterVolume(
+        state,
+        CreatePartitionSessionControl(Actors->GetActorSystem(0), actorId));
     Registrations.push_back(
-        {metadata.GetDiskId(), state->GetRegistrationId(), actorId});
+        {metadata.GetDiskId(),
+         state->AtomicLoad()->GetRegistrationId(),
+         actorId});
     return registration;
 }
 

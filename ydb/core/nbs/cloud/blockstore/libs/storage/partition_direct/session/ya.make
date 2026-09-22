@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    partition_session_control.cpp
     partition_session_state.cpp
     events.cpp
 )
@@ -10,7 +11,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/service
     ydb/core/protos
     ydb/library/actors/core
-    library/cpp/threading/atomic_shared_ptr
+    library/cpp/threading/hot_swap
 )
 
 END()

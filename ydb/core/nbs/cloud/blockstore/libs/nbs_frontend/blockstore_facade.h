@@ -6,14 +6,15 @@
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
 
 #include <library/cpp/logger/log.h>
-#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
+#include <library/cpp/threading/hot_swap/hot_swap.h>
 
 #include <util/system/mutex.h>
 
-namespace NActors {
-class TActorSystem;
-struct TActorId;
-}   // namespace NActors
+#include <atomic>
+
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+struct IPartitionSessionControl;
+}
 
 namespace NYdb::NBS::NBlockStore {
 
@@ -40,17 +41,18 @@ public:
         size_t bytesCount) override;
 
     // Publishes a matched control target and session/backend incarnation.
-    // The first registration binds this facade to one actor system.
+    // Control must target the same incarnation as state and remain callable by
+    // requests retaining this registration, even after removal or replacement.
     TResultOrError<TString> RegisterVolume(
-        NActors::TActorSystem* actorSystem,
-        const NActors::TActorId& actorId,
-        std::shared_ptr<NStorage::NPartitionDirect::TPartitionSessionState>
-            sessionState);
+        NStorage::NPartitionDirect::TPartitionSessionStateHolderPtr
+            sessionState,
+        std::shared_ptr<NStorage::NPartitionDirect::IPartitionSessionControl>
+            sessionControl);
 
     // Removes only the specified disk incarnation; stale tokens are harmless.
     void UnregisterVolume(const TString& diskId, const TString& registrationId);
 
-    // Dispatches RPCs; mount/unmount execute on the owning partition actor.
+    // Adapts classic RPCs to partition session control and I/O.
     template <typename TMethod>
     NThreading::TFuture<typename TMethod::TResponse> Execute(
         TCallContextPtr callContext,
@@ -58,28 +60,23 @@ public:
 
 private:
     struct TPartitionRegistration;
-    struct TSnapshot;
+    struct TPartitionRegistry;
 
     TResultOrError<std::shared_ptr<const TPartitionRegistration>> FindPartition(
         const TString& diskId) const;
-
-    template <typename TEvent>
-    auto SendSessionRequest(
-        const std::shared_ptr<const TPartitionRegistration>& partition,
-        std::unique_ptr<TEvent> event);
 
     NThreading::TFuture<
         NNbs1CompatApi::NBlockStore::NProto::TMountVolumeResponse>
     ExecuteMountVolume(
         const NNbs1CompatApi::NBlockStore::NProto::TMountVolumeRequest& request,
-        std::shared_ptr<const TPartitionRegistration> partition);
+        const TPartitionRegistration& registration);
 
     NThreading::TFuture<
         NNbs1CompatApi::NBlockStore::NProto::TUnmountVolumeResponse>
     ExecuteUnmountVolume(
         const NNbs1CompatApi::NBlockStore::NProto::TUnmountVolumeRequest&
             request,
-        std::shared_ptr<const TPartitionRegistration> partition);
+        const TPartitionRegistration& registration);
 
     NThreading::TFuture<
         NNbs1CompatApi::NBlockStore::NProto::TReadBlocksResponse>
@@ -97,11 +94,12 @@ private:
             NNbs1CompatApi::NBlockStore::NProto::TWriteBlocksRequest> request,
         NStorage::NPartitionDirect::TPartitionIoBackend backend);
 
-    // Serializes registry/admission updates and session request dispatch.
+    std::atomic_bool AcceptingRequests = false;
+    // Serializes registry updates and admission closure with session dispatch.
     TMutex RegistryMutex;
-    // Non-owning; all registered partitions belong to this actor system.
-    NActors::TActorSystem* ActorSystem = nullptr;
-    TTrueAtomicSharedPtr<TSnapshot> Snapshot;
+    // Publishes only partition registrations; read-modify-write needs the
+    // mutex.
+    THotSwap<TPartitionRegistry> PartitionRegistry;
     TLog Log;
 };
 

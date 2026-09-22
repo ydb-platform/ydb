@@ -4,7 +4,7 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
-#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
+#include <library/cpp/threading/hot_swap/hot_swap.h>
 
 namespace NKikimrBlockStore {
 class TVolumeConfig;
@@ -23,33 +23,37 @@ struct TPartitionIoBackend
     TVolumeConfigPtr IoGeometry;
 };
 
-// One process-local session per partition. The owner actor serializes
-// mutations; I/O threads only read immutable snapshots. Unmount does not drain
-// admitted I/O.
+// One published version of a partition's process-local session. Readers never
+// mutate it; the owner actor modifies a copy before publishing it through the
+// shared THotSwap. Unmount does not drain admitted I/O.
 class TPartitionSessionState final
+    : public TAtomicRefCount<TPartitionSessionState>
 {
 public:
     // Validates partition metadata and builds its shared storage chain.
-    static TResultOrError<std::shared_ptr<TPartitionSessionState>> Create(
+    static TResultOrError<TIntrusivePtr<TPartitionSessionState>> Create(
         const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
         IStoragePtr storage,
         TVolumeConfigPtr ioGeometry);
 
+    // Copies the session while sharing immutable metadata and the same backend.
+    TPartitionSessionState(const TPartitionSessionState& other);
     ~TPartitionSessionState();
 
     // Returns immutable metadata owned by this partition incarnation.
     const NKikimrBlockStore::TVolumeConfig& GetVolumeMetadata() const;
 
-    // Identifies this incarnation, including its control and I/O targets.
+    // Prevents a stale unregister from removing a replacement registration.
     const TString& GetRegistrationId() const;
 
-    // Creates the single writer session, or reuses it for the same client.
+    // Creates or reuses the writer session.
     TResultOrError<TString> Mount(const TString& clientId);
 
-    // Revokes a matching session; subsequent I/O must mount again.
+    // Ends the matching session without cancelling already admitted I/O.
     NProto::TError Unmount(const TString& clientId, const TString& sessionId);
 
-    // Permanently closes this incarnation and detaches its storage backend.
+    // Disables session and backend access for this partition incarnation.
+    // Does not wait for in-flight I/O to complete.
     void Stop();
 
     // Checks session identity without a mutex or actor hop on the I/O path.
@@ -58,15 +62,13 @@ public:
         const TString& sessionId) const;
 
 private:
-    struct TSnapshot;
-
     TPartitionSessionState(
         const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
         IStoragePtr storage,
         TVolumeConfigPtr ioGeometry);
 
     // Disk metadata for registration and the classic MountVolume response.
-    const std::unique_ptr<const NKikimrBlockStore::TVolumeConfig>
+    const std::shared_ptr<const NKikimrBlockStore::TVolumeConfig>
         VolumeMetadata;
     // Effective backend geometry for I/O validation and device handler
     // creation.
@@ -74,8 +76,16 @@ private:
     const TString RegistrationId;
     const std::shared_ptr<TStorageGate> StorageGate;
     const IStoragePtr Storage;
-    // Active session identity and its handler.
-    TTrueAtomicSharedPtr<TSnapshot> Snapshot;
+    // These fields may only be changed before this version is published.
+    bool Stopped = false;
+    TString ClientId;
+    TString SessionId;
+    IDeviceHandlerPtr Handler;
 };
+
+// The actor and facade share this container, not independent THotSwap copies.
+using TPartitionSessionStateHolder = THotSwap<TPartitionSessionState>;
+using TPartitionSessionStateHolderPtr =
+    std::shared_ptr<TPartitionSessionStateHolder>;
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

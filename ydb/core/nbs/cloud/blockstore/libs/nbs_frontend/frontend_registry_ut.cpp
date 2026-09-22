@@ -8,8 +8,6 @@
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 
-#include <ydb/library/actors/testlib/test_runtime.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <barrier>
@@ -83,7 +81,7 @@ ui32 ReadBlock(
 
 Y_UNIT_TEST_SUITE(TFrontendRegistryTest)
 {
-    Y_UNIT_TEST(ShouldRejectRegistrationFromAnotherActorSystem)
+    Y_UNIT_TEST(ShouldRejectRegistrationWithoutSessionControl)
     {
         ui32 readCalls = 0;
         TFrontendTestEnv env;
@@ -93,17 +91,16 @@ Y_UNIT_TEST_SUITE(TFrontendRegistryTest)
         const auto mounted = Mount(env.Facade, MakeTestMountRequest());
         UNIT_ASSERT(!HasError(mounted));
 
-        NActors::TTestActorRuntimeBase otherActors(1, true);
-        otherActors.Initialize();
         auto state = NStorage::NPartitionDirect::TPartitionSessionState::Create(
             config,
             std::make_shared<TTestStorage>(),
             MakeTestIoConfig(config));
         UNIT_ASSERT(!HasError(state));
         const auto registration = env.Facade->RegisterVolume(
-            otherActors.GetActorSystem(0),
-            otherActors.AllocateEdgeActor(),
-            state.ExtractResult());
+            std::make_shared<
+                NStorage::NPartitionDirect::TPartitionSessionStateHolder>(
+                state.ExtractResult()),
+            {});
         UNIT_ASSERT_VALUES_EQUAL(registration.GetError().GetCode(), E_ARGUMENT);
 
         // A rejected replacement must preserve the original control and I/O
@@ -270,6 +267,10 @@ Y_UNIT_TEST_SUITE(TFrontendRegistryTest)
         UNIT_ASSERT_VALUES_EQUAL(
             Mount(env.Facade, request).GetError().GetCode(),
             E_REJECTED);
+        UNIT_ASSERT_VALUES_EQUAL(
+            Unmount(env.Facade, TestDiskId, TestClientId, first.GetSessionId())
+                .GetCode(),
+            E_REJECTED);
         env.Facade->Start();
         UNIT_ASSERT_VALUES_EQUAL(
             ReadBlock(
@@ -283,11 +284,23 @@ Y_UNIT_TEST_SUITE(TFrontendRegistryTest)
         UNIT_ASSERT_VALUES_EQUAL(
             Mount(env.Facade, request).GetSessionId(),
             first.GetSessionId());
-        // Partition teardown is still effective while frontend admission is
-        // closed.
+        // Registry changes remain effective while admission is closed, but
+        // must not reopen it.
         env.Facade->Stop();
         env.UnregisterVolume(TestDiskId, registration);
+        UNIT_ASSERT_VALUES_EQUAL(
+            Mount(env.Facade, request).GetError().GetCode(),
+            E_REJECTED);
+        auto other = MakeTestVolumeConfig();
+        other.SetDiskId("disk2");
+        UNIT_ASSERT(!HasError(RegisterTestVolume(env, other)));
+        request.SetDiskId(other.GetDiskId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            Mount(env.Facade, request).GetError().GetCode(),
+            E_REJECTED);
         env.Facade->Start();
+        UNIT_ASSERT(!HasError(Mount(env.Facade, request)));
+        request.SetDiskId(TestDiskId);
         UNIT_ASSERT_VALUES_EQUAL(
             Mount(env.Facade, request).GetError().GetCode(),
             E_NOT_FOUND);

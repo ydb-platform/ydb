@@ -25,22 +25,20 @@ struct TEvPartitionSession
 
     struct TEvMount final: NActors::TEventLocal<TEvMount, EvMount>
     {
-        TString RegistrationId;
         TString ClientId;
         NThreading::TPromise<TResultOrError<TString>> Result;
 
-        TEvMount(TString registrationId, TString clientId);
+        explicit TEvMount(TString clientId);
         ~TEvMount() override;
     };
 
     struct TEvUnmount final: NActors::TEventLocal<TEvUnmount, EvUnmount>
     {
-        TString RegistrationId;
         TString ClientId;
         TString SessionId;
         NThreading::TPromise<NProto::TError> Result;
 
-        TEvUnmount(TString registrationId, TString clientId, TString sessionId);
+        TEvUnmount(TString clientId, TString sessionId);
         ~TEvUnmount() override;
     };
 };

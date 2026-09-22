@@ -15,6 +15,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_control.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
@@ -59,18 +60,23 @@ TPartitionActor::TPartitionActor(
 
 TPartitionActor::~TPartitionActor()
 {
-    if (SessionState) {
-        SessionState->Stop();
+    if (!SessionState) {
+        return;
     }
+    auto next =
+        MakeIntrusive<TPartitionSessionState>(*SessionState->AtomicLoad());
+    next->Stop();
+    SessionState->AtomicStore(next);
     // Actor-system cleanup can destroy a partition without PassAway(). Its
-    // blockStoreFacade registration must not retain FastPath beyond the actor system.
-    if (!FrontendRegistrationId.empty()) {
+    // blockStoreFacade registration must not retain FastPath beyond the actor
+    // system.
+    if (!FrontendRegistrationClosed) {
         if (auto service = GetNbsService();
             service && service->BlockStoreFacade)
         {
             service->BlockStoreFacade->UnregisterVolume(
                 VolumeConfig.GetDiskId(),
-                FrontendRegistrationId);
+                next->GetRegistrationId());
         }
     }
 }
@@ -214,25 +220,30 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
 
 void TPartitionActor::UnregisterFrontendVolume(const TActorContext& ctx)
 {
-    FrontendRegistrationClosed = true;
-    if (SessionState) {
-        SessionState->Stop();
-    }
-    if (FrontendRegistrationId.empty()) {
+    if (FrontendRegistrationClosed) {
         return;
     }
-    if (auto& blockStoreFacade = GetNbsService()->BlockStoreFacade; blockStoreFacade) {
+    FrontendRegistrationClosed = true;
+    if (!SessionState) {
+        return;
+    }
+    auto next =
+        MakeIntrusive<TPartitionSessionState>(*SessionState->AtomicLoad());
+    next->Stop();
+    SessionState->AtomicStore(next);
+    if (auto& blockStoreFacade = GetNbsService()->BlockStoreFacade;
+        blockStoreFacade)
+    {
         blockStoreFacade->UnregisterVolume(
             VolumeConfig.GetDiskId(),
-            FrontendRegistrationId);
+            next->GetRegistrationId());
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "%s Frontend unregister requested: registrationId=%s",
             LogTitle.GetWithTime().c_str(),
-            FrontendRegistrationId.c_str());
+            next->GetRegistrationId().c_str());
     }
-    FrontendRegistrationId.clear();
 }
 
 void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
@@ -566,23 +577,24 @@ void TPartitionActor::HandleFastPathServiceReady(
             !HasError(sessionState),
             "%s",
             FormatError(sessionState.GetError()).c_str());
-        SessionState = sessionState.ExtractResult();
-        auto registration =
-            blockStoreFacade->RegisterVolume(ctx.ActorSystem(), SelfId(), SessionState);
+        SessionState = std::make_shared<TPartitionSessionStateHolder>(
+            sessionState.ExtractResult());
+        auto registration = blockStoreFacade->RegisterVolume(
+            SessionState,
+            CreatePartitionSessionControl(ctx.ActorSystem(), SelfId()));
         Y_ABORT_UNLESS(
             !HasError(registration),
             "%s Could not publish volume: %s",
             LogTitle.GetWithTime().c_str(),
             FormatError(registration.GetError()).c_str());
 
-        FrontendRegistrationId = registration.ExtractResult();
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "%s Frontend backend published: registrationId=%s "
             "blockSize=%u blocksCount=%llu",
             LogTitle.GetWithTime().c_str(),
-            FrontendRegistrationId.c_str(),
+            registration.GetResult().c_str(),
             VolumeConfig.GetBlockSize(),
             static_cast<unsigned long long>(
                 VolumeConfig.GetPartitions(0).GetBlockCount()));
@@ -864,14 +876,18 @@ void TPartitionActor::HandleMountSession(
 {
     Y_UNUSED(ctx);
     auto* request = ev->Get();
-    if (!SessionState || FrontendRegistrationClosed ||
-        request->RegistrationId != FrontendRegistrationId)
-    {
+    if (!SessionState || FrontendRegistrationClosed) {
         request->Result.TrySetValue(
             MakeError(E_REJECTED, "Partition registration is unavailable"));
         return;
     }
-    request->Result.TrySetValue(SessionState->Mount(request->ClientId));
+    auto next =
+        MakeIntrusive<TPartitionSessionState>(*SessionState->AtomicLoad());
+    auto result = next->Mount(request->ClientId);
+    if (!HasError(result)) {
+        SessionState->AtomicStore(next);
+    }
+    request->Result.TrySetValue(std::move(result));
 }
 
 void TPartitionActor::HandleUnmountSession(
@@ -880,15 +896,18 @@ void TPartitionActor::HandleUnmountSession(
 {
     Y_UNUSED(ctx);
     auto* request = ev->Get();
-    if (!SessionState || FrontendRegistrationClosed ||
-        request->RegistrationId != FrontendRegistrationId)
-    {
+    if (!SessionState || FrontendRegistrationClosed) {
         request->Result.TrySetValue(
             MakeError(E_REJECTED, "Partition registration is unavailable"));
         return;
     }
-    request->Result.TrySetValue(
-        SessionState->Unmount(request->ClientId, request->SessionId));
+    auto next =
+        MakeIntrusive<TPartitionSessionState>(*SessionState->AtomicLoad());
+    auto result = next->Unmount(request->ClientId, request->SessionId);
+    if (!HasError(result)) {
+        SessionState->AtomicStore(next);
+    }
+    request->Result.TrySetValue(std::move(result));
 }
 
 void TPartitionActor::HandleUpdateVChunkConfig(

@@ -40,7 +40,7 @@ TVolumeConfigPtr MakeGeometry(const NKikimrBlockStore::TVolumeConfig& config)
     });
 }
 
-std::shared_ptr<TPartitionSessionState> MakeState()
+TIntrusivePtr<TPartitionSessionState> MakeState()
 {
     const auto config = MakeMetadata();
     auto result = TPartitionSessionState::Create(
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TPartitionSessionStateTest)
         }
     }
 
-    Y_UNIT_TEST(ShouldOwnMetadataAndReuseHandler)
+    Y_UNIT_TEST(ShouldPublishSessionVersionsAndReuseBackend)
     {
         auto config = MakeMetadata();
         const auto state = TPartitionSessionState::Create(
@@ -123,13 +123,49 @@ Y_UNIT_TEST_SUITE(TPartitionSessionStateTest)
         UNIT_ASSERT_VALUES_EQUAL(
             state->GetVolumeMetadata().GetDiskId(),
             "disk1");
-        const auto first = state->Mount("client").ExtractResult();
-        const auto backend =
-            state->AcquireIoBackend("client", first).ExtractResult();
-        UNIT_ASSERT_VALUES_EQUAL(state->Mount("client").GetResult(), first);
+        TPartitionSessionStateHolder holder(state);
+        auto mounted =
+            MakeIntrusive<TPartitionSessionState>(*holder.AtomicLoad());
+        const auto first = mounted->Mount("client").ExtractResult();
+        holder.AtomicStore(mounted);
+        // Publishing a session must not modify the version retained by readers.
+        UNIT_ASSERT_VALUES_EQUAL(
+            state->AcquireIoBackend("client", first).GetError().GetCode(),
+            E_BS_INVALID_SESSION);
+        UNIT_ASSERT_VALUES_EQUAL(
+            mounted->GetRegistrationId(),
+            state->GetRegistrationId());
         UNIT_ASSERT(
-            backend.Handler ==
-            state->AcquireIoBackend("client", first).GetResult().Handler);
+            &mounted->GetVolumeMetadata() == &state->GetVolumeMetadata());
+        const auto backend = holder.AtomicLoad()
+                                 ->AcquireIoBackend("client", first)
+                                 .ExtractResult();
+        auto remounted =
+            MakeIntrusive<TPartitionSessionState>(*holder.AtomicLoad());
+        UNIT_ASSERT_VALUES_EQUAL(remounted->Mount("client").GetResult(), first);
+        holder.AtomicStore(remounted);
+        const auto remountedBackend = holder.AtomicLoad()
+                                          ->AcquireIoBackend("client", first)
+                                          .ExtractResult();
+        UNIT_ASSERT(backend.Handler == remountedBackend.Handler);
+        UNIT_ASSERT(backend.IoGeometry == remountedBackend.IoGeometry);
+
+        auto unmounted =
+            MakeIntrusive<TPartitionSessionState>(*holder.AtomicLoad());
+        UNIT_ASSERT(!HasError(unmounted->Unmount("client", first)));
+        holder.AtomicStore(unmounted);
+        UNIT_ASSERT_VALUES_EQUAL(
+            holder.AtomicLoad()
+                ->AcquireIoBackend("client", first)
+                .GetError()
+                .GetCode(),
+            E_BS_INVALID_SESSION);
+        UNIT_ASSERT(
+            mounted->AcquireIoBackend("client", first).GetResult().Handler ==
+            backend.Handler);
+        UNIT_ASSERT_VALUES_EQUAL(
+            holder.AtomicLoad()->GetRegistrationId(),
+            state->GetRegistrationId());
     }
 
     Y_UNIT_TEST(ShouldCreateBackendForNativeBlockSizes)
@@ -238,24 +274,25 @@ Y_UNIT_TEST_SUITE(TPartitionSessionStateTest)
                 .GetValueSync();
         };
         UNIT_ASSERT(!HasError(read().Error));
-        state->Stop();
+        auto stopped = MakeIntrusive<TPartitionSessionState>(*state);
+        stopped->Stop();
         UNIT_ASSERT_VALUES_EQUAL(
-            state->Mount("client").GetError().GetCode(),
+            stopped->Mount("client").GetError().GetCode(),
             E_REJECTED);
         UNIT_ASSERT_VALUES_EQUAL(
-            state->Unmount("client", session).GetCode(),
+            stopped->Unmount("client", session).GetCode(),
             E_REJECTED);
         UNIT_ASSERT_VALUES_EQUAL(
-            state->AcquireIoBackend("client", session).GetError().GetCode(),
+            stopped->AcquireIoBackend("client", session).GetError().GetCode(),
             E_REJECTED);
+        // Old versions keep their session data but share the detached backend.
+        UNIT_ASSERT(!HasError(state->AcquireIoBackend("client", session)));
         UNIT_ASSERT_VALUES_EQUAL(read().Error.GetCode(), E_REJECTED);
     }
 
     Y_UNIT_TEST(ShouldCompleteDroppedControlRequests)
     {
-        auto mount = std::make_unique<TEvPartitionSession::TEvMount>(
-            "registration",
-            "client");
+        auto mount = std::make_unique<TEvPartitionSession::TEvMount>("client");
         auto mounted = mount->Result.GetFuture();
         mount.reset();
         UNIT_ASSERT(mounted.HasValue());
@@ -263,7 +300,6 @@ Y_UNIT_TEST_SUITE(TPartitionSessionStateTest)
             mounted.GetValue().GetError().GetCode(),
             E_REJECTED);
         auto unmount = std::make_unique<TEvPartitionSession::TEvUnmount>(
-            "registration",
             "client",
             "session");
         auto unmounted = unmount->Result.GetFuture();

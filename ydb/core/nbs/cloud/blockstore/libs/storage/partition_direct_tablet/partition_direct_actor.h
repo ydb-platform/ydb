@@ -65,8 +65,7 @@ private:
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
-    std::shared_ptr<TPartitionSessionState> SessionState;
-    TString FrontendRegistrationId;
+    TPartitionSessionStateHolderPtr SessionState;
     // A queued Ready event must not republish metadata after backend shutdown.
     bool FrontendRegistrationClosed = false;
 

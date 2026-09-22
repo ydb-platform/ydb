@@ -34,8 +34,8 @@ void MakeEmptyTopic(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaR
 void MakeDuplicatedTopic(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& request);
 void MakeDuplicatedPartition(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& request);
 
-const static TString topic1 = "rt3.dc1--topic1";
-const static TString topic2 = "rt3.dc1--topic2";
+const static TString topic1 = "topic1";
+const static TString topic2 = "topic2";
 // Base test class with useful helpers for constructing all you need to test pq requests.
 class TMessageBusServerPersQueueRequestTestBase: public TTestBase {
 protected:

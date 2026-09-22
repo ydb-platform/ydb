@@ -31,7 +31,7 @@ public:
         });
         server.CleverServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_DEBUG);
         server.CleverServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_DEBUG);
-        server.AnnoyingClient->CreateTopic("rt3.dc1--" + TString(GetTestTopic()), 1);
+        server.AnnoyingClient->CreateTopic(TString(GetTestTopic()), 1);
         NKikimr::NPersQueueTests::TPQDataWriter writer(GetTestMessageGroupId(), server);
 
         auto seed = TInstant::Now().MicroSeconds();

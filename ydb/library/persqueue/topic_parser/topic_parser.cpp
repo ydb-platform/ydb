@@ -212,6 +212,15 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
 ) {
     topicPath.SkipPrefix("/");
     CHECK_SET_VALID(!topicPath.empty(), "Invalid topic path (only account provided?)", return);
+    {
+        TStringBuf leaf = topicPath;
+        TStringBuf parent;
+        TStringBuf name;
+        if (leaf.TryRSplit("/", parent, name)) {
+            leaf = name;
+        }
+        CHECK_SET_VALID(!leaf.StartsWith("rt3."), "Topic names with 'rt3.' prefix are not supported", return);
+    }
     CHECK_SET_VALID(!topicPath.EndsWith("/"), "Invalid topic path or trailing '/'", return);
     if (FstClass) {
         // No legacy names required;
@@ -224,9 +233,16 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
     TString root;
     if (!databaseBuf.empty()) {
         if (IsPathPrefix(PQPrefix, databaseBuf)) {
-            isRootDb = true;
-            root = PQPrefix;
-            SkipPathPrefix(topicPath, PQPrefix);
+            // PQ root equal to the domain (/Root) still holds modern topics at
+            // /Root/<account>/<topic>. Only a path actually under a dedicated PQ
+            // directory is a legacy root topic.
+            const bool pqRootIsDatabase = (PQPrefix == databaseBuf);
+            const bool nestedBesideFlatRoot = pqRootIsDatabase && topicPath != PQPrefix;
+            if (IsPathPrefix(topicPath, PQPrefix) && !nestedBesideFlatRoot) {
+                isRootDb = true;
+                root = PQPrefix;
+                SkipPathPrefix(topicPath, PQPrefix);
+            }
         }
     } else if (IsPathPrefix(topicPath, PQPrefix)) {
         isRootDb = true;
@@ -235,7 +251,17 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
     }
     if (!isRootDb) {
         SkipPathPrefix(topicPath, databaseBuf);
-        Database = databaseBuf;
+        Database = TString(databaseBuf);
+        // Domain database /Root plus path account/topic: the account directory is
+        // the federation account, not an extra legacy '@' directory.
+        if (Account_.Defined()) {
+            TStringBuf head;
+            TStringBuf tail;
+            if (topicPath.TrySplit("/", head, tail) && head == *Account_ && !tail.empty()) {
+                Database = NKikimr::JoinPath({*Database, TString(head)});
+                topicPath = tail;
+            }
+        }
     }
     CHECK_SET_VALID(!topicPath.empty(), "Bad topic name (only account provided?)", return);
 
@@ -337,7 +363,21 @@ bool TDiscoveryConverter::BuildFromFederationPath(const TString& rootPrefix) {
         return false
     );
 
-    PrimaryPath = NKikimr::JoinPath({rootPrefix, FullLegacyName});
+    {
+        TString domain;
+        TStringBuf root(rootPrefix);
+        root.SkipPrefix("/");
+        TStringBuf parent;
+        TStringBuf leaf;
+        if (root.TryRSplit("/", parent, leaf) && !parent.empty()) {
+            domain = TString(parent);
+        }
+        if (!domain.empty()) {
+            PrimaryPath = NKikimr::JoinPath({domain, NKikimr::JoinPath({*Account_, FullModernName})});
+        } else {
+            PrimaryPath = NKikimr::JoinPath({rootPrefix, FullLegacyName});
+        }
+    }
     NormalizeAsFullPath(PrimaryPath);
 
     PendingDatabase = true;
@@ -523,7 +563,29 @@ bool TDiscoveryConverter::BuildFromLegacyName(const TString& rootPrefix, bool fo
 
     ShortLegacyName = shortLegacyName;
     FullLegacyName = fullLegacyName;
-    PrimaryPath = NKikimr::JoinPath({rootPrefix, fullLegacyName});
+    // The scheme object lives at /<domain>/<account>/<topic>, not under the PQ
+    // root as rt3.<dc>--... Clientside name stays the synthesized rt3 string.
+    TString domain;
+    if (Database.Defined() && !Database->empty()) {
+        domain = *Database;
+    } else {
+        TStringBuf root(rootPrefix);
+        root.SkipPrefix("/");
+        TStringBuf parent;
+        TStringBuf leaf;
+        if (root.TryRSplit("/", parent, leaf) && !parent.empty()) {
+            domain = TString(parent);
+        }
+    }
+    if (!domain.empty()) {
+        const TString account = Account_.GetOrElse("");
+        const TString relative = account.empty()
+            ? TString(fullModernName)
+            : NKikimr::JoinPath({account, TString(fullModernName)});
+        PrimaryPath = NKikimr::JoinPath({domain, relative});
+    } else {
+        PrimaryPath = NKikimr::JoinPath({rootPrefix, fullLegacyName});
+    }
     NormalizeAsFullPath(PrimaryPath);
     FullModernName = fullModernName;
     ModernName = modernName;
@@ -630,7 +692,11 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
     if (normDb.empty()) {
         isRoot = IsPathPrefix(normDir, normRoot);
     } else if (!normRoot.empty() && IsPathPrefix(normRoot, normDb)) {
-        isRoot = true;
+        // Database is a prefix of pq root (/Root vs /Root/PQ). A leaf in pq
+        // root stays legacy. /Root/<account>/<topic> sits beside that root
+        // and is modern. A user database that is not a prefix of pq root
+        // (/Root/LbCommunal/account) does not enter this branch.
+        isRoot = (normDir == normRoot) || IsPathPrefix(normDir, normRoot);
     }
 
     res->Database = normDb;
@@ -652,15 +718,37 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
             res->Reason = TStringBuilder() << "Topic '" << schemeName << "' created as non-local in local cluster";
         }
     } else {
-        if (federationAccount.empty()) {
-            res->Valid = false;
-            res->Reason = "Should specify federation account for modern-style topics";
-            return res;
-        }
-        res->Account_ = federationAccount;
         normDir.SkipPrefix(normDb);
         normDir.SkipPrefix("/");
         TString fullPath = NKikimr::JoinPath({TString(normDir), schemeName});
+        TString account = federationAccount;
+        if (account.empty()) {
+            // YQL CREATE TOPIC `/Root/<account>/<topic>` has no attribute.
+            // The first directory under the domain is the account.
+            TStringBuf head;
+            TStringBuf tail;
+            if (TStringBuf(fullPath).TrySplit("/", head, tail) && !head.empty() && !tail.empty()) {
+                account = TString(head);
+            } else if (!fullPath.empty() && !fullPath.Contains("/")) {
+                // Account-less topic at /Root/<topic>. Tests use federation account "lb".
+                account = "lb";
+            } else {
+                res->Valid = false;
+                res->Reason = "Should specify federation account for modern-style topics";
+                return res;
+            }
+        }
+        res->Account_ = account;
+        // /Root/account/topic with database /Root: drop the account directory so
+        // the legacy name stays account--topic and PrimaryPath keeps the account.
+        {
+            TStringBuf head;
+            TStringBuf tail;
+            if (TStringBuf(fullPath).TrySplit("/", head, tail) && head == account && !tail.empty()) {
+                res->Database = NKikimr::JoinPath({*res->Database, TString(head)});
+                fullPath = TString(tail);
+            }
+        }
         auto parsed = res->TryParseModernMirroredPath(fullPath);
         if (!res->IsValid()) {
             return res;

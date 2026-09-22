@@ -340,8 +340,15 @@ bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
         if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo) {
 
             auto name = converter->GetClientsideName();
-
-            if (name.empty() || !TopicsToRequest.empty() && !IsIn(TopicsToRequest, name)) {
+            // Clientside is still rt3.<dc>--..., which is no longer a valid
+            // request name. Also accept the modern names the caller resolved.
+            const bool requested = TopicsToRequest.empty()
+                || IsIn(TopicsToRequest, name)
+                || IsIn(TopicsToRequest, converter->GetModernName())
+                || IsIn(TopicsToRequest, converter->GetFederationPath())
+                || IsIn(TopicsToRequest, converter->GetFederationPathWithDC())
+                || IsIn(TopicsToRequest, converter->GetPrimaryPath());
+            if (name.empty() || !requested) {
                 continue;
             }
             ChildrenToCreate.emplace_back(new TPerTopicInfo(entry, converter));

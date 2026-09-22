@@ -95,10 +95,11 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
                 Server->AnnoyingClient->CreateTopicNoLegacy("/Root/PQ/acc/topic1", 1);
             } else {
                 Cerr << "=== Will create legacy-style topics\n";
-                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--acc--topic2dc", 1);
-                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--acc--topic2dc", 1, true, false);
-                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--topic1", 1);
-                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--acc--topic1", 1);
+                Server->AnnoyingClient->MkDir("/Root", "acc");
+                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/acc/topic2dc", 1, true, true, "dc1", {"user"}, "acc");
+                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/acc/topic2dc-mirrored-from-dc2", 1, true, false, "dc2", {"user"}, "acc");
+                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/topic1", 1, true, true, "dc1", {"user"}, "lb");
+                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/acc/topic1", 1, true, true, "dc1", {"user"}, "acc");
                 Server->WaitInit("topic1");
             }
 
@@ -202,7 +203,7 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
         }
 
         TString GetTopic() {
-            return TenantModeEnabled() ? "/Root/acc/topic1" : "rt3.dc1--topic1";
+            return TenantModeEnabled() ? "/Root/acc/topic1" : "topic1";
         }
 
         TString GetTopicPath() {
@@ -211,7 +212,7 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
 
 
         TString GetFullTopicPath() {
-            return TenantModeEnabled() ? "/Root/acc/topic1" : "/Root/PQ/rt3.dc1--topic1";
+            return TenantModeEnabled() ? "/Root/acc/topic1" : "/Root/topic1";
         }
         TString GetTopicPathMultipleDC() const {
             return "acc/topic2dc";
@@ -294,13 +295,12 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
         void CreateTopicWithQuota(const TString& path, bool createKesus = true, double writeQuota = 1000.0) {
             TVector<TString> pathComponents = SplitPath(path);
             const TString account = pathComponents[0];
-            const TString name = NPersQueue::BuildFullTopicName(path, "dc1");
-
             if (TenantModeEnabled()) {
                 Server->AnnoyingClient->CreateTopicNoLegacy("/Root/PQ/" + path, 1);
             } else {
-                Cerr << "Creating topic \"" << name << "\"" << Endl;
-                Server->AnnoyingClient->CreateTopicNoLegacy(name, 1);
+                const TString schemePath = "/Root/" + path;
+                Cerr << "Creating topic \"" << schemePath << "\"" << Endl;
+                Server->AnnoyingClient->CreateTopicNoLegacy(schemePath, 1, true, true, "dc1", {"user"}, account);
             }
 
             const TString rootPath = "/Root/PersQueue/System/Quoters";

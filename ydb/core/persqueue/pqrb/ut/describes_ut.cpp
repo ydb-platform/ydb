@@ -12,8 +12,8 @@ Y_UNIT_TEST_SUITE(TPQRBDescribes) {
     Y_UNIT_TEST(PartitionLocations) {
 
         NPersQueue::TTestServer server;
-        TString topicName = "rt3.dc1--topic";
-        TString topicPath = TString("/Root/PQ/") + topicName;
+        TString topicName = "topic";
+        TString topicPath = TString("/Root/") + topicName;
         ui32 totalPartitions = 5;
         server.AnnoyingClient->CreateTopic(topicName, totalPartitions);
 

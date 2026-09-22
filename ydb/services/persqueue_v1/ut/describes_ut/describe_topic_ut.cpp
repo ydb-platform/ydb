@@ -11,7 +11,7 @@ namespace NKikimr::NPersQueueTests {
 
 using namespace NIcNodeCache;
 
-const static TString topicName = "rt3.dc1--topic-x";
+const static TString topicName = "topic-x";
 const static TString topicPath = "/Root/PQ/" + topicName;
 
 class TDescribeTestServer {

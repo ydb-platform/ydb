@@ -32,8 +32,8 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         ui32 partitionsCount = 2;
         TString srcTopic = "topic2";
         TString dstTopic = "topic1";
-        TString srcTopicFullName = "rt3.dc1--" + srcTopic;
-        TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+        TString srcTopicFullName = srcTopic;
+        TString dstTopicFullName = dstTopic;
 
         server.AnnoyingClient->CreateTopic(
             srcTopicFullName,
@@ -290,10 +290,10 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
 
         const TString srcTopic = "batch_source";
         const TString dstTopic = "batch_mirror";
-        const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
-        const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+        const TString srcTopicFullName = srcTopic;
+        const TString dstTopicFullName = dstTopic;
         const TString srcTopicSdkPath = "PQ/" + srcTopicFullName;
-        const TString dstTopicPath = "/Root/PQ/" + dstTopicFullName;
+        const TString dstTopicPath = "/Root/" + dstTopicFullName;
         const TString mirrorConsumer = "mirror_user";
         const TString readerConsumer = "reader";
 
@@ -463,7 +463,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
 
         NPersQueue::TTestServer server;
         TString topic = "topic1";
-        TString topicFullName = "rt3.dc1--" + topic;
+        TString topicFullName = topic;
 
         server.AnnoyingClient->CreateTopic(topicFullName, 1);
 
@@ -553,8 +553,8 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         constexpr ui32 messageSize = 90_KB;
         const TString srcTopic = "src_topic";
         const TString dstTopic = "dst_topic";
-        const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
-        const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+        const TString srcTopicFullName = srcTopic;
+        const TString dstTopicFullName = dstTopic;
         const TString mirrorConsumer = "mirror_consumer";
 
         server.AnnoyingClient->CreateTopic(
@@ -607,7 +607,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             while (TInstant::Now() < describeDeadline) {
                 Cerr << "Waiting for blobs cleanup\n";
                 auto descr = topicClient.DescribePartition(
-                                            "/Root/PQ/" + topicFullName,
+                                            "/Root/" + topicFullName,
                                             0,
                                             NYdb::NTopic::TDescribePartitionSettings().IncludeStats(true))
                                  .GetValueSync();
@@ -672,7 +672,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         bool committed = false;
         while (TInstant::Now() < describeDeadline) {
             auto descr = topicClient.DescribeConsumer(
-                "/Root/PQ/" + srcTopicFullName,
+                "/Root/" + srcTopicFullName,
                 mirrorConsumer,
                 NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)
             ).GetValueSync();
@@ -697,7 +697,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         UNIT_ASSERT_C(committed, "mirror_consumer did not commit all skipped messages within timeout");
 
         if (withRestart) {
-            server.KillTopicPqTablets("/Root/PQ/" + dstTopicFullName);
+            server.KillTopicPqTablets("/Root/" + dstTopicFullName);
             Sleep(TDuration::Seconds(1));
         }
 

@@ -238,8 +238,10 @@ Y_UNIT_TEST(CreateTopicWithIdAttribute) {
     {
         runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
-        const TString path = "/Root/rt3.dc1--test_account--topic_id_attr_federation";
+        setup->GetServer().AnnoyingClient->MkDir("/Root", "test_account");
+        const TString path = "/Root/test_account/topic_id_attr_federation";
         auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_federation_account"] = "test_account";
         (*request.mutable_attributes())["_id"] = "1234567";
         AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
 
@@ -256,8 +258,10 @@ Y_UNIT_TEST(CreateTopicWithIdAttribute) {
     {
         runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
-        const TString path = "/Root/rt3.dc1--test_account--topic_bad_id";
+        setup->GetServer().AnnoyingClient->MkDir("/Root", "test_account");
+        const TString path = "/Root/test_account/topic_bad_id";
         auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_federation_account"] = "test_account";
         (*request.mutable_attributes())["_id"] = "not-a-number";
         AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "not a valid positive integer");
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
@@ -267,8 +271,10 @@ Y_UNIT_TEST(CreateTopicWithIdAttribute) {
     {
         runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
-        const TString path = "/Root/rt3.dc1--test_account--topic_zero_id";
+        setup->GetServer().AnnoyingClient->MkDir("/Root", "test_account");
+        const TString path = "/Root/test_account/topic_zero_id";
         auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_federation_account"] = "test_account";
         (*request.mutable_attributes())["_id"] = "0";
         AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "must be greater than 0");
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);

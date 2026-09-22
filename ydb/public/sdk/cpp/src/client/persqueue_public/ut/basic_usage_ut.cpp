@@ -515,8 +515,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         auto& client = setup->GetPersQueueClient();
         const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
-        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+        const TString path = "/Root/" + name;
         NPersQueue::TCreateTopicSettings settings{};
+        settings.FederationAccount("lb");
         TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
         rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(setup->GetTestConsumer())});
         settings.ReadRules(rrSettings);
@@ -532,9 +533,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         auto& client = setup->GetPersQueueClient();
         const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
-        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+        const TString path = "/Root/" + name;
         {
             NPersQueue::TCreateTopicSettings settings{};
+            settings.FederationAccount("lb");
             TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
             rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(setup->GetTestConsumer()).AvailabilityPeriod(TDuration::Minutes(250))});
             settings.ReadRules(rrSettings);
@@ -567,9 +569,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         auto& client = setup->GetPersQueueClient();
         const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
-        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+        const TString path = "/Root/" + name;
         {
             NPersQueue::TCreateTopicSettings settings{};
+            settings.FederationAccount("lb");
             const auto creat = client.CreateTopic(path, settings).GetValueSync();
             UNIT_ASSERT_C(creat.IsSuccess(), creat.GetIssues().ToOneLineString());
         }
@@ -595,13 +598,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         auto& client = setup->GetPersQueueClient();
         const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
-        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+        const TString path = "/Root/" + name;
 
         const TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings{
             {NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName("shared/user")},
         };
         {
             NPersQueue::TCreateTopicSettings settings{};
+            settings.FederationAccount("lb");
             settings.ReadRules(rrSettings);
             const auto creat = client.CreateTopic(path, settings).GetValueSync();
             UNIT_ASSERT_C(creat.IsSuccess(), creat.GetIssues().ToOneLineString());

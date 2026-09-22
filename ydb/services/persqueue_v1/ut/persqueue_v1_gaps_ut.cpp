@@ -22,7 +22,7 @@ namespace NKikimr::NPersQueueTests {
 
 namespace {
 
-constexpr TStringBuf DefaultTopicFullName = "rt3.dc1--topic1";
+constexpr TStringBuf DefaultTopicFullName = "topic1";
 constexpr TStringBuf DefaultTopicShortName = "topic1";
 constexpr TStringBuf DefaultConsumer = "user";
 
@@ -384,7 +384,7 @@ Y_UNIT_TEST(UnaryRpcsRejectEmptyAndMissingDatabase) {
                 [&](grpc::ClientContext& context, Ydb::Operations::Operation& operation) {
                     Ydb::Topic::CreateTopicRequest request;
                     Ydb::Topic::CreateTopicResponse response;
-                    request.set_path("/Root/PQ/rt3.dc1--empty-db-topic");
+                    request.set_path("/Root/empty-db-topic");
                     request.mutable_partitioning_settings()->set_min_active_partitions(1);
                     auto rpc = topicStub->CreateTopic(&context, request, &response);
                     UNIT_ASSERT(rpc.ok());
@@ -398,7 +398,7 @@ Y_UNIT_TEST(UnaryRpcsRejectEmptyAndMissingDatabase) {
                 [&](grpc::ClientContext& context, Ydb::Operations::Operation& operation) {
                     Ydb::Topic::DescribeTopicRequest request;
                     Ydb::Topic::DescribeTopicResponse response;
-                    request.set_path(TStringBuilder() << "/Root/PQ/" << DefaultTopicFullName);
+                    request.set_path(TStringBuilder() << "/Root/" << DefaultTopicFullName);
                     auto rpc = topicStub->DescribeTopic(&context, request, &response);
                     UNIT_ASSERT(rpc.ok());
                     operation = response.operation();
@@ -411,7 +411,7 @@ Y_UNIT_TEST(UnaryRpcsRejectEmptyAndMissingDatabase) {
                 [&](grpc::ClientContext& context, Ydb::Operations::Operation& operation) {
                     Ydb::Topic::DescribeConsumerRequest request;
                     Ydb::Topic::DescribeConsumerResponse response;
-                    request.set_path(TStringBuilder() << "/Root/PQ/" << DefaultTopicFullName);
+                    request.set_path(TStringBuilder() << "/Root/" << DefaultTopicFullName);
                     request.set_consumer(TString(DefaultConsumer));
                     auto rpc = topicStub->DescribeConsumer(&context, request, &response);
                     UNIT_ASSERT(rpc.ok());
@@ -425,7 +425,7 @@ Y_UNIT_TEST(UnaryRpcsRejectEmptyAndMissingDatabase) {
                 [&](grpc::ClientContext& context, Ydb::Operations::Operation& operation) {
                     Ydb::Topic::DropTopicRequest request;
                     Ydb::Topic::DropTopicResponse response;
-                    request.set_path(TStringBuilder() << "/Root/PQ/" << DefaultTopicFullName);
+                    request.set_path(TStringBuilder() << "/Root/" << DefaultTopicFullName);
                     auto rpc = topicStub->DropTopic(&context, request, &response);
                     UNIT_ASSERT(rpc.ok());
                     operation = response.operation();
@@ -649,7 +649,7 @@ Y_UNIT_TEST(StreamReadRejectsSharedConsumer) {
     NPersQueue::TTestServer server(settings);
     server.EnableLogs({NKikimrServices::PQ_READ_PROXY});
 
-    const TString fullPath = "/Root/PQ/rt3.dc1--shared_read_topic";
+    const TString fullPath = "/Root/shared_read_topic";
     const TString shortPath = "shared_read_topic";
     const TString consumer = "shared_c1";
     CreateTopicWithSharedConsumerYql(server, fullPath, consumer);
@@ -718,7 +718,7 @@ Y_UNIT_TEST(CommitSurvivesTabletRestart) {
     UNIT_ASSERT(session->Stream->Write(commitReq));
 
     // Kill partition tablet to force pipe reconnect / session recovery path.
-    const TString oldPath = TStringBuilder() << "/Root/PQ/" << DefaultTopicFullName;
+    const TString oldPath = TStringBuilder() << "/Root/" << DefaultTopicFullName;
     auto pathDescr = server.AnnoyingClient->Ls(oldPath)->Record.GetPathDescription().GetPersQueueGroup();
     UNIT_ASSERT_GE(pathDescr.PartitionsSize(), 1);
     server.AnnoyingClient->KillTablet(*server.CleverServer, pathDescr.GetPartitions(0).GetTabletId());
@@ -770,7 +770,7 @@ Y_UNIT_TEST_SUITE(PersQueueV1Gaps_SchemaSmoke) {
 Y_UNIT_TEST(TopicAlterDropAndDescribeUnknownConsumer) {
     auto server = MakeServerWithTopic(1);
     auto stub = MakeTopicStub(server);
-    const TString topicPath = TStringBuilder() << "/Root/PQ/" << DefaultTopicFullName;
+    const TString topicPath = TStringBuilder() << "/Root/" << DefaultTopicFullName;
 
     {
         Ydb::Topic::AlterTopicRequest request;
@@ -823,10 +823,10 @@ Y_UNIT_TEST(TopicAlterDropAndDescribeUnknownConsumer) {
     }
 
     {
-        server.AnnoyingClient->CreateTopic("rt3.dc1--schema-drop-me", 1);
+        server.AnnoyingClient->CreateTopic("schema-drop-me", 1);
         Ydb::Topic::DropTopicRequest request;
         Ydb::Topic::DropTopicResponse response;
-        request.set_path("/Root/PQ/rt3.dc1--schema-drop-me");
+        request.set_path("/Root/schema-drop-me");
         grpc::ClientContext context;
         FillDatabaseHeader(context, "/Root");
         auto status = stub->DropTopic(&context, request, &response);
@@ -842,7 +842,7 @@ Y_UNIT_TEST(Pqv1RemoveReadRuleSharedConsumer) {
     settings.SetFeatureFlags(ff);
     NPersQueue::TTestServer server(settings);
 
-    const TString fullPath = "/Root/PQ/rt3.dc1--shared_remove_topic";
+    const TString fullPath = "/Root/shared_remove_topic";
     const TString consumer = "shared_to_remove";
     CreateTopicWithSharedConsumerYql(server, fullPath, consumer);
 
@@ -880,7 +880,7 @@ Y_UNIT_TEST(DescribeConsumerSharedWithStats) {
     settings.SetFeatureFlags(ff);
     NPersQueue::TTestServer server(settings);
 
-    const TString fullPath = "/Root/PQ/rt3.dc1--shared_describe_topic";
+    const TString fullPath = "/Root/shared_describe_topic";
     const TString consumer = "shared_describe";
     CreateTopicWithSharedConsumerYql(server, fullPath, consumer);
 

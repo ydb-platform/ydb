@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
 
         wrapper.SetConverter("topic", "dc2", "");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.GetFullLegacyName(), "rt3.dc2--topic");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc2--topic");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/topic-mirrored-from-dc2");
     }
 
     Y_UNIT_TEST(FullLegacyNamesWithRootDatabase) {
@@ -113,11 +113,11 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
     Y_UNIT_TEST(WithLogbrokerPath) {
         TConverterTestWrapper wrapper(false, "/Root/PQ", TString("dc1"));
         wrapper.SetConverter("account/topic", "", "");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc1--account--topic");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/account/topic");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.GetAccount(), "account");
 
         wrapper.SetConverter("account/topic", "dc2", "/Root");
-        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc2--account--topic");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/Root/account/topic-mirrored-from-dc2");
     }
 
     Y_UNIT_TEST(AccountDatabase) {

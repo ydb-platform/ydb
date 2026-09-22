@@ -43,10 +43,11 @@ NKikimrPQ::TPQTabletConfig MakeConfig(const TMakeConfigParams& params)
     }
 
     config.SetTopicName("rt3.dc1--account--topic");
-    config.SetTopicPath("/Root/PQ/rt3.dc1--account--topic");
+    config.SetTopicPath("/Root/account/topic");
     config.SetFederationAccount("account");
+    config.SetDC("dc1");
     config.SetLocalDC(true);
-    config.SetYdbDatabasePath("");
+    config.SetYdbDatabasePath("/Root");
 
     config.SetMeteringMode(params.MeteringMode);
     config.MutablePartitionConfig()->SetLifetimeSeconds(TDuration::Hours(24).Seconds());

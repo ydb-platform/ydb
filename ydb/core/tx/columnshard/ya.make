@@ -35,6 +35,7 @@ GENERATE_ENUM_SERIALIZATION(columnshard.h)
 GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
 
 PEERDIR(
+    library/cpp/monlib/service/pages
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/cms/console

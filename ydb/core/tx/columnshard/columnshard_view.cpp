@@ -7,6 +7,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json.h>
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
 
@@ -819,16 +820,21 @@ TString TTxMonitoring::RenderMainPage() {
         html << "<h3>" << RenderLwTraceStartLink(createUrl, traceId, logUrl, "Traces for all portions on shard") << "</h3>";
     }
 
-    html << "<h3>Persisted CutHistory send attempts (latest " << TColumnShard::CutHistoryRequestLimit
-         << "; Hive confirmation is not tracked)</h3><pre>";
-    for (const auto& request : CutHistoryRequests) {
-        html << TEscapeHtml(TStringBuilder() << request.Timestamp << " recipient=" << request.Recipient
-                                             << " toGeneration=" << request.ToGeneration << " sendingGeneration=" << request.SendingGeneration
-                                             << " TabletID: " << request.TabletID << " Channel: " << request.Channel
-                                             << " GroupID: " << request.GroupID << " FromGeneration: " << request.FromGeneration)
-             << "\n";
+    HTML(html) {
+        H3_CLASS("") {
+            html << "Persisted CutHistory send attempts (latest " << TColumnShard::CutHistoryRequestLimit
+                 << "; Hive confirmation is not tracked)";
+        }
+        PRE() {
+            for (const auto& request : CutHistoryRequests) {
+                html << TEscapeHtml(TStringBuilder()
+                                    << request.Timestamp << " recipient=" << request.Recipient << " toGeneration=" << request.ToGeneration
+                                    << " sendingGeneration=" << request.SendingGeneration << " TabletID: " << request.TabletID << " Channel: "
+                                    << request.Channel << " GroupID: " << request.GroupID << " FromGeneration: " << request.FromGeneration)
+                     << "\n";
+            }
+        }
     }
-    html << "</pre>";
 
     html << "<h3>Tiering Errors</h3>";
     auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();

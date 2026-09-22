@@ -47,6 +47,16 @@ enum ESpillResult {
     DontHavePages
 };
 
+struct TPageWithMatchFlags {
+    TPackResult Tuples;
+    TMKQLVector<ui8> MatchFlags;
+};
+
+struct TSpilledProbePage {
+    ISpiller::TKey SpillKey;
+    TMKQLVector<ui8> MatchFlags;
+};
+
 
 inline ESpillResult Wait() {
     return ESpillResult::Spilling;
@@ -183,7 +193,8 @@ template <TSpillerSettings Settings> class TProbeSpiller {
     }
     struct State {
         TMKQLVector<Bucket> Buckets;
-        TMKQLVector<TValueAndLocation<TPackResult>> InMemoryPages;
+        TMKQLVector<TValueAndLocation<TPageWithMatchFlags>> InMemoryPages;
+        TMKQLVector<TMKQLVector<TSpilledProbePage>> SpilledProbePages;
     };
 
     TProbeSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout, State state)
@@ -191,17 +202,9 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         , Layout_(layout)
         , Spiller_(spiller)
     {
-        for(int index = 0; index < std::ssize(State_.Buckets); ++index) {
-            TSides<TBucket>* thisBucket = std::get_if<TSides<TBucket>>(&State_.Buckets[index]);
-            if (thisBucket) {
-                for(ESide side: EachSide){
-                    thisBucket->SelectSide(side).DetatchBuildingPage();
-                    for( TPackResult& page: thisBucket->SelectSide(side).DetatchPages()){
-                        State_.InMemoryPages.push_back(TValueAndLocation<TPackResult>{.Val = std::move(page), .Side = side, .BucketIndex = index});
-                    }
-                }
-            }
-        }
+        State_.SpilledProbePages.resize(State_.Buckets.size());
+        BuildingMatchFlags_.resize(State_.Buckets.size());
+        FlushBuildingPages();
     }
 
     [[nodiscard]] ESpillResult SpillWhile(std::predicate auto condition) {
@@ -217,8 +220,13 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                     MKQL_ENSURE(future.Val.IsReady(), "no blocking wait");
                     TSides<TBucket>* thisBucket = std::get_if<TSides<TBucket>>(&State_.Buckets[future.BucketIndex]);
                     MKQL_ENSURE(thisBucket, "spilling page from in memory bucket?");
-                    thisBucket->SelectSide(future.Side)
-                        .SpilledPages->push_back(future.Val.ExtractValueSync());
+                    const ISpiller::TKey key = future.Val.ExtractValueSync();
+                    if (future.Side == ESide::Probe) {
+                        State_.SpilledProbePages[future.BucketIndex].push_back(
+                            {.SpillKey = key, .MatchFlags = std::move(future.MatchFlags)});
+                    } else {
+                        thisBucket->Build.SpilledPages->push_back(key);
+                    }
                 }
                 SpillingPages_ = std::nullopt;
             } else {
@@ -228,8 +236,9 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                 SpillingPages_.emplace();
                 for (int index = 0; index < Settings.SpillingPagesAtTime; ++index) {
                     auto page = *GetBackOrNull(State_.InMemoryPages);
-                    SpillingPages_->push_back({.Val = SpillPage(*Spiller_, std::move(page.Val)), .Side = page.Side,
-                                               .BucketIndex = page.BucketIndex});
+                    SpillingPages_->push_back({.Val = SpillPage(*Spiller_, std::move(page.Val.Tuples)),
+                                               .Side = page.Side, .BucketIndex = page.BucketIndex,
+                                               .MatchFlags = std::move(page.Val.MatchFlags)});
                 }
             }
         }
@@ -242,15 +251,22 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         MKQL_ENSURE(thisBucket, "spilling row that should be looked up?");
         thisBucket->Probe.BuildingPage.AppendTuple(tuple.Val, Layout_);
         if (matched.has_value()) {
-            thisBucket->Probe.BuildingPage.MatchFlags.push_back(*matched);
+            BuildingMatchFlags_[tuple.BucketIndex].push_back(*matched);
         } else {
-            MKQL_ENSURE(thisBucket->Probe.BuildingPage.MatchFlags.empty(),
+            MKQL_ENSURE(BuildingMatchFlags_[tuple.BucketIndex].empty(),
                         "all rows in a page must use the same match-state format");
         }
         if (thisBucket->Probe.template DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>()) {
-            for( TPackResult& page: thisBucket->Probe.DetatchPages()){
-                State_.InMemoryPages.push_back(
-                    {.Val = std::move(page), .Side = tuple.Side, .BucketIndex = tuple.BucketIndex});
+            FlushBucketPages(tuple.BucketIndex, ESide::Probe);
+        }
+    }
+
+    void FlushBuildingPages() {
+        for (int index = 0; index < std::ssize(State_.Buckets); ++index) {
+            if (std::get_if<TSides<TBucket>>(&State_.Buckets[index])) {
+                for (ESide side : EachSide) {
+                    FlushBucketPages(index, side);
+                }
             }
         }
     }
@@ -274,10 +290,37 @@ template <TSpillerSettings Settings> class TProbeSpiller {
     }
 
   private:
+    void FlushBucketPages(int index, ESide side) {
+        TSides<TBucket>* buckets = std::get_if<TSides<TBucket>>(&State_.Buckets[index]);
+        MKQL_ENSURE(buckets, "flushing pages from an in-memory table");
+        TBucket& bucket = buckets->SelectSide(side);
+        bucket.DetatchBuildingPage();
+        auto pages = bucket.DetatchPages();
+        for (TPackResult& page : pages) {
+            TPageWithMatchFlags result{.Tuples = std::move(page)};
+            if (side == ESide::Probe && !BuildingMatchFlags_[index].empty()) {
+                MKQL_ENSURE(pages.size() == 1, "match flags belong to exactly one building page");
+                MKQL_ENSURE(std::ssize(BuildingMatchFlags_[index]) == result.Tuples.NTuples,
+                            "match flags must contain one flag per tuple");
+                result.MatchFlags = std::move(BuildingMatchFlags_[index]);
+            }
+            State_.InMemoryPages.push_back(
+                {.Val = std::move(result), .Side = side, .BucketIndex = index});
+        }
+    }
+
     State State_;
     const NPackedTuple::TTupleLayout* Layout_;
 
-    std::optional<TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>>> SpillingPages_;
+    struct TPendingSpill {
+        NThreading::TFuture<ISpiller::TKey> Val;
+        ESide Side;
+        int BucketIndex;
+        TMKQLVector<ui8> MatchFlags;
+    };
+
+    TMKQLVector<TMKQLVector<ui8>> BuildingMatchFlags_;
+    std::optional<TMKQLVector<TPendingSpill>> SpillingPages_;
     ISpiller::TPtr Spiller_;
 
 };

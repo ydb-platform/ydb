@@ -12,14 +12,12 @@ NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& p
 NYql::TChunkedBuffer Serialize(TPackResult&& result) {
     MKQL_ENSURE(!result.Empty(), "spilling empty page?");
     NYql::TChunkedBuffer buff{};
-    const i64 matchFlagsSize = result.MatchFlags.size();
-    char header[sizeof(result.NTuples) + sizeof(matchFlagsSize)]{};
-    std::memcpy(header, &result.NTuples, sizeof(result.NTuples));
-    std::memcpy(header + sizeof(result.NTuples), &matchFlagsSize, sizeof(matchFlagsSize));
-    buff.Append(TString{header, header + sizeof(header)});
+    constexpr int size = sizeof(result.NTuples);
+    char ntuplesBuff[size]{};
+    std::memcpy(ntuplesBuff, &result.NTuples, size);
+    buff.Append(TString{ntuplesBuff, ntuplesBuff+size});
     buff.Append(TString{reinterpret_cast<const char*>(result.PackedTuples.data()), result.PackedTuples.size()});
     buff.Append(TString{reinterpret_cast<const char*>(result.Overflow.data()), result.Overflow.size()});
-    buff.Append(TString{reinterpret_cast<const char*>(result.MatchFlags.data()), result.MatchFlags.size()});
 
     return buff;
 }
@@ -45,23 +43,12 @@ TPackResult Parse(NYql::TChunkedBuffer&& buff, const NPackedTuple::TTupleLayout*
     str.To = std::span<char>{reinterpret_cast<char*>(&res.NTuples), sizeof(res.NTuples)}; 
     fillTo();
 
-    i64 matchFlagsSize = 0;
-    str.To = std::span<char>{reinterpret_cast<char*>(&matchFlagsSize), sizeof(matchFlagsSize)};
-    fillTo();
-    MKQL_ENSURE(matchFlagsSize >= 0 && (matchFlagsSize == 0 || matchFlagsSize == res.NTuples),
-                "corrupted match flags size");
-    
     res.PackedTuples.resize(res.NTuples*layout->TotalRowSize);
     str.To = std::span<char>{reinterpret_cast<char*>(res.PackedTuples.data()), res.PackedTuples.size()};
     fillTo();
 
-    MKQL_ENSURE(static_cast<ui64>(matchFlagsSize) <= buff.Size(), "corrupted spilled page");
-    res.Overflow.resize(buff.Size() - matchFlagsSize);
+    res.Overflow.resize(buff.Size());
     str.To = std::span<char>{reinterpret_cast<char*>(res.Overflow.data()), res.Overflow.size()};
-    fillTo();
-
-    res.MatchFlags.resize(matchFlagsSize);
-    str.To = std::span<char>{reinterpret_cast<char*>(res.MatchFlags.data()), res.MatchFlags.size()};
     fillTo();
 
     return res;

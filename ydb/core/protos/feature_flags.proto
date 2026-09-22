@@ -403,4 +403,5 @@ message TFeatureFlags {
     optional bool CollectHourMetric = 334 [default = false];
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
     optional bool EnableIamDelegationSecrets = 336 [default = false]; // YDBFEATURES-144
+    optional bool EnableStreamingQueryTopicAutopartitioning = 337 [default = true];
 }

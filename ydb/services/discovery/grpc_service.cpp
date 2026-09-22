@@ -37,7 +37,7 @@ void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         Y_STRINGIZE(methodName), logger, YDB_API_DEFAULT_COUNTER_BLOCK(discovery, methodName))->Run();
 
      SETUP_LEGACY_EVENT_METHOD(ListEndpoints, ListEndpointsRequest, ListEndpointsResponse, {
-         ActorSystem_->Send(GRpcRequestProxyId_, new TEvListEndpointsRequest(reqCtx, AppData(ActorSystem_)));
+         ActorSystem_->Send(GRpcRequestProxyId_, new TEvListEndpointsRequest(reqCtx));
      });
 
 #undef SETUP_DISCOVERY_METHOD

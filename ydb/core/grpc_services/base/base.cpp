@@ -5,15 +5,14 @@
 
 namespace NKikimr::NGRpcService {
 
-IRequestProxyCtx::IRequestProxyCtx(const TAppData* appData) {
-    if (!appData && HasAppData()) {
-        appData = AppData();
+IRequestProxyCtx::IRequestProxyCtx() {
+    if (HasAppData()) {
+        InitRootPath(AppData());
     }
-    InitRootPath(appData);
 }
 
 void IRequestProxyCtx::InitRootPath(const TAppData* appData) {
-    if (appData && appData->DomainsInfo && appData->DomainsInfo->Domain) {
+    if (RootPath.empty() && appData && appData->DomainsInfo && appData->DomainsInfo->Domain) {
         RootPath = "/" + appData->DomainsInfo->Domain->Name;
         RelativePathsEnabled_ = appData->FeatureFlags.GetEnableRelativePaths();
     }
@@ -44,7 +43,7 @@ const TMaybe<TString> IRequestProxyCtx::GetDatabaseName() const {
 }
 
 TMaybe<TString> IRequestProxyCtx::ResolveDatabaseName(const TMaybe<TString>& database) const {
-    if (!DatabaseName && database && !database->empty()) {
+    if (!DatabaseName && !RootPath.empty() && database && !database->empty()) {
         DatabaseName = RelativePathsEnabled_ ? PrependDomainIfNeeded(RootPath, *database) : *database;
     }
     return DatabaseName ? DatabaseName : database;

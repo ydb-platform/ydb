@@ -1,6 +1,5 @@
 #include "ydb_dummy.h"
 
-#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
@@ -155,7 +154,7 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     })
 
     ADD_REQUEST(Infinite, InfiniteRequest, InfiniteResponse, {
-        ActorSystem_->Register(new TInfiniteRpc(new TEvInfiniteRequest(ctx, AppData(ActorSystem_))));
+        ActorSystem_->Register(new TInfiniteRpc(new TEvInfiniteRequest(ctx)));
     })
 #undef ADD_REQUEST
 
@@ -180,8 +179,7 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     new TEvBiStreamPingRequest(
                         context,
                         NGRpcService::TRequestAuxSettings{
-                            .EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseForbidden,
-                            .AppData = AppData(ActorSystem_)
+                            .EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseForbidden
                         }
                     )
                 );

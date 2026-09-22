@@ -21,7 +21,11 @@ bool TPersQueueReadBalancer::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
             postParams.emplace(kv.GetKey(), kv.GetValue());
         }
         if (postParams.Get("action") == "kill_session") {
-            Balancer->StopReadingSession(postParams.Get("consumer"), postParams.Get("session"), ctx);
+            const auto& consumer = postParams.Get("consumer");
+            const auto& session = postParams.Get("session");
+            if (!consumer.empty() && !session.empty()) {
+                Balancer->StopReadingSession(consumer, session, ctx);
+            }
         }
     }
 

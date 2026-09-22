@@ -43,7 +43,11 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
                                     __stream << ", ";
                                 }
                             }
-                            TABLED() { __stream << (family->Session ? family->Session->SessionName : ""); }
+                            TABLED() {
+                                if (family->Session) {
+                                    __stream << EncodeHtmlPcdata(family->Session->SessionName);
+                                }
+                            }
                             TABLED() { __stream << "Active " << family->ActivePartitionCount << " / Inactive " << family->InactivePartitionCount << " / Locked " << family->LockedPartitions.size(); }
                         }
                     }
@@ -203,12 +207,12 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
 
                         TABLER() {
                             TABLED() { __stream << ++i; }
-                            TABLED() { __stream << session->SessionName; }
+                            TABLED() { __stream << EncodeHtmlPcdata(session->SessionName); }
                             TABLED() { __stream << (session->Partitions.empty() ? "" : JoinRange(", ", session->Partitions.begin(), session->Partitions.end())); }
                             TABLED() { __stream << session->Families.size() << " / " << session->ActiveFamilyCount << " / " << session->ReleasingFamilyCount; }
                             TABLED() { __stream << (session->ActivePartitionCount + session->InactivePartitionCount + session->ReleasingPartitionCount)
                                            << " / " << session->ActivePartitionCount << " / " << session->InactivePartitionCount << " / " << session->ReleasingPartitionCount; }
-                            TABLED() { __stream << session->ClientNode; }
+                            TABLED() { __stream << EncodeHtmlPcdata(session->ClientNode); }
                             TABLED() { __stream << session->ProxyNodeId; }
                             TABLED() {
                                 if (!session->SessionName.empty()) {

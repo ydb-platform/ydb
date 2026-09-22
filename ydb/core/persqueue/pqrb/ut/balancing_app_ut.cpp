@@ -364,6 +364,31 @@ Y_UNIT_TEST(KillSessionGetDoesNotStopSession) {
     UNIT_ASSERT(!error);
 }
 
+Y_UNIT_TEST(KillEmptyConsumerOrSessionDoesNotMatchUnregisteredPipe) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    PQTabletPrepare({}, {}, tc);
+    SendBalancerUpdate(tc, TBalancerUpdate{
+        .Partitions = {{0, {tc.TabletId, 1}}},
+        .Consumers = {{"user", NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING}},
+    });
+    WaitBalancerReady(tc);
+
+    auto pipe = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
+    DispatchFor(tc);
+    Y_UNUSED(pipe);
+
+    SendBalancerKillPost(tc, "", "");
+    auto res = tc.Runtime->GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>(TDuration::Seconds(10));
+    UNIT_ASSERT(res);
+    UNIT_ASSERT_C(res->Html.Contains("Generic Info"), res->Html.substr(0, 2000));
+
+    auto error = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvError>(TDuration::MilliSeconds(1));
+    UNIT_ASSERT(!error);
+}
+
 Y_UNIT_TEST(KillUnknownSessionPostRendersPage) {
     TTestContext tc;
     tc.Prepare();

@@ -2172,9 +2172,16 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
 }
 
 void TBalancer::StopReadingSession(const TString& consumer, const TString& sessionName, const TActorContext& ctx) {
+    if (consumer.empty() || sessionName.empty()) {
+        LOG_N("Ignored kill request with empty consumer or session name",
+            {"consumer", consumer},
+            {"session", sessionName});
+        return;
+    }
+
     size_t stopped = 0;
     for (auto& [pipe, session] : Sessions) {
-        if (session->ClientId != consumer || session->SessionName != sessionName) {
+        if (session->ClientId != consumer || session->SessionName != sessionName || !session->Sender) {
             continue;
         }
 

@@ -202,6 +202,19 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT_VALUES_EQUAL(size_t(2), configuredCounts[1]);
         UNIT_ASSERT_VALUES_EQUAL(size_t(2), configuredCounts[2]);
 
+        auto snapshot =
+            WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(2, snapshot.ConfiguredDDiskImbalance.Moves);
+        UNIT_ASSERT_VALUES_EQUAL(
+            6,
+            snapshot.ConfiguredDDiskImbalance.TotalDDiskCount);
+        UNIT_ASSERT_VALUES_EQUAL(33, snapshot.ConfiguredDDiskImbalance.Percent);
+        UNIT_ASSERT_VALUES_EQUAL(0, snapshot.TouchedDDiskImbalance.Moves);
+        UNIT_ASSERT_VALUES_EQUAL(
+            3,
+            snapshot.TouchedDDiskImbalance.TotalDDiskCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, snapshot.TouchedDDiskImbalance.Percent);
+
         const auto pendingHost =
             RunOnExecutor(
                 executor,
@@ -223,6 +236,17 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT_VALUES_EQUAL(size_t(1), touchedCounts[pendingHost]);
         UNIT_ASSERT_VALUES_EQUAL(size_t(1), configuredCounts[pendingHost]);
 
+        snapshot = WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(1, snapshot.ConfiguredDDiskImbalance.Moves);
+        UNIT_ASSERT_VALUES_EQUAL(
+            7,
+            snapshot.ConfiguredDDiskImbalance.TotalDDiskCount);
+        UNIT_ASSERT_VALUES_EQUAL(14, snapshot.ConfiguredDDiskImbalance.Percent);
+        UNIT_ASSERT_VALUES_EQUAL(0, snapshot.TouchedDDiskImbalance.Moves);
+        UNIT_ASSERT_VALUES_EQUAL(
+            4,
+            snapshot.TouchedDDiskImbalance.TotalDDiskCount);
+
         RunOnExecutor(
             executor,
             [&]
@@ -238,6 +262,16 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(size_t(0), touchedCounts[1]);
 
+        snapshot = WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(1, snapshot.ConfiguredDDiskImbalance.Moves);
+        UNIT_ASSERT_VALUES_EQUAL(
+            5,
+            snapshot.ConfiguredDDiskImbalance.TotalDDiskCount);
+        UNIT_ASSERT_VALUES_EQUAL(20, snapshot.ConfiguredDDiskImbalance.Percent);
+        UNIT_ASSERT_VALUES_EQUAL(
+            3,
+            snapshot.TouchedDDiskImbalance.TotalDDiskCount);
+
         RunOnExecutor(
             executor,
             [&]
@@ -248,6 +282,48 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             .GetValue(WaitTimeout);
         touched->Stop().GetValue(WaitTimeout);
         untouched->Stop().GetValue(WaitTimeout);
+    }
+
+    Y_UNIT_TEST_F(ShouldIgnoreDisabledDDiskInImbalance, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_shared<TStorageTransportMock>());
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        auto config = TVChunkConfig::MakeDefault(
+            0,
+            DirectBlockGroupHostCount,
+            DefaultPrimaryCount);
+        config.PromoteHost(3);
+        config.DisableHost(0);
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            Service.get(),
+            DiskDescription,
+            config,
+            true,
+            TDirtyMapStateProto{},
+            dbg,
+            1000,
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+        WaitDirtyMapReady(executor, vchunk);
+
+        const auto snapshot =
+            WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(
+            3,
+            snapshot.ConfiguredDDiskImbalance.TotalDDiskCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            3,
+            snapshot.TouchedDDiskImbalance.TotalDDiskCount);
+
+        vchunk->Stop().GetValue(WaitTimeout);
     }
 
     Y_UNIT_TEST_F(ShouldAllocateDDiskWithQuorum, TDBGFixture)

@@ -2319,6 +2319,16 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    const auto allowedForBalancing = GetBalancingAllowedHosts();
+    const auto configuredImbalance = CalculateDDiskImbalance(
+        CountDDisksByHost(
+            EDDiskBalanceStrategy::Configured,
+            allowedForBalancing),
+        allowedForBalancing);
+    const auto touchedImbalance = CalculateDDiskImbalance(
+        CountDDisksByHost(EDDiskBalanceStrategy::Touched, allowedForBalancing),
+        allowedForBalancing);
+
     TVector<TConnectionSnapshot> connections;
     connections.reserve(Connections.GetSlotCount());
     for (size_t host = 0; host < Connections.GetSlotCount(); ++host) {
@@ -2357,6 +2367,8 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .VChunkCount = VChunks.size(),
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
+        .ConfiguredDDiskImbalance = configuredImbalance,
+        .TouchedDDiskImbalance = touchedImbalance,
         .FreshDDisks = std::move(freshDDisks),
         .MemoryStats = ArenaAllocatorPool->GetMemoryStats(),
         .DetailedMemoryStats = ArenaAllocatorPool->GetDetailedStat(),

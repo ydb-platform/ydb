@@ -1,6 +1,9 @@
 #include "ddisk_balance.h"
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
+
+#include <cmath>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -95,6 +98,46 @@ std::array<TVector<const TVChunkConfig*>, MaxHostCount> CollectVChunksByHost(
 }
 
 }   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+TDDiskImbalance CalculateDDiskImbalance(
+    const std::array<size_t, MaxHostCount>& ddiskCountByHost,
+    THostMask allowedForBalancing)
+{
+    const size_t hostCount = allowedForBalancing.Count();
+    if (hostCount == 0) {
+        return {};
+    }
+
+    size_t ddiskCount = 0;
+    for (THostIndex host: allowedForBalancing) {
+        ddiskCount += ddiskCountByHost[host];
+    }
+    if (ddiskCount == 0) {
+        return {};
+    }
+
+    const size_t baseCount = ddiskCount / hostCount;
+    const size_t extraHosts = ddiskCount % hostCount;
+    size_t excess = 0;
+    size_t hostsAboveBase = 0;
+    for (THostIndex host: allowedForBalancing) {
+        const size_t count = ddiskCountByHost[host];
+        if (count > baseCount) {
+            excess += count - baseCount;
+            ++hostsAboveBase;
+        }
+    }
+
+    // Keep the extra DDisks on already loaded hosts to minimize moves.
+    const size_t moves = excess - Min(extraHosts, hostsAboveBase);
+    return {
+        .Moves = moves,
+        .TotalDDiskCount = ddiskCount,
+        .Percent = static_cast<ui32>(std::lround(100.0 * moves / ddiskCount)),
+    };
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

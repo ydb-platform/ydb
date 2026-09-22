@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/mon_model.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ddisk_balance.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
@@ -99,6 +100,8 @@ struct TDbgSnapshot
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
+    TDDiskImbalance ConfiguredDDiskImbalance;
+    TDDiskImbalance TouchedDDiskImbalance;
     // Current Fresh DDisks for vchunks that have any.
     THashMap<ui32, THostMask> FreshDDisks;
     TArenaPoolStats MemoryStats;

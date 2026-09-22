@@ -8,6 +8,31 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 Y_UNIT_TEST_SUITE(TDDiskBalanceTest)
 {
+    Y_UNIT_TEST(ShouldCalculateImbalanceOnlyForAllowedHosts)
+    {
+        const std::array<size_t, MaxHostCount> ddiskCountByHost =
+            {5, 5, 5, 0, 20};
+
+        const auto allHosts =
+            CalculateDDiskImbalance(ddiskCountByHost, THostMask::MakeAll(5));
+        UNIT_ASSERT_VALUES_EQUAL(13, allHosts.Moves);
+        UNIT_ASSERT_VALUES_EQUAL(35, allHosts.TotalDDiskCount);
+        UNIT_ASSERT_VALUES_EQUAL(37, allHosts.Percent);
+
+        const auto allowedHosts = CalculateDDiskImbalance(
+            ddiskCountByHost,
+            THostMask::MakeMask({0, 1, 2, 3}));
+        UNIT_ASSERT_VALUES_EQUAL(3, allowedHosts.Moves);
+        UNIT_ASSERT_VALUES_EQUAL(15, allowedHosts.TotalDDiskCount);
+        UNIT_ASSERT_VALUES_EQUAL(20, allowedHosts.Percent);
+
+        const auto noHosts =
+            CalculateDDiskImbalance(ddiskCountByHost, THostMask::MakeEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(0, noHosts.Moves);
+        UNIT_ASSERT_VALUES_EQUAL(0, noHosts.TotalDDiskCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, noHosts.Percent);
+    }
+
     Y_UNIT_TEST(ShouldUseDifferentTargetsAndRequestEachVChunkOnce)
     {
         const auto first = TVChunkConfig::MakeDefault(0, 5, 3);

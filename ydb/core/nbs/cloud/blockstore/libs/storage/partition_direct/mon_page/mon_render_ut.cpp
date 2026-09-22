@@ -293,24 +293,17 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         TMonPageData data = MakeData();
         data.TabletInfo.BlockCount = 5 * 8192;
         data.Dbgs = MakeOverviewDbgs();
+        data.Dbgs[0].ConfiguredDDiskImbalance = {
+            .Moves = 6,
+            .TotalDDiskCount = 15,
+            .Percent = 40};
+        data.Dbgs[0].TouchedDDiskImbalance = {
+            .Moves = 3,
+            .TotalDDiskCount = 9,
+            .Percent = 33};
 
-        TTestTouchedProvider touchedProvider;
-        TVChunkConfigs configs;
-        for (ui32 region = 0; region < 5; ++region) {
-            const ui32 vChunkIndex = region * VChunkPerRegionCount;
-            if (region < 3) {
-                touchedProvider.Touched.insert(vChunkIndex);
-            }
-            configs.emplace(
-                vChunkIndex,
-                TVChunkConfig::Make(
-                    vChunkIndex,
-                    THostRoles::MakeRotating(5, 0, 3, EHostRole::HandOff),
-                    THostRoles::MakeRotating(5, 0, 3, EHostRole::None),
-                    THostMask::MakeAll(5)));
-        }
-
-        const TString html = RenderMonPage(data, configs, touchedProvider);
+        const TString html =
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
         UNIT_ASSERT_STRING_CONTAINS(html, "<th rowspan=\"1\">Node</th>");
         UNIT_ASSERT_VALUES_EQUAL(1, CountDbgHeaderRows(html));
         UNIT_ASSERT_STRING_CONTAINS(
@@ -328,10 +321,12 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "dbg=1'>DBG #1</a> Imb: 0%</th>");
         UNIT_ASSERT_STRING_CONTAINS(html, "dbg=31'>DBG #31</a> Imb: 0%</th>");
 
-        configs[4 * VChunkPerRegionCount].DemoteHost(2);
-        configs[4 * VChunkPerRegionCount].PromoteHost(3);
+        data.Dbgs[0].ConfiguredDDiskImbalance = {
+            .Moves = 5,
+            .TotalDDiskCount = 15,
+            .Percent = 33};
         const TString roundedHtml =
-            RenderMonPage(data, configs, touchedProvider);
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
         UNIT_ASSERT_STRING_CONTAINS(
             roundedHtml,
             "title=\"Config:  need move 5 of 15 DDisks (33%)&#10;"

@@ -36,11 +36,7 @@ public:
     static inline const TString ManifestColName = "manifest"; // Json
     static inline const TString VersionColName = "version"; // Uint64
     static inline const TString ChunkCountColName = "chunk_count"; // Uint64
-    static inline const TString CompileStatusColName = "compile_status"; // Utf8
-    static inline const TString CompileErrorColName = "compile_error"; // Utf8
     static inline const TString CreatedAtColName = "created_at"; // Timestamp
-    static inline const TString CompileStartedAtColName = "compile_started_at"; // Timestamp
-    static inline const TString CompileFinishedAtColName = "compile_finished_at"; // Timestamp
 
 private:
     YDB_ACCESSOR_DEF(TString, Uid);
@@ -51,11 +47,7 @@ private:
     YDB_ACCESSOR_DEF(TString, Manifest);
     YDB_ACCESSOR_DEF(ui64, Version);
     YDB_ACCESSOR_DEF(ui64, ChunkCount);
-    YDB_ACCESSOR_DEF(ECompileStatus, CompileStatus);
-    YDB_ACCESSOR_DEF(TString, CompileError);
     YDB_ACCESSOR_DEF(TInstant, CreatedAt);
-    YDB_ACCESSOR_DEF(TInstant, CompileStartedAt);
-    YDB_ACCESSOR_DEF(TInstant, CompileFinishedAt);
 public:
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();
     static TVector<NKikimrSchemeOp::TColumnDescription> GetColumnDescription();
@@ -72,11 +64,7 @@ public:
         YDB_ACCESSOR(i32, ManifestIdx, -1);
         YDB_ACCESSOR(i32, VersionIdx, -1);
         YDB_ACCESSOR(i32, ChunkCountIdx, -1);
-        YDB_ACCESSOR(i32, CompileStatusIdx, -1);
-        YDB_ACCESSOR(i32, CompileErrorIdx, -1);
         YDB_ACCESSOR(i32, CreatedAtIdx, -1);
-        YDB_ACCESSOR(i32, CompileStartedAtIdx, -1);
-        YDB_ACCESSOR(i32, CompileFinishedAtIdx, -1);
 
     public:
         TDecoder(const Ydb::ResultSet& rawData);

@@ -144,7 +144,7 @@ TString BuildSelectModuleByNameQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $name AS Utf8; "
         << "DECLARE $type AS Utf8; "
-           << "SELECT uid, md5, name, type, version, size, chunk_count, compile_status, compile_error, manifest FROM `"
+        << "SELECT uid, md5, name, type, version, size, chunk_count, manifest FROM `"
         << EscapeTablePath(tablePath)
         << "` WHERE name = $name AND type = $type;";
 }
@@ -176,11 +176,6 @@ bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& respo
     ReadUint64Column(resultSet, "version", row.Version);
     ReadUint64Column(resultSet, "size", row.Size);
     ReadUint64Column(resultSet, "chunk_count", row.ChunkCount);
-    TString compileStatus;
-    if (ReadUtf8Column(resultSet, "compile_status", compileStatus)) {
-        TUdfModule::CompileStatusFromString(compileStatus, row.CompileStatus);
-    }
-    ReadUtf8Column(resultSet, "compile_error", row.CompileError);
     ReadUtf8Column(resultSet, "manifest", row.Manifest);
     return true;
 }
@@ -563,43 +558,6 @@ void SetUpsertArtifactChunkParams(
     (*request.mutable_parameters())["$blob_kind"] = MakeUtf8Param(blobKind);
     (*request.mutable_parameters())["$chunk_idx"] = MakeUint64Param(chunkIdx);
     (*request.mutable_parameters())["$data"] = MakeStringParam(data);
-}
-
-TString BuildUpdateCompileStatusQuery(const TString& tablePath) {
-    // Compiles run per node against a shared table, so a compile started for
-    // one upload may finish after the module has been re-uploaded over the
-    // same name. The name identifies the module, and uid identifies the upload
-    // behind the row right now: without it in the predicate a stale compile
-    // would publish its verdict over content it never looked at.
-    return TStringBuilder()
-        << "DECLARE $name AS Utf8; "
-        << "DECLARE $type AS Utf8; "
-        << "DECLARE $uid AS Utf8; "
-        << "DECLARE $compile_status AS Utf8; "
-        << "DECLARE $compile_error AS Utf8; "
-        << "UPDATE `"
-        << EscapeTablePath(tablePath)
-        << "` SET compile_status = $compile_status, "
-        << "compile_error = $compile_error, "
-        << "compile_started_at = IF($compile_status = 'compiling', CurrentUtcTimestamp(), compile_started_at), "
-        << "compile_finished_at = IF($compile_status = 'ready' OR $compile_status = 'failed', "
-        << "CurrentUtcTimestamp(), compile_finished_at) "
-        << "WHERE name = $name AND type = $type AND uid = $uid;";
-}
-
-void SetUpdateCompileStatusParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& name,
-    const TString& type,
-    const TString& uid,
-    const TString& status,
-    const TString& errorMessage)
-{
-    (*request.mutable_parameters())["$name"] = MakeUtf8Param(name);
-    (*request.mutable_parameters())["$type"] = MakeUtf8Param(type);
-    (*request.mutable_parameters())["$uid"] = MakeUtf8Param(uid);
-    (*request.mutable_parameters())["$compile_status"] = MakeUtf8Param(status);
-    (*request.mutable_parameters())["$compile_error"] = MakeUtf8Param(errorMessage);
 }
 
 } // namespace NKikimr::NUdfStore::NTableQuery

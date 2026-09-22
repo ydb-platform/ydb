@@ -21,8 +21,6 @@ struct TModuleSourceRow {
     ui64 ChunkCount = 0;
     TString Body;
     TString Manifest;
-    ECompileStatus CompileStatus = ECompileStatus::Pending;
-    TString CompileError;
 };
 
 struct TWasmArtifactRow {
@@ -167,17 +165,6 @@ void SetUpsertArtifactChunkParams(
     const TString& blobKind,
     ui64 chunkIdx,
     const TString& data);
-
-//! Scoped by uid as well as name and type: the compile that started for an
-//! earlier upload must not overwrite the status of the one that replaced it.
-TString BuildUpdateCompileStatusQuery(const TString& tablePath);
-void SetUpdateCompileStatusParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& name,
-    const TString& type,
-    const TString& uid,
-    const TString& status,
-    const TString& errorMessage);
 
 bool ExtractQueryResult(
     const Ydb::Table::ExecuteDataQueryResponse& response,

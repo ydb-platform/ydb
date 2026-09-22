@@ -518,7 +518,7 @@ def test_ydb_udf_administrator_access(database_admin):
         with grpc.insecure_channel(endpoint) as channel:
             stub = UdfServiceStub(channel)
             for user, allowed in [("root@builtin", True), ("owner@builtin", database_admin), ("ordinary@builtin", False)]:
-                metadata = (("x-ydb-database", database), ("x-ydb-auth-ticket", user))
+                metadata = (("x-ydb-database", "test" if database_admin else database), ("x-ydb-auth-ticket", user))
                 expected = StatusIds.SUCCESS if allowed else StatusIds.UNAUTHORIZED
                 name = user.split("@")[0]
                 manifest = json.dumps(dict(module_name=name, module_type="library", module_kind="wasm"))

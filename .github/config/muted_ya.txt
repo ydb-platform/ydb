@@ -56,6 +56,7 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query
 ydb/tests/fq/streaming/logbroker py3test.sole chunk
 ydb/tests/fq/streaming/streaming_large test_cluster_restarts.py.TestStreamingLarge.test_replace_node[kikimr0]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
+ydb/tests/functional/federation_test unittest.sole chunk
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_stress
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test

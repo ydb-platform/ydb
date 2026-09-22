@@ -182,19 +182,21 @@ void TViewerPipeClient::SetupTracing(const TString& handlerName) {
         : NWilson::TTraceId::MAX_VERBOSITY;
 
     auto request = GetRequest();
-    NWilson::TTraceId traceId;
-    TString traceparent = request.GetHeader("traceparent");
-    if (traceparent) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, viewerTraceDefaultVerbosity);
-    }
     TString wantTrace = request.GetHeader("X-Want-Trace");
     TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
     TString traceTTL = request.GetHeader("X-Trace-TTL");
+
+    ui8 verbosity = viewerTraceDefaultVerbosity;
+    if (traceVerbosity) {
+        verbosity = std::min(viewerTraceMaxVerbosity, FromStringWithDefault<ui8>(traceVerbosity, verbosity));
+    }
+
+    NWilson::TTraceId traceId;
+    TString traceparent = request.GetHeader("traceparent");
+    if (traceparent) {
+        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, verbosity);
+    }
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
-        ui8 verbosity = viewerTraceDefaultVerbosity;
-        if (traceVerbosity) {
-            verbosity = std::min(viewerTraceMaxVerbosity, FromStringWithDefault<ui8>(traceVerbosity, verbosity));
-        }
         ui32 ttl = Max<ui32>();
         if (traceTTL) {
             ttl = FromStringWithDefault<ui32>(traceTTL, ttl);

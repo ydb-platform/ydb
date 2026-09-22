@@ -254,10 +254,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        auto makeRequest = [&](bool requestMaxVerbosity) {
+        auto makeRequest = [&](bool requestMaxVerbosity, bool withTraceparent = false) {
             traceVerbosity.reset();
             TActorId sender = runtime.AllocateEdgeActor();
             THttpRequest httpReq(HTTP_METHOD_GET);
+            if (withTraceparent) {
+                httpReq.HttpHeaders.AddHeader(
+                    "traceparent",
+                    "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01");
+            }
             if (requestMaxVerbosity) {
                 httpReq.HttpHeaders.AddHeader("X-Trace-Verbosity", "15");
             } else {
@@ -275,12 +280,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
 
         UNIT_ASSERT_VALUES_EQUAL(makeRequest(true), static_cast<ui8>(TComponentTracingLevels::DynamicNodesOnly));
+        UNIT_ASSERT_VALUES_EQUAL(makeRequest(true, true), static_cast<ui8>(TComponentTracingLevels::DynamicNodesOnly));
 
         TControlBoard::SetValue(
             0,
             runtime.GetAppData().Icb->ViewerControls.LimitTraceVerbosity);
         UNIT_ASSERT_VALUES_EQUAL(makeRequest(true), NWilson::TTraceId::MAX_VERBOSITY);
+        UNIT_ASSERT_VALUES_EQUAL(makeRequest(true, true), NWilson::TTraceId::MAX_VERBOSITY);
         UNIT_ASSERT_VALUES_EQUAL(makeRequest(false), static_cast<ui8>(TComponentTracingLevels::DynamicNodesOnly));
+        UNIT_ASSERT_VALUES_EQUAL(makeRequest(false, true), static_cast<ui8>(TComponentTracingLevels::DynamicNodesOnly));
     }
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {

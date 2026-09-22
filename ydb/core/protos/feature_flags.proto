@@ -137,7 +137,8 @@ message TFeatureFlags {
     reserved 111; // UseVDisksBalancing
     optional bool EnableViews = 112 [default = true];
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
-    optional bool EnableAccessServiceBulkAuthorization = 114 [default = true];
+    reserved 114; // EnableAccessServiceBulkAuthorization
+    reserved "EnableAccessServiceBulkAuthorization";
     optional bool EnableAddColumsWithDefaults = 115 [default = true];
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = true];
     optional bool EnableCMSRequestPriorities = 117 [default = true];

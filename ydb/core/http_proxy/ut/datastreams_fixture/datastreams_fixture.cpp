@@ -978,7 +978,7 @@ void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Inte
         setupAccessServiceMock(AccessServiceMock);
         builder.RegisterService(&AccessServiceMock);
     }
-    // We always should setup v2, because bulkAuthorization works only in v2 and EnableBulkAuthorization=true will call it
+    // Always set up v2: ticket parser authorization uses BulkAuthorize, which is only available in v2.
     setupAccessServiceMock(AccessServiceMockV2);
     builder.RegisterService(&AccessServiceMockV2);
 

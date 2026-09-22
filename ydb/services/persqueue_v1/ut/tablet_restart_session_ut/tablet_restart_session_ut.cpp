@@ -294,8 +294,11 @@ struct TTabletRestartReadSessionEnv {
     // Which tablet to reboot (PqTabletId or PqrbTabletId), set by the event
     // filter at the boundary based on which pipe the boundary event flows
     // through. The main loop reads this to call RebootTablet() for the
-    // correct party.
+    // correct party. An event flowing between the PQ tablet and the
+    // balancer matches both pipes: when both reboot switches are set, both
+    // targets are non-zero and both tablets are rebooted.
     std::atomic<ui64> RebootTargetTabletId{0};
+    std::atomic<ui64> RebootTargetTabletId2{0};
 
     // Set by the main loop after RebootTablet() completes. The event filter
     // drops all TEvPersQueue events while RebootTriggered && !RebootCompleted,
@@ -590,17 +593,24 @@ struct TTabletRestartReadSessionEnv {
                 // reboot the partition tablet when the boundary event is on
                 // the partition tablet's pipe, reboot the balancer when the
                 // boundary event is on the balancer's pipe.
-                const ui64 tabletToReboot = isPqTabletEvent ? PqTabletId
-                                          : isBalancerEvent ? PqrbTabletId
-                                                            : 0;
+                // Respect the reboot switches: an event flowing between the
+                // PQ tablet and the balancer matches both classifications,
+                // so with both switches set both tablets are rebooted; with
+                // only one switch set, only that party's tablet is rebooted.
+                const ui64 tabletToReboot =
+                    (isPqTabletEvent && DoRebootPqTablet) ? PqTabletId : 0;
+                const ui64 tabletToReboot2 =
+                    (isBalancerEvent && DoRebootPqrbTablet) ? PqrbTabletId : 0;
                 RebootTargetTabletId.store(tabletToReboot);
+                RebootTargetTabletId2.store(tabletToReboot2);
                 Cerr << "=== REBOOT_BOUNDARY effCount=" << effectiveCount
                      << " pqCount=" << PqTabletEventCount.load()
                      << " balCount=" << PqBalancerEventCount.load()
                      << " target=" << target << " ev=" << name
                      << " isPq=" << isPqTabletEvent
                      << " isBal=" << isBalancerEvent
-                     << " tabletToReboot=" << tabletToReboot << Endl;
+                     << " tabletToReboot=" << tabletToReboot
+                     << " tabletToReboot2=" << tabletToReboot2 << Endl;
                 // DROP the boundary event — it's lost in the "reboot".
                 // Subsequent events are also dropped (by the RebootTriggered
                 // && !RebootCompleted check above) until the main loop completes
@@ -645,6 +655,7 @@ struct TTabletRestartReadSessionEnv {
         ErrorCloseReason.clear();
         RebootTriggered.store(false);
         RebootTargetTabletId.store(0);
+        RebootTargetTabletId2.store(0);
         RebootCompleted.store(false);
         DroppedInRebootCount.store(0);
         PqTabletPipeActors.clear();
@@ -904,50 +915,35 @@ protected:
             }
         }
 
-        if (ScenarioMaxLagSeconds == 0) {
-            // No max_lag: every message must be delivered.
-            i64 firstMissing = missing.empty() ? -1 : *missing.begin();
-            UNIT_ASSERT_C(missing.empty(), label << ": " << missing.size() << " of " << runTotal
-                << " messages never delivered; first missing SeqNo: " << firstMissing);
-            AssertNoErrorClose(label);
-            return;
-        }
+        // The earliest time a read session from a LATER step could attempt
+        // to read a step's messages: the next step's start time, or this
+        // step's end time for the last step.
+        const auto lateReadTime = [&](size_t i) {
+            return i + 1 < StepTimings.size() ? StepTimings[i + 1].WriteStartTime
+                                               : StepTimings[i].StepEndTime;
+        };
 
-        // max_lag > 0: predict which messages could have been skipped.
-        // A message written in step S (at simulated time ~WriteStartTime) can
-        // be skipped if a later step S' starts reading at a simulated time
-        // more than MaxLagSeconds after the message's write time. Since the
-        // partition tablet uses ctx.Now() - maxTimeLagMs as the read timestamp
-        // threshold, any message with WriteTimestamp < ctx.Now() - max_lag is
-        // skipped. We approximate the write timestamp by the step's start time
-        // and the read time by the next step's start time (or the current
-        // step's end time for the last step).
-        //
-        // Note: this is a conservative over-approximation. Not all messages
-        // in a skippable step will actually be skipped — if some read
-        // sessions deliver them before the lag window expires, they survive.
-        // The validation checks that every missing message is in the skippable
-        // set (no unexpected losses) and that the missing count is reasonable.
-        const TDuration maxLag = TDuration::Seconds(ScenarioMaxLagSeconds);
+        // Predict which messages could have been skipped due to max_lag:
+        // a message written in step S (at simulated time ~WriteStartTime) can
+        // be skipped if a later step starts reading more than MaxLagSeconds
+        // after the write time (the partition tablet reads with a
+        // ctx.Now() - maxTimeLagMs timestamp threshold). This is a
+        // conservative over-approximation: not every skippable message is
+        // actually skipped. With no max_lag the skippable set is empty, so
+        // the validation below degenerates to "every message must be
+        // delivered".
         THashSet<i64> skippable;
-        for (size_t i = 0; i < StepTimings.size(); ++i) {
-            const auto& st = StepTimings[i];
-            if (st.LastSeqNo < st.FirstSeqNo) {
-                continue; // no messages written in this step
-            }
-            // The earliest time a read session from a LATER step could
-            // attempt to read these messages. For step i, the next step's
-            // start time is the earliest "late read" opportunity. If there
-            // is no next step, use this step's end time.
-            TInstant lateReadTime = st.StepEndTime;
-            if (i + 1 < StepTimings.size()) {
-                lateReadTime = StepTimings[i + 1].WriteStartTime;
-            }
-            // If the late read time exceeds the write time + max_lag, messages
-            // from this step are eligible for skipping.
-            if (lateReadTime - st.WriteStartTime > maxLag) {
-                for (i64 seqNo = st.FirstSeqNo; seqNo <= st.LastSeqNo; ++seqNo) {
-                    skippable.insert(seqNo);
+        if (ScenarioMaxLagSeconds > 0) {
+            const TDuration maxLag = TDuration::Seconds(ScenarioMaxLagSeconds);
+            for (size_t i = 0; i < StepTimings.size(); ++i) {
+                const auto& st = StepTimings[i];
+                if (st.LastSeqNo < st.FirstSeqNo) {
+                    continue; // no messages written in this step
+                }
+                if (lateReadTime(i) - st.WriteStartTime > maxLag) {
+                    for (i64 seqNo = st.FirstSeqNo; seqNo <= st.LastSeqNo; ++seqNo) {
+                        skippable.insert(seqNo);
+                    }
                 }
             }
         }
@@ -960,7 +956,7 @@ protected:
             }
         }
 
-        // Log the timing analysis for diagnostics.
+        // Log the analysis for diagnostics.
         Cerr << "=== MAX_LAG_ANALYSIS label=" << label
              << " maxLagSeconds=" << ScenarioMaxLagSeconds
              << " runTotal=" << runTotal
@@ -971,16 +967,11 @@ protected:
              << Endl;
         for (size_t i = 0; i < StepTimings.size(); ++i) {
             const auto& st = StepTimings[i];
-            TInstant lateReadTime = st.StepEndTime;
-            if (i + 1 < StepTimings.size()) {
-                lateReadTime = StepTimings[i + 1].WriteStartTime;
-            }
             Cerr << "  step[" << i << "] seqNos=" << st.FirstSeqNo << "-" << st.LastSeqNo
                  << " writeStart=" << st.WriteStartTime
                  << " stepEnd=" << st.StepEndTime
-                 << " lateRead=" << lateReadTime
-                 << " age=" << (lateReadTime - st.WriteStartTime)
-                 << " skippable=" << (lateReadTime - st.WriteStartTime > maxLag ? "YES" : "no")
+                 << " lateRead=" << lateReadTime(i)
+                 << " age=" << (lateReadTime(i) - st.WriteStartTime)
                  << Endl;
         }
         if (!missing.empty()) {
@@ -997,12 +988,6 @@ protected:
             << " (maxLagSeconds=" << ScenarioMaxLagSeconds << ")"
             << "; first unexpected missing SeqNo: "
             << (unexpectedMissing.empty() ? -1 : unexpectedMissing[0]));
-
-        // Also validate that the missing count does not exceed the skippable
-        // count (sanity bound — all missing must be within the skippable set).
-        UNIT_ASSERT_C(missing.size() <= skippable.size(),
-            label << ": missing=" << missing.size() << " > skippable=" << skippable.size()
-            << " (maxLagSeconds=" << ScenarioMaxLagSeconds << ")");
 
         AssertNoErrorClose(label);
     }
@@ -1436,21 +1421,30 @@ protected:
                 && !future.HasValue() && !future.HasException())
             {
                 const ui64 tabletId = Env.RebootTargetTabletId.load();
-                if (tabletId != 0) {
+                const ui64 tabletId2 = Env.RebootTargetTabletId2.load();
+                if (tabletId != 0 || tabletId2 != 0) {
                     const TInstant rebootStart = TInstant::Now();
-                    Cerr << "=== REBOOT_TABLET tabletId=" << tabletId
-                         << " start=" << rebootStart << Endl;
                     auto sender = runtime.AllocateEdgeActor();
                     // RebootTablet: sends poison pill via tablet resolver
                     // (proper death path), waits for EvBoot (ensuring reboot),
                     // invalidates resolver cache (clients reconnect to the new
-                    // instance), waits for scheduled events.
-                    RebootTablet(runtime, tabletId, sender,
-                                 /*nodeIndex=*/0, /*sysTablet=*/false);
-                    const TInstant rebootEnd = TInstant::Now();
-                    Cerr << "=== REBOOT_COMPLETED tabletId=" << tabletId
-                         << " elapsedMs=" << (rebootEnd - rebootStart).MilliSeconds()
-                         << " bootCount=" << Env.TabletBootCount.load() << Endl;
+                    // instance), waits for scheduled events. Reboot each
+                    // target tablet in turn (both when the boundary event
+                    // flowed between the PQ tablet and the balancer with both
+                    // reboot switches set).
+                    for (const ui64 id : {tabletId, tabletId2}) {
+                        if (id == 0) {
+                            continue;
+                        }
+                        Cerr << "=== REBOOT_TABLET tabletId=" << id
+                             << " start=" << rebootStart << Endl;
+                        RebootTablet(runtime, id, sender,
+                                     /*nodeIndex=*/0, /*sysTablet=*/false);
+                        const TInstant rebootEnd = TInstant::Now();
+                        Cerr << "=== REBOOT_COMPLETED tabletId=" << id
+                             << " elapsedMs=" << (rebootEnd - rebootStart).MilliSeconds()
+                             << " bootCount=" << Env.TabletBootCount.load() << Endl;
+                    }
                 } else {
                     Cerr << "=== REBOOT_TABLET tabletId=0 (boundary event was"
                             " neither PQ nor balancer!)" << Endl;
@@ -1560,10 +1554,10 @@ protected:
         // Verify coverage for THIS run (VerifiedSeqNos and StepTimings are
         // per-run, reset at the start of each reboot-point run). With
         // max_lag, this predicts which messages could have been skipped due
-        // to balancer reboot delays and validates that only those are missing.
-        if (ScenarioMaxLagSeconds > 0) {
-            VerifyFullCoverage(Sprintf("reboot_after_event_%lu", (unsigned long)rebootPoint));
-        }
+        // to balancer reboot delays and validates that only those are
+        // missing; without max_lag, VerifyFullCoverage asserts strict full
+        // delivery (every message must be delivered).
+        VerifyFullCoverage(Sprintf("reboot_after_event_%lu", (unsigned long)rebootPoint));
 
         // Check if reboot was actually triggered.
         Cerr << "=== REBOOT_CHECK rebootPoint=" << rebootPoint

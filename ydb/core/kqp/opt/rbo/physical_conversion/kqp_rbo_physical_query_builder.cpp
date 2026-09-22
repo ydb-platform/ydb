@@ -666,7 +666,16 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     }
     auto queryColumns = Build<TCoAtomList>(ctx, Roots[Roots.size()-1]->Pos).Add(queryColumnAtomList).Done().Ptr();
 
-    return ctx.NewList(Roots[0]->Pos, {ctx.NewList(Roots[0]->Pos, {phyQuery, queryColumns})});
+    TVector<TExprNode::TPtr> listElements;
+    if (RBOCtx.EmptyPreamble) {
+        listElements.push_back(ctx.NewList(Roots[0]->Pos, {}));
+    }
+    listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery}));
+    if (!phyTxSettings.WithEffects) {
+        listElements.push_back(queryColumns);
+    }
+
+    return ctx.NewList(Roots[0]->Pos, std::move(listElements));
 }
 
 TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {

@@ -372,9 +372,14 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
 
             // Match whole elements that are tuples (TKqpOpRoot, columns) or (Unordered(TKqpOpRoot), columns)
             if (node->IsList()) {
+                bool emptyPreamble = false;
                 TVector<TExprNode::TPtr> roots;
                 for (const auto& child : node->Children()) {
-                    if (!child->IsList() || child->ChildrenSize()==0) {
+                    if (!child->IsList()) {
+                        continue;
+                    }
+                    if(child->ChildrenSize()==0) {
+                        emptyPreamble = true;
                         continue;
                     }
                     if (TCoUnordered::Match(child->ChildPtr(0).Get()) && TKqpOpRoot::Match(child->ChildPtr(0)->ChildPtr(0).Get())) {
@@ -390,6 +395,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
                 }
 
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
+                rboCtx.EmptyPreamble = emptyPreamble;
                 TRBOTraceOutput traceOutput(rboCtx);
                 auto output = RBO.Optimize(Roots, rboCtx);
                 traceOutput.Flush();

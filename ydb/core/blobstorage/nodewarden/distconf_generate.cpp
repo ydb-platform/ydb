@@ -258,7 +258,7 @@ namespace NKikimr::NStorage {
         };
 
         struct TPDiskMapperSettings {
-            ui32 SlotCount = 0;
+            ui32 ExpectedSlotCount = 0;
             ui32 SlotSizeInUnits = 0;
             ui64 SlotSizeInBytes = 0;
             ui32 MaxSlots = 0;
@@ -272,7 +272,7 @@ namespace NKikimr::NStorage {
 
         auto applyPDiskConfig = [](TPDiskMapperSettings& settings, const NKikimrBlobStorage::TPDiskConfig& pdiskConfig) {
             if (pdiskConfig.HasExpectedSlotCount()) {
-                settings.SlotCount = pdiskConfig.GetExpectedSlotCount();
+                settings.ExpectedSlotCount = pdiskConfig.GetExpectedSlotCount();
             }
             if (pdiskConfig.HasSlotSizeInUnits()) {
                 settings.SlotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
@@ -371,7 +371,7 @@ namespace NKikimr::NStorage {
                         applyPDiskConfig(pdiskMapperSettings[pdiskId], pdisk.GetPDiskConfig());
                     }
                     if (pdisk.GetExpectedSlotCount()) {
-                        pdiskMapperSettings[pdiskId].SlotCount = pdisk.GetExpectedSlotCount();
+                        pdiskMapperSettings[pdiskId].ExpectedSlotCount = pdisk.GetExpectedSlotCount();
                     }
                     if (pdisk.GetExpectedSlotSize()) {
                         pdiskMapperSettings[pdiskId].SlotSizeInBytes = pdisk.GetExpectedSlotSize();
@@ -391,8 +391,8 @@ namespace NKikimr::NStorage {
                         const auto& m = *metrics;
                         pdiskState.Space = NBsController::TGroupMapper::CapturePDiskSpace(m);
                         auto& settings = pdiskMapperSettings[pdiskId];
-                        if (settings.SlotSizeInBytes && m.HasSlotCount()) {
-                            settings.SlotCount = m.GetSlotCount();
+                        if (settings.SlotSizeInBytes && m.HasExpectedSlotCount()) {
+                            settings.ExpectedSlotCount = m.GetExpectedSlotCount();
                         }
                         if (m.HasSlotSizeInUnits()) {
                             settings.SlotSizeInUnits = m.GetSlotSizeInUnits();
@@ -567,8 +567,8 @@ namespace NKikimr::NStorage {
                 : TPDiskMapperSettings{};
 
             ui32 maxSlots = defaultMaxSlots;
-            if (settings.SlotCount) {
-                maxSlots = settings.SlotCount;
+            if (settings.ExpectedSlotCount) {
+                maxSlots = settings.ExpectedSlotCount;
             } else if (settings.SlotSizeInBytes) {
                 // Slot count for byte-sized slots is calculated by NodeWarden and arrives via PDisk config or
                 // metrics. Until then MaxSlots is its upper bound (ExpectedSlotCount = min(size/slot, MaxSlots)),

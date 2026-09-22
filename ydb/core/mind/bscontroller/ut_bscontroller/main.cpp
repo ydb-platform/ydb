@@ -1965,7 +1965,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(slotSizeInUnits, 0);
         UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 0);
 
-        pdisk.Metrics.SetSlotCount(64);
+        pdisk.Metrics.SetExpectedSlotCount(64);
         pdisk.ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
         UNIT_ASSERT_VALUES_EQUAL(slotCount, 64);
         UNIT_ASSERT_VALUES_EQUAL(slotSizeInUnits, 0);

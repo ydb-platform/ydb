@@ -604,8 +604,8 @@ public:
         }
 
         void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
-            if (Metrics.HasSlotCount()) {
-                slotCount = Metrics.GetSlotCount();
+            if (Metrics.HasExpectedSlotCount()) {
+                slotCount = Metrics.GetExpectedSlotCount();
                 slotSizeInUnits = Metrics.GetSlotSizeInUnits();
             } else {
                 slotCount = ExpectedSlotCount;
@@ -2650,8 +2650,8 @@ public:
         }
 
         void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
-            if (PDiskMetrics && PDiskMetrics->HasSlotCount()) {
-                slotCount = PDiskMetrics->GetSlotCount();
+            if (PDiskMetrics && PDiskMetrics->HasExpectedSlotCount()) {
+                slotCount = PDiskMetrics->GetExpectedSlotCount();
                 slotSizeInUnits = PDiskMetrics->GetSlotSizeInUnits();
             } else {
                 slotCount = ExpectedSlotCount;

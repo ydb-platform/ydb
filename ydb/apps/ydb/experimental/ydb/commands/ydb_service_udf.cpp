@@ -199,9 +199,16 @@ void TCommandUdfUpload::Config(TConfig& config) {
         .Required()
         .RequiredArgument("PATH")
         .StoreResult(&ManifestPath);
-    config.Opts->AddLongOption("write-mode", "create-or-replace | create-only | replace-only")
+    config.Opts->AddLongOption(
+            "write-mode",
+            "Module write mode: create-or-replace (default) | create-only | replace-only")
         .Optional()
         .RequiredArgument("MODE")
+        .ChoicesWithCompletion({
+            {"create-or-replace", "Create a module or replace an existing module"},
+            {"create-only", "Refuse to replace an existing module"},
+            {"replace-only", "Refuse to create a missing module"},
+        })
         .StoreResult(&WriteMode);
     config.Opts->AddLongOption("create-only", "Refuse to replace an existing module")
         .StoreTrue(&CreateOnly);
@@ -216,25 +223,24 @@ void TCommandUdfUpload::Config(TConfig& config) {
         .RequiredArgument("MD5")
         .StoreResult(&ExpectedMd5);
     config.Opts->AddLongOption("format", "Output format: text (default) | json").RequiredArgument("FORMAT").StoreResult(&Format);
+    config.Opts->MutuallyExclusive("create-only", "replace-only");
+    config.Opts->MutuallyExclusive("create-only", "write-mode");
+    config.Opts->MutuallyExclusive("replace-only", "write-mode");
     config.SetFreeArgsNum(0);
 }
 
 void TCommandUdfUpload::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     CheckFormat(Format, {"text", "json"});
+    if (config.ParseResult->Has("expected-uid") && ExpectedUid.empty()) {
+        throw TMisuseException() << "--expected-uid must not be empty";
+    }
+    if (config.ParseResult->Has("expected-md5") && ExpectedMd5.empty()) {
+        throw TMisuseException() << "--expected-md5 must not be empty";
+    }
 }
 
 int TCommandUdfUpload::Run(TConfig& config) {
-    if (CreateOnly && ReplaceOnly) {
-        throw TMisuseException() << "--create-only and --replace-only are mutually exclusive";
-    }
-    if (CreateOnly && WriteMode) {
-        throw TMisuseException() << "--create-only conflicts with --write-mode";
-    }
-    if (ReplaceOnly && WriteMode) {
-        throw TMisuseException() << "--replace-only conflicts with --write-mode";
-    }
-
     const auto manifest = TFileInput(ManifestPath).ReadAll();
     NUdfManifest::Parse(manifest);
     auto settings = FillSettings(NUdf::TUploadModuleSettings()).ManifestJson(manifest);
@@ -311,6 +317,13 @@ void TCommandUdfDelete::Config(TConfig& config) {
         .RequiredArgument("UID")
         .StoreResult(&ExpectedUid);
     config.SetFreeArgsNum(0);
+}
+
+void TCommandUdfDelete::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    if (config.ParseResult->Has("expected-uid") && ExpectedUid.empty()) {
+        throw TMisuseException() << "--expected-uid must not be empty";
+    }
 }
 
 int TCommandUdfDelete::Run(TConfig& config) {

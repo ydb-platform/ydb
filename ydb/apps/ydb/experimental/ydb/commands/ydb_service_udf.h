@@ -36,6 +36,7 @@ class TCommandUdfDelete: public TYdbOperationCommand {
 public:
     TCommandUdfDelete();
     void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
 
 private:

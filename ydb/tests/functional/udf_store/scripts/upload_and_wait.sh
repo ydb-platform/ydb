@@ -80,7 +80,9 @@ upload_module() {
     [[ -f "$MANIFEST" ]] || die "manifest not found: $MANIFEST"
     local -a args=(experimental udf upload --file "$FILE" --manifest "$MANIFEST" --format json)
     [[ -f "$FILE" ]] || die "file not found: $FILE"
-    args+=("${EXTRA_UPLOAD_ARGS[@]}")
+    if (( ${#EXTRA_UPLOAD_ARGS[@]} )); then
+        args+=("${EXTRA_UPLOAD_ARGS[@]}")
+    fi
 
     echo "+ ${YDB[*]} ${args[*]}" >&2
     local out
@@ -115,9 +117,13 @@ wait_ready() {
     [[ -n "$UID_EXPECT" ]] || die "--uid is required for wait (or upload first)"
 
     local deadline=$((SECONDS + TIMEOUT_SEC))
-    local desc rc
+    local desc rc remaining
     while (( SECONDS < deadline )); do
-        desc=$("${YDB[@]}" experimental udf describe --name "$NAME" --format json)
+        remaining=$((deadline - SECONDS))
+        desc=$("${YDB[@]}" experimental udf describe \
+            --name "$NAME" --format json --timeout "${remaining}s")
+        (( SECONDS < deadline )) ||
+            die "timeout ${TIMEOUT_SEC}s waiting for name=$NAME uid=$UID_EXPECT"
         set +e
         module_ready "$desc"
         rc=$?

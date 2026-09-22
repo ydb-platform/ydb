@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(Path) {
         UNIT_ASSERT_EQUAL(PathPartBrokenAt(pathPart, " "), pathPart.end());
     }
 
-    Y_UNIT_TEST(PrependClusterRootIfNeeded) {
+    Y_UNIT_TEST(PrependDomainIfNeeded) {
         const TVector<std::pair<TString, TString>> cases = {
             {"mydb", "/ru/mydb"},
             {"ru/mydb", "/ru/ru/mydb"},
@@ -217,9 +217,9 @@ Y_UNIT_TEST_SUITE(Path) {
             {"", ""},
         };
         for (const auto& [path, expected] : cases) {
-            const auto result = NKikimr::PrependClusterRootIfNeeded("/ru", path);
+            const auto result = NKikimr::PrependDomainIfNeeded("/ru", path);
             UNIT_ASSERT_VALUES_EQUAL(result, expected);
-            UNIT_ASSERT_VALUES_EQUAL(NKikimr::PrependClusterRootIfNeeded("/ru", result), expected);
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::PrependDomainIfNeeded("/ru", result), expected);
         }
     }
 

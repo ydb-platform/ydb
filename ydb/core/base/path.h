@@ -24,7 +24,7 @@ bool TrySplitPathByDb(const TString& path, const TString& database,
     std::pair<TString, TString>& result, TString& error);
 
 // Empty and slash-prefixed database paths are unchanged; others are relative to domainRoot.
-TString PrependClusterRootIfNeeded(TStringBuf domainRoot, TStringBuf databasePath);
+TString PrependDomainIfNeeded(TStringBuf domainRoot, TStringBuf databasePath);
 
 /**
  * If path is already under database (or equal), returns path as-is.

@@ -48,7 +48,7 @@ public:
         // request endpoints
         const TString& database = Request->GetProtoRequest()->database();
         const TString resolvedDatabase = AppData()->FeatureFlags.GetEnableRelativePaths()
-            ? PrependClusterRootIfNeeded(TString("/") + AppData()->DomainsInfo->GetDomain()->Name, database)
+            ? PrependDomainIfNeeded(TString("/") + AppData()->DomainsInfo->GetDomain()->Name, database)
             : database;
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
             resolvedDatabase,

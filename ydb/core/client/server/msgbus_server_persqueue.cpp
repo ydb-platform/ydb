@@ -957,13 +957,22 @@ public:
         Y_ABORT_UNLESS(TopicInfo.size() == resultSet.size());
         for (auto i = 0u; i != resultSet.size(); i++) {
             auto& entry = resultSet[i];
-            auto& converter = ev->Get()->TopicsRequested[i];
-            if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo && converter) {
+            auto& requested = ev->Get()->TopicsRequested[i];
+            if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo && requested) {
                 auto& description = entry.PQGroupInfo->Description;
-                auto converter = ev->Get()->TopicsRequested[i]->UpgradeToFullConverter(description.GetPQTabletConfig(),
-                                                                                                           AppData(ctx)->PQConfig.GetTestDatabaseRoot());
-                Y_ABORT_UNLESS(TopicInfo.contains(converter->GetClientsideName()));
-                auto& topicInfo = TopicInfo[converter->GetClientsideName()];
+                // TopicInfo is filled by the name the client sent. Tablet replies
+                // and the response Topic field use the synthesized clientside name.
+                auto full = requested->UpgradeToFullConverter(
+                    description.GetPQTabletConfig(),
+                    AppData(ctx)->PQConfig.GetTestDatabaseRoot());
+                const TString clientside = full->GetClientsideName();
+                const TString original = requested->GetOriginalTopic();
+                if (original != clientside && TopicInfo.contains(original)) {
+                    TopicInfo[clientside] = std::move(TopicInfo[original]);
+                    TopicInfo.erase(original);
+                }
+                Y_ABORT_UNLESS(TopicInfo.contains(clientside));
+                auto& topicInfo = TopicInfo[clientside];
                 topicInfo.BalancerTabletId = description.GetBalancerTabletID();
                 topicInfo.PQInfo = entry.PQGroupInfo;
             }

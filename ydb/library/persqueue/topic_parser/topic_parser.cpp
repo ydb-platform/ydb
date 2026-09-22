@@ -254,13 +254,18 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
         Database = TString(databaseBuf);
         // Domain database /Root plus path account/topic: the account directory is
         // the federation account, not an extra legacy '@' directory.
-        if (Account_.Defined()) {
+        if (Account_.Defined() && !Account_->empty()) {
             TStringBuf head;
             TStringBuf tail;
             if (topicPath.TrySplit("/", head, tail) && head == *Account_ && !tail.empty()) {
                 Database = NKikimr::JoinPath({*Database, TString(head)});
                 topicPath = tail;
             }
+        } else if (!topicPath.empty() && !topicPath.Contains("/")) {
+            // Single-segment topic at /Root/<topic> is created with federation
+            // account "lb". Without this the clientside name is
+            // rt3.<dc>--undef-account--<topic>.
+            Account_ = "lb";
         }
     }
     CHECK_SET_VALID(!topicPath.empty(), "Bad topic name (only account provided?)", return);
@@ -694,9 +699,16 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
     } else if (!normRoot.empty() && IsPathPrefix(normRoot, normDb)) {
         // Database is a prefix of pq root (/Root vs /Root/PQ). A leaf in pq
         // root stays legacy. /Root/<account>/<topic> sits beside that root
-        // and is modern. A user database that is not a prefix of pq root
+        // and is modern. When pq root is the domain itself (/Root), only a
+        // direct child of that root is legacy; nested paths are modern.
+        // A user database that is not a prefix of pq root
         // (/Root/LbCommunal/account) does not enter this branch.
-        isRoot = (normDir == normRoot) || IsPathPrefix(normDir, normRoot);
+        const bool pqRootIsDatabase = (normRoot == normDb);
+        if (pqRootIsDatabase) {
+            isRoot = (normDir == normRoot);
+        } else {
+            isRoot = (normDir == normRoot) || IsPathPrefix(normDir, normRoot);
+        }
     }
 
     res->Database = normDb;

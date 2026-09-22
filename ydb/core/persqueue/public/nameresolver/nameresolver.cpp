@@ -300,6 +300,8 @@ std::expected<TResolvedName, TString> ResolveName(
     const auto& pqConfig = AppData()->PQConfig;
     const bool isFederation = !pqConfig.GetTopicsAreFirstClassCitizen();
 
+    const bool absoluteInput = name.StartsWith('/');
+
     // Absolute paths may contain accidental '//' (e.g. JoinPath({"/Root/PQ/", name})).
     // Canonize those before BasicNameChecks; keep relative '//' rejected as before.
     TString canonName;
@@ -355,6 +357,12 @@ std::expected<TResolvedName, TString> ResolveName(
     }
 
     auto wrap = [&](TString path) {
+        // StripLeadingSlash drops the marker. An absolute input that is not
+        // rejoined under PQ/LbRoot must stay absolute, or scheme-cache paths
+        // (/Root/...) miss the resolver map.
+        if (absoluteInput && !path.empty() && !path.StartsWith('/')) {
+            path.prepend('/');
+        }
         return MakeResolved(std::move(path), database, databaseNorm, lbRoot, isFederation);
     };
 

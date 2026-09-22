@@ -263,7 +263,14 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
         UNIT_ASSERT_STRING_CONTAINS(html, "Direct Block Group config");
         UNIT_ASSERT_STRING_CONTAINS(html, "<th rowspan=\"2\">Node</th>");
-        UNIT_ASSERT_STRING_CONTAINS(html, "<th rowspan=\"2\">Total</th>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<th>Total <form method='post' "
+            "action='?TabletID=42&page=overview&action=balance&from=0&to=32'");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<th>Total <form method='post' "
+            "action='?TabletID=42&page=overview&action=balance&from=32&to=33'");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "title=\"Config:  need move 0 of 0 DDisks (0%)&#10;"
@@ -310,7 +317,14 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             html,
             "title=\"Config:  need move 6 of 15 DDisks (40%)&#10;"
             "Touched:  need move 3 of 9 DDisks (33%)\">"
-            "<a href='?TabletID=42&page=dbg&dbg=0'>DBG #0</a> Imb: 33%</th>");
+            "<a href='?TabletID=42&page=dbg&dbg=0'>DBG #0</a> Imb: 33% "
+            "<form method='post' "
+            "action='?TabletID=42&page=overview&action=balance&from=0&to=1'");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<th>Total <form method='post' "
+            "action='?TabletID=42&page=overview&action=balance&from=0&to=32'");
+        UNIT_ASSERT_C(!html.Contains("action=balance&from=1&to=2'"), html);
         UNIT_ASSERT_STRING_CONTAINS(html, "dbg=1'>DBG #1</a> Imb: 0%</th>");
         UNIT_ASSERT_STRING_CONTAINS(html, "dbg=31'>DBG #31</a> Imb: 0%</th>");
 
@@ -322,7 +336,9 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             roundedHtml,
             "title=\"Config:  need move 5 of 15 DDisks (33%)&#10;"
             "Touched:  need move 3 of 9 DDisks (33%)\">"
-            "<a href='?TabletID=42&page=dbg&dbg=0'>DBG #0</a> Imb: 33%</th>");
+            "<a href='?TabletID=42&page=dbg&dbg=0'>DBG #0</a> Imb: 33% "
+            "<form method='post' "
+            "action='?TabletID=42&page=overview&action=balance&from=0&to=1'");
     }
 
     Y_UNIT_TEST(OverviewReadsTouchedVChunksByRegion)

@@ -10,6 +10,7 @@ GENERATE_ENUM_SERIALIZATION(vchunk_config.h)
 
 SRCS(
     count_size.cpp
+    ddisk_balance.cpp
     host_health_policy.cpp
     host_mask.cpp
     host_roles.cpp

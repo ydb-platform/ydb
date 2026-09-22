@@ -471,6 +471,13 @@ TDirectBlockGroupMock::BuildMonSnapshot() const
     return NThreading::MakeFuture(TDbgSnapshot{});
 }
 
+void TDirectBlockGroupMock::BalanceDDisks(EDDiskBalanceStrategy strategy)
+{
+    if (BalanceDDisksHandler) {
+        BalanceDDisksHandler(strategy);
+    }
+}
+
 NThreading::TFuture<TVChunkStatsGatherResult>
 TDirectBlockGroupMock::GatherVChunkStats(EVChunkStatsDetail detail) const
 {

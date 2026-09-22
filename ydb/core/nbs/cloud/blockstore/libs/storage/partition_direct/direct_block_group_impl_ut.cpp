@@ -76,7 +76,8 @@ std::shared_ptr<TVChunk> StartVChunk(
     const TDiskDescription& diskDescription,
     const std::shared_ptr<TDirectBlockGroup>& dbg,
     TPartitionDirectServiceMock& service,
-    ui32 vChunkIndex)
+    ui32 vChunkIndex,
+    bool touched = false)
 {
     auto vchunk = std::make_shared<TVChunk>(
         actorSystem,
@@ -87,7 +88,7 @@ std::shared_ptr<TVChunk> StartVChunk(
             vChunkIndex,
             DirectBlockGroupHostCount,
             DefaultPrimaryCount),
-        false,
+        touched,
         TDirtyMapStateProto{},
         dbg,
         1000,   // syncRequestsBatchSize
@@ -110,6 +111,98 @@ NWilson::TTraceId CreateTraceId()
 
 Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 {
+    Y_UNIT_TEST_F(ShouldCountBalanceDDisksByStrategyAndPending, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_shared<TStorageTransportMock>());
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        auto touched = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            *Service,
+            0,
+            true);
+        auto untouched = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            *Service,
+            DirectBlockGroupHostCount);
+        WaitDirtyMapReady(executor, touched);
+        WaitDirtyMapReady(executor, untouched);
+
+        auto touchedCounts = CountDDisksByHostDebugOnly(
+            executor,
+            dbg,
+            EDDiskBalanceStrategy::Touched,
+            WaitTimeout);
+        auto configuredCounts = CountDDisksByHostDebugOnly(
+            executor,
+            dbg,
+            EDDiskBalanceStrategy::Configured,
+            WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(size_t(1), touchedCounts[0]);
+        UNIT_ASSERT_VALUES_EQUAL(size_t(1), touchedCounts[1]);
+        UNIT_ASSERT_VALUES_EQUAL(size_t(1), touchedCounts[2]);
+        UNIT_ASSERT_VALUES_EQUAL(size_t(2), configuredCounts[0]);
+        UNIT_ASSERT_VALUES_EQUAL(size_t(2), configuredCounts[1]);
+        UNIT_ASSERT_VALUES_EQUAL(size_t(2), configuredCounts[2]);
+
+        const auto pendingHost =
+            RunOnExecutor(
+                executor,
+                [&]
+                { return dbg->AllocateDDiskForPromote(touched->GetConfig()); })
+                .GetValue(WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(THostIndex(3), pendingHost);
+
+        touchedCounts = CountDDisksByHostDebugOnly(
+            executor,
+            dbg,
+            EDDiskBalanceStrategy::Touched,
+            WaitTimeout);
+        configuredCounts = CountDDisksByHostDebugOnly(
+            executor,
+            dbg,
+            EDDiskBalanceStrategy::Configured,
+            WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(size_t(1), touchedCounts[pendingHost]);
+        UNIT_ASSERT_VALUES_EQUAL(size_t(1), configuredCounts[pendingHost]);
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->GetOracle()->OnHostRemoved(1);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+        touchedCounts = CountDDisksByHostDebugOnly(
+            executor,
+            dbg,
+            EDDiskBalanceStrategy::Touched,
+            WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(size_t(0), touchedCounts[1]);
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->CommitDDiskPromotion(touched->GetConfig());
+                return true;
+            })
+            .GetValue(WaitTimeout);
+        touched->Stop().GetValue(WaitTimeout);
+        untouched->Stop().GetValue(WaitTimeout);
+    }
+
     Y_UNIT_TEST_F(ShouldAllocateDDiskWithQuorum, TDBGFixture)
     {
         auto executor = MakeExecutor();

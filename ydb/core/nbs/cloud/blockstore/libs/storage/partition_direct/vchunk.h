@@ -81,6 +81,12 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
+    // Receives the source and target hosts for a DDisk move.
+    void BalanceDDisks(THostIndex sourceHost, THostIndex targetHost);
+
+    // Reports whether this vchunk has been touched.
+    [[nodiscard]] bool IsTouched() const;
+
     // If the current count of hosts in the config is less than the desired
     // host count, update the config and persist it in the tablet.
     void UpdateHostCount(size_t newHostCount);
@@ -177,7 +183,6 @@ private:
 
     // VDisk touch state.
     void Touch();
-    [[nodiscard]] bool IsTouched() const;
     void DoPersistTouched();
     void OnTouchedPersisted();
 

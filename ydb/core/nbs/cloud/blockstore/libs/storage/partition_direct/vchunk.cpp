@@ -100,7 +100,7 @@ TVChunk::TVChunk(
     , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(
           DirectBlockGroup->GetArenaAllocatorPool(),
           VChunkConfig,
-          IsTouched(),
+          touched,
           dirtyMapState,
           BlockSize,
           BlocksCount))
@@ -287,6 +287,26 @@ void TVChunk::SetHostState(THostIndex hostIndex, EHostState state)
         std::move(prepare),
         TStringBuilder() << "state of " << PrintHostAndNode(hostIndex)
                          << " updated to " << ToString(state));
+}
+
+void TVChunk::BalanceDDisks(THostIndex sourceHost, THostIndex targetHost)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s DDisk balancing requested: move from host %s to host %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(sourceHost).c_str(),
+        PrintHostIndex(targetHost).c_str());
+}
+
+bool TVChunk::IsTouched() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return TouchedState != ETouchedState::NotTouched;
 }
 
 void TVChunk::UpdateHostCount(size_t newHostCount)
@@ -1025,11 +1045,6 @@ void TVChunk::Touch()
         TouchedState = ETouchedState::Persisting;
         DoPersistTouched();
     }
-}
-
-bool TVChunk::IsTouched() const
-{
-    return TouchedState != ETouchedState::NotTouched;
 }
 
 void TVChunk::DoPersistTouched()

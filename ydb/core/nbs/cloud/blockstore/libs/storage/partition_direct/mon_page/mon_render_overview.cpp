@@ -455,6 +455,25 @@ void RenderDbgConfigHeader(
         << "%";
 }
 
+void RenderBalanceDDisksButton(
+    IOutputStream& str,
+    ui64 tabletId,
+    size_t from,
+    size_t to)
+{
+    str << " <form method='post' action='?TabletID=" << tabletId
+        << "&page=overview&action=balance&from=" << from << "&to=" << to
+        << "' style='display:inline'>"
+           "<input type='hidden' name='TabletID' value='"
+        << tabletId
+        << "'/><input type='hidden' name='page' value='overview'/>"
+           "<input type='hidden' name='action' value='balance'/>"
+           "<input type='hidden' name='from' value='"
+        << from << "'/><input type='hidden' name='to' value='" << to
+        << "'/><button type='submit' class='btn btn-default btn-xs'>"
+           "Balance</button></form>";
+}
+
 bool IsEmpty(const TDbgTableCell& cell)
 {
     return cell.DDiskStates.empty() && cell.PBufferCount == 0;
@@ -610,6 +629,13 @@ void RenderDbgConfigTable(
                                         tabletInfo.TabletId,
                                         dbgId,
                                         touchedImbalance.Percent);
+                                    if (touchedImbalance.Moves) {
+                                        RenderBalanceDDisksButton(
+                                            str,
+                                            tabletInfo.TabletId,
+                                            dbgId,
+                                            dbgId + 1);
+                                    }
                                 }
                             } else {
                                 TABLEH () {
@@ -617,10 +643,16 @@ void RenderDbgConfigTable(
                                 }
                             }
                         }
-                        if (headerRow == 0) {
-                            str << "<th rowspan=\"" << headerRowCount
-                                << "\">Total</th>";
-                        }
+                        str << "<th>Total";
+                        const size_t from = headerRow * VChunkPerRegionCount;
+                        const size_t to =
+                            Min(from + VChunkPerRegionCount, dbgs.size());
+                        RenderBalanceDDisksButton(
+                            str,
+                            tabletInfo.TabletId,
+                            from,
+                            to);
+                        str << "</th>";
                     }
                 }
             }

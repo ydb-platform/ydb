@@ -27,6 +27,14 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+enum class EDDiskBalanceStrategy
+{
+    Touched,      // Balance DDisks of touched VChunks only.
+    Configured,   // Balance DDisks of all configured VChunks.
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TDBGReadBlocksResponse
 {
     NProto::TError Error;
@@ -250,6 +258,9 @@ public:
 
     // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
     virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const = 0;
+
+    // Requests balancing of DDisks in this DBG using the strategy.
+    virtual void BalanceDDisks(EDDiskBalanceStrategy strategy) = 0;
 
     // Sums (and optionally lists) vchunk stats on the executor thread.
     virtual NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(

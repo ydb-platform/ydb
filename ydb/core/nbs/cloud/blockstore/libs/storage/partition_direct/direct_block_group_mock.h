@@ -174,6 +174,7 @@ public:
     TOnRemoveHostSucceededHandler OnRemoveHostSucceededHandler;
     TOnRemoveHostFailedHandler OnRemoveHostFailedHandler;
     TTakeCopyRangeBudgetHandler TakeCopyRangeBudgetHandler;
+    std::function<void(EDDiskBalanceStrategy)> BalanceDDisksHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
     TArenaAllocatorPoolPtr ArenaAllocatorPool;
@@ -283,6 +284,8 @@ public:
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
+
+    void BalanceDDisks(EDDiskBalanceStrategy strategy) override;
 
     NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
         EVChunkStatsDetail detail) const override;

@@ -307,6 +307,35 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         return true;
     }
 
+    if (page == EMonPage::Overview && cgi.Get("action") == "balance" &&
+        ev->Get()->GetMethod() == HTTP_METHOD_POST)
+    {
+        ui32 from = 0;
+        ui32 to = 0;
+        bool requested = false;
+        if (cgi.Has("from") && cgi.Has("to") &&
+            TryFromString(cgi.Get("from"), from) &&
+            TryFromString(cgi.Get("to"), to) && from < to &&
+            to <= data.TabletInfo.VolumeDirectBlockGroupCount)
+        {
+            for (ui32 i = from; i < to; ++i) {
+                if (auto dbg = FastPathService->GetDirectBlockGroup(i)) {
+                    dbg->BalanceDDisks(EDDiskBalanceStrategy::Touched);
+                    requested = true;
+                }
+            }
+        }
+
+        ctx.Send(
+            ev->Sender,
+            new NMon::TEvRemoteHttpInfoRes(MakeRedirectResponse(
+                TabletID(),
+                "overview",
+                requested ? "DDisk balancing requested."
+                          : "Invalid DDisk balancing request.")));
+        return true;
+    }
+
     if (page == EMonPage::Overview) {
         data.FastPathServiceInfo = FastPathService->GetMonInfo();
         FastPathService->GatherMonSnapshots(std::nullopt)

@@ -164,6 +164,8 @@ public:
 
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 
+    void BalanceDDisks(EDDiskBalanceStrategy strategy) override;
+
     NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
         EVChunkStatsDetail detail) const override;
 
@@ -268,6 +270,15 @@ private:
     void HandleBlockedGeneration(THostIndex hostIndex, TStringBuf context);
 
     [[nodiscard]] TDBGDumpResponse DoDebugPrintDirtyMap() const;
+
+    [[nodiscard]] THostMask GetBalancingAllowedHosts() const;
+    [[nodiscard]] std::array<size_t, MaxHostCount> CountDDisksByHost(
+        EDDiskBalanceStrategy strategy,
+        THostMask allowedForBalancing) const;
+    [[nodiscard]] bool IsBalancingAllowed(
+        const TVChunk& vChunk,
+        EDDiskBalanceStrategy strategy) const;
+    void DoBalanceDDisks(EDDiskBalanceStrategy strategy);
 
     [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot() const;
 

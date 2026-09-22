@@ -110,6 +110,59 @@ NWilson::TTraceId CreateTraceId()
 
 Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 {
+    Y_UNIT_TEST_F(ShouldIncludeCurrentFreshDDisksInMonSnapshot, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_shared<TStorageTransportMock>());
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        auto vchunk = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            *Service,
+            0);
+        WaitDirtyMapReady(executor, vchunk);
+
+        auto snapshot =
+            WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        UNIT_ASSERT(snapshot.FreshDDisks.empty());
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                TBaseFixture::AccessBlocksDirtyMap(*vchunk)
+                    .SetReadablePrefixDebugOnly(0, DefaultBlockSize);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        snapshot = WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(1, snapshot.FreshDDisks.size());
+        UNIT_ASSERT(snapshot.FreshDDisks.at(0).Get(0));
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                auto config = vchunk->GetConfig();
+                config.DisableHost(0);
+                TBaseFixture::AccessBlocksDirtyMap(*vchunk).UpdateConfig(
+                    config,
+                    true);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        snapshot = WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        UNIT_ASSERT(snapshot.FreshDDisks.at(0).Get(0));
+    }
+
     Y_UNIT_TEST_F(ShouldDelegateCopyRangeBudgetToService, TDBGFixture)
     {
         auto executor = MakeExecutor();
@@ -1648,14 +1701,11 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto initialReady = RunAndGetInitialReady(dbg);
         WaitReady(executor, initialReady);
 
-        auto config = TVChunkConfig::MakeDefault(
-            100,
-            grownHostCount,
-            DefaultPrimaryCount);
+        auto config =
+            TVChunkConfig::MakeDefault(0, grownHostCount, DefaultPrimaryCount);
         config.DisableHost(2);
-        // One primary replica is still catching up; the healthy-ddisk count
-        // drops below the quorum.
-        config.SetWatermark(*config.GetDDisks().begin(), 1024);
+        // Disabling one of three primary replicas drops the healthy DDisk
+        // count below the quorum.
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
             TraceService.get(),

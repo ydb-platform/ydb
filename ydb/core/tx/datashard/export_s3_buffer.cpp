@@ -290,7 +290,7 @@ bool TS3Buffer::IsFilled() const {
     if (readyOutputBytes < MinBytes) {
         return false;
     }
-    // MaxBytes caps both the uncompressed size of a part and the memory held by the buffer
+    // After MinBytes, MaxBytes caps the uncompressed size and the memory held.
     return Rows >= RowsLimit || UncompressedBytes >= MaxBytes || GetMemoryBytes() >= MaxBytes;
 }
 

@@ -1,5 +1,6 @@
 #include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/testlib/actor_helpers.h>

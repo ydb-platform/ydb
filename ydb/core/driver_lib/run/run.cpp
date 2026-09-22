@@ -218,6 +218,17 @@ namespace {
         }
         wrapper->Servers.clear();
     }
+<<<<<<< HEAD
+=======
+
+    // Do not destroy TGRpcServer objects here.
+    // KikimrStop() calls StopGRpcServers() before ActorSystem->Stop(), so destroying the
+    // servers here would leave dangling TServer* pointers in any
+    // TGRpcStreamingRequest objects that are still alive when the actor system
+    // destroys their holding actors. The servers are destroyed later when
+    // GRpcServersWrapper (a shared_ptr member of TKikimrRunner) is released in
+    // ~TKikimrRunner(), which runs after ActorSystem.Destroy().
+>>>>>>> 99c51a5c8e6 (Fix  Y_VERIFY assert on shutdown due to access to dangling pointers (#53001))
 }
 
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {

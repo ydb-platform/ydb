@@ -1059,7 +1059,6 @@ namespace NKikimr {
             const char* Group;
             ui64 Bytes;
             const char* ProgressBarClass;
-            const char* LabelClass;
         };
 
         static constexpr size_t BreakdownItemCount = 14;
@@ -1085,33 +1084,33 @@ namespace NKikimr {
         {
             return {{
                 {"Useful blob data", "Useful data", breakdown.GetUsefulBlobDataBytes(),
-                    "progress-bar progress-bar-success", "label label-success"},
+                    "progress-bar progress-bar-success"},
                 {"Live metadata", "Metadata", breakdown.GetLiveMetadataBytes(),
-                    "progress-bar progress-bar-info", "label label-info"},
+                    "progress-bar progress-bar-info"},
                 {"Live auxiliary data", "System data", breakdown.GetLiveAuxiliaryDataBytes(),
-                    "progress-bar", "label label-primary"},
+                    "progress-bar"},
                 {"GC-dead blob data", "Garbage", breakdown.GetGcDeadBlobDataBytes(),
-                    "progress-bar progress-bar-danger", "label label-danger"},
+                    "progress-bar progress-bar-danger"},
                 {"GC-dead metadata", "Garbage", breakdown.GetGcDeadMetadataBytes(),
-                    "progress-bar progress-bar-danger", "label label-danger"},
+                    "progress-bar progress-bar-danger"},
                 {"Merge-redundant blob data", "Garbage", breakdown.GetMergeRedundantBlobDataBytes(),
-                    "progress-bar progress-bar-danger", "label label-danger"},
+                    "progress-bar progress-bar-danger"},
                 {"Merge-redundant metadata", "Garbage", breakdown.GetMergeRedundantMetadataBytes(),
-                    "progress-bar progress-bar-danger", "label label-danger"},
+                    "progress-bar progress-bar-danger"},
                 {"Write padding", "Fragmentation", breakdown.GetWritePaddingBytes(),
-                    "progress-bar progress-bar-warning", "label label-warning"},
+                    "progress-bar progress-bar-warning"},
                 {"Slot internal fragmentation", "Fragmentation", breakdown.GetSlotInternalFragmentationBytes(),
-                    "progress-bar progress-bar-warning", "label label-warning"},
+                    "progress-bar progress-bar-warning"},
                 {"Free slot space", "Fragmentation", breakdown.GetFreeSlotBytes(),
-                    "progress-bar progress-bar-warning", "label label-warning"},
+                    "progress-bar progress-bar-warning"},
                 {"Chunk tail", "Other", breakdown.GetChunkTailBytes(),
-                    "progress-bar progress-bar-striped", "label label-default"},
+                    "progress-bar progress-bar-striped"},
                 {"Free chunk reserve", "Other", breakdown.GetFreeChunkReserveBytes(),
-                    "progress-bar progress-bar-striped", "label label-default"},
+                    "progress-bar progress-bar-striped"},
                 {"Locked or quarantined", "Other", breakdown.GetLockedOrQuarantinedBytes(),
-                    "progress-bar progress-bar-striped", "label label-default"},
+                    "progress-bar progress-bar-striped"},
                 {"Unclassified", "Other", breakdown.GetUnclassifiedBytes(),
-                    "progress-bar progress-bar-striped", "label label-default"},
+                    "progress-bar progress-bar-striped"},
             }};
         }
 
@@ -1125,6 +1124,13 @@ namespace NKikimr {
 
         static double GetPercentage(ui64 bytes, ui64 totalBytes) {
             return totalBytes ? 100.0 * static_cast<double>(bytes) / static_cast<double>(totalBytes) : 0.0;
+        }
+
+        static void RenderBreakdownMarker(IOutputStream& str, const TBreakdownItem& item) {
+            str << "<span class=\"progress\" aria-hidden=\"true\" "
+                << "style=\"display:inline-block;width:1em;height:1em;margin:0 0.25em 0 0;vertical-align:middle\">"
+                << "<span class=\"" << item.ProgressBarClass
+                << "\" style=\"width:100%;height:100%\"></span></span>";
         }
 
         static void RenderBreakdownBar(
@@ -1235,8 +1241,8 @@ namespace NKikimr {
                                 for (const TBreakdownItem& item : GetBreakdownItems(report.GetTotal())) {
                                     TABLER() {
                                         TABLED() {
-                                            str << "<span class=\"" << item.LabelClass
-                                                << "\">&nbsp;</span> " << item.Name;
+                                            RenderBreakdownMarker(str, item);
+                                            str << item.Name;
                                         }
                                         TABLED() { str << item.Group; }
                                         TABLED_ATTRS({{"data-text", ToString(item.Bytes)}}) {

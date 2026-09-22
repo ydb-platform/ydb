@@ -2543,7 +2543,7 @@ public:
                 executionStats.Swap(&stats);
                 stats = QueryState->QueryStats.ToProto();
                 stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
-                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, Config->GetEnableNewRBO(), QueryState->UserRequestContext->PoolId));
+                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UsedNewRbo(), QueryState->UserRequestContext->PoolId));
                 stats.SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
 
                 if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
@@ -3117,7 +3117,7 @@ public:
         if (QueryState->ReportStats()) {
             auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-                response->SetQueryPlan(SerializeAnalyzePlan(stats, Config->GetEnableNewRBO(), QueryState->UserRequestContext->PoolId));
+                response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UsedNewRbo(), QueryState->UserRequestContext->PoolId));
                 if (const auto compileResult = QueryState->CompileResult) {
                     if (const auto preparedQuery = compileResult->PreparedQuery) {
                         if (const auto& queryAst = preparedQuery->GetPhysicalQuery().GetQueryAst()) {

@@ -884,6 +884,7 @@ private:
         auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, compileResult->CompilationDuration ,std::move(query), compileResult->QueryAst,
             false, {}, compileResult->ReplayMessageUserView);
         newCompileResult->AllowCache = compileResult->AllowCache;
+        newCompileResult->UsedNewRbo = compileResult->UsedNewRbo;
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
         YDB_LOG_DEBUG_CTX(ctx, "Insert preparing query with params",
             {"queryId", compileResult->Query->SerializeToString()});

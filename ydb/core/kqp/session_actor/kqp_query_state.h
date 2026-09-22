@@ -259,6 +259,10 @@ public:
         return RequestEv->GetQuery();
     }
 
+    bool UsedNewRbo() const {
+        return CompileResult && CompileResult->UsedNewRbo;
+    }
+
     const TString& GetPreparedQuery() const {
         return RequestEv->GetPreparedQuery();
     }

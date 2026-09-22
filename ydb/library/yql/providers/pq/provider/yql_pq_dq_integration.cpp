@@ -14,6 +14,7 @@
 #include <ydb/library/yql/providers/pq/common/events.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/pq/common/pq_partitions.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
@@ -40,7 +41,6 @@ using namespace std::literals::string_view_literals;
 
 class TPqDqIntegration : public TDqIntegrationBase {
     static constexpr ui64 DefaultMaxPartitions = 10000;
-    static constexpr ui64 AveragePartitionsPerTask = 5;
 
 public:
     explicit TPqDqIntegration(const TPqState::TPtr& state)
@@ -70,9 +70,8 @@ public:
         }
 
         if (predicatePartitions.empty()) {      // read all partitions
-            const size_t tasks = groupPartitions
-                ? (topicPartitionsCount + AveragePartitionsPerTask - 1) / AveragePartitionsPerTask
-                : Min(maxPartitions, topicPartitionsCount);
+            const size_t tasks = NDq::GetExpectedTopicReadTasks(
+                topicPartitionsCount, maxPartitions, groupPartitions);
             partitions.reserve(tasks);
             for (size_t i = 0; i < tasks; ++i) {
                 NPq::NProto::TDqReadTaskParams params;
@@ -87,9 +86,8 @@ public:
                 partitions.emplace_back(std::move(serializedParams));
             }
         } else {    // read only predicate partitions
-            const size_t tasks = groupPartitions
-                ? (predicatePartitions.size() + AveragePartitionsPerTask - 1) / AveragePartitionsPerTask
-                : Min(maxPartitions, predicatePartitions.size());
+            const size_t tasks = NDq::GetExpectedTopicReadTasks(
+                predicatePartitions.size(), maxPartitions, groupPartitions);
             auto predicatePartitionIt = predicatePartitions.begin();
             partitions.reserve(tasks);
             size_t allocatedPartitions = 0;

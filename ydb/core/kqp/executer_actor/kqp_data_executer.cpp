@@ -8,6 +8,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
@@ -989,7 +990,7 @@ private:
     void ContinueExecute() {
         OnEmptyResult();
 
-        StartCheckpointCoordinator();
+        StartStreamingQueriesActors();
 
         if (!ExecuteTasks()) {
             return;
@@ -1224,14 +1225,53 @@ private:
             {"traceId", TraceId()});
     }
 
-    void StartCheckpointCoordinator() {
+    void StartStreamingQueriesActors() {
         const auto context = TasksGraph.GetMeta().UserRequestContext;
         bool disableCheckpoints = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetDisableCheckpoints();
 
-        bool enableCheckpointCoordinator = AppData()->FeatureFlags.GetEnableStreamingQueries()
+        const bool enableStreamingQueriesActors = AppData()->FeatureFlags.GetEnableStreamingQueries()
             && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr)
-            && context && context->CheckpointId && !disableCheckpoints;
-        if (!enableCheckpointCoordinator) {
+            && context && context->CheckpointId;
+        if (!enableStreamingQueriesActors) {
+            return;
+        }
+
+        NFq::NProto::TGraphParams graphParams;
+        if (Request.QueryPhysicalGraph) {
+            for (const auto& task : Request.QueryPhysicalGraph->GetTasks()) {
+                *graphParams.AddTasks() = task.GetDqTask();
+            }
+        }
+
+        bool hasPqSources = false;
+        for (const auto& transaction : Request.Transactions) {
+            if (transaction.Body->GetHasPqSources()) {
+                hasPqSources = true;
+                break;
+            }
+        }
+
+        if (hasPqSources) {
+            StreamingQueryNodesManagerId = Register(
+                CreateStreamingQueryNodesManager(
+                    SelfId(),
+                    Database,
+                    context->StreamingQueryPath,
+                    graphParams.GetTasks(),
+                    TDuration::Seconds(300),
+                    TDuration::Seconds(120),
+                    Request.QueryPhysicalGraph
+                        ? Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetMaxTasksPerStage()
+                        : 0));
+            YDB_LOG_DEBUG("Created new StreamingQueryNodesManager",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId},
+                {"traceId", TraceId()});
+        }
+
+        if (disableCheckpoints) {
             return;
         }
 
@@ -1263,13 +1303,6 @@ private:
         const auto stateLoadMode = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetZeroCheckpointSaved()
             ? FederatedQuery::FROM_LAST_CHECKPOINT
             : FederatedQuery::EMPTY;
-
-        NFq::NProto::TGraphParams graphParams;
-        if (Request.QueryPhysicalGraph) {
-            for (const auto& task : Request.QueryPhysicalGraph->GetTasks()) {
-                *graphParams.AddTasks() = task.GetDqTask();
-            }
-        }
 
         auto counters = Counters->Counters->GetKqpCounters();
         if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {

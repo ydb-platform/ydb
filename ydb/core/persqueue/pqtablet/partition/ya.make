@@ -43,6 +43,7 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/write_meta
+    ydb/core/persqueue/public/write_sessions_quoter
     ydb/core/protos
     ydb/library/actors/core
     ydb/library/kll_median

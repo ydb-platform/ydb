@@ -1228,8 +1228,13 @@ bool TNotifyWriteSessionsQuoterStep::Handle(STFUNC_SIG) {
 }
 
 void TNotifyWriteSessionsQuoterStep::Execute(const TActorContext& ctx) {
+    if (Partition()->IsSupportive()) {
+        return Done(ctx);
+    }
+
     auto actorId = MakeWriteSessionsQuoterId();
 
+    Partition()->WriteSessionsQuoterRegistered = true;
     ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvNotify(TopicName(), PartitionId().OriginalPartitionId, Partition()->TabletGeneration));
 }
 

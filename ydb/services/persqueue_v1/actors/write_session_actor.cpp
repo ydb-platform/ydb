@@ -715,6 +715,16 @@ void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaAcquir
 }
 
 template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaDeclined::TPtr&, const TActorContext& ctx) {
+    if (State != ES_WAIT_WRITE_SESSION_QUOTA) {
+        return;
+    }
+
+    CloseSession("Write session quota declined: partition or generation is unavailable",
+                 PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
+}
+
+template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::CreatePartitionChooser(const TActorContext& ctx) {
     State = ES_WAIT_PARTITION;
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);

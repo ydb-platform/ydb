@@ -651,13 +651,24 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             UNIT_ASSERT(body.Contains("ForceTraversals: 1"));
         }
 
-        block.Unblock();
-        block.Stop();
+        SetAggregatorStatisticsConfig(env, tableInfo.SaTabletId, false, false);
+        const auto aggregator = ResolveTablet(runtime, tableInfo.SaTabletId);
+        size_t wakeups = 0;
+        auto observer = runtime.AddObserver<TStatisticsAggregatorTestAccess::TTraversalWakeup>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == aggregator) {
+                ++wakeups;
+            }
+        });
+        block.Stop().Unblock();
 
-        auto analyzeResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        auto analyzeResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender, TDuration::Seconds(30));
+        UNIT_ASSERT(analyzeResponse);
         UNIT_ASSERT_VALUES_EQUAL(analyzeResponse->Get()->Record.GetOperationId(), operationId);
+        UNIT_ASSERT_VALUES_EQUAL(analyzeResponse->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 
         AnalyzeStatus(runtime, sender, tableInfo.SaTabletId, operationId, NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(wakeups, 0);
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeSameOperationId, ColumnShard) {
@@ -833,6 +844,30 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             SetAggregatorStatisticsConfig(env, table.SaTabletId, true, false);
         }
         CheckTraversalSchedulerRate(runtime, table.SaTabletId);
+
+        SetAggregatorStatisticsConfig(env, table.SaTabletId, false, false);
+        // Let the pending tick stop the periodic chain.
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        CheckTraversalSchedulerRate(runtime, table.SaTabletId, /*started=*/false);
+
+        const auto sender = runtime.AllocateEdgeActor();
+        for (double sampleRate : {1.0, 0.5}) {
+            auto request = MakeAnalyzeRequest({table.PathId}, "disabledOperation");
+            request->Record.MutableTables(0)->SetSampleRate(sampleRate);
+            runtime.SendToPipe(table.SaTabletId, sender, request.release());
+            const auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender, TDuration::Seconds(5));
+            UNIT_ASSERT(response);
+            const auto& record = response->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), "disabledOperation");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            UNIT_ASSERT_C(issues.ToString().Contains("Column statistics are disabled"), issues.ToString());
+        }
+
+        SetAggregatorStatisticsConfig(env, table.SaTabletId, true, false);
+        CheckTraversalSchedulerRate(runtime, table.SaTabletId);
+        Analyze(runtime, table.SaTabletId, {table.PathId});
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeMultiOperationId, ColumnShard) {

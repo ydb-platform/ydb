@@ -58,7 +58,11 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
 
         Self->ResolveStatisticsTablePathId();
         if (!ForceTraversal) {
-            Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+            if (Self->EnableColumnStatistics) {
+                Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
+            } else {
+                Self->TraversalSchedulerStarted = false;
+            }
         }
     }
 };

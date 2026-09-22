@@ -315,7 +315,7 @@ private:
 
     // period for both force and schedule traversals
     static constexpr TDuration TraversalPeriod = TDuration::Seconds(1);
-    // Keep one periodic chain across enable/disable changes.
+    // A periodic tick or its transaction is pending.
     bool TraversalSchedulerStarted = false;
     // if table traverse time is older, than traserse it on schedule
     static constexpr TDuration ScheduleTraversalPeriod = TDuration::Hours(24);

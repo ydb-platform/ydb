@@ -124,7 +124,7 @@ Each time interval (minute or hour) contains the TOP-5 queries executed in that 
 
 Fields providing information about CPU time spent (...`CPUTime`) are expressed in microseconds.
 
-Query text is limited to 10 kilobytes.
+Query text is limited to 10 kibibytes.
 
 All views have the same structure:
 
@@ -206,7 +206,7 @@ Each row of the view contains information about multiple queries with the same t
 
 Limitations:
 
-* query text is limited to 10 kilobytes.
+* query text is limited to 10 kibibytes.
 * statistics may be incomplete if the database is under heavy load.
 
 View structure:
@@ -389,7 +389,7 @@ View structure:
 | --- | --- |
 | `NodeId` | Node ID where the query is stored in the cache.<br/>Type: `Uint32`.<br/>Key: `0`. |
 | `QueryId` | Unique query ID in the node cache.<br/>Type: `Utf8`.<br/>Key: `1`. |
-| `Query` | Query text. If the query exceeds 10 KB, it is truncated.<br/>Type: `Utf8`. |
+| `Query` | Query text. If the query exceeds 10 KiB, it is truncated.<br/>Type: `Utf8`. |
 | `AccessCount` | Number of cache hits for the query text.<br/>Type: `Uint64`. |
 | `CompiledAt` | Query compilation time.<br/>Type: `Timestamp`. |
 | `UserSID` | Security ID of the user on whose behalf the query was compiled. May be empty for system queries.<br/>Type: `Utf8`. |
@@ -397,7 +397,7 @@ View structure:
 | `CompilationDurationMs` | Query compilation duration in milliseconds.<br/>Type: `Uint64`. |
 | `Warnings` | Warnings that occurred during query compilation.<br/>Type: `Utf8`. |
 | `Metadata` | Query parameter types in JSON format. Contains the `parameters` key with parameter names and their types.<br/>Type: `Utf8`. |
-| `IsTruncated` | Flag indicating whether the query text was truncated due to exceeding the 10 KB limit.<br/>Type: `Bool`. |
+| `IsTruncated` | Flag indicating whether the query text was truncated due to exceeding the 10 KiB limit.<br/>Type: `Bool`. |
 | `QueryType` | Query type, one of:<br/>`QUERY_TYPE_SQL_DML` — Table Service<br/>`QUERY_TYPE_SQL_GENERIC_QUERY` — Query Service<br/>`QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY` — Query Service in concurrent mode<br/>May be empty for old entries.<br/>Type: `Utf8`. |
 | `Syntax` | Query syntax, one of:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_UNSPECIFIED` — for old entries without syntax information<br/>`SYNTAX_PG` — deprecated value for entries compiled before the removal of experimental PostgreSQL compatibility; new queries with this syntax are not accepted<br/>Type: `Utf8`. |
 

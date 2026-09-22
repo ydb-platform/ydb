@@ -376,7 +376,7 @@ Installing a [connector](../../../concepts/query_execution/federated_query/archi
 
 The optimal value of the `ydb_database_storage_groups` setting in the `vars` section depends on available disk drives. Assuming only one database in the cluster, use the following logic:
 
-* For production-grade deployments, use disks with a capacity of over 800 GB and high IOPS, then choose the value for this setting based on the cluster topology:
+* For production-grade deployments, use disks with a capacity of over 800 GiB and high IOPS, then choose the value for this setting based on the cluster topology:
   * For `block-4-2`, set `ydb_database_storage_groups` to 95% of your total disk drive count, rounded down.
   * For `mirror-3-dc`, set `ydb_database_storage_groups` to 84% of your total disk drive count, rounded down.
 * For testing {{ ydb-short-name }} on small disks, set `ydb_database_storage_groups` to 1 regardless of cluster topology.

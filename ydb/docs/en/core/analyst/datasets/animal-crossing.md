@@ -6,7 +6,7 @@ A catalog of items from the popular game Animal Crossing: New Horizons.
 
 **Source**: [Kaggle - Animal Crossing New Horizons Catalog](https://www.kaggle.com/datasets/jessicali9530/animal-crossing-new-horizons-nookplaza-dataset/)
 
-**Size**: 51 KB
+**Size**: 51 kB
 
 ## Loading Example
 

@@ -6,7 +6,7 @@
 
 **Источник**: [Kaggle - COVID-19 Open Research Dataset Challenge](https://www.kaggle.com/datasets/allen-institute-for-ai/CORD-19-research-challenge?select=metadata.csv)
 
-**Размер**: 1.65 GB (файл metadata.csv)
+**Размер**: 1.65 ГБ (файл metadata.csv)
 
 ## Пример загрузки
 

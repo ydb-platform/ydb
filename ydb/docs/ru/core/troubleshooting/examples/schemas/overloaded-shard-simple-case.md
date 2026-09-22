@@ -268,10 +268,10 @@ class node1,node2,node3,node5,node6,node7,node9,node10,node11 database-node
 - Платформа: Intel Broadwell
 - Гарантированный уровень производительности vCPU: 100%
 - vCPU: 28
-- Память: 32 GB
+- Память: 32 ГБ
 - Диски:
-    - 3 × 93 GB SSD на каждом узле {{ ydb-short-name }}
-    - 20 GB HDD для операционной системы
+    - 3 × 93 ГБ SSD на каждом узле {{ ydb-short-name }}
+    - 20 ГБ HDD для операционной системы
 
 
 ### Тест

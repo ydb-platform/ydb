@@ -18,7 +18,7 @@ This ad-hoc actor is used for testing specific functionality. This is not a load
 
 ## Examples {#examples}
 
-The following actor allocates blocks of `1048576` bytes every `9000000` microseconds during `3600` seconds and takes up 32 GB while running:
+The following actor allocates blocks with an average size of 1 MiB every 9 seconds for 3600 seconds. Each block has a random size between 0 and 2 MiB. It allocates approximately 400 blocks with an expected total size of about 400 MiB:
 
 ```proto
 MemoryLoad: {

@@ -6,7 +6,7 @@
 
 **Источник**: [Kaggle - Netflix Movies and TV Shows](https://www.kaggle.com/datasets/shivamb/netflix-shows)
 
-**Размер**: 3.4 MB
+**Размер**: 3.4 МБ
 
 ## Пример загрузки
 

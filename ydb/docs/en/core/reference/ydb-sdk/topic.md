@@ -1396,7 +1396,7 @@ Currently, only connections with matching [source and message group](../../conce
 
   All messages are written to an internal buffer. There are 3 mechanisms for sending to the server: two automatic and one manual. The manual one is calling the `writer.flush` method, which returns the last seqno written on the server. Automatic sending occurs under the following conditions:
 
-  - Exceeding the internal buffer size `maxBufferBytes` (default value = 256MiB).
+  - Exceeding the internal buffer size `maxBufferBytes` (default value = 256 MiB).
   - By the tick of the periodic send interval `flushIntervalMs` (default value = 10ms).
 
 

@@ -202,7 +202,7 @@ table_service_config:
 #### local_file_config.max_total_size {#local-file-config-max-total-size}
 
 **Тип:** `uint64`  
-**По умолчанию:** `21474836480` (20 GiB)  
+**По умолчанию:** `21474836480` (20 ГиБ)  
 **Описание:** Максимальный суммарный размер всех файлов спиллинга на каждом [узле](../../concepts/glossary.md#node). При превышении лимита операции спиллинга завершаются ошибкой. Общий лимит спиллинга во всем кластере равен сумме значений `max_total_size` со всех узлов.
 
 ##### Рекомендации
@@ -259,7 +259,7 @@ table_service_config:
   spilling_service_config:
     local_file_config:
       root: ""
-      max_total_size: 107374182400   # 100 GiB
+      max_total_size: 107374182400   # 100 ГиБ
 ```
 
 #### Ограниченные ресурсы
@@ -271,7 +271,7 @@ table_service_config:
   spilling_service_config:
     local_file_config:
       root: ""
-      max_total_size: 5368709120     # 5 GiB
+      max_total_size: 5368709120     # 5 ГиБ
 ```
 
 ### Полный пример
@@ -282,7 +282,7 @@ table_service_config:
     local_file_config:
       enable: true
       root: "/var/spilling"
-      max_total_size: 53687091200    # 50 GiB
+      max_total_size: 53687091200    # 50 ГиБ
 ```
 
 ## См. также

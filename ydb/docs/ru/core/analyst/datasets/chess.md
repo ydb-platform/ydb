@@ -6,7 +6,7 @@
 
 **Источник**: [Kaggle - Chess Position Evaluations](https://www.kaggle.com/datasets/lichess/chess-evaluations)
 
-**Размер**: 59.66 GB
+**Размер**: 59.66 ГБ
 
 ## Пример загрузки
 

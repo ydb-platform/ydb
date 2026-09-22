@@ -21,7 +21,7 @@ Once enabled, the server writes logs on every lock conflict, and `VictimQuerySpa
 
 {% note info %}
 
-The base log size for a single TLI event is 10-20 KB. The actual volume depends on the size of the text of the logged requests (the breaker and the victim) and the transactions of which they are part, since all this data is recorded in the log.
+The base log size for a single TLI event is 10-20 kB. The actual volume depends on the size of the text of the logged requests (the breaker and the victim) and the transactions of which they are part, since all this data is recorded in the log.
 If conflicts are infrequent, the logging overhead is negligible. At high TLI rates, monitor the total log volume.
 
 To exclude tables with expected conflicts from TLI diagnostics, use the [`tli_config.ignored_table_regexes`](../../../reference/configuration/tli_config.md) parameter.

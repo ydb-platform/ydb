@@ -1,5 +1,7 @@
 # Transfer load
 
+The output examples retain the CLI label `MB/s`. The rate is actually calculated in MiB/s: the byte count is divided by 1024² and the elapsed time in seconds.
+
 Starts the load in the form of transactions {{ ydb-short-name }} involving topics and tables simultaneously. The data is read from the topic and written to the table. To simulate a real load, you can set various input parameters: the number of messages, the size of messages, the target write speed, the number of consumers and producers, the number of partitions. During operation, the console displays the results: the number of written messages, the speed of writing messages, etc.
 
 {% include [ydb-cli-profile.md](../../_includes/ydb-cli-profile.md) %}
@@ -81,9 +83,9 @@ Parameter name | Parameter Description | Default value
 `--producer-threads`, `-p` | Number of producer threads | `1`
 `--consumer-threads`, `-t` | Number of consumer threads | `1`
 `--consumers`, `-c` | Number of consumers | `1`
-`--message-size`, `-m` | Message size in bytes. It is possible to specify in KB, MB, GB by adding suffixes `K`, `M`, `G` respectively | `10240`
+`--message-size`, `-m` | Message size in bytes. It is possible to specify in KiB, MiB, GiB by adding suffixes `K`, `M`, `G` respectively | `10240`
 `--message-rate` | Target total write speed. In messages per second. Excludes the use of the `--byte-rate` parameter | `0`
-`--byte-rate` | Target total write speed. In bytes per second. Excludes the use of the `--message-rate` parameter. It is possible to specify in KB/s, MB/s, GB/s by adding suffixes `K`, `M`, `G` respectively | `0`
+`--byte-rate` | Target total write speed. In bytes per second. Excludes the use of the `--message-rate` parameter. It is possible to specify in KiB/s, MiB/s, GiB/s by adding suffixes `K`, `M`, `G` respectively | `0`
 `--tx-commit-interval` | The period between transaction `COMMIT` calls. In milliseconds | `1000`
 `--tx-commit-messages` | The period between transaction `COMMIT` calls. In number of messages | `1000000`
 `--only-topic-in-tx` | Only topic partitions are forced to participate in transactions. Excludes the use of the `--only-table-in-tx` parameter | `0`
@@ -115,12 +117,12 @@ Window  Write speed     Write time      Inflight        Read speed      Topic ti
 ```
 
 * `Window` — the serial number of the time window for collecting statistics.
-* `Write speed` — the speed of writing messages by producers. In messages per second and in megabytes per second.
+* `Write speed` — the speed of writing messages by producers. In messages per second and in mebibytes per second.
 * `Write time` — the specified percentile of the message writing time in ms.
 * `Inflight` — the maximum number of messages waiting for confirmation for all batches.
 * `Lag` — the specified percentile of maximum number of messages waiting to be read in the statistics collection window. Messages for all batches are taken into account.
 * `Lag time` — the specified percentile of message delay time in ms.
-* `Read speed` — the speed of reading messages by consumers. In messages per second and in megabytes per second.
+* `Read speed` — the speed of reading messages by consumers. In messages per second and in mebibytes per second.
 * `Select time`, `Upsert time`, `Commit time` — the specified percentile of the execution time of Select, Insert, Commit operations in ms.
 
 ## Removing the test environment {#clean}

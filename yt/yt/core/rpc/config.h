@@ -440,7 +440,7 @@ struct TDispatcherConfig
     TDuration HeavyPoolPollingPeriod;
     TDuration DefaultRequestTimeout;
 
-    bool AlertOnMissingRequestInfo;
+    bool AlertOnMissingRequestAnnotation;
     bool AlertOnUnsetRequestTimeout;
 
     bool SendTracingBaggage;
@@ -464,7 +464,7 @@ struct TDispatcherDynamicConfig
     std::optional<TDuration> HeavyPoolPollingPeriod;
     std::optional<TDuration> DefaultRequestTimeout;
 
-    std::optional<bool> AlertOnMissingRequestInfo;
+    std::optional<bool> AlertOnMissingRequestAnnotation;
     std::optional<bool> AlertOnUnsetRequestTimeout;
 
     std::optional<bool> SendTracingBaggage;

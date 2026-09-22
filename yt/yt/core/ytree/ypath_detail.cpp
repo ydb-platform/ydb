@@ -1652,19 +1652,19 @@ protected:
 
         delimitedBuilder->AppendFormat("Retry: %v", IsRetry());
 
-        for (const auto& info : RequestInfos_){
-            delimitedBuilder->AppendString(info);
+        if (!RequestLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", RequestLoggingTags_);
         }
 
         auto logMessage = builder.Flush();
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
-            traceContext->AddTag(RequestInfoAnnotation, logMessage);
+            traceContext->AddTag(RequestAnnotationsTraceTag, logMessage);
         });
         YT_LOG_DEBUG(logMessage);
 
         Timer_.emplace();
 
-        RequestInfoState_ = ERequestInfoState::Flushed;
+        RequestAnnotationState_ = ERequestAnnotationState::Flushed;
     }
 
     void LogResponse() override
@@ -1697,8 +1697,8 @@ protected:
                 usage.ResultSize);
         }
 
-        for (const auto& info : ResponseInfos_) {
-            delimitedBuilder->AppendString(info);
+        if (!ResponseLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", ResponseLoggingTags_);
         }
 
         if (Timer_) {
@@ -1709,7 +1709,7 @@ protected:
 
         auto logMessage = builder.Flush();
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
-            traceContext->AddTag(ResponseInfoAnnotation, logMessage);
+            traceContext->AddTag(ResponseAnnotationsTraceTag, logMessage);
         });
         YT_LOG_DEBUG(logMessage);
     }

@@ -289,6 +289,103 @@ selector_config:
         UNIT_ASSERT_VALUES_EQUAL(count, 1);
     }
 
+    Y_UNIT_TEST(ManyValuesOfOneLabelConvergeToNonBaseConfig) {
+        TStringBuilder yaml;
+        yaml << "config:\n  log_config: {cluster_name: base}\n"
+             << "allowed_labels:\n  deployment: {type: string}\nselector_config:\n";
+        for (size_t i = 0; i < 10000; ++i) {
+            yaml << "- description: converging\n  selector: {deployment: v" << i << "}\n"
+                 << "  config: {log_config: {cluster_name: selected}}\n";
+        }
+        auto doc = NFyaml::TDocument::Parse(yaml);
+        TSet<TString> names;
+        size_t count = 0;
+        EnumerateDistinctProjections(doc, {"/log_config"}, [&](NFyaml::TNodeRef config) {
+            ++count;
+            names.insert(config.Map().at("log_config").Map().at("cluster_name").Scalar());
+        });
+        UNIT_ASSERT_VALUES_EQUAL(count, 2);
+        UNIT_ASSERT(names.contains("base"));
+        UNIT_ASSERT(names.contains("selected"));
+    }
+
+    Y_UNIT_TEST(BinaryLabelEncodingExcludesPaddingValues) {
+        for (size_t size = 0; size < 18; ++size) {
+            TStringBuilder yaml;
+            yaml << "config: {log_config: {cluster_name: base}}\n"
+                 << "allowed_labels:\n  deployment: {type: enum, values: {";
+            for (size_t i = 0; i < size; ++i) {
+                yaml << (i ? ", " : "") << "v" << i << ": {}";
+            }
+            yaml << "}}\nselector_config:\n"
+                 << "- description: empty label\n  selector: {deployment: ''}\n"
+                 << "  config: {log_config: {cluster_name: selected}}\n";
+            for (size_t i = 0; i < size; ++i) {
+                yaml << "- description: named value\n  selector: {deployment: v" << i << "}\n"
+                     << "  config: {log_config: {cluster_name: selected}}\n";
+            }
+            auto doc = NFyaml::TDocument::Parse(yaml);
+            size_t count = 0;
+            EnumerateDistinctProjections(doc, {"/log_config"}, [&](NFyaml::TNodeRef config) {
+                ++count;
+                UNIT_ASSERT_VALUES_EQUAL(config.Map().at("log_config").Map().at("cluster_name").Scalar(), "selected");
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(count, 1, size);
+        }
+    }
+
+    Y_UNIT_TEST(RegionReclamationPreservesCorrelationsAndRules) {
+        TStringBuilder yaml;
+        yaml << R"(
+config: {log_config: {cluster_name: base}, other: base}
+allowed_labels:
+  deployment: {type: string}
+  test: {type: string}
+incompatibility_overrides:
+  custom_rules:
+  - name: forbidden_pair
+    patterns:
+    - {label: deployment, value: v0}
+    - {label: test, value: blocked}
+selector_config:
+)";
+        // Grow and then shrink correlated regions, reclaiming historical prefixes
+        // and reusing node IDs before later selectors query those label values.
+        for (bool reset : {false, true}) {
+            for (size_t i = 0; i < 128; ++i) {
+                yaml << "- description: converge\n  selector: {deployment: v" << (reset ? 127 - i : i)
+                     << ", test: {not_in: [off]}}\n"
+                     << "  config: {log_config: {cluster_name: " << (reset ? "base" : "selected") << "}}\n";
+            }
+        }
+        for (size_t i : {0, 64, 127}) {
+            yaml << "- description: query reclaimed region\n  selector: {deployment: v" << i << "}\n"
+                 << "  config: {log_config: {cluster_name: value" << i << "}}\n";
+        }
+        yaml << R"(
+- description: observe correlation
+  selector: {test: off}
+  config: {other: off}
+- description: observe compatibility rule
+  selector: {deployment: v0, test: blocked}
+  config: {log_config: {cluster_name: forbidden}}
+)";
+        auto doc = NFyaml::TDocument::Parse(yaml);
+        const TVector<TString> sections = {"/log_config", "/other"};
+        TSet<TString> expected;
+        ResolveUniqueDocs(doc, [&](TDocumentConfig&& config) {
+            expected.insert(ProjectionKey(config.second, sections));
+        });
+        TSet<TString> actual;
+        size_t count = 0;
+        EnumerateDistinctProjections(doc, sections, [&](NFyaml::TNodeRef config) {
+            actual.insert(ProjectionKey(config, sections));
+            ++count;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(count, actual.size());
+        UNIT_ASSERT_C(actual == expected, "reclaimed regions must preserve legacy results");
+    }
+
     Y_UNIT_TEST(CustomSwissKnifeReceivesCompleteConfigurations) {
         class TSwissKnife : public NYamlConfig::IConfigSwissKnife {
         public:

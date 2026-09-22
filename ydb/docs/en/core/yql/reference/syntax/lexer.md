@@ -102,7 +102,7 @@ At the same time, parameters cannot be used in the parts required for query comp
 
 * In table names;
 * In any parameters of the [WITH](select/with.md) block;
-* In any expressions inside [EvaluateExpr and EvaluateAtom](../builtins/basic.md#evaluate_expr_atom).
+* In any expressions inside [EvaluateExpr](../builtins/basic.md#evaluate_expr_atom).
 
 For such parts, you can only use string constants inside the query, for example:
 

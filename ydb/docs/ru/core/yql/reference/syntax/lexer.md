@@ -105,7 +105,7 @@ SELECT Data || $my_param FROM my_table
 
 * В именах таблиц;
 * В любых параметрах блока [WITH](select/with.md);
-* В любых выражениях внутри [EvaluateExpr и EvaluateAtom](../builtins/basic.md#evaluate_expr_atom).
+* В любых выражениях внутри [EvaluateExpr](../builtins/basic.md#evaluate_expr_atom).
 
 Для таких частей можно использовать только строковые константы внутри запроса, например:
 

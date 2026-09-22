@@ -188,11 +188,10 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
     UNIT_ASSERT_C(req.Has("duration_us"), "duration_us field");
     UNIT_ASSERT(!req["ast"].GetStringSafe("").empty());
     UNIT_ASSERT(req.Has("cpu_time_us"));
-    UNIT_ASSERT(req.Has("compute_memory_bytes"));
-    UNIT_ASSERT_VALUES_EQUAL(req["compute_memory_bytes"].GetUIntegerSafe(1), 0);
     UNIT_ASSERT(req.Has("observed_peak_compute_memory_bytes"));
-    UNIT_ASSERT(req.Has("table_read_bytes"));
     UNIT_ASSERT(req.Has("read_ingress_bytes"));
+    UNIT_ASSERT(!req.Has("compute_memory_bytes"));
+    UNIT_ASSERT(!req.Has("table_read_bytes"));
     UNIT_ASSERT_C(req.Has("query_len"), "query_len field");
     UNIT_ASSERT_C(req.Has("results_size"), "results_size field");
     UNIT_ASSERT_C(req.Has("database"), "database field");
@@ -820,7 +819,6 @@ Y_UNIT_TEST_TWIN(TableReadResourcesWithoutClientStats, DropProgress) {
             continue;
         }
         UNIT_ASSERT(req["cpu_time_us"].GetUIntegerSafe(0) > 0);
-        UNIT_ASSERT(req["table_read_bytes"].GetUIntegerSafe(0) > 0);
         UNIT_ASSERT(req.Has("observed_peak_compute_memory_bytes"));
         UNIT_ASSERT(!req["ast"].GetStringSafe("").empty());
         found = true;
@@ -845,8 +843,6 @@ Y_UNIT_TEST(BatchQueryResources) {
             continue;
         }
         UNIT_ASSERT(req["cpu_time_us"].GetUIntegerSafe(0) > 0);
-        UNIT_ASSERT(req["table_read_bytes"].GetUIntegerSafe(0) > 0);
-        UNIT_ASSERT_VALUES_EQUAL(req["compute_memory_bytes"].GetUIntegerSafe(1), 0);
         found = true;
     }
     UNIT_ASSERT(found);

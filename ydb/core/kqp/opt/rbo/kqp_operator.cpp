@@ -1772,16 +1772,25 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
 
     TString mode;
     
-    if (EffectType == EEffectType::InsertRows) {
-        mode = "insert";
-    } else if (EffectType == EEffectType::UpdateRows) {
-        mode = "update";
-    } else if (EffectType == EEffectType::UpsertRows) {
-        mode = "upsert";
-    } else if (EffectType == EEffectType::DeleteRows) {
-        mode = "delete";
-    } else {
-        Y_ENSURE(false, "Unsupported DML in new optimizer");
+    switch(EffectType) {
+        case EEffectType::InsertRows:
+        case EEffectType::InsertRowsIndex:
+            mode = "insert";
+            break;
+        case EEffectType::UpdateRows:
+        case EEffectType::UpdateRowsIndex:
+            mode = "update";
+            break;
+        case EEffectType::UpsertRows:
+        case EEffectType::UpsertRowsIndex:
+            mode = "upsert";
+            break;
+        case EEffectType::DeleteRows:
+        case EEffectType::DeleteRowsIndex:
+            mode = "delete";
+            break;
+        default:
+            Y_ENSURE(false, "Unsupported DML in new optimizer");
     }
 
     TString isBatch = "false";

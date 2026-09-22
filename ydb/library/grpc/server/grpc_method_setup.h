@@ -1,6 +1,7 @@
 #ifndef GRPC_METHOD_SETUP_H
 #define GRPC_METHOD_SETUP_H
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
@@ -46,6 +47,7 @@
                         .AuditMode = auditMode,                                                           \
                         .RequestType = ::NKikimr::NJaegerTracing::ERequestType::requestType,              \
                         .EmptyDatabaseMode = emptyDatabaseMode,                                           \
+                        .AppData = ::NKikimr::AppData(ActorSystem_),                                        \
                     }));                                                                                  \
         },                                                                                                \
         &TGrpcAsyncService::Y_CAT(Request, methodName),                                                   \
@@ -73,6 +75,7 @@
                         .AuditMode = auditMode,                                                                         \
                         .RequestType = ::NKikimr::NJaegerTracing::ERequestType::requestType,                            \
                         .EmptyDatabaseMode = emptyDatabaseMode,                                                         \
+                        .AppData = ::NKikimr::AppData(ActorSystem_),                                                      \
                     }                                                                                                   \
                 )                                                                                                       \
             );                                                                                                          \

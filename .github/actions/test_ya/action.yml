@@ -18,8 +18,8 @@ inputs:
     description: "small or small-medium or all"
   test_threads:
     required: false
-    default: "56"
-    description: "Test threads count"
+    default: "60"
+    description: "Test threads count (PR-check YAML comes from main and still passes 52; this action overrides it)"
   link_threads:
     required: false
     default: "12"
@@ -195,11 +195,16 @@ runs:
 
         export TEST_ICRDMA=1
 
+        # pull_request_target runs pr_check.yml from main (still test_threads=52).
+        # This composite action is loaded from the PR checkout, so this is the
+        # place a PR can actually raise --test-threads.
+        TEST_THREADS=60
+
         params=(
           -T
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
           --stat
-          --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
+          --test-threads "${TEST_THREADS}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
           --add-peerdirs-tests all
           --cleanup-child-processes

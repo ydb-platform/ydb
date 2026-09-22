@@ -1,5 +1,6 @@
 #include "kqp_opt.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
@@ -1825,13 +1826,29 @@ TStatus AnnotateKqpPhysicalTx(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx, bool enableRBO) {
+TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx, const TKikimrConfiguration& config) {
     if (!EnsureArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
     }
 
+    if (config.EnableStreamingAggregation.Get().GetOrElse(false)
+        && !config.StreamingAggregationStateTablePath.Get().GetOrElse("").empty()) {
+        ui32 stateTableAggregations = 0;
+        if (const auto extraAggregation = FindNode(node, [&](const TExprNode::TPtr& expr) {
+            if (const auto aggregation = TMaybeNode<TKqpStreamingAggregation>(expr)) {
+                const auto stateTablePath = GetSetting(aggregation.Cast().Settings().Ref(), "state_table_path");
+                return stateTablePath && !stateTablePath->Tail().Content().empty() && ++stateTableAggregations > 1;
+            }
+            return false;
+        })) {
+            ctx.AddError(TIssue(ctx.GetPosition(extraAggregation->Pos()),
+                "At most one streaming aggregation with a state table is allowed per query"));
+            return TStatus::Error;
+        }
+    }
+
     // We need to infer the type of physical query for RBO at this time
-    if (enableRBO) {
+    if (config.GetEnableNewRBO()) {
         TKqpPhysicalQuery query(node);
 
         // Check the transactions, if any of them has effects, return the list of effects type
@@ -3659,6 +3676,12 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
             if (!EnsureTupleSize(*setting, 2, ctx) || !EnsureAtom(setting->Tail(), ctx)) {
                 return TStatus::Error;
             }
+            const TString tablePath(setting->Tail().Content());
+            if (NKikimr::PathPartBrokenAt(tablePath, "/") != tablePath.end()) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()),
+                    "Invalid streaming aggregation state table path: only ASCII letters, digits, '/', '-', '_', and '.' are allowed"));
+                return TStatus::Error;
+            }
         } else if (name == "output_columns") {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
                 return TStatus::Error;
@@ -3857,9 +3880,9 @@ private:
         };
     }
 
-    THandler HndlInt(TStatus (*handler)(const TExprNode::TPtr&, TExprContext&, bool enableRBO)) {
-        return [handler, enableRBO = Config->GetEnableNewRBO()](TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
-            return handler(input, ctx, enableRBO);
+    THandler HndlInt(TStatus (*handler)(const TExprNode::TPtr&, TExprContext&, const TKikimrConfiguration&)) {
+        return [handler, this](TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
+            return handler(input, ctx, *Config);
         };
     }
 

@@ -212,7 +212,6 @@ namespace NActors {
 
     void TSharedExecutorPool::SwitchToPool(i16 poolId, NHPTimer::STime) {
         TWorkerId workerId = TlsThreadContext->WorkerId();
-        RunWaker(workerId);
         TlsThreadContext->ExecutionStats->UpdateThreadTime();
         if (Threads[workerId].CurrentPoolId != poolId && !CheckPoolAdjacency(PoolManager, Threads[workerId].OwnerPoolId, Threads[workerId].CurrentPoolId)) {
             ui64 slots = ForeignThreadSlots[Threads[workerId].CurrentPoolId].fetch_add(1, std::memory_order_acq_rel);
@@ -236,7 +235,6 @@ namespace NActors {
         TMailbox *mailbox = nullptr;
         bool hasAdjacentPools = HasAdjacentPools(PoolManager, thread.OwnerPoolId);
         while (!StopFlag.load(std::memory_order_acquire)) {
-            RunWaker(workerId);
             bool adjacentPool = CheckPoolAdjacency(PoolManager, thread.OwnerPoolId, thread.CurrentPoolId);
             if (hpnow < thread.SoftDeadlineForPool || !hasAdjacentPools && adjacentPool) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "continue same pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
@@ -294,12 +292,14 @@ namespace NActors {
                 }
             }
             if (goToSleep) {
-                RunWaker(workerId);
                 bool allowedToSleep = false;
                 ui64 threadsStateRaw = ThreadsState.load(std::memory_order_acquire);
                 TThreadsState threadsState = TThreadsState::GetThreadsState(threadsStateRaw);
                 while (true) {
-                    if (threadsState.Notifications == 0) {
+                    // Leave a waker notification for Wait(): its first returning
+                    // worker claims the role, including a wake racing with park.
+                    if (threadsState.Notifications == 0 ||
+                            (HasWakerPools && WakerState.load() == EWakerState::Requested)) {
                         threadsState.WorkingThreadCount--;
                         if (ThreadsState.compare_exchange_strong(threadsStateRaw, threadsState.ConvertToUI64(), std::memory_order_acq_rel, std::memory_order_acquire)) {
                             allowedToSleep = true;
@@ -315,7 +315,7 @@ namespace NActors {
                     }
                     threadsState = TThreadsState::GetThreadsState(threadsStateRaw);
                 }
-                if (allowedToSleep) {
+                if (allowedToSleep && !(HasWakerPools && WakerState.load() == EWakerState::Requested)) {
                     ui64 localNotifications = LocalNotifications[thread.OwnerPoolId].load(std::memory_order_acquire);
                     while (true) {
                         if (localNotifications == 0) {
@@ -342,6 +342,7 @@ namespace NActors {
                     }
                     LocalThreads[thread.OwnerPoolId].fetch_add(1, std::memory_order_acq_rel);
                     ThreadsState.fetch_add(1, std::memory_order_acq_rel);
+                    RunWaker(workerId);
                 }
             }
             hpnow = GetCycleCountFast();

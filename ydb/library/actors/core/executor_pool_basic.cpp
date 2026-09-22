@@ -1254,7 +1254,6 @@ namespace NActors {
         }
         constexpr ui32 maxAttempts = 8;
         if (EnableWaker) {
-            SharedPool->RunWaker(workerId);
             TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
             for (ui32 attempt = 0; attempt < maxAttempts && !StopFlag.load(std::memory_order_acquire); ++attempt) {
                 if (const ui32 activation = Activations.Pop(revolvingCounter++)) {

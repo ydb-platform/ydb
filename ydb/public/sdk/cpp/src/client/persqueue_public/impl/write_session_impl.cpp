@@ -599,7 +599,7 @@ void TWriteSessionImpl::InitImpl() {
 
 // Called under lock. Invokes Processor->Write, which is assumed to be deadlock-safe
 void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&& req,
-                                             size_t requestMemoryUsage) {
+                                             size_t memoryUsageToRelease) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     Y_ASSERT(Processor);
@@ -608,9 +608,9 @@ void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&&
     }
     auto callback = [cbContext = SelfContext,
                      connectionGeneration = ConnectionGeneration,
-                     requestMemoryUsage](NYdbGrpc::TGrpcStatus&& grpcStatus) {
+                     memoryUsageToRelease](NYdbGrpc::TGrpcStatus&& grpcStatus) {
         if (auto self = cbContext->LockShared()) {
-            self->OnWriteDone(std::move(grpcStatus), connectionGeneration, requestMemoryUsage);
+            self->OnWriteDone(std::move(grpcStatus), connectionGeneration, memoryUsageToRelease);
         }
     };
 
@@ -643,28 +643,20 @@ void TWriteSessionImpl::ReadFromProcessor() {
 }
 
 void TWriteSessionImpl::OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration,
-                                    size_t requestMemoryUsage) {
+                                    size_t memoryUsageToRelease) {
     THandleResult handleResult;
     bool readyToAccept = false;
     {
         std::lock_guard guard(Lock);
         const bool wasOk = MemoryUsage <= Settings.MaxMemoryUsage_;
-        if (requestMemoryUsage) {
-            Y_ABORT_UNLESS(WriteRequestsMemoryUsage >= requestMemoryUsage);
-            WriteRequestsMemoryUsage -= requestMemoryUsage;
-            OnMemoryUsageChangedImpl(-static_cast<i64>(requestMemoryUsage));
+        if (memoryUsageToRelease) {
+            OnMemoryUsageChangedImpl(-static_cast<i64>(memoryUsageToRelease));
         }
 
-        if (connectionGeneration != ConnectionGeneration) {
-            if (requestMemoryUsage && !Aborting) {
-                SendImpl();
-            }
-        } else if (!Aborting && !status.Ok()) {
+        if (connectionGeneration == ConnectionGeneration && !Aborting && !status.Ok()) {
             handleResult = OnErrorImpl(status);
-        } else if (!Aborting && requestMemoryUsage) {
-            SendImpl();
         }
-        readyToAccept = requestMemoryUsage && !Aborting && !wasOk
+        readyToAccept = memoryUsageToRelease && !Aborting && !wasOk
             && MemoryUsage <= Settings.MaxMemoryUsage_;
     }
     ProcessHandleResult(handleResult);
@@ -978,7 +970,12 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
 
     UpdateTimedCountersImpl();
     Y_ABORT_UNLESS(block.Valid);
-    auto memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size()) - block.OriginalMemoryUsage);
+    TMemoryUsageChange memoryUsage{MemoryUsage <= Settings.MaxMemoryUsage_, MemoryUsage <= Settings.MaxMemoryUsage_};
+    if (block.Data.size() < block.OriginalMemoryUsage) {
+        block.MemoryUsageToReleaseOnWrite = block.OriginalMemoryUsage - block.Data.size();
+    } else {
+        memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size() - block.OriginalMemoryUsage));
+    }
     (*Counters->BytesInflightUncompressed) -= block.OriginalSize;
     (*Counters->BytesInflightCompressed) += block.Data.size();
 
@@ -1276,10 +1273,10 @@ void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     // Split ready blocks into requests bounded by the driver's outbound limit.
-    while (IsReadyToSendNextImpl()
-           && (WriteRequestsMemoryUsage == 0 || WriteRequestsMemoryUsage < Settings.MaxMemoryUsage_)) {
+    while (IsReadyToSendNextImpl()) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
+        size_t memoryUsageToRelease = 0;
         auto sentAtMs = TInstant::Now().MilliSeconds();
         NGrpc::TRequestSizeLimiter sizeLimiter(2, NGrpc::GetMaxGrpcMessageSize(*Connections));
 
@@ -1322,6 +1319,9 @@ void TWriteSessionImpl::SendImpl() {
 
             TBlock moveBlock;
             moveBlock.Move(block);
+            Y_ABORT_UNLESS(std::numeric_limits<size_t>::max() - memoryUsageToRelease >= moveBlock.MemoryUsageToReleaseOnWrite);
+            memoryUsageToRelease += moveBlock.MemoryUsageToReleaseOnWrite;
+            moveBlock.MemoryUsageToReleaseOnWrite = 0;
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
             sizeLimiter.Add(blockSize);
@@ -1334,10 +1334,10 @@ void TWriteSessionImpl::SendImpl() {
                 << writeRequest->sequence_numbers(0)
         );
         const size_t requestMemoryUsage = clientMessage.SpaceUsedLong();
-        Y_ABORT_UNLESS(std::numeric_limits<size_t>::max() - WriteRequestsMemoryUsage >= requestMemoryUsage);
-        WriteRequestsMemoryUsage += requestMemoryUsage;
+        Y_ABORT_UNLESS(std::numeric_limits<size_t>::max() - memoryUsageToRelease >= requestMemoryUsage);
+        memoryUsageToRelease += requestMemoryUsage;
         OnMemoryUsageChangedImpl(static_cast<i64>(requestMemoryUsage));
-        WriteToProcessorImpl(std::move(clientMessage), requestMemoryUsage);
+        WriteToProcessorImpl(std::move(clientMessage), memoryUsageToRelease);
     }
 }
 

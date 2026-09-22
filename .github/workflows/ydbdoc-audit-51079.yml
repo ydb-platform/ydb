@@ -32,7 +32,7 @@ jobs:
           import ydb
 
           endpoint = os.environ.get("YDB_ENDPOINT") or "grpcs://ydb.serverless.yandexcloud.net:2135"
-          database = os.environ.get("YDB_DATABASE") or "/ru-central1/b1g1tm6rj2e9pc4rm2qn/etn2k2b6nqg89bthhn3p"
+          database = os.environ.get("YDB_DATABASE") or "/ru-central1/b1g7gqj2vnq67gjseuva/etns0641qf73btm7j21k"
           credentials = ydb.iam.ServiceAccountCredentials.from_content(os.environ["YDB_SA_KEY"])
           driver = ydb.Driver(endpoint=endpoint, database=database, credentials=credentials)
           driver.wait(timeout=30, fail_fast=True)

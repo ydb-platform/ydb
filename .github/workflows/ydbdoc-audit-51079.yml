@@ -1,70 +1,95 @@
-name: Read ydbdoc job audit for PR 51079
+name: Read latest ydbdoc audit for PR 51079
 
 on:
   push:
-    branches: [ydbdoc-v1.1-audit-51079-20260922]
+    branches: [ydbdoc-audit-51079-20260922-4]
 
 permissions:
   contents: read
 
 jobs:
   audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-        with:
-          repository: ydb-platform/ydbdoc-review-ng
-          ref: 738fe6cc425945c349e9a1e26d2a2100bed44eb7
-          path: tool
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.11"
-      - run: python -m pip install './tool[runtime]'
-      - name: Print sanitized job and attempt status only
+      - run: python -m pip install 'ydb[yc]>=3.31,<4'
+      - name: Print sanitized audit
         env:
           YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
         run: |
           python - <<'PY'
+          from datetime import UTC, datetime
+          from decimal import Decimal
+          import json
           import os
-          from ydbdoc_review_ng.runtime_ydb import (
-              DEFAULT_YDB_DATABASE,
-              DEFAULT_YDB_ENDPOINT,
-              SDKExecutor,
-          )
+          import ydb
 
-          executor = SDKExecutor(
-              os.environ.get("YDB_ENDPOINT", DEFAULT_YDB_ENDPOINT),
-              os.environ.get("YDB_DATABASE", DEFAULT_YDB_DATABASE),
-              "",
-              os.environ["YDB_SA_KEY"],
-          )
+          def rows(result_sets):
+              return [dict(row) for result_set in result_sets for row in result_set.rows]
+
+          def safe(value):
+              if isinstance(value, datetime):
+                  if value.tzinfo is None:
+                      value = value.replace(tzinfo=UTC)
+                  return value.isoformat()
+              if isinstance(value, Decimal):
+                  return str(value)
+              return value
+
+          def emit(kind, values):
+              print(kind, json.dumps(
+                  {key: safe(value) for key, value in values.items()},
+                  ensure_ascii=True, sort_keys=True,
+              ), flush=True)
+
+          driver = None
+          pool = None
           try:
-              jobs = executor.execute(
-                  """SELECT job_id, mode, pr_number, source_sha, target_sha,
-                            started_at, finished_at, status, error
-                     FROM `ydbdoc_review/jobs`
-                     WHERE pr_number = $pr_number
-                     ORDER BY started_at DESC
-                     LIMIT 5;""",
-                  {"pr_number": 51079},
+              credentials = ydb.iam.ServiceAccountCredentials.from_content(
+                  os.environ["YDB_SA_KEY"]
               )
+              driver = ydb.Driver(
+                  endpoint="grpcs://ydb.serverless.yandexcloud.net:2135",
+                  database="/ru-central1/b1g7gqj2vnq67gjseuva/etns0641qf73btm7j21k",
+                  credentials=credentials,
+              )
+              driver.wait(timeout=30, fail_fast=True)
+              pool = ydb.QuerySessionPool(driver)
+              jobs = rows(pool.execute_with_retries(
+                  """DECLARE $pr AS Uint64;
+                  DECLARE $since AS Timestamp;
+                  SELECT job_id, started_at, finished_at, status, error, mode,
+                         source_sha, target_sha
+                  FROM `ydbdoc_review/jobs`
+                  WHERE pr_number = $pr AND started_at > $since
+                  ORDER BY started_at DESC LIMIT 5;""",
+                  {
+                      "$pr": ydb.TypedValue(51079, ydb.PrimitiveType.Uint64),
+                      "$since": ydb.TypedValue(
+                          datetime(2026, 9, 22, 15, 55, tzinfo=UTC),
+                          ydb.PrimitiveType.Timestamp,
+                      ),
+                  },
+              ))
               for job in jobs:
-                  safe_job = {key: job.get(key) for key in (
-                      "job_id", "mode", "pr_number", "source_sha", "target_sha",
-                      "started_at", "finished_at", "status", "error",
-                  )}
-                  print("JOB", safe_job, flush=True)
-                  attempts = executor.execute(
-                      """SELECT role, status, error, model, started_at,
-                                finished_at, cost_rub
-                         FROM `ydbdoc_review/attempts`
-                         WHERE job_id = $job_id
-                         ORDER BY started_at ASC;""",
-                      {"job_id": job["job_id"]},
-                  )
-                  for attempt in attempts:
-                      print("ATTEMPT", dict(attempt), flush=True)
+                  emit("JOB", job)
+                  attempts = rows(pool.execute_with_retries(
+                      """DECLARE $job AS Utf8;
+                      SELECT started_at, finished_at, status, error, role, model, cost_rub
+                      FROM `ydbdoc_review/attempts`
+                      WHERE job_id = $job ORDER BY started_at ASC;""",
+                      {"$job": ydb.TypedValue(job["job_id"], ydb.PrimitiveType.Utf8)},
+                  ))
+                  for number, attempt in enumerate(attempts, 1):
+                      emit("ATTEMPT", {"job_id": job["job_id"], "attempt_no": number, **attempt})
           finally:
-              executor.close()
+              try:
+                  if pool is not None:
+                      pool.stop()
+              finally:
+                  if driver is not None:
+                      driver.stop()
           PY

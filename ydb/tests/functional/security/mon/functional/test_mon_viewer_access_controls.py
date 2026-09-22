@@ -84,6 +84,22 @@ def topic_created(mon_base_url_with_extra_sids_control):
         yield
 
 
+# A monitoring level endpoint stays closed for anonymous requests even when neither
+# enforce_user_token_requirement nor enforce_user_token_check_requirement is set:
+# the monitoring http pages are registered with a non-empty list of allowed SIDs,
+# which an anonymous request can never match.
+def test_monitoring_endpoint_denies_anonymous_without_token_enforcement(
+    mon_base_url_without_token_enforcement,
+):
+    base_url = mon_base_url_without_token_enforcement
+    # anonymous request is rejected before the handler
+    _assert_status(base_url, '/pdisk/restart', None, 401)
+    # a request of an allowed SID reaches the handler, which rejects it as it has no
+    # pdisk to restart in the parameters
+    _assert_status(base_url, '/pdisk/restart', 'monitoring@builtin', 400)
+    _assert_status(base_url, '/pdisk/restart', 'root@builtin', 400)
+
+
 # The capabilities handler is used to discover capabilities, including whether authentication
 # is required at all, so it must be available without authentication regardless of the
 # enable_extra_sids_control_for_http_viewer feature flag.

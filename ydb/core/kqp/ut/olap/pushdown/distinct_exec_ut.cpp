@@ -8,6 +8,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <optional>
+#include <utility>
 
 #include <util/string/split.h>
 
@@ -405,6 +406,69 @@ TCollectedStreamResult RunDistinctQuery(
         std::optional<ui64>(sqlLimit), true, std::nullopt);
 }
 
+enum class ECounterOnForce {
+    MustGrow,
+    MustStay,
+};
+
+struct TOnOffQueryRun {
+    TCollectedStreamResult Off;
+    TCollectedStreamResult On;
+    i64 CounterBefore = 0;
+    i64 CounterAfterOff = 0;
+    i64 CounterAfterOn = 0;
+};
+
+template <typename TReadCounter, typename TRunQuery>
+TOnOffQueryRun RunOnOffWithCounter(TReadCounter&& readCounter, TRunQuery&& runQuery) {
+    TOnOffQueryRun result;
+    result.CounterBefore = readCounter();
+    result.Off = runQuery(false);
+    result.CounterAfterOff = readCounter();
+    result.On = runQuery(true);
+    result.CounterAfterOn = readCounter();
+    return result;
+}
+
+template <typename TRunQuery>
+TOnOffQueryRun RunForcedDistinctOnOff(TKikimrRunner& kikimr, TRunQuery&& runQuery) {
+    return RunOnOffWithCounter(
+        [&kikimr] { return ReadDistinctLimitSyncPointInvocations(kikimr); },
+        std::forward<TRunQuery>(runQuery));
+}
+
+template <typename TRunQuery>
+TOnOffQueryRun RunDictionaryOnlyOnOff(TKikimrRunner& kikimr, TRunQuery&& runQuery) {
+    return RunOnOffWithCounter(
+        [&kikimr] { return ReadDictionaryOnlyOptimizations(kikimr); },
+        std::forward<TRunQuery>(runQuery));
+}
+
+void AssertOnOffSameResult(
+    const TOnOffQueryRun& run,
+    const ui64 expectedRows,
+    const TString& message,
+    const ECounterOnForce counterOnForce = ECounterOnForce::MustGrow,
+    const TStringBuf counterGrowMessage = "DistinctLimit sync point expected with force",
+    const bool unordered = true)
+{
+    UNIT_ASSERT_VALUES_EQUAL(run.CounterAfterOff, run.CounterBefore);
+    if (counterOnForce == ECounterOnForce::MustGrow) {
+        UNIT_ASSERT_C(run.CounterAfterOn > run.CounterAfterOff,
+            TStringBuilder() << counterGrowMessage << "; before=" << run.CounterBefore
+                             << " after_off=" << run.CounterAfterOff << " after_on=" << run.CounterAfterOn);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(run.CounterAfterOn, run.CounterAfterOff);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(run.Off.RowsCount, expectedRows);
+    UNIT_ASSERT_VALUES_EQUAL(run.On.RowsCount, expectedRows);
+    if (unordered) {
+        CompareYsonUnordered(run.Off.ResultSetYson, run.On.ResultSetYson, message);
+    } else {
+        CompareYson(run.Off.ResultSetYson, run.On.ResultSetYson, message);
+    }
+}
+
 void CheckDistinctLimitPastPkOrderedDuplicateRun(const TString& readerClass) {
     auto settings = TKikimrSettings().SetWithSampleTables(false);
     if (!readerClass.empty()) {
@@ -430,20 +494,19 @@ void CheckDistinctLimitPastPkOrderedDuplicateRun(const TString& readerClass) {
     auto tableClient = kikimr.GetTableClient();
     constexpr ui64 kLimit = 5;
     const TString tablePath = "/Root/olapStore/olapTable";
-    const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-    auto resOff = RunDistinctScanQuery(tableClient, tablePath, false, "resource_id", "resource_id", {}, {}, kLimit);
-    const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-    auto resOn = RunDistinctScanQuery(tableClient, tablePath, true, "resource_id", "resource_id", {}, {}, kLimit);
-    const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+    auto run = RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+        return RunDistinctScanQuery(tableClient, tablePath, withForce, "resource_id", "resource_id", {}, {}, kLimit);
+    });
 
-    UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-    UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+    UNIT_ASSERT_VALUES_EQUAL(run.CounterAfterOff, run.CounterBefore);
+    UNIT_ASSERT_C(run.CounterAfterOn > run.CounterAfterOff,
         TStringBuilder() << "DistinctLimit sync point expected with force; reader=" << readerClass
-                         << " before=" << syncBefore << " after_off=" << syncAfterOff << " after_on=" << syncAfterOn);
-    UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kLimit);
-    UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kLimit);
+                         << " before=" << run.CounterBefore << " after_off=" << run.CounterAfterOff
+                         << " after_on=" << run.CounterAfterOn);
+    UNIT_ASSERT_VALUES_EQUAL(run.Off.RowsCount, kLimit);
+    UNIT_ASSERT_VALUES_EQUAL(run.On.RowsCount, kLimit);
     // Without ORDER BY the two engines may pick different keys; force-on must not stop after the duplicate run.
-    UNIT_ASSERT_C(resOn.ResultSetYson.find("run_a") != TString::npos, resOn.ResultSetYson);
+    UNIT_ASSERT_C(run.On.ResultSetYson.find("run_a") != TString::npos, run.On.ResultSetYson);
 }
 
 void AssertQueryPlanContains(
@@ -757,21 +820,12 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         auto tableClient = kikimr.GetTableClient();
 
         constexpr ui64 kCap = 100;
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false, kCap);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true, kCap);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(
-            syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 100);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 100);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "distinct results differ with pushdown on/off");
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", withForce, kCap);
+            }),
+            100,
+            "distinct results differ with pushdown on/off");
     }
 
     Y_UNIT_TEST(OneShard_WithDuplicates_DistinctOnOff_SameResult_UniqueCount) {
@@ -786,20 +840,12 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kCap = 10;
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false, kCap);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true, kCap);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "distinct results differ with pushdown on/off");
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", withForce, kCap);
+            }),
+            10,
+            "distinct results differ with pushdown on/off");
     }
 
     Y_UNIT_TEST(TwoShards_HalfRowsPerShard_DistinctOnOff_SameResult_AllRowsReturned) {
@@ -831,20 +877,12 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         auto tableClient = kikimr.GetTableClient();
 
         constexpr ui64 kCap = 100;
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false, kCap);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true, kCap);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 100);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 100);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "distinct results differ with pushdown on/off");
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", withForce, kCap);
+            }),
+            100,
+            "distinct results differ with pushdown on/off");
     }
 
     Y_UNIT_TEST(TwoShards_DuplicatesAcrossShards_DistinctOnOff_SameResult_KqpMerges) {
@@ -884,20 +922,12 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kCap = 80;
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", false, kCap);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", true, kCap);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 80);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 80);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "distinct results differ with pushdown on/off");
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunDistinctQuery(tableClient, "/Root/olapStore/olapTable", withForce, kCap);
+            }),
+            80,
+            "distinct results differ with pushdown on/off");
     }
 
     Y_UNIT_TEST(OneShard_WithDuplicates_DistinctOnOff_LimitBelowUniques_SameResult) {
@@ -951,23 +981,16 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kCap = 10;
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", {},
-            "ORDER BY resource_id", kCap);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", {},
-            "ORDER BY resource_id", kCap);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10);
-        CompareYson(resOff.ResultSetYson, resOn.ResultSetYson,
-            "ORDER BY (full distinct set): row order must match with OLAP distinct pushdown on/off");
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, "resource_id", "resource_id", {},
+                    "ORDER BY resource_id", kCap);
+            }),
+            10,
+            "ORDER BY (full distinct set): row order must match with OLAP distinct pushdown on/off",
+            ECounterOnForce::MustGrow,
+            "DistinctLimit sync point expected with force",
+            /*unordered=*/false);
     }
 
     Y_UNIT_TEST(TwoShards_DuplicatesAcrossShards_DistinctOnOff_Limit_SameResult) {
@@ -1046,20 +1069,12 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kDistinctCap = 5;
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "level", "`level`", where, {}, kDistinctCap);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "level", "`level`", where, {}, kDistinctCap);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 5);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 5);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "distinct+pk-prefix where results differ with pushdown on/off");
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, "level", "`level`", where, {}, kDistinctCap);
+            }),
+            5,
+            "distinct+pk-prefix where results differ with pushdown on/off");
 
         constexpr ui64 kLimit = 3;
         auto resL = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "level", "`level`", where, "ORDER BY `level`", kLimit);
@@ -1082,22 +1097,12 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             << ") AND `timestamp` <= DateTime::FromMicroseconds(" << ts[9] << ")";
 
         constexpr ui64 kHighLimit = 1000;
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", where, {}, kHighLimit);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", where, {}, kHighLimit);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunDistinctScanQuery(
+                    tableClient, "/Root/olapStore/olapTable", withForce, "resource_id", "resource_id", where, {}, kHighLimit);
+            }),
+            10u,
             "WHERE subset + high SQL LIMIT: distinct pushdown must match plain (robust limit path)");
     }
 
@@ -1117,26 +1122,12 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         constexpr ui64 kLimit = 50;
         const i64 predicateBefore = ReadPredicateFilterInvocations(kikimr);
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", where, {}, kLimit);
-        const i64 predicateAfterOff = ReadPredicateFilterInvocations(kikimr);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", where, {}, kLimit);
-        const i64 predicateAfterOn = ReadPredicateFilterInvocations(kikimr);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(predicateAfterOff, predicateBefore);
-        UNIT_ASSERT_VALUES_EQUAL(predicateAfterOn, predicateBefore);
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kLimit);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kLimit);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+        auto run = RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+            return RunDistinctScanQuery(
+                tableClient, "/Root/olapStore/olapTable", withForce, "resource_id", "resource_id", where, {}, kLimit);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ReadPredicateFilterInvocations(kikimr), predicateBefore);
+        AssertOnOffSameResult(run, kLimit,
             "WHERE full portion: all distinct values, no row-level PK filter at reader");
     }
 
@@ -1157,27 +1148,15 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         constexpr ui64 kLimit = 10;
         const i64 predicateBefore = ReadPredicateFilterInvocations(kikimr);
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", where, {}, kLimit);
-        const i64 predicateAfterOff = ReadPredicateFilterInvocations(kikimr);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", where, {}, kLimit);
-        const i64 predicateAfterOn = ReadPredicateFilterInvocations(kikimr);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_C(predicateAfterOn > predicateBefore,
+        auto run = RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+            return RunDistinctScanQuery(
+                tableClient, "/Root/olapStore/olapTable", withForce, "resource_id", "resource_id", where, {}, kLimit);
+        });
+        const i64 predicateAfter = ReadPredicateFilterInvocations(kikimr);
+        UNIT_ASSERT_C(predicateAfter > predicateBefore,
             TStringBuilder() << "Partial PK range must run TPredicateFilter; before=" << predicateBefore
-                             << " after_off=" << predicateAfterOff << " after_on=" << predicateAfterOn);
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kLimit);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kLimit);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+                             << " after=" << predicateAfter);
+        AssertOnOffSameResult(run, kLimit,
             "WHERE partial portion + low distinct limit: pushdown must match plain DISTINCT");
     }
 
@@ -1201,25 +1180,14 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         constexpr ui64 kLimit = 10;
         const i64 predicateBefore = ReadPredicateFilterInvocations(kikimr);
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, where, kLimit);
-        const i64 predicateAfterOff = ReadPredicateFilterInvocations(kikimr);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, where, kLimit);
-        const i64 predicateAfterOn = ReadPredicateFilterInvocations(kikimr);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_C(predicateAfterOn > predicateBefore,
+        auto run = RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+            return RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, where, kLimit);
+        });
+        const i64 predicateAfter = ReadPredicateFilterInvocations(kikimr);
+        UNIT_ASSERT_C(predicateAfter > predicateBefore,
             TStringBuilder() << "Partial PK range must run TPredicateFilter; before=" << predicateBefore
-                             << " after_off=" << predicateAfterOff << " after_on=" << predicateAfterOn);
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kLimit);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kLimit);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+                             << " after=" << predicateAfter);
+        AssertOnOffSameResult(run, kLimit,
             "JSON_VALUE DISTINCT + WHERE partial portion + low distinct limit: pushdown must match plain");
     }
 
@@ -1239,22 +1207,13 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         constexpr TStringBuf kWhere = "WHERE level = 2";
         constexpr ui64 kLimit = 100;
 
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", TString(kWhere), {}, kLimit);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", TString(kWhere), {}, kLimit);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 2u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 2u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "non-PK filter + DISTINCT: pushdown must match plain");
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunDistinctScanQuery(
+                    tableClient, "/Root/olapStore/olapTable", withForce, "resource_id", "resource_id", TString(kWhere), {}, kLimit);
+            }),
+            2u,
+            "non-PK filter + DISTINCT: pushdown must match plain");
     }
 
     // JSON_VALUE alias DISTINCT + pushed non-PK filter + PK range.
@@ -1278,20 +1237,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             << ") AND `timestamp` <= DateTime::FromMicroseconds(" << ts[49] << ")";
         constexpr ui64 kLimit = 100;
 
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, where, kLimit);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, where, kLimit);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 2u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 2u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, where, kLimit);
+            }),
+            2u,
             "JSON_VALUE DISTINCT + non-PK filter: pushdown must match plain");
     }
 
@@ -1316,20 +1266,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         const TString where = R"(WHERE JSON_VALUE(json_payload, "$.other") = "grp_1")";
         constexpr ui64 kLimit = 100;
 
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, where, kLimit);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, where, kLimit);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 5u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 5u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, where, kLimit);
+            }),
+            5u,
             "JSON_VALUE DISTINCT + JSON_VALUE filter on the same column: pushdown must match plain");
     }
 
@@ -1374,19 +1315,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             return CollectStreamResult(it);
         };
 
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = run(false);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = run(true);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 2u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 2u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+        AssertOnOffSameResult(RunForcedDistinctOnOff(kikimr, run), 2u,
             "JSON_VALUE DISTINCT over a subselect with a column subset: pushdown must match plain");
     }
 
@@ -1421,31 +1350,24 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         constexpr ui64 kLimit = 100;
 
-        const i64 dictBefore = ReadDictionaryOnlyOptimizations(kikimr);
-        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "", kLimit);
-        const i64 dictAfterOff = ReadDictionaryOnlyOptimizations(kikimr);
-        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "", kLimit);
-        const i64 dictAfterOn = ReadDictionaryOnlyOptimizations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(dictAfterOff, dictBefore);
-        UNIT_ASSERT_C(dictAfterOn > dictAfterOff,
-            TStringBuilder() << "dictionary-only fetch expected for DISTINCT over a dictionary sub-column; before=" << dictBefore
-                             << " after_off=" << dictAfterOff << " after_on=" << dictAfterOn);
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
-            "JSON_VALUE DISTINCT over a dictionary sub-column: pushdown must match plain");
+        AssertOnOffSameResult(
+            RunDictionaryOnlyOnOff(kikimr, [&](bool withForce) {
+                return RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, "", kLimit);
+            }),
+            10u,
+            "JSON_VALUE DISTINCT over a dictionary sub-column: pushdown must match plain",
+            ECounterOnForce::MustGrow,
+            "dictionary-only fetch expected for DISTINCT over a dictionary sub-column");
 
         // Filter on another path of the same JSON column: rows are needed, dictionary-only must stay off.
         const TString where = R"(WHERE JSON_VALUE(json_payload, "$.other") = "grp_1")";
-        const i64 dictBeforeFiltered = ReadDictionaryOnlyOptimizations(kikimr);
-        auto resOffFiltered = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, where, kLimit);
-        auto resOnFiltered = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, where, kLimit);
-        UNIT_ASSERT_VALUES_EQUAL(ReadDictionaryOnlyOptimizations(kikimr), dictBeforeFiltered);
-        UNIT_ASSERT_VALUES_EQUAL(resOffFiltered.RowsCount, 5u);
-        UNIT_ASSERT_VALUES_EQUAL(resOnFiltered.RowsCount, 5u);
-        CompareYsonUnordered(resOffFiltered.ResultSetYson, resOnFiltered.ResultSetYson,
-            "JSON_VALUE DISTINCT over a dictionary sub-column + JSON filter: pushdown must match plain");
+        AssertOnOffSameResult(
+            RunDictionaryOnlyOnOff(kikimr, [&](bool withForce) {
+                return RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, where, kLimit);
+            }),
+            5u,
+            "JSON_VALUE DISTINCT over a dictionary sub-column + JSON filter: pushdown must match plain",
+            ECounterOnForce::MustStay);
     }
 
     // Same as DictionarySubColumn, but the JSON column is stored with dense dictionary encoding.
@@ -1477,30 +1399,23 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         constexpr ui64 kLimit = 100;
 
-        const i64 dictBefore = ReadDictionaryOnlyOptimizations(kikimr);
-        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "", kLimit);
-        const i64 dictAfterOff = ReadDictionaryOnlyOptimizations(kikimr);
-        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "", kLimit);
-        const i64 dictAfterOn = ReadDictionaryOnlyOptimizations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(dictAfterOff, dictBefore);
-        UNIT_ASSERT_C(dictAfterOn > dictAfterOff,
-            TStringBuilder() << "dictionary-only fetch expected for DISTINCT over a dense dictionary sub-column; before=" << dictBefore
-                             << " after_off=" << dictAfterOff << " after_on=" << dictAfterOn);
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
-            "JSON_VALUE DISTINCT over a dense dictionary sub-column: pushdown must match plain");
+        AssertOnOffSameResult(
+            RunDictionaryOnlyOnOff(kikimr, [&](bool withForce) {
+                return RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, "", kLimit);
+            }),
+            10u,
+            "JSON_VALUE DISTINCT over a dense dictionary sub-column: pushdown must match plain",
+            ECounterOnForce::MustGrow,
+            "dictionary-only fetch expected for DISTINCT over a dense dictionary sub-column");
 
         const TString where = R"(WHERE JSON_VALUE(json_payload, "$.other") = "grp_1")";
-        const i64 dictBeforeFiltered = ReadDictionaryOnlyOptimizations(kikimr);
-        auto resOffFiltered = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, where, kLimit);
-        auto resOnFiltered = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, where, kLimit);
-        UNIT_ASSERT_VALUES_EQUAL(ReadDictionaryOnlyOptimizations(kikimr), dictBeforeFiltered);
-        UNIT_ASSERT_VALUES_EQUAL(resOffFiltered.RowsCount, 5u);
-        UNIT_ASSERT_VALUES_EQUAL(resOnFiltered.RowsCount, 5u);
-        CompareYsonUnordered(resOffFiltered.ResultSetYson, resOnFiltered.ResultSetYson,
-            "JSON_VALUE DISTINCT over a dense dictionary sub-column + JSON filter: pushdown must match plain");
+        AssertOnOffSameResult(
+            RunDictionaryOnlyOnOff(kikimr, [&](bool withForce) {
+                return RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, where, kLimit);
+            }),
+            5u,
+            "JSON_VALUE DISTINCT over a dense dictionary sub-column + JSON filter: pushdown must match plain",
+            ECounterOnForce::MustStay);
     }
 
     // JSON_VALUE of an absent path and of JSON null both become SQL NULL; DISTINCT must keep a single NULL.
@@ -1521,19 +1436,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kLimit = 100;
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "", kLimit);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "", kLimit);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 3u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 3u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, "", kLimit);
+            }),
+            3u,
             "JSON_VALUE DISTINCT with missing path and JSON null: force on/off must match (single NULL)");
     }
 
@@ -1564,20 +1471,14 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             "/Root/olapStore/olapTable", BuildBatchForRowsWithJsonPayload(ts, rids, jsonPayloads, "u"));
 
         constexpr ui64 kLimit = 100;
-        const i64 dictBefore = ReadDictionaryOnlyOptimizations(kikimr);
-        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "", kLimit);
-        const i64 dictAfterOff = ReadDictionaryOnlyOptimizations(kikimr);
-        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "", kLimit);
-        const i64 dictAfterOn = ReadDictionaryOnlyOptimizations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(dictAfterOff, dictBefore);
-        UNIT_ASSERT_C(dictAfterOn > dictAfterOff,
-            TStringBuilder() << "dictionary-only fetch expected for DISTINCT over a sparse dictionary sub-column; before="
-                             << dictBefore << " after_off=" << dictAfterOff << " after_on=" << dictAfterOn);
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 3u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 3u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
-            "JSON_VALUE DISTINCT over a dictionary sub-column with missing path: NULL must appear once");
+        AssertOnOffSameResult(
+            RunDictionaryOnlyOnOff(kikimr, [&](bool withForce) {
+                return RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, "", kLimit);
+            }),
+            3u,
+            "JSON_VALUE DISTINCT over a dictionary sub-column with missing path: NULL must appear once",
+            ECounterOnForce::MustGrow,
+            "dictionary-only fetch expected for DISTINCT over a sparse dictionary sub-column");
     }
 
     // Same missing-path NULL as DictionarySubColumn, with dense dictionary encoding.
@@ -1608,20 +1509,14 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             "/Root/olapStore/olapTable", BuildBatchForRowsWithJsonPayload(ts, rids, jsonPayloads, "u"));
 
         constexpr ui64 kLimit = 100;
-        const i64 dictBefore = ReadDictionaryOnlyOptimizations(kikimr);
-        auto resOff = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "", kLimit);
-        const i64 dictAfterOff = ReadDictionaryOnlyOptimizations(kikimr);
-        auto resOn = RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "", kLimit);
-        const i64 dictAfterOn = ReadDictionaryOnlyOptimizations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(dictAfterOff, dictBefore);
-        UNIT_ASSERT_C(dictAfterOn > dictAfterOff,
-            TStringBuilder() << "dictionary-only fetch expected for DISTINCT over a dense sparse sub-column; before="
-                             << dictBefore << " after_off=" << dictAfterOff << " after_on=" << dictAfterOn);
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 3u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 3u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
-            "JSON_VALUE DISTINCT over a dense dictionary sub-column with missing path: NULL must appear once");
+        AssertOnOffSameResult(
+            RunDictionaryOnlyOnOff(kikimr, [&](bool withForce) {
+                return RunJsonValueDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", withForce, "", kLimit);
+            }),
+            3u,
+            "JSON_VALUE DISTINCT over a dense dictionary sub-column with missing path: NULL must appear once",
+            ECounterOnForce::MustGrow,
+            "dictionary-only fetch expected for DISTINCT over a dense sparse sub-column");
     }
 
     // No matching rows: SYNC_DISTINCT_LIMIT must forward empty stages without breaking the scan pipeline.
@@ -1673,22 +1568,12 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kCap = 10;
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", false, "level", "`level`", {}, {}, kCap);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", true, "level", "`level`", {}, {}, kCap);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 3u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 3u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunDistinctScanQuery(
+                    tableClient, "/Root/olapStore/olapTable", withForce, "level", "`level`", {}, {}, kCap);
+            }),
+            3u,
             "nullable level DISTINCT: force distinct on/off must match (NULL is one distinct value)");
     }
 
@@ -1731,22 +1616,12 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kCap = 50;
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", false, "timestamp", "`timestamp`", {}, {}, kCap);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctScanQuery(
-            tableClient, "/Root/olapStore/olapTable", true, "timestamp", "`timestamp`", {}, {}, kCap);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kCap);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kCap);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunDistinctScanQuery(
+                    tableClient, "/Root/olapStore/olapTable", withForce, "timestamp", "`timestamp`", {}, {}, kCap);
+            }),
+            kCap,
             "DISTINCT timestamp: force distinct on/off must match");
     }
 
@@ -1768,20 +1643,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kCap = 100;
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOff = RunDistinctQuery(tableClient, tablePath, false, kCap);
-        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto resOn = RunDistinctQuery(tableClient, tablePath, true, kCap);
-        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
-
-        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
-        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
-            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
-                             << " after_on=" << syncAfterOn);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10u);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10u);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                return RunDistinctQuery(tableClient, tablePath, withForce, kCap);
+            }),
+            10u,
             "multi-insert DISTINCT (10 uniques): force distinct on/off must match");
     }
 
@@ -1820,21 +1686,15 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         AssertQueryPlanNotContains(tableClient, qOn, "KqpOlapDistinct");
 
-        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
-        auto itOff = tableClient.StreamExecuteScanQuery(qOff).GetValueSync();
-        UNIT_ASSERT_C(itOff.IsSuccess(), itOff.GetIssues().ToString());
-        auto resOff = CollectStreamResult(itOff);
-
-        auto itOn = tableClient.StreamExecuteScanQuery(qOn).GetValueSync();
-        UNIT_ASSERT_C(itOn.IsSuccess(), itOn.GetIssues().ToString());
-        auto resOn = CollectStreamResult(itOn);
-        const i64 syncAfter = ReadDistinctLimitSyncPointInvocations(kikimr);
-        UNIT_ASSERT_VALUES_EQUAL(syncAfter, syncBefore);
-
-        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kCap);
-        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kCap);
-        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
-            "DISTINCT level with agg+force pragmas: force pragma on/off must match");
+        AssertOnOffSameResult(
+            RunForcedDistinctOnOff(kikimr, [&](bool withForce) {
+                auto it = tableClient.StreamExecuteScanQuery(withForce ? TString(qOn) : TString(qOff)).GetValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                return CollectStreamResult(it);
+            }),
+            kCap,
+            "DISTINCT level with agg+force pragmas: force pragma on/off must match",
+            ECounterOnForce::MustStay);
     }
 }
 

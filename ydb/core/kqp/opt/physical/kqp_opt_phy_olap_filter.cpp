@@ -981,7 +981,7 @@ bool CollectOlapOperationForAliasProjection(const TCoAtom& aliasAtom, const TExp
         return false;
     }
     const TString alias(aliasAtom.StringValue());
-    if (alias.empty() || alias.StartsWith("__kqp_olap_projection") || alias.Contains('.')) {
+    if (alias.empty() || alias.StartsWith(KqpOlapProjectionNamePrefix) || alias.Contains('.')) {
         return false;
     }
     const TString sourceColumn(maybeMember.Cast().Name().StringValue());
@@ -1035,10 +1035,13 @@ bool CollectOlapOperationForProjection(TExprNode::TPtr input, const TExprNode& a
             if (!predicateMembers.contains(originalMemberName)) {
                 if (projectionMembers.contains(originalMemberName)) {
                     if (pushdownOptions.StripAliasPrefixFromColName && HasAlias(originalMemberName)) {
-                        originalMemberName = GetAlias(originalMemberName) + "." + "__kqp_olap_projection_" + GetOlapColumnName(originalMemberName, /*stripAlias=*/true) +
-                                             ToString(nextMemberId++);
+                        originalMemberName = TStringBuilder() << GetAlias(originalMemberName) << "."
+                            << KqpOlapProjectionNamePrefix << "_"
+                            << GetOlapColumnName(originalMemberName, /*stripAlias=*/true)
+                            << ToString(nextMemberId++);
                     } else {
-                        originalMemberName = "__kqp_olap_projection_" + originalMemberName + ToString(nextMemberId++);
+                        originalMemberName = TStringBuilder() << KqpOlapProjectionNamePrefix << "_"
+                            << originalMemberName << ToString(nextMemberId++);
                     }
                 } else {
                     projectionMembers.insert(originalMemberName);
@@ -1254,7 +1257,7 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
             TVector<TExprNode::TPtr> keepMembers;
             THashSet<TString> keepNames;
             for (const auto* item : rowType->GetItems()) {
-                if (neededStoredColumns->contains(TString(item->GetName())) && keepNames.insert(TString(item->GetName())).second) {
+                if (neededStoredColumns->contains(item->GetName()) && keepNames.insert(TString(item->GetName())).second) {
                     keepMembers.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
                 }
             }

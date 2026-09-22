@@ -352,7 +352,7 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     pDiskInfo->ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
     info->SetExpectedSlotCount(slotCount);
     info->SetExpectedSlotSize(pDiskInfo->GetEffectiveExpectedSlotSize());
-    info->SetNumActiveSlots(pDiskInfo->NumActiveSlots + pDiskInfo->StaticSlotUsage);
+    info->SetNumActiveSlots(pDiskInfo->NumActiveDynamicSlots + pDiskInfo->StaticSlotUsage);
     info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
     info->SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::E_Name(pDiskInfo->MaintenanceStatus));
     info->SetSlotSizeInUnits(slotSizeInUnits);

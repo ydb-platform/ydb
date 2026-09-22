@@ -674,7 +674,7 @@ namespace NKikimr {
                     pdisk.PDiskId = id;
                     pdisk.Location = State.HostRecords->GetLocation(id.NodeId);
                     pdisk.Usable = usable;
-                    pdisk.NumActiveSlots = info.NumActiveSlots + info.StaticSlotUsage;
+                    pdisk.NumActiveSlots = info.NumActiveDynamicSlots + info.StaticSlotUsage;
                     info.ExtractInferredPDiskSettings(pdisk.ExpectedSlotCount, pdisk.SlotSizeInUnits);
                     pdisk.SlotSizeInBytes = info.GetEffectiveExpectedSlotSize();
                     pdisk.Space = TGroupMapper::CapturePDiskSpace(info.Metrics);

@@ -72,7 +72,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
             Group = group;
             group->AddVSlot(this);
         }
-        pdisk->NumActiveSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
+        pdisk->NumActiveDynamicSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
     }
 }
 
@@ -182,7 +182,7 @@ bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGr
         if (metrics.HasEnforcedDynamicSlotSize()) {
             vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
         } else if (metrics.GetTotalSize()) {
-            const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->NumActiveSlots;
+            const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->NumActiveDynamicSlots;
             vdiskSlotSize = metrics.GetTotalSize() / shareFactor * weight;
         }
         if (vdiskSlotSize) {
@@ -902,17 +902,17 @@ void TBlobStorageController::ValidateInternalState() {
     // here we compare different structures to ensure that the memory state is sane
 #ifndef NDEBUG
     for (const auto& [pdiskId, pdisk] : PDisks) {
-        ui32 numActiveSlots = 0;
+        ui32 numActiveDynamicSlots = 0;
         for (const auto& [vslotId, vslot] : pdisk->VSlotsOnPDisk) {
             Y_ABORT_UNLESS(vslot == FindVSlot(TVSlotId(pdiskId, vslotId)));
             Y_ABORT_UNLESS(vslot->PDisk == pdisk.Get());
             if (!vslot->IsBeingDeleted()) {
                 const TGroupInfo* group = FindGroup(vslot->GroupId);
                 Y_ABORT_UNLESS(group);
-                numActiveSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
+                numActiveDynamicSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
             }
         }
-        Y_ABORT_UNLESS(pdisk->NumActiveSlots == numActiveSlots);
+        Y_ABORT_UNLESS(pdisk->NumActiveDynamicSlots == numActiveDynamicSlots);
     }
     for (const auto& [vslotId, vslot] : VSlots) {
         Y_ABORT_UNLESS(vslot->VSlotId == vslotId);

@@ -441,42 +441,33 @@ bool TDiscoveryConverter::BuildFromShortModernName() {
 
 bool TDiscoveryConverter::BuildFromLegacyName(const TString& rootPrefix, bool forceFullName) {
     TStringBuf topic (OriginalTopic);
-    bool hasDcInName = topic.Contains("rt3.");
+    if (topic.StartsWith("rt3.")) {
+        CHECK_SET_VALID(false, "Topic names with 'rt3.' prefix are not supported", return false);
+    }
     TStringBuf fst, snd;
     Account_ = Nothing(); //Account must be parsed out of legacy topic name
     TString shortLegacyName, fullLegacyName;
     if (forceFullName) {
-        CHECK_SET_VALID(hasDcInName,
+        CHECK_SET_VALID(false,
                         TStringBuilder() << "Invalid topic name - " << OriginalTopic
-                                         << " - expected legacy-style name like rt3.<dc>--<account>--<topic>",
+                                         << " - legacy-style names with an 'rt3.' prefix are not supported",
                         return false);
     }
-    if (Dc.empty() && !hasDcInName) {
+    if (Dc.empty()) {
         CHECK_SET_VALID(!FstClass, TStringBuilder() << "Internal error: FirstClass mode enabled, but trying to parse Legacy-style name: "
                                                     << OriginalTopic, return false;);
         CHECK_SET_VALID(!LocalDc.empty(),
-                        "Cannot determine DC: should specify either in topic name, Dc option or LocalDc option",
+                        "Cannot determine DC: should specify either with Dc option or LocalDc option",
                         return false);
 
         Dc = LocalDc;
     }
 
-    if (hasDcInName) {
-        fullLegacyName = topic;
-        auto res = topic.SkipPrefix("rt3.");
-        CHECK_SET_VALID(res, "Malformed full legacy topic name", return false);
-        res = topic.TrySplit("--", fst, snd);
-        CHECK_SET_VALID(res, "Malformed legacy style topic name: contains 'rt3.', but no '--'.", return false);
-        CHECK_SET_VALID(Dc.empty() || Dc == fst, "DC specified both in topic name and separate option and they mismatch", return false);
-        Dc = fst;
-        topic = snd;
-    } else {
-        CHECK_SET_VALID(!Dc.empty(), TStringBuilder() << "Internal error: Could not determine DC (despite beleiving the name contins one) for topic "
-                                                    << OriginalTopic, return false;);
-        TStringBuilder builder;
-        builder << "rt3." << Dc << "--" << topic;
-        fullLegacyName = builder;
-    }
+    CHECK_SET_VALID(!Dc.empty(), TStringBuilder() << "Internal error: Could not determine DC for topic "
+                                                << OriginalTopic, return false;);
+    TStringBuilder builder;
+    builder << "rt3." << Dc << "--" << topic;
+    fullLegacyName = builder;
     // Now topic is supposed to contain short legacy style name ('topic' OR 'account--topic' OR 'account@dir--topic');
     shortLegacyName = topic;
     TStringBuilder modernName, fullModernName;

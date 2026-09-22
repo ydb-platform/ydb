@@ -446,40 +446,27 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
     }
 
     Y_UNIT_TEST(LegacyRt3ResolvedUnderFederationRoot) {
-        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& request, TNavigate::TEntry& entry) {
-            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root/Federation/account");
-            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic");
-            FillOkTopic(entry, /*balancerTabletId=*/11);
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& /*entry*/) {
+            UNIT_FAIL("scheme cache must not be called for an rt3. name");
         });
         env.EnableFederationRoot("/Root/Federation");
-
-        UNIT_ASSERT(!env.Runtime.GetAppData().PQConfig.GetTopicsAreFirstClassCitizen());
-        UNIT_ASSERT_VALUES_EQUAL(
-            env.Runtime.GetAppData().PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot(),
-            "/Root/Federation");
 
         env.StartDescribe({"rt3.dc1--account--topic"});
         auto ev = env.WaitResponse();
 
-        UNIT_ASSERT(ev->Topics.contains("rt3.dc1--account--topic"));
-        auto& info = ev->Topics["rt3.dc1--account--topic"];
-        UNIT_ASSERT_VALUES_EQUAL(info.Status, NDescriber::EStatus::Success);
-        UNIT_ASSERT_VALUES_EQUAL(info.RealPath, "/Root/Federation/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].Status, NDescriber::EStatus::BadRequest);
     }
 
-    Y_UNIT_TEST(LegacyRt3RemoteDcWithoutLocalDcSkipsMirror) {
-        // Empty localDc/dc in ResolveName → no -mirrored-from- suffix.
-        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& entry) {
-            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/topic");
-            FillOkTopic(entry, /*balancerTabletId=*/12);
+    Y_UNIT_TEST(LegacyRt3RemoteDcRejected) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& /*entry*/) {
+            UNIT_FAIL("scheme cache must not be called for an rt3. name");
         });
         env.EnableFederationRoot("/Root/Federation");
 
         env.StartDescribe({"rt3.dc2--account--topic"});
         auto ev = env.WaitResponse();
 
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc2--account--topic"].Status, NDescriber::EStatus::Success);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc2--account--topic"].RealPath, "/Root/Federation/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc2--account--topic"].Status, NDescriber::EStatus::BadRequest);
     }
 
     Y_UNIT_TEST(LegacyShortNameResolved) {
@@ -496,29 +483,16 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account--topic"].RealPath, "/Root/Federation/account/topic");
     }
 
-    Y_UNIT_TEST(LegacyRt3CdcResolved) {
-        TDescribeEnv env([](ui32 requestIndex, TNavigate& request, TNavigate::TEntry& entry) {
-            UNIT_ASSERT_VALUES_EQUAL(request.DatabaseName, "/Root/Federation/account");
-            if (requestIndex == 0) {
-                UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/table1/feed");
-                FillCdcStream(entry, "feed");
-                return;
-            }
-            UNIT_ASSERT_VALUES_EQUAL(EntryPath(entry), "/Root/Federation/account/table1/feed/streamImpl");
-            FillOkTopic(entry, /*balancerTabletId=*/14);
+    Y_UNIT_TEST(LegacyRt3CdcRejected) {
+        TDescribeEnv env([](ui32 /*requestIndex*/, TNavigate& /*request*/, TNavigate::TEntry& /*entry*/) {
+            UNIT_FAIL("scheme cache must not be called for an rt3. name");
         });
         env.EnableFederationRoot("/Root/Federation");
 
-        // Nested path in legacy form: @ → /
         env.StartDescribe({"rt3.dc1--account@table1--feed"});
         auto ev = env.WaitResponse();
 
-        UNIT_ASSERT(ev->Topics.contains("rt3.dc1--account@table1--feed"));
-        auto& info = ev->Topics["rt3.dc1--account@table1--feed"];
-        UNIT_ASSERT_VALUES_EQUAL(info.Status, NDescriber::EStatus::Success);
-        UNIT_ASSERT(info.CdcStream);
-        UNIT_ASSERT_VALUES_EQUAL(info.CdcStreamName, "feed");
-        UNIT_ASSERT_VALUES_EQUAL(info.RealPath, "/Root/Federation/account/table1/feed/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account@table1--feed"].Status, NDescriber::EStatus::BadRequest);
     }
 
     Y_UNIT_TEST(LegacyNameResolveBadRequest) {
@@ -563,15 +537,15 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         });
         env.EnableFederationRoot("/Root/Federation");
 
-        env.StartDescribe({"rt3.dc1--account--topic", "account--topic"});
+        env.StartDescribe({"account--topic", "account/topic"});
         auto ev = env.WaitResponse();
 
         UNIT_ASSERT_VALUES_EQUAL(navigateCalls, 1u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account--topic"].Status, NDescriber::EStatus::Success);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].RealPath, "/Root/Federation/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/topic"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account--topic"].RealPath, "/Root/Federation/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/topic"].RealPath, "/Root/Federation/account/topic");
     }
 
     Y_UNIT_TEST(MultipleOriginalsFederationNavigate) {
@@ -588,14 +562,14 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         });
         env.EnableFederationRoot("/Root/Federation");
 
-        env.StartDescribe({"rt3.dc1--account--topic", "account/topic"});
+        env.StartDescribe({"account--topic", "account/topic"});
         auto ev = env.WaitResponse();
 
         UNIT_ASSERT(ev->UsedSyncVersion);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].Status, NDescriber::EStatus::Success);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account--topic"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/topic"].Status, NDescriber::EStatus::Success);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].RealPath, "/Root/Federation/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account--topic"].RealPath, "/Root/Federation/account/topic");
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account/topic"].RealPath, "/Root/Federation/account/topic");
     }
 
@@ -613,11 +587,11 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         });
         env.EnableFederationRoot("/Root/Federation");
 
-        env.StartDescribe({"rt3.dc1--account@table1--feed", "account/table1/feed"});
+        env.StartDescribe({"account@table1--feed", "account/table1/feed"});
         auto ev = env.WaitResponse();
 
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics.size(), 2u);
-        for (const auto* key : {"rt3.dc1--account@table1--feed", "account/table1/feed"}) {
+        for (const auto* key : {"account@table1--feed", "account/table1/feed"}) {
             auto& info = ev->Topics[key];
             UNIT_ASSERT_VALUES_EQUAL(info.Status, NDescriber::EStatus::Success);
             UNIT_ASSERT(info.CdcStream);
@@ -635,13 +609,13 @@ Y_UNIT_TEST_SUITE(TDescriberFakeSchemeCacheTests) {
         });
         env.EnableFederationRoot("/Root/Federation");
 
-        env.StartDescribe({"rt3.bad", "rt3.dc1--account--topic"});
+        env.StartDescribe({"rt3.bad", "account--topic"});
         auto ev = env.WaitResponse();
 
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.bad"].Status, NDescriber::EStatus::BadRequest);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].Status, NDescriber::EStatus::Success);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["rt3.dc1--account--topic"].RealPath, "/Root/Federation/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account--topic"].Status, NDescriber::EStatus::Success);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["account--topic"].RealPath, "/Root/Federation/account/topic");
     }
 
     Y_UNIT_TEST(OnlyBadRequestSkipsSchemeCache) {

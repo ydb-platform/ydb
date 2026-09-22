@@ -1686,7 +1686,7 @@ void AsKeylessJoin(TJoinTestData& td, EJoinKind kind) {
     td.RightKeyColmns = {};
 }
 
-TJoinTestData KeylessLeftJoinCommonFilterTestData(EJoinKind kind) {
+TJoinTestData KeylessJoinCommonFilterTestData(EJoinKind kind) {
     TJoinTestData td;
     auto& setup = *td.Setup;
     TVector<ui64> leftKeys = {1, 2, 3};
@@ -1699,7 +1699,13 @@ TJoinTestData KeylessLeftJoinCommonFilterTestData(EJoinKind kind) {
     td.JoinSettings.BuildSide = EBuildSide::Right;
     AsKeylessJoin(td, kind);
 
-    if (kind == EJoinKind::Left) {
+    if (kind == EJoinKind::Inner) {
+        TVector<ui64> expLeftKeys = {1, 1, 2};
+        TVector<ui64> expLeftVals = {5, 5, 20};
+        TVector<ui64> expRightKeys = {10, 20, 20};
+        TVector<ui64> expRightVals = {10, 50, 50};
+        td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    } else if (kind == EJoinKind::Left) {
         TVector<ui64> expLeftKeys = {1, 1, 2, 3};
         TVector<ui64> expLeftVals = {5, 5, 20, 100};
         TVector<std::optional<ui64>> expRightKeys = {10, 20, 20, std::nullopt};
@@ -1722,7 +1728,7 @@ TJoinTestData KeylessLeftJoinCommonFilterTestData(EJoinKind kind) {
 }
 
 TJoinTestData KeylessLeftJoinCommonFilterTestDataLeftIsBuild() {
-    auto td = KeylessLeftJoinCommonFilterTestData(EJoinKind::Left);
+    auto td = KeylessJoinCommonFilterTestData(EJoinKind::Left);
     td.JoinSettings.BuildSide = EBuildSide::Left;
     return td;
 }
@@ -1759,6 +1765,12 @@ TJoinTestData TrueCrossJoinTestData() {
     td.Result =
         ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
     AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData TrueKeylessInnerJoinTestData() {
+    auto td = TrueCrossJoinTestData();
+    td.Kind = EJoinKind::Inner;
     return td;
 }
 
@@ -2795,7 +2807,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinCommonFilter, BlockJoin) {
-        Test(KeylessLeftJoinCommonFilterTestData(EJoinKind::Left), BlockJoin);
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::Left), BlockJoin);
     }
 
     Y_UNIT_TEST(TestHashKeylessLeftJoinCommonFilterLeftIsBuild) {
@@ -2803,11 +2815,11 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinCommonFilter, BlockJoin) {
-        Test(KeylessLeftJoinCommonFilterTestData(EJoinKind::LeftSemi), BlockJoin);
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::LeftSemi), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftOnlyJoinCommonFilter, BlockJoin) {
-        Test(KeylessLeftJoinCommonFilterTestData(EJoinKind::LeftOnly), BlockJoin);
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::LeftOnly), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinEmptyRight, BlockJoin) {
@@ -2828,6 +2840,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestHashKeylessLeftJoinSpillingLeftIsBuild) {
         Test(KeylessLeftJoinSpillingLeftIsBuildTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessInnerJoin, BlockJoin) {
+        Test(TrueKeylessInnerJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessInnerJoinCommonFilter, BlockJoin) {
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::Inner), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoin, BlockJoin) {

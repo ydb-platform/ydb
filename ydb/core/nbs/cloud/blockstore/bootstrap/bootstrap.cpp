@@ -93,10 +93,6 @@ void TNbsService::Stop()
     }
     VhostServer->Stop();
     Scheduler->Stop();
-    // Join NBS threads while TActorSystem is still alive. The pool used to
-    // live until static destruction, so a queued flush could log through the
-    // freed actor system (YDBBUGS-790).
-    ExecutorPool.Stop();
 }
 
 const NKikimrConfig::TNbsConfig& TNbsService::GetConfig() const
@@ -125,6 +121,26 @@ void StopNbsService()
 {
     if (NbsService) {
         NbsService->Stop();
+    }
+}
+
+void StopNbsExecutors()
+{
+    if (!NbsService) {
+        return;
+    }
+
+    // Same count the pool was built with, so the rotated vector holds each
+    // executor once. GetExecutors(0) indexes an empty pool.
+    const ui32 executorCount = NbsService->StorageConfig->GetThreadPoolSize();
+    if (executorCount == 0) {
+        return;
+    }
+
+    for (const auto& executor:
+         NbsService->ExecutorPool.GetExecutors(executorCount))
+    {
+        executor->Stop();
     }
 }
 

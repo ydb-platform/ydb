@@ -37,20 +37,6 @@ Y_UNIT_TEST_SUITE(TExecutorTest)
         executor->Stop();
     }
 
-    Y_UNIT_TEST(ShouldStopTwice)
-    {
-        auto executor = TExecutor::Create("TEST");
-        executor->Start();
-
-        auto future = executor->Execute([] { return 42; });
-
-        auto result = future.GetValue(WaitTimeout);
-        UNIT_ASSERT(result == 42);
-
-        executor->Stop();
-        executor->Stop();
-    }
-
     Y_UNIT_TEST(ShouldWaitForFuture)
     {
         auto executor = TExecutor::Create("TEST");

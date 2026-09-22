@@ -19,9 +19,6 @@ public:
 
     ~TExecutorPool();
 
-    // Stops every executor and joins its thread. A later call does nothing.
-    void Stop();
-
     [[nodiscard]] TVector<TExecutorPtr> GetExecutors(ui32 count) const;
 
 private:

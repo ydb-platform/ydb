@@ -171,14 +171,10 @@ void TExecutor::Start()
 
 void TExecutor::Stop()
 {
-    // Before Start the dispatcher does not exist yet. A second Stop must not
-    // enqueue onto the dispatcher of an already joined thread.
-    if (!Thread->Dispatcher || Stopped.exchange(true)) {
-        return;
+    if (Thread->Dispatcher) {
+        Thread->Dispatcher->Stop();
+        Thread->Join();
     }
-
-    Thread->Dispatcher->Stop();
-    Thread->Join();
 }
 
 void TExecutor::Enqueue(ITaskPtr task)

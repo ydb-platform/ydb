@@ -1781,7 +1781,7 @@ private:
 
         // The scanned table is the main table, except the compact rowid-mode posting fill, which scans
         // the row-id source table built by the prepass (see GetShardsPath).
-        GetShardsPath(buildInfo)->PathId.ToProto(ev->Record.MutablePathId());
+        GetShardsPath(Self, buildInfo)->PathId.ToProto(ev->Record.MutablePathId());
         ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
 
         if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson ||
@@ -3033,7 +3033,7 @@ private:
     bool FillIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         // for now build index impl tables don't need snapshot,
         // because they're used only by build index
-        if (!buildInfo.SnapshotTxId && GetShardsPath(buildInfo)->PathId == buildInfo.TablePathId) {
+        if (!buildInfo.SnapshotTxId && GetShardsPath(Self, buildInfo)->PathId == buildInfo.TablePathId) {
             Y_ENSURE(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
             Y_ENSURE(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
 
@@ -3681,50 +3681,6 @@ public:
         Self->Execute(Self->CreateTxProgress(buildInfo->Id), ctx);
     }
 
-    static TSerializedTableRange ParentRange(NTableIndex::NKMeans::TClusterId parent) {
-        if (parent == 0) {
-            return {};  // empty
-        }
-        auto from = TCell::Make(parent - 1);
-        auto to = TCell::Make(parent);
-        return TSerializedTableRange{{&from, 1}, false, {&to, 1}, true};
-    }
-
-    TPath GetShardsPath(TIndexBuildInfo& buildInfo) {
-        switch (buildInfo.BuildKind) {
-            case TIndexBuildInfo::EBuildKind::BuildSecondaryIndex:
-            case TIndexBuildInfo::EBuildKind::BuildColumns:
-            case TIndexBuildInfo::EBuildKind::BuildFulltext:
-                if (buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextIndexDictionary) {
-                    if (buildInfo.IsBuildFulltextCompact()) {
-                        return GetBuildPath(Self, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
-                    }
-                    return GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
-                }
-                // Compact rowid-mode: the posting fill (SubState None) scans the row-id source table;
-                // the prepass (FulltextRowIdSrc) and all other builds scan the main table.
-                if (buildInfo.SubState == TIndexBuildInfo::ESubState::None && buildInfo.IsBuildFulltextCompactRowId()) {
-                    return GetBuildPath(Self, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
-                }
-                return TPath::Init(buildInfo.TablePathId, Self);
-            case TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex:
-                return buildInfo.IsValidatingUniqueIndex()
-                    ? GetBuildPath(Self, buildInfo, NTableIndex::ImplTable)
-                    : TPath::Init(buildInfo.TablePathId, Self);
-            case TIndexBuildInfo::EBuildKind::BuildVectorIndex:
-            case TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex:
-                if (buildInfo.KMeans.Level == 1 &&
-                    buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
-                    buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders) {
-                    return TPath::Init(buildInfo.TablePathId, Self);
-                } else {
-                    return GetBuildPath(Self, buildInfo, buildInfo.KMeans.ReadFrom());
-                }
-            default:
-                Y_ENSURE(false, buildInfo.InvalidBuildKind());
-        }
-    }
-
     bool InitiateShards(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
         YDB_LOG_DEBUG(LogPrefix << "InitiateShards",
             {"buildInfo", buildInfo.DebugString()},
@@ -3735,7 +3691,7 @@ public:
         Y_ENSURE(buildInfo.InProgressShards.empty());
         Y_ENSURE(buildInfo.DoneShards.empty());
 
-        TPath path = GetShardsPath(buildInfo);
+        TPath path = GetShardsPath(Self, buildInfo);
         if (!path.IsLocked()) { // lock is needed to prevent table shards from being split
             Y_ENSURE(buildInfo.IsBuildVectorIndex() && (buildInfo.KMeans.Level > 1 ||
                 buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Filter) ||
@@ -4086,8 +4042,8 @@ public:
     virtual void UpdateLastKeyAck(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo, const TString& lastKeyAck) {
         if (!lastKeyAck.empty()) {
             if (shardStatus.LastKeyAck) {
-                //check that all LastKeyAcks are monotonously increase
-                const auto& tableInfo = *Self->Tables.at(buildInfo.TablePathId);
+                // Check that all LastKeyAcks monotonically increase
+                const auto& tableInfo = *Self->Tables.at(GetShardsPath(Self, buildInfo)->PathId);
                 std::vector<NScheme::TTypeInfo> keyTypes;
                 keyTypes.reserve(tableInfo.KeyColumnIds.size());
                 for (ui32 keyPos: tableInfo.KeyColumnIds) {

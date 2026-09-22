@@ -52,6 +52,74 @@ def test_workspace_set_from_package_json():
     ]
 
 
+def test_workspace_set_from_package_json_writes_pnpm_11_settings(tmp_path):
+    workspace_path = tmp_path / "pnpm-workspace.yaml"
+    package_json = PackageJson(path=str(tmp_path / "package.json"))
+    package_json.data = {
+        "pnpm": {
+            "overrides": {"foo": "1.0.0"},
+            "packageExtensions": {"bar": {"peerDependencies": {"baz": "2.0.0"}}},
+            "patchedDependencies": {"qux@3.0.0": "patches/qux.patch"},
+            "peerDependencyRules": {"ignoreMissing": ["react"]},
+            "onlyBuiltDependencies": ["esbuild", "sharp"],
+            "neverBuiltDependencies": ["core-js"],
+            "ignoredBuiltDependencies": ["sharp"],
+            "allowNonAppliedPatches": True,
+            "managePackageManagerVersions": False,
+            "packageManagerStrict": False,
+            "packageManagerStrictVersion": True,
+        }
+    }
+    workspace = PnpmWorkspace(path=str(workspace_path))
+
+    workspace.set_from_package_json(package_json)
+    workspace.write()
+
+    written_workspace = PnpmWorkspace.load(str(workspace_path))
+    assert written_workspace.packages == {"."}
+    assert written_workspace.settings == {
+        "overrides": {"foo": "1.0.0"},
+        "packageExtensions": {"bar": {"peerDependencies": {"baz": "2.0.0"}}},
+        "patchedDependencies": {"qux@3.0.0": "patches/qux.patch"},
+        "peerDependencyRules": {"ignoreMissing": ["react"]},
+        "allowBuilds": {"esbuild": True, "sharp": False, "core-js": False},
+        "allowUnusedPatches": True,
+        "pmOnFail": "error",
+    }
+
+
+def test_workspace_drops_settings_without_automatic_pnpm_11_migration(tmp_path):
+    package_json = PackageJson(path=str(tmp_path / "package.json"))
+    package_json.data = {
+        "pnpm": {
+            "onlyBuiltDependenciesFile": "allowed-builds.json",
+            "ignoreDepScripts": True,
+            "ignorePatchFailures": True,
+            "useNodeVersion": "22.0.0",
+            "executionEnv": {"nodeVersion": "22.0.0"},
+            "auditConfig": {"ignoreCves": ["CVE-2025-0001"]},
+        }
+    }
+    workspace = PnpmWorkspace(path=str(tmp_path / "pnpm-workspace.yaml"))
+
+    workspace.set_from_package_json(package_json)
+
+    assert workspace.settings == {}
+
+
+def test_workspace_read_write_preserves_settings(tmp_path):
+    workspace_path = tmp_path / "pnpm-workspace.yaml"
+    workspace_path.write_text("packages:\n  - .\noverrides:\n  foo: 1.0.0\n")
+
+    workspace = PnpmWorkspace.load(str(workspace_path))
+    workspace.packages.add("../bar")
+    workspace.write()
+
+    written_workspace = PnpmWorkspace.load(str(workspace_path))
+    assert written_workspace.packages == {".", "../bar"}
+    assert written_workspace.settings == {"overrides": {"foo": "1.0.0"}}
+
+
 def test_workspace_merge():
     ws1 = PnpmWorkspace(path="/packages/foo/pnpm-workspace.yaml")
     ws1.packages = set([".", "../bar", "../../another/baz"])

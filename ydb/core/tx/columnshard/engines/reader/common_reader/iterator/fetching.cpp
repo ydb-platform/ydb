@@ -163,6 +163,7 @@ void TProgramStep::ReportTracing(IDataSource& source, const NArrow::NAccessor::T
             LWTRACK(ProgramProjection, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Filter:
+        case NArrow::NSSA::EProcessorType::DistinctMarker:
             LWTRACK(ProgramFilter, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Aggregation:

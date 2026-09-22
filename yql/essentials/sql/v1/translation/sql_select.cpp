@@ -923,7 +923,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
 
     bool listCall = false;
     TSqlCallExpr call(*this);
-    bool initRet = call.Init(block5.GetRule_using_call_expr2());
+    TSQLStatus initRet = call.Init(block5.GetRule_using_call_expr2());
     if (initRet) {
         call.IncCounters();
     }
@@ -1047,7 +1047,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
 
     bool listCall = false;
     TSqlCallExpr call(*this);
-    bool initRet = call.Init(node.GetRule_using_call_expr9());
+    TSQLStatus initRet = call.Init(node.GetRule_using_call_expr9());
     if (initRet) {
         call.IncCounters();
     }
@@ -1343,7 +1343,7 @@ TSourcePtr TSqlSelect::CombineCore(const TRule_combine_core& node, const TWriteS
     Token(node.GetToken9());
 
     TSqlCallExpr call(*this);
-    bool initRet = call.Init(node.GetRule_using_call_expr10());
+    TSQLStatus initRet = call.Init(node.GetRule_using_call_expr10());
     if (!initRet) {
         return {};
     }

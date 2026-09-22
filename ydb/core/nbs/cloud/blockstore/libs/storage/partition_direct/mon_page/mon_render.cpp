@@ -981,6 +981,34 @@ void RenderLatencyDetailTable(
     str << "</tbody></table></div>";   // latDetailBody
 }
 
+// Disk-wide in-flight write count at the top of the Latency tab.
+void RenderInflightWritesOverview(
+    IOutputStream& str,
+    const std::optional<TFastPathServiceInfo>& serviceInfo)
+{
+    HTML (str) {
+        TAG (TH3) {
+            str << "Overview";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEBODY () {
+                TABLER () {
+                    TABLED () {
+                        str << "Inflight writes";
+                    }
+                    TABLED () {
+                        if (serviceInfo) {
+                            str << serviceInfo->InflightWriteCount;
+                        } else {
+                            str << "-";
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 void RenderLatency(IOutputStream& str, const TMonPageData& data)
 {
     bool anyCapacity = false;
@@ -991,6 +1019,7 @@ void RenderLatency(IOutputStream& str, const TMonPageData& data)
         }
     }
     if (!anyCapacity) {
+        RenderInflightWritesOverview(str, data.FastPathServiceInfo);
         HTML (str) {
             DIV_CLASS ("alert alert-warning") {
                 str << "Latency history is disabled "
@@ -1005,6 +1034,7 @@ void RenderLatency(IOutputStream& str, const TMonPageData& data)
 
     const auto nodes = AggregateLatencyByNode(data.Dbgs);
     if (nodes.empty()) {
+        RenderInflightWritesOverview(str, data.FastPathServiceInfo);
         HTML (str) {
             DIV_CLASS ("alert alert-info") {
                 str << "No latency samples in the current window.";
@@ -1032,6 +1062,7 @@ void RenderLatency(IOutputStream& str, const TMonPageData& data)
     RenderLatencyAutoRefreshControls(str);
     str << "<div id='latencyLiveContent' data-op-names='" << opNamesJson
         << "'>";
+    RenderInflightWritesOverview(str, data.FastPathServiceInfo);
     RenderLatencyHeatmap(str, data, nodes);
     RenderLatencySlotGrid(str, data, nodes);
     RenderLatencyDetailTable(str, nodes);

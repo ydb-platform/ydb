@@ -1,3 +1,0 @@
-# https://github.com/ydb-platform/ydb/issues/41296
-# The races on IDataSource / TExecutionContext are fixed: a source is processed by exactly one owner at a time,
-# so no suppressions are needed for columnshard scans any more. The file stays because deployments reference it.

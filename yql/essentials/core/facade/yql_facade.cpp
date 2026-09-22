@@ -281,6 +281,10 @@ void TProgramFactory::AddRemoteLayersProvider(const TString& alias, NLayers::IRe
     RemoteLayersProviders_.emplace(alias, std::move(provider));
 }
 
+void TProgramFactory::SetTranslatorsRegistry(NSQLTranslation::TTranslatorsRegistry translatorsRegistry) {
+    TranslatorsRegistry_ = std::move(translatorsRegistry);
+}
+
 void TProgramFactory::SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig) {
     GatewaysConfig_ = gatewaysConfig;
 }
@@ -358,7 +362,7 @@ TProgramPtr TProgramFactory::Create(
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_ ? MakeHolder<TGatewaysConfig>(*GatewaysConfig_) : nullptr,
                         filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
-                        qContext, RemoteLayersProviders_, BridgeBinaryPath_);
+                        qContext, RemoteLayersProviders_, BridgeBinaryPath_, TranslatorsRegistry_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -394,7 +398,8 @@ TProgram::TProgram(
     EHiddenMode hiddenMode,
     const TQContext& qContext,
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders,
-    TString bridgeBinaryPath)
+    TString bridgeBinaryPath,
+    NSQLTranslation::TTranslatorsRegistry translatorsRegistry)
     : IssueReportTarget_(std::move(issueReportTarget))
     , FunctionRegistry_(functionRegistry)
     , RandomProvider_(std::move(randomProvider))
@@ -430,6 +435,7 @@ TProgram::TProgram(
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
     , RemoteLayersProviders_(std::move(remoteLayersProviders))
+    , TranslatorsRegistry_(std::move(translatorsRegistry))
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -956,7 +962,8 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator());
+        NSQLTranslationPG::MakeTranslator(),
+        TranslatorsRegistry_);
 
     return FillParseResult(SqlToYql(translators, SourceCode_, currentSettings, &warningRules), &warningRules);
 }

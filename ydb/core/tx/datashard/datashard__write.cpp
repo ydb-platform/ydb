@@ -85,7 +85,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 LWTRACK(ProposeTransactionParsed, op->Orbit, false);
                 Y_ENSURE(writeOp->GetWriteResult());
                 op->OperationSpan.EndError("Unsuccessful operation parse");
-                ctx.Send(op->GetTarget(), writeOp->ReleaseWriteResult().release());
+                ctx.Send(op->GetTarget(), writeOp->ReleaseWriteResult().release(), 0, op->GetCookie());
                 return true;
             }
             LWTRACK(ProposeTransactionParsed, op->Orbit, true);

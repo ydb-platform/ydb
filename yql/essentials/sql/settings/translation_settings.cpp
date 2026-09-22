@@ -102,6 +102,10 @@ bool TParsedSettings::ApplyTo(TTranslationSettings& settings, NYql::TIssues& iss
         settings.PgParser = true;
     }
 
+    if (Syntax) {
+        settings.Syntax = Syntax;
+    }
+
     return true;
 }
 
@@ -153,6 +157,8 @@ bool ParseTranslationSettingsFromComments(const TString& query, TParsedSettings&
             // Is always turned on, ignore
         } else if (value == "syntax_pg") {
             parsed.HasPgParser = true;
+        } else if (value.StartsWith("syntax_")) {
+            parsed.Syntax = value.substr(7);
         } else {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, lineNumber), NYql::TIssuesIds::DEFAULT_ERROR,
                                            TStringBuilder() << "Unknown SQL translation setting: " << value));

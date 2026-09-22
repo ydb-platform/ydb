@@ -1278,37 +1278,37 @@
 <text x='396' y='13' class='texte'>Tasks</text>
 <text x='403' y='13' class='texts'>Statistics</text>
 <g><title>2025-07-16T15:10:37.959000Z</title>
-<text x='608' y='13' class='texts'>0:00</text>
+<text x='608' y='13' class='texts'>0</text>
 </g>
 <g><title>2025-07-16T15:10:40.959000Z</title>
-<text x='673' y='13' class='texts'>0:03</text>
+<text x='669' y='13' class='texte'>0:03</text>
 </g>
 <g><title>2025-07-16T15:10:43.959000Z</title>
-<text x='739' y='13' class='texts'>0:06</text>
+<text x='735' y='13' class='texte'>0:06</text>
 </g>
 <g><title>2025-07-16T15:10:46.959000Z</title>
-<text x='805' y='13' class='texts'>0:09</text>
+<text x='801' y='13' class='texte'>0:09</text>
 </g>
 <g><title>2025-07-16T15:10:49.959000Z</title>
-<text x='871' y='13' class='texts'>0:12</text>
+<text x='867' y='13' class='texte'>0:12</text>
 </g>
 <g><title>2025-07-16T15:10:52.959000Z</title>
-<text x='937' y='13' class='texts'>0:15</text>
+<text x='933' y='13' class='texte'>0:15</text>
 </g>
 <g><title>2025-07-16T15:10:55.959000Z</title>
-<text x='1003' y='13' class='texts'>0:18</text>
+<text x='999' y='13' class='texte'>0:18</text>
 </g>
 <g><title>2025-07-16T15:10:58.959000Z</title>
-<text x='1068' y='13' class='texts'>0:21</text>
+<text x='1064' y='13' class='texte'>0:21</text>
 </g>
 <g><title>2025-07-16T15:11:01.959000Z</title>
-<text x='1134' y='13' class='texts'>0:24</text>
+<text x='1130' y='13' class='texte'>0:24</text>
 </g>
 <g><title>2025-07-16T15:11:04.959000Z</title>
-<text x='1200' y='13' class='texts'>0:27</text>
+<text x='1196' y='13' class='texte'>0:27</text>
 </g>
 <g><title>2025-07-16T15:11:07.959000Z</title>
-<text x='1266' y='13' class='texts'>0:30</text>
+<text x='1262' y='13' class='texte'>0:30</text>
 </g>
 </svg>
 <line x1='0' y1='18' x2='1280' y2='18' class='columns' />

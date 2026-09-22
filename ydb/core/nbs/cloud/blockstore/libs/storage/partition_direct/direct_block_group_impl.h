@@ -26,6 +26,8 @@
 
 #include <ydb/core/mind/bscontroller/types.h>
 
+#include <util/generic/hash.h>
+
 #include <array>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -59,6 +61,8 @@ public:
     // IDirectBlockGroup implementation
 
     void Register(TVChunkWeakPtr vChunk) override;
+    THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) override;
+    void CommitDDiskPromotion(const TVChunkConfig& config) override;
 
     TExecutorPtr GetExecutor() override;
     TArenaAllocatorPoolPtr GetArenaAllocatorPool() override;
@@ -292,6 +296,7 @@ private:
 
     TDBGConnections Connections;
     TVector<TVChunkWeakPtr> VChunks;
+    THashMap<ui32, THostIndex> PendingDDiskAllocations;
 
     std::array<ui64, MaxHostCount> LastSentBarrierByPBufferHost{};
     TOracle Oracle;

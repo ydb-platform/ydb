@@ -241,6 +241,49 @@ void TDirectBlockGroup::Register(TVChunkWeakPtr weakVChunk)
     VChunks.push_back(std::move(weakVChunk));
 }
 
+THostIndex TDirectBlockGroup::AllocateDDiskForPromote(
+    const TVChunkConfig& config)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(!PendingDDiskAllocations.contains(config.GetVChunkIndex()));
+
+    std::array<size_t, MaxHostCount> ddiskCountByHost{};
+    for (const auto& weakVChunk: VChunks) {
+        if (auto vChunk = weakVChunk.lock()) {
+            for (THostIndex host: vChunk->GetConfig().GetDDisks()) {
+                ++ddiskCountByHost[host];
+            }
+        }
+    }
+    for (const auto& [vChunkIndex, host]: PendingDDiskAllocations) {
+        Y_UNUSED(vChunkIndex);
+        ++ddiskCountByHost[host];
+    }
+
+    const auto candidates = THostMask::MakeAll(config.GetHostCount())
+                                .Exclude(config.GetDisabledHosts())
+                                .Exclude(config.GetDDisks());
+    THostIndex selected = InvalidHostIndex;
+    for (THostIndex host: candidates) {
+        if (selected == InvalidHostIndex ||
+            ddiskCountByHost[host] < ddiskCountByHost[selected])
+        {
+            selected = host;
+        }
+    }
+
+    if (selected != InvalidHostIndex) {
+        PendingDDiskAllocations.emplace(config.GetVChunkIndex(), selected);
+    }
+    return selected;
+}
+
+void TDirectBlockGroup::CommitDDiskPromotion(const TVChunkConfig& config)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    PendingDDiskAllocations.erase(config.GetVChunkIndex());
+}
+
 TExecutorPtr TDirectBlockGroup::GetExecutor()
 {
     return Executor;
@@ -284,6 +327,7 @@ NThreading::TFuture<void> TDirectBlockGroup::Run(
 {
     TraceService = traceService;
     Service = service;
+    Oracle.SetDiskStateProvider(service);
 
     ScheduleOracleThinking();
 

@@ -300,6 +300,91 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 
+    Y_UNIT_TEST_F(ShouldTrackDiskWideInflightWriteCount, TBaseFixture)
+    {
+        Init();
+
+        const auto range = TBlockRange16::WithLength(10, 1);
+        ExpectedRange = range;
+        RangeData = GenerateRandomString(BlockSize * range.Size());
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            true,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            // Keep the batch above the three overlapping writes so completing
+            // them does not start flush executors. Those would abort when the
+            // fixture is destroyed with pending TDBGFlushResponse promises.
+            100,   // syncRequestsBatchSize
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+
+        auto startWrite = [&]
+        {
+            auto callContext =
+                MakeIntrusive<TCallContext>(static_cast<ui64>(0));
+            auto request =
+                std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                    .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                    .RequestId = 1,
+                    .Range = ConvertRangeSafe<TBlockRange64>(range)});
+            request->Sglist = MakeSgList();
+            return vchunk->WriteBlocksLocal(
+                callContext,
+                request,
+                NWilson::TTraceId());
+        };
+
+        const auto first = startWrite();
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitWriteRequests(3, TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            1u,
+            PartitionDirectService->InflightWriteCount);
+
+        const auto second = startWrite();
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitWriteRequests(6, TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            2u,
+            PartitionDirectService->InflightWriteCount);
+
+        const auto third = startWrite();
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitWriteRequests(9, TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            3u,
+            PartitionDirectService->InflightWriteCount);
+
+        SetWriteResult(TDBGWriteBlocksResponse{.Error = MakeError(S_OK)}, true);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            S_OK,
+            first.GetValue(TDuration::Seconds(10)).Error.GetCode(),
+            "first write");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            S_OK,
+            second.GetValue(TDuration::Seconds(10)).Error.GetCode(),
+            "second write");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            S_OK,
+            third.GetValue(TDuration::Seconds(10)).Error.GetCode(),
+            "third write");
+        UNIT_ASSERT_VALUES_EQUAL(
+            0u,
+            PartitionDirectService->InflightWriteCount);
+
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+    }
+
     // Until the vchunk finishes restoring its dirty map from the PBuffers,
     // its pre-flush records exist only in the PBuffers and are not inflight.
     // Reporting "no constraint" (nullopt) in that window is indistinguishable
@@ -839,6 +924,48 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             0,
             PartitionDirectService->UpdateConfigRequests.size());
 
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST_F(ShouldNotAllocateDDiskWhenQuorumRemains, TBaseFixture)
+    {
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            false,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            3,
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]
+            {
+                vchunk->SetHostState(3, EHostState::Offline);
+                return true;
+            })
+            .GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        const auto& config =
+            PartitionDirectService->UpdateConfigRequests.front().Config;
+        UNIT_ASSERT_VALUES_EQUAL(
+            QuorumDirectBlockGroupHostCount,
+            config.GetEnabledDDisks().Count());
+        UNIT_ASSERT_VALUES_EQUAL(EHostRole::None, config.GetDDiskRole(4));
+
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 

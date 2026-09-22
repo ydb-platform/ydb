@@ -133,7 +133,7 @@ struct TDescribeModuleResult: public TStatus {
     const std::vector<TPlatformCompileStatus>& GetPlatforms() const;
 
 private:
-    TModuleInfo Module_;
+    TModuleInfo ModuleInfo_;
     std::string ManifestJson_;
     std::vector<TPlatformCompileStatus> Platforms_;
 };

@@ -691,7 +691,7 @@ def test_ydb_udf_cli_yaml_preserves_types():
         def DescribeModule(self, request, context):
             module = next(module for module in modules if module.name == request.name)
             return response(udf.DescribeModuleResponse, udf.DescribeModuleResult(
-                module=module, manifest_json=json.dumps(dict(module_name=module.name)),
+                module_info=module, manifest_json=json.dumps(dict(module_name=module.name)),
                 platforms=[udf.PlatformCompileStatus(cpu_spec="12345", status=udf.FAILED,
                                                      compile_error='false\n"quoted"\\error')],
             ))

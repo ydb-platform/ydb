@@ -1000,6 +1000,7 @@ public:
 
     void WritesDone(TWriteCallback callback) override {
         TGrpcStatus status;
+        bool startWritesDone = false;
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
@@ -1019,10 +1020,13 @@ public:
                 WriteActive = true;
                 WriteDonePending = true;
                 WriteCallback.swap(callback);
-                Stream->WritesDone(OnWriteDoneTag.Prepare());
+                startWritesDone = true;
             }
         }
 
+        if (startWritesDone) {
+            Stream->WritesDone(OnWriteDoneTag.Prepare());
+        }
         if (!status.Ok() && callback) {
             RunGuarded([&] {
                 callback(std::move(status));

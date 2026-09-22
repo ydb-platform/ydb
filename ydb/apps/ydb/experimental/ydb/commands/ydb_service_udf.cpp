@@ -438,9 +438,9 @@ int TCommandUdfDescribe::Run(TConfig& config) {
     auto result = client.DescribeModule(Name, FillSettings(NUdf::TDescribeModuleSettings())).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    const auto& module = result.GetModule();
+    const auto& moduleInfo = result.GetModule();
     NJson::TJsonValue json(NJson::JSON_MAP);
-    json["module"] = ModuleToJson(module);
+    json["module"] = ModuleToJson(moduleInfo);
     json["manifest_json"] = result.GetManifestJson();
     NJson::TJsonValue platforms(NJson::JSON_ARRAY);
     for (const auto& platform : result.GetPlatforms()) {

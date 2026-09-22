@@ -10,8 +10,6 @@
 
 #include <util/generic/yexception.h>
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/executor/executor.h>
-
 #include <atomic>
 #include <fstream>
 #include <sstream>
@@ -116,15 +114,6 @@ void FillUploadParams(Ydb::Udf::UploadModuleParams& params, const TUploadModuleS
 //! One-shot BIDI UploadModule: connect, post the response read, write metadata
 //! and data, half-close, and answer from the single response. Owns its input
 //! stream until all callbacks complete; only one data chunk is in flight.
-IExecutor::TPtr FileReadExecutor() {
-    static const auto executor = [] {
-        auto result = CreateThreadPoolExecutor(2);
-        result->Start();
-        return result;
-    }();
-    return executor;
-}
-
 class TUploadModuleSession: public std::enable_shared_from_this<TUploadModuleSession> {
 public:
     using TService = Ydb::Udf::V1::UdfService;
@@ -214,7 +203,9 @@ private:
     //! and why it is gone is what the pending read is about to say. Writing just
     //! stops.
     void ScheduleNextData() {
-        FileReadExecutor()->Post([self = shared_from_this()] { self->WriteNextDataOrDone(); });
+        Connections_->PostToResponseQueue([self = shared_from_this()] {
+            self->WriteNextDataOrDone();
+        });
     }
 
     void WriteNextDataOrDone() {
@@ -350,8 +341,8 @@ TListModulesResult::TListModulesResult(TStatus&& status, Ydb::Udf::ListModulesRe
     , NextPageToken_(proto.next_page_token())
 {
     Modules_.reserve(proto.modules_size());
-    for (const auto& module : proto.modules()) {
-        Modules_.push_back(FromProto(module));
+    for (const auto& moduleInfo : proto.modules()) {
+        Modules_.push_back(FromProto(moduleInfo));
     }
 }
 
@@ -369,8 +360,8 @@ TDescribeModuleResult::TDescribeModuleResult(TStatus&& status, Ydb::Udf::Describ
     : TStatus(std::move(status))
     , ManifestJson_(proto.manifest_json())
 {
-    if (proto.has_module()) {
-        Module_ = FromProto(proto.module());
+    if (proto.has_module_info()) {
+        ModuleInfo_ = FromProto(proto.module_info());
     }
     Platforms_.reserve(proto.platforms_size());
     for (const auto& platform : proto.platforms()) {
@@ -380,7 +371,7 @@ TDescribeModuleResult::TDescribeModuleResult(TStatus&& status, Ydb::Udf::Describ
 
 const TModuleInfo& TDescribeModuleResult::GetModule() const {
     CheckStatusOk("TDescribeModuleResult::GetModule");
-    return Module_;
+    return ModuleInfo_;
 }
 
 const std::string& TDescribeModuleResult::GetManifestJson() const {
@@ -395,7 +386,7 @@ const std::vector<TPlatformCompileStatus>& TDescribeModuleResult::GetPlatforms()
 
 class TUdfClient::TImpl: public TClientImplCommon<TUdfClient::TImpl> {
 public:
-    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
+    TImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TCommonClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings)
     {
     }

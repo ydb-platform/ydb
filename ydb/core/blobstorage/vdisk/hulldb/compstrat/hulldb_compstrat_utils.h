@@ -3,6 +3,9 @@
 #include "defs.h"
 #include "hulldb_compstrat_defs.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_glue.h>
+// TLevelIndex / TLevelIndexSnapshot: this header used to get them only from whatever
+// included it first, which broke as soon as the selector header started including it.
+#include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.h>
 
 namespace NKikimr {
     namespace NHullComp {
@@ -34,10 +37,16 @@ namespace NKikimr {
             }
 
             static ui64 SstKeepBytes(const TLevelSegment &sst) {
+                // ManyHugeBlobs keep their payload in the HugeKeeper, but the rewritten
+                // SST still stores one TDiskPart per live erasure part in its outbound
+                // array. StorageRatio counts the payload and index bytes only; include the
+                // source outbound cardinality as a conservative upper bound for this
+                // metadata, otherwise high-part-count blobs can exceed the broker grant.
+                const ui64 outboundBytes = ui64(sst.Info.OutboundItems) * sizeof(TDiskPart);
                 if (TSstRatioPtr ratio = sst.StorageRatio.Get()) {
-                    return ratio->IndexBytesKeep + ratio->InplacedDataKeep;
+                    return ratio->IndexBytesKeep + ratio->InplacedDataKeep + outboundBytes;
                 }
-                return ui64(sst.Info.IdxTotalSize) + sst.Info.InplaceDataTotalSize;
+                return ui64(sst.Info.IdxTotalSize) + sst.Info.InplaceDataTotalSize + outboundBytes;
             }
 
             static ui64 SstHugeGarbageBytes(const TLevelSegment &sst) {
@@ -72,6 +81,29 @@ namespace NKikimr {
                     it.Next();
                 }
                 return EstimateOutputChunks(keepBytes, chunkSize);
+            }
+
+            // What the job costs and what it gives back, for the compaction broker. The
+            // output figure is the same conservative estimate the selection strategies
+            // budget against, so a job that was admitted can also be reserved for.
+            static typename TTask::TSpaceForecast ForecastCompactSsts(
+                    const typename TTask::TCompactSsts &compactSsts,
+                    ui32 chunkSize)
+            {
+                typename TTask::TSpaceForecast forecast;
+                ui64 keepBytes = 0;
+                TLeveledSstsIterator it(&compactSsts.TablesToDelete);
+                it.SeekToFirst();
+                while (it.Valid()) {
+                    const TLevelSegment &sst = *it.Get().SstPtr;
+                    keepBytes += SstKeepBytes(sst);
+                    forecast.InputChunks += SstInputChunks(sst);
+                    forecast.HugeGarbageBytes += SstHugeGarbageBytes(sst);
+                    it.Next();
+                }
+                forecast.OutputChunks = EstimateOutputChunks(keepBytes, chunkSize);
+                forecast.Valid = true;
+                return forecast;
             }
 
             static void PreserveLastCompactedKey(
@@ -122,4 +154,3 @@ namespace NKikimr {
 
     } // NHullComp
 } // NKikimr
-

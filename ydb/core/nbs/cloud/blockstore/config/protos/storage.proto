@@ -7,6 +7,7 @@ import "ydb/core/nbs/cloud/blockstore/config/protos/ddisk_config.proto";
 ////////////////////////////////////////////////////////////////////////////////
 
 // Mode of write requests.
+// Static write mode. Used only when TOracleConfig::MaxInflightWritesForDirectWrite is 0.
 enum EWriteMode {
     // Persistent Buffers replication is going from one of PBuffers. Write request
     // will be sended to 1 PBuffer, then this PBuffer will send request to other PBuffer.
@@ -59,6 +60,12 @@ message TOracleConfig
     // back online. If the number of successes is less, the host will not go online,
     // regardless of the time during which the successes occurred.
     optional uint32 MinSuccessesCountBeforeReturningOnline = 10;
+
+    // Disk-wide in-flight write requests count at or below which
+    // DirectWrite mode is selected. Above this value IndirectWrite is used.
+    // Unset defaults to 16 (adaptive on). 0 disables the adaptive choice
+    // and the static WriteMode is used.
+    optional uint32 MaxInflightWritesForDirectWrite = 11;
 }
 
 message TStorageServiceConfig
@@ -99,6 +106,7 @@ message TStorageServiceConfig
     // Default stripe size for volumes.
     optional uint64 StripeSize = 13;
 
+    // Static write mode. Used only when MaxInflightWritesForDirectWrite is 0.
     optional EWriteMode WriteMode = 14;
 
     // Timeout for request to PBuffer.

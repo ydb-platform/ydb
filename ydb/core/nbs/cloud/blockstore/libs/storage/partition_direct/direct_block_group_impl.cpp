@@ -284,6 +284,7 @@ NThreading::TFuture<void> TDirectBlockGroup::Run(
 {
     TraceService = traceService;
     Service = service;
+    Oracle.SetDiskStateProvider(service);
 
     ScheduleOracleThinking();
 

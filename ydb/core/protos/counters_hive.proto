@@ -200,5 +200,5 @@ enum ETxTypes {
     TXTYPE_PROCESS_TABLET_METRICS = 70                    [(TxTypeOpts) = {Name: "TxProcessTabletMetrics"}];
     TXTYPE_SHRINK_POOL = 71                               [(TxTypeOpts) = {Name: "TxShrinkPool"}];
     TXTYPE_SHRINK_POOL_REPLY = 72                         [(TxTypeOpts) = {Name: "TxShrinkPoolReply"}];
-    TXTYPE_MON_DECOMMISSION = 73                          [(TxTypeOpts) = {Name: "TxMonDecommission"}];
+    TXTYPE_MON_SHRINK_POOL = 73                           [(TxTypeOpts) = {Name: "TxMonShrinkPool"}];
 }

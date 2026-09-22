@@ -208,7 +208,7 @@ protected:
     friend class TTxMonEvent_ObjectStats;
     friend class TTxMonEvent_StorageRebalance;
     friend class TTxMonEvent_Subactors;
-    friend class TTxMonEvent_Decommission;
+    friend class TTxMonEvent_ShrinkPool;
     friend class TTxKillNode;
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;

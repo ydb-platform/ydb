@@ -4911,19 +4911,19 @@ public:
 };
 
 // Read-only view of what a shrink is still waiting for: which tablets hold history in the pool being removed.
-class TTxMonEvent_Decommission : public TTransactionBase<THive> {
+class TTxMonEvent_ShrinkPool : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
-    TTxMonEvent_Decommission(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+    TTxMonEvent_ShrinkPool(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())
     {
     }
 
-    TTxType GetTxType() const override { return NHive::TXTYPE_MON_DECOMMISSION; }
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_SHRINK_POOL; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(txc);
@@ -5333,8 +5333,8 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     if (page == "Groups") {
         return Execute(new TTxMonEvent_Groups(ev->Sender, ev, this), ctx);
     }
-    if (page == "Decommission") {
-        return Execute(new TTxMonEvent_Decommission(ev->Sender, ev, this), ctx);
+    if (page == "ShrinkPool") {
+        return Execute(new TTxMonEvent_ShrinkPool(ev->Sender, ev, this), ctx);
     }
     if (page == "UpdateResources") {
         TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);

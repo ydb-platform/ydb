@@ -10634,12 +10634,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             p1->SetValue(TStringBuilder() << hiveTablet);
             auto* p2 = pb.AddQueryParams();
             p2->SetKey("page");
-            p2->SetValue("Decommission");
+            p2->SetValue("ShrinkPool");
             runtime.SendToPipe(hiveTablet, senderA, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
         }
         TAutoPtr<IEventHandle> pageHandle;
         const auto* page = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteHttpInfoRes>(pageHandle, TDuration::Seconds(10));
-        UNIT_ASSERT_C(page, "the Decommission page never answered");
+        UNIT_ASSERT_C(page, "the ShrinkPool page never answered");
         UNIT_ASSERT_STRING_CONTAINS(page->Html, "def1");
         UNIT_ASSERT_STRING_CONTAINS(page->Html, ToString(tabletId));
 

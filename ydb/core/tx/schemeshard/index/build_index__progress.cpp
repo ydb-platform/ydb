@@ -3254,12 +3254,17 @@ public:
                 break;
             }
             auto* child = Self->IndexBuilds.FindPtr(buildInfo.RowIdColumnBuildId);
-            if (child && (*child)->IsDone()) {
+            if (!child) {
+                NIceDb::TNiceDb db(txc.DB);
+                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ true,
+                    buildInfo.RowIdColumnBuildId);
+                Progress(child->Id);
+            } else if ((*child)->IsDone()) {
                 ChangeState(BuildId, buildInfo.FulltextNeedsUniqueIndex
                     ? TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex
                     : TIndexBuildInfo::EState::Locking);
                 Progress(BuildId);
-            } else if (child && (*child)->IsCancelled()) {
+            } else if ((*child)->IsCancelled()) {
                 // The child rolled back its own column on failure; the parent never locked, so it just
                 // transitions to Rejected (nothing of its own to unlock or drop).
                 NIceDb::TNiceDb db(txc.DB);
@@ -3278,10 +3283,15 @@ public:
                 break;
             }
             auto* child = Self->IndexBuilds.FindPtr(buildInfo.RowIdUniqueBuildId);
-            if (child && (*child)->IsDone()) {
+            if (!child) {
+                NIceDb::TNiceDb db(txc.DB);
+                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ false,
+                    buildInfo.RowIdUniqueBuildId);
+                Progress(child->Id);
+            } else if ((*child)->IsDone()) {
                 ChangeState(BuildId, TIndexBuildInfo::EState::Locking);
                 Progress(BuildId);
-            } else if (child && (*child)->IsCancelled()) {
+            } else if ((*child)->IsCancelled()) {
                 NIceDb::TNiceDb db(txc.DB);
                 Self->PersistBuildIndexAddIssue(db, buildInfo,
                     TStringBuilder() << "Auto-provisioning of the '" << buildInfo.AutoUniqueIndexName
@@ -5026,21 +5036,14 @@ public:
             break;
         case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
             if (!buildInfo.RowIdColumnBuildId) {
-                // Use the freshly allocated tx-id as the child build id and spawn the column build.
                 buildInfo.RowIdColumnBuildId = TIndexBuildId(ui64(txId));
                 Self->PersistBuildIndexFulltextProvisioning(db, buildInfo);
-                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ true,
-                    buildInfo.RowIdColumnBuildId);
-                Progress(child->Id);
             }
             break;
         case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex:
             if (!buildInfo.RowIdUniqueBuildId) {
                 buildInfo.RowIdUniqueBuildId = TIndexBuildId(ui64(txId));
                 Self->PersistBuildIndexFulltextProvisioning(db, buildInfo);
-                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ false,
-                    buildInfo.RowIdUniqueBuildId);
-                Progress(child->Id);
             }
             break;
         case TIndexBuildInfo::EState::DropBuild:

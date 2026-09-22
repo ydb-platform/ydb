@@ -306,7 +306,7 @@ public:
             Stats->ResultRows = ResponseEv->GetResultRowsCount();
             Stats->ResultBytes = ResponseEv->GetByteSize();
             Stats->ExportExecStats(*response.MutableResult()->MutableStats());
-            if (GetUserRequestContext()->CurrentQueryStatsInterval) {
+            if (StatsReportingSettings.CollectCurrentQueryStats) {
                 ResponseEv->CurrentExecutionStats = Stats->TakeCurrentStats(true);
             }
 

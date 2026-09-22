@@ -84,6 +84,8 @@ TModuleInfo FromProto(const Ydb::Udf::ModuleInfo& proto) {
     info.Version = proto.version();
     info.CompileStatus = FromProto(proto.compile_status());
     info.CompileError = proto.compile_error();
+    info.CreatedAt = ProtoTimestampToInstant(proto.created_at());
+    info.CompileFinishedAt = ProtoTimestampToInstant(proto.compile_finished_at());
     return info;
 }
 

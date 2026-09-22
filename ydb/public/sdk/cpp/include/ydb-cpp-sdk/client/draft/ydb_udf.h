@@ -54,6 +54,8 @@ struct TModuleInfo {
     uint64_t Version = 0;
     ECompileStatus CompileStatus = ECompileStatus::Unspecified;
     std::string CompileError;
+    TInstant CreatedAt;
+    TInstant CompileFinishedAt;
 };
 
 struct TPlatformCompileStatus {

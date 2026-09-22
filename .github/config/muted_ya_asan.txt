@@ -87,6 +87,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedNoMatch
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.GeneratedInPrimaryKeyRejected
 ydb/core/kqp/ut/scheme GeneratedStored.IndexOnGeneratedKeyUpdatesEntry
+ydb/core/kqp/ut/scheme GeneratedStored.NullableOptionalExprAccepted
 ydb/core/kqp/ut/scheme GeneratedStored.RandomGeneratedConsistentWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMissingAndExistingRows
@@ -110,6 +111,7 @@ ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance-IsOlap
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnDefaultNullIsNotAllowed
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultUndeterministicExpression
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalSyncUniqueIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableViaApiMultipleTime
@@ -260,6 +262,7 @@ ydb/core/persqueue/public/schema/ut SchemaOps.AlterDlqMoveActionRequiresExisting
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterEnableAutopartitioningAndServiceConsumerGuards
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterIfExistsMissingIsSuccess
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMissingWithoutIfExistsIsSchemeError
+ydb/core/persqueue/public/schema/ut SchemaOps.DropIfExistsSucceedsForMissing
 ydb/core/persqueue/public/schema/ut SchemaValidation.ProcessTopicAttributesInvalidValues
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyAlterSchema
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyUpdateRow
@@ -369,6 +372,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithou
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.TypedProducer_BasicWrite
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.DirectWriteWithoutDescribeResourcesPermission
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.WithoutPartitionWithRestart
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query_SkipConflictOn
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
@@ -390,6 +394,7 @@ ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.FederationTopicNa
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ImportantConsumerAndCodecsStored
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.NegativeReadSpeedRejected
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ReadQuotaStored
+ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.UnauthenticatedRejectedWhenRequired
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.UnknownCodecRejected
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.UnknownFormatRejected
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ZeroPartitionsRejected
@@ -511,6 +516,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_lea
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pool_estimated_usage
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_vdisk_evict_fallback_to_legacy_api
 ydb/tests/functional/dstool test_static_vdisk_evict.py.test_dstool_evict_static_vdisk
+ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
 ydb/tests/functional/federation_test unittest.sole chunk
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_indexes unittest.sole chunk

@@ -40,7 +40,7 @@ jobs:
             core.setOutput('sha', ref.object.sha);
 
       - name: Documentation translation review
-        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.1.0
+        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.0.1
         with:
           mode: translate
           pr: ${{ github.event.pull_request.number }}

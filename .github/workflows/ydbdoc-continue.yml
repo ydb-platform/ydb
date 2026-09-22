@@ -35,7 +35,7 @@ jobs:
       # Trusted runtime creates audit before checking the actual label actor and
       # preceding allowed comment. No source/PR checkout or code execution.
       - name: Continue translation with operator feedback
-        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.1.0
+        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.0.1
         with:
           mode: continue
           pr: ${{ github.event.pull_request.number }}

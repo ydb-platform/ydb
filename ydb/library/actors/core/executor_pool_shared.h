@@ -101,7 +101,7 @@ namespace NActors {
         bool HasWakerPools = false;
         // Only the shared waker changes sleep decisions and their accounting.
         alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SharedSleepingCount = 0;
-        std::vector<bool> SleepingWorkers;
+        alignas(PLATFORM_CACHE_LINE) std::vector<bool> SleepingWorkers;
         static constexpr i16 InvalidWakerWorkerId = -1;
         alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
         std::atomic<i16> WakerWorkerId = InvalidWakerWorkerId;

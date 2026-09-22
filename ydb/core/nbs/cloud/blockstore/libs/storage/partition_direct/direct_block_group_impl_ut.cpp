@@ -111,6 +111,53 @@ NWilson::TTraceId CreateTraceId()
 
 Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 {
+    Y_UNIT_TEST_F(ShouldSelectDDiskOnMostLoadedHostForDemote, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_shared<TStorageTransportMock>());
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        auto first = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            *Service,
+            0);
+        auto second = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            *Service,
+            1);
+        WaitDirtyMapReady(executor, first);
+        WaitDirtyMapReady(executor, second);
+
+        const auto selected = RunOnExecutor(
+                                  executor,
+                                  [&] {
+                                      return dbg->SelectDDiskForDemote(
+                                          THostMask::MakeMask({0, 1, 3}));
+                                  })
+                                  .GetValue(WaitTimeout);
+        UNIT_ASSERT(selected == THostMask::MakeOne(1));
+
+        const auto none =
+            RunOnExecutor(
+                executor,
+                [&]
+                { return dbg->SelectDDiskForDemote(THostMask::MakeEmpty()); })
+                .GetValue(WaitTimeout);
+        UNIT_ASSERT(none.Empty());
+
+        first->Stop().GetValue(WaitTimeout);
+        second->Stop().GetValue(WaitTimeout);
+    }
+
     Y_UNIT_TEST_F(ShouldCountBalanceDDisksByStrategyAndPending, TDBGFixture)
     {
         auto executor = MakeExecutor();

@@ -132,6 +132,9 @@ public:
     // canceled.
     virtual void CommitDDiskPromotion(const TVChunkConfig& config) = 0;
 
+    // Selects a DDisk on the most loaded candidate host for demotion.
+    virtual THostMask SelectDDiskForDemote(THostMask candidates) const = 0;
+
     virtual TExecutorPtr GetExecutor() = 0;
 
     virtual TArenaAllocatorPoolPtr GetArenaAllocatorPool()

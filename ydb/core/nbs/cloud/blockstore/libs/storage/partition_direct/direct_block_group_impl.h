@@ -63,6 +63,7 @@ public:
     void Register(TVChunkWeakPtr vChunk) override;
     THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) override;
     void CommitDDiskPromotion(const TVChunkConfig& config) override;
+    THostMask SelectDDiskForDemote(THostMask candidates) const override;
 
     TExecutorPtr GetExecutor() override;
     TArenaAllocatorPoolPtr GetArenaAllocatorPool() override;

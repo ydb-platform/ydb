@@ -250,6 +250,15 @@ void TDirectBlockGroupMock::CommitDDiskPromotion(const TVChunkConfig& config)
     Y_UNUSED(config);
 }
 
+THostMask TDirectBlockGroupMock::SelectDDiskForDemote(
+    THostMask candidates) const
+{
+    if (const auto selected = candidates.First()) {
+        return THostMask::MakeOne(*selected);
+    }
+    return THostMask::MakeEmpty();
+}
+
 TExecutorPtr TDirectBlockGroupMock::GetExecutor()
 {
     return Executor;

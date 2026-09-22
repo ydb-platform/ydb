@@ -70,6 +70,30 @@ THostIndex FindTargetHost(
     return targetHost;
 }
 
+std::array<TVector<const TVChunkConfig*>, MaxHostCount> CollectVChunksByHost(
+    const TVector<const TVChunkConfig*>& vChunks,
+    const std::array<size_t, MaxHostCount>& toMove)
+{
+    std::array<TVector<const TVChunkConfig*>, MaxHostCount> vchunksByHost;
+
+    // Keep registration order within each priority group.
+    for (size_t priority = 0; priority < 2; ++priority) {
+        for (const auto* config: vChunks) {
+            if ((config->GetEnabledDDisks().Count() >= 4) != (priority == 1)) {
+                continue;
+            }
+
+            for (THostIndex host: config->GetEnabledDDisks()) {
+                if (toMove[host] != 0) {
+                    vchunksByHost[host].push_back(config);
+                }
+            }
+        }
+    }
+
+    return vchunksByHost;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -94,30 +118,22 @@ TVector<TDDiskBalanceRequest> PlanDDiskBalance(
         }
     }
 
-    std::array<TVector<size_t>, MaxHostCount> vchunksByHost;
-    for (size_t position = 0; position < vChunks.size(); ++position) {
-        for (THostIndex host: vChunks[position]->GetEnabledDDisks()) {
-            if (toMove[host] != 0) {
-                vchunksByHost[host].push_back(position);
-            }
-        }
-    }
+    const auto vchunksByHost = CollectVChunksByHost(vChunks, toMove);
 
     THashSet<ui32> requestedVChunks;
     std::array<size_t, MaxHostCount> requestedIncoming{};
     for (THostIndex source: allowedForBalancing) {
-        for (size_t position: vchunksByHost[source]) {
+        for (const auto* config: vchunksByHost[source]) {
             if (toMove[source] == 0) {
                 break;
             }
 
-            const auto& config = *vChunks[position];
-            if (requestedVChunks.contains(config.GetVChunkIndex())) {
+            if (requestedVChunks.contains(config->GetVChunkIndex())) {
                 continue;
             }
 
             const THostIndex targetHost = FindTargetHost(
-                config,
+                *config,
                 allowedForBalancing,
                 ddiskCountByHost,
                 targetCounts,
@@ -127,10 +143,10 @@ TVector<TDDiskBalanceRequest> PlanDDiskBalance(
             }
 
             requests.push_back(
-                {.VChunkId = config.GetVChunkIndex(),
+                {.VChunkId = config->GetVChunkIndex(),
                  .SourceHost = source,
                  .TargetHost = targetHost});
-            requestedVChunks.insert(config.GetVChunkIndex());
+            requestedVChunks.insert(config->GetVChunkIndex());
             ++requestedIncoming[targetHost];
             --toMove[source];
         }

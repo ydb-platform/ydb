@@ -28,6 +28,54 @@ Y_UNIT_TEST_SUITE(TDDiskBalanceTest)
         UNIT_ASSERT_VALUES_EQUAL(4u, requests[1].TargetHost);
     }
 
+    Y_UNIT_TEST(ShouldPreferVChunkWithFewerEnabledDDisks)
+    {
+        auto fourDDisks = TVChunkConfig::MakeDefault(0, 5, 3);
+        fourDDisks.PromoteHost(3);
+        const auto threeDDisks = TVChunkConfig::MakeDefault(5, 5, 3);
+        std::array<size_t, MaxHostCount> ddiskCountByHost{};
+        for (THostIndex host: fourDDisks.GetEnabledDDisks()) {
+            ++ddiskCountByHost[host];
+        }
+        for (THostIndex host: threeDDisks.GetEnabledDDisks()) {
+            ++ddiskCountByHost[host];
+        }
+
+        const auto allowedForBalancing = THostMask::MakeAll(5);
+        const TVector<const TVChunkConfig*> vChunks = {
+            &fourDDisks,
+            &threeDDisks};
+        const auto requests =
+            PlanDDiskBalance(vChunks, allowedForBalancing, ddiskCountByHost);
+
+        UNIT_ASSERT_VALUES_EQUAL(1u, requests.size());
+        UNIT_ASSERT_VALUES_EQUAL(5u, requests[0].VChunkId);
+        UNIT_ASSERT_VALUES_EQUAL(2u, requests[0].SourceHost);
+        UNIT_ASSERT_VALUES_EQUAL(4u, requests[0].TargetHost);
+
+        const TVector<const TVChunkConfig*> onlyFourDDisks = {&fourDDisks};
+        const auto fallback = PlanDDiskBalance(
+            onlyFourDDisks,
+            allowedForBalancing,
+            ddiskCountByHost);
+        UNIT_ASSERT_VALUES_EQUAL(1u, fallback.size());
+        UNIT_ASSERT_VALUES_EQUAL(0u, fallback[0].VChunkId);
+        UNIT_ASSERT_VALUES_EQUAL(2u, fallback[0].SourceHost);
+        UNIT_ASSERT_VALUES_EQUAL(4u, fallback[0].TargetHost);
+
+        fourDDisks.DisableHost(3);
+        --ddiskCountByHost[3];
+        UNIT_ASSERT_VALUES_EQUAL(4u, fourDDisks.GetDDisks().Count());
+        UNIT_ASSERT_VALUES_EQUAL(3u, fourDDisks.GetEnabledDDisks().Count());
+
+        const auto withDisabledDDisk =
+            PlanDDiskBalance(vChunks, allowedForBalancing, ddiskCountByHost);
+        UNIT_ASSERT_VALUES_EQUAL(2u, withDisabledDDisk.size());
+        UNIT_ASSERT_VALUES_EQUAL(0u, withDisabledDDisk[0].VChunkId);
+        UNIT_ASSERT_VALUES_EQUAL(1u, withDisabledDDisk[0].SourceHost);
+        UNIT_ASSERT_VALUES_EQUAL(4u, withDisabledDDisk[0].TargetHost);
+    }
+
     Y_UNIT_TEST(ShouldAccountForDDisksOfExcludedVChunk)
     {
         const auto first = TVChunkConfig::MakeDefault(0, 5, 3);

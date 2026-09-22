@@ -292,6 +292,29 @@ void TDirectBlockGroup::CommitDDiskPromotion(const TVChunkConfig& config)
     PendingDDiskAllocations.erase(config.GetVChunkIndex());
 }
 
+THostMask TDirectBlockGroup::SelectDDiskForDemote(THostMask candidates) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (candidates.Empty()) {
+        return THostMask::MakeEmpty();
+    }
+
+    const auto ddiskCountByHost =
+        CountDDisksByHost(EDDiskBalanceStrategy::Configured, candidates);
+
+    THostIndex selected = InvalidHostIndex;
+    for (THostIndex host: candidates) {
+        if (selected == InvalidHostIndex ||
+            ddiskCountByHost[host] > ddiskCountByHost[selected])
+        {
+            selected = host;
+        }
+    }
+
+    return THostMask::MakeOne(selected);
+}
+
 TExecutorPtr TDirectBlockGroup::GetExecutor()
 {
     return Executor;

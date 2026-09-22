@@ -21,6 +21,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 
 namespace NKikimr::NKqp {
@@ -227,16 +228,37 @@ private:
 
 namespace {
 
-TVector<NACLib::TSID> GetGroupSidsFromMetadata(const TString& metadata) {
+TVector<NACLib::TSID> GetGroupSidsFromMetadata(
+    const TString& metadata, const TString& database, const TString& userSid, bool& warningLogged)
+{
+    auto warn = [&](const TString& reason) {
+        LOG_LOG_S(*TlsActivationContext, warningLogged ? NLog::PRI_DEBUG : NLog::PRI_WARN,
+            NKikimrServices::KQP_COMPILE_SERVICE,
+            "Invalid warmup group metadata; discarding group SIDs, database: " << database
+                << ", user: " << userSid << ", reason: " << reason);
+        warningLogged = true;
+    };
+    if (metadata.empty()) {
+        return {};
+    }
+
     NJson::TJsonValue json;
-    if (metadata.empty() || !NJson::ReadJsonTree(metadata, &json, false)
-            || !json.Has("user_group_sids") || !json["user_group_sids"].IsArray()) {
+    if (!NJson::ReadJsonTree(metadata, &json, false)) {
+        warn("Invalid JSON");
+        return {};
+    }
+    if (!json.Has("user_group_sids")) {
+        return {};
+    }
+    if (!json["user_group_sids"].IsArray()) {
+        warn("user_group_sids is not an array");
         return {};
     }
 
     TVector<NACLib::TSID> groups;
     for (const auto& sid : json["user_group_sids"].GetArray()) {
         if (!sid.IsString()) {
+            warn(TStringBuilder() << "user_group_sids[" << groups.size() << "] is not a string");
             return {};
         }
         groups.push_back(sid.GetString());
@@ -559,25 +581,19 @@ private:
         if (auto it = PendingQueriesByCookie.find(cookie); it != PendingQueriesByCookie.end()) {
             auto& query = it->second;
             if (success) {
-                LOG_I("Query compiled successfully, user: " << query.UserSID
+                LOG_D("Query compiled successfully, user: " << query.UserSID
                       << ", has_metadata: " << !query.Metadata.empty()
                       << ", query: " << query.QueryText.substr(0, 200)
                       << (query.QueryText.size() > 200 ? "..." : ""));
             } else {
-                TString errorMsg;
-                const auto& issues = record.GetResponse().GetQueryIssues();
-                if (issues.size() > 0) {
-                    for (const auto& issue : issues) {
-                        if (!errorMsg.empty()) {
-                            errorMsg += "; ";
-                        }
-                        errorMsg += issue.message();
-                    }
-                }
-                LOG_W("Query compilation failed, user: " << query.UserSID
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+                LOG_LOG_S(*TlsActivationContext, EntriesFailed ? NLog::PRI_DEBUG : NLog::PRI_WARN,
+                    NKikimrServices::KQP_COMPILE_SERVICE,
+                    LogPrefix() << "Query compilation failed, user: " << query.UserSID
                       << ", has_metadata: " << !query.Metadata.empty()
                       << ", status: " << Ydb::StatusIds::StatusCode_Name(record.GetYdbStatus())
-                      << ", error: " << errorMsg
+                      << ", error: " << issues.ToOneLineString()
                       << ", query: " << query.QueryText.substr(0, 200)
                       << (query.QueryText.size() > 200 ? "..." : ""));
             }
@@ -627,7 +643,7 @@ private:
         return Ydb::Query::SYNTAX_UNSPECIFIED;
     }
 
-    static std::unique_ptr<TEvKqp::TEvQueryRequest> CreatePrepareRequest(
+    std::unique_ptr<TEvKqp::TEvQueryRequest> CreatePrepareRequest(
         const TString& database,
         const TString& queryText,
         const TString& userSid,
@@ -639,7 +655,8 @@ private:
         auto queryEv = std::make_unique<TEvKqp::TEvQueryRequest>();
         auto& record = queryEv->Record;
         if (!userSid.empty()) {
-            auto userToken = MakeIntrusive<NACLib::TUserToken>(userSid, GetGroupSidsFromMetadata(metadata));
+            auto userToken = MakeIntrusive<NACLib::TUserToken>(userSid,
+                GetGroupSidsFromMetadata(metadata, database, userSid, InvalidGroupMetadataLogged));
             record.SetUserToken(userToken->SerializeAsString());
         }
 
@@ -744,7 +761,8 @@ private:
         }
         Completed = true;
 
-        LOG_I("Warmup " << (success ? "completed" : "finished") << ": " << message);
+        LOG_I("Warmup " << (success ? "completed" : "finished") << ": " << message
+              << ", database: " << Database << ", compiled: " << EntriesLoaded << ", failed: " << EntriesFailed);
 
         for (const auto& actorId : NotifyActorIds) {
             Send(actorId, new TEvKqpWarmupComplete(success, message, EntriesLoaded, EntriesFailed));
@@ -775,6 +793,7 @@ private:
     ui32 EntriesFailed = 0;
     ui32 MaxConcurrentCompilations = 1;
     bool Completed = false;
+    bool InvalidGroupMetadataLogged = false;
     bool SoftDeadlineReached = false;
     NActors::TSchedulerCookieHolder SoftDeadlineCookieHolder;
     TInstant HardDeadlineTimestamp;

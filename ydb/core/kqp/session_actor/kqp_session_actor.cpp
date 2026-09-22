@@ -3538,7 +3538,8 @@ public:
             }
         }
 
-        STLOG_I("Cleanup start",
+        STLOG(QueryState && QueryState->IsWarmupCompilation_ ? PRI_DEBUG : PRI_INFO,
+            NKikimrServices::KQP_SESSION, KQPSA, LogPrefix() << "Cleanup start",
             (is_final, isFinal),
             (has_cleanup_ctx, bool{CleanupCtx}),
             (transactions_to_be_aborted_size, CleanupCtx ? CleanupCtx->TransactionsToBeAborted.size() : 0),

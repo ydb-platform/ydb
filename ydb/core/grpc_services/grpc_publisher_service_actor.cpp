@@ -5,6 +5,7 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -73,6 +74,9 @@ public:
     }
 
     void HandleWarmupTimeout() {
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+            "Warmup deadline exceeded, forcing gRPC endpoint publication, actor: " << SelfId()
+                << ", timeout: " << WarmupTimeout);
         StartPublishing();
     }
 

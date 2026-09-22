@@ -943,6 +943,15 @@ public:
     }
 
     void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
+        if (!ShardedWriteController->HasShard(shardId)) {
+            // The shard was removed by a reroute after a split/merge: a late
+            // TEvOverloadReady for the dead tablet (sent after an overload wait that
+            // outlived the reroute) is stale.
+            YDB_LOG_INFO("Ignoring TEvOverloadReady for a shard removed by a reroute.",
+                {"logPrefix", this->LogPrefix},
+                {"shardID", shardId});
+            return;
+        }
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (metadata && seqNo + 1 == metadata->NextOverloadSeqNo) {
             YDB_LOG_DEBUG("Retry Overloaded",
@@ -989,6 +998,17 @@ public:
             {"txId", ev->Get()->Record.GetTxId()},
             {"locks", txLocks},
             {"cookie", ev->Cookie});
+
+        if (!ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
+            // The shard was removed by a reroute after a split/merge: any late result
+            // for it is stale (its in-flight batches were extracted and re-sent to the
+            // covering shards), including the error statuses below.
+            YDB_LOG_INFO("Ignoring a late TEvWriteResult for a shard removed by a reroute.",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", ev->Get()->Record.GetOrigin()},
+                {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())});
+            return;
+        }
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
@@ -1648,6 +1668,17 @@ public:
 
     void Handle(TEvPrivate::TEvShardRetry::TPtr& ev) {
         const auto& msg = ev->Get();
+
+        if (!ShardedWriteController->HasShard(msg->ShardId)) {
+            // The shard was removed by a reroute after a split/merge (its batches were
+            // re-sent to the covering shards): a late retry for the dead tablet is
+            // expected and harmless.
+            YDB_LOG_INFO("Ignoring TEvShardRetry for a shard removed by a reroute.",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", msg->ShardId});
+            return;
+        }
+
         const auto metadata = ShardedWriteController->GetMessageMetadata(msg->ShardId);
         if (!metadata || metadata->Cookie != msg->Cookie) {
             // The batch was acknowledged (its cookie advanced) or is no longer
@@ -1666,6 +1697,16 @@ public:
 
         if (!LinkedPipeCache) {
             YDB_LOG_WARN("Ignoring TEvDeliveryProblem from tablet after pipe unlink.",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", ev->Get()->TabletId});
+            return;
+        }
+
+        if (!ShardedWriteController->HasShard(ev->Get()->TabletId)) {
+            // The shard was removed by a reroute after a split/merge (its batches were
+            // re-sent to the covering shards): a late delivery problem for the dead
+            // tablet is expected and harmless.
+            YDB_LOG_INFO("Ignoring TEvDeliveryProblem for a shard removed by a reroute.",
                 {"logPrefix", this->LogPrefix},
                 {"tabletId", ev->Get()->TabletId});
             return;
@@ -1837,6 +1878,7 @@ public:
                     }
                 }
                 ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards));
+                bool locksConsistent = true;
                 for (const auto& [shardId, targets] : transferTargets) {
                     // Every covering shard must join the commit: it holds the
                     // DataShard-side transferred chain of the removed shard even when
@@ -1845,7 +1887,17 @@ public:
                     // be an unreachable commit participant and the prepare would wait
                     // for it forever).
                     ShardedWriteController->EnsureShards(targets);
-                    TxManager->MoveShardTo(shardId, targets);
+                    locksConsistent &= TxManager->MoveShardTo(shardId, targets);
+                }
+                if (!locksConsistent) {
+                    // A transferred ancestor lock merged inconsistently with a lock
+                    // already stored on a target: the transaction cannot proceed.
+                    // Abort here — an earlier AddLock failure does the same, and
+                    // proceeding to prepare would hit the BrokenLocks assumption of
+                    // StartPrepare.
+                    AFL_ENSURE(TxManager->BrokenLocks());
+                    RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, {}));
+                    return;
                 }
             }
 

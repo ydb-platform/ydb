@@ -50,7 +50,11 @@ public:
     // Targets must exactly cover the removed shard's range (computed by the caller
     // from the partitionings) — a wrong target does not hold the transferred lock
     // and would break the commit.
-    virtual void MoveShardTo(ui64 fromShardId, const TVector<ui64>& toShardIds) = 0;
+    // Returns false when a transferred lock merged inconsistently with a lock already
+    // stored on a target (a WriteSeqNum regression: the shard's uncommitted write chain
+    // collapsed underneath the stored lock). The lock is marked invalidated and the
+    // locks issue is recorded; the caller must abort the transaction.
+    virtual bool MoveShardTo(ui64 fromShardId, const TVector<ui64>& toShardIds) = 0;
 
     virtual void BreakLock(ui64 shardId) = 0;
     virtual TVector<NKikimrDataEvents::TLock> GetLocks() const = 0;

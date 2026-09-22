@@ -1211,7 +1211,8 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     // runtime observer for the whole test; the test thread reads the captures under
     // the same mutex. InitialShards / SuppressResultsFrom / CookieTablet must be
     // configured before the observer is installed and are not modified afterwards;
-    // HoldWritesTo may be modified later under Mutex.
+    // HoldWritesTo may be modified later under Mutex. The write actor's SelfId is
+    // captured from the first observed data EvWrite.
     struct TUncommittedWriteWire {
         mutable TMutex Mutex;
         // Tablets existing before the partitioning change; data EvWrites to any other
@@ -1231,6 +1232,16 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
         std::atomic<ui64> NewShardSends{0};
         std::atomic<ui64> SuppressedAckCompleted{0};
+
+        // The SelfId of the write actor that sent the first observed data EvWrite
+        // (the Sender of the TEvPipeCache::TEvForward to the pipe cache).
+        TActorId WriteActorId;
+
+        TActorId WriteActorIdSnapshot() const {
+            with_lock(Mutex) {
+                return WriteActorId;
+            }
+        }
 
         // (destination, WriteSeqNum, OriginalShard) of every data-mode operation.
         TVector<std::tuple<ui64, ui64, ui64>> WriteOps;
@@ -1322,6 +1333,9 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             }
             bool hold = false;
             with_lock(Mutex) {
+                if (WriteActorId == TActorId()) {
+                    WriteActorId = ev->Sender;
+                }
                 for (const auto& op : record.GetOperations()) {
                     WriteOps.emplace_back(
                         fwd.TabletId,
@@ -1539,6 +1553,176 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
     Y_UNIT_TEST(InconsistentWritePartitioningChangeRoutesOnlyDeletedShards) {
         TInconsistentWritePartitioningChangeRoutesOnlyDeletedShards tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // A reroute after a split removes the shard's record from the write controller
+    // (an inconsistent (streaming) write has no TxManager state to transfer), but
+    // events referencing the dead tablet can still arrive afterwards — a pipe
+    // delivery problem, a scheduled retry, a stale result. None of them may fail
+    // the write: the reroute already re-sent the pending batches to the covering
+    // shards, so late events for the dead tablet are stale by definition. The query
+    // must succeed and every row must be applied exactly once.
+    class TInconsistentWriteLateEventsForRemovedShard : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            // The split re-route relies on paced retries against the removed shard;
+            // keep the backoff short so the re-resolve rounds stay fast.
+            auto& writeActorSettings = *settings.AppConfig.MutableTableServiceConfig()->MutableWriteActorSettings();
+            writeActorSettings.SetStartRetryDelayMs(100);
+            writeActorSettings.SetMaxRetryDelayMs(1000);
+        }
+
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+
+            auto create = Kikimr->RunCall([&] {
+                return client.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/SplitKVInconsistentLate` (
+                        Key Uint32 not null,
+                        Value String,
+                        PRIMARY KEY (Key)
+                    ) WITH (
+                        AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                        AUTO_PARTITIONING_BY_LOAD = DISABLED,
+                        UNIFORM_PARTITIONS = 2
+                    );
+                )"), TTxControl::NoTx()).GetValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+            auto edgeActor = runtime.AllocateEdgeActor();
+            const auto shards = GetTableShards(&Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVInconsistentLate");
+            UNIT_ASSERT_VALUES_EQUAL_C(shards.size(), 2u, "expected /Root/SplitKVInconsistentLate to have 2 shards");
+            const ui64 splitShard = shards[0];
+            const THashSet<ui64> initialShards(shards.begin(), shards.end());
+
+            TUncommittedWriteWire wire;
+            wire.InitialShards = initialShards;
+            with_lock(wire.Mutex) {
+                wire.HoldWritesTo = {splitShard};
+            }
+
+            bool queryRequestPatched = false;
+            auto observer = [&](TAutoPtr<IEventHandle>& ev) -> TTestActorRuntime::EEventAction {
+                // IsStreamingQuery=true makes the sink compile with InconsistentTx=true.
+                if (!queryRequestPatched &&
+                    ev->GetTypeRewrite() == TEvKqp::TEvQueryRequest::EventType) {
+                    queryRequestPatched = true;
+                    auto* req = ev->Get<TEvKqp::TEvQueryRequest>();
+                    auto userCtx = MakeIntrusive<TUserRequestContext>("", "/Root", "");
+                    userCtx->IsStreamingQuery = true;
+                    req->SetUserRequestContext(std::move(userCtx));
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                return wire.Observe(ev);
+            };
+            auto saveObserver = runtime.SetObserverFunc(observer);
+
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session.ExecuteQuery(
+                    Q_(BuildKvUpsertQuery("/Root/SplitKVInconsistentLate", 20)),
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); });
+
+            // The split-shard write is held: it pins the query open while the split runs.
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    with_lock(wire.Mutex) {
+                        return wire.HeldWrite != nullptr;
+                    }
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+                UNIT_ASSERT_C(wire.HeldWrite != nullptr, "no write to the split shard was observed");
+            }
+            UNIT_ASSERT_C(wire.WriteActorIdSnapshot() != TActorId(), "the write actor id was not observed on a data write");
+
+            // Disable the readiness gate that would otherwise reject a split of a
+            // freshly created table whose shards have not reported stats yet.
+            SetSplitMergePartCountLimit(&runtime, -1);
+
+            // Quiet split: the removed shard is replaced by two new shards.
+            const ui64 splitTxId = AsyncSplitTable(Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVInconsistentLate", splitShard, 10u);
+            WaitTxNotification(Kikimr->GetTestServer(), edgeActor, splitTxId);
+
+            const auto shardsAfterSplit = GetTableShards(&Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVInconsistentLate");
+            THashSet<ui64> newShards;
+            for (const ui64 shardId : shardsAfterSplit) {
+                if (!initialShards.contains(shardId)) {
+                    newShards.insert(shardId);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(newShards.size(), 2u, "the split must produce two new shards");
+
+            // Re-deliver the intercepted write to the split-shard tablet id: it is gone
+            // after the split, so the delivery fails and the paced retries fall back to
+            // re-resolve, which re-routes the batch to the new shards. Hold the
+            // re-routed batch undelivered: the write actor stays in-flight with the
+            // reroute fully applied while the late events for the removed shard are
+            // injected.
+            with_lock(wire.Mutex) {
+                wire.HoldWritesTo = newShards;
+            }
+            runtime.Send(wire.HeldWrite.release());
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    with_lock(wire.Mutex) {
+                        return wire.HeldWrite != nullptr;
+                    }
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+                UNIT_ASSERT_C(wire.HeldWrite != nullptr, "the re-routed batch was not observed on a new shard");
+            }
+
+            // The reroute is complete: the removed shard is erased from the write
+            // controller. Inject the late events for it.
+            const TActorId writeActorId = wire.WriteActorIdSnapshot();
+            runtime.Send(new IEventHandle(
+                writeActorId, writeActorId,
+                new TEvPipeCache::TEvDeliveryProblem(splitShard, /* notDelivered */ true)));
+            auto lateError = NEvents::TDataEvents::TEvWriteResult::BuildError(
+                splitShard, 0, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR,
+                "late result for a shard removed by a reroute");
+            runtime.Send(new IEventHandle(
+                writeActorId, writeActorId, lateError.release()));
+            auto lateCompleted = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(splitShard);
+            runtime.Send(new IEventHandle(
+                writeActorId, writeActorId, lateCompleted.release()));
+
+            // Release the held re-routed batch: the write proceeds to the new shard
+            // and the query completes.
+            with_lock(wire.Mutex) {
+                wire.HoldWritesTo.clear();
+            }
+            runtime.Send(wire.HeldWrite.release());
+
+            auto result = runtime.WaitFuture(future, TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            runtime.SetObserverFunc(saveObserver);
+
+            // Every row is applied exactly once.
+            {
+                auto check = Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(Q_(R"(
+                        SELECT Key, Value FROM `/Root/SplitKVInconsistentLate` WHERE Key IN (
+                            1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,16u,17u,18u,19u,20u,3000000000u
+                        ) ORDER BY Key;
+                    )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(check.GetStatus(), EStatus::SUCCESS, check.GetIssues().ToString());
+                CompareYson(BuildExpectedKvYson(20), FormatResultSetYson(check.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(InconsistentWriteLateEventsForRemovedShard) {
+        TInconsistentWriteLateEventsForRemovedShard tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
@@ -2797,6 +2981,160 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
     Y_UNIT_TEST(UncommittedWriteSeqNumMultiHopReroute) {
         TUncommittedWriteSeqNumMultiHopReroute tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // A reroute (split/merge) erases the removed shard's records from the write
+    // actor's controller and from the TxManager. Events referencing the dead tablet
+    // can still arrive afterwards — a pipe delivery problem, a stale error result,
+    // a stale acknowledgement. None of them may fail the transaction: the reroute
+    // already transferred the pending batches and the participant state to the
+    // covering shards, so late events for the dead tablet are stale by definition.
+    // The transaction must commit and every row must be applied exactly once.
+    class TUncommittedWriteSeqNumLateEventsForRemovedShard : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            SetupUncommittedWriteSeqNum(settings);
+        }
+
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+
+            auto create = Kikimr->RunCall([&] {
+                return client.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/SplitKVLateEvents` (
+                        Key Uint32 not null,
+                        Value String,
+                        PRIMARY KEY (Key)
+                    ) WITH (
+                        AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                        AUTO_PARTITIONING_BY_LOAD = DISABLED,
+                        UNIFORM_PARTITIONS = 2
+                    );
+                )"), TTxControl::NoTx()).GetValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+            auto edgeActor = runtime.AllocateEdgeActor();
+            const auto shards = GetTableShards(&Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVLateEvents");
+            UNIT_ASSERT_VALUES_EQUAL_C(shards.size(), 2u, "expected /Root/SplitKVLateEvents to have 2 shards");
+            const ui64 splitShard = shards[0];
+            const THashSet<ui64> initialShards(shards.begin(), shards.end());
+
+            TUncommittedWriteWire wire;
+            wire.InitialShards = initialShards;
+            auto observer = [&wire](TAutoPtr<IEventHandle>& ev) { return wire.Observe(ev); };
+            auto saveObserver = runtime.SetObserverFunc(observer);
+
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto tx = Kikimr->RunCall([&] {
+                return session.BeginTransaction(TTxSettings::ReadCommittedRW()).ExtractValueSync().GetTransaction(); });
+
+            // The first write fully succeeds: the lock and the WriteSeqNum chain (1..20)
+            // exist on the shard that is about to be split.
+            {
+                auto result = Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(
+                        Q_(BuildKvUpsertQuery("/Root/SplitKVLateEvents", 20) + "; SELECT Key, Value FROM `/Root/SplitKVLateEvents` WHERE Key IN (3000000000u);"),
+                        TTxControl::Tx(tx)).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            const TActorId writeActorId = wire.WriteActorIdSnapshot();
+            UNIT_ASSERT_C(writeActorId != TActorId(), "the write actor id was not observed on a data write");
+
+            // Disable the readiness gate that would otherwise reject a split of a
+            // freshly created table whose shards have not reported stats yet.
+            SetSplitMergePartCountLimit(&runtime, -1);
+
+            // Quiet split: the removed shard is replaced by two new shards.
+            const ui64 splitTxId = AsyncSplitTable(Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVLateEvents", splitShard, 10u);
+            WaitTxNotification(Kikimr->GetTestServer(), edgeActor, splitTxId);
+
+            const auto shardsAfterSplit = GetTableShards(&Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVLateEvents");
+            THashSet<ui64> newShards;
+            for (const ui64 shardId : shardsAfterSplit) {
+                if (!initialShards.contains(shardId)) {
+                    newShards.insert(shardId);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(newShards.size(), 2u, "the split must produce two new shards");
+
+            // Hold the re-routed batch undelivered on the new shards: the write actor
+            // stays in-flight with the reroute fully applied while the late events
+            // for the removed shard are injected.
+            with_lock(wire.Mutex) {
+                wire.HoldWritesTo = newShards;
+            }
+
+            // The second write targets the removed shard through the stale partitioning
+            // and is re-routed to a new shard (held undelivered).
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/SplitKVLateEvents` (Key, Value) VALUES
+                        (21u, "V21"), (22u, "V22"), (23u, "V23"), (24u, "V24"), (25u, "V25");
+                    SELECT Key, Value FROM `/Root/SplitKVLateEvents` WHERE Key IN (3000000000u);
+                )"), TTxControl::Tx(tx)).ExtractValueSync(); });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    with_lock(wire.Mutex) {
+                        return wire.HeldWrite != nullptr;
+                    }
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+                UNIT_ASSERT_C(wire.HeldWrite != nullptr, "the re-routed batch was not observed on a new shard");
+            }
+
+            // The reroute is complete: the removed shard is erased from the write
+            // actor's controller and TxManager state. Inject the late events for it.
+            runtime.Send(new IEventHandle(
+                writeActorId, writeActorId,
+                new TEvPipeCache::TEvDeliveryProblem(splitShard, /* notDelivered */ true)));
+            auto lateError = NEvents::TDataEvents::TEvWriteResult::BuildError(
+                splitShard, 0, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR,
+                "late result for a shard removed by a reroute");
+            runtime.Send(new IEventHandle(
+                writeActorId, writeActorId, lateError.release()));
+            auto lateCompleted = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(splitShard);
+            runtime.Send(new IEventHandle(
+                writeActorId, writeActorId, lateCompleted.release()));
+
+            // Release the held re-routed batch: the write proceeds to the new shard
+            // and the transaction completes.
+            with_lock(wire.Mutex) {
+                wire.HoldWritesTo.clear();
+            }
+            runtime.Send(wire.HeldWrite.release());
+
+            auto result = runtime.WaitFuture(future, TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // The transaction commits through the split.
+            auto commitResult = Kikimr->RunCall([&] { return tx.Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+            runtime.SetObserverFunc(saveObserver);
+
+            // Every row is applied exactly once.
+            {
+                auto check = Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(Q_(R"(
+                        SELECT Key, Value FROM `/Root/SplitKVLateEvents` WHERE Key IN (
+                            1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,16u,17u,18u,19u,20u,
+                            21u,22u,23u,24u,25u,3000000000u
+                        ) ORDER BY Key;
+                    )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(check.GetStatus(), EStatus::SUCCESS, check.GetIssues().ToString());
+                CompareYson(BuildExpectedKvYson(25), FormatResultSetYson(check.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(UncommittedWriteSeqNumLateEventsForRemovedShard) {
+        TUncommittedWriteSeqNumLateEventsForRemovedShard tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();

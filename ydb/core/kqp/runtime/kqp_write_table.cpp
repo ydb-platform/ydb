@@ -2185,6 +2185,10 @@ public:
         return result;
     }
 
+    bool HasShard(ui64 shardId) const override {
+        return ShardsInfo.Has(shardId);
+    }
+
     std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
         auto* shardInfo = ShardsInfo.FindShard(shardId);
         AFL_ENSURE(shardInfo);

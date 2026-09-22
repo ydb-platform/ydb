@@ -192,8 +192,8 @@ public:
     }
 
     // A shard removed by a split/merge had its participant state moved to every shard
-    // covering its range 
-    void MoveShardTo(ui64 fromShardId, const TVector<ui64>& toShardIds) override {
+    // covering its range
+    bool MoveShardTo(ui64 fromShardId, const TVector<ui64>& toShardIds) override {
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         AFL_ENSURE(!toShardIds.empty());
         // The removed shard's tablet id is gone: GetDeletedShards only returns shards
@@ -207,6 +207,7 @@ public:
         AFL_ENSURE(from.State == EShardState::PROCESSING);
         AFL_ENSURE(!from.IsOlap);
 
+        bool locksConsistent = true;
         for (const ui64 toShardId : toShardIds) {
             // MoveShard to may be called for toShardIds several times in case of merge.
             auto [toIt, inserted] = ShardsInfo.try_emplace(toShardId);
@@ -223,8 +224,20 @@ public:
             }
             for (const auto& [key, lockInfo] : from.Locks) {
                 if (auto existing = to.Locks.FindPtr(key)) {
-                    // TODO: What if shards merged back after split???
-                    AFL_ENSURE(existing->Lock.MergeWriteSeqNums(lockInfo.Lock.Proto));
+                    // The same ancestor lock reached the target through two removed
+                    // shards (e.g. shards merged back after a split). A WriteSeqNum
+                    // regression means the stored lock no longer matches the shard's
+                    // uncommitted write chain: mirror AddLock and treat it as an
+                    // invalidation instead of crashing — the caller aborts the
+                    // transaction with the recorded locks issue.
+                    if (!existing->Lock.MergeWriteSeqNums(lockInfo.Lock.Proto)) {
+                        // TODO: What if shards merged back after split???
+                        existing->Invalidated = true;
+                        if (!LocksIssue && State != ETransactionState::ERROR) {
+                            MakeLocksIssue(to);
+                        }
+                        locksConsistent = false;
+                    }
                 } else {
                     to.Locks.emplace(key, lockInfo);
                 }
@@ -233,6 +246,7 @@ public:
         }
         ShardsIds.erase(fromShardId);
         ShardsInfo.erase(fromIt);
+        return locksConsistent;
     }
 
     void BreakLock(ui64 shardId) override {

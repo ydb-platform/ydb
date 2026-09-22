@@ -23,8 +23,8 @@ public:
         return NKikimrServices::TActivity::IAM_DELEGATION_SERVICE_ACTOR;
     }
 
-    TIamDelegationService(const TIamDelegationSettings& settings, ISystemTokenSource::TPtr tokenSource)
-        : TBase(settings, std::move(tokenSource))
+    TIamDelegationService(const TIamDelegationSettings& settings, const TActorId& systemTokenService)
+        : TBase(settings, systemTokenService)
     {}
 
     void Bootstrap() {
@@ -200,8 +200,8 @@ private:
     TActorId OperationClient;
 };
 
-IActor* CreateIamDelegationService(const TIamDelegationSettings& settings, ISystemTokenSource::TPtr tokenSource) {
-    return new TIamDelegationService(settings, std::move(tokenSource));
+IActor* CreateIamDelegationService(const TIamDelegationSettings& settings, const TActorId& systemTokenService) {
+    return new TIamDelegationService(settings, systemTokenService);
 }
 
 } // namespace NKikimr::NIamDelegation

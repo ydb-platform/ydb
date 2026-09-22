@@ -8,7 +8,7 @@ SRCS(
     iam_delegation_service.cpp
     services.h
     settings.cpp
-    system_token_source.cpp
+    system_token_service.cpp
 )
 
 PEERDIR(

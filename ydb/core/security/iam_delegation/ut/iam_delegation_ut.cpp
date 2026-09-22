@@ -1,13 +1,13 @@
 #include <ydb/core/security/iam_delegation/cloud_resolver.h>
 #include <ydb/core/security/iam_delegation/events.h>
+#include <ydb/core/security/iam_delegation/iam_actor_base.h>
 #include <ydb/core/security/iam_delegation/iam_delegated_token_service.h>
 #include <ydb/core/security/iam_delegation/iam_delegation_service.h>
 #include <ydb/core/security/iam_delegation/services.h>
 #include <ydb/core/security/iam_delegation/settings.h>
-#include <ydb/core/security/iam_delegation/system_token_source.h>
+#include <ydb/core/security/iam_delegation/system_token_service.h>
 
 #include <ydb/core/base/counters.h>
-#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/protos/config.pb.h>
@@ -20,6 +20,8 @@
 #include <ydb/library/testlib/service_mocks/operation_service_mock.h>
 #include <ydb/library/testlib/service_mocks/service_account_service_mock.h>
 #include <ydb/library/testlib/service_mocks/service_control_service_mock.h>
+#include <ydb/library/ycloud/api/folder_service.h>
+#include <ydb/library/ycloud/api/service_account_service.h>
 #include <ydb/library/ycloud/impl/folder_service.h>
 #include <ydb/library/ycloud/impl/service_account_service.h>
 
@@ -54,6 +56,123 @@ void WaitUntil(TCondition condition, TStringBuf what, TDuration timeout = TDurat
 
 // An operation the mock never reports as done.
 constexpr ui32 NEVER_DONE_OPERATION = 1000000;
+
+// A stand-in for the system token service. Answers TEvGetSystemToken at once with Token (or Error when it
+// is set) while Deliver is true; otherwise only records the request so that the test can answer it late.
+// The state is read by the test thread while the actor runs on the runtime's threads, hence the lock.
+struct TSystemTokenFake : TThrRefBase {
+    TMutex Mutex;
+    TActorId Service; // the fake actor
+    TActorId Recipient;
+    ui64 Cookie = 0;
+    ui32 Requests = 0;
+    bool Deliver = true;
+    TString Token = "ssa-token";
+    TString Error;
+
+    std::pair<TActorId, ui64> LastRequest() {
+        with_lock (Mutex) {
+            return {Recipient, Cookie};
+        }
+    }
+
+    ui32 RequestCount() {
+        with_lock (Mutex) {
+            return Requests;
+        }
+    }
+
+    // Delivers the system token for the last request.
+    void DeliverLast(TTestActorRuntime& runtime) {
+        const auto [recipient, cookie] = LastRequest();
+        runtime.Send(new IEventHandle(recipient, Service, new TEvIamDelegation::TEvSystemTokenReady(Token, {}), 0, cookie));
+    }
+
+    // hang guard: the requests are made inevitable by the test
+    void WaitRequests(ui32 count) {
+        WaitUntil([&]() { return RequestCount() >= count; }, "the system token requests");
+        UNIT_ASSERT_VALUES_EQUAL(RequestCount(), count);
+    }
+};
+
+class TFakeSystemTokenService : public TActor<TFakeSystemTokenService> {
+public:
+    explicit TFakeSystemTokenService(TIntrusivePtr<TSystemTokenFake> state)
+        : TActor(&TThis::StateWork)
+        , State(std::move(state))
+    {}
+
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvIamDelegation::TEvGetSystemToken, Handle);
+        cFunc(TEvents::TEvPoison::EventType, PassAway);
+    )
+
+private:
+    void Handle(TEvIamDelegation::TEvGetSystemToken::TPtr& ev) {
+        bool deliver = false;
+        TString token;
+        TString error;
+        with_lock (State->Mutex) {
+            State->Recipient = ev->Sender;
+            State->Cookie = ev->Cookie;
+            ++State->Requests;
+            deliver = State->Deliver;
+            token = State->Token;
+            error = State->Error;
+        }
+        if (deliver) {
+            Send(ev->Sender, new TEvIamDelegation::TEvSystemTokenReady(error ? TString() : token, error), 0, ev->Cookie);
+        }
+    }
+
+    const TIntrusivePtr<TSystemTokenFake> State;
+};
+
+// Runs ResolveCloud inside an actor and reports the outcome to the edge actor.
+class TResolveCloudProbe : public TActorBootstrapped<TResolveCloudProbe> {
+public:
+    struct TEvResult : TEventLocal<TEvResult, EventSpaceBegin(TEvents::ES_PRIVATE)> {
+        TDelegationResult Result;
+        TResolvedCloud Resolved;
+    };
+
+    TResolveCloudProbe(TIamDelegationSettings settings, TString userToken, TString serviceAccountId, const TActorId& replyTo)
+        : Settings(std::move(settings))
+        , UserToken(std::move(userToken))
+        , ServiceAccountId(std::move(serviceAccountId))
+        , ReplyTo(replyTo)
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        auto result = std::make_unique<TEvResult>();
+        try {
+            result->Resolved = co_await ResolveCloud(Settings, UserToken, ServiceAccountId);
+        } catch (const TIamCallError& e) {
+            result->Result = TDelegationResult::Error(e.Status, e.what());
+        }
+        Send(ReplyTo, result.release());
+        Become(&TThis::StateDying);
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateWork,
+        // late replies of the client actors
+        IgnoreFunc(NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse);
+        IgnoreFunc(NCloud::TEvFolderService::TEvResolveFoldersResponse);
+        IgnoreFunc(TEvents::TEvUndelivered);
+    )
+
+    STFUNC(StateDying) {
+        Y_UNUSED(ev); // PassAway unregisters the actor only when its coroutine tasks have unwound
+    }
+
+private:
+    const TIamDelegationSettings Settings;
+    const TString UserToken;
+    const TString ServiceAccountId;
+    const TActorId ReplyTo;
+};
 
 struct TFixture {
     TPortManager PortManager;
@@ -138,30 +257,62 @@ struct TFixture {
         ::NKikimr::NIamDelegation::WaitUntil(std::move(condition), what, timeout);
     }
 
-    // Resolves the cloud of the service account with the given user token and returns the reply.
-    TEvIamDelegation::TEvResolveCloudResult::TPtr ResolveCloud(const TString& sa, const TString& userToken = "user-token") {
-        Runtime->Register(CreateCloudResolver(Settings, userToken, sa, Sender, 42));
-        auto ev = Runtime->GrabEdgeEvent<TEvIamDelegation::TEvResolveCloudResult>(Sender, TDuration::Seconds(30));
+    // Resolves the cloud of the service account with the given user token from a probe actor and returns the outcome.
+    TResolveCloudProbe::TEvResult::TPtr ResolveCloud(const TString& sa, const TString& userToken = "user-token") {
+        Runtime->Register(new TResolveCloudProbe(Settings, userToken, sa, Sender));
+        auto ev = Runtime->GrabEdgeEvent<TResolveCloudProbe::TEvResult>(Sender, TDuration::Seconds(30));
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 42u);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->ServiceAccountId, sa);
         return ev;
     }
 
-    TActorId StartDelegationService(ISystemTokenSource::TPtr tokenSource = {}) {
-        if (!tokenSource) {
-            tokenSource = CreateStaticSystemTokenSource("ssa-token");
+    // Registers a fake system token service answering every request with the token at once.
+    TIntrusivePtr<TSystemTokenFake> StaticSystemToken(const TString& token = "ssa-token") {
+        auto fake = MakeIntrusive<TSystemTokenFake>();
+        fake->Token = token;
+        fake->Service = Runtime->Register(new TFakeSystemTokenService(fake));
+        return fake;
+    }
+
+    // Registers a fake system token service failing every request with the error (the metadata service is down).
+    TIntrusivePtr<TSystemTokenFake> FailingSystemToken(const TString& error) {
+        auto fake = StaticSystemToken();
+        fake->Error = error;
+        return fake;
+    }
+
+    // Registers a fake system token service that records the requests and answers none until told to.
+    TIntrusivePtr<TSystemTokenFake> SilentSystemToken() {
+        auto fake = StaticSystemToken();
+        fake->Deliver = false;
+        return fake;
+    }
+
+    TActorId StartDelegationService(TActorId systemTokenService = {}) {
+        if (!systemTokenService) {
+            systemTokenService = StaticSystemToken()->Service;
         }
-        const TActorId id = Runtime->Register(CreateIamDelegationService(Settings, tokenSource));
+        const TActorId id = Runtime->Register(CreateIamDelegationService(Settings, systemTokenService));
         Runtime->RegisterService(MakeIamDelegationServiceId(), id);
         return id;
     }
 
-    TActorId StartTokenService(ISystemTokenSource::TPtr tokenSource = {}) {
-        if (!tokenSource) {
-            tokenSource = CreateStaticSystemTokenSource("ssa-token");
+    // Registers the real system token service over the metadata service at host:port under its service id.
+    TActorId StartSystemTokenService(const TString& host, ui16 port) {
+        const TActorId id = Runtime->Register(CreateIamSystemTokenService(host, port));
+        Runtime->RegisterService(MakeIamSystemTokenServiceId(), id);
+        return id;
+    }
+
+    // Asks the system token service at the id for a token on behalf of the edge actor.
+    void RequestSystemToken(const TActorId& service, ui64 cookie) {
+        Runtime->Send(new IEventHandle(service, Sender, new TEvIamDelegation::TEvGetSystemToken(), 0, cookie));
+    }
+
+    TActorId StartTokenService(TActorId systemTokenService = {}) {
+        if (!systemTokenService) {
+            systemTokenService = StaticSystemToken()->Service;
         }
-        const TActorId id = Runtime->Register(CreateIamDelegatedTokenService(Settings, tokenSource));
+        const TActorId id = Runtime->Register(CreateIamDelegatedTokenService(Settings, systemTokenService));
         Runtime->RegisterService(MakeIamDelegatedTokenServiceId(), id);
         return id;
     }
@@ -207,75 +358,6 @@ struct TFixture {
         auto* result = Runtime->GrabEdgeEvent<TEvIamDelegation::TEvGetTokenResult>(handle);
         UNIT_ASSERT(result);
         return THolder<TEvIamDelegation::TEvGetTokenResult>(static_cast<TEvIamDelegation::TEvGetTokenResult*>(handle->ReleaseBase().Release()));
-    }
-};
-
-// Always fails with the given error (the metadata service is down).
-class TFailingSystemTokenSource : public ISystemTokenSource {
-public:
-    explicit TFailingSystemTokenSource(TString error)
-        : Error(std::move(error))
-    {}
-
-    void RequestToken(TActorSystem* actorSystem, const TActorId& recipient, ui64 cookie) override {
-        actorSystem->Send(new IEventHandle(recipient, TActorId(), new TEvIamDelegation::TEvSystemTokenReady({}, Error), 0, cookie));
-    }
-
-private:
-    const TString Error;
-};
-
-ISystemTokenSource::TPtr CreateFailingSystemTokenSource(const TString& error) {
-    return MakeIntrusive<TFailingSystemTokenSource>(error);
-}
-
-// Never delivers the system token until Deliver is set; remembers the last request so a test can deliver it late.
-class TSilentSystemTokenSource : public ISystemTokenSource {
-public:
-    TMutex Mutex;
-    TActorId Recipient;
-    ui64 Cookie = 0;
-    ui32 Requests = 0;
-    bool Deliver = false;
-    TString Token = "ssa-token";
-
-    void RequestToken(TActorSystem* actorSystem, const TActorId& recipient, ui64 cookie) override {
-        bool deliver = false;
-        TString token;
-        with_lock (Mutex) {
-            Recipient = recipient;
-            Cookie = cookie;
-            ++Requests;
-            deliver = Deliver;
-            token = Token;
-        }
-        if (deliver) {
-            actorSystem->Send(new IEventHandle(recipient, TActorId(), new TEvIamDelegation::TEvSystemTokenReady(token, {}), 0, cookie));
-        }
-    }
-
-    std::pair<TActorId, ui64> LastRequest() {
-        with_lock (Mutex) {
-            return {Recipient, Cookie};
-        }
-    }
-
-    ui32 RequestCount() {
-        with_lock (Mutex) {
-            return Requests;
-        }
-    }
-
-    // Delivers the system token for the last request.
-    void DeliverLast(TTestActorRuntime& runtime) {
-        const auto [recipient, cookie] = LastRequest();
-        runtime.Send(new IEventHandle(recipient, TActorId(), new TEvIamDelegation::TEvSystemTokenReady(Token, {}), 0, cookie));
-    }
-
-    // hang guard: the requests are made inevitable by the test
-    void WaitRequests(ui32 count) {
-        WaitUntil([&]() { return RequestCount() >= count; }, "the system token requests");
-        UNIT_ASSERT_VALUES_EQUAL(RequestCount(), count);
     }
 };
 
@@ -360,14 +442,14 @@ Y_UNIT_TEST_SUITE(IamDelegationLive) {
              << ", target sa: " << sa << ", subject: " << subject
              << ", referrer: " << spec.ReferrerId << Endl;
 
-        const auto delegation = f.StartDelegationService(CreateStaticSystemTokenSource(systemToken));
+        const auto delegation = f.StartDelegationService(f.StaticSystemToken(systemToken)->Service);
         const auto setup = f.Setup(delegation, spec, subject);
         Cerr << "SetupDelegation: " << Ydb::StatusIds::StatusCode_Name(setup.Status)
              << " " << setup.Issues.ToOneLineString() << Endl;
 
         if (setup.IsSuccess()) {
             // the delegation now exists, so minting a token for the target must work
-            const auto tokens = f.StartTokenService(CreateStaticSystemTokenSource(systemToken));
+            const auto tokens = f.StartTokenService(f.StaticSystemToken(systemToken)->Service);
             const auto got = f.GetToken(tokens, TTokenKey{.ServiceAccountId = sa, .CloudId = cloud});
             Cerr << "CreateForService after delegation: "
                  << Ydb::StatusIds::StatusCode_Name(got->Status)
@@ -410,7 +492,7 @@ Y_UNIT_TEST_SUITE(IamDelegationLive) {
              << ", cloud: " << cloud << ", target sa: " << sa
              << ", system token length: " << systemToken.size() << Endl;
 
-        const auto service = f.StartTokenService(CreateStaticSystemTokenSource(systemToken));
+        const auto service = f.StartTokenService(f.StaticSystemToken(systemToken)->Service);
         const TTokenKey key{.ServiceAccountId = sa, .CloudId = cloud};
         const auto result = f.GetToken(service, key);
 
@@ -713,7 +795,7 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
 
     Y_UNIT_TEST(SystemTokenFailure) {
         TFixture f;
-        const auto service = f.StartDelegationService(CreateFailingSystemTokenSource("metadata is down"));
+        const auto service = f.StartDelegationService(f.FailingSystemToken("metadata is down")->Service);
 
         const auto result = f.Setup(service, f.Spec());
         UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAVAILABLE);
@@ -776,10 +858,10 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
         TFixture f;
         f.Settings.RequestTimeout = TDuration::Seconds(1);
         f.Settings.MaxRetries = 1;
-        auto source = MakeIntrusive<TSilentSystemTokenSource>();
-        const auto service = f.StartDelegationService(source);
+        auto source = f.SilentSystemToken();
+        const auto service = f.StartDelegationService(source->Service);
 
-        // the source never answers: the request fails with the timeout (RequestTimeout is what makes it inevitable)
+        // the service never answers: the request fails with the timeout (RequestTimeout is what makes it inevitable)
         const auto result = f.Setup(service, f.Spec());
         UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToOneLineString(), "timeout while obtaining the system service account token");
@@ -792,8 +874,8 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
         TFixture f;
         f.Settings.RequestTimeout = TDuration::Seconds(1);
         f.Settings.MaxRetries = 2;
-        auto source = MakeIntrusive<TSilentSystemTokenSource>();
-        const auto service = f.StartDelegationService(source);
+        auto source = f.SilentSystemToken();
+        const auto service = f.StartDelegationService(source->Service);
 
         const auto result = f.Setup(service, f.Spec());
         UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAVAILABLE);
@@ -806,8 +888,8 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
         TFixture f;
         f.Settings.RequestTimeout = TDuration::Seconds(1);
         f.Settings.MaxRetries = 1;
-        auto source = MakeIntrusive<TSilentSystemTokenSource>();
-        const auto service = f.StartDelegationService(source);
+        auto source = f.SilentSystemToken();
+        const auto service = f.StartDelegationService(source->Service);
 
         auto result = f.Setup(service, f.Spec());
         UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAVAILABLE);
@@ -899,7 +981,7 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
 
         f.Settings.MaxRetries = 1;
         f.ServiceControlMock.FailCount = 100;
-        const auto single = f.Runtime->Register(CreateIamDelegationService(f.Settings, CreateStaticSystemTokenSource("ssa-token")));
+        const auto single = f.Runtime->Register(CreateIamDelegationService(f.Settings, f.StaticSystemToken()->Service));
         const auto failed = f.Setup(single, f.Spec());
         UNIT_ASSERT_VALUES_EQUAL(failed.Status, Ydb::StatusIds::UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(failed.Issues.ToOneLineString(), "failed after 1 attempts");
@@ -907,7 +989,7 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
 
         // MaxRetries = 0 still makes the one attempt, and the error says so
         f.Settings.MaxRetries = 0;
-        const auto none = f.Runtime->Register(CreateIamDelegationService(f.Settings, CreateStaticSystemTokenSource("ssa-token")));
+        const auto none = f.Runtime->Register(CreateIamDelegationService(f.Settings, f.StaticSystemToken()->Service));
         const auto failedToo = f.Setup(none, f.Spec());
         UNIT_ASSERT_VALUES_EQUAL(failedToo.Status, Ydb::StatusIds::UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(failedToo.Issues.ToOneLineString(), "failed after 1 attempts");
@@ -1344,7 +1426,7 @@ Y_UNIT_TEST_SUITE(IamDelegatedTokenService) {
     Y_UNIT_TEST(TokenServiceSystemTokenFailure) {
         TFixture f;
         f.TokenMock.SetServiceToken("cloud-1", "sa-1", "delegated");
-        const auto service = f.StartTokenService(CreateFailingSystemTokenSource("metadata is down"));
+        const auto service = f.StartTokenService(f.FailingSystemToken("metadata is down")->Service);
 
         const auto result = f.GetToken(service, KEY);
         UNIT_ASSERT(!result->IsSuccess());
@@ -1354,7 +1436,7 @@ Y_UNIT_TEST_SUITE(IamDelegatedTokenService) {
     }
 }
 
-Y_UNIT_TEST_SUITE(IamSystemTokenSource) {
+Y_UNIT_TEST_SUITE(IamSystemTokenService) {
     // A TCP listener that accepts connections and never answers: the metadata service is "up" but silent.
     struct TSilentListener {
         TPortManager PortManager;
@@ -1369,22 +1451,21 @@ Y_UNIT_TEST_SUITE(IamSystemTokenSource) {
         }
     };
 
-    // The token source asks the SDK provider asynchronously: the metadata request runs on the provider's own
-    // thread, so RequestToken returns even when the endpoint never answers (a blocking implementation would
-    // hang here and hit the test timeout), and an actor waiting for the token fails with the configured
-    // timeout instead of hanging.
-    Y_UNIT_TEST(RequestTokenReturnsImmediatelyWhenMetadataIsUnreachable) {
+    // The system token service asks the SDK provider asynchronously: the metadata request runs on the provider's
+    // own thread, so the service keeps handling requests when the endpoint never answers, and an actor waiting
+    // for the token fails with the configured timeout instead of hanging.
+    Y_UNIT_TEST(ServiceKeepsHandlingRequestsWhenMetadataIsUnreachable) {
         TSilentListener metadata;
         TFixture f;
-        auto source = CreateVmMetadataSystemTokenSource("127.0.0.1", metadata.Port);
+        const auto service = f.StartSystemTokenService("127.0.0.1", metadata.Port);
 
-        source->RequestToken(f.Runtime->GetActorSystem(0), f.Sender, 7);
-        // (the call returned: the proof of the invariant; the SDK keeps retrying the silent endpoint in the
-        // background and no TEvSystemTokenReady is ever produced)
+        f.RequestSystemToken(service, 7);
+        // (the SDK keeps retrying the silent endpoint in the background and no TEvSystemTokenReady is ever
+        // produced; the service handles the requests below meanwhile)
 
         f.Settings.RequestTimeout = TDuration::Seconds(1); // makes the failure below inevitable
         f.Settings.MaxRetries = 1;
-        const auto delegation = f.StartDelegationService(source);
+        const auto delegation = f.StartDelegationService(service);
         const auto setup = f.Setup(delegation, f.Spec());
         UNIT_ASSERT_VALUES_EQUAL(setup.Status, Ydb::StatusIds::UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(setup.Issues.ToOneLineString(), "timeout while obtaining the system service account token");
@@ -1396,9 +1477,9 @@ Y_UNIT_TEST_SUITE(IamSystemTokenSource) {
     Y_UNIT_TEST(PendingSystemTokenDoesNotBlockOtherWork) {
         TFixture f;
         f.Settings.RequestTimeout = TDuration::Minutes(5); // the wait is ended by the test, not by a timeout
-        auto source = MakeIntrusive<TSilentSystemTokenSource>();
-        const auto delegation = f.StartDelegationService(source);
-        const auto tokens = f.StartTokenService(CreateStaticSystemTokenSource("ssa-token"));
+        auto source = f.SilentSystemToken();
+        const auto delegation = f.StartDelegationService(source->Service);
+        const auto tokens = f.StartTokenService();
         f.TokenMock.SetServiceToken("cloud-1", "sa-1", "delegated");
 
         f.Runtime->Send(new IEventHandle(delegation, f.Sender, new TEvIamDelegation::TEvSetupDelegation(f.Spec(), "user-1"), 0, 42));
@@ -1480,10 +1561,10 @@ Y_UNIT_TEST_SUITE(IamSystemTokenSource) {
         TMetadataServer metadata(portManager.GetPort());
         metadata.StatusCode = HTTP_NOT_FOUND;
         TFixture f;
-        auto source = CreateVmMetadataSystemTokenSource("127.0.0.1", metadata.Port);
+        const auto service = f.StartSystemTokenService("127.0.0.1", metadata.Port);
 
         const auto request = [&](ui64 cookie) {
-            source->RequestToken(f.Runtime->GetActorSystem(0), f.Sender, cookie);
+            f.RequestSystemToken(service, cookie);
             TAutoPtr<IEventHandle> handle;
             auto* ready = f.Runtime->GrabEdgeEvent<TEvIamDelegation::TEvSystemTokenReady>(handle);
             UNIT_ASSERT(ready);
@@ -1514,9 +1595,9 @@ Y_UNIT_TEST_SUITE(IamSystemTokenSource) {
         TPortManager portManager;
         TMetadataServer metadata(portManager.GetPort());
         TFixture f;
-        auto source = CreateVmMetadataSystemTokenSource("127.0.0.1", metadata.Port);
+        const auto service = f.StartSystemTokenService("127.0.0.1", metadata.Port);
 
-        const auto delegation = f.StartDelegationService(source);
+        const auto delegation = f.StartDelegationService(service);
         const auto setup = f.Setup(delegation, f.Spec());
         UNIT_ASSERT_C(setup.IsSuccess(), setup.Issues.ToOneLineString());
         UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 1u); // the mock requires "Bearer ssa-token"
@@ -1547,7 +1628,6 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         *appConfig.MutableReplicationConfig()->MutableIamServiceControl() = c.Replication;
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableIamDelegationSecrets(c.Flag);
-        *appConfig.MutableFeatureFlags() = featureFlags; // the config dispatcher's first notification carries the flags of the app config
         auto settings = TServerSettings(portManager.GetPort(2134));
         settings.SetDomainName("Root").SetAppConfig(appConfig).SetFeatureFlags(featureFlags);
         TServer server(settings);
@@ -1560,6 +1640,8 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(bool(runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0)), c.TokenService, what);
         UNIT_ASSERT_VALUES_EQUAL_C(bool(runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0)), c.DelegationService, what);
+        // the system token service comes with the first of the two
+        UNIT_ASSERT_VALUES_EQUAL_C(bool(runtime->GetLocalServiceId(MakeIamSystemTokenServiceId(), 0)), c.TokenService, what);
     }
 
     NKikimrConfig::TIamConfig FullIamConfig() {
@@ -1592,100 +1674,6 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         Check({.Iam = FullIamConfig(), .TokenService = true, .DelegationService = true}, "full IamConfig");
     }
 
-    // The services follow the configuration at runtime: a config notification with the missing endpoint starts
-    // the delegation service next to the token service already running (each registered once), one that
-    // turns the flag off stops both, and one that changes IamConfig restarts the service whose settings changed.
-    Y_UNIT_TEST(ConfigNotificationStartsAndStopsTheServices) {
-        TPortManager portManager;
-        auto iam = FullIamConfig();
-        iam.ClearServiceControlEndpoint();
-        NKikimrConfig::TAppConfig appConfig;
-        *appConfig.MutableIamConfig() = iam;
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableIamDelegationSecrets(true);
-        *appConfig.MutableFeatureFlags() = featureFlags; // the config dispatcher's first notification carries the flags of the app config
-        auto settings = TServerSettings(portManager.GetPort(2134));
-        settings.SetDomainName("Root").SetAppConfig(appConfig).SetFeatureFlags(featureFlags);
-        TServer server(settings);
-        auto* runtime = server.GetRuntime();
-        const auto proxy = NKqp::MakeKqpProxyID(runtime->GetNodeId(0));
-        const auto sender = runtime->AllocateEdgeActor();
-
-        runtime->Send(new IEventHandle(proxy, sender, new NKqp::TEvKqp::TEvCreateSessionRequest()));
-        UNIT_ASSERT(runtime->GrabEdgeEvent<NKqp::TEvKqp::TEvCreateSessionResponse>(sender, TDuration::Seconds(120)));
-        const auto tokenService = runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0);
-        UNIT_ASSERT(tokenService);
-        UNIT_ASSERT(!runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0));
-
-        // The proxy acknowledges a notification before it re-initializes the services, so the state a notification
-        // leads to is awaited after the acknowledgement (hang guards: the notification makes each state inevitable).
-        const auto notify = [&](const NKikimrConfig::TFeatureFlags& flags, const NKikimrConfig::TIamConfig& iamConfig) {
-            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *request->Record.MutableConfig()->MutableFeatureFlags() = flags;
-            *request->Record.MutableConfig()->MutableIamConfig() = iamConfig;
-            runtime->Send(new IEventHandle(proxy, sender, request.Release()));
-            UNIT_ASSERT(runtime->GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender, TDuration::Seconds(120)));
-        };
-
-        const auto registered = [&](const TActorId& serviceId) { return bool(runtime->GetLocalServiceId(serviceId, 0)); };
-        notify(featureFlags, FullIamConfig());
-        WaitUntil([&]() { return registered(MakeIamDelegationServiceId()); }, "the delegation service to start");
-        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0), tokenService); // not re-registered
-
-        featureFlags.SetEnableIamDelegationSecrets(false);
-        notify(featureFlags, FullIamConfig());
-        WaitUntil([&]() { return !registered(MakeIamDelegatedTokenServiceId()) && !registered(MakeIamDelegationServiceId()); }, "the services to stop");
-        {
-            // the stopped actor is gone: a tracked event comes back undelivered
-            const auto probe = runtime->AllocateEdgeActor();
-            runtime->Send(new IEventHandle(tokenService, probe, new TEvents::TEvWakeup(), IEventHandle::FlagTrackDelivery));
-            UNIT_ASSERT(runtime->GrabEdgeEvent<TEvents::TEvUndelivered>(probe, TDuration::Seconds(120)));
-        }
-
-        featureFlags.SetEnableIamDelegationSecrets(true);
-        notify(featureFlags, FullIamConfig());
-        WaitUntil([&]() { return registered(MakeIamDelegatedTokenServiceId()) && registered(MakeIamDelegationServiceId()); }, "the services to start again");
-
-        // A changed IamConfig restarts the service whose settings changed, since an actor keeps the settings it was
-        // created with; the other service keeps its actor. The proxy re-initializes the services in the notification
-        // handler right after acknowledging, so a request it has answered afterwards proves the re-initialization
-        // ran (FIFO) and the registrations are final.
-        const auto settled = [&]() {
-            runtime->Send(new IEventHandle(proxy, sender, new NKqp::TEvKqp::TEvCreateSessionRequest()));
-            UNIT_ASSERT(runtime->GrabEdgeEvent<NKqp::TEvKqp::TEvCreateSessionResponse>(sender, TDuration::Seconds(120)));
-        };
-        const auto gone = [&](const TActorId& actor) {
-            const auto probe = runtime->AllocateEdgeActor();
-            runtime->Send(new IEventHandle(actor, probe, new TEvents::TEvWakeup(), IEventHandle::FlagTrackDelivery));
-            UNIT_ASSERT(runtime->GrabEdgeEvent<TEvents::TEvUndelivered>(probe, TDuration::Seconds(120)));
-        };
-        const auto tokenService1 = runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0);
-        const auto delegationService1 = runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0);
-
-        auto changed = FullIamConfig();
-        changed.SetTokenServiceEndpoint("localhost:2"); // used by the token service only
-        notify(featureFlags, changed);
-        settled();
-        const auto tokenService2 = runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0);
-        UNIT_ASSERT(tokenService2 && tokenService2 != tokenService1);
-        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0), delegationService1);
-        gone(tokenService1);
-
-        changed.SetServiceControlEndpoint("localhost:2"); // used by the delegation service only
-        notify(featureFlags, changed);
-        settled();
-        const auto delegationService2 = runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0);
-        UNIT_ASSERT(delegationService2 && delegationService2 != delegationService1);
-        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0), tokenService2);
-        gone(delegationService1);
-
-        // the same settings again change nothing
-        notify(featureFlags, changed);
-        settled();
-        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0), tokenService2);
-        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0), delegationService2);
-    }
-
     Y_UNIT_TEST(BothWithIdentityFromTheReplicationSection) {
         NKikimrConfig::TIamConfig iam;
         iam.SetServiceControlEndpoint("localhost:1");
@@ -1703,18 +1691,18 @@ Y_UNIT_TEST_SUITE(IamCloudResolver) {
         TFixture f;
         const auto result = f.ResolveCloud("sa-1");
         UNIT_ASSERT_C(result->Get()->Result.IsSuccess(), result->Get()->Result.Issues.ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->FolderId, "folder-1");
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->CloudId, "cloud-1");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Resolved.FolderId, "folder-1");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Resolved.CloudId, "cloud-1");
     }
 
     // The lookup is done with the user's token: with the system token IAM refuses to read the
-    // service account, and the resolver reports that instead of retrying
+    // service account, which is reported instead of retried
     Y_UNIT_TEST(SystemTokenIsRefused) {
         TFixture f;
         const auto result = f.ResolveCloud("sa-1", "ssa-token");
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Result.Status, Ydb::StatusIds::UNAUTHORIZED);
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "GetServiceAccount failed");
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->CloudId, "");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Resolved.CloudId, "");
     }
 
     Y_UNIT_TEST(UnknownServiceAccount) {
@@ -1722,7 +1710,7 @@ Y_UNIT_TEST_SUITE(IamCloudResolver) {
         const auto result = f.ResolveCloud("sa-9");
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Result.Status, Ydb::StatusIds::NOT_FOUND);
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "GetServiceAccount failed");
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->FolderId, "");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Resolved.FolderId, "");
     }
 
     Y_UNIT_TEST(FolderWithoutCloud) {
@@ -1731,8 +1719,6 @@ Y_UNIT_TEST_SUITE(IamCloudResolver) {
         const auto result = f.ResolveCloud("sa-1");
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Result.Status, Ydb::StatusIds::NOT_FOUND);
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "did not resolve folder folder-1");
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->FolderId, "folder-1");
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->CloudId, "");
     }
 
     // The account is known but IAM returned it without a folder: an error naming the account, not a lookup of "".
@@ -1742,7 +1728,7 @@ Y_UNIT_TEST_SUITE(IamCloudResolver) {
         const auto result = f.ResolveCloud("sa-1");
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Result.Status, Ydb::StatusIds::INTERNAL_ERROR);
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "returned no folder for sa-1");
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->FolderId, "");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Resolved.FolderId, "");
     }
 
     // Resource Manager resolved the folder but reported no cloud for it.
@@ -1752,7 +1738,7 @@ Y_UNIT_TEST_SUITE(IamCloudResolver) {
         const auto result = f.ResolveCloud("sa-1");
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Result.Status, Ydb::StatusIds::NOT_FOUND);
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "did not resolve folder folder-1");
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->CloudId, "");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Resolved.CloudId, "");
     }
 
     // No user token to authorize the lookups with: refused at once, nothing is sent to IAM.
@@ -1782,7 +1768,6 @@ Y_UNIT_TEST_SUITE(IamCloudResolver) {
         const auto result = f.ResolveCloud("sa-1");
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Result.Status, Ydb::StatusIds::UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "ResolveFolders failed after 3 attempts");
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->FolderId, "folder-1");
     }
 }
 

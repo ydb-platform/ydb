@@ -56,8 +56,8 @@ public:
         return NKikimrServices::TActivity::IAM_DELEGATED_TOKEN_SERVICE_ACTOR;
     }
 
-    TIamDelegatedTokenService(const TIamDelegationSettings& settings, ISystemTokenSource::TPtr tokenSource)
-        : TBase(settings, std::move(tokenSource))
+    TIamDelegatedTokenService(const TIamDelegationSettings& settings, const TActorId& systemTokenService)
+        : TBase(settings, systemTokenService)
     {}
 
     void Bootstrap() {
@@ -116,7 +116,7 @@ private:
         entry->LastUse = TActivationContext::Now();
         if (!entry->LoopRunning) {
             entry->LoopRunning = true;
-            RefreshLoop(key); // independent top-level task
+            Spawn(&TThis::RefreshLoop, this, key);
         }
         return *entry;
     }
@@ -169,8 +169,9 @@ private:
         }
     }
 
-    // top-level coroutine: background refresh loop of one key
-    void RefreshLoop(TTokenKey key) {
+    // Background refresh loop of one key, a task of the actor (Spawn): mints, publishes the result to the
+    // requests parked on the entry, sleeps until the next refresh, and ends when the entry is dropped.
+    async<void> RefreshLoop(TTokenKey key) {
         Y_DEFER {
             if (TEntry* entry = FindEntry(key)) {
                 entry->LoopRunning = false;
@@ -300,8 +301,8 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CachedKeys;
 };
 
-IActor* CreateIamDelegatedTokenService(const TIamDelegationSettings& settings, ISystemTokenSource::TPtr tokenSource) {
-    return new TIamDelegatedTokenService(settings, std::move(tokenSource));
+IActor* CreateIamDelegatedTokenService(const TIamDelegationSettings& settings, const TActorId& systemTokenService) {
+    return new TIamDelegatedTokenService(settings, systemTokenService);
 }
 
 } // namespace NKikimr::NIamDelegation

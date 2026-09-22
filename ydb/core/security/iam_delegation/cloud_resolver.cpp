@@ -1,7 +1,6 @@
 #include "cloud_resolver.h"
 #include "iam_actor_base.h"
 
-#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/ycloud/api/folder_service.h>
 #include <ydb/library/ycloud/api/service_account_service.h>
 #include <ydb/library/ycloud/impl/folder_service.h>
@@ -13,140 +12,79 @@ namespace NKikimr::NIamDelegation {
 
 using namespace NActors;
 
-// The calls are authorized with the user's token, which is what the base class obtains from its token
-// source: a static source holding the user's token makes CallWithRetry send it as is.
-class TCloudResolver : public TIamActorBase<TCloudResolver> {
-private:
-    using TBase = TIamActorBase<TCloudResolver>;
+namespace {
 
+// A client actor registered for one call: poisoned when the call ends, including when the caller's
+// timeout cancels the call (the coroutine frame is destroyed on the caller's thread, in its context).
+// Not on actor system shutdown: there is no context then, and the client dies with the system.
+class TCallClient {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::IAM_CLOUD_RESOLVER_ACTOR;
-    }
-
-    TCloudResolver(const TIamDelegationSettings& settings, const TString& userToken, const TString& serviceAccountId,
-            const TActorId& replyTo, ui64 cookie)
-        : TBase(settings, CreateStaticSystemTokenSource(userToken))
-        , ServiceAccountId(serviceAccountId)
-        , ReplyTo(replyTo)
-        , Cookie(cookie)
-        , HasUserToken(!userToken.empty())
+    explicit TCallClient(IActor* client)
+        : Id(TActivationContext::AsActorContext().RegisterWithSameMailbox(client))
     {}
 
-    void Bootstrap() {
-        Become(&TThis::StateWork);
+    TCallClient(const TCallClient&) = delete;
+    TCallClient& operator=(const TCallClient&) = delete;
 
-        if (!HasUserToken) {
-            // nothing to authorize the lookups with: answered at once rather than retried as a missing system token
-            auto result = std::make_unique<TEvIamDelegation::TEvResolveCloudResult>();
-            result->ServiceAccountId = ServiceAccountId;
-            result->Result = TDelegationResult::Error(Ydb::StatusIds::UNAUTHORIZED,
-                TStringBuilder() << "no user token to look service account " << ServiceAccountId << " up with");
-            Send(ReplyTo, result.release(), 0, Cookie);
-            BeginShutdown();
-            co_return;
+    ~TCallClient() {
+        if (TlsActivationContext) {
+            TActivationContext::Send(new IEventHandle(Id, TActorId(), new TEvents::TEvPoison()));
         }
-
-        {
-            NCloud::TServiceAccountServiceSettings clientSettings(Settings.ServiceControlEndpoint, "ydb-iam-delegation");
-            clientSettings.EnableSsl = Settings.EnableSsl;
-            clientSettings.RequestTimeoutMs = Settings.RequestTimeout.MilliSeconds();
-            ServiceAccountClient = RegisterWithSameMailbox(NCloud::CreateServiceAccountService(clientSettings));
-        }
-        {
-            NCloud::TFolderServiceSettings clientSettings;
-            clientSettings.Endpoint = Settings.ResourceManagerEndpoint;
-            clientSettings.EnableSsl = Settings.EnableSsl;
-            clientSettings.RequestTimeoutMs = Settings.RequestTimeout.MilliSeconds();
-            FolderClient = RegisterWithSameMailbox(NCloud::CreateFolderService(clientSettings));
-        }
-
-        auto result = std::make_unique<TEvIamDelegation::TEvResolveCloudResult>();
-        result->ServiceAccountId = ServiceAccountId;
-        try {
-            result->FolderId = co_await GetFolder();
-            result->CloudId = co_await ResolveCloud(result->FolderId);
-            YDB_LOG_INFO("Cloud of service account resolved",
-                {"serviceAccountId", ServiceAccountId},
-                {"folderId", result->FolderId},
-                {"cloudId", result->CloudId}
-            );
-        } catch (const TIamCallError& e) {
-            result->Result = TDelegationResult::Error(e.Status, e.what());
-        } catch (const std::exception& e) {
-            result->Result = TDelegationResult::Error(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "unexpected exception: " << e.what());
-        }
-        if (!result->Result.IsSuccess()) {
-            YDB_LOG_WARN("Cloud of service account is unknown",
-                {"serviceAccountId", ServiceAccountId},
-                {"status", result->Result.Status},
-                {"issues", result->Result.Issues.ToOneLineString()}
-            );
-        }
-        Send(ReplyTo, result.release(), 0, Cookie);
-        BeginShutdown();
     }
 
-    STRICT_STFUNC(StateWork,
-        // late replies after a timeout
-        IgnoreFunc(NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse);
-        IgnoreFunc(NCloud::TEvFolderService::TEvResolveFoldersResponse);
-        IgnoreFunc(TEvIamDelegation::TEvSystemTokenReady);
-        IgnoreFunc(TEvents::TEvUndelivered);
-        cFunc(TEvents::TEvPoison::EventType, BeginShutdown);
-    )
-
-    STFUNC(StateDying) {
-        Y_UNUSED(ev); // PassAway may be waiting for coroutine tasks
-    }
-
-private:
-    void BeginShutdown() {
-        Become(&TThis::StateDying);
-        Send(ServiceAccountClient, new TEvents::TEvPoison());
-        Send(FolderClient, new TEvents::TEvPoison());
-        PassAway();
-    }
-
-    async<TString> GetFolder() {
-        auto response = co_await CallWithRetry<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest, NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(
-            ServiceAccountClient, "GetServiceAccount", [this](auto& request) {
-                request.set_service_account_id(ServiceAccountId);
-            });
-        const TString folderId = response->Get()->Response.folder_id();
-        if (folderId.empty()) {
-            throw TIamCallError(Ydb::StatusIds::INTERNAL_ERROR) << "GetServiceAccount returned no folder for " << ServiceAccountId;
-        }
-        co_return folderId;
-    }
-
-    async<TString> ResolveCloud(TString folderId) {
-        auto response = co_await CallWithRetry<NCloud::TEvFolderService::TEvResolveFoldersRequest, NCloud::TEvFolderService::TEvResolveFoldersResponse>(
-            FolderClient, "ResolveFolders", [&folderId](auto& request) {
-                request.add_folder_ids(folderId);
-            });
-        for (const auto& folder : response->Get()->Response.resolved_folders()) {
-            if (folder.id() == folderId && !folder.cloud_id().empty()) {
-                co_return folder.cloud_id();
-            }
-        }
-        throw TIamCallError(Ydb::StatusIds::NOT_FOUND) << "ResolveFolders did not resolve folder " << folderId << " of service account " << ServiceAccountId;
-    }
-
-private:
-    const TString ServiceAccountId;
-    const TActorId ReplyTo;
-    const ui64 Cookie;
-    const bool HasUserToken;
-    TActorId ServiceAccountClient;
-    TActorId FolderClient;
+    const TActorId Id;
 };
 
-IActor* CreateCloudResolver(const TIamDelegationSettings& settings, const TString& userToken, const TString& serviceAccountId,
-    const TActorId& replyTo, ui64 cookie)
-{
+} // namespace
+
+async<TResolvedCloud> ResolveCloud(TIamDelegationSettings settings, TString userToken, TString serviceAccountId) {
     AFL_ENSURE(settings.CanResolveCloud())("serviceControlEndpoint", settings.ServiceControlEndpoint)("resourceManagerEndpoint", settings.ResourceManagerEndpoint);
-    return new TCloudResolver(settings, userToken, serviceAccountId, replyTo, cookie);
+    if (userToken.empty()) {
+        throw TIamCallError(Ydb::StatusIds::UNAUTHORIZED) << "no user token to look service account " << serviceAccountId << " up with";
+    }
+
+    NCloud::TServiceAccountServiceSettings serviceAccountSettings(settings.ServiceControlEndpoint, "ydb-iam-delegation");
+    serviceAccountSettings.EnableSsl = settings.EnableSsl;
+    serviceAccountSettings.RequestTimeoutMs = settings.RequestTimeout.MilliSeconds();
+    const TCallClient serviceAccountClient(NCloud::CreateServiceAccountService(serviceAccountSettings));
+
+    NCloud::TFolderServiceSettings folderSettings;
+    folderSettings.Endpoint = settings.ResourceManagerEndpoint;
+    folderSettings.EnableSsl = settings.EnableSsl;
+    folderSettings.RequestTimeoutMs = settings.RequestTimeout.MilliSeconds();
+    const TCallClient folderClient(NCloud::CreateFolderService(folderSettings));
+
+    const auto credentials = TIamCallCredentials::Token(userToken);
+    TResolvedCloud resolved;
+
+    const auto account = co_await IamCallWithRetry<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest, NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(
+        settings, credentials, serviceAccountClient.Id, "GetServiceAccount", [&serviceAccountId](auto& request) {
+            request.set_service_account_id(serviceAccountId);
+        });
+    resolved.FolderId = account->Get()->Response.folder_id();
+    if (resolved.FolderId.empty()) {
+        throw TIamCallError(Ydb::StatusIds::INTERNAL_ERROR) << "GetServiceAccount returned no folder for " << serviceAccountId;
+    }
+
+    const auto folders = co_await IamCallWithRetry<NCloud::TEvFolderService::TEvResolveFoldersRequest, NCloud::TEvFolderService::TEvResolveFoldersResponse>(
+        settings, credentials, folderClient.Id, "ResolveFolders", [&resolved](auto& request) {
+            request.add_folder_ids(resolved.FolderId);
+        });
+    for (const auto& folder : folders->Get()->Response.resolved_folders()) {
+        if (folder.id() == resolved.FolderId && !folder.cloud_id().empty()) {
+            resolved.CloudId = folder.cloud_id();
+        }
+    }
+    if (resolved.CloudId.empty()) {
+        throw TIamCallError(Ydb::StatusIds::NOT_FOUND) << "ResolveFolders did not resolve folder " << resolved.FolderId << " of service account " << serviceAccountId;
+    }
+
+    YDB_LOG_INFO("Cloud of service account resolved",
+        {"serviceAccountId", serviceAccountId},
+        {"folderId", resolved.FolderId},
+        {"cloudId", resolved.CloudId}
+    );
+    co_return resolved;
 }
 
 } // namespace NKikimr::NIamDelegation

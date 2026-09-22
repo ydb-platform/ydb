@@ -72,10 +72,8 @@ struct TEvIamDelegation {
         EvGetToken,
         EvGetTokenResult,
 
-        // cloud resolver
-        EvResolveCloudResult,
-
-        // private
+        // system token service
+        EvGetSystemToken,
         EvSystemTokenReady,
 
         EvEnd
@@ -138,15 +136,11 @@ struct TEvIamDelegation {
         }
     };
 
-    // Reply of the cloud resolver: the cloud (and folder) of the service account it was created for.
-    struct TEvResolveCloudResult : NActors::TEventLocal<TEvResolveCloudResult, EvResolveCloudResult> {
-        TDelegationResult Result;
-        TString ServiceAccountId;
-        TString FolderId;
-        TString CloudId;
+    // Request of the system token service: answered with TEvSystemTokenReady to the sender, with the cookie.
+    struct TEvGetSystemToken : NActors::TEventLocal<TEvGetSystemToken, EvGetSystemToken> {
     };
 
-    // Completion of ISystemTokenSource::RequestToken.
+    // Answer of the system token service to TEvGetSystemToken: the token, or the error of obtaining it.
     struct TEvSystemTokenReady : NActors::TEventLocal<TEvSystemTokenReady, EvSystemTokenReady> {
         TString Token;
         TString Error;

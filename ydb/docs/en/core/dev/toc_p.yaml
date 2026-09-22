@@ -6,6 +6,16 @@ items:
   include:
     mode: link
     path: streaming-query/toc_p.yaml
+<<<<<<< HEAD
+=======
+- name: Example applications
+  href: example-app/index.md
+  include:
+    mode: link
+    path: example-app/toc_p.yaml
+- name: Generate code from YQL
+  href: sqlc-ydb.md
+>>>>>>> ad580a71c86 (docs: add sqlc-ydb quick start with synchronized language tabs (#52929))
 - name: YQL tutorial
   href: yql-tutorial/index.md
   include:

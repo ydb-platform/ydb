@@ -114,7 +114,7 @@ private:
     TControlWrapper MaxCacheDataSize;
     const bool UseMaxCacheDataSizeFromConfig;
     TControlWrapper MaxInFlightDataSize;
-    TControlWrapper WriteProtectDurationMs;
+    ui64 WriteProtectDurationMs;
     ui64 MaxRequestBytes;
     TDuration ReadDeadlineDuration;
     i64 CacheDataSize;   // Current size of all blobs in cache
@@ -173,7 +173,7 @@ public:
         , MaxCacheDataSize(settings.MaxCacheDataSize.value_or(DEFAULT_MAX_CACHE_DATA_SIZE), 0, 1ull << 40)
         , UseMaxCacheDataSizeFromConfig(settings.MaxCacheDataSize.has_value())
         , MaxInFlightDataSize(settings.MaxInFlightBytes.value_or(Min<ui64>((ui64)MaxCacheDataSize, DEFAULT_MAX_IN_FLIGHT_BYTES)), 0, 10ull << 30)
-        , WriteProtectDurationMs(settings.WriteProtectDurationMs.value_or(DEFAULT_WRITE_PROTECT_DURATION_MS), 0, 7ull * 86400000)
+        , WriteProtectDurationMs(settings.WriteProtectDurationMs.value_or(DEFAULT_WRITE_PROTECT_DURATION_MS))
         , MaxRequestBytes(settings.MaxRequestBytes.value_or(DEFAULT_MAX_REQUEST_BYTES))
         , ReadDeadlineDuration(TDuration::MilliSeconds(settings.ReadDeadlineMs.value_or(DEFAULT_READ_DEADLINE_MS)))
         , CacheDataSize(0)
@@ -214,7 +214,6 @@ public:
         auto& icb = AppData(ctx)->Icb;
         TControlBoard::RegisterSharedControl(MaxCacheDataSize, icb->BlobCache.MaxCacheDataSize);
         TControlBoard::RegisterSharedControl(MaxInFlightDataSize, icb->BlobCache.MaxInFlightDataSize);
-        TControlBoard::RegisterSharedControl(WriteProtectDurationMs, icb->BlobCache.WriteProtectDurationMs);
 
         LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize << " InFlightDataSize: " << (i64)InFlightDataSize);
 
@@ -674,7 +673,7 @@ private:
             {"sticky", sticky});
 
         const TInstant now = TAppData::TimeProvider->Now();
-        const TDuration protectFor = TDuration::MilliSeconds((ui64)WriteProtectDurationMs);
+        const TDuration protectFor = TDuration::MilliSeconds(WriteProtectDurationMs);
         const TInstant stickyUntil = (sticky && protectFor) ? (now + protectFor) : TInstant::Zero();
 
         auto existing = Cache.FindWithoutPromote(blobRange);

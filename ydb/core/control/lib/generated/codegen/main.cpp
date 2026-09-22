@@ -274,8 +274,7 @@ void CodeGenBlobCacheControls(TCodeGenContext& context) {
     };
     for (const auto& field: {
         "MaxCacheDataSize",
-        "MaxInFlightDataSize",
-        "WriteProtectDurationMs"
+        "MaxInFlightDataSize"
     }) {
         auto fieldPath = TStringBuilder() << blobCacheControls.Name << "." << field;
         TImmediateControl control {

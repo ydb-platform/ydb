@@ -10,6 +10,14 @@
         "min_langver": "2026.03",
         "is_backport_allowed": true
     },
+    "SparkDigestFuncs": {
+        "min_langver": "2026.03",
+        "is_backport_allowed": true
+    },
+    "SparkStringFuncs": {
+        "min_langver": "2026.03",
+        "is_backport_allowed": true
+    },
     "IfWithoutEvaluate": {
         "description": "IF without EVALUATE",
         "min_langver": "max",

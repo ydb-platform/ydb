@@ -56,6 +56,40 @@ TString ReverseBytes(const TStringRef input) {
     return result;
 }
 
+char GetSoundexCode(char character) {
+    static constexpr TStringBuf Codes = "01230120022455012623010202";
+    return character >= 'A' && character <= 'Z' ? Codes[character - 'A'] : 0;
+}
+
+TString Soundex(TStringBuf input) {
+    TString result;
+    char previousCode = 0;
+    for (char character : input) {
+        if (character >= 'a' && character <= 'z') {
+            character -= 'a' - 'A';
+        }
+        const char code = GetSoundexCode(character);
+        if (!code) {
+            continue;
+        }
+        if (result.empty()) {
+            result += character;
+        } else if (code != '0' && code != previousCode) {
+            result += code;
+        }
+        if (character != 'H' && character != 'W') {
+            previousCode = code;
+        }
+        if (result.size() == 4) {
+            break;
+        }
+    }
+    if (!result.empty()) {
+        result.resize(4, '0');
+    }
+    return result;
+}
+
 TString ReverseBits(const TStringRef input) {
     TString result;
     result.ReserveAndResize(input.Size());
@@ -397,7 +431,8 @@ SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
     XX(Strip, StripString, NYql::UnknownLangVersion)                              \
     XX(Collapse, Collapse, NYql::UnknownLangVersion)                              \
     XX(ReverseBytes, ReverseBytes, NYql::NFeature::StringReverseBytes.MinLangVer) \
-    XX(ReverseBits, ReverseBits, NYql::NFeature::StringReverseBytes.MinLangVer)
+    XX(ReverseBits, ReverseBits, NYql::NFeature::StringReverseBytes.MinLangVer)   \
+    XX(Soundex, Soundex, NYql::NFeature::SparkStringFuncs.MinLangVer)
 
 #define STRING_UNSAFE_UDF_MAP(XX)              \
     XX(Base32Decode, Base32Decode)             \

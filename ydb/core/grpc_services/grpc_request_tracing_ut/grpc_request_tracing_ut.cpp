@@ -809,6 +809,8 @@ Y_UNIT_TEST_TWIN(InternalDatabaseResolutionRespectsFlag, relativePathsEnabled) {
     NGRpcService::TRefreshTokenGenericRequest emptyRefresh("", "", "", "", {});
     const TString expected = relativePathsEnabled ? "/Root/mydb" : "mydb";
     runtime.GetAppData().FeatureFlags.SetEnableRelativePaths(!relativePathsEnabled);
+    refresh.InitRootPath(&runtime.GetAppData());
+    emptyRefresh.InitRootPath(&runtime.GetAppData());
     UNIT_ASSERT_VALUES_EQUAL(request->GetDatabaseName().GetRef(), expected);
     // Refresh keeps the database selected by the original stream, even if the flag changed.
     UNIT_ASSERT_VALUES_EQUAL(refresh.GetDatabaseName().GetRef(), "Root/mydb");

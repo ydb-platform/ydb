@@ -1217,7 +1217,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLogTypes) {
     /* Y_UNIT_TEST(Bool) {
         TestType<bool, TString>(true, TString("s"));
     } */
-
     Y_UNIT_TEST(Int8) {
         TestType<i8, TString>(i8(-8), TString("s"));
     }

@@ -3376,12 +3376,40 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
                                             ctx);
                 return;
             }
+            // Kafka < 4.0 reuses producerId+epoch across consecutive transactions.
+            // Produce for the next txn may already be queued while the previous WriteId
+            // is gone. Completing this EndTxn as an empty commit would publish offsets
+            // without those writes (Kafka 3.4 returns CONCURRENT_TRANSACTIONS instead).
+            if (KafkaNextTransactionRequests.contains(writeId.GetKafkaProducerInstanceId())) {
+                LOG_W("TxId Kafka commit while previous transaction is still completing",
+                    {"txId", event.GetTxId()},
+                    {"writeId", writeId});
+                SendProposeTransactionOverloaded(ActorIdFromProto(event.GetSourceActor()),
+                                                 event.GetTxId(),
+                                                 NKikimrPQ::TError::ERROR,
+                                                 "previous Kafka transaction is still completing",
+                                                 ctx);
+                return;
+            }
             LOG_D("TxId Kafka commit with no writes for WriteId",
                 {"txId", event.GetTxId()},
                 {"writeId", writeId});
         } else {
             TTxWriteInfo& writeInfo = TxWrites.at(writeId);
             if (writeInfo.Deleting) {
+                // Kafka 3.4: EndTxn while the previous txn is still completing is retryable
+                // CONCURRENT_TRANSACTIONS, not a fatal abort and not an empty success.
+                if (writeId.IsKafkaApiTransaction()) {
+                    LOG_W("TxId Kafka commit while previous transaction is still completing",
+                        {"txId", event.GetTxId()},
+                        {"writeId", writeId});
+                    SendProposeTransactionOverloaded(ActorIdFromProto(event.GetSourceActor()),
+                                                     event.GetTxId(),
+                                                     NKikimrPQ::TError::ERROR,
+                                                     "previous Kafka transaction is still completing",
+                                                     ctx);
+                    return;
+                }
                 LOG_W("TxId WriteId will be deleted",
                     {"txId", event.GetTxId()},
                     {"writeId", writeId});
@@ -5656,6 +5684,21 @@ void TPersQueue::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& 
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
+void TPersQueue::Handle(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
+    const ui32 partitionId = ev->Get()->GetPartitionId();
+    auto it = Partitions.find(TPartitionId{partitionId});
+    if (it == Partitions.end()) {
+        const ui64 cookie = ev->Get()->Record.HasCookie() ? ev->Get()->Record.GetCookie() : ev->Cookie;
+        Send(ev->Sender, new TEvPQ::TEvResetOffsetResponse(
+            partitionId,
+            Ydb::StatusIds::SCHEME_ERROR,
+            TStringBuilder() << "Partition " << partitionId << " not found",
+            cookie), 0, cookie);
+        return;
+    }
+    Forward(ev, it->second.Actor);
+}
+
 void TPersQueue::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr& ev) {
     auto& record = ev->Get()->Record;
     auto partitionId = record.GetPartitionId();
@@ -5772,6 +5815,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
         hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
+        hFuncTraced(TEvPQ::TEvResetOffsetRequest, Handle);
         hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             return false;

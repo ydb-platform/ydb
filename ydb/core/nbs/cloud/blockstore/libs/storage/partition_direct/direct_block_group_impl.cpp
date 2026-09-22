@@ -73,9 +73,11 @@ TListPBufferResponse MakeListPBufferResponse(
             .Generation = segment.GetGeneration(),
             .Lsn = segment.GetLsn()};
         ui32 vChunkIndex = segment.GetSelector().GetVChunkIndex();
-        auto range = TBlockRange64::WithLength(
-            segment.GetSelector().GetOffsetInBytes() / blockSize,
-            segment.GetSelector().GetSize() / blockSize);
+        const ui16 rangeStart =
+            segment.GetSelector().GetOffsetInBytes() / blockSize;
+        const ui16 rangeSize = segment.GetSelector().GetSize() / blockSize;
+        Y_ABORT_UNLESS(rangeSize);
+        const auto range = TBlockRange16::WithLength(rangeStart, rangeSize);
         result.Meta.push_back(
             {.VChunkIndex = vChunkIndex,
              .PBufferKey = pBufferKey,
@@ -161,6 +163,7 @@ CreateWaitSessionCbForSyncWithPBuffer(
 ////////////////////////////////////////////////////////////////////////////////
 
 TDirectBlockGroup::TDirectBlockGroup(
+    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
     TExecutorPtr executor,
@@ -169,10 +172,13 @@ TDirectBlockGroup::TDirectBlockGroup(
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
+    const TVector<EHostHealth>& hostHealths,
     ui32 dbgConnectionsConfigGeneration,
     NTransport::TStorageTransportPtr storageTransport,
     NMonitoring::TDynamicCounterPtr counters)
-    : ActorSystem(actorSystem)
+    : ArenaAllocatorPool(
+          std::make_shared<TArenaAllocatorPool>(std::move(arenaAllocator)))
+    , ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
     , Executor(std::move(executor))
     , TabletId(diskDescription.TabletId)
@@ -192,11 +198,12 @@ TDirectBlockGroup::TDirectBlockGroup(
           TabletGeneration,
           static_cast<ui32>(DirectBlockGroupIndex),
           dbgConnectionsConfigGeneration)
-    , Oracle(StorageConfig, this)
+    , Oracle(StorageConfig, this, hostHealths)
     , Counters(std::move(counters))
 {
     Y_ABORT_UNLESS(IsSupportedBlockSize(BlockSize));
     Y_ASSERT(pbufferIds.size() == ddisksIds.size());
+    Y_ASSERT(hostHealths.size() == ddisksIds.size());
     Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
 
     for (THostIndex host = 0; host < ddisksIds.size(); ++host) {
@@ -215,6 +222,11 @@ TDirectBlockGroup::~TDirectBlockGroup()
         NKikimrServices::NBS_PARTITION,
         "%s ~TDirectBlockGroup",
         LogTitle.GetWithTime().c_str());
+}
+
+TArenaAllocatorPoolPtr TDirectBlockGroup::GetArenaAllocatorPool()
+{
+    return ArenaAllocatorPool;
 }
 
 void TDirectBlockGroup::Register(TVChunkWeakPtr weakVChunk)
@@ -291,7 +303,7 @@ NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroup::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -419,7 +431,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -493,7 +505,7 @@ NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroup::WriteBlocksToDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -621,14 +633,13 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
     // INVARIANT: PBuffer does NOT require a session/lock
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    // New records are always minted under the current tablet generation.
-    Y_ABORT_UNLESS(pBufferKey.Generation == TabletGeneration);
+    OnNewPBufferKey(pBufferKey);
 
     using TEvWritePersistentBufferResultFuture = NThreading::TFuture<
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>;
@@ -698,7 +709,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     THostIndex coordinatorHostIndex,
     THostMask hostIndexes,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId,
@@ -710,8 +721,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     // INVARIANT: PBuffer does NOT require a session/lock
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(hostIndexes.Count() > 0);
-    // New records are always minted under the current tablet generation.
-    Y_ABORT_UNLESS(pBufferKey.Generation == TabletGeneration);
+    OnNewPBufferKey(pBufferKey);
 
     const auto startAt = TMonotonic::Now();
 
@@ -1080,30 +1090,56 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
     return result;
 }
 
-void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
+void TDirectBlockGroup::OnNewPBufferKey(TPBufferKey pBufferKey)
 {
-    Executor->ExecuteSimple(
-        [weakSelf = weak_from_this(), lsn]()
-        {
-            auto self = weakSelf.lock();
-            if (!self) {
-                return;
-            }
-            LOG_DEBUG(
-                *self->ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "%s barrier-erase lsn=%lu on %lu PBuffer hosts",
-                self->LogTitle.GetWithTime().c_str(),
-                lsn,
-                self->Connections.GetSlotCount());
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(pBufferKey.Generation == TabletGeneration);
 
-            auto span = self->TraceService->CreateRootSpan(
-                "NbsPartition.BarrierEraseFromPBuffer");
+    const ui64 step = StorageConfig->GetPBufferCleanupLsnStep();
+    if (step && pBufferKey.Lsn % step == 0) {
+        PBufferCleanup();
+    }
+}
 
-            for (THostIndex h = 0; h < self->Connections.GetSlotCount(); ++h) {
-                self->DoBarrierEraseFromPBuffer(h, lsn, span.GetTraceId());
-            }
-        });
+std::optional<TPBufferKey> TDirectBlockGroup::ComputeSafeBarrierForErase() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    std::optional<TPBufferKey> safeBarrier;
+    for (const auto& weakVChunk: VChunks) {
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk) {
+            continue;
+        }
+        const auto candidate = vChunk->GetSafeBarrierForErase();
+        if (candidate && (!safeBarrier || *candidate < *safeBarrier)) {
+            safeBarrier = candidate;
+        }
+    }
+    return safeBarrier;
+}
+
+void TDirectBlockGroup::PBufferCleanup()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const auto safeBarrier = ComputeSafeBarrierForErase();
+    if (!safeBarrier || safeBarrier->Lsn == 0 ||
+        safeBarrier->Generation != TabletGeneration)
+    {
+        return;
+    }
+
+    const ui64 cleanupBound = safeBarrier->Lsn - 1;
+
+    auto span = TraceService->CreateRootSpan("NbsPartition.PBufferCleanup");
+    for (THostIndex h = 0; h < Connections.GetSlotCount(); ++h) {
+        if (cleanupBound <= LastSentBarrierByPBufferHost[h]) {
+            continue;
+        }
+        LastSentBarrierByPBufferHost[h] = cleanupBound;
+        DoBarrierEraseFromPBuffer(h, cleanupBound, span.GetTraceId());
+    }
 }
 
 void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
@@ -1112,13 +1148,6 @@ void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
     const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    if (!Service->TryAdvancePBufferBarrier(
-            Connections.GetPBuffer(hostIndex).HostConnection.DDiskId,
-            lsn))
-    {
-        return;
-    }
 
     using TEvErasePersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
@@ -1169,38 +1198,6 @@ void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
                         TranslateError(result));
                 });
         });
-}
-
-NThreading::TFuture<std::optional<TPBufferKey>>
-TDirectBlockGroup::GatherSafeBarrierForErase()
-{
-    auto promise = NewPromise<std::optional<TPBufferKey>>();
-    auto future = promise.GetFuture();
-
-    Executor->ExecuteSimple(
-        [weakSelf = weak_from_this(), promise]() mutable
-        {
-            auto self = weakSelf.lock();
-            if (!self) {
-                promise.SetValue(std::nullopt);
-                return;
-            }
-
-            std::optional<TPBufferKey> safeBarrier;
-            for (const auto& weakVChunk: self->VChunks) {
-                auto vChunk = weakVChunk.lock();
-                if (!vChunk) {
-                    continue;
-                }
-                const auto candidate = vChunk->GetSafeBarrierForErase();
-                if (candidate && (!safeBarrier || *candidate < *safeBarrier)) {
-                    safeBarrier = candidate;
-                }
-            }
-            promise.SetValue(safeBarrier);
-        });
-
-    return future;
 }
 
 NThreading::TFuture<TDBGRestoreResponse> TDirectBlockGroup::RestoreDBGPBuffers(
@@ -1865,7 +1862,7 @@ TString TDirectBlockGroup::ValidateRemoveHost(THostIndex hostIndex) const
         }
         // Removal is irreversible, so every vchunk must keep a quorum of
         // healthy ddisks. The disabled host is not in that set already.
-        const auto healthyCount = cfg.GetHealthyDDisks().Count();
+        const auto healthyCount = vChunk->GetHealthyDDisks().Count();
         if (healthyCount < QuorumDirectBlockGroupHostCount) {
             return TStringBuilder()
                    << "vchunk " << cfg.GetVChunkIndex() << " has "
@@ -2148,21 +2145,29 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
     }
 
     auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
-    TVChunkConfigs vChunkConfigs;
-    size_t allocatedMemorySize = 0;
-    size_t usedMemorySize = 0;
+    TDirtyMapStats dirtyMapStats;
+    TCountAndSize pBuffersUsage;
+    THashMap<ui32, THostMask> freshDDisks;
+
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
-            vChunkConfigs[vChunk->GetConfig().GetVChunkIndex()] =
-                vChunk->GetConfig();
-
+            THostMask fresh;
             for (THostIndex host = 0; host < GetHostCount(); ++host) {
-                auto& stat = hostsStat[host];
-                stat.FreshTotalBytes += vChunk->GetFreshTotalBytes(host);
-                stat.RottenTotalBytes += vChunk->GetRottenTotalBytes(host);
+                const auto hostStats = vChunk->GetDirtyMapHostStats(host);
+                hostsStat[host].DirtyMapStats.Aggregate(hostStats);
+                pBuffersUsage += hostStats.PBuffersUsage;
+                if (hostStats.FreshTotalBytes != 0 ||
+                    hostStats.RottenTotalBytes != 0)
+                {
+                    fresh.Set(host);
+                }
             }
-            allocatedMemorySize += vChunk->GetAllocatedMemorySize();
-            usedMemorySize += vChunk->GetUsedMemorySize();
+            if (!fresh.Empty()) {
+                freshDDisks.emplace(
+                    vChunk->GetConfig().GetVChunkIndex(),
+                    fresh);
+            }
+            dirtyMapStats.Aggregate(vChunk->GetDirtyMapStats());
         }
     }
 
@@ -2171,9 +2176,11 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .VChunkCount = VChunks.size(),
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
-        .VChunkConfigs = std::move(vChunkConfigs),
-        .AllocatedMemorySize = allocatedMemorySize,
-        .UsedMemorySize = usedMemorySize,
+        .FreshDDisks = std::move(freshDDisks),
+        .MemoryStats = ArenaAllocatorPool->GetMemoryStats(),
+        .DetailedMemoryStats = ArenaAllocatorPool->GetDetailedStat(),
+        .DirtyMapStats = dirtyMapStats,
+        .PBuffersUsage = pBuffersUsage,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };
 }

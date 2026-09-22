@@ -189,7 +189,8 @@ public:
 
     static void ContinueCursor(std::unique_ptr<NCommon::TDataSourceLease> sourceLease);
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
+    virtual NArrow::TSimpleRow GetFirstPK() const = 0;
+    virtual NArrow::TSimpleRow GetLastPK() const = 0;
 
     static void StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sourceLease);
     virtual void InitializeProcessing();
@@ -359,11 +360,19 @@ public:
         TBase::InitializeProcessing();
     }
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
+    virtual NArrow::TSimpleRow GetFirstPK() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
             return Portion->IndexKeyEnd();
         } else {
             return Portion->IndexKeyStart();
+        }
+    }
+
+    virtual NArrow::TSimpleRow GetLastPK() const override {
+        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
+            return Portion->IndexKeyStart();
+        } else {
+            return Portion->IndexKeyEnd();
         }
     }
 
@@ -561,8 +570,13 @@ public:
         return 0;
     }
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
+    virtual NArrow::TSimpleRow GetFirstPK() const override {
         AFL_VERIFY(false);
+        return NArrow::TSimpleRow(nullptr, 0);
+    }
+
+    virtual NArrow::TSimpleRow GetLastPK() const override {
+        AFL_VERIFY(false)("error", "GetLastPK not implemented");
         return NArrow::TSimpleRow(nullptr, 0);
     }
 

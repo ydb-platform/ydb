@@ -3,6 +3,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
@@ -11,6 +12,7 @@
 
 #include <ydb/core/mind/bscontroller/types.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
@@ -58,24 +60,24 @@ struct TTabletInfo
     ui64 TabletId = 0;
     ui32 Generation = 0;
     ui32 BlockSize = 0;
+    ui64 BlockCount = 0;
+    ui64 VChunkSize = 0;
+    ui32 VolumeDirectBlockGroupCount = 0;
+    size_t TouchedVChunkCount = 0;
+    size_t TouchedEnabledDDiskCount = 0;
+    size_t TouchedDisabledDDiskCount = 0;
     TString DiskId;
     TString State;   // "INIT" / "WORK"
 };
 
 struct TArenaMemoryUsage
 {
-    TVector<TArenaAllocatorStats> Slots;
+    TArenaAllocatorStats Slots;
 };
 
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
-    // Minimum safe barrier across all DBGs from the last finished cleanup
-    // round; 0 until the first round finishes.
-    ui64 LastSafeBarrier = 0;
-    size_t TotalVChunks = 0;
-    size_t DbgCount = 0;
-
     TArenaMemoryUsage ArenaMemoryUsage;
 };
 
@@ -95,9 +97,12 @@ struct TDbgSnapshot
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
-    TVChunkConfigs VChunkConfigs;
-    size_t AllocatedMemorySize = 0;
-    size_t UsedMemorySize = 0;
+    // Current Fresh DDisks for vchunks that have any.
+    THashMap<ui32, THostMask> FreshDDisks;
+    TArenaPoolStats MemoryStats;
+    TArenaAllocatorStats DetailedMemoryStats;
+    TDirtyMapStats DirtyMapStats;
+    TCountAndSize PBuffersUsage;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;
 };
@@ -140,8 +145,6 @@ struct TLocalDbContents
     std::optional<TString> VolumeConfig;
     std::optional<TString> DirectBlockGroupsConnections;
     std::optional<TString> AddHostInProgress;
-    // Persisted per-vchunk overrides.
-    TVChunkConfigs VChunkConfigs;
 };
 
 struct TMonPageData

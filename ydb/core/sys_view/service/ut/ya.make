@@ -5,11 +5,16 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/testlib/basics/default
+    ydb/core/tx/scheme_cache
 )
+
+YQL_LAST_ABI_VERSION()
 
 SRCS(
     db_counters_codec_ut.cpp
     query_history_ut.cpp
+    sysview_service_ut.cpp
 )
 
 END()

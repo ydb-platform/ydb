@@ -58,7 +58,8 @@ bool TSchedulableTask::TryIncreaseUsage() {
         return false;
     }
 
-    for (TTreeElement* parent = poolOrQuery; parent; parent = parent->GetParent()) {
+    // Always start from the query itself to keep usage symmetric with DecreaseUsage().
+    for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         if (parent != poolOrQuery) {
             ++parent->CpuUsage;
         }

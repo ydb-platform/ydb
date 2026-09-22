@@ -12,6 +12,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/pbuffer_key_test_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -42,7 +43,8 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     static constexpr ui32 FixtureVChunkIndex = 100;
 
     const ui32 BlockSize = DefaultBlockSize;
-    const ui64 VChunkBlockCount = DefaultVChunkSize / BlockSize;
+    const ui64 VChunkBlockCount =
+        GetVChunkBlockCount(BlockSize, DefaultVChunkSize);
     const ui64 BlocksPerCopy = CopyRangeSize / BlockSize;
     const THostIndex FreshDDisk = 1;
     TVChunkConfig VChunkConfig = TVChunkConfig::MakeDefault(
@@ -66,13 +68,15 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
     TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
-        CreateArenaAllocator(),
+        CreateArenaAllocatorPool(),
         VChunkConfig,
+        false,
+        DirtyMapStateProto,
         BlockSize,
         VChunkBlockCount);
 
     THostIndex ExpectedHost = 0;
-    TBlockRange64 ExpectedRange;
+    TBlockRange16 ExpectedRange;
     TString RangeData;
 
     TMutex PromisesGuard;
@@ -119,15 +123,21 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         return vchunk.DirtyMapReady.HasValue();
     }
 
-    static bool IsDirtyMapStatePersisting(TVChunk& vchunk)
+    static bool IsPersisting(TVChunk& vchunk)
     {
-        return vchunk.DirtyMapStatePersisting;
+        return vchunk.Persisting;
     }
 
     // Must be invoked on the vchunk's executor thread.
-    static void InvokePersistDirtyMap(TVChunk& vchunk)
+    static void InvokeStartPersist(TVChunk& vchunk)
     {
-        vchunk.DoPersistDirtyMap();
+        vchunk.StartPersist();
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokeFlush(TVChunk& vchunk)
+    {
+        vchunk.DoFlush(false);
     }
 
     static auto& AccessDirtyMapReadyPromise(TVChunk& vchunk)

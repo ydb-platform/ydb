@@ -31,6 +31,7 @@ from ydb.tools.ydb_bench.lib.linux_telemetry import LogicalCpuSampler
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, atomic_write_json, atomic_write_text
 from ydb.tools.ydb_bench.lib.config import BACKGROUND_LOAD_MODES, build_run_plan, load_config
 from ydb.tools.ydb_bench.lib.results import ResultStore, _non_finite_json_as_null, load_manifest
+from ydb.tools.ydb_bench.lib.run_index import RunIndex
 from ydb.tools.ydb_bench.lib.actors_core import run_benchmark
 from ydb.tools.ydb_bench.lib.common import binary_catalog, extract_executable, load_profile_binaries
 from ydb.tools.ydb_bench.lib.import_results import MAX_TOTAL_SIZE, export_archive, import_archive
@@ -38,16 +39,21 @@ from ydb.tools.ydb_bench.lib.local_ydb import run_local_ydb
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import web_workload_catalog
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, plan_affinity, topology_record
 from ydb.tools.ydb_bench.lib.ydb_telemetry import read_metrics
-from ydb.tools.ydb_bench.lib.hosts import HostDirectory, allowed_path, allowed_post_path, open_peer, request_peer
-from ydb.tools.ydb_bench.lib.federation import Federation, split_reference
-from ydb.tools.ydb_bench.lib.cluster_templates import ClusterTemplateStore
+from ydb.tools.ydb_bench.lib.hosts import HostDirectory, allowed_path, allowed_post_path
+from ydb.tools.ydb_bench.lib.federation import Federation, split_reference, page_options
+from ydb.tools.ydb_bench.lib.cluster_templates import ClusterTemplateStore, apply_configuration_yaml
+from ydb.tools.ydb_bench.lib.monitoring_settings import MonitoringSettings
+from ydb.tools.ydb_bench.lib.metrics_export import MetricsExporter
+from ydb.tools.ydb_bench.lib.grafana import Grafana
 from ydb.tools.ydb_bench.lib.distributed_sessions import HostSessions
 from ydb.tools.ydb_bench.lib.distributed_worker import DistributedWorker
 from ydb.tools.ydb_bench.lib.distributed_coordinator import DistributedCleanupError, request_operation
 from ydb.tools.ydb_bench.lib import process_recovery
 from ydb.tools.ydb_bench.lib.distributed_runtime import DistributedRuntime
 from ydb.tools.ydb_bench.lib.distributed_reports import attempt_counters
-from ydb.tools.ydb_bench.lib import cluster_templates_ui, distributed_builder_ui
+from ydb.tools.ydb_bench.lib import cluster_templates_ui, distributed_builder_ui, monitoring_settings_ui
+from ydb.tools.ydb_bench.lib import cluster_config, cluster_config_ui
+from ydb.tools.ydb_bench.lib.cluster_deployment import run_deployment
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 _STREAM_CHUNK_SIZE = 1024 * 1024
@@ -82,7 +88,8 @@ _CSS = (
     ':.9rem;margin:0 0 .6rem}.page-title{margin:0 0 1rem;font-size:1.5rem}.toolbar{display:flex;gap:.55rem;align-items:center'
     ';flex-wrap:wrap;margin:.8rem 0}.filters,.grid{display:grid;gap:.7rem}.filters{grid-template-columns:repeat(auto-fit,minm'
     'ax(10rem,1fr));background:var(--panel);padding:.8rem;border:1px solid #d0d5dd;border-radius:6px}.field{display:grid;gap:'
-    '.25rem}.field label{font-size:.85rem;color:var(--muted)}input,select,textarea{border:1px solid #98a2b3;border-radius:4px'
+    '.25rem}.filters .field{min-width:0}.filters input,.filters select{min-width:0;max-width:100%;width:100%;box-sizing:border-box}'
+    '.field label{font-size:.85rem;color:var(--muted)}input,select,textarea{border:1px solid #98a2b3;border-radius:4px'
     ';padding:.42rem;background:#fff;color:var(--text)}textarea.yaml{width:100%;min-height:33rem;tab-size:2;font-family:ui-mo'
     'nospace,SFMono-Regular,Menlo,monospace;line-height:1.35}.notice{padding:.7rem .85rem;border-radius:5px;background:#eef4f'
     'f;border:1px solid #b2ccff;margin:.8rem 0}.notice.error{background:#fff0f0;border-color:#fecdca;color:var(--bad)}.notice'
@@ -216,6 +223,10 @@ _CSS = (
 .attempt-pass{color:var(--good);font-weight:650}.attempt-fail{color:var(--bad);font-weight:650}
 .comparison-delta{font-weight:650}.comparison-delta.good{color:var(--good)}.comparison-delta.bad{color:var(--bad)}
 .comparison-config-changed{background:var(--panel);font-weight:600;overflow-wrap:anywhere}
+.comparison-config-group th{background:var(--panel);padding-top:.8rem}
+.comparison-config-table{table-layout:fixed;min-width:36rem;width:100%}
+.comparison-config-table th,.comparison-config-table td{white-space:normal;overflow-wrap:anywhere;vertical-align:top}
+.comparison-config-table th:first-child{width:28%}
 #local-ydb-comparison table{width:100%;min-width:620px;table-layout:fixed}
 #local-ydb-comparison td,#local-ydb-comparison th{white-space:normal;overflow-wrap:anywhere}
 #local-ydb-comparison .comparison-results th:first-child{width:34%}
@@ -294,6 +305,9 @@ _CSS += """
 .run-configuration{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none;padding:1rem;background:var(--panel)}
 .configuration-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.2rem 2rem}
 .configuration-grid h3{margin:.6rem 0}.configuration-values{margin:0}
+.configuration-grid>section{min-width:0;border-top:1px solid var(--line);padding-top:.6rem}
+.topbar .run-refresh{margin-left:.5rem;padding:.15rem .5rem;font-size:1.25rem}
+.run-header{justify-content:flex-end}.run-header+.muted{margin:.3rem 0 .7rem}
 .configuration-values>div{display:grid;grid-template-columns:minmax(8rem,1fr) minmax(0,1.4fr);gap:1rem;padding:.5rem 0;border-bottom:1px solid #d0d5dd}
 .configuration-values dt{color:var(--muted)}.configuration-values dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
 .configuration-subgroup{margin:.6rem 0}.configuration-subgroup h4{margin:.8rem 0 .3rem}
@@ -317,6 +331,16 @@ _CSS += """
 .new-run-page .editor-plan{margin:.8rem 0;color:var(--muted)}
 .new-run-page .page-heading{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
 .new-run-page .page-heading .toolbar{margin:0}.new-run-page .page-heading .page-title{margin:0}
+.new-run-page[data-editor-profile]>.page-heading{position:sticky;top:0;z-index:5;background:#fff;padding:.65rem 0;border-bottom:1px solid var(--line);margin-bottom:.7rem}
+.new-run-page[data-editor-profile]>.page-heading .toolbar{min-width:0}
+.new-run-page[data-editor-profile]>.page-heading label{min-width:0;max-width:100%}
+.new-run-page[data-editor-profile]>.page-heading select{max-width:100%}
+.new-run-page[data-editor-profile] :is(input,select,textarea,button,summary){scroll-margin-top:calc(var(--editor-toolbar-height,12rem) + 1rem)}
+@media(max-width:550px){
+.new-run-page[data-editor-profile]>.page-heading{gap:.5rem}
+.new-run-page[data-editor-profile]>.page-heading .toolbar{width:100%}
+.new-run-page[data-editor-profile]>.page-heading label{width:100%}
+.new-run-page[data-editor-profile]>.page-heading select{width:100%}}
 @media(max-width:800px){.new-run-page .editor-grid{grid-template-columns:1fr}}
 @media(max-width:550px){.new-run-page .editor-role{grid-template-columns:1fr}.new-run-page .editor-role strong{padding-top:0}}
 """
@@ -364,6 +388,7 @@ _JS = (
     "\\n    repetitions: 1\\n    affinity: [none]\\n',perf:false,continueOnError:false,model:null,error:null,selected:null};\n"
     "let activeRun=sessionStorage.getItem('ydb-bench-active-run')||'';\n"
     'let refreshTimer=null;\n'
+    'let editorToolbarObserver=null;\n'
     "const viewedHost=new URLSearchParams(location.search).get('host')||'';\n"
     """
 function splitRunRef(value){const match=/^([0-9a-f]{8}-[0-9a-f-]{27}):(.*)$/.exec(value);return match?{host:match[1],id:match[2]}:null}
@@ -375,12 +400,13 @@ async function refreshEditorActivity(){
   try{
     const value=await editorApi('/api/activity-status');
     if(host===editorHost&&button===document.querySelector('#start-run')){
-      button.textContent=value.active_run_id||value.queued?'Add to queue':'Start run'
+      button.textContent=value.active_run_id||value.queued?'Add to queue':editor.model?.profiles?.some(p=>p.distributed_config?.mode==='deploy')?'Deploy cluster':'Start run'
     }
   }catch{}
 }
 function runDisplay(value){return splitRunRef(value)?.id||value}
 function hostApiPath(path){
+  if(path.startsWith('/api/grafana/'))return path;
   if(path.startsWith('/api/federation/')||path.startsWith('/api/hosts'))return path;
   const match=/^[/]api[/]runs[/]([^/?]+)(.*)$/.exec(path),ref=match&&splitRunRef(decodeURIComponent(match[1]));
   if(ref)return '/api/hosts/'+enc(ref.host)+'/api/runs/'+enc(ref.id)+match[2];
@@ -389,10 +415,33 @@ function hostApiPath(path){
   return viewedHost&&(/#(?:run|attempt|distributed-attempt)[/]/.test(location.hash)||path==='/api/system-topology'||path==='/api/cpu-usage')?
     '/api/hosts/'+enc(viewedHost)+path:path
 }
-function federationErrors(errors){return (errors||[]).map(item=>'<div class=notice>'+esc(item.host_name)+': '+esc(item.error)+'</div>').join('')}
+function federationErrors(errors){return (errors||[]).map(item=>'<div class=notice>Results are incomplete — '+esc(item.host_name)+': '+esc(item.error)+'</div>').join('')}
+const hostAvailability=new Map();
+let checkingHostAvailability=false;
+async function refreshHostAvailability(){
+  if(checkingHostAvailability)return;
+  checkingHostAvailability=true;
+  try{
+    const value=await api('/api/hosts'),ids=new Set(value.hosts.map(h=>h.id));
+    for(const id of hostAvailability.keys())if(!ids.has(id))hostAvailability.delete(id);
+    const failed=[];
+    for(const host of value.hosts){
+      if(host.availability==='unavailable'&&hostAvailability.get(host.id)!=='unavailable')failed.push(host.name||host.id);
+      hostAvailability.set(host.id,host.availability);
+    }
+    if(failed.length){
+      document.getElementById('host-unavailable-toast')?.remove();
+      const toast=document.createElement('div');toast.id='host-unavailable-toast';toast.className='notice';
+      toast.setAttribute('role','status');toast.style.cssText='position:fixed;right:1rem;bottom:1rem;z-index:1000;max-width:32rem';
+      const text=document.createElement('span');text.textContent='Host unavailable: '+failed.join(', ');toast.append(text);
+      const close=document.createElement('button');close.type='button';close.textContent='×';close.setAttribute('aria-label','Dismiss notification');
+      close.onclick=()=>toast.remove();toast.append(close);document.body.append(toast);setTimeout(()=>toast.remove(),8000);
+    }
+  }catch{}finally{checkingHostAvailability=false}
+}
 async function hostChoices(selected='',all=true){
   const value=await api('/api/hosts'),hosts=[value.local,...value.hosts];
-  for(const host of hosts)distributedHosts.set(host.id,host.name);
+  for(const host of hosts)distributedHosts.set(host.id,host.name||host.endpoint||host.id);
   return (all?'<option value="">All hosts</option>':'')+hosts.map(host=>'<option value="'+esc(host.id===value.local.id&&!all?'':host.id)+'" '+
     ((selected||value.local.id)===host.id&&!all||selected===host.id?'selected':'')+'>'+esc(host.name)+(host.id===value.local.id?' (this host)':'')+'</option>').join('')
 }
@@ -423,6 +472,22 @@ async function hostChoices(selected='',all=true){
     "ndsLabel((Date.now()-Date.parse(step.started_at))/1000);return '—'}\n"
     'function status(value){return \'<span class="status \'+esc(value||\'unknown\')+\'">\'+esc(value||\'unknown\')+\'</span>\'}\n'
     """
+async function refreshHostActivity(row){
+  try{
+    const prefix=row.dataset.host?'/api/hosts/'+enc(row.dataset.host):'';
+    const activity=await api(prefix+'/api/activity-status');
+    if(!row.isConnected)return;
+    row.querySelector('[data-connection]').textContent='Online';
+    const parts=[];
+    if(activity.active_run_id)parts.push(activity.active_run_id);
+    if(activity.queued)parts.push('Queued: '+activity.queued);
+    if(activity.recovery_run_ids?.length)parts.push('Recovery required: '+activity.recovery_run_ids.length);
+    row.querySelector('[data-activity]').textContent=parts.join(' · ')||'Idle';
+  }catch(error){if(row.isConnected){
+    row.querySelector('[data-connection]').textContent='Unavailable';
+    row.querySelector('[data-activity]').textContent='Unknown';
+  }}
+}
 async function renderHosts(){
   clearRefresh();
   try{
@@ -431,17 +496,18 @@ async function renderHosts(){
     app.innerHTML=shell('hosts','<div class=runs-toolbar><span class=muted>Benchmark hosts</span><div class=runs-actions>'+
       '<button id=refresh-hosts>Refresh</button><button id=add-host class=primary>Add host</button></div></div>'+
       '<div class=table-scroll><table><thead><tr><th>Host</th><th>Port</th><th>Connection</th><th>Activity</th><th>Views</th><th></th></tr></thead><tbody>'+
-      '<tr><td>'+esc(value.local.name)+'<div class=muted>This server</div></td><td>'+esc(value.local.port??'—')+'</td><td>Online</td><td>—</td><td>'+
+      '<tr data-host-activity><td>'+esc(value.local.name)+'<div class=muted>This server</div></td><td>'+esc(value.local.port??'—')+
+      '</td><td data-connection>Checking…</td><td data-activity>Checking…</td><td>'+
       '<a href="/?#runs">Runs</a> · <a href="/?#topology">Topology</a></td><td><button id=copy-host-token>Copy token</button></td></tr>'+
-      value.hosts.map(host=>'<tr data-host="'+esc(host.id)+'"><td>'+esc(host.name)+'<div class=muted>'+esc(host.endpoint)+
-      '</div></td><td>'+esc(host.port??'—')+'</td><td data-connection>Checking…</td><td data-activity>—</td><td><a href="/?host='+enc(host.id)+
+      value.hosts.map(host=>'<tr data-host-activity data-host="'+esc(host.id)+'"><td>'+esc(host.name)+'<div class=muted>'+esc(host.endpoint)+
+      '</div></td><td>'+esc(host.port??'—')+'</td><td data-connection>Checking…</td><td data-activity>Checking…</td><td><a href="/?host='+enc(host.id)+
       '#runs">Runs</a> · <a href="/?host='+enc(host.id)+'#topology">Topology</a></td><td><button data-remove>Remove</button></td></tr>').join('')+
       '</tbody></table></div><div id=hosts-error role=alert></div>'+
       '<dialog id=host-dialog class=import-dialog><h2>Add host</h2><label class=field>Name<input id=host-name maxlength=120></label>'+
       '<label class=field>Server endpoint<input id=host-endpoint placeholder="http://127.0.0.1:42420"></label>'+
       '<label class=field>Peer token<input id=host-token type=password autocomplete=off></label>'+
       '<p class=muted>HTTP sends the token and data unencrypted; use it only on trusted networks. Open Hosts on the server you want to add and click Copy token.</p>'+
-      '<div id=host-error role=alert></div><div class=toolbar><button id=cancel-host>Cancel</button><button id=save-host>Add host</button></div></dialog>');
+      '<div id=host-error role=alert></div><div class=toolbar><button id=cancel-host>Cancel</button><button id=save-host class=primary>Add host</button></div></dialog>');
     const dialog=app.querySelector('#host-dialog');
     app.querySelector('#refresh-hosts').onclick=renderHosts;
     app.querySelector('#copy-host-token').onclick=async event=>{
@@ -472,13 +538,8 @@ async function renderHosts(){
         try{await api('/api/hosts/remove',jsonOptions({id:row.dataset.host}));await renderHosts()}
         catch(error){app.querySelector('#hosts-error').textContent=error.message}
       };
-      api('/api/hosts/'+enc(row.dataset.host)+'/api/activity-status').then(activity=>{
-        if(!row.isConnected)return;
-        row.querySelector('[data-connection]').textContent='Online';
-        row.querySelector('[data-activity]').textContent=activity.active_run_id||'Idle';
-      }).catch(()=>{if(row.isConnected){row.querySelector('[data-connection]').textContent='Offline';
-        row.querySelector('[data-activity]').textContent='Unknown'}});
     }
+    app.querySelectorAll('[data-host-activity]').forEach(refreshHostActivity);
   }catch(error){app.innerHTML=shell('hosts',displayError(error))}
 }
 function shell(current,body,breadcrumb=''){
@@ -490,7 +551,11 @@ function shell(current,body,breadcrumb=''){
     '<nav class=primary-nav aria-label="Main navigation">'+navigation.map(([id,label])=>
       '<a href="'+(id==='hosts'?'/?#hosts':'#'+id)+'"'+(section===id?' aria-current="page"':'')+'>'+label+'</a>').join('')+
     '</nav><span class=active-run>'+(activeRun?'<a href="#run/'+enc(activeRun)+'">Active run: '+esc(activeRun)+'</a>':
-      'No active run')+'</span></header><main>'+
+      'No active run')+'</span>'+(/^#run[/]/.test(location.hash)?'<button type=button id=refresh-run class=run-refresh aria-label="Refresh run" title="Refresh run">↻</button>':'')+
+      '<a href="/?#settings" class=settings-link title="Settings" aria-label="Settings"'+(section==='settings'?' aria-current="page"':'')+'>'+
+      '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" focusable="false">'+
+      '<path d="m9 3-.6 2.4-2 .9-2.2-.7-2 3.4 1.6 1.7v2.6L2.2 15l2 3.4 2.2-.7 2 .9L9 21h4l.6-2.4 2-.9 2.2.7 2-3.4-1.6-1.7v-2.6L19.8 9l-2-3.4-2.2.7-2-.9L13 3Z"/>'+
+      '<circle cx="11" cy="12" r="3"/></svg></a></header><main>'+
       (viewedHost&&/^#(?:run|attempt|distributed-attempt)[/]/.test(location.hash)?
         '<p class=muted>Remote host · '+esc(viewedHost)+' · <a href="/?#hosts">Back to hosts</a></p>':'')+
       breadcrumb+body+'</main></div></div>'
@@ -665,6 +730,10 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     'matrix)){const values=profile.parameters[parameter.name]||parameter.default;cases=cases.flatMap(parts=>values.map(value='
     ">[...parts,parameter.name+'='+value]))}return cases}\n"
     'function bindEditorControls(){\n'
+    "  const page=document.querySelector('.new-run-page[data-editor-profile]'),heading=page?.querySelector('.page-heading');\n"
+    "  editorToolbarObserver?.disconnect();\n"
+    "  if(heading&&typeof ResizeObserver!=='undefined'){editorToolbarObserver=new ResizeObserver(()=>"
+    "page.style.setProperty('--editor-toolbar-height',heading.offsetHeight+'px'));editorToolbarObserver.observe(heading)}\n"
     '  refreshEditorActivity();\n'
     "  document.querySelector('#run-host').onchange=async event=>{editorHost=event.target.value;clearTimeout(window.ydbBenchYamlTimer);await renderNew()};\n"
     "  const message=document.querySelector('#editor-message');\n"
@@ -1319,14 +1388,14 @@ async function renderNew(tab){
     "mark);if(benchmark?.profile_kind==='distributed-ydb')bindDistributedEditor(selected);"
     "else if(benchmark?.profile_kind==='local-ydb')bindLocalYdbEditor(selected);else if(benchmark?.builder_supported)bindPro"
     "fileEditor(selected)}}\n"
-    'function clearRefresh(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null}}\n'
+    'function clearRefresh(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null}editorToolbarObserver?.disconnect();editorToolbarObserver=null}\n'
     "function runFilters(){return '<div class=filters><div class=field><label>Status</label><select id=f-status><option value"
-    '="">Any</option><option>queued</option><option>running</option><option>completed</option><option>failed</option><option>'
-    'cancelled</option><option>recovery_required</option></select></div><div class=field><label>Benchmark</label><input id=f-'
-    'benchmark placeholder="ping-bench"></div><div class=field><label>Profile</label><input id=f-profile placeholder="baselin'
-    'e"></div><div class=field><label>Source</label><select id=f-source><option value="">Any</option><option value=local>Loca'
-    'l</option><option value=imported>Imported</option></select></div><div class=field><label>From</label><input id=f-since t'
-    "ype=date></div><div class=field><label>To</label><input id=f-until type=date></div></div>'}\n"
+    '="">All statuses</option><option>queued</option><option>running</option><option>completed</option><option>failed</option><option>'
+    'cancelled</option><option>recovery_required</option></select></div><div class=field><label>Benchmark</label><select id=f-'
+    'benchmark><option value="">All benchmarks</option></select></div><div class=field><label>Profile</label><input id=f-profile type=search placeholder="Search profiles'
+    '"></div><div class=field><label>Source</label><select id=f-source><option value="">All sources</option><option value=local>Loca'
+    'l</option><option value=imported>Imported</option></select></div><div class=field><label>Started from (UTC)</label><input id=f-since t'
+    "ype=date></div><div class=field><label>Started through (UTC)</label><input id=f-until type=date></div></div>'}\n"
     "function runHref(id,kind){return hostApiPath('/api/runs/'+enc(id)+'/'+kind)}\n"
     """
 function sectionTabs(name,items){
@@ -1385,57 +1454,97 @@ function compactRun(run){
     '</div><div class=dense-run-meta><span>'+esc(benchmarks.join(' · '))+'</span><a class=dense-run-id href="#run/'+
     enc(run.id)+'">'+esc(run.run_id||run.id)+'</a><span>'+esc(run.config_path||'config snapshot')+'</span></div></div>'+
     '<details class=dense-run-actions><summary>Actions</summary><div class=actions>'+
+    (run.state==='running'&&run.deployment?.phase==='cluster-ready'?'<button data-release-cluster="'+esc(run.id)+'">Release cluster</button>':'')+
     '<a href="#run/'+enc(run.id)+'">Open</a><a href="#new" data-repeat="'+esc(run.id)+'">Repeat</a>'+
     '<a href="'+runHref(run.id,'config')+'">YAML</a><a href="'+runHref(run.id,'manifest')+'">run.json</a>'+
     '<a href="'+runHref(run.id,'archive')+'">Archive</a></div></details></article>'
 }
-function bindAutomaticFilters(fields,reset,apply,connected){
+function bindAutomaticFilters(fields,reset,apply,connected,invalidate=()=>{}){
   let timer;
-  const update=()=>{reset.hidden=!fields.some(field=>field.value.trim())};
+  const update=()=>{const empty=!fields.some(field=>field.type==='checkbox'?field.checked:field.value.trim());
+    reset.style.visibility=empty?'hidden':'visible';reset.disabled=empty};
   const run=()=>{clearTimeout(timer);update();if(connected())apply()};
   for(const field of fields){
-    field.oninput=()=>{clearTimeout(timer);update();timer=setTimeout(run,250)};
+    field.oninput=()=>{clearTimeout(timer);invalidate();update();timer=setTimeout(run,300)};
     field.onchange=run;
   }
-  reset.onclick=()=>{for(const field of fields)field.value='';run()};
+  reset.onclick=()=>{for(const field of fields){if(field.type==='checkbox')field.checked=false;else field.value=''}run()};
   update();
+}
+function runPager(){return '<div class=runs-toolbar data-run-pager><span data-page-state role=status>Loading runs…</span>'+
+  '<div class=runs-actions><button data-page-refresh>Refresh</button><button data-page-prev disabled>Previous</button>'+
+  '<button data-page-next disabled>Next</button></div></div><div data-page-errors role=alert></div>'}
+function bindRunPager(container,query,draw,active){
+  const state=container.querySelector('[data-page-state]'),errors=container.querySelector('[data-page-errors]'),
+    prev=container.querySelector('[data-page-prev]'),next=container.querySelector('[data-page-next]');
+  let cursors=[''],page=0,nextCursor=null,version=0,controller;
+  const invalidate=()=>{version++;controller?.abort();prev.disabled=true;next.disabled=true};
+  async function load(reset=true){
+    invalidate();const current=version;controller=new AbortController();
+    if(reset){page=0;cursors=['']}
+    const params=query();params.set('limit','50');if(cursors[page])params.set('cursor',cursors[page]);
+    state.textContent='Updating…';errors.innerHTML='';
+    try{
+      const value=await api('/api/federation/run-page?'+params,{signal:controller.signal});
+      if(current!==version||!active())return;
+      draw(value);nextCursor=value.next_cursor;
+      state.textContent='Page '+(page+1)+' · '+value.entries.length+' runs'+(value.errors.length?' · incomplete':'');
+      errors.innerHTML=federationErrors(value.errors);prev.disabled=page===0;next.disabled=!nextCursor;
+    }catch(error){if(current===version&&active()&&error.name!=='AbortError'){
+      state.textContent='Could not update runs';errors.innerHTML=displayError(error);prev.disabled=page===0;
+    }}
+  }
+  prev.onclick=()=>{if(page){page--;load(false)}};
+  next.onclick=()=>{if(nextCursor){cursors[++page]=nextCursor;load(false)}};
+  container.querySelector('[data-page-refresh]').onclick=()=>load();
+  return {load,invalidate};
 }
 async function renderRuns(){
   clearRefresh();
   const hostOptions=await hostChoices();
   if(location.hash!=='#runs')return;
   app.innerHTML=shell('runs',runFilters()+
-    '<div class=runs-toolbar><label>Host <select id=runs-host>'+hostOptions+'</select></label><label>Sort <select id=runs-sort>'+
+    '<div class=runs-toolbar><label>Host <select id=runs-host>'+hostOptions+'</select></label><label>Sort by <select id=runs-sort>'+
     '<option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
-    '<option value=longest>Longest first</option></select></label><div class=runs-actions><button id=open-import>Import</button>'+
-    '<button id=reset-run-filters hidden>Reset filters</button>'+
-    '<a class=new-run-link href="#new"><span aria-hidden=true>+</span> New run</a></div></div><div id=runs-table></div>'+
+    '<option value=longest>Longest first</option></select></label><div class=runs-actions>'+
+    '<button id=reset-run-filters style="visibility:hidden" disabled>Reset filters</button><button id=open-import>Import</button>'+
+    '<a class=new-run-link href="#new"><span aria-hidden=true>+</span> New run</a></div></div>'+runPager()+'<div id=runs-table></div>'+
     '<dialog id=import-dialog class=import-dialog aria-labelledby=import-title><h2 id=import-title>Import results</h2>'+
     '<label for=import-file>Portable ZIP archive</label><input id=import-file type=file accept=".zip,application/zip">'+
     '<div id=import-error role=alert></div><div id=import-status role=status></div><div class=toolbar>'+
     '<button id=cancel-import>Cancel</button><button id=import-run class=primary>Import</button></div></dialog>');
   const target=document.querySelector('#runs-table'),sort=document.querySelector('#runs-sort');
-  let records=[],request=0,hostErrors=[];
+  let records=[];
   sort.value=runsSort;
   function draw(){
-    target.innerHTML=federationErrors(hostErrors)+(records.length?sortRuns(records,runsSort).map(compactRun).join(''):
+    target.innerHTML=(records.length?records.map(compactRun).join(''):
       '<div class=empty>No runs match these filters.</div>');
     for(const item of target.querySelectorAll('[data-repeat]'))item.onclick=event=>{
       event.preventDefault();reuseRun(item.dataset.repeat)
     };
+    for(const item of target.querySelectorAll('[data-release-cluster]'))item.onclick=async()=>{
+      if(!confirm('Stop this cluster and release its hosts?'))return;
+      item.disabled=true;try{await api('/api/runs/'+enc(item.dataset.releaseCluster)+'/release-cluster',jsonOptions({}));item.textContent='Releasing…'}
+      catch(error){item.disabled=false;alert(error.message)}
+    };
   }
-  async function load(){
-    const current=++request,query=new URLSearchParams();
+  const pager=bindRunPager(app,()=>{
+    const query=new URLSearchParams({sort:runsSort});
     for(const [name,id] of Object.entries({status:'f-status',benchmark:'f-benchmark',profile:'f-profile',source:'f-source',since:'f-since',until:'f-until'})){
       const value=document.querySelector('#'+id).value.trim();if(value)query.set(name,value)
     }
     if(app.querySelector('#runs-host').value)query.set('host',app.querySelector('#runs-host').value);
-    try{const value=await api('/api/federation/runs?'+query);if(current!==request||!target.isConnected)return;records=value.entries;hostErrors=value.errors;draw()}
-    catch(error){if(current===request&&target.isConnected)target.innerHTML=displayError(error)}
-  }
-  sort.onchange=()=>{runsSort=sort.value;draw()};
+    return query;
+  },value=>{
+    records=value.entries;
+    const select=app.querySelector('#f-benchmark'),selected=select.value;
+    select.innerHTML='<option value="">All benchmarks</option>'+[...new Set([...value.benchmarks,...(selected?[selected]:[])])].sort()
+      .map(name=>'<option value="'+esc(name)+'">'+esc(name)+'</option>').join('');select.value=selected;draw();
+  },()=>target.isConnected);
+  const load=()=>pager.load();
+  sort.onchange=()=>{runsSort=sort.value;load()};
   bindAutomaticFilters([...app.querySelectorAll('.filters input,.filters select'),app.querySelector('#runs-host')],
-    app.querySelector('#reset-run-filters'),load,()=>target.isConnected);
+    app.querySelector('#reset-run-filters'),load,()=>target.isConnected,pager.invalidate);
   const dialog=document.querySelector('#import-dialog'),fileInput=document.querySelector('#import-file'),
     importButton=document.querySelector('#import-run'),cancelButton=document.querySelector('#cancel-import'),
     importError=document.querySelector('#import-error'),importStatus=document.querySelector('#import-status');
@@ -1766,7 +1875,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "(measurement.warmup===null?'automatic':measurement.warmup):'—';\n"
     "  const values={\n"
     "    'Workload':workload.type??'—','Operation':workload.operation??'—','Load parameter':load.parameter??'—',\n"
-    "    'Load values':JSON.stringify(localComparisonStable(load.values??null)),\n"
+    "    'Load values':load.values??null,\n"
     "    'Objective':objective.type??'points','Warmup seconds':warmup,\n"
     "    'Duration seconds':measurement.duration??'—','Repetitions':measurement.repetitions??'—',\n"
     "    'Verification repetitions':measurement.verification_repetitions??0,\n"
@@ -1778,10 +1887,10 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "    'Geometry preset':geometry.preset??'—','Static nodes':geometry.static_nodes??'—',\n"
     "    'Initial dynamic nodes':geometry.dynamic_nodes??'—','Maximum dynamic nodes':geometry.max_dynamic_nodes??'—',\n"
     "    'Storage groups':geometry.storage_groups??'—','Disk size GiB':geometry.disk_size_gb??'—','YDB CLI threads':client.threads??'—',\n"
-    "    'Affinity config':JSON.stringify(localComparisonStable(parameters.affinity??null)),\n"
-    "    'YDB CLI CPUs':JSON.stringify(localComparisonStable(item.role_affinity?.ydb_cli??null)),\n"
-    "    'Static CPUs':JSON.stringify(localComparisonStable(item.role_affinity?.static_nodes??null)),\n"
-    "    'Dynamic CPUs':JSON.stringify(localComparisonStable(item.role_affinity?.dynamic_nodes??null))\n"
+    "    'Affinity config':parameters.affinity??null,\n"
+    "    'YDB CLI CPUs':item.role_affinity?.ydb_cli??null,\n"
+    "    'Static CPUs':item.role_affinity?.static_nodes??null,\n"
+    "    'Dynamic CPUs':item.role_affinity?.dynamic_nodes??null\n"
     "  };for(const [name,value] of Object.entries(workload.options||{}))values['Option '+name]=value;\n"
     "  if(parameters.distributed){const distributed=parameters.distributed;values['Measurement scope']=item.measurement_scope;\n"
     "    values['Cluster placement']=JSON.stringify(localComparisonStable(distributed.template??null));\n"
@@ -1793,7 +1902,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     '}\n'
     'function localComparisonContext(item){return {\n'
     "  'Host':item.platform?.uname?.node??'—','CPU':item.platform?.cpu_model??'—',\n"
-    "  'Kernel':item.platform?.uname?.release??'—','CPU topology':JSON.stringify(localComparisonStable(item.cpu_topology??null)),\n"
+    "  'Kernel':item.platform?.uname?.release??'—','CPU topology':item.cpu_topology??null,\n"
     "  'YDB CLI build':item.binaries?.ydb_cli?.sha256??'—',\n"
     "  'Verification cluster':localResultMetrics(item.result).verified?localVerificationClusterLabel(item.verification):'not applicable'\n"
     '}}\n'
@@ -1854,6 +1963,74 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "  return '<span class=\"comparison-delta '+(good?'good':bad?'bad':'')+'\">'+(delta>0?'+':'')+delta.toFixed(1)+'%</span>'\n"
     '}\n'
     """
+function localComparisonSections(item){
+  const sections=new Map(),parameters=item.parameters||{},distributed=parameters.distributed;
+  const add=(category,name,value)=>sections.set(JSON.stringify([category,name]),{title:category+(name?' · '+name:''),value});
+  if(distributed){
+    const template=distributed.template||{};
+    add('Cluster','',Object.fromEntries(Object.entries(template).filter(([key])=>
+      !['nodes','tenants','id','revision','created_at','updated_at'].includes(key))));
+    for(const node of template.nodes||[])add('Placement',node.name,
+      Object.fromEntries(Object.entries(node).filter(([key])=>key!=='name')));
+    const actor=parameters.actor_system||{};
+    add('Storage','',Object.fromEntries(Object.entries(actor).filter(([key])=>key!=='tenants')));
+    const tenants=new Map((template.tenants||[]).map(tenant=>[tenant.path,tenant]));
+    for(const name of new Set([...tenants.keys(),...Object.keys(actor.tenants||{})])){
+      const placement=Object.fromEntries(Object.entries(tenants.get(name)||{}).filter(([key])=>key!=='path'));
+      add('Tenant',name,{...placement,...actor.tenants?.[name]});
+    }
+    for(const [name,value] of Object.entries(distributed.cli_nodes||{}))add('CLI',name,value);
+    // Older distributed results have one controller and no per-CLI configuration.
+    if(!distributed.cli_nodes)add('CLI','',{workload:parameters.workload,client:parameters.client,load:parameters.load});
+    add('Run policy','',{...parameters.measurement,timeout:parameters.timeout,
+      search_cli:distributed.search_cli,measurement_scope:item.measurement_scope});
+  }else{
+    add('Profile configuration','',localComparisonConfig(item));
+  }
+  add('Environment','',localComparisonContext(item));add('Build','',localComparisonBuild(item));
+  return sections;
+}
+function localComparisonFields(value,path=[],result=new Map()){
+  if(value===undefined)return result;
+  if(value&&typeof value==='object'&&Object.keys(value).length&&
+    (!Array.isArray(value)||value.some(item=>item&&typeof item==='object'))){
+    for(const [key,item] of Object.entries(value))localComparisonFields(item,[...path,key],result);
+  }else result.set(JSON.stringify(path),{path,value});
+  return result;
+}
+function localComparisonConfiguration(entries,baseline,showAll){
+  const projections=entries.map(localComparisonSections),referenceIndex=entries.indexOf(baseline);
+  const keys=[...new Set(projections.flatMap(sections=>[...sections.keys()]))];
+  const stable=value=>JSON.stringify(localComparisonStable(value));
+  const label=path=>path.map(key=>configurationLabel(key)).join(' / ');
+  const display=value=>value===null?'null':Array.isArray(value)?(value.length?value.map(display).join(', '):'Empty list'):
+    typeof value==='object'?'Empty object':typeof value==='boolean'?(value?'Enabled':'Disabled'):value===''?'Empty string':String(value);
+  let rows='',differenceCount=0;
+  for(const key of keys){
+    const groups=projections.map(sections=>sections.get(key)),fields=groups.map(group=>localComparisonFields(group?.value));
+    const paths=[...new Set(fields.flatMap(value=>[...value.keys()]))];
+    let body='',count=0;
+    for(const path of paths){
+      const cells=fields.map((value,index)=>!groups[index]?{state:'absent'}:
+        !value.has(path)?{state:'missing'}:{state:'value',value:value.get(path).value});
+      const different=new Set(cells.map(stable)).size>1;
+      if(different){count++;differenceCount++}else if(!showAll)continue;
+      const field=fields.find(value=>value.has(path)).get(path),reference=stable(cells[referenceIndex]);
+      body+='<tr><th scope=row>'+esc(label(field.path)||'Settings')+'</th>'+cells.map(cell=>{
+        const changed=stable(cell)!==reference;
+        const value=field.path.at(-1)==='host_id'&&typeof distributedHosts!=='undefined'?
+          distributedHosts.get(cell.value)||cell.value:cell.value;
+        const full=cell.state==='absent'?'Not applicable (object absent)':cell.state==='missing'?'Not set':display(value);
+        const short=/^[a-f0-9]{40,64}$/.test(full)?full.slice(0,12):full;
+        return '<td'+(changed?' class=comparison-config-changed':'')+'><span title="'+esc(full)+'">'+esc(short)+'</span>'+
+          (changed?' <span class=muted aria-label="Different from baseline">≠</span>':'')+'</td>';
+      }).join('')+'</tr>';
+    }
+    if(body)rows+='<tr class=comparison-config-group><th scope=rowgroup colspan="'+(entries.length+1)+'">'+
+      esc(groups.find(Boolean).title)+' <span class=muted>· '+count+' differences</span></th></tr>'+body;
+  }
+  return {rows,differenceCount};
+}
 function mountLocalYdbComparison(container,data,chartData=null){
   const all=data.entries||[];
   if(!all.length){container.innerHTML='<div class=empty>No YDB profiles in the selected runs.</div>';return}
@@ -1914,33 +2091,8 @@ function mountLocalYdbComparison(container,data,chartData=null){
         (showCpu?['static_cpu_mean','dynamic_cpu_mean','cli_cpu_mean'].map(key=>'<td>'+
           esc(metricLabel(metrics[key]??'—'))+(metrics[key]!==undefined?'%':'')+'</td>').join(''):'')+'</tr>'
     }).join('');
-    const groups=[
-      ['Profile configuration',localComparisonConfig],
-      ['Environment',localComparisonContext],
-      ['Build',localComparisonBuild]
-    ];
-    let configRows='',differenceCount=0;
-    for(const [title,project] of groups){
-      const values=entries.map(project);
-      const names=[...new Set(values.flatMap(Object.keys))];
-      let groupRows='';
-      for(const name of names){
-        const cells=values.map(value=>value[name]??'—');
-        const different=new Set(cells.map(value=>JSON.stringify(localComparisonStable(value)))).size>1;
-        if(different)differenceCount++;
-        if(!different&&container.dataset.allConfig!=='true')continue;
-        const reference=cells[entries.indexOf(baseline)];
-        groupRows+='<tr><th>'+esc(name)+'</th>'+cells.map(value=>{
-          const full=typeof value==='object'?JSON.stringify(localComparisonStable(value)):String(value);
-          const revision=value&&typeof value==='object'?(value.commit_id||value.hash):null;
-          const short=revision?String(revision).slice(0,12)+' · '+(value.build_type||'unknown build'):
-            /^[a-f0-9]{40,64}$/.test(full)?full.slice(0,12):full;
-          return '<td'+(JSON.stringify(value)!==JSON.stringify(reference)?' class=comparison-config-changed':'')+
-            '><span title="'+esc(full)+'">'+esc(short)+'</span></td>'
-        }).join('')+'</tr>';
-      }
-      if(groupRows)configRows+='<tr><th colspan="'+(entries.length+1)+'">'+esc(title)+'</th></tr>'+groupRows;
-    }
+    const configEntries=[baseline,...entries.filter(item=>item!==baseline)];
+    const {rows:configRows,differenceCount}=localComparisonConfiguration(configEntries,baseline,container.dataset.allConfig==='true');
     container.innerHTML=toolbar+sectionTabs('comparison',[['results','Results'],['configuration','Configuration']])+
       '<div data-section-panel="comparison:results"><label><input type=checkbox data-comparison-cpu '+
       (showCpu?'checked':'')+'> CPU metrics</label><div class=local-attempts-scroll><table class="local-attempts comparison-results">'+
@@ -1949,8 +2101,8 @@ function mountLocalYdbComparison(container,data,chartData=null){
       rows+'</tbody></table></div></div><div data-section-panel="comparison:configuration" hidden>'+
       '<label><input type=checkbox data-only-differences '+(container.dataset.allConfig==='true'?'':'checked')+
       '> Only differences</label> <span class=muted>'+differenceCount+' differing parameters</span>'+
-      '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Parameter</th>'+
-      entries.map(item=>'<th>'+esc(item.profile)+'<div class=muted>'+esc(item.host_name||'')+' · '+esc(item.run_id||item.run)+
+      '<div class=local-attempts-scroll><table class="local-attempts comparison-config-table"><thead><tr><th>Parameter</th>'+
+      configEntries.map(item=>'<th>'+esc(item.profile)+'<div class=muted>'+esc(item.host_name||'')+' · '+esc(item.run_id||item.run)+
         (item===baseline?' · Baseline':'')+'</div></th>').join('')+'</tr></thead><tbody>'+
       (configRows||'<tr><td colspan="'+(entries.length+1)+'">No configuration differences.</td></tr>')+
       '</tbody></table></div></div>';
@@ -2398,7 +2550,7 @@ function localReportTable(title,rows,headers=[]){
     '<tbody>'+rows.map(row=>'<tr>'+row.map(value=>'<td>'+esc(value??'—')+'</td>').join('')+'</tr>').join('')+
     '</tbody></table></section>'
 }
-function localReportConfiguration(data){
+function localReportConfiguration(data,runId){
   const p=data.parameters||{},m=p.measurement||{},g=p.geometry||{},result=data.result||{},objective=p.load?.objective||{};
   const value=item=>item===null||item===undefined?'—':typeof item==='object'?JSON.stringify(item):String(item);
   const rows=object=>Object.entries(object||{}).map(([key,item])=>[key.replaceAll('_',' '),value(item)]);
@@ -2424,7 +2576,8 @@ function localReportConfiguration(data){
     ])+
     localReportTable('Binaries',Object.entries(data.binaries||{}).map(([role,binary])=>[
       role.replaceAll('_',' '),String(binary.name||'—').split('/').pop(),binary.sha256||'—'
-    ]),['Role','Name','SHA-256'])+'</details>'
+    ]),['Role','Name','SHA-256'])+
+    (runId?savedYdbConfigurationHtml(runId,data.ydb_configurations||[]):'')+'</details>'
 }
 function localReportMetrics(data){
   const schema=localResultSchema(data),metrics=localResultMetrics(data.result||{},schema).metrics;
@@ -2449,7 +2602,7 @@ function localReportMetrics(data){
     '</div>'+localReportTable('CPU usage · % of assigned CPUs',cpu,['Role','Mean','Peak'])+
     localReportTable('Additional workload metrics',extra)
 }
-function localResultPanel(data){
+function localResultPanel(data,runId){
   const view=localResultViewModel(data);
   if(!view.hasResult){
     const terminal=!['running','preparing'].includes(data.state);
@@ -2464,7 +2617,7 @@ function localResultPanel(data){
   return '<div class=local-result-heading><span class="local-result-badge '+esc(view.tone)+'">'+
     esc(normal&&result.outcome==='boundary-found'?'SLO satisfied':view.label)+'</span></div>'+
     (!normal&&view.detail?'<p class=error>'+esc(view.detail)+'</p>':'')+
-    '<p class=report-source>'+esc(source)+'</p>'+localReportMetrics(data)+localReportConfiguration(data)
+    '<p class=report-source>'+esc(source)+'</p>'+localReportMetrics(data)+localReportConfiguration(data,runId)
 }
 function localYdbDefaultView(data){
   return ['running','preparing'].includes(data.state)?'discovery':data.result?'result':'discovery'
@@ -2544,6 +2697,28 @@ function bindLocalAttemptRows(container){
   }
 }
 function renderLocalYdbProfile(container,data){
+  if(data.parameters?.mode==='deploy'){
+    const progress=data.progress||{},endpoints=data.endpoints||progress.endpoints||[],telemetry=data.telemetry;
+    let release=document.querySelector('#release-cluster');
+    if(data.state==='running'&&progress.phase==='cluster-ready'){
+      if(!release){release=document.createElement('button');release.id='release-cluster';release.textContent='Release cluster';
+        document.querySelector('#repeat-run')?.before(release)}
+      release.onclick=async()=>{if(!confirm('Stop this cluster and release its hosts?'))return;release.disabled=true;
+        try{await api('/api/runs/'+enc(container.dataset.localYdbRunId)+'/release-cluster',jsonOptions({}));release.textContent='Releasing…'}
+        catch(error){release.disabled=false;alert(error.message)}};
+    }else release?.remove();
+    container.innerHTML='<div class=runs-toolbar><h3>Cluster reservation · '+
+      esc(progress.phase==='cluster-ready'?'Ready':String(progress.phase||data.state).replaceAll('-',' '))+'</h3><span data-reservation-grafana></span></div>'+
+      (data.error?displayError(Error(data.error)):'')+
+      '<p class=muted>'+esc(telemetry?'Metrics: '+telemetry.status+' · '+telemetry.segments+' saved intervals':'Metrics were not recorded for this reservation.')+'</p>'+
+      (telemetry?.error?displayError(Error(telemetry.error)):'')+
+      (endpoints.length?localReportTable('Endpoints',endpoints.map(e=>[e.node,e.tenant,e.host+':'+e.port]),['Node','Tenant','Host:port']):'')+
+      savedYdbConfigurationHtml(container.dataset.localYdbRunId,data.ydb_configurations||[]);
+    mountGrafana(container.querySelector('[data-reservation-grafana]'),container.dataset.localYdbRunId,
+      {benchmark:data.benchmark,profile:data.profile,attempt:'deployment'},
+      Date.parse(data.started_at),data.finished_at?Date.parse(data.finished_at):Date.now());
+    return;
+  }
   const failure=['failed','cancelled'].includes(data.state)?'<section class=profile-error role=alert><h3>'+
     (data.state==='failed'?'Profile failed':'Profile cancelled')+'</h3><div>'+
     esc(String(data.error||'No diagnostic was recorded.').split(String.fromCharCode(10))[0].slice(0,240))+'</div>'+
@@ -2574,7 +2749,7 @@ function renderLocalYdbProfile(container,data){
     );
     container.innerHTML=localYdbViewTabs(container,data,selectedView)+
       '<section class=local-profile-view data-local-ydb-panel=result'+
-      (selectedView==='result'?'':' hidden')+'>'+localResultPanel(data)+'</section>'+
+      (selectedView==='result'?'':' hidden')+'>'+localResultPanel(data,container.dataset.localYdbRunId)+'</section>'+
       '<section class=local-profile-view data-local-ydb-panel=discovery'+
       (selectedView==='discovery'?'':' hidden')+'>'+discovery+'</section>';
     localApplyYdbView(container,selectedView,container.dataset.localYdbViewExplicit==='true');
@@ -2784,7 +2959,7 @@ function renderLocalYdbProfile(container,data){
   ))+'">Verification metrics</a></p>';
   container.innerHTML=failure+localYdbViewTabs(container,data,selectedView)+
     '<section class=local-profile-view data-local-ydb-panel=result'+
-    (selectedView==='result'?'':' hidden')+'>'+localResultPanel(data)+'</section>'+
+    (selectedView==='result'?'':' hidden')+'>'+localResultPanel(data,container.dataset.localYdbRunId)+'</section>'+
     '<section class=local-profile-view data-local-ydb-panel=discovery'+
     (selectedView==='discovery'?'':' hidden')+'>'+html+'</section>';
   localApplyYdbView(container,selectedView,container.dataset.localYdbViewExplicit==='true');
@@ -2935,7 +3110,7 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
   app.innerHTML=shell('runs','<div class=attempt-page><div class=breadcrumbs><a href="'+esc(discovery)+'">'+
     esc(runId+' / '+profile)+' / Discovery</a></div><div class=run-header><h1 class=page-title>'+
     (attempt==='verification'?'Verification':'Attempt '+esc(attempt))+
-    '</h1><div class=toolbar><button id=counter-refresh>Refresh</button><details class=downloads hidden '+
+    '</h1><div class=toolbar><span class=toolbar id=attempt-export></span><span id=attempt-grafana></span><button id=counter-refresh>Refresh</button><details class=downloads hidden '+
     'id=attempt-downloads><summary>Downloads</summary><div class=actions id=attempt-artifacts></div></details></div></div>'+
     '<div id=attempt-error></div><div id=attempt-header></div><nav class=local-profile-tabs aria-label="Attempt details">'+
     [['summary','Summary'],['counters','YDB counters'],['commands','Commands']].map(([view,label])=>
@@ -2950,6 +3125,7 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
     '</div><div id=counter-notice></div><div id=counter-charts class=local-charts></div></section>'+
     '<section data-attempt-panel=commands id=attempt-commands></section></div>');
   const target=document.querySelector('#counter-charts'),summary=document.querySelector('#attempt-summary');
+  mountMetricsExport(document.querySelector('#attempt-export'),runId,{benchmark,profile,attempt:String(attempt)});
   const repetition=document.querySelector('#counter-repetition'),node=document.querySelector('#counter-node');
   const host=document.querySelector('#counter-host');
   const raw=document.querySelector('#counter-raw');
@@ -3022,6 +3198,9 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
         '">Profile YDB counters (JSONL)</a>':'')+downloads.map(item=>'<a href="'+esc(hostApiPath(item.url))+'">'+
           esc(hostNames.get(item.host_id)||item.host_id)+' · '+esc(item.url.split('/').slice(-4,-2).join('/'))+' (JSONL)</a>').join('');
       samples=metrics.samples||[];
+      let from=Infinity,to=-Infinity;
+      for(const sample of samples){if(Number.isFinite(sample.timestamp_unix)){from=Math.min(from,sample.timestamp_unix*1000);to=Math.max(to,sample.timestamp_unix*1000)}}
+      mountGrafana(document.querySelector('#attempt-grafana'),runId,{benchmark,profile,attempt:String(attempt)},from,to);
       const errors=[...new Set(samples.flatMap(sample=>[
         sample.error,...sample.nodes.map(value=>value.error?value.role+' '+value.index+': '+value.error:null)
       ]).filter(Boolean))];
@@ -3072,7 +3251,8 @@ function configurationLabel(key){
 }
 function configurationFields(value){
   if(Array.isArray(value)&&value.some(item=>item&&typeof item==='object'))return value.map((item,index)=>
-    '<div class=configuration-subgroup><h4>'+esc(item?.name||item?.path||'#'+(index+1))+'</h4>'+configurationFields(item)+'</div>'
+    '<div class=configuration-subgroup><h4>'+esc(item?.name||item?.path||'#'+(index+1))+'</h4>'+configurationFields(
+      item?.name||item?.path?Object.fromEntries(Object.entries(item).filter(([key])=>key!==(item.name?'name':'path'))):item)+'</div>'
   ).join('');
   const scalar=item=>Array.isArray(item)?item.map(scalar).join(', '):item===null?'—':String(item);
   if(!value||typeof value!=='object'||Array.isArray(value))return '<p>'+esc(scalar(value))+'</p>';
@@ -3081,11 +3261,29 @@ function configurationFields(value){
     if(item&&typeof item==='object'&&(!Array.isArray(item)||item.some(entry=>entry&&typeof entry==='object')))groups.push(
       '<div class=configuration-subgroup><h4>'+esc(configurationLabel(key))+'</h4>'+configurationFields(item)+'</div>'
     );
-    else fields.push('<div><dt>'+esc(configurationLabel(key))+'</dt><dd>'+esc(scalar(item))+'</dd></div>')
+    else fields.push('<div><dt>'+esc(configurationLabel(key))+'</dt><dd>'+esc(
+      key==='host_id'?hostRecord(item).name:key==='host_ids'&&Array.isArray(item)?item.map(id=>hostRecord(id).name).join(', '):scalar(item))+'</dd></div>')
   }
   return (fields.length?'<dl class=configuration-values>'+fields.join('')+'</dl>':'')+groups.join('')
 }
 function configurationProfile(value){
+  if(value['cluster-template']){
+    const sections=[],section=(title,item)=>'<section><h3>'+esc(title)+'</h3>'+configurationFields(item)+'</section>';
+    const template=value['cluster-template'];
+    if(template&&typeof template==='object'){
+      const general=Object.fromEntries(Object.entries(template).filter(([key])=>key!=='nodes'));
+      sections.push('<section class=configuration-wide><h3>Cluster</h3>'+configurationFields(general)+
+        '<div class=configuration-role-grid>'+(template.nodes||[]).map(node=>'<div><h4>'+esc(node.name)+'</h4>'+
+          configurationFields(Object.fromEntries(Object.entries(node).filter(([key])=>key!=='name')))+'</div>').join('')+'</div></section>');
+    }else sections.push(section('Cluster',template));
+    if(value.storage)sections.push(section('Storage',value.storage));
+    for(const [name,settings] of Object.entries(value.tenants||{}))sections.push(section('Tenant · '+name,settings));
+    for(const [name,settings] of Object.entries(value['cli-nodes']||{}))sections.push(section('Load generator · '+name,settings));
+    if(value.measurement)sections.push(section('Run policy',value.measurement));
+    const extra=Object.fromEntries(Object.entries(value).filter(([key])=>!['cluster-template','storage','tenants','cli-nodes','measurement'].includes(key)));
+    if(Object.keys(extra).length)sections.push(section('Additional settings',extra));
+    return '<div class=configuration-grid>'+sections.join('')+'</div>'
+  }
   const titles={workload:'Workload',load:'Load & objective',measurement:'Measurement',geometry:'Cluster',
     affinity:'CPU placement','actor-system':'Actor system',client:'YDB CLI'};
   const sections=[],general={};
@@ -3112,6 +3310,41 @@ function configurationProfile(value){
   return '<div class=configuration-grid>'+sections.join('')+'</div>'
 }
 const configurationSelections=new Map();
+const configurationSections=new Map();
+function configurationProfileSections(value){
+  const pick=keys=>Object.fromEntries(keys.filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]]));
+  if(value['cluster-template']){
+    const groups=[['Cluster',['cluster-template']],['Storage',['storage','actor-system']],['Tenants',['tenants']],
+      ['Load generators',['cli-nodes','workload','load','client','tenant']],['Run policy',['measurement']]];
+    const known=new Set(groups.flatMap(([,keys])=>keys));
+    const extra=Object.keys(value).filter(key=>!known.has(key));
+    return groups.map(([name,keys])=>{
+      if(name==='Cluster')return [name,configurationProfile(pick([...keys,...extra]))];
+      const selected=pick(keys);
+      return [name,'<div class=configuration-grid>'+Object.entries(selected).map(([key,item])=>
+        ['tenants','cli-nodes'].includes(key)?Object.entries(item||{}).map(([title,settings])=>
+          '<section><h3>'+esc(title)+'</h3>'+configurationFields(settings)+'</section>').join(''):
+          '<section>'+configurationFields(item)+'</section>').join('')+'</div>']
+    });
+  }
+  if(value.workload){
+    const actor=value['actor-system']||{};
+    const cluster=pick(Object.keys(value).filter(key=>!['workload','load','client','affinity','measurement','actor-system'].includes(key)));
+    cluster['actor-system']=Object.fromEntries(Object.entries(actor).filter(([key])=>!['static-nodes','dynamic-nodes'].includes(key)));
+    return [['Cluster',configurationProfile(cluster)],['Storage',configurationFields(actor['static-nodes']||{})],
+      ['Compute',configurationFields(actor['dynamic-nodes']||{})],
+      ['Load generator',configurationProfile(pick(['workload','load','client']))],
+      ['CPU placement',configurationFields(value.affinity||{})],['Run policy',configurationFields(value.measurement||{})]];
+  }
+  return [['Parameters',configurationProfile(value)]]
+}
+function savedYdbConfigurationHtml(id,files){
+  return '<section><h3>Saved YDB configuration</h3>'+(files.length?
+    '<p class=muted>Captured at launch; independent of subsequent template changes.</p><ul>'+files.map(file=>
+      '<li><a target=_blank rel=noopener href="'+esc(runHref(id,'artifact/'+file.path.split('/').map(enc).join('/')))+'">'+
+      esc(file.label)+'</a></li>').join('')+'</ul>':
+    '<p class=muted>No saved YDB YAML is available for this profile. It is not reconstructed from the current template.</p>')+'</section>'
+}
 function runConfigurationHtml(id,saved){
   const profiles=[];
   for(const [benchmark,items] of Object.entries(saved.structured||{})){
@@ -3120,21 +3353,52 @@ function runConfigurationHtml(id,saved){
     }
   }
   const previous=configurationSelections.get(id);
-  const selected=previous==='YAML'||profiles.some(profile=>profile.key===previous)?previous:profiles[0]?.key||'YAML';
-  const tabs='<nav class=profile-list>'+profiles.map((profile,index)=>
+  const selected=previous==='yaml'||profiles.some(profile=>profile.key===previous)?previous:profiles[0]?.key||'yaml';
+  const tabs='<nav class=profile-list aria-label="Run configuration">'+profiles.map((profile,index)=>
     '<button type=button data-config-profile="'+index+'" class="'+(profile.key===selected?'selected':'')+'">'+esc(profile.key)+'</button>'
-  ).join('')+'<button type=button data-config-profile="yaml" class="'+(selected==='YAML'?'selected':'')+'">YAML</button></nav>';
-  const panels=profiles.map((profile,index)=>'<div data-config-panel="'+index+'" '+(profile.key===selected?'':'hidden')+'>'+configurationProfile(profile.value)+'</div>').join('');
+  ).join('')+'<button type=button data-config-profile="yaml" class="'+(selected==='yaml'?'selected':'')+'">Run YAML</button></nav>';
+  const panels=profiles.map((profile,index)=>{
+    const files=(saved.ydb_configurations?.[profile.key]||[]).filter(file=>!file.path.endsWith('/profile.yaml'));
+    const yaml=files.length?files.map(file=>(files.length>1?'<h4>'+esc(file.label)+'</h4>':'')+
+      '<pre class=run-configuration><code data-config-yaml-url="'+esc(runHref(id,'artifact/'+file.path.split('/').map(enc).join('/')))+
+      '">Loading saved YDB configuration…</code></pre>').join(''):
+      '<p class=muted>No YDB configuration was saved for this profile. It is not reconstructed from the current template.</p>';
+    const sections=[...configurationProfileSections(profile.value),['YDB configuration',yaml]],key=JSON.stringify([id,profile.key]);
+    const active=sections.some(([name])=>name===configurationSections.get(key))?configurationSections.get(key):sections[0][0];
+    return '<div data-config-panel="'+index+'" data-config-key="'+esc(key)+'" '+(profile.key===selected?'':'hidden')+'>'+
+      '<nav class=tabs aria-label="Profile configuration sections">'+sections.map(([name],i)=>
+        '<button type=button data-config-section="'+i+'" class="'+(name===active?'active':'')+'" aria-pressed="'+(name===active)+'">'+esc(name)+'</button>').join('')+'</nav>'+
+      sections.map(([name,body],i)=>'<div data-config-section-panel="'+i+'" '+(name===active?'':'hidden')+'>'+
+        (body||'<p class=muted>No explicit settings in the saved profile.</p>')+'</div>').join('')+'</div>'
+  }).join('');
   return '<section id=run-configuration-view class=new-run-page>'+tabs+
     '<p class=muted>perf: '+(saved.perf?'on':'off')+' · Continue on error: '+(saved.continue_on_error?'on':'off')+'</p>'+
-    panels+'<div data-config-panel="yaml" '+(selected==='YAML'?'':'hidden')+'><pre class=run-configuration><code>'+esc(saved.yaml)+'</code></pre></div></section>'
+    panels+(!profiles.length?'<p class=muted>Structured configuration unavailable. See Run YAML.</p>':'')+
+    '<div data-config-panel="yaml" '+(selected==='yaml'?'':'hidden')+'><pre class=run-configuration><code>'+esc(saved.yaml)+'</code></pre></div></section>'
 }
 function bindRunConfiguration(container,id){
   if(!container)return;
   for(const button of container.querySelectorAll('[data-config-profile]'))button.onclick=()=>{
     for(const other of container.querySelectorAll('[data-config-profile]'))other.classList.toggle('selected',other===button);
     for(const panel of container.querySelectorAll('[data-config-panel]'))panel.hidden=panel.dataset.configPanel!==button.dataset.configProfile;
-    configurationSelections.set(id,button.textContent)
+    configurationSelections.set(id,button.dataset.configProfile==='yaml'?'yaml':button.textContent)
+  }
+  for(const panel of container.querySelectorAll('[data-config-panel]')){
+    for(const button of panel.querySelectorAll('[data-config-section]'))button.onclick=()=>{
+      for(const other of panel.querySelectorAll('[data-config-section]')){
+        other.setAttribute('aria-pressed',String(other===button));other.classList.toggle('active',other===button)
+      }
+      for(const body of panel.querySelectorAll('[data-config-section-panel]'))body.hidden=body.dataset.configSectionPanel!==button.dataset.configSection;
+      configurationSections.set(panel.dataset.configKey,button.textContent)
+    };
+    for(const text of panel.querySelectorAll('[data-config-yaml-url]'))(async()=>{
+      try{
+        const response=await fetch(text.dataset.configYamlUrl);
+        if(!response.ok)throw Error('Cannot load saved YAML (HTTP '+response.status+')');
+        const yaml=await response.text();
+        if(text.isConnected)text.textContent=yaml
+      }catch(error){if(text.isConnected)text.textContent=error.message}
+    })();
   }
 }
 """
@@ -3143,6 +3407,7 @@ function bindRunConfiguration(container,id){
     '  try{\n'
     "    const run=await api('/api/runs/'+enc(id));\n"
     "    const directory=await api('/api/hosts'),owner=splitRunRef(id)?.host||viewedHost||directory.local.id;\n"
+    "    for(const host of [directory.local,...directory.hosts])distributedHosts.set(host.id,host.name||host.endpoint||host.id);\n"
     "    const hostName=[directory.local,...directory.hosts].find(host=>host.id===owner)?.name||owner;\n"
     "    activeRun=run.current_run_id||(['running','recovery_required'].includes(run.state)?id:'');\n"
     "    const queueNotice=run.state==='queued'?'<div class=notice>Queue position: '+esc(run.queue_position??'—')+'. '+(run.c"
@@ -3152,11 +3417,10 @@ function bindRunConfiguration(container,id){
     '    const groups=profileGroups(run.steps||[]),profileKeys=Object.keys(groups),selection=parseLocalYdbProfileSelection('
     "groups,selectedProfile),activeProfile=runView==='configuration'?'':selection.profile||(profileKeys.length===1?profileKeys[0]:''),requestedLocalView="
     "selection.profile?selection.view:'',activeBenchmark=activeProfile?activeProfile.split('/')[0]:'';\n"
-    "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:runDisplay(id)}];if(activeProfile&&profileKeys.length>1)cr"
-    "umbs.push({route:'run/'+enc(id)+'/profile/'+enc(activeProfile),label:activeProfile});\n"
-    "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><h1 class=page-title>'+esc(activeProfile||runDisplay(id))+'</h1><div class=toolbar><button id=ref"
-    "resh-run>Refresh</button>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
-    ":'')+'<button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
+    "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:runDisplay(id)}];\n"
+    "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><div class=toolbar>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
+    ":'')+(run.state==='running'&&run.deployment?.phase==='cluster-ready'?'<button id=release-cluster>Release cluster</button>':'')+"
+    "'<span class=toolbar id=run-export></span><button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
     "ss=actions><a href=\"'+runHref(id,'config')+'\">YAML</a><a href=\"'+runHref(id,'manifest')+'\">run.json</a><a href=\"'+r"
     "unHref(id,'archive')+'\">Archive.zip</a></div></details></div></div><p class=muted>'+esc(hostName)+' · '+status(run.status)+' · '+"
     "esc(humanTime(run.started_at))+' · Run duration <span id=run-duration>'+duration(run)+'</span> · '+run.finished_steps+' / '+run.steps.length+"
@@ -3191,12 +3455,17 @@ function bindRunConfiguration(container,id){
     "?'<h3>Live stdout</h3><pre class=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><p"
     "re class=log>'+esc(run.tail?.stderr||'No stderr captured yet.')+'</pre>':'')+'</section>';content+='</div>';\n"
     "    app.innerHTML=shell('runs',content);\n"
+    "    mountMetricsExport(document.querySelector('#run-export'),id);\n"
     "    if(runView==='configuration')bindRunConfiguration(document.querySelector('#run-configuration-view'),id);\n"
     "    const selectedRoute=()=>{const local=document.querySelector('#local-ydb-result');return ['local-ydb','distributed-ydb'].includes(activeBenchmark)&&"
     "local?.dataset.localYdbViewExplicit==='true'?activeProfile+'/view/'+local.dataset.localYdbView:activeProfile};\n"
     "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedRoute(),runView);\n"
     "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
     "    const cancel=document.querySelector('#cancel-run');\n"
+    "    const release=document.querySelector('#release-cluster');if(release)release.onclick=async()=>{"
+    "if(!confirm('Stop this cluster and release its hosts?'))return;release.disabled=true;"
+    "try{await api('/api/runs/'+enc(id)+'/release-cluster',jsonOptions({}));renderRun(id,selectedRoute(),runView)}"
+    "catch(error){release.disabled=false;alert(error.message)}};\n"
     "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',jsonOptions({}));renderRun(id,sele"
     'ctedRoute(),runView)}catch(error){alert(error.message)}};\n'
     "    if(activeProfile){const pieces=activeProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');if("
@@ -3296,7 +3565,7 @@ function filterComparisonRuns(runs,filters,selected){
     const benchmarks=Array.isArray(run.benchmarks)?run.benchmarks:[];
     const date=(run.started_at||run.queued_at||'').slice(0,10);
     return (!filters.only||selected.has(run.id))&&(!filters.status||run.status===filters.status)&&
-      (!filters.benchmark||benchmarks.includes(filters.benchmark))&&(!filters.since||date>=filters.since)&&
+      (!filters.benchmark||benchmarks.includes(filters.benchmark))&&(!filters.since||date>=filters.since)&&(!filters.until||date<=filters.until)&&
       (!query||[run.id,...names,...benchmarks].join(' ').toLowerCase().includes(query))
   }),filters.sort||'newest')
 }
@@ -3309,13 +3578,13 @@ async function renderSavedComparisons(){
     if(!active())return;
     if(!id){
       app.innerHTML=shell('comparisons',
-        federationErrors(catalog.errors)+'<div class=filters><label class=field>Comparison, profile or run<input id=saved-comparison-query type=search placeholder="Search comparisons"></label>'+
+        federationErrors(catalog.errors)+'<div class=filters><label class=field>Search<input id=saved-comparison-query type=search placeholder="Comparison, profile or run ID"></label>'+
         '<label class=field>Created from (UTC)<input id=saved-comparison-since type=date></label>'+
-        '<label class=field>Created to (UTC)<input id=saved-comparison-until type=date></label></div>'+
-        '<div class=runs-toolbar><label>Sort <select id=saved-comparison-sort><option value=newest>Newest first</option>'+
+        '<label class=field>Created through (UTC)<input id=saved-comparison-until type=date></label></div>'+
+        '<div class=runs-toolbar><label>Sort by <select id=saved-comparison-sort><option value=newest>Newest first</option>'+
         '<option value=oldest>Oldest first</option><option value=name>Name A–Z</option></select></label>'+
         '<span id=saved-comparison-count class=muted aria-live=polite></span><div class=runs-actions>'+
-        '<button id=reset-comparison-filters hidden>Reset filters</button>'+
+        '<button id=reset-comparison-filters style="visibility:hidden" disabled>Reset filters</button>'+
         '<a class=new-run-link href="#comparisons/new"><span aria-hidden=true>+</span> New comparison</a></div></div><div id=saved-comparison-list></div>');
       const query=app.querySelector('#saved-comparison-query'),since=app.querySelector('#saved-comparison-since'),
         until=app.querySelector('#saved-comparison-until'),sort=app.querySelector('#saved-comparison-sort'),
@@ -3346,25 +3615,29 @@ async function renderSavedComparisons(){
     const crumb='<div class=breadcrumbs><a href="#comparisons">Comparisons</a> / '+esc(record?.name||'New comparison')+'</div>';
     if(editing){
       if(record?.remote)throw Error('Edit this comparison on its owning host: '+record.host_name);
-      const runCatalog=await api('/api/federation/runs'),runs=runCatalog.entries,hostOptions=await hostChoices();if(!active())return;
+      const hostOptions=await hostChoices();if(!active())return;
+      let runs=[];const knownRuns=new Map();
       const selected=new Map((record?.profiles||[]).map(pair=>[JSON.stringify(pair),pair]));
       const seeds=record?[...new Set(record.profiles.map(pair=>pair[0]))]:new URLSearchParams(route.split('?')[1]||'').getAll('run');
       const chosenRuns=new Set(seeds),cache=new Map(),pending=new Map(),errors=new Map(),autoSelect=new Set(record?[]:seeds);
       let baseline=record?JSON.stringify(record.baseline):'',saving=false;
-      const options=values=>'<option value="">All</option>'+[...new Set(values)].sort().map(value=>'<option value="'+esc(value)+'">'+esc(value)+'</option>').join('');
+      const options=(values,label)=>'<option value="">All '+label+'</option>'+[...new Set(values)].sort().map(value=>'<option value="'+esc(value)+'">'+esc(value)+'</option>').join('');
       app.innerHTML=shell('comparisons',crumb+'<h1 class=page-title>'+(record?'Edit comparison':'New comparison')+'</h1>'+
         '<div class=toolbar><label>Name <input id=comparison-name maxlength=200 value="'+esc(record?.name||'')+'"></label>'+
         '<button id=save-saved-comparison>'+(record?'Save':'Create comparison')+'</button><a href="#comparisons'+
-        (record?'/'+enc(record.id):'')+'">Cancel</a></div>'+federationErrors(runCatalog.errors)+'<div id=comparison-error role=alert></div>'+
-        '<div class=filters><div class=field><label for=comparison-query>Run or profile</label><input id=comparison-query placeholder="Name, profile or run ID"></div>'+
+        (record?'/'+enc(record.id):'')+'">Cancel</a></div><div id=comparison-error role=alert></div>'+
+        '<div class=filters><div class=field><label for=comparison-query>Search</label><input id=comparison-query type=search placeholder="Name, profile or run ID"></div>'+
         '<div class=field><label for=comparison-host>Host</label><select id=comparison-host>'+hostOptions+'</select></div>'+
-        '<div class=field><label for=comparison-status>Status</label><select id=comparison-status>'+options(runs.map(run=>run.status))+'</select></div>'+
+        '<div class=field><label for=comparison-status>Status</label><select id=comparison-status>'+
+        options(['queued','running','completed','failed','cancelled','recovery_required'],'statuses')+'</select></div>'+
         '<div class=field><label for=comparison-benchmark>Benchmark</label><select id=comparison-benchmark>'+
-        options(runs.flatMap(run=>run.benchmarks||[]))+'</select></div><div class=field><label for=comparison-since>Started since</label>'+
-        '<input id=comparison-since type=date></div></div><div class=runs-toolbar><span id=comparison-selection-count aria-live=polite></span>'+
-        '<label><input id=comparison-selected-only type=checkbox> Selected only</label><button id=comparison-reset>Reset filters</button>'+
-        '<label>Sort <select id=comparison-sort><option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
-        '<option value=longest>Longest first</option></select></label></div><div class=table-scroll><table><thead><tr>'+
+        options(runs.flatMap(run=>run.benchmarks||[]),'benchmarks')+'</select></div><div class=field><label for=comparison-since>Started from (UTC)</label>'+
+        '<input id=comparison-since type=date></div><div class=field><label for=comparison-until>Started through (UTC)</label>'+
+        '<input id=comparison-until type=date></div></div><div class=runs-toolbar>'+
+        '<label>Sort by <select id=comparison-sort><option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
+        '<option value=longest>Longest first</option></select></label><span id=comparison-selection-count aria-live=polite></span>'+
+        '<label><input id=comparison-selected-only type=checkbox> Selected only</label><div class=runs-actions>'+
+        '<button id=comparison-reset style="visibility:hidden" disabled>Reset filters</button></div></div>'+runPager()+'<div class=table-scroll><table><thead><tr>'+
         '<th></th><th>Run / profiles</th><th>Started</th><th>Duration</th><th>Status</th></tr></thead><tbody id=comparison-runs></tbody></table></div>'+
         '<section id=comparison-picked-profiles><h3 id=comparison-profiles-title>Profiles</h3><div id=comparison-load-status aria-live=polite></div>'+
         '<div id=comparison-profile-options></div><label>Baseline <select id=comparison-baseline></select></label></section>');
@@ -3377,12 +3650,12 @@ async function renderSavedComparisons(){
         element('comparison-profile-options').innerHTML=[...choices].map(([key,pair])=>
           '<label class=comparison-profile-choice><input type=checkbox data-saved-profile value="'+esc(key)+'" '+(selected.has(key)?'checked':'')+'>'+
           '<span>'+esc(pair[2]||'local-ydb')+' / '+esc(pair[1])+'</span><span class=muted>'+
-          esc(runs.find(run=>run.id===pair[0])?.host_name||'')+' · '+esc(runDisplay(pair[0]))+'</span></label>').join('')||
+          esc(knownRuns.get(pair[0])?.host_name||'')+' · '+esc(runDisplay(pair[0]))+'</span></label>').join('')||
           '<div class=muted>'+(chosenRuns.size?'No profiles available from the selected runs.':'Select runs below to load profiles.')+'</div>';
         element('comparison-profiles-title').textContent='Profiles · '+selected.size;
         if(!selected.has(baseline))baseline=selected.keys().next().value||'';
         element('comparison-baseline').innerHTML=[...selected].map(([key,pair])=>'<option value="'+esc(key)+'" '+
-          (key===baseline?'selected':'')+'>'+esc((runs.find(run=>run.id===pair[0])?.host_name||'')+' / '+runDisplay(pair[0])+
+          (key===baseline?'selected':'')+'>'+esc((knownRuns.get(pair[0])?.host_name||'')+' / '+runDisplay(pair[0])+
           ' / '+(pair[2]||'local-ydb')+' / '+pair[1])+'</option>').join('');
         const loading=[...chosenRuns].filter(id=>pending.has(id));
         element('save-saved-comparison').disabled=saving||!!loading.length||!selected.size||!element('comparison-name').value.trim();
@@ -3397,13 +3670,9 @@ async function renderSavedComparisons(){
         for(const button of app.querySelectorAll('[data-retry-run]'))button.onclick=()=>loadRun(button.dataset.retryRun);
       };
       const drawRuns=()=>{
-        const visible=filterComparisonRuns(runs.filter(run=>!element('comparison-host').value||run.host_id===element('comparison-host').value),{
-          query:element('comparison-query').value,status:element('comparison-status').value,
-          benchmark:element('comparison-benchmark').value,since:element('comparison-since').value,
-          only:element('comparison-selected-only').checked,sort:element('comparison-sort').value
-        },chosenRuns);
+        const visible=runs;
         const outside=[...chosenRuns].filter(id=>!visible.some(run=>run.id===id)).length;
-        element('comparison-selection-count').textContent=chosenRuns.size+' selected'+(outside?' · '+outside+' outside filters':'')+' · '+visible.length+' shown';
+        element('comparison-selection-count').textContent=chosenRuns.size+' selected'+(outside?' · '+outside+' outside this page':'')+' · '+visible.length+' shown';
         element('comparison-runs').innerHTML=visible.map(run=>'<tr data-picker-run="'+esc(run.id)+'" class="'+
           (chosenRuns.has(run.id)?'comparison-run-selected':'')+'"><td><input type=checkbox aria-label="Select '+esc(run.id)+
           '" '+(chosenRuns.has(run.id)?'checked':'')+'></td><td><div>'+esc((run.profile_names||[]).join(' · ')||'No profiles')+
@@ -3446,16 +3715,28 @@ async function renderSavedComparisons(){
             autoSelect.delete(id)
           }else loadRun(id)
         }
-        drawRuns();drawProfiles()
+        if(element('comparison-selected-only').checked)pager.load();else drawRuns();drawProfiles()
       };
       element('comparison-baseline').onchange=event=>{baseline=event.target.value};
       element('comparison-name').oninput=drawProfiles;
-      element('comparison-query').oninput=drawRuns;
-      for(const id of ['comparison-host','comparison-status','comparison-benchmark','comparison-since','comparison-selected-only','comparison-sort'])element(id).onchange=drawRuns;
-      element('comparison-reset').onclick=()=>{
-        for(const id of ['comparison-query','comparison-host','comparison-status','comparison-benchmark','comparison-since'])element(id).value='';
-        element('comparison-selected-only').checked=false;drawRuns()
-      };
+      const pager=bindRunPager(app,()=>{
+        const query=new URLSearchParams({sort:element('comparison-sort').value});
+        for(const name of ['query','host','status','benchmark','since','until']){
+          const value=element('comparison-'+name).value.trim();if(value)query.set(name,value);
+        }
+        if(element('comparison-selected-only').checked)for(const id of chosenRuns.size?chosenRuns:['!'])query.append('selected',id);
+        return query;
+      },value=>{
+        runs=value.entries;
+        for(const [id] of knownRuns)if(!chosenRuns.has(id))knownRuns.delete(id);
+        for(const run of runs)knownRuns.set(run.id,run);
+        const select=element('comparison-benchmark'),selected=select.value;
+        select.innerHTML=options([...value.benchmarks,...(selected?[selected]:[])],'benchmarks');select.value=selected;
+        drawRuns();drawProfiles();
+      },active);
+      bindAutomaticFilters(['comparison-query','comparison-host','comparison-status','comparison-benchmark','comparison-since',
+        'comparison-until','comparison-selected-only'].map(element),element('comparison-reset'),()=>pager.load(),active,pager.invalidate);
+      element('comparison-sort').onchange=()=>pager.load();
       element('save-saved-comparison').onclick=async()=>{
         if(saving)return;saving=true;drawProfiles();
         try{
@@ -3465,11 +3746,11 @@ async function renderSavedComparisons(){
         }catch(error){if(active())element('comparison-error').innerHTML=displayError(error)}
         finally{saving=false;if(active())drawProfiles()}
       };
-      drawRuns();drawProfiles();for(const id of chosenRuns)loadRun(id);return
+      drawProfiles();pager.load();for(const id of chosenRuns)loadRun(id);return
     }
-    app.innerHTML=shell('comparisons',crumb+'<div class=toolbar><h1 class=page-title>'+esc(record.name)+'</h1>'+
+    app.innerHTML=shell('comparisons',crumb+'<div class=runs-toolbar><h1 class=page-title>'+esc(record.name)+'</h1><div class=runs-actions>'+
       (record.remote?'<span class=muted>Stored on '+esc(record.host_name)+' · read-only</span>':
-        '<a href="#comparisons/'+enc(record.id)+'/edit">Edit comparison</a><button id=delete-comparison>Delete</button>')+'</div>'+
+        '<a href="#comparisons/'+enc(record.id)+'/edit">Edit comparison</a><button id=delete-comparison>Delete</button>')+'</div></div>'+
       '<div class=muted>'+record.profiles.length+' profiles · Baseline: '+esc(runDisplay(record.baseline[0])+' / '+record.baseline[1])+'</div>'+
       '<div id=comparison-error></div><div id=comparison-missing></div><section id=local-ydb-comparison>Loading profiles…</section>');
     const deleteComparison=document.querySelector('#delete-comparison');
@@ -3479,6 +3760,11 @@ async function renderSavedComparisons(){
       catch(error){if(active())document.querySelector('#comparison-error').innerHTML=displayError(error)}
     };
     const entries=[],errors=[];
+    try{
+      const directory=await api('/api/hosts');
+      for(const host of [directory.local,...directory.hosts])distributedHosts.set(host.id,host.name||host.endpoint||host.id);
+    }catch{/* Host IDs remain usable when the directory is unavailable. */}
+    if(!active())return;
     for(const run of [...new Set(record.profiles.map(pair=>pair[0]))]){
       try{entries.push(...(await loadLocalYdbComparison([run])).entries)}catch(error){errors.push(run+': '+error.message)}
       if(!active())return
@@ -3524,19 +3810,23 @@ async function renderComparisons(){
     """
     "async function compose(){if(!location.hash.slice(1))history.replaceState(history.state,'',location.pathname+location.search+'#runs');"
     "const pieces=routeParts(),current=pieces.join('/');if(pieces[0]==='cluster-templates')return renderClusterTemplates(pieces[1]);"
-    "if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
+    "if(current==='settings')return renderMonitoringSettings();if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
     "t==='comparisons'||pieces[0]==='comparisons')return renderSavedComparisons();if(['attempt','distributed-attempt'].includes(pieces[0])&&[4,5].includes(pieces.length))"
     "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4],pieces[0]==='distributed-attempt'?'distributed-ydb':'local-ydb');if(pieces[0]==='run'){"
     "if(pieces.length===3&&pieces[2]==='configuration')return renderRun(pieces[1],'','configuration');if(pieces[2]"
     "==='profile')return renderRun(pieces[1],pieces.slice(3).join('/'));return renderRun(pieces.slice(1).join('/'))}setRoute("
     "'runs')}\n"
-    "addEventListener('hashchange',compose);setInterval(refreshActiveBanner,3000);compose();\n"
+    "addEventListener('hashchange',compose);setInterval(refreshActiveBanner,3000);setInterval(refreshHostAvailability,3000);refreshHostAvailability();compose();\n"
 )
 
 
 _CSS += cluster_templates_ui.CSS
+_CSS += cluster_config_ui.CSS
+_CSS += monitoring_settings_ui.CSS
+_JS = monitoring_settings_ui.JS + _JS
 _JS += cluster_templates_ui.JS
+_JS += cluster_config_ui.JS
 _CSS += distributed_builder_ui.CSS
 _JS += distributed_builder_ui.JS
 
@@ -3596,6 +3886,57 @@ def _run_directory(output, run_id):
     return candidate
 
 
+def _saved_ydb_configurations(root, profile_directory):
+    """List only retained execution files; never regenerate from a live template."""
+    root, profile_directory = Path(root).resolve(), Path(profile_directory).resolve()
+    if profile_directory == root or root not in profile_directory.parents:
+        return []
+    result = []
+
+    def add(path, label):
+        resolved = path.resolve()
+        if not path.is_symlink() and root in resolved.parents and resolved.is_file():
+            result.append({"label": label, "path": resolved.relative_to(root).as_posix()})
+
+    add(profile_directory / "profile.yaml", "Profile snapshot")
+    for generation in ("cluster", "verification-cluster"):
+        directory = profile_directory / generation
+        add(directory / "cluster.yaml", generation + " · YDB YAML")
+        add(directory / "configuration" / "cluster.yaml", generation + " · YDB YAML")
+        index = directory / "configuration" / "index.json"
+        if not index.is_file() or index.is_symlink() or root not in index.resolve().parents:
+            continue
+        if index.stat().st_size > 1024 * 1024:
+            continue
+        try:
+            entries = json.loads(index.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(entries, list) or len(entries) > 1000:
+            continue
+        start = len(result)
+        fingerprints = set()
+        remaining = 32 * 1024 * 1024
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+                continue
+            path = directory / entry["path"]
+            if (directory / "configuration").resolve() not in path.resolve().parents:
+                continue
+            if not path.is_symlink() and root in path.resolve().parents and path.is_file():
+                size = path.stat().st_size
+                if size <= remaining:
+                    remaining -= size
+                    digest = hashlib.sha256(path.read_bytes()).digest()
+                    if digest in fingerprints:
+                        continue
+                    fingerprints.add(digest)
+            add(path, "{} · {} · {}".format(generation, entry.get("node", "YDB"), entry.get("host_id", "")))
+        if len(result) == start + 1:
+            result[start]["label"] = generation + " · YDB YAML"
+    return result
+
+
 def _content_disposition(filename):
     fallback = "".join(
         character if character.isascii() and (character.isalnum() or character in "._-") else "_"
@@ -3626,53 +3967,56 @@ def read_model(output):
     root = Path(output).resolve()
     result = {}
     for run_id, manifest in _manifests(output):
-        run_root = root / run_id
-        steps = manifest.get("steps", [])
-        runs = manifest.get("runs", [])
-        profile_keys = {
-            (str(item.get("benchmark")), str(item.get("profile")))
-            for item in steps + runs
-            if item.get("benchmark") is not None and item.get("profile") is not None
-        }
-        result[run_id] = {
-            "id": run_id,
-            "status": manifest.get("status", "unknown"),
-            "state": manifest.get("state", "unknown"),
-            "source": (
-                "imported"
-                if (
-                    (run_root / ".imported").is_file()
-                    or manifest.get("imported")
-                    or manifest.get("source") == "imported"
-                    or manifest.get("origin")
-                )
-                else "local"
-            ),
-            "queued_at": manifest.get("queued_at"),
-            "started_at": manifest.get("started_at"),
-            "finished_at": manifest.get("finished_at"),
-            "duration_seconds": _duration_seconds(manifest),
-            "profiles": len(profile_keys),
-            "repetitions": len(steps),
-            "benchmarks": sorted(
-                {str(item.get("benchmark")) for item in steps + runs if item.get("benchmark") is not None}
-            ),
-            "profile_names": sorted(
-                {str(item.get("profile")) for item in steps + runs if item.get("profile") is not None}
-            ),
-            "perf": bool(manifest.get("profiler")),
-            "config_path": manifest.get("config", {}).get("path")
-            or ("config.yaml" if (run_root / "config.yaml").is_file() else "config snapshot"),
-            "output_directory": str(run_root),
-            "runs": runs,
-            "steps": steps,
-            "topology": manifest.get("topology"),
-            "events": manifest.get("events", 0),
-            "finished_steps": sum(
-                1 for item in steps if item.get("state") in ("passed", "failed", "unsupported", "cancelled")
-            ),
-        }
+        result[run_id] = run_record(run_id, manifest, root)
     return result
+
+
+def run_record(run_id, manifest, root):
+    run_root = root / run_id
+    steps = manifest.get("steps", [])
+    runs = manifest.get("runs", [])
+    profile_keys = {
+        (str(item.get("benchmark")), str(item.get("profile")))
+        for item in steps + runs
+        if item.get("benchmark") is not None and item.get("profile") is not None
+    }
+    return {
+        "id": run_id,
+        "status": manifest.get("status", "unknown"),
+        "state": manifest.get("state", "unknown"),
+        "deployment": manifest.get("deployment"),
+        "source": (
+            "imported"
+            if (
+                (run_root / ".imported").is_file()
+                or manifest.get("imported")
+                or manifest.get("source") == "imported"
+                or manifest.get("origin")
+            )
+            else "local"
+        ),
+        "queued_at": manifest.get("queued_at"),
+        "started_at": manifest.get("started_at"),
+        "finished_at": manifest.get("finished_at"),
+        "duration_seconds": _duration_seconds(manifest),
+        "profiles": len(profile_keys),
+        "repetitions": len(steps),
+        "benchmarks": sorted(
+            {str(item.get("benchmark")) for item in steps + runs if item.get("benchmark") is not None}
+        ),
+        "profile_names": sorted({str(item.get("profile")) for item in steps + runs if item.get("profile") is not None}),
+        "perf": bool(manifest.get("profiler")),
+        "config_path": manifest.get("config", {}).get("path")
+        or ("config.yaml" if (run_root / "config.yaml").is_file() else "config snapshot"),
+        "output_directory": str(run_root),
+        "runs": runs,
+        "steps": steps,
+        "topology": manifest.get("topology"),
+        "events": manifest.get("events", 0),
+        "finished_steps": sum(
+            1 for item in steps if item.get("state") in ("passed", "failed", "unsupported", "cancelled")
+        ),
+    }
 
 
 def benchmark_catalog():
@@ -4265,6 +4609,9 @@ class RunService:
         self.output = Path(output).resolve()
         self.output.mkdir(parents=True, exist_ok=True)
         self.hosts = HostDirectory(self.output)
+        self.monitoring_settings = MonitoringSettings(self.output, self.hosts)
+        self.metrics_exporter = MetricsExporter(self.output, self.monitoring_settings, self.hosts.id)
+        self.grafana = Grafana(self.monitoring_settings, self.hosts)
         self.cluster_templates = ClusterTemplateStore(self.output)
         self.executor = executor or self._unsupported_executor
         self.event_limit, self.tail_limit = event_limit, tail_limit
@@ -4279,6 +4626,7 @@ class RunService:
         self._dispatcher_thread = None
         self._selection_path = self.output / ".comparison-selection.json"
         self._recover()
+        self.run_index = RunIndex(self.output, run_record)
         self.distributed_sessions = HostSessions(
             self.output, self._lock, self._distributed_busy, self._cleanup_distributed
         )
@@ -4288,6 +4636,8 @@ class RunService:
         self._recovery_stop = threading.Event()
         self._recovery_thread = None
         self._start_recovery()
+        self.monitoring_settings.start()
+        self.hosts.start()
 
     def _start_recovery(self):
         with self._lock:
@@ -4348,6 +4698,7 @@ class RunService:
                         recovery={"state": "completed", "at": _utc_now()},
                     )
                     atomic_write_json(root / "run.json", manifest)
+                    self.run_index.mark_dirty(root / "run.json")
                     if run_id in self._runs:
                         self._runs[run_id]["store"].manifest.update(manifest)
                     self._recovery_runs.discard(run_id)
@@ -4480,11 +4831,17 @@ class RunService:
         model["binary_catalog"] = binary_catalog(self.binaries_dir)
         return model
 
+    def _reserved_by_other_run(self):
+        session = self.distributed_sessions.status()
+        return session is not None and not (
+            session.get("coordinator_id") == self.hosts.id and session.get("run_id") == self._active_run_id
+        )
+
     def start(self, yaml_text, perf=False, continue_on_error=False):
         with self._lock:
             if not self._accepting_runs:
                 raise BenchmarkError("web run service is shutting down")
-            if self.distributed_sessions.status() is not None:
+            if self._reserved_by_other_run():
                 raise BenchmarkError("Host is reserved by a distributed benchmark")
         plan_result = self.plan(yaml_text, perf)
         if not plan_result["valid"]:
@@ -4497,7 +4854,7 @@ class RunService:
             # with its worker before shutdown takes its active-run snapshot.
             if not self._accepting_runs:
                 raise BenchmarkError("web run service is shutting down")
-            if self.distributed_sessions.status() is not None:
+            if self._reserved_by_other_run():
                 raise BenchmarkError("Host is reserved by a distributed benchmark")
             run_id = "{}-web".format(datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
             while (self.output / run_id).exists():
@@ -4529,10 +4886,11 @@ class RunService:
                 "distributed_generation": None,
                 "root": root,
                 "loaded": loaded,
-                "store": ResultStore(root / "run.json", manifest),
+                "store": ResultStore(root / "run.json", manifest, on_write=self.run_index.mark_dirty),
                 "events": deque(maxlen=self.event_limit),
                 "tail": {"stdout": "", "stderr": ""},
                 "cancel": threading.Event(),
+                "release_cluster": threading.Event(),
                 "cancel_requested": False,
                 "finished": threading.Event(),
                 "finalized": False,
@@ -4560,7 +4918,7 @@ class RunService:
     def _dispatch(self):
         while True:
             with self._lock:
-                while self._queue and self.distributed_sessions.status() is not None:
+                while self._queue and (self.distributed_sessions.status() is not None or self._recovery_runs):
                     self._admission.wait(0.1)
                 while self._queue:
                     run = self._queue.popleft()
@@ -4722,6 +5080,21 @@ class RunService:
         run["finalized"] = True
         run["finished"].set()
 
+    def release_cluster(self, run_id):
+        with self._lock:
+            run = self._runs.get(run_id)
+            if run is None:
+                raise BenchmarkError("Cluster deployment is not active")
+            with run["lock"]:
+                if run["release_cluster"].is_set():
+                    return {"id": run_id, "release_requested": True}
+                if run["store"].manifest.get("deployment", {}).get("phase") != "cluster-ready" or run["finalized"]:
+                    raise BenchmarkError("Cluster is not ready for release")
+                run["store"].manifest["release_requested"] = True
+                self._emit_locked(run, {"type": "cluster-release-requested"})
+                run["release_cluster"].set()
+                return {"id": run_id, "release_requested": True}
+
     def cancel(self, run_id):
         with self._lock:
             run = self._runs.get(run_id)
@@ -4767,6 +5140,9 @@ class RunService:
         if timeout is not None:
             timeout = max(0.0, float(timeout))
         self._recovery_stop.set()
+        self.monitoring_settings.close()
+        self.hosts.close()
+        self.run_index.close()
         if self._recovery_thread is not None:
             self._recovery_thread.join(timeout=6)
         with self._lock:
@@ -4916,8 +5292,32 @@ class RunService:
                 structured = None
         except (yaml.YAMLError, TypeError, ValueError, RecursionError):
             structured = None
+        profile_yaml = {}
+        if structured is not None:
+            try:
+                document = yaml.safe_load(yaml_text)
+                for benchmark, profiles in document.items():
+                    if not isinstance(profiles, dict):
+                        continue
+                    for name, value in profiles.items():
+                        if isinstance(value, dict):
+                            profile_yaml[str(benchmark) + "/" + str(name)] = yaml.safe_dump(
+                                {benchmark: {name: value}}, sort_keys=False, allow_unicode=True
+                            )
+            except (yaml.YAMLError, TypeError, ValueError, RecursionError):
+                profile_yaml = {}
+        configurations = {}
+        for record in manifest.get("runs", []):
+            if record.get("benchmark") not in ("local-ydb", "distributed-ydb"):
+                continue
+            relative = record.get("manifest") or str(Path(record.get("directory", "")) / "run.json")
+            configurations[record["benchmark"] + "/" + record["profile"]] = _saved_ydb_configurations(
+                root, (root / relative).parent
+            )
         return {
             "yaml": yaml_text,
+            "ydb_configurations": configurations,
+            "profile_yaml": profile_yaml,
             "structured": structured,
             "perf": bool(options.get("perf", manifest.get("profiler"))),
             "continue_on_error": bool(options.get("continue_on_error", False)),
@@ -4935,6 +5335,24 @@ class RunService:
 
     def chart_data(self, run_ids, benchmark_filter=None):
         return chart_data(self.output, run_ids, benchmark_filter)
+
+    def metrics_export(self, run_id, options, start=False):
+        root = _run_directory(self.output, run_id)
+        if not isinstance(options, dict) or set(options) not in (set(), {'benchmark', 'profile', 'attempt'}):
+            raise BenchmarkError('expected benchmark, profile and attempt, or an empty run selection')
+        if options and (
+            options['benchmark'] not in ('local-ydb', 'distributed-ydb')
+            or not isinstance(options['profile'], str)
+            or not isinstance(options['attempt'], str)
+            or not re.fullmatch(r'(?:[1-9][0-9]{0,8}|verification)', options['attempt'])
+        ):
+            raise BenchmarkError('invalid metrics export selection')
+        if start:
+            detail = self.detail(run_id)
+            if not detail or detail['state'] not in ('passed', 'failed', 'cancelled', 'unsupported'):
+                raise BenchmarkError('Export is available after the run has finished')
+            return self.metrics_exporter.start(run_id, root, options)
+        return self.metrics_exporter.status(run_id, options)
 
     def local_ydb_metrics(self, run_id, profile, attempt, benchmark="local-ydb"):
         if attempt != "verification" and not re.fullmatch(r"[1-9][0-9]{0,8}", str(attempt)):
@@ -5054,7 +5472,7 @@ class RunService:
             return unavailable_profile(record.get("status"), record.get("error"))
         if candidate.stat().st_size > 16 * 1024 * 1024:
             raise BenchmarkError("local-ydb profile manifest is too large")
-        value = load_manifest(candidate)
+        value = load_manifest(candidate, allow_legacy_deployment=True)
         value["workload_result_schema"] = _resolved_local_ydb_result_schema(value)
         top_state = manifest.get("state")
         if value.get("state") in ("preparing", "running") and top_state not in ("pending", "queued", "running"):
@@ -5081,13 +5499,17 @@ class RunService:
             "distributed",
             "coordinator_hardware",
             "progress",
+            "endpoints",
+            "telemetry",
             "attempts",
             "searches",
             "verification",
             "result",
             "error",
         )
-        return {name: value[name] for name in fields if name in value}
+        result = {name: value[name] for name in fields if name in value}
+        result["ydb_configurations"] = _saved_ydb_configurations(root, candidate.parent)
+        return result
 
     def local_ydb_activity(self, run_id, profile, after=0, benchmark="local-ydb"):
         if benchmark not in ("local-ydb", "distributed-ydb"):
@@ -5582,8 +6004,32 @@ class RunService:
             'profile_names',
             'current_run_id',
             'queue_position',
+            'deployment',
         )
-        return [{key: item[key] for key in fields} for item in self.filtered_model(filters)]
+        return [{key: item.get(key) for key in fields} for item in self.indexed_runs(filters)]
+
+    def indexed_runs(self, filters, order='newest', limit=None, after=None):
+        with self._lock:
+            active = self._active_run_id
+            positions = {
+                run['id']: index
+                for index, run in enumerate(
+                    (run for run in self._queue if run['store'].manifest['state'] == 'queued'), 1
+                )
+            }
+        self.run_index.refresh_pending()
+        records = self.run_index.query(filters, order, limit, after, self.hosts.id)
+        return [
+            {**record, 'current_run_id': active, 'queue_position': positions.get(record['id'])} for record in records
+        ]
+
+    def run_page(self, query):
+        filters, order, limit, after, _ = page_options(query)
+        return {
+            'entries': self.indexed_runs(filters, order, limit + 1, after),
+            'benchmarks': self.run_index.facets()['benchmarks'],
+            'index_error': self.run_index.error,
+        }
 
     def save_comparison(self, value):
         if not isinstance(value, dict):
@@ -5765,7 +6211,9 @@ def production_executor(resource_loader, tool_revision):
                         emit(item)
 
                 try:
-                    if configuration.benchmark.executor in ("local-ydb", "distributed-ydb"):
+                    if distributed and configuration.parameters["local_ydb"].get("mode") == "deploy":
+                        profile = run_deployment(run, configuration, directory, event, cancelled)
+                    elif configuration.benchmark.executor in ("local-ydb", "distributed-ydb"):
                         profile = run_local_ydb(
                             profile_binaries,
                             configuration,
@@ -5944,6 +6392,8 @@ def _handler(service):
                         return self._json(200, federation.runs(filters, query.get('host', [None])[-1]))
                     if path == '/api/federation/comparisons':
                         return self._json(200, federation.comparisons())
+                    if path == '/api/federation/run-page':
+                        return self._json(200, federation.run_page(query))
                     if path == '/api/federation/profiles':
                         return self._json(200, federation.profiles(query.get('run', [])))
                     return self._json(404, {'error': 'not found'})
@@ -5964,8 +6414,7 @@ def _handler(service):
                             raise BenchmarkError('route is not allowed')
                         self.path = target
                         return self.do_GET()
-                    record = service.hosts.get(host_id)
-                    with open_peer(record, target) as response:
+                    with service.hosts.open(host_id, target) as response:
                         self.send_response(response.status)
                         self.send_header(
                             "Content-Type", response.headers.get("Content-Type", "application/octet-stream")
@@ -5990,6 +6439,24 @@ def _handler(service):
                 return self._send(200, "application/javascript; charset=utf-8", _JS.encode())
             if path == "/api/settings":
                 return self._json(200, service.settings())
+            if path == "/api/monitoring-settings":
+                return self._json(200, service.monitoring_settings.status())
+            if path in ('/api/grafana/config', '/api/grafana/catalog'):
+                try:
+                    return self._json(
+                        200,
+                        service.grafana.config() if path.endswith('/config') else service.grafana.execute('catalog'),
+                    )
+                except BenchmarkError as error:
+                    return self._json(400, {'error': str(error)})
+            if path.startswith('/api/runs/') and path.endswith('/metrics-export'):
+                try:
+                    options = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
+                    return self._json(
+                        200, service.metrics_export(unquote(path[len('/api/runs/') : -len('/metrics-export')]), options)
+                    )
+                except BenchmarkError as error:
+                    return self._json(400, {'error': str(error)})
             if path == "/api/activity-status":
                 return self._json(200, service.activity_status())
             if path == "/api/benchmarks":
@@ -6005,6 +6472,8 @@ def _handler(service):
                     return self._json(200, service.topology(mode, count, excluded))
                 except (BenchmarkError, ValueError) as error:
                     return self._json(400, {"error": str(error)})
+            if path == "/api/cluster-config/schema":
+                return self._json(200, cluster_config.schema())
             if path == "/api/cluster-templates":
                 try:
                     return self._json(200, service.cluster_templates.list())
@@ -6019,6 +6488,11 @@ def _handler(service):
                 return self._json(200, service.run_list(filters))
             if path == "/api/saved-comparisons":
                 return self._json(200, service.saved_comparisons())
+            if path == '/api/run-page':
+                try:
+                    return self._json(200, service.run_page(parse_qs(parsed.query, keep_blank_values=True)))
+                except BenchmarkError as error:
+                    return self._json(400, {'error': str(error)})
             if path == "/api/comparisons":
                 return self._json(200, service.comparisons())
             if path == "/api/chart-data":
@@ -6132,6 +6606,42 @@ def _handler(service):
         def do_POST(self):
             path = urlparse(self.path).path
             try:
+                if path in ('/peer/monitoring/snapshot', '/peer/monitoring/save', '/peer/monitoring/grafana'):
+                    if not service.hosts.authorized(self.headers.get('Authorization')):
+                        return self._json(401, {'error': 'peer authentication required'})
+                    if (
+                        self.headers.get('Origin')
+                        or self.headers.get('Content-Type', '').split(';')[0] != 'application/json'
+                    ):
+                        return self._json(403, {'error': 'server-to-server JSON request required'})
+                    options = self._json_body()
+                    if path.endswith('/grafana'):
+                        if not isinstance(options, dict) or set(options) != {'operation', 'options'}:
+                            raise BenchmarkError('invalid Grafana request')
+                        return self._json(
+                            200, service.grafana.execute(options['operation'], options['options'], forwarded=True)
+                        )
+                    return self._json(
+                        200,
+                        (
+                            service.monitoring_settings.snapshot()
+                            if path.endswith('/snapshot')
+                            else service.monitoring_settings.save(options)
+                        ),
+                    )
+                if path in ('/api/monitoring-settings', '/api/monitoring-settings/refresh', '/api/grafana/install'):
+                    origin = self.headers.get('Origin')
+                    if self.headers.get('Content-Type', '').split(';')[0] != 'application/json' or (
+                        origin and urlparse(origin).netloc != self.headers.get('Host')
+                    ):
+                        return self._json(403, {'error': 'same-origin JSON request required'})
+                    options = self._json_body()
+                    if path == '/api/grafana/install':
+                        return self._json(201, service.grafana.execute('install', options))
+                    if path.endswith('/refresh'):
+                        service.monitoring_settings.sync()
+                        return self._json(200, service.monitoring_settings.status())
+                    return self._json(200, service.monitoring_settings.save(options))
                 if path.startswith('/peer/distributed/'):
                     if not service.hosts.authorized(self.headers.get('Authorization')):
                         return self._json(401, {'error': 'peer authentication required'})
@@ -6167,15 +6677,31 @@ def _handler(service):
                         if parts[0] == service.hosts.id:
                             self.path = '/' + parts[1]
                             return self.do_POST()
-                        options = self._json_body() if parts[1].endswith('/cancel') else self._options()
+                        options = (
+                            self._json_body()
+                            if parts[1].endswith(('/cancel', '/metrics-export', '/release-cluster'))
+                            else self._options()
+                        )
                         if not isinstance(options, dict):
                             raise BenchmarkError('request must be an object')
-                        status, content_type, body = request_peer(service.hosts.get(parts[0]), '/' + parts[1], options)
+                        status, content_type, body = service.hosts.request(parts[0], '/' + parts[1], options)
                         return self._send(status, content_type, body, {'Cache-Control': 'no-store'})
                 local_prefix = '/api/hosts/' + service.hosts.id
                 if path.startswith(local_prefix + '/api/runs/'):
                     self.path = self.path[len(local_prefix) :]
                     return self.do_POST()
+                if path.startswith('/api/runs/') and path.endswith('/metrics-export'):
+                    origin = self.headers.get('Origin')
+                    if self.headers.get('Content-Type', '').split(';')[0] != 'application/json' or (
+                        origin and urlparse(origin).netloc != self.headers.get('Host')
+                    ):
+                        return self._json(403, {'error': 'same-origin JSON request required'})
+                    return self._json(
+                        202,
+                        service.metrics_export(
+                            unquote(path[len('/api/runs/') : -len('/metrics-export')]), self._json_body(), start=True
+                        ),
+                    )
                 if path in ('/api/saved-comparisons', '/api/saved-comparisons/delete'):
                     options = self._json_body()
                     if isinstance(options, dict) and isinstance(options.get('id'), str):
@@ -6230,7 +6756,39 @@ def _handler(service):
                 if path.startswith(("/peer/", "/api/hosts/")):
                     return self._json(403, {"error": "remote operation is not allowed"})
                 if path == "/api/import":
-                    return self._json(201, import_archive(service.output, self._raw_body()))
+                    result = import_archive(service.output, self._raw_body())
+                    service.run_index.refresh([service.output / result['id'] / 'run.json'])
+                    return self._json(201, result)
+                if path in ("/api/cluster-config/validate", "/api/cluster-config/yaml", "/api/cluster-config/apply"):
+                    origin = self.headers.get("Origin")
+                    if self.headers.get("Content-Type", "").split(";")[0] != "application/json" or (
+                        origin and urlparse(origin).netloc != self.headers.get("Host")
+                    ):
+                        return self._json(403, {"error": "same-origin JSON request required"})
+                    options = self._json_body()
+                    if not isinstance(options, dict):
+                        raise BenchmarkError('Expected a configuration object')
+                    if path.endswith('/apply'):
+                        return self._json(
+                            200,
+                            apply_configuration_yaml(
+                                options.get('template'),
+                                options.get('yaml'),
+                                [service.hosts.identity(self.server.server_port), *service.hosts.list()],
+                            ),
+                        )
+                    paths = options.get('tenants', [])
+                    result = (
+                        cluster_config.parse_document(options.get('yaml'), paths)
+                        if path.endswith('/yaml')
+                        else cluster_config.document_response(
+                            options.get('config'),
+                            options.get('tenant_configs', {}),
+                            paths,
+                            options.get('tenant_replacements', {}),
+                        )
+                    )
+                    return self._json(200, result)
                 if path in ("/api/cluster-templates", "/api/cluster-templates/delete"):
                     origin = self.headers.get("Origin")
                     if self.headers.get("Content-Type", "").split(";")[0] != "application/json" or (
@@ -6270,6 +6828,10 @@ def _handler(service):
                     return self._json(200, service.run_config(unquote(path[len("/api/runs/") : -len("/repeat")])))
                 if path.startswith("/api/runs/") and path.endswith("/cancel"):
                     return self._json(200, service.cancel(unquote(path[len("/api/runs/") : -len("/cancel")])))
+                if path.startswith("/api/runs/") and path.endswith("/release-cluster"):
+                    return self._json(
+                        200, service.release_cluster(unquote(path[len("/api/runs/") : -len("/release-cluster")]))
+                    )
             except BenchmarkError as error:
                 return self._json(400, {"error": str(error)})
             return self._json(404, {"error": "not found"})

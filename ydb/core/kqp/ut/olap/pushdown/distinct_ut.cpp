@@ -1,4 +1,4 @@
-#include "../helpers/aggregation.h"
+#include "../helpers/test_case.h"
 #include "../helpers/local.h"
 #include "../helpers/writer.h"
 

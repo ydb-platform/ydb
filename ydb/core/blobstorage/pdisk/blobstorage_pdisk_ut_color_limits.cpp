@@ -2,6 +2,7 @@
 #include "blobstorage_pdisk_chunk_tracker.h"
 #include "blobstorage_pdisk_color_limits.h"
 #include "blobstorage_pdisk_impl.h"
+#include "blobstorage_pdisk_quota_record.h"
 
 #include "blobstorage_pdisk_ut.h"
 #include "blobstorage_pdisk_ut_actions.h"
@@ -194,6 +195,104 @@ Y_UNIT_TEST_SUITE(TColorLimitsTest) {
             }
             UNIT_ASSERT_C(occupancy >= prevOccupancy, "check that with Border is increasing fair occupancy is increasing too");
         }
+    }
+
+    Y_UNIT_TEST(TightLargeDiskUsesPercents) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        const i64 total = 10'000;
+        auto limits = TColorLimits::MakeChunkLimits(TColorLimits::TightCyanPermille, true);
+
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::CYAN, total), 300);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::LIGHT_YELLOW, total), 230);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::YELLOW, total), 180);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::LIGHT_ORANGE, total), 150);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::PRE_ORANGE, total), 110);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::ORANGE, total), 60);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::RED, total), 20);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::BLACK, total), 10);
+    }
+
+    Y_UNIT_TEST(TightSmallDiskUsesChunkFloors) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        const i64 total = 200;
+        auto limits = TColorLimits::MakeChunkLimits(TColorLimits::TightCyanPermille, true);
+
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::CYAN, total), TColorLimits::TightMinChunksCyan);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::LIGHT_YELLOW, total), TColorLimits::TightMinChunksLightYellow);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::YELLOW, total), TColorLimits::TightMinChunksYellow);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::LIGHT_ORANGE, total), TColorLimits::TightMinChunksLightOrange);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::PRE_ORANGE, total), TColorLimits::TightMinChunksPreOrange);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::ORANGE, total), TColorLimits::TightMinChunksOrange);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::RED, total), TColorLimits::TightMinChunksRed);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::BLACK, total), TColorLimits::TightMinChunksBlack);
+
+        UNIT_ASSERT_LT(total * TColorLimits::TightCyanPermille / 1000, TColorLimits::TightMinChunksCyan);
+    }
+
+    Y_UNIT_TEST(TightIcbCyanPermilleKeepsFloors) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        // ICB may raise cyan above 30; floors still bind on a small pool.
+        auto limits = TColorLimits::MakeChunkLimits(50, true);
+
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::CYAN, 10'000), 500);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::CYAN, 200), TColorLimits::TightMinChunksCyan);
+    }
+
+    Y_UNIT_TEST(TightQuotasAreNested) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        auto limits = TColorLimits::MakeChunkLimits(TColorLimits::TightCyanPermille, true);
+        const TColor::E colors[] = {
+            TColor::BLACK,
+            TColor::RED,
+            TColor::ORANGE,
+            TColor::PRE_ORANGE,
+            TColor::LIGHT_ORANGE,
+            TColor::YELLOW,
+            TColor::LIGHT_YELLOW,
+            TColor::CYAN,
+        };
+
+        for (i64 total : {50, 200, 10'000}) {
+            i64 prev = -1;
+            for (auto color : colors) {
+                const i64 quota = limits.GetQuotaForColor(color, total);
+                UNIT_ASSERT_C(quota > prev, "total# " << total << " color# " << color
+                    << " quota# " << quota << " prev# " << prev);
+                prev = quota;
+            }
+            const i64 runway = limits.GetQuotaForColor(TColor::PRE_ORANGE, total)
+                - limits.GetQuotaForColor(TColor::BLACK, total);
+            UNIT_ASSERT_C(runway >= 8, "total# " << total << " runway# " << runway);
+        }
+
+        TQuotaRecord rec;
+        rec.ForceHardLimit(20, limits);
+        double occupancy = 0;
+        NKikimrBlobStorage::TPDiskSpaceColor::E prevColor = TColor::GREEN;
+        for (i64 used = 0; used <= 20; ++used) {
+            const auto color = rec.EstimateSpaceColor(used, &occupancy);
+            UNIT_ASSERT_C(color >= prevColor, "used# " << used
+                << " color# " << color << " prev# " << prevColor);
+            prevColor = color;
+        }
+    }
+
+    Y_UNIT_TEST(LegacyCyanThirtyKeepsAddends) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        const i64 total = 200;
+        auto limits = TColorLimits::MakeChunkLimits(TColorLimits::TightCyanPermille, false);
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetQuotaForColor(TColor::CYAN, total), total * 30 / 1000 + 8);
+        UNIT_ASSERT_LT(limits.GetQuotaForColor(TColor::CYAN, total), TColorLimits::TightMinChunksCyan);
     }
 }
 } // namespace NKikimr

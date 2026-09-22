@@ -6,20 +6,21 @@
 
 #include <ydb/core/base/subdomain.h>
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TPropose: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     const TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateExternalDataSource TPropose"
-            << ", operationId: " << OperationId;
-    }
 
 public:
     explicit TPropose(TOperationId id)
@@ -30,8 +31,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -58,7 +60,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -70,6 +72,8 @@ public:
 };
 
 class TCreateExternalDataSource : public TSubOperation {
+    virtual const char* Name() const override final { return "TCreateExternalDataSource"; }
+
     static TTxState::ETxState NextState() { return TTxState::Propose; }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
@@ -166,8 +170,9 @@ public:
             Transaction.GetCreateExternalDataSource();
         const TString& name = externalDataSourceDescription.GetName();
 
-        LOG_N("TCreateExternalDataSource Propose"
-              << ": opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", JoinPath({parentPathStr, name})},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -245,13 +250,15 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateExternalDataSource AbortPropose"
-              << ": opId# " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateExternalDataSource AbortUnsafe"
-              << ": opId# " << OperationId << ", txId# " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateExternalDataSource AbortUnsafe",
+            {"operationId", OperationId},
+            {"txId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -289,9 +296,12 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
                                                          TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
 
-    LOG_I("CreateNewExternalDataSource, opId " << id << ", feature flag EnableReplaceIfExistsForExternalEntities "
-                                               << context.SS->EnableReplaceIfExistsForExternalEntities << ", tx "
-                                               << tx.ShortDebugString());
+    YDB_LOG_INFO_CTX(context.Ctx, "CreateNewExternalDataSource",
+        {"operationId", id},
+        {"enableReplaceIfExistsForExternalEntities", context.SS->EnableReplaceIfExistsForExternalEntities},
+        {"tx", tx.ShortDebugString()},
+        {"schemeshard", context.SS->TabletID()},
+    );
 
     auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
         return {CreateReject(id, status, TStringBuilder() << "Invalid TCreateExternalDataSource request: " << msg)};
@@ -335,3 +345,5 @@ ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, TTxState::ETxSt
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

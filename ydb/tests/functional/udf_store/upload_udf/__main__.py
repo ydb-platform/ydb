@@ -180,7 +180,7 @@ def _upsert_module_row(
         decls += "DECLARE $compile_status AS Utf8; "
         columns += ", compile_status"
         values += ", $compile_status"
-    if module_type == "WASM":
+    if module_type in ("WASM", "LIBRARY"):
         params["$manifest"] = _json(manifest)
         decls += "DECLARE $manifest AS Json; "
         columns += ", manifest"
@@ -377,15 +377,18 @@ def _do_upload(args) -> str:
     udf_name = udf_basename.rsplit(".", 1)[0]
 
     manifest_text = ""
-    if args.type == "WASM" and args.kind == "udf":
+    if args.type == "WASM" or args.kind == "library":
         if not args.manifest:
             raise RuntimeError("--manifest is required for WASM uploads")
         with open(args.manifest, "r", encoding="utf-8") as manifest_file:
             manifest_text = manifest_file.read().strip()
         udf_name = _module_name_from_manifest(manifest_text)
-
-    if args.kind == "library" and not args.library_name:
-        raise RuntimeError("--library-name is required for library uploads")
+        manifest = json.loads(manifest_text)
+        expected_type = "library" if args.kind == "library" else "module"
+        if manifest.get("module_type") != expected_type or manifest.get("module_kind") != "wasm":
+            raise RuntimeError("manifest must describe a WASM {}".format(expected_type))
+        if args.library_name and args.library_name != udf_name:
+            raise RuntimeError("--library-name must match manifest module_name")
 
     md5, size = _compute_md5(args.udf_file)
     body = _read_file(args.udf_file)
@@ -401,13 +404,14 @@ def _do_upload(args) -> str:
                     args.database,
                     module_type="LIBRARY",
                     md5=md5,
-                    name=args.library_name,
+                    name=udf_name,
                     version=args.version,
                     body=body,
+                    manifest=manifest_text,
                 )
                 print("[upload_udf] library uploaded: name={} uid={} md5={}".format(
-                    args.library_name, uid, md5), file=sys.stderr)
-                return args.library_name
+                    udf_name, uid, md5), file=sys.stderr)
+                return udf_name
             if args.type == "WASM":
                 uid = _upsert_wasm_or_library(
                     pool,

@@ -69,6 +69,21 @@ class DistributedBuilderTest(unittest.TestCase):
         self.assertEqual(16, profile["actor_system"]["tenants"]["/Root/db"]["dynamic_nodes"]["cpu_count"])
         self.assertEqual("select", profile["distributed"]["cli_nodes"]["c2"]["workload"]["operation"])
 
+    def test_deployment_has_no_workload_or_cli_requirement(self):
+        raw = {key: self.raw[key] for key in ("cluster-template", "storage", "tenants")}
+        raw["mode"] = "deploy"
+        profile = self.load(raw).runs[0].parameters["local_ydb"]
+        self.assertNotIn("workload", profile)
+        self.assertNotIn("load", profile)
+        self.assertEqual(["static", "dynamic"], [n["role"] for n in profile["distributed"]["template"]["nodes"]])
+        self.assertEqual(8, profile["actor_system"]["static_nodes"]["cpu_count"])
+        self.assertEqual(16, profile["actor_system"]["tenants"]["/Root/db"]["dynamic_nodes"]["cpu_count"])
+        raw["cluster-template"]["nodes"] = raw["cluster-template"]["nodes"][:1]
+        self.load(raw)
+        raw["load"] = {"values": [1]}
+        with self.assertRaises(BenchmarkError):
+            self.load(raw)
+
     def test_shared_dataset_rejects_incompatible_options(self):
         self.raw["cli-nodes"]["c2"]["workload"]["options"]["columns"] = 3
         with self.assertRaisesRegex(BenchmarkError, "identical workload type and options"):
@@ -163,6 +178,9 @@ class DistributedBuilderTest(unittest.TestCase):
         script += "\nconst profile=" + json.dumps(model["profiles"][0]) + ";\n"
         script += """
 const lines=[];serializeDistributedYdb(lines,profile);
+assert(lines.some(line=>line.trim()==='-'));
+assert(!lines.some(line=>line.includes('"nodes": [')));
+distributedHosts.set('host','Build host');
 const draft=distributedDefault(profile.distributed_config['cluster-template'],'/Root/db');
 assert.deepStrictEqual(Object.keys(draft['cli-nodes']),['c1','c2']);
 assert.equal(draft['cli-nodes'].c1.workload.options['init-upserts'],1000);
@@ -172,6 +190,7 @@ for(const tab of ['Cluster','Storage','Tenants','Load generators','Run policy'])
   const html=distributedProfileEditor(profile);assert(!html.includes('>YAML<'));
   assert(!html.includes('id=delete-profile'));
   if(tab==='Cluster'){
+    assert(html.includes('Build host'));
     assert(html.includes('<th>Tenant</th>'));assert(html.includes('<th>Affinity</th>'));
     assert(html.includes('dc / dc-R1'));assert(html.includes('/Root/db'));
     assert(html.includes('bundled'));assert(html.includes('No pinning'));
@@ -180,10 +199,18 @@ for(const tab of ['Cluster','Storage','Tenants','Load generators','Run policy'])
   assert(html.includes('class="active" data-distributed-tab="'+tab+'"'));
   assert(!html.includes('class=view-tabs'));
   if(tab==='Storage'||tab==='Tenants'){
-    assert.equal((html.match(/type=checkbox/g)||[]).length,3);
-    assert(!html.includes('<select'));
+    assert(html.includes('class=actor-settings'));
+    const actorFlags=html.split('<div class=actor-flags>')[1].split('</div>')[0];
+    assert.equal((actorFlags.match(/type=checkbox/g)||[]).length,3);
+    for(const flag of ['use-shared-threads','use-united-pool','use-ring-queue'])assert(actorFlags.includes(flag));
+    const resetDisks=html.split('<input type=checkbox data-distributed-path="["reset-disks"]" ')[1];
+    assert.equal(Boolean(resetDisks),tab==='Storage');
+    if(resetDisks)assert(!resetDisks.split('>')[0].includes('checked'));
+    assert.equal((html.match(/<select/g)||[]).length,3); // Benchmark, mode and template; actor flags remain checkboxes.
+    for(const id of ['benchmark','distributed-mode','distributed-template'])assert(html.includes('id='+id));
   }
   if(tab==='Load generators'){assert(html.includes('Dataset'));assert(html.includes('c1'));assert(html.includes('c2'))}
+  if(tab==='Run policy')assert(html.includes('Failed requests remain visible'));
 }
 distributedSetLoadMode(draft,'c2','latency-slo');
 assert.equal(draft['cli-nodes'].c2.load.objective.type,'latency-slo');
@@ -200,6 +227,71 @@ process.stdout.write('distributed-ydb:\\n  test:\\n'+lines.join('\\n'));
 """
         result = subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10)
         self.assertEqual({"distributed-ydb": {"test": self.raw}}, yaml.safe_load(result))
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required")
+    def test_inline_template_preserves_clients_and_defaults_tenants(self):
+        model = web.editor_model(self.load(), self.root)
+        script = "const assert=require('assert'),esc=String,editor={};\n" + distributed_builder_ui.JS
+        script += "\nconst profile=" + json.dumps(model["profiles"][0]) + ";\n"
+        script += r"""
+const raw=profile.distributed_config,template=raw['cluster-template'];
+assert(distributedProfileControls(profile).includes('id=distributed-template'));
+assert(distributedProfileControls(profile).includes('id=benchmark'));
+assert(!distributedProfileControls(profile).includes('Initial target tenant'));
+const automatic=distributedDefault(template);
+for(const client of Object.values(automatic['cli-nodes']))assert.equal(client.tenant,'/Root/db');
+const changed=JSON.parse(JSON.stringify(template));
+changed.nodes=changed.nodes.filter(n=>n.name!=='c2');
+changed.nodes.push({...template.nodes.find(n=>n.role==='cli'),name:'c3'});
+raw['cli-nodes'].c1.client.threads=17;
+raw['cli-nodes'].c1.load['allow-errors']=true;
+raw['cli-nodes'].c2.load['allow-errors']=true;
+const before=JSON.stringify(raw),replacement=distributedReplaceTemplate(raw,changed);
+assert.deepStrictEqual(replacement.removed,['c2']);
+assert.equal(replacement.next['cli-nodes'].c1.client.threads,17);
+assert.equal(replacement.next['cli-nodes'].c3.tenant,'/Root/db');
+assert.equal(replacement.next['cli-nodes'].c3.load['allow-errors'],true);
+assert.notEqual(replacement.next['cli-nodes'].c3.dataset,replacement.next['cli-nodes'].c1.dataset);
+assert.equal(JSON.stringify(raw),before);
+replacement.next['cli-nodes'].c1.client.threads=2;
+assert.equal(raw['cli-nodes'].c1.client.threads,17);
+const retarget=JSON.parse(JSON.stringify(template));
+retarget.tenants[0].path='/Root/new';
+for(const node of retarget.nodes)if(node.role==='dynamic')node.tenant='/Root/new';
+const moved=distributedReplaceTemplate(raw,retarget);
+assert.deepStrictEqual(moved.retargeted,['c1','c2']);
+assert.equal(moved.next['cli-nodes'].c1.tenant,'/Root/new');
+const empty=JSON.parse(JSON.stringify(template));empty.nodes=empty.nodes.filter(n=>n.role!=='dynamic');
+assert.throws(()=>distributedDefault(empty),/tenant with a dynamic node/);
+assert.equal(JSON.stringify(profile.distributed_config),before);
+"""
+        subprocess.run([shutil.which("node"), "-e", script], check=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required")
+    def test_inline_template_cancel_and_stale_directory(self):
+        model = web.editor_model(self.load(), self.root)
+        script = "const assert=require('assert'),esc=String;\n" + distributed_builder_ui.JS
+        script += "\nconst profile=" + json.dumps(model["profiles"][0]) + ";\n"
+        script += r"""
+let editorHost='host';const editor={yaml:'unchanged'},location={hash:'#new'};
+const select={isConnected:true,value:'',innerHTML:'',disabled:true},message={innerHTML:''};
+const document={querySelector:s=>s==='#distributed-template'?select:message};
+const displayError=e=>e.message;let commits=0;
+commitDistributed=async()=>{commits++};
+const record=JSON.parse(JSON.stringify(profile.distributed_config['cluster-template']));
+record.nodes=record.nodes.filter(n=>n.name!=='c2');
+let editorApi=async()=>[record],confirm=()=>false;
+(async()=>{
+  await bindDistributedTemplate(profile);select.value='0';await select.onchange();
+  assert.equal(commits,0);assert.equal(select.value,'');
+  confirm=()=>true;select.value='0';await select.onchange();assert.equal(commits,1);
+  let release;editorApi=()=>new Promise(resolve=>{release=resolve});
+  select.innerHTML='sentinel';const pending=bindDistributedTemplate(profile);
+  editorHost='other-host';release([record]);await pending;
+  assert.equal(select.innerHTML,'sentinel');assert.equal(editor.yaml,'unchanged');
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+        subprocess.run([shutil.which("node"), "-e", script], check=True, timeout=10)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required")
     def test_common_profile_actions(self):

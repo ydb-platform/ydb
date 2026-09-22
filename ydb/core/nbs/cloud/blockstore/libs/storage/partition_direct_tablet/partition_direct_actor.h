@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_events_private.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -26,6 +27,8 @@
 
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <util/generic/ptr.h>
 
 #include <optional>
 
@@ -54,11 +57,15 @@ private:
     TDiskDescription DiskDescription;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
-    NActors::TActorId BSControllerPipeClient;
+
+    NActors::TActorId BscProxy;
 
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
+    TString FrontendRegistrationId;
+    // A queued Ready event must not republish metadata after backend shutdown.
+    bool FrontendRegistrationClosed = false;
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 
@@ -76,7 +83,6 @@ private:
         size_t DirectBlockGroupId = 0;
         ui32 LiveHostCount = 0;
         ui32 DBGConnectionsConfigGeneration = 0;
-        NActors::TActorId BSPipeClient;
     };
 
     // At most one add-host runs at a time across the whole partition.
@@ -88,24 +94,24 @@ private:
         NKikimrBlobStorage::NDDisk::TDDiskId DDiskId;
         NKikimrBlobStorage::NDDisk::TDDiskId PBufferId;
         ui32 DBGConnectionsConfigGeneration = 0;
-        NActors::TActorId BSPipeClient;
     };
 
     // At most one remove-host runs at a time; mutually exclusive with
     // AddHostInFlight.
     std::optional<TRemoveHostInFlight> RemoveHostInFlight;
 
-    // Batch persisting of vchunk configs.
-    bool ExecutingUpdateVChunkConfig = false;
-    TVector<TPersistResultPromise> ExecutingUpdateVChunkConfigPromises;
-    TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests
-        PendingUpdateVChunkConfigRequests;
+    // Batch persisting of vChunk configs and behind fields. Both kinds of
+    // updates share one queue so a combined update cannot overwrite a newer
+    // dirty-map state.
+    bool ExecutingUpdateVChunkState = false;
+    TVector<TPersistResultPromise> ExecutingUpdateVChunkStatePromises;
+    TTxPartition::TUpdateVChunkState::TUpdateStateRequests
+        PendingUpdateVChunkStateRequests;
+    // Persisted vchunk config overrides, keyed by vchunk index.
+    TVChunkConfigs VChunkConfigs;
 
-    // Batch persisting of ahead and behind fields.
-    bool ExecutingUpdateDirtyMapState = false;
-    TVector<TPersistResultPromise> ExecutingUpdateDirtyMapStatePromises;
-    TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests
-        PendingUpdateDirtyMapStateRequests;
+    // A bit is set after its vchunk is touched and is never cleared.
+    TTouchedVChunks TouchedVChunks;
 
 public:
     TPartitionActor(
@@ -122,6 +128,15 @@ private:
     STFUNC(StateWork);
     // Remove tablet and wipe disk
     STFUNC(StateDelete);
+
+    // SendData via the BSC proxy actor (created on first use).
+    void SendToBsc(
+        const NActors::TActorContext& ctx,
+        THolder<NActors::IEventBase> request,
+        ui64 cookie = 0);
+
+    // Poison the BSC proxy and drop the id. No-op if it was never created.
+    void StopBscProxy(const NActors::TActorContext& ctx);
 
     // Common handlers in different states
     void HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev);
@@ -143,6 +158,7 @@ private:
     void DefaultSignalTabletActive(const NActors::TActorContext& ctx) override;
 
     void CleanupResources(const NActors::TActorContext& ctx);
+    void UnregisterFrontendVolume(const NActors::TActorContext& ctx);
     void DetachEndpointAddDie(const NActors::TActorContext& ctx);
 
     void HandleConnect(
@@ -163,8 +179,6 @@ private:
         const NActors::TActorContext& ctx);
 
     void ReportTabletState(const NActors::TActorContext& ctx);
-
-    void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
@@ -225,8 +239,20 @@ private:
         const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void EnqueueUpdateVChunkState(
+        TTxPartition::TUpdateVChunkState::TUpdateStateRequest request,
+        const NActors::TActorContext& ctx);
+
+    void HandleSetVChunkTouched(
+        const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleFastPathServiceReady(
         const TEvPartitionDirectPrivate::TEvFastPathServiceReady::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleRenderMonPage(
+        const TEvPartitionDirectPrivate::TEvRenderMonPage::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceShutdown(
@@ -283,6 +309,10 @@ private:
 
     void HandleUpdateDirtyMapStateDuringDelete(
         const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleSetVChunkTouchedDuringDelete(
+        const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceShutdownDuringDelete(

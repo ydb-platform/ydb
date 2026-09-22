@@ -9,6 +9,7 @@ namespace NFq {
 
 struct TTopicSessionClientStatistic {
     NActors::TActorId ReadActorId;
+    ui64 Generation = 0;
     ui32 PartitionId = 0;
     i64 QueuedRows = 0;         // Current value
     i64 QueuedBytes = 0;        // Current value

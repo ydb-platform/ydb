@@ -259,14 +259,19 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
 
     Y_UNIT_TEST(JsonRestorer) {
         NKikimr::NArrow::NAccessor::TJsonRestorer restorer;
-        restorer.SetValueByPath("a", "b");
-        restorer.SetValueByPath(R"("b"."c")", "d");
-        restorer.SetValueByPath("p.q", "r");
-        restorer.SetValueByPath(R"("d'".e)", "f");
-        restorer.SetValueByPath(R"("g.h.".i)", "j");
-        restorer.SetValueByPath(R"(".".k)", "l");
-        restorer.SetValueByPath(R"("\"")", "o");
-        restorer.SetValueByPath(R"("\'")", "p");
+        const auto setValue = [&](const TStringBuf path, const NJson::TJsonValue& value) {
+            auto parsedResult = NSubColumns::ParseJsonPath(NSubColumns::ToJsonPath(path.empty() ? "\"\"" : path));
+            UNIT_ASSERT_C(parsedResult.IsSuccess(), parsedResult.GetErrorMessage());
+            restorer.SetValueByPath(parsedResult.DetachResult().Items, value);
+        };
+        setValue("a", "b");
+        setValue(R"("b"."c")", "d");
+        setValue("p.q", "r");
+        setValue(R"("d'".e)", "f");
+        setValue(R"("g.h.".i)", "j");
+        setValue(R"(".".k)", "l");
+        setValue(R"("\"")", "o");
+        setValue(R"("\'")", "p");
 
         NJson::TJsonValue expected;
         expected["a"] = "b";
@@ -576,7 +581,10 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             NKikimr::NArrow::NAccessor::TJsonRestorer restorer;
             NJson::TJsonValue expected;
 
-            restorer.SetValueByPath(NSubColumns::ToSubcolumnName(NSubColumns::QuoteJsonItem(str)), 1);
+            const auto path = NSubColumns::ToSubcolumnName(NSubColumns::QuoteJsonItem(str));
+            auto parsedResult = NSubColumns::ParseJsonPath(NSubColumns::ToJsonPath(path));
+            UNIT_ASSERT_C(parsedResult.IsSuccess(), parsedResult.GetErrorMessage());
+            restorer.SetValueByPath(parsedResult.DetachResult().Items, 1);
             expected[str] = 1;
             UNIT_ASSERT_VALUES_EQUAL(expected, restorer.GetResult());
         }

@@ -18,6 +18,8 @@
 #include <sanitizer/common_interface_defs.h>
 #endif
 
+#include <sanitizer/msan_interface.h>
+
 using namespace WAVM;
 using namespace WAVM::Platform;
 
@@ -46,6 +48,12 @@ CallStack Platform::captureCallStack(Uptr numOmittedFramesFromTop)
 		{
 			unw_word_t ip;
 			WAVM_ERROR_UNLESS(!unw_get_reg(&cursor, UNW_REG_IP, &ip));
+			// libunwind fills ip via uninstrumented assembly; JIT return addresses
+			// are also invisible to MSan. Mark the value initialized before use.
+			// Note: Clang does not define __SANITIZE_MEMORY__; use __has_feature.
+#if defined(__has_feature) && __has_feature(memory_sanitizer)
+			__msan_unpoison(&ip, sizeof(ip));
+#endif
 			result.frames.push_back(CallStack::Frame{frameIndex == 0 ? ip : (ip - 1)});
 		}
 	}

@@ -31,10 +31,9 @@ using namespace NThreading;
 
 namespace {
 
-ui32 CheckedVChunkBlockSize(ui32 blockSize, ui64 vChunkSize)
+ui32 CheckedVChunkBlockSize(ui32 blockSize)
 {
     Y_ABORT_UNLESS(IsSupportedBlockSize(blockSize));
-    Y_ABORT_UNLESS(vChunkSize % blockSize == 0);
     return blockSize;
 }
 
@@ -48,17 +47,32 @@ NProto::TError MakeVChunkStoppedError()
     return MakeError(E_REJECTED, "VChunk stopped");
 }
 
+// Finds DDisks that have Behind in the proto.
+THostMask GetFreshDDisks(const TDirtyMapStateProto& dirtyMapState)
+{
+    THostMask result;
+    THostIndex host = 0;
+    for (const auto& ddiskState: dirtyMapState.GetDDiskStates()) {
+        const auto& behind = ddiskState.GetBehind();
+        if (behind.GetEncodingCase() != TBlockFieldProto::ENCODING_NOT_SET) {
+            result.Set(host);
+        }
+        ++host;
+    }
+    return result;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TVChunk::TVChunk(
-    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
     const TVChunkConfig& vChunkConfig,
+    bool touched,
     const TDirtyMapStateProto& dirtyMapState,
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
@@ -70,8 +84,8 @@ TVChunk::TVChunk(
     , DiskDescription(diskDescription)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
-    , BlockSize(CheckedVChunkBlockSize(blockSize, vChunkSize))
-    , BlocksCount(vChunkSize / BlockSize)
+    , BlockSize(CheckedVChunkBlockSize(blockSize))
+    , BlocksCount(GetVChunkBlockCount(BlockSize, vChunkSize))
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , LogTitle{GetCycleCount(), TLogTitle::TVChunk{
         .DiskId = DiskDescription.DiskId,
@@ -81,11 +95,16 @@ TVChunk::TVChunk(
         .VChunkIndex = vChunkConfig.GetVChunkIndex()
      }}
     , VChunkConfig(vChunkConfig)
+    , TouchedState(
+          touched ? ETouchedState::Persisted : ETouchedState::NotTouched)
     , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(
-          std::move(arenaAllocator),
+          DirectBlockGroup->GetArenaAllocatorPool(),
           VChunkConfig,
+          IsTouched(),
+          dirtyMapState,
           BlockSize,
           BlocksCount))
+    , PersistedFreshDDisks(BlocksDirtyMap->GetOutdatedDDisks())
 {
     // ActorSystem thread
 
@@ -94,8 +113,6 @@ TVChunk::TVChunk(
         NKikimrServices::NBS_PARTITION,
         "%s Create",
         LogTitle.GetWithTime().c_str());
-
-    BlocksDirtyMap->Load(dirtyMapState);
 }
 
 TVChunk::~TVChunk()
@@ -149,7 +166,7 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
     const TBlockRange64 regionRange = TranslateToRegion(
         *request->Headers.VolumeConfig,
         request->Headers.Range);
-    const TBlockRange64 vchunkRange =
+    const TBlockRange16 vchunkRange =
         TranslateToVChunk(*request->Headers.VolumeConfig, regionRange);
 
     LOG_DEBUG(
@@ -208,7 +225,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     const TBlockRange64 regionRange = TranslateToRegion(
         *request->Headers.VolumeConfig,
         request->Headers.Range);
-    const TBlockRange64 vchunkRange =
+    const TBlockRange16 vchunkRange =
         TranslateToVChunk(*request->Headers.VolumeConfig, regionRange);
 
     LOG_DEBUG(
@@ -302,6 +319,15 @@ const TVChunkConfig& TVChunk::GetConfig() const
     return VChunkConfig;
 }
 
+THostMask TVChunk::GetHealthyDDisks() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return VChunkConfig.GetEnabledDDisks()
+        .Exclude(PersistedFreshDDisks)
+        .Exclude(BlocksDirtyMap->GetOutdatedDDisks());
+}
+
 TExecutorPtr TVChunk::GetExecutor() const
 {
     return Executor;
@@ -312,30 +338,6 @@ TCountAndSize TVChunk::GetPBuffersUsage(THostIndex hostIndex) const
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return BlocksDirtyMap->GetPBuffersUsage(hostIndex);
-}
-
-ui64 TVChunk::GetFreshTotalBytes(THostIndex hostIndex) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    return BlocksDirtyMap->GetFreshTotalBytes(hostIndex);
-}
-
-ui64 TVChunk::GetRottenTotalBytes(THostIndex hostIndex) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    return BlocksDirtyMap->GetRottenTotalBytes(hostIndex);
-}
-
-size_t TVChunk::GetAllocatedMemorySize() const
-{
-    return BlocksDirtyMap->GetAllocatedSize();
-}
-
-size_t TVChunk::GetUsedMemorySize() const
-{
-    return BlocksDirtyMap->GetUsedSize();
 }
 
 std::optional<TPBufferKey> TVChunk::GetSafeBarrierForErase() const
@@ -368,12 +370,22 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "CloneQueue: " << BlocksDirtyMap->DebugPrintReadyToClone() << "\n";
     sb << "FlushQueue: " << BlocksDirtyMap->DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap->DebugPrintReadyToErase() << "\n";
-    sb << "AheadBehind:" << BlocksDirtyMap->DebugPrintAheadBehindBrief()
-       << "\n";
-    sb << "Ahead:\n" << BlocksDirtyMap->DebugPrintAhead();
+    sb << "BehindBrief:" << BlocksDirtyMap->DebugPrintBehindBrief() << "\n";
     sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
     sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
     return sb;
+}
+
+TDirtyMapStats TVChunk::GetDirtyMapStats() const
+{
+    return BlocksDirtyMap->GetStats();
+}
+
+TDirtyMapHostStats TVChunk::GetDirtyMapHostStats(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetHostStats(hostIndex);
 }
 
 TVChunkSnapshot TVChunk::BuildMonSnapshot()
@@ -450,34 +462,34 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         bundle->GetPBufferKey());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
-    DoPersistDirtyMap();
+    StartPersist();
     ScheduleCleaningUp();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<TBlockRange64> TVChunk::GetFreshRange(THostIndex host) const
+std::optional<TBlockRange16> TVChunk::GetFreshRange(THostIndex host) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return BlocksDirtyMap->GetFreshRange(host);
 }
 
-TReadHint TVChunk::MakeReadHint(TBlockRange64 range)
+TReadHint TVChunk::MakeReadHint(TBlockRange16 range)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return BlocksDirtyMap->MakeReadHint(range);
 }
 
-TRangeLock TVChunk::MakeDDiskRangeLock(TBlockRange64 range, THostMask mask)
+TRangeLock TVChunk::MakeDDiskRangeLock(TBlockRange16 range, THostMask mask)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return TRangeLock(BlocksDirtyMap, range, mask);
 }
 
-TSyncHint TVChunk::BeginRangeSync(THostIndex host, TBlockRange64 range)
+TSyncHint TVChunk::BeginRangeSync(THostIndex host, TBlockRange16 range)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -495,25 +507,14 @@ void TVChunk::OnCopyProgress(ui64 totalBytes)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto prepare = [weakSelf = weak_from_this()]()
-    {
-        if (auto self = weakSelf.lock()) {
-            auto newConfig = self->VChunkConfig;
-            for (const auto& [hostIndex, _]: self->Copiers) {
-                const auto freshRange = self->GetFreshRange(hostIndex);
-                newConfig.SetWatermark(
-                    hostIndex,
-                    freshRange ? std::optional<ui64>(
-                                     freshRange->Start * self->BlockSize)
-                               : std::nullopt);
-            }
-            return newConfig;
-        }
-        return TVChunkConfig{};
-    };
-    UpdateConfig(
-        std::move(prepare),
-        TStringBuilder() << "copy progress " << totalBytes << " bytes");
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Copy progress %lu bytes",
+        LogTitle.GetWithTime().c_str(),
+        totalBytes);
+
+    StartPersist();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -534,7 +535,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 
     DoFlush(false);
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
-    DoPersistDirtyMap();
+    StartPersist();
 }
 
 void TVChunk::DoStart()
@@ -606,7 +607,7 @@ void TVChunk::OnStopped()
 
 void TVChunk::DoReadBlocksLocal(
     TTracedPromise<TReadBlocksLocalResponse> promise,
-    TBlockRange64 vchunkRange,
+    TBlockRange16 vchunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     std::shared_ptr<NWilson::TSpan> span)
@@ -762,6 +763,11 @@ void TVChunk::DoFlush(bool force)
         return;
     }
 
+    Touch();
+    if (TouchedState != ETouchedState::Persisted) {
+        return;
+    }
+
     auto flushBatch =
         BlocksDirtyMap->MakeFlushHint(force ? 1 : SyncRequestsBatchSize);
 
@@ -827,7 +833,7 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
     UpdatePendingCounters();
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
-    DoPersistDirtyMap();
+    StartPersist();
     ScheduleCleaningUp();
 }
 
@@ -933,18 +939,34 @@ void TVChunk::OnEraseBelatedResponse(
     ScheduleCleaningUp();
 }
 
-void TVChunk::DoPersistDirtyMap()
+void TVChunk::StartPersist()
 {
-    if (DirtyMapStatePersisting) {
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (Persisting) {
         return;
     }
+
+    if (!PendingVChunkConfigs.empty()) {
+        PersistNextPendingConfig();
+        return;
+    }
+
+    DoPersistDirtyMap();
+}
+
+void TVChunk::DoPersistDirtyMap()
+{
+    Y_ABORT_UNLESS(!Persisting);
+
     if (!BlocksDirtyMap->NeedPersist()) {
         return;
     }
-    DirtyMapStatePersisting = true;
+    Persisting = true;
 
     auto state = BlocksDirtyMap->GetStateForPersist();
-    const ui32 stateGeneration = state.GetStateGeneration();
+    const ui32 stateGeneration = BlocksDirtyMap->GetCurrentGeneration();
+    const THostMask freshDDisks = BlocksDirtyMap->GetOutdatedDDisks();
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -958,23 +980,24 @@ void TVChunk::DoPersistDirtyMap()
     future.Subscribe(
         [weakSelf = weak_from_this(),
          executor = Executor,
-         stateGeneration]   //
+         stateGeneration,
+         freshDDisks]   //
         (const TPersistResultFuture& f) mutable
         {
             if (f.GetValue() != EPersistResult::Success) {
                 return;
             }
             executor->ExecuteSimple(
-                [weakSelf = std::move(weakSelf), stateGeneration]()
+                [weakSelf = std::move(weakSelf), stateGeneration, freshDDisks]()
                 {
                     if (auto self = weakSelf.lock()) {
-                        self->OnDirtyMapPersisted(stateGeneration);
+                        self->OnDirtyMapPersisted(stateGeneration, freshDDisks);
                     }
                 });
         });
 }
 
-void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
+void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -985,8 +1008,70 @@ void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
         LogTitle.GetWithTime().c_str(),
         stateGeneration);
 
-    DirtyMapStatePersisting = false;
+    Y_ABORT_UNLESS(Persisting);
+    Persisting = false;
     BlocksDirtyMap->StatePersisted(stateGeneration);
+    PersistedFreshDDisks = freshDDisks;
+    StartPersist();
+    DemoteUnavailableHostsIfNeeded();
+    ScheduleCleaningUp();
+}
+
+void TVChunk::Touch()
+{
+    if (TouchedState == ETouchedState::NotTouched) {
+        TouchedState = ETouchedState::Persisting;
+        DoPersistTouched();
+    }
+}
+
+bool TVChunk::IsTouched() const
+{
+    return TouchedState != ETouchedState::NotTouched;
+}
+
+void TVChunk::DoPersistTouched()
+{
+    Y_ABORT_UNLESS(TouchedState == ETouchedState::Persisting);
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Will persist touched",
+        LogTitle.GetWithTime().c_str());
+
+    auto future =
+        PartitionDirectService->SetVChunkTouched(VChunkConfig.GetVChunkIndex());
+    future.Subscribe(
+        [weakSelf = weak_from_this(),
+         executor = Executor]   //
+        (const TPersistResultFuture& f) mutable
+        {
+            if (f.GetValue() != EPersistResult::Success) {
+                return;
+            }
+            executor->ExecuteSimple(
+                [weakSelf = std::move(weakSelf)]()
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnTouchedPersisted();
+                    }
+                });
+        });
+}
+
+void TVChunk::OnTouchedPersisted()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Touched persisted.",
+        LogTitle.GetWithTime().c_str());
+
+    TouchedState = ETouchedState::Persisted;
+    ScheduleCleaningUp();
 }
 
 void TVChunk::ScheduleCleaningUp()
@@ -1043,7 +1128,7 @@ void TVChunk::CleaningUp()
 
     DoFlush(true);
     DoErase(true, TBlocksDirtyMap::EEraseType::Standard);
-    DoPersistDirtyMap();
+    StartPersist();
 }
 
 void TVChunk::UpdatePendingCounters()
@@ -1074,74 +1159,99 @@ void TVChunk::UpdateConfig(TPrepareConfigFunc prepareConfig, TString message)
     PendingVChunkConfigs.push_back(TPendingVChunkConfig{
         .PrepareConfig = std::move(prepareConfig),
         .Message = std::move(message)});
-    if (PendingVChunkConfigs.size() == 1) {
-        PersistNextPendingConfig();
-    }
+
+    StartPersist();
 }
 
 void TVChunk::PersistNextPendingConfig()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (PendingVChunkConfigs.empty()) {
-        return;
-    }
+    Y_ABORT_UNLESS(!Persisting);
+    Y_ABORT_UNLESS(!PendingVChunkConfigs.empty());
 
-    auto& pending = *PendingVChunkConfigs.begin();
+    TPendingVChunkConfig& pending = PendingVChunkConfigs.front();
+    auto config = std::move(pending.PrepareConfig)();
+    auto message = std::move(pending.Message);
+    PendingVChunkConfigs.pop_front();
 
-    pending.Config = std::move(pending.PrepareConfig)();
-
-    if (pending.Config.Empty() || pending.Config == VChunkConfig) {
+    if (config.Empty() || config == VChunkConfig) {
         LOG_INFO(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "%s Skip update config: %s %s",
             LogTitle.GetWithTime().c_str(),
-            pending.Message.Quote().c_str(),
-            pending.Config.DebugPrint().c_str());
+            message.Quote().c_str(),
+            config.DebugPrint().c_str());
 
-        PendingVChunkConfigs.pop_front();
-        PersistNextPendingConfig();
+        StartPersist();
         return;
     }
 
-    Y_ABORT_UNLESS(
-        pending.Config.GetVChunkIndex() == VChunkConfig.GetVChunkIndex());
-    Y_ABORT_UNLESS(pending.Config.IsValid());
+    Persisting = true;
 
-    auto onPersisted =
-        PartitionDirectService->UpdateVChunkConfig(pending.Config);
+    Y_ABORT_UNLESS(config.GetVChunkIndex() == VChunkConfig.GetVChunkIndex());
+    Y_ABORT_UNLESS(config.IsValid());
+
+    const ui32 stateGeneration = BlocksDirtyMap->GetCurrentGeneration();
+    auto dirtyMapState = BlocksDirtyMap->MakeFutureState(config, IsTouched());
+    // GetOutdatedDDisks() only sees current DDisks and would miss a newly
+    // promoted DDisk. Use the state that will be persisted with the config.
+    const THostMask freshDDisks = GetFreshDDisks(dirtyMapState);
+    auto onPersisted = PartitionDirectService->UpdateVChunkState(
+        config,
+        std::move(dirtyMapState));
     onPersisted.Subscribe(
-        [weakSelf = weak_from_this(), executor = Executor]   //
+        [weakSelf = weak_from_this(),
+         executor = Executor,
+         config,
+         message = std::move(message),
+         stateGeneration,
+         freshDDisks]   //
         (const TPersistResultFuture& f) mutable
         {
             if (f.GetValue() != EPersistResult::Success) {
                 return;
             }
             executor->ExecuteSimple(
-                [weakSelf = std::move(weakSelf)]()
+                [weakSelf = std::move(weakSelf),
+                 config,
+                 message = std::move(message),
+                 stateGeneration,
+                 freshDDisks]() mutable
                 {
                     if (auto self = weakSelf.lock()) {
-                        self->OnConfigPersisted();
+                        self->OnConfigPersisted(
+                            config,
+                            message,
+                            stateGeneration,
+                            freshDDisks);
                     }
                 });
         });
 }
 
-void TVChunk::OnConfigPersisted()
+void TVChunk::OnConfigPersisted(
+    const TVChunkConfig& config,
+    const TString& message,
+    ui32 stateGeneration,
+    THostMask freshDDisks)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    Y_ABORT_UNLESS(!PendingVChunkConfigs.empty());
+    Y_ABORT_UNLESS(Persisting);
 
-    auto persisted = std::move(PendingVChunkConfigs.front());
-    PendingVChunkConfigs.pop_front();
+    Persisting = false;
 
-    ApplyConfig(std::move(persisted.Config), persisted.Message);
-    PersistNextPendingConfig();
+    BlocksDirtyMap->StatePersisted(stateGeneration);
+    PersistedFreshDDisks = freshDDisks;
+    ApplyConfig(config, message);
+    StartPersist();
     DemoteUnavailableHostsIfNeeded();
 }
 
-void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
+void TVChunk::ApplyConfig(
+    const TVChunkConfig& newConfig,
+    const TString& message)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1154,8 +1264,8 @@ void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
         VChunkConfig.DebugPrint().c_str(),
         newConfig.DebugPrint().c_str());
 
-    VChunkConfig = std::move(newConfig);
-    BlocksDirtyMap->UpdateConfig(VChunkConfig);
+    VChunkConfig = newConfig;
+    BlocksDirtyMap->UpdateConfig(VChunkConfig, IsTouched());
 
     for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
          ++hostIndex)
@@ -1291,18 +1401,8 @@ void TVChunk::OnCopyComplete(
         return;
     }
 
-    auto prepare = [weakSelf = weak_from_this(), hostIndex]()
-    {
-        if (auto self = weakSelf.lock()) {
-            auto newConfig = self->VChunkConfig;
-            newConfig.SetWatermark(hostIndex, std::nullopt);
-            return newConfig;
-        }
-        return TVChunkConfig{};
-    };
-    UpdateConfig(
-        std::move(prepare),
-        TStringBuilder() << PrintHostAndNode(hostIndex) << " copy finished");
+    Copiers.erase(hostIndex);
+    StartPersist();
 }
 
 void TVChunk::DemoteUnavailableHostsIfNeeded()
@@ -1332,7 +1432,7 @@ void TVChunk::DemoteUnavailableHostsIfNeeded()
 THostMask TVChunk::GetDDisksForDemote() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    auto healthyDDisks = VChunkConfig.GetHealthyDDisks();
+    auto healthyDDisks = GetHealthyDDisks();
     if (healthyDDisks.Count() < QuorumDirectBlockGroupHostCount) {
         return THostMask::MakeEmpty();
     }

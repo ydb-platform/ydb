@@ -466,7 +466,6 @@ struct TRequestAuxSettings {
     TAuditMode AuditMode = {};
     NJaegerTracing::ERequestType RequestType = NJaegerTracing::ERequestType::UNSPECIFIED;
     EEmptyDatabaseMode EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseForbidden;
-    const TAppData* AppData = nullptr;
 };
 
 class TGRpcRequestProxySimple;
@@ -484,10 +483,11 @@ private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
     virtual const TMaybe<TString> GetDatabaseNameFromRequest() const = 0;
 public:
-    explicit IRequestProxyCtx(const TAppData* appData = nullptr);
+    IRequestProxyCtx();
     virtual ~IRequestProxyCtx() = default;
 
     const TMaybe<TString> GetDatabaseName() const final;
+    void InitRootPath(const TAppData* appData);
 
     // auth
     virtual const TMaybe<TString> GetYdbToken() const = 0;
@@ -555,7 +555,6 @@ public:
     virtual TString GetRpcMethodName() const = 0;
 
 protected:
-    void InitRootPath(const TAppData* appData);
     TMaybe<TString> ResolveDatabaseName(const TMaybe<TString>& database) const;
     virtual void CountRequestBodyPaths() const {}
     virtual NYdbGrpc::ICounterBlock* GetRequestCounters() const { return nullptr; }
@@ -961,8 +960,7 @@ public:
     using IStreamCtx = NGRpcServer::IGRpcStreamingContext<TRequest, TResponse>;
 
     TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx, TRequestAuxSettings auxSettings = {})
-        : IRequestProxyCtx(auxSettings.AppData)
-        , Ctx_(ctx)
+        : Ctx_(ctx)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
         , AuxSettings(std::move(auxSettings))
     {
@@ -1756,9 +1754,7 @@ public:
         : TBase(ctx)
         , PassMethod(std::forward<TCallback>(cb))
         , AuxSettings(std::move(auxSettings))
-    {
-        this->InitRootPath(AuxSettings.AppData);
-    }
+    { }
 
     void Pass(const IFacilityProvider& facility) override {
         try {
@@ -1844,12 +1840,10 @@ public:
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
-    TGRpcRequestWrapper(NYdbGrpc::IRequestContextBase* ctx, const TAppData* appData = nullptr)
+    TGRpcRequestWrapper(NYdbGrpc::IRequestContextBase* ctx)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
             TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
-    {
-        this->InitRootPath(appData);
-    }
+    { }
 
     TRateLimiterMode GetRlMode() const override {
         return RateLimitMode;
@@ -1967,10 +1961,8 @@ public:
         NActors::TActorId sender,
         TAuditMode auditMode,
         TString peerName,
-        TString requestId,
-        const TAppData* appData = nullptr)
-        : IRequestProxyCtx(appData)
-        , Database(database)
+        TString requestId)
+        : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
         , AuthState(true)

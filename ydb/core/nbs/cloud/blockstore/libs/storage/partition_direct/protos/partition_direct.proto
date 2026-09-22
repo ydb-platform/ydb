@@ -31,16 +31,10 @@ message TDirectBlockGroupsConnections {
 
 // TODO. Make inner message THostConfig
 message TVChunkConfig {
-    message Watermark {
-        uint32 HostIndex = 1;
-        uint64 Value = 2;
-    }
-
     uint32 VChunkIndex = 1;
     repeated uint32 PBufferHostRoles = 2;
     repeated uint32 DDiskHostRoles = 3;
     repeated uint32 EnabledHosts = 4;
-    repeated Watermark Watermarks = 5;
 }
 
 message TTabletInfo {

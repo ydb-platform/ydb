@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/counters.h>
 
 namespace NKikimr {
 namespace {
@@ -798,5 +799,34 @@ Y_UNIT_TEST(MoveDataSecondPass) {
 
     UNIT_ASSERT(caughtRepeat);
 }
+
+Y_UNIT_TEST(MoveDataCounters) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare([](TTestActorRuntime &){});
+
+    CmdWrite("key", tc.Value, NKikimrClient::TKeyValueRequest::MAIN, NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+    tc.PoisonTablet();
+    tc.StartReassignedTablet();
+
+    tc.ExecuteMoveData();
+
+    CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, {tc.Value}, {}, tc);
+
+    tc.PoisonTablet();
+    tc.StartReassignedTablet();
+
+    auto counters = tc.Runtime->GetAppData(0).Counters;
+    auto dbGroup = GetServiceCounters(counters, "tablets")->GetSubgroup("type", "KeyValue")->GetSubgroup("category", "app");
+
+    UNIT_ASSERT_EQUAL(dbGroup->GetCounter("KV/ReqWoOk")->Val(), 1);
+    UNIT_ASSERT_EQUAL(dbGroup->GetCounter("KV/ReqRoOk")->Val(), 1);
+
+    UNIT_ASSERT_EQUAL(dbGroup->GetCounter("KV/MoveDataBlobsMoved")->Val(), 1);
+    UNIT_ASSERT_EQUAL(dbGroup->GetCounter("KV/MoveDataBytesMoved")->Val(), (i64)tc.Value.size());
+    UNIT_ASSERT_EQUAL(dbGroup->GetCounter("KV/MoveDataRecordsScanned")->Val(), 1);
+}
+
 } // TKeyValueMoveDataTest
 } // NKikimr

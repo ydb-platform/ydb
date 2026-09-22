@@ -6,6 +6,8 @@
 namespace NKikimr {
 namespace NDriverClient {
 
+std::unique_ptr<TClientCommand> CreateClientCommandDisk();
+
 class TClientCommandAdmin : public TClientCommandTree {
 public:
     TClientCommandAdmin();

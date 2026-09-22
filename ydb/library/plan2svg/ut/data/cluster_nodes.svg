@@ -339,9 +339,9 @@
 <svg class='slimable' data-stage='inner 6' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g2' class='selectable'><title>Stage 6</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>TopSort: Limit: 10, TopSortBy: [Arg.Sum0,Arg.o_orderdate,Arg.l_orderkey]</title><text x='36' y='13' class='texts clipped'>TopSort: Limit: 10, TopSortBy: [Arg.Sum0,Arg.o_orderdate,Arg.l_orderkey]</text>
 <g><title>Output Rows 0%, 10</title>
@@ -387,13 +387,15 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>315us</text>
 </g>
 <g><title>Input Throughput 173.37K/s</title>
-  <rect x='368' y='0%' width='30' height='100%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.0001555008631'/>
+  <rect x='358' y='0%' width='40' height='100%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.0001555008631'/>
 </g>
 <g><title>Max CPU 0.24</title>
 <path d='M1279,47c0,0,0,-13,0,-13c0,0,0,13,1,13c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
-<g><title>Stage 6, tasks: 1, finished: 1</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+<g><title>Stage 6 tasks: finished 1 of 1</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>
@@ -420,9 +422,9 @@
 <svg class='slimable' data-stage='inner 5' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g4' class='selectable'><title>Stage 5</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Top: Limit: 10</title><text x='36' y='13' class='texts clipped'>Top: Limit: 10</text>
 <g><title>Output Rows 0%, ∑160, 10 | 10 | 10</title>
@@ -477,13 +479,15 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>3.20s</text>
 </g>
 <g><title>Input Throughput 136.49M/s</title>
-  <rect x='368' y='0%' width='30' height='100%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.1224202162'/>
+  <rect x='358' y='0%' width='40' height='100%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.1224202162'/>
 </g>
 <g><title>Max CPU 136.57</title>
 <path d='M1275,47c0,0,0,0,1,0c0,0,0,-13,0,-13c0,0,0,13,0,13c0,0,0,0,1,0c0,0,0,0,1,0c0,0,0,-2,0,-2c0,0,0,2,0,2c0,0,0,-4,0,-4c0,0,0,4,0,4c0,0,0,0,1,0c0,0,0,-1,0,-1c0,0,0,-6,0,-6c0,0,0,-2,1,-2c0,0,0,9,0,9z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
-<g><title>Stage 5, tasks: 16, finished: 16</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+<g><title>Stage 5 tasks: finished 16 of 16</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>16</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>
@@ -517,9 +521,9 @@
 <svg class='slimable' data-stage='inner 4' data-height='82' width='1280' height='82' x='0' y='3'>
 <g data-group='g6' class='selectable'><title>Stage 4</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: SUM, Group By: [0,1,2]</title><text x='36' y='13' class='texts clipped'>Aggregate: SUM, Group By: [0,1,2]</text>
 <g><title>Output Rows 0%, ∑1.13M, 70.05K | 70.69K | 71.20K</title>
@@ -588,17 +592,19 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>16.09s</text>
 </g>
 <g><title>Wait Input Time 91%, ∑2m 54s, 10.86s | 10.88s | 10.88s</title>
-  <rect x='368' y='9%' width='30' height='91%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='358' y='9%' width='40' height='91%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <path d='M607,47c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-13,21,-13c7,0,14,13,21,13c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Input Throughput 19.77M/s</title>
-  <rect x='368' y='0%' width='30' height='9%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.01773327'/>
+  <rect x='358' y='0%' width='40' height='9%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.01773327'/>
 </g>
 <g><title>Max CPU 5.60</title>
 <path d='M607,47c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-6,21,-6c7,0,14,6,21,6c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-1,21,-1c6,0,13,1,20,1c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-1,21,-1c7,0,14,1,21,1c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,-13,21,-13c0,0,0,13,0,13z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
-<g><title>Stage 4, tasks: 16, finished: 16</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+<g><title>Stage 4 tasks: finished 16 of 16</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 82' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,41L13,82L0,82z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>16</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>
@@ -643,9 +649,9 @@
 <svg class='slimable' data-stage='inner 2' data-height='82' width='1280' height='82' x='0' y='3'>
 <g data-group='g8' class='selectable'><title>Stage 2</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Filter: Exist(o_1.o_custkey)</title><text x='47' y='13' class='texts clipped'>Filter: Exist(o_1.o_custkey)</text>
 <g><title>Output Rows 1%, ∑14.96M, 3.73M | 3.74M | 3.74M, Est: 144.00M Rows: 6.00M Size: 258.38MB</title>
@@ -714,21 +720,23 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>1m 50s</text>
 </g>
 <g><title>Wait Input Time 6%, ∑7.47s, 1.86s | 1.86s | 1.86s</title>
-  <rect x='368' y='94%' width='30' height='6%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='358' y='94%' width='40' height='6%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <path d='M606,47c6,0,13,0,20,0c7,0,14,-13,21,-13c7,0,14,13,21,13c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Wait Output Time 0%, ∑0.20s, 42ms | 50ms | 58ms</title>
-  <rect x='368' y='0%' width='30' height='0%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
+  <rect x='358' y='0%' width='40' height='0%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
 </g>
 <path d='M606,47c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,-4,21,-4c6,0,13,2,20,2c7,0,14,-3,21,-3c7,0,14,-5,21,-5c7,0,14,2,21,2c6,0,13,2,20,2c7,0,14,-7,21,-7c7,0,14,3,21,3c6,0,13,0,20,0c7,0,14,-2,21,-2c7,0,14,1,21,1c6,0,13,5,20,5c7,0,14,-5,21,-5c7,0,14,-1,21,-1c7,0,14,3,21,3c6,0,13,-3,20,-3c7,0,14,4,21,4c7,0,14,0,21,0c6,0,13,1,20,1c7,0,14,2,21,2c0,0,0,5,0,5z' stroke-width='1' stroke='var(--output-medium, #5781B9)' fill='var(--output-light, #6F93C3)' />
 <g><title>Input Throughput 307.45M/s</title>
-  <rect x='368' y='0%' width='30' height='94%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.2757584375'/>
+  <rect x='358' y='0%' width='40' height='94%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.2757584375'/>
 </g>
 <g><title>Max CPU 8.19</title>
 <path d='M606,47c6,0,13,0,20,0c7,0,14,0,21,0c7,0,14,-4,21,-4c6,0,13,0,20,0c7,0,14,4,21,4c7,0,14,-12,21,-12c7,0,14,10,21,10c6,0,13,2,20,2c7,0,14,-13,21,-13c7,0,14,8,21,8c6,0,13,1,20,1c7,0,14,-5,21,-5c7,0,14,1,21,1c6,0,13,4,20,4c7,0,14,-2,21,-2c7,0,14,2,21,2c7,0,14,-2,21,-2c6,0,13,2,20,2c7,0,14,-3,21,-3c7,0,14,3,21,3c6,0,13,4,20,4c7,0,14,-12,21,-12c7,0,14,8,21,8c6,0,13,-2,20,-2c7,0,14,2,21,2c7,0,14,-3,21,-3c7,0,14,2,21,2c6,0,13,0,20,0c7,0,14,5,21,5c7,0,14,-11,21,-11c6,0,13,5,20,5c7,0,14,1,21,1c0,0,0,5,0,5z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
-<g><title>Stage 2, tasks: 4, finished: 4</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+<g><title>Stage 2 tasks: finished 4 of 4</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 82' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,41L13,82L0,82z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>4</text>
 </g>
 <g class='plus button'><rect x='13' y='20' width='14' height='14' class='transparent'/>
@@ -772,13 +780,13 @@
 <svg class='slimable' data-stage='inner 0' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g10' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Filter-TableFullScan: </title><text x='58' y='13' class='texts clipped'>Filter-TableFullScan: </text>
 <g><title>Output Rows 35%, ∑323.49M, 19.58M | 20.21M | 20.85M</title>
-  <rect x='303' y='2' width='60' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 333,3 363,3 363,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='2' width='50' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 328,3 353,3 353,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='5' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='13'>323.49M</text>
 </g>
@@ -824,21 +832,23 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>10.08s</text>
 </g>
 <g><title>Wait Input Time 0%, ∑2.01s, 40ms | 0.12s | 0.26s</title>
-  <rect x='368' y='100%' width='30' height='0%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='358' y='100%' width='40' height='0%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <path d='M647,47c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,-13,18,-13c6,0,12,11,19,11c6,0,12,2,19,2c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,18,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,18,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,18,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,18,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,18,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Wait Output Time 96%, ∑6m 29s, 23.36s | 24.36s | 26.10s</title>
-  <rect x='368' y='0%' width='30' height='96%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
+  <rect x='358' y='0%' width='40' height='96%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
 </g>
 <path d='M647,47c6,0,12,0,19,0c6,0,12,-9,19,-9c6,0,12,7,18,7c6,0,12,-5,19,-5c6,0,12,3,19,3c6,0,12,-3,19,-3c6,0,12,1,19,1c6,0,12,1,18,1c6,0,12,-2,19,-2c6,0,12,5,19,5c6,0,12,2,19,2c6,0,12,-5,19,-5c6,0,12,-7,18,-7c6,0,12,2,19,2c6,0,12,2,19,2c6,0,12,2,19,2c6,0,12,-2,19,-2c6,0,12,7,18,7c6,0,12,-9,19,-9c6,0,12,3,19,3c6,0,12,2,19,2c6,0,12,1,19,1c6,0,12,-4,19,-4c6,0,12,1,18,1c6,0,12,7,19,7c6,0,12,-13,19,-13c6,0,12,8,19,8c6,0,12,-2,19,-2c6,0,12,1,18,1c6,0,12,2,19,2c6,0,12,4,19,4c6,0,12,0,19,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-medium, #5781B9)' fill='var(--output-light, #6F93C3)' />
 <g><title>Input Throughput 384.25M/s</title>
-  <rect x='368' y='96%' width='30' height='4%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.3446374531'/>
+  <rect x='358' y='96%' width='40' height='4%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.3446374531'/>
 </g>
 <g><title>Max CPU 1.88</title>
 <path d='M647,47c6,0,12,0,19,0c6,0,12,-13,19,-13c6,0,12,12,18,12c6,0,12,-2,19,-2c6,0,12,2,19,2c6,0,12,1,19,1c6,0,12,-2,19,-2c6,0,12,2,18,2c6,0,12,0,19,0c6,0,12,-2,19,-2c6,0,12,2,19,2c6,0,12,0,19,0c6,0,12,0,18,0c6,0,12,-1,19,-1c6,0,12,-2,19,-2c6,0,12,2,19,2c6,0,12,-1,19,-1c6,0,12,2,18,2c6,0,12,-5,19,-5c6,0,12,2,19,2c6,0,12,2,19,2c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,18,0c6,0,12,-1,19,-1c6,0,12,2,19,2c6,0,12,-3,19,-3c6,0,12,2,19,2c6,0,12,0,18,0c6,0,12,0,19,0c6,0,12,1,19,1c6,0,12,0,19,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
-<g><title>Stage 0, tasks: 16, finished: 16</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+<g><title>Stage 0 tasks: finished 16 of 16</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>16</text>
 </g>
 <g class='plus button'><rect x='24' y='20' width='14' height='14' class='transparent'/>
@@ -867,13 +877,13 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g12' class='selectable'><title>Stage E</title>
 <rect x='22' y='0' width='276' height='100%' class='clone'/>
-<rect x='301' y='0' width='64' height='100%' class='clone'/>
+<rect x='301' y='0' width='54' height='100%' class='clone'/>
 <rect x='401' y='0' width='200' height='100%' class='clone'/>
-<rect x='368' y='0' width='30' height='100%' class='clone'/>
+<rect x='358' y='0' width='40' height='100%' class='clone'/>
 <rect x='604' y='0' width='676' height='100%' class='clone'/>
 <g><title>Filter: l_shipdate &gt; 9204</title><text x='58' y='13' class='texts clipped'>Filter: l_shipdate &gt; 9204</text>
 <g><title>Output Rows 35%, ∑323.49M, 5.05M | 5.05M | 5.05M, Est: 0 Rows: 60.00M Size: 1.01GB</title>
-  <rect x='303' y='2' width='60' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 327,3 363,3 363,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='2' width='50' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 323,3 353,3 353,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='5' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='13'>323.49M</text>
 </g>
@@ -901,8 +911,10 @@
   <line x1='668' y1='14' x2='1232' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
   <line x1='1093' y1='9' x2='1093' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
 </g>
-<g><title>External Source, partitions: 64, finished: 64</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+<g><title>External Source partitions: finished 64 of 64</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>64</text>
 </g>
 <g class='arup button'><rect x='24' y='34' width='14' height='14' class='transparent'/>
@@ -923,13 +935,13 @@
 <svg class='slimable' data-stage='inner 1' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g14' class='selectable'><title>Stage 1</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Filter: Exist(o_custkey) AND o_orderdate &lt; "9204"</title><text x='58' y='13' class='texts clipped'>Filter: Exist(o_custkey) AND o_orderdate &lt; "9204"</text>
 <g><title>Output Rows 8%, ∑72.87M, 3.94M | 4.55M | 5.15M, Est: 0 Rows: 15.00M Size: 385.79MB</title>
-  <rect x='303' y='2' width='13' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 309,4 316,6 316,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='2' width='11' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 308,4 314,6 314,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='5' width='33' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='13'>72.87M</text>
 </g>
@@ -976,21 +988,23 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>4.32s</text>
 </g>
 <g><title>Wait Input Time 0%, ∑0.50s, 1ms | 31ms | 0.23s</title>
-  <rect x='368' y='100%' width='30' height='0%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='358' y='100%' width='40' height='0%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <path d='M606,47c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,-13,5,-13c1,0,3,13,5,13c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,-7,5,-7c1,0,3,7,5,7c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Wait Output Time 94%, ∑1m 19s, 3.81s | 4.95s | 6.90s</title>
-  <rect x='368' y='0%' width='30' height='94%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
+  <rect x='358' y='0%' width='40' height='94%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
 </g>
 <path d='M606,47c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,-4,5,-4c1,0,3,-9,5,-9c2,0,4,12,6,12c1,0,3,1,5,1c1,0,3,0,5,0c1,0,3,-4,5,-4c1,0,3,2,5,2c2,0,4,2,6,2c1,0,3,-4,5,-4c1,0,3,3,5,3c1,0,3,0,5,0c1,0,3,-4,5,-4c2,0,4,4,6,4c1,0,3,-2,5,-2c1,0,3,0,5,0c1,0,3,3,5,3c1,0,3,0,5,0c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--output-medium, #5781B9)' fill='var(--output-light, #6F93C3)' />
 <g><title>Input Throughput 557.47M/s</title>
-  <rect x='368' y='94%' width='30' height='6%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.5'/>
+  <rect x='358' y='94%' width='40' height='6%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.5'/>
 </g>
 <g><title>Max CPU 4.81</title>
 <path d='M606,47c1,0,3,0,5,0c1,0,3,-13,5,-13c1,0,3,10,5,10c1,0,3,3,5,3c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,-10,5,-10c2,0,4,4,6,4c1,0,3,6,5,6c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c2,0,4,0,6,0c1,0,3,-1,5,-1c1,0,3,-1,5,-1c1,0,3,2,5,2c1,0,3,-1,5,-1c2,0,4,1,6,1c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c1,0,3,0,5,0c2,0,4,0,6,0c1,0,3,0,5,0c1,0,3,0,5,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
-<g><title>Stage 1, tasks: 16, finished: 16</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+<g><title>Stage 1 tasks: finished 16 of 16</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>16</text>
 </g>
 <g class='plus button'><rect x='24' y='20' width='14' height='14' class='transparent'/>
@@ -1019,14 +1033,14 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g16' class='selectable'><title>Stage E</title>
 <rect x='22' y='0' width='276' height='100%' class='clone'/>
-<rect x='301' y='0' width='64' height='100%' class='clone'/>
+<rect x='301' y='0' width='54' height='100%' class='clone'/>
 <rect x='401' y='0' width='200' height='100%' class='clone'/>
-<rect x='368' y='0' width='30' height='100%' class='clone'/>
+<rect x='358' y='0' width='40' height='100%' class='clone'/>
 <rect x='604' y='0' width='676' height='100%' class='clone'/>
 <g><title>TableFullScan: orders(o_orderkey (-∞, +∞), o_custkey, o_orderdate, o_shippriority) Blocks: True</title><rect x='22' y='5' width='32' height='45' class='blocks'/>
 <text x='58' y='13' class='texts clipped'>TableFullScan: orders(o_orderkey (-∞, +∞), o_custkey, o_orderdate, o_shippriority)</text>
 <g><title>Output Rows 16%, ∑150.00M, 2.34M | 2.34M | 2.34M, Est: 0 Rows: 150.00M Size: 3.76GB</title>
-  <rect x='303' y='2' width='27' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 315,3 330,3 330,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='2' width='23' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 313,3 326,3 326,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='5' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='13'>150.00M</text>
 </g>
@@ -1051,8 +1065,10 @@
   <line x1='610' y1='14' x2='734' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
   <line x1='690' y1='9' x2='690' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
 </g>
-<g><title>External Source, partitions: 64, finished: 64</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+<g><title>External Source partitions: finished 64 of 64</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>64</text>
 </g>
 <g class='arup button'><rect x='24' y='34' width='14' height='14' class='transparent'/>
@@ -1078,9 +1094,9 @@
 <svg class='slimable' data-stage='inner 3' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g18' class='selectable'><title>Stage 3</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Filter-TableFullScan: </title><text x='47' y='13' class='texts clipped'>Filter-TableFullScan: </text>
 <g><title>Output Rows 0%, ∑3.00M, 31.32K | 187.51K | 344.11K</title>
@@ -1130,17 +1146,19 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>0.16s</text>
 </g>
 <g><title>Wait Input Time 99%, ∑21.73s, 0.55s | 1.35s | 2.09s</title>
-  <rect x='368' y='1%' width='30' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='358' y='1%' width='40' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <path d='M607,47c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,-13,2,-13c0,0,0,12,1,12c0,0,1,1,2,1c0,0,0,-2,1,-2c0,0,1,2,2,2c0,0,0,0,1,0c0,0,1,-7,2,-7c0,0,1,6,2,6c0,0,0,1,1,1c0,0,1,-1,2,-1c0,0,0,1,1,1c0,0,1,0,2,0c0,0,0,-3,1,-3c0,0,1,3,2,3c0,0,0,-3,1,-3c0,0,1,2,2,2c0,0,0,-1,1,-1c0,0,1,1,2,1c0,0,1,0,2,0c0,0,0,1,0,1z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
 <g><title>Input Throughput 16.18M/s</title>
-  <rect x='368' y='0%' width='30' height='1%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.01452040108'/>
+  <rect x='358' y='0%' width='40' height='1%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.01452040108'/>
 </g>
 <g><title>Max CPU 0.20</title>
 <path d='M607,47c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,-1,2,-1c0,0,1,0,2,0c0,0,0,-2,1,-2c0,0,1,3,2,3c0,0,0,-1,1,-1c0,0,1,1,2,1c0,0,0,-5,1,-5c0,0,1,-1,2,-1c0,0,0,-3,1,-3c0,0,1,4,2,4c0,0,1,0,2,0c0,0,0,0,1,0c0,0,1,-2,2,-2c0,0,0,2,1,2c0,0,1,4,2,4c0,0,0,1,1,1c0,0,1,-13,2,-13c0,0,0,5,1,5c0,0,1,2,2,2c0,0,0,-1,1,-1c0,0,1,-4,2,-4c0,0,1,4,2,4c0,0,0,7,0,7z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
-<g><title>Stage 3, tasks: 16, finished: 16</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+<g><title>Stage 3 tasks: finished 16 of 16</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>16</text>
 </g>
 <g class='plus button'><rect x='13' y='20' width='14' height='14' class='transparent'/>
@@ -1169,9 +1187,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g20' class='selectable'><title>Stage E</title>
 <rect x='11' y='0' width='287' height='100%' class='clone'/>
-<rect x='301' y='0' width='64' height='100%' class='clone'/>
+<rect x='301' y='0' width='54' height='100%' class='clone'/>
 <rect x='401' y='0' width='200' height='100%' class='clone'/>
-<rect x='368' y='0' width='30' height='100%' class='clone'/>
+<rect x='358' y='0' width='40' height='100%' class='clone'/>
 <rect x='604' y='0' width='676' height='100%' class='clone'/>
 <g><title>Filter: c_mktsegment == "BUILDING"</title><text x='47' y='13' class='texts clipped'>Filter: c_mktsegment == "BUILDING"</text>
 <g><title>Output Rows 0%, ∑3.00M, 46.38K | 46.87K | 47.35K, Est: 0 Rows: 1.50M Size: 37.05MB</title>
@@ -1203,8 +1221,10 @@
   <line x1='623' y1='14' x2='657' y2='14' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' stroke-dasharray='1,1' />
   <line x1='643' y1='9' x2='643' y2='16' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
 </g>
-<g><title>External Source, partitions: 64, finished: 64</title>
-<line x1='371' y1='0%' x2='371' y2='100%' stroke-width='7' stroke='var(--stage-text, #262626)' stroke-dasharray='1,1' />
+<g><title>External Source partitions: finished 64 of 64</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>64</text>
 </g>
 <g class='arup button'><rect x='13' y='34' width='14' height='14' class='transparent'/>
@@ -1249,8 +1269,8 @@
 <g id='columnHeaders'>
 <svg width='1280' height='18' x='0' y='0'>
 <rect x='0' y='0' width='298' height='18' class='columns'/>
-<rect x='301' y='0' width='64' height='18' class='columns'/>
-<rect x='368' y='0' width='30' height='18' class='columns'/>
+<rect x='301' y='0' width='54' height='18' class='columns'/>
+<rect x='358' y='0' width='40' height='18' class='columns'/>
 <rect x='401' y='0' width='200' height='18' class='columns'/>
 <rect x='604' y='0' width='676' height='18' class='columns'/>
 <text x='2' y='13' class='texts'>Stages and Operators</text>

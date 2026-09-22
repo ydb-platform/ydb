@@ -650,7 +650,12 @@ namespace NKikimr {
                 }
 
                 IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, id, MinHugeBlobInBytes), keep.KeepData);
+            } else if constexpr (std::is_same_v<TKey, TKeyBlock>) {
+                // One merged record per tablet; Max generation is the deletion tombstone and must stay.
+                keep = NGc::TKeepStatus(true);
+                IndexMerger.Finish(false, false);
             } else {
+                Y_VERIFY_S(Barriers, HullCtx->VCtx->VDiskLogPrefix);
                 keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {}, HullCtx->AllowKeepFlags,
                     AllowGarbageCollection);
 

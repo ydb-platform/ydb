@@ -233,6 +233,15 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
         TestSync(2, 2, 8, 1);
     }
 
+    Y_UNIT_TEST(PhysicalChunkSizeFullChunkIo_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestPhysicalChunkSizeFullChunkIo({});
+    }
+
+    Y_UNIT_TEST(PhysicalChunkSizeFullChunkIo_PDiskFallback) {
+        TestPhysicalChunkSizeFullChunkIo({.ForcePDiskFallback = true});
+    }
+
     Y_UNIT_TEST(DeleteTabletChunks_Uring) {
         if (!NPDisk::RequireUring()) { return; }
         TestDeleteTabletChunks({});

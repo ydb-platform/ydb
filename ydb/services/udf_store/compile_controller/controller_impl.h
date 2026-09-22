@@ -37,10 +37,7 @@ struct TGapKey {
     TString CpuSpec;
 
     bool operator==(const TGapKey& other) const {
-        return Name == other.Name
-            && Kind == other.Kind
-            && Uid == other.Uid
-            && CpuSpec == other.CpuSpec;
+        return Name == other.Name && Kind == other.Kind && Uid == other.Uid && CpuSpec == other.CpuSpec;
     }
 
     TString ToString() const {
@@ -57,18 +54,18 @@ struct TGapKeyHash {
 };
 
 class TWasmCompileController
-    : public NActors::TActor<TWasmCompileController>
-    , public NTabletFlatExecutor::TTabletExecutedFlat
-{
+    : public NActors::TActor<TWasmCompileController>,
+      public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     using Schema = TCompileControllerSchema;
 
-    class TTxBase : public NTabletFlatExecutor::TTransactionBase<TWasmCompileController> {
+    class TTxBase: public NTabletFlatExecutor::TTransactionBase<TWasmCompileController> {
     public:
         TTxBase(const TString& name, TWasmCompileController* self)
             : TTransactionBase(self)
             , LogPrefix(name)
-        {}
+        {
+        }
 
     protected:
         const TString LogPrefix;
@@ -101,6 +98,7 @@ public:
             hFunc(TEvControllerPrivate::TEvScheduleTick, Handle);
             hFunc(TEvControllerPrivate::TEvReconcileTick, Handle);
             hFunc(TEvControllerPrivate::TEvHintTick, Handle);
+            hFunc(TEvCompileController::TEvDescribeModule, Handle);
             hFunc(TEvCompileController::TEvRegister, Handle);
             hFunc(TEvCompileController::TEvHeartbeat, Handle);
             hFunc(TEvCompileController::TEvNeedArtifact, Handle);
@@ -213,6 +211,7 @@ private:
     void Handle(TEvControllerPrivate::TEvScheduleTick::TPtr& ev);
     void Handle(TEvControllerPrivate::TEvReconcileTick::TPtr& ev);
     void Handle(TEvControllerPrivate::TEvHintTick::TPtr& ev);
+    void Handle(TEvCompileController::TEvDescribeModule::TPtr& ev);
     void Handle(TEvCompileController::TEvRegister::TPtr& ev);
     void Handle(TEvCompileController::TEvHeartbeat::TPtr& ev);
     void Handle(TEvCompileController::TEvNeedArtifact::TPtr& ev);

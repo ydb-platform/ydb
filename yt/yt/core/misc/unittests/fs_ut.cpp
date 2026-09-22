@@ -72,19 +72,36 @@ TEST(TFSTest, TestMakeDirRecursive)
 #ifdef _linux_
 TEST(TFSTest, TestMakeDirRecursiveReportsRealError)
 {
-    auto readOnlyDir = CombinePaths(NFs::CurrentWorkingDirectory(), "read_only");
-    MakeDirRecursive(readOnlyDir);
-    Chmod(readOnlyDir, 0500);
+    if (::geteuid() != 0) {
+        auto readOnlyDir = CombinePaths(NFs::CurrentWorkingDirectory(), "read_only");
+        MakeDirRecursive(readOnlyDir);
+        Chmod(readOnlyDir, 0500);
 
-    for (const auto& path : {
-        CombinePaths(readOnlyDir, "child"),
-        CombinePaths(readOnlyDir, "a/b/c"),
-    }) {
-        EXPECT_THROW_WITH_ERROR_CODE(MakeDirRecursive(path), ELinuxErrorCode::ACCESS);
+        for (const auto& path : {
+            CombinePaths(readOnlyDir, "child"),
+            CombinePaths(readOnlyDir, "a/b/c"),
+        }) {
+            EXPECT_THROW_WITH_ERROR_CODE(MakeDirRecursive(path), ELinuxErrorCode::ACCESS);
+        }
+
+        Chmod(readOnlyDir, 0700);
+        RemoveRecursive(readOnlyDir);
     }
 
-    Chmod(readOnlyDir, 0700);
-    RemoveRecursive(readOnlyDir);
+    const auto danglingLink = CombinePaths(NFs::CurrentWorkingDirectory(), "dangling");
+    MakeSymbolicLink("missing_target", danglingLink);
+
+    // TODO(dann239): Introduce ELinuxErrorCode::EXIST and use it here.
+    constexpr auto expectedCode = TErrorCode(LinuxErrorCodeBase + EEXIST);
+
+    for (const auto& path : {
+        danglingLink,
+        CombinePaths(danglingLink, "a/b/c"),
+    }) {
+        EXPECT_THROW_WITH_ERROR_CODE(MakeDirRecursive(path), expectedCode);
+    }
+
+    Remove(danglingLink);
 }
 #endif
 

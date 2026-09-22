@@ -652,26 +652,26 @@ namespace NKikimr {
                                                                           bool pretty) {
         // aggregation class
         struct TAggr {
-            using TLevelSegment = ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
-            using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
-
             TAggr(IOutputStream &str, bool pretty)
                 : Str(str)
                 , Pretty(pretty)
             {}
 
-            void UpdateFresh(const char *segName,
-                             const TKeyLogoBlob &key,
-                             const TMemRecLogoBlob &memRec) {
-                Y_UNUSED(segName);
+            void BeginKey(const TKeyLogoBlob&) {
+            }
+
+            void UpdateFreshRecord(const TMemRecLogoBlob& memRec, const TRope*,
+                    const TKeyLogoBlob& key, ui64) {
                 Update(key, memRec);
             }
 
-            void UpdateLevel(const TLevelSstPtr &sstPtr,
-                             const TKeyLogoBlob &key,
-                             const TMemRecLogoBlob &memRec) {
-                Y_UNUSED(sstPtr);
+            void UpdateLevelRecord(const TMemRecLogoBlob& memRec, const TDiskPart*,
+                    const TKeyLogoBlob& key, ui64,
+                    const TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>*) {
                 Update(key, memRec);
+            }
+
+            void FinishKey(const TKeyLogoBlob&) {
             }
 
             void Update(const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec) {
@@ -696,25 +696,25 @@ namespace NKikimr {
     >::PrepareStat(std::unique_ptr<TEvGetLogoBlobIndexStatResponse>& result) {
         // aggregation class
         struct TAggr {
-            using TLevelSegment = ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
-            using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
-
             TAggr(std::unique_ptr<TEvGetLogoBlobIndexStatResponse> &result)
                 : Result(result)
             {}
 
-            void UpdateFresh(const char *segName,
-                             const TKeyLogoBlob &key,
-                             const TMemRecLogoBlob &memRec) {
-                Y_UNUSED(segName);
+            void BeginKey(const TKeyLogoBlob&) {
+            }
+
+            void UpdateFreshRecord(const TMemRecLogoBlob& memRec, const TRope*,
+                    const TKeyLogoBlob& key, ui64) {
                 Update(key, memRec);
             }
 
-            void UpdateLevel(const TLevelSstPtr &sstPtr,
-                             const TKeyLogoBlob &key,
-                             const TMemRecLogoBlob &memRec) {
-                Y_UNUSED(sstPtr);
+            void UpdateLevelRecord(const TMemRecLogoBlob& memRec, const TDiskPart*,
+                    const TKeyLogoBlob& key, ui64,
+                    const TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>*) {
                 Update(key, memRec);
+            }
+
+            void FinishKey(const TKeyLogoBlob&) {
             }
 
             void Update(const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec) {
@@ -738,33 +738,33 @@ namespace NKikimr {
                                                                     bool pretty) {
         // aggregation class
         struct TAggr {
-            using TLevelSegment = ::NKikimr::TLevelSegment<TKeyBlock, TMemRecBlock>;
-            using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
-
             TAggr(IOutputStream &str, bool pretty)
                 : Str(str)
                 , Pretty(pretty)
             {}
+
+            void BeginKey(const TKeyBlock&) {
+            }
+
+            void UpdateFreshRecord(const TMemRecBlock& memRec, const TRope*,
+                    const TKeyBlock& key, ui64) {
+                Update(key, memRec);
+            }
+
+            void UpdateLevelRecord(const TMemRecBlock& memRec, const TDiskPart*,
+                    const TKeyBlock& key, ui64,
+                    const TLevelSegment<TKeyBlock, TMemRecBlock>*) {
+                Update(key, memRec);
+            }
+
+            void FinishKey(const TKeyBlock&) {
+            }
 
             void Update(const TKeyBlock &key,
                         const TMemRecBlock &memRec) {
                 TValue &v = Map[key.TabletId];
                 v.Number++;
                 v.BlockedGeneration = Max(v.BlockedGeneration, memRec.BlockedGeneration);
-            }
-
-            void UpdateFresh(const char *segName,
-                             const TKeyBlock &key,
-                             const TMemRecBlock &memRec) {
-                Y_UNUSED(segName);
-                Update(key, memRec);
-            }
-
-            void UpdateLevel(const TLevelSstPtr &sstPtr,
-                             const TKeyBlock &key,
-                             const TMemRecBlock &memRec) {
-                Y_UNUSED(sstPtr);
-                Update(key, memRec);
             }
 
             void Finish() {
@@ -822,13 +822,27 @@ namespace NKikimr {
                                                                         bool pretty) {
         // aggregation class
         struct TAggr {
-            using TLevelSegment = ::NKikimr::TLevelSegment<TKeyBarrier, TMemRecBarrier>;
-            using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
-
             TAggr(IOutputStream &str, bool pretty)
                 : Str(str)
                 , Pretty(pretty)
             {}
+
+            void BeginKey(const TKeyBarrier&) {
+            }
+
+            void UpdateFreshRecord(const TMemRecBarrier& memRec, const TRope*,
+                    const TKeyBarrier& key, ui64) {
+                Update(key, memRec);
+            }
+
+            void UpdateLevelRecord(const TMemRecBarrier& memRec, const TDiskPart*,
+                    const TKeyBarrier& key, ui64,
+                    const TLevelSegment<TKeyBarrier, TMemRecBarrier>*) {
+                Update(key, memRec);
+            }
+
+            void FinishKey(const TKeyBarrier&) {
+            }
 
             void Update(const TKeyBarrier &key,
                         const TMemRecBarrier &memRec) {
@@ -841,21 +855,6 @@ namespace NKikimr {
                     v.CollectGen = memRec.CollectGen;
                     v.CollectStep = memRec.CollectStep;
                 }
-            }
-
-            void UpdateFresh(const char *segName,
-                             const TKeyBarrier &key,
-                             const TMemRecBarrier &memRec) {
-                Y_UNUSED(segName);
-                Update(key, memRec);
-            }
-
-
-            void UpdateLevel(const TLevelSstPtr &sstPtr,
-                             const TKeyBarrier &key,
-                             const TMemRecBarrier &memRec) {
-                Y_UNUSED(sstPtr);
-                Update(key, memRec);
             }
 
             void Finish() {

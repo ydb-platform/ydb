@@ -33,11 +33,11 @@ TString GetDefaultPqEndpoint();
 TString GetDefaultPqDatabase();
 
 struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
-    std::unique_ptr<TFakeCASetup> CaSetup = std::make_unique<TFakeCASetup>();
+    std::unique_ptr<TFakeCASetup> CaSetup;
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release())));
     NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory = NYql::CreateStructuredTokenCredentialsFactory();
 
-    TPqIoTestFixture();
+    explicit TPqIoTestFixture(ui32 nodeCount = 1);
     ~TPqIoTestFixture();
 
     template<typename T>

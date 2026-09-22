@@ -163,6 +163,7 @@ namespace NActors {
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
                 std::optional<ui32> RdmaReadCumulativeCheckSum;
+                size_t DeclaredSize = 0; // sum of declared section sizes, bounded against EventMaxByteSize
             };
 
             std::deque<TPendingEvent> PendingEvents;

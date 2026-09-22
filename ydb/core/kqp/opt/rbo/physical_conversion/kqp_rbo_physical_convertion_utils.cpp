@@ -133,25 +133,22 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
 }
 
 TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector<TInfoUnit> members) {
-    auto arg = ctx.NewArgument(input->Pos(), "extract_members_arg");
-    TExprNode::TListType fields;
-    fields.reserve(members.size());
+    TVector<TCoAtom> memberAtoms;
+    memberAtoms.reserve(members.size());
     for (const auto& iu : members) {
-        fields.emplace_back(ctx.Builder(input->Pos())
-            .List()
-                .Atom(0, iu.GetFullName())
-                .Callable(1, "Member")
-                    .Add(0, arg)
-                    .Atom(1, iu.GetFullName())
-                .Seal()
-            .Seal()
-            .Build());
+        memberAtoms.push_back(Build<TCoAtom>(ctx, input->Pos())
+            .Value(iu.GetFullName())
+        .Done());
     }
 
-    auto body = ctx.NewCallable(input->Pos(), "AsStruct", std::move(fields));
-    auto lambda = ctx.NewLambda(input->Pos(), ctx.NewArguments(input->Pos(), {std::move(arg)}), std::move(body));
-    // OrderedMap is conservative when constraints have not been computed for the newly built input yet.
-    return ctx.NewCallable(input->Pos(), "OrderedMap", {std::move(input), std::move(lambda)});
+    // clang-format off
+    return Build<TCoExtractMembers>(ctx, input->Pos())
+        .Input(input)
+        .Members<TCoAtomList>()
+            .Add(memberAtoms)
+        .Build()
+    .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TString, TString>>& renames, TExprContext& ctx) {

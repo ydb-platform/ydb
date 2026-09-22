@@ -3420,6 +3420,7 @@ void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings&
     if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
         settings.SetLockMode(*GetMeta().LockMode);
     }
+    settings.SetDisablePessimisticLocks(GetMeta().DisablePessimisticLocks);
     settings.SetCollectAffectedRows(
         GetMeta().CollectAffectedRows && !settings.GetIsIndexImplTable());
 

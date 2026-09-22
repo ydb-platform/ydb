@@ -14,6 +14,10 @@ public:
     virtual NYdb::NTopic::TAsyncBeginPublicationResult BeginPublication(const TString& extPublicationId, const NYdb::NTopic::TBeginPublicationSettings& settings = {}) = 0;
 
     virtual NYdb::NTopic::TAsyncPublishResult Publish(const NYdb::NTopic::TDeferredPublication& publication, const NYdb::NTopic::TPublishSettings& settings = {}) = 0;
+
+    virtual NYdb::NTopic::TAsyncCancelPublicationResult CancelPublication(const NYdb::NTopic::TDeferredPublication& publication, const NYdb::NTopic::TCancelPublicationSettings& settings = {}) = 0;
+
+    virtual NYdb::NTopic::TAsyncListPublicationsResult ListPublications(const NYdb::NTopic::TListPublicationsSettings& settings = {}) = 0;
 };
 
 } // namespace NYql

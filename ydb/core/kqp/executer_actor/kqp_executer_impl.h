@@ -1211,6 +1211,8 @@ protected:
                 break;
         }
 
+        TasksGraph.GetMeta().SetDisablePessimisticLocks(Request.DisablePessimisticLocks);
+
         if (IsDebugLogEnabled()) {
             for (auto& tx : Request.Transactions) {
                 YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Executing physical tx",

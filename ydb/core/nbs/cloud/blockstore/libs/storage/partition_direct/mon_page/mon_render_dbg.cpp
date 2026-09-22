@@ -2,6 +2,8 @@
 
 #include "mon_util.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -15,28 +17,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 //////////////////////////////////////////////////////////////////////////////////
-
-void RenderWatermarks(
-    IOutputStream& str,
-    const TDbgSnapshot& dbg,
-    ui32 blockSize)
-{
-    for (const auto& [vChunkId, vChunkConfig]: dbg.VChunkConfigs) {
-        TStringBuilder w;
-        for (auto host: vChunkConfig.GetDDisks()) {
-            if (auto watermark = vChunkConfig.GetWatermark(host)) {
-                if (!w.empty()) {
-                    w << ",";
-                }
-                w << PrintHostIndex(host) << ":" << *watermark / blockSize;
-            }
-        }
-
-        if (w) {
-            str << PrintVChunkId(vChunkId) << "[" << w << "] ";
-        }
-    }
-}
 
 void RenderDbgList(
     IOutputStream& str,
@@ -94,7 +74,6 @@ void RenderDbgList(
                     size_t inflight = 0;
                     size_t consecutiveErrors = 0;
                     size_t consecutiveSuccesses = 0;
-                    TCountAndSize pBuffersUsage;
                     ui64 ddiskTotalBytes = 0;
                     ui64 freshTotalBytes = 0;
                     ui64 rottenTotalBytes = 0;
@@ -108,7 +87,6 @@ void RenderDbgList(
                         {
                             inflight += host.InflightByOperation[operation];
                         }
-                        pBuffersUsage += host.DirtyMapStats.PBuffersUsage;
                         ddiskTotalBytes += host.DirtyMapStats.DDiskTotalBytes;
                         freshTotalBytes += host.DirtyMapStats.FreshTotalBytes;
                         rottenTotalBytes += host.DirtyMapStats.RottenTotalBytes;
@@ -116,7 +94,7 @@ void RenderDbgList(
                     totalInflight += inflight;
                     totalConsecutiveErrors += consecutiveErrors;
                     totalConsecutiveSuccesses += consecutiveSuccesses;
-                    totalPBuffersUsage += pBuffersUsage;
+                    totalPBuffersUsage += dbg.PBuffersUsage;
                     totalDDiskBytes += ddiskTotalBytes;
                     totalFreshBytes += freshTotalBytes;
                     totalRottenBytes += rottenTotalBytes;
@@ -156,7 +134,7 @@ void RenderDbgList(
                             str << consecutiveErrors;
                         }
                         TABLED () {
-                            str << pBuffersUsage.Print(true);
+                            str << dbg.PBuffersUsage.Print(true);
                         }
                         TABLED () {
                             str << FormatByteSize(ddiskTotalBytes);
@@ -164,8 +142,6 @@ void RenderDbgList(
                             str << FormatByteSize(rottenTotalBytes);
                             str << " / ";
                             str << FormatByteSize(freshTotalBytes);
-                            str << "<br>";
-                            RenderWatermarks(str, dbg, tabletInfo.BlockSize);
                         }
                     }
                 }

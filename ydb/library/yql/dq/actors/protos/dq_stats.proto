@@ -403,6 +403,13 @@ message TDqOperatorStatsAggr {
     }
 }
 
+// task counts of one stage on one node
+message TDqStageNodeStats {
+    uint32 NodeId = 1;
+    uint32 Tasks = 2;
+    uint32 Finished = 3;
+}
+
 // aggregated stats for all tasks of the stage
 message TDqStageStats {
     uint32 StageId = 1;
@@ -477,6 +484,8 @@ message TDqStageStats {
 
     TDqStatsAggr MaxMemoryUsage = 24;
     TDqStatsAggr MemoryUsageMB = 54;
+
+    repeated TDqStageNodeStats Nodes = 55; // task distribution over nodes, sorted by NodeId
 
     google.protobuf.Any Extra = 100;
 }

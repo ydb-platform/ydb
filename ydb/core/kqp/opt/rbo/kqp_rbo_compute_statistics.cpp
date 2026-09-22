@@ -71,7 +71,9 @@ TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
     TVector<TInfoUnit> leftJoinKeys;
     TVector<TInfoUnit> rightJoinKeys;
 
-    for (const auto & [l, r] : join->JoinKeys) {
+    for (const auto& joinKey : join->JoinKeys) {
+        const auto& l = joinKey.Left;
+        const auto& r = joinKey.Right;
         leftJoinKeys.push_back(l);
         rightJoinKeys.push_back(r);
     }
@@ -348,6 +350,10 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Statistics = GetInput()->Props.Statistics;
     Props.Cost = GetInput()->Props.Cost;
 
+    if (PartiallyPushedDown) {
+        return;
+    }
+
     auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetInput()->Props, true, ctx.TypeCtx));
     auto lambda = TCoLambda(FilterExpr.Node);
     double selectivity = TPredicateSelectivityComputer(inputStats, &Props.Metadata->ColumnLineage).Compute(lambda.Body());
@@ -498,11 +504,7 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
     Props.Metadata->ColumnsCount = outputIUs.size();
 
-    Props.Metadata->ShuffledByColumns = {};
-    if (CanEliminateAggregateShuffle(*this, ctx)) {
-        // Aggregation by a superset of existing shuffle keys keeps every group colocated by those shuffle keys.
-        Props.Metadata->ShuffledByColumns = inputMetadata.ShuffledByColumns;
-    }
+    Props.Metadata->ShuffledByColumns = GetAggregatePreservedShuffling(*this, ctx);
 
     // Aggregate acts like a source in terms of lineage.
     // FIXME: We currently delete all lineage of columns before Aggregate,
@@ -557,7 +559,9 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
 
-    for (const auto& [leftKey, rightKey] : JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         leftJoinKeys.push_back(TJoinColumn(leftKey.GetAlias(), leftKey.GetColumnName()));
         rightJoinKeys.push_back(TJoinColumn(rightKey.GetAlias(), rightKey.GetColumnName()));
     }
@@ -621,7 +625,9 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         // the equal columns is dropped by a projection later.
 
         bool rightSided = (JoinKind == "Right" || JoinKind == "RightSemi" || JoinKind == "RightOnly");
-        for (const auto& [leftKey, rightKey] : JoinKeys) {
+        for (const auto& joinKey : JoinKeys) {
+            const auto& leftKey = joinKey.Left;
+            const auto& rightKey = joinKey.Right;
             Props.Metadata->ShuffledByColumns.push_back(rightSided ? rightKey : leftKey);
         }
     }
@@ -644,7 +650,9 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
 
-    for (const auto& [leftKey, rightKey] : JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         leftJoinKeys.push_back(TJoinColumn(leftKey.GetAlias(), leftKey.GetColumnName()));
         rightJoinKeys.push_back(TJoinColumn(rightKey.GetAlias(), rightKey.GetColumnName()));
     }

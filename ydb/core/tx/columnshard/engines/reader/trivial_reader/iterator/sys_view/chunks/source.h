@@ -13,15 +13,15 @@ class TSourceData: public NAbstract::TPathSourceData {
 private:
     using TBase = NAbstract::TPathSourceData;
     YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
-    ISnapshotSchema::TPtr Schema;
+    ISnapshotSchema::TPtr PortionSchema;
     std::shared_ptr<NArrow::NAccessor::TAccessorsCollection> OriginalData;
 
     virtual TString GetColumnStorageId(const ui32 columnId) const override {
-        return GetPortionAccessor().GetPortionInfo().GetColumnStorageId(columnId, Schema->GetIndexInfo());
+        return GetPortionAccessor().GetPortionInfo().GetColumnStorageId(columnId, PortionSchema->GetIndexInfo());
     }
 
     virtual TString GetEntityStorageId(const ui32 entityId) const override {
-        return GetPortionAccessor().GetPortionInfo().GetEntityStorageId(entityId, Schema->GetIndexInfo());
+        return GetPortionAccessor().GetPortionInfo().GetEntityStorageId(entityId, PortionSchema->GetIndexInfo());
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnsIds*/) const override {
@@ -36,18 +36,37 @@ private:
         return GetPortionAccessor().RestoreBlobRange(rangeLink);
     }
 
-    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
-        return Schema;
-    }
-
-    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const override {
-        return Schema;
-    }
-
     virtual bool DoStartFetchingAccessor(
         const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) override;
 
     virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const override;
+
+    mutable std::optional<NCommon::TPKSortPermutation> ChunksPKOrder;
+
+    const NCommon::TPKSortPermutation& GetChunksPKOrder() const;
+
+    template <class TOnRecord, class TOnIndex>
+    void ForEachChunkInPKOrder(TOnRecord&& onRecord, TOnIndex&& onIndex) const {
+        const auto& records = GetPortionAccessor().GetRecordsVerified();
+        const auto& indexes = GetPortionAccessor().GetIndexesVerified();
+        const auto& order = GetChunksPKOrder();
+        if (order.empty()) {
+            for (auto&& record : records) {
+                onRecord(record);
+            }
+            for (auto&& index : indexes) {
+                onIndex(index);
+            }
+            return;
+        }
+        for (const ui64 position : order) {
+            if (position < records.size()) {
+                onRecord(records[position]);
+            } else {
+                onIndex(indexes[position - records.size()]);
+            }
+        }
+    }
 
     virtual void InitUsedRawBytes() override {
         AFL_VERIFY(!UsedRawBytes);
@@ -80,7 +99,7 @@ public:
         : TBase(sourceIdx, pathId, tabletId, std::move(start), std::move(finish), std::nullopt, portion->RecordSnapshotMin(),
               portion->RecordSnapshotMin(), context)
         , Portion(std::move(portion))
-        , Schema(std::move(schema))
+        , PortionSchema(std::move(schema))
     {
     }
 };

@@ -1020,7 +1020,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStartSession>();
         event->Record.CopyFrom(ev->Get()->Record);
-        Send(new IEventHandle(sessionActorId, ev->Sender, event.release(), 0));
+        Send(new IEventHandle(sessionActorId, ev->Sender, event.release(), 0, consumerInfo->Generation));
     }
     consumerInfo->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvStartSessionAck(consumerInfo->Proto), consumerInfo->Generation);
     Metrics.ClientsCount->Set(Consumers.size());
@@ -1251,8 +1251,10 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) 
         {"readActorId", ev->Get()->ReadActorId},
         {"queryId", consumerInfoPtr->QueryId});
     auto partitionIt = consumerInfoPtr->Partitions.find(ev->Get()->Record.GetPartitionId());
-    if (partitionIt == consumerInfoPtr->Partitions.end()) {
-        // Ignore TEvNewDataArrived because read actor now read others partitions.
+    if (partitionIt == consumerInfoPtr->Partitions.end()
+        || partitionIt->second.TopicSessionId != ev->Sender
+        || consumerInfoPtr->Generation != ev->Cookie) {
+        // A topic session can still have events in flight when its consumer is replaced.
         return;
     }
     partitionIt->second.PendingNewDataArrived = true;
@@ -1276,12 +1278,13 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
         {"sender", ev->Sender},
         {"readActorId", ev->Get()->ReadActorId},
         {"queryId", consumerInfoPtr->QueryId});
-    Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     auto partitionIt = consumerInfoPtr->Partitions.find(ev->Get()->Record.GetPartitionId());
-    if (partitionIt == consumerInfoPtr->Partitions.end()) {
-        // Ignore TEvMessageBatch because read actor now read others partitions.
+    if (partitionIt == consumerInfoPtr->Partitions.end()
+        || partitionIt->second.TopicSessionId != ev->Sender
+        || consumerInfoPtr->Generation != ev->Cookie) {
         return;
     }
+    Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     partitionIt->second.PendingGetNextBatch = false;
     consumerInfoPtr->Counters.MessageBatch++;
     consumerInfoPtr->EventsQueue.Send(ev->Release().Release(), it->second->Generation);
@@ -1294,6 +1297,12 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
             {"logPrefix", LogPrefix},
             {"sender", ev->Sender},
             {"readActorId", ev->Get()->ReadActorId});
+        return;
+    }
+    const auto partitionIt = it->second->Partitions.find(ev->Get()->Record.GetPartitionId());
+    if (partitionIt == it->second->Partitions.end()
+        || partitionIt->second.TopicSessionId != ev->Sender
+        || it->second->Generation != ev->Cookie) {
         return;
     }
     LWPROBE(SessionError, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), it->second->QueryId, it->second->Generation, ev->Get()->Record.ByteSizeLong());
@@ -1457,7 +1466,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
     sessionInfo.Stat.Add(ev->Get()->Stat.Common);
     for (const auto& clientStat : ev->Get()->Stat.Clients) {
         auto it = sessionInfo.Consumers.find(clientStat.ReadActorId);
-        if (it == sessionInfo.Consumers.end()) {
+        if (it == sessionInfo.Consumers.end() || it->second->Generation != clientStat.Generation) {
             continue;
         }
         auto consumerInfoPtr = it->second;

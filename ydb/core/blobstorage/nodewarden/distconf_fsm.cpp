@@ -22,13 +22,6 @@ namespace NKikimr::NStorage {
                 connected.push_back(nodeId);
             }
 
-            ui32 numConnected = 0;
-            ui32 numDisconnected = 0;
-            for (const auto& [nodeId, node] : AllNodeIds) {
-                ++(AllBoundNodes.contains(node) ? numConnected : numDisconnected);
-            }
-            MajorityOfNodesConnected = numConnected > numDisconnected;
-
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
             GlobalQuorum = HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
@@ -49,7 +42,14 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TDistributedConfigKeeper::CheckRootNodeStatus() {
+    void TDistributedConfigKeeper::ReconcileNodeRole() {
+        UpdateQuorums();
+        if (RootProbe && (HasStaticGroupConfig() || !AllNodeIds.contains(RootProbe->NodeId)
+                          || AllBoundNodes.contains(AllNodeIds.at(RootProbe->NodeId)))) {
+            AbortRootProbe();
+        }
+        IssueNextBindRequest();
+
         Y_VERIFY_S(Binding ? (RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT) && !Scepter :
             RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ? !Scepter :
             static_cast<bool>(Scepter),
@@ -103,6 +103,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
+        AbortRootProbe();
         if (StateStorageSelfHealActor) {
             Send(new IEventHandle(TEvents::TSystem::Poison, 0, StateStorageSelfHealActor.value(), SelfId(), nullptr, 0));
             StateStorageSelfHealActor.reset();
@@ -115,24 +116,29 @@ namespace NKikimr::NStorage {
             {"marker", "NWDC38"},
             {"rootState", RootState},
             {"reason", reason});
+        Y_ABORT_UNLESS(RootState != ERootState::ERROR_TIMEOUT);
+        StopRootActivities(reason);
+        RootState = ERootState::ERROR_TIMEOUT;
+        ErrorReason = reason;
+        const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
+        TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
+    }
+
+    void TDistributedConfigKeeper::StopRootActivities(const TString& reason) {
         if (Scepter) {
             UnbecomeRoot();
             Scepter.reset();
             ++ScepterCounter;
         }
-        Y_ABORT_UNLESS(RootState != ERootState::ERROR_TIMEOUT);
-        RootState = ERootState::ERROR_TIMEOUT;
-        ErrorReason = reason;
+        RootState = ERootState::INITIAL;
         OpQueueOnError(reason);
         if (CurrentProposition) {
-           UndoCurrentPropositionNodeChange(*CurrentProposition);
-           CurrentProposition.reset();
+            UndoCurrentPropositionNodeChange(*CurrentProposition);
+            CurrentProposition.reset();
         }
         CurrentSelfAssemblyUUID.reset();
         ApplyConfigUpdateToDynamicNodes(true);
         AbortAllScatterTasks(std::nullopt);
-        const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
-        TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
     }
 
     void TDistributedConfigKeeper::HandleErrorTimeout() {

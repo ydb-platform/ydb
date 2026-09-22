@@ -129,7 +129,7 @@ def allowed_post_path(path):
         len(parts) == 5
         and parts[:3] == ['', 'api', 'runs']
         and bool(parts[3])
-        and parts[4] in ('cancel', 'metrics-export')
+        and parts[4] in ('cancel', 'metrics-export', 'release-cluster')
     )
 
 

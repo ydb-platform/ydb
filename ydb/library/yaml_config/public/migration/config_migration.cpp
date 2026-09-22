@@ -3,6 +3,7 @@
 
 #include <util/generic/hash_set.h>
 #include <util/string/ascii.h>
+#include <util/string/cast.h>
 
 #include <array>
 #include <exception>
@@ -416,6 +417,63 @@ namespace NKikimr::NYamlConfig {
             return enabled && AsciiEqualsIgnoreCase(*enabled, "true");
         }
 
+        bool HasGrpcEndpoint(const NFyaml::TMapping& endpoint) {
+            for (const auto* key : {"port", "ssl_port"}) {
+                if (endpoint.Has(key) && FromString<ui32>(endpoint.at(key).Scalar())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        bool ContainsConfigService(const NFyaml::TMapping& endpoint, const TString& key) {
+            if (endpoint.Has(key)) {
+                for (const auto& service : endpoint.at(key).Sequence()) {
+                    if (service.Scalar() == "config") {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        void EnsureConfigServiceEnabled(NFyaml::TDocument& doc) {
+            ResolveUniqueDocs(doc, [](TDocumentConfig&& resolved) {
+                const auto config = resolved.second.Map();
+                if (!config.Has("grpc_config")) {
+                    return;
+                }
+                const auto grpcConfig = config.at("grpc_config").Map();
+                if (grpcConfig.Has("start_grpc_proxy") && !FromString<bool>(grpcConfig.at("start_grpc_proxy").Scalar())) {
+                    return;
+                }
+
+                bool hasGrpcEndpoint = false;
+                bool hasConfigEndpoint = false;
+                const auto checkEndpoint = [&](const NFyaml::TMapping& endpoint) {
+                    if (!HasGrpcEndpoint(endpoint)) {
+                        return;
+                    }
+                    hasGrpcEndpoint = true;
+                    const bool defaultServices = !endpoint.Has("services") || endpoint.at("services").Sequence().size() == 0;
+                    hasConfigEndpoint |= (defaultServices || ContainsConfigService(endpoint, "services")
+                                          || ContainsConfigService(endpoint, "services_enabled"))
+                                         && !ContainsConfigService(endpoint, "services_disabled");
+                };
+                checkEndpoint(grpcConfig);
+                if (grpcConfig.Has("ext_endpoints")) {
+                    for (const auto& endpoint : grpcConfig.at("ext_endpoints").Sequence()) {
+                        checkEndpoint(endpoint.Map());
+                    }
+                }
+                Y_ENSURE_EX(!hasGrpcEndpoint || hasConfigEndpoint,
+                            TYamlConfigEx() << "Config V2 migration requires the 'config' gRPC service on at least one endpoint "
+                                            << "in every resolved config with gRPC enabled; enable it in services/services_enabled "
+                                            << "and remove it from services_disabled. Apply the service configuration and restart "
+                                            << "the affected nodes before switching to Config V2");
+            });
+        }
+
         template <class TCallback>
         void ForEachSelectorConfig(NFyaml::TDocument& doc, TCallback&& callback) {
             auto root = doc.Root().Map();
@@ -604,6 +662,9 @@ namespace NKikimr::NYamlConfig {
         auto featureFlags = GetOrCreateMap(doc, config, "feature_flags", "config.feature_flags");
         SetBool(doc, featureFlags, "switch_to_config_v2", enabled);
         EnsureSelectorsKeepValue(doc, "feature_flags", "switch_to_config_v2", enabled);
+        if (enabled) {
+            EnsureConfigServiceEnabled(doc);
+        }
         return doc;
     }
 
@@ -619,6 +680,9 @@ namespace NKikimr::NYamlConfig {
         auto selfManagement = GetOrCreateMap(doc, config, "self_management_config", "config.self_management_config");
         SetBool(doc, selfManagement, "enabled", enabled);
         EnsureSelectorsKeepValue(doc, "self_management_config", "enabled", enabled);
+        if (enabled) {
+            EnsureConfigServiceEnabled(doc);
+        }
         return doc;
     }
 

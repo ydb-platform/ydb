@@ -1,4 +1,6 @@
 #include "blocks.h"
+#include "data.h"
+#include "garbage_collection.h"
 #include "schema.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
@@ -15,6 +17,7 @@ namespace NKikimr::NBlobDepot {
         const TInstant Timestamp;
         std::unique_ptr<IEventHandle> Response;
         bool ProcessBlock = false;
+        bool TabletDeleted = false;
 
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_UPDATE_BLOCK; }
@@ -54,6 +57,8 @@ namespace NKikimr::NBlobDepot {
                     response.SetStatus(NKikimrProto::ALREADY);
                     response.SetActualGeneration(block.BlockedGeneration);
                 } else {
+                    TabletDeleted = !IsCompleteTabletDeletionBlock(block.BlockedGeneration) &&
+                        IsCompleteTabletDeletionBlock(BlockedGeneration);
                     block.BlockedGeneration = BlockedGeneration;
                     block.IssuerGuid = IssuerGuid;
                     db.Table<Schema::Blocks>().Key(tabletId).Update(
@@ -74,6 +79,8 @@ namespace NKikimr::NBlobDepot {
                     response.SetErrorReason("generation check failed while increasing tablet storage info version");
                 }
             } else {
+                TabletDeleted = !IsCompleteTabletDeletionBlock(block.BlockedGeneration) &&
+                    IsCompleteTabletDeletionBlock(BlockedGeneration);
                 block.BlockedGeneration = BlockedGeneration;
                 block.IssuerGuid = IssuerGuid;
                 ProcessBlock = true;
@@ -93,6 +100,9 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
+            if (TabletDeleted) {
+                Self->BlocksManager->OnTabletDeleted(TabletId);
+            }
             if (Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.GetStatus() != NKikimrProto::OK) {
                 TActivationContext::Send(Response.release());
             } else if (ProcessBlock) {
@@ -100,6 +110,43 @@ namespace NKikimr::NBlobDepot {
                     std::move(Response));
             } else {
                 TActivationContext::Send(Response.release());
+            }
+        }
+    };
+
+    // Drops the data of a tablet that has been deleted for good (Max<ui32>() block). This is what the
+    // hard barrier issued by Hive right after the block would have done, but that barrier may never
+    // arrive -- in particular, a VDisk that has seen the block is allowed to drop the barrier records
+    // for this tablet, so decommission may bring us the block without any barriers.
+    class TBlobDepot::TBlocksManager::TTxDeleteTabletData : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+        const ui64 TabletId;
+        bool Finished = false;
+
+    public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DELETE_TABLET_DATA; }
+
+        TTxDeleteTabletData(TBlobDepot *self, ui64 tabletId)
+            : TTransactionBase(self)
+            , TabletId(tabletId)
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            ui32 maxItems = 10'000;
+            Finished = Self->Data->OnTabletDeleted(TabletId, maxItems, txc, this);
+            if (Finished) {
+                // the data is gone, so the barriers that used to guard it are not needed either
+                Self->BarrierServer->OnTabletDeleted(TabletId, txc);
+            }
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            Self->Data->CommitTrash(this);
+            if (Finished) {
+                Self->BlocksManager->DeleteTabletDataInFlight = false;
+                Self->BlocksManager->ProcessTabletsToDelete();
+            } else {
+                Self->Execute(std::make_unique<TTxDeleteTabletData>(Self, TabletId));
             }
         }
     };
@@ -122,6 +169,7 @@ namespace NKikimr::NBlobDepot {
         ui32 RetryCount = 0;
         ui32 ActualGeneration = 0;
         THashSet<ui32> NodesWaitingForPushResult;
+        THashSet<ui32> NodesWithBlockToDeliver; // agents whose BlockToDeliver entry is (still) owned by this actor
         std::weak_ptr<TToken> Token;
 
     public:
@@ -180,10 +228,13 @@ namespace NKikimr::NBlobDepot {
                     // enqueue push notification
                     const auto [it, inserted] = agent.BlockToDeliver.try_emplace(TabletId, BlockedGeneration, IssuerGuid, SelfId());
                     if (!inserted) {
+                        // an entry may be left over by a processor that stopped waiting when the agent's block lease
+                        // expired; CanSetNewBlock also lets the very same block be reissued, hence <= and not <
                         const auto& [currentBlockedGeneration, _1, _2] = it->second;
-                        Y_ABORT_UNLESS(currentBlockedGeneration < BlockedGeneration);
+                        Y_ABORT_UNLESS(currentBlockedGeneration <= BlockedGeneration);
                         it->second = {BlockedGeneration, IssuerGuid, SelfId()};
                     }
+                    NodesWithBlockToDeliver.insert(agentId);
 
                     // add node to wait list; also start timer to remove this node from the wait queue
                     NodesWaitingForPushResult.insert(agentId);
@@ -233,9 +284,11 @@ namespace NKikimr::NBlobDepot {
                 block.PerAgentInfo.erase(agentId);
 
                 TAgent& agent = Self->GetAgent(agentId);
-                const auto it = agent.BlockToDeliver.find(TabletId);
-                Y_ABORT_UNLESS(it != agent.BlockToDeliver.end() && it->second == std::make_tuple(BlockedGeneration, IssuerGuid, SelfId()));
-                agent.BlockToDeliver.erase(it);
+                NodesWithBlockToDeliver.erase(agentId);
+                if (const auto it = agent.BlockToDeliver.find(TabletId); it != agent.BlockToDeliver.end() &&
+                        it->second == std::make_tuple(BlockedGeneration, IssuerGuid, SelfId())) {
+                    agent.BlockToDeliver.erase(it);
+                }
 
                 if (NodesWaitingForPushResult.empty()) {
                     Finish();
@@ -315,7 +368,21 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
+        // Entries we enqueued into agents that never answered (a disconnected agent, or one whose block lease has
+        // expired) are owned by nobody once this actor is gone; drop them here, or they pile up in TAgent forever
+        // and get pushed to the agent on every reconnect.
+        void DropPendingBlockNotifications() {
+            for (const ui32 agentId : std::exchange(NodesWithBlockToDeliver, {})) {
+                TAgent& agent = Self->GetAgent(agentId);
+                if (const auto it = agent.BlockToDeliver.find(TabletId); it != agent.BlockToDeliver.end() &&
+                        std::get<2>(it->second) == SelfId()) {
+                    agent.BlockToDeliver.erase(it);
+                }
+            }
+        }
+
         void Finish() {
+            DropPendingBlockNotifications();
             auto& record = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
             record.SetActualGeneration(Max(ActualGeneration, record.GetActualGeneration()));
             TActivationContext::Send(Response.release());
@@ -343,6 +410,36 @@ namespace NKikimr::NBlobDepot {
             .IssuerGuid = issuerGuid,
             .Version = version,
         };
+        if (IsCompleteTabletDeletionBlock(blockedGeneration)) {
+            // data is not loaded yet, so this only enqueues the tablet; OnDataLoaded starts the purge
+            OnTabletDeleted(tabletId);
+        }
+    }
+
+    void TBlobDepot::TBlocksManager::OnTabletDeleted(ui64 tabletId) {
+        if (!TabletsToDelete.insert(tabletId).second) {
+            return; // already queued
+        }
+        YDB_LOG_DEBUG("Tablet deleted for good",
+            {"marker", "BDT86"},
+            {"id", Self->GetLogId()},
+            {"blockedTabletId", tabletId});
+        ProcessTabletsToDelete();
+    }
+
+    void TBlobDepot::TBlocksManager::ProcessTabletsToDelete() {
+        if (DeleteTabletDataInFlight || TabletsToDelete.empty() || !Self->Data->IsLoaded()) {
+            return;
+        }
+        const auto it = TabletsToDelete.begin();
+        const ui64 tabletId = *it;
+        TabletsToDelete.erase(it);
+        DeleteTabletDataInFlight = true;
+        Self->Execute(std::make_unique<TTxDeleteTabletData>(Self, tabletId));
+    }
+
+    void TBlobDepot::TBlocksManager::OnDataLoaded() {
+        ProcessTabletsToDelete();
     }
 
     void TBlobDepot::TBlocksManager::AddBlockOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlock& block,
@@ -356,11 +453,17 @@ namespace NKikimr::NBlobDepot {
                 NIceDb::TUpdate<Schema::Blocks::Version>(item.Version));
         } else {
             auto& item = Blocks[block.TabletId];
+            const bool wasDeleted = IsCompleteTabletDeletionBlock(item.BlockedGeneration);
             item.BlockedGeneration = Max(item.BlockedGeneration, block.BlockedGeneration);
             item.IssuerGuid = 0;
             db.Table<Schema::Blocks>().Key(block.TabletId).Update(
                 NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(item.BlockedGeneration),
                 NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(0));
+            if (!wasDeleted && IsCompleteTabletDeletionBlock(item.BlockedGeneration)) {
+                // blocks are assimilated before any barrier or blob, so from now on the blobs of
+                // this tablet are refused by GetBlobBarrierRelation and never even get here
+                OnTabletDeleted(block.TabletId);
+            }
         }
 
         YDB_LOG_DEBUG("Adding block through decommission",

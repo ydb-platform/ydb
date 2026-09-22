@@ -15,11 +15,1074 @@
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/scope.h>
 
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
+#include <ydb/core/blobstorage/nodewarden/distconf_quorum.h>
+
+#include <array>
 
 namespace NKikimr {
 namespace NBlobStorageNodeWardenTest{
+
+namespace {
+
+    void AddStorageConfigNodes(NKikimrBlobStorage::TStorageConfig& config, ui32 nodeCount) {
+        for (ui32 nodeId = 1; nodeId <= nodeCount; ++nodeId) {
+            auto *node = config.AddAllNodes();
+            node->SetNodeId(nodeId);
+            node->SetHost("node-" + std::to_string(nodeId));
+            node->SetPort(19000 + nodeId);
+            node->MutableLocation()->SetDataCenter("dc-" + std::to_string(nodeId));
+        }
+    }
+
+    void AddMultiVDiskGroup(NKikimrBlobStorage::TStorageConfig& config,
+                            const std::vector<ui32>& nodeIds,
+                            i32 erasureSpecies) {
+        auto *serviceSet = config.MutableBlobStorageConfig()->MutableServiceSet();
+        auto *group = serviceSet->AddGroups();
+        group->SetGroupID(0);
+        group->SetGroupGeneration(1);
+        group->SetErasureSpecies(erasureSpecies);
+        auto *ring = group->AddRings();
+
+        for (ui32 domainIdx = 0; domainIdx < nodeIds.size(); ++domainIdx) {
+            const ui32 nodeId = nodeIds[domainIdx];
+            const ui32 pdiskId = 1;
+            const ui64 pdiskGuid = nodeId * 1000 + pdiskId;
+
+            auto *pdisk = serviceSet->AddPDisks();
+            pdisk->SetNodeID(nodeId);
+            pdisk->SetPDiskID(pdiskId);
+            pdisk->SetPath("/dev/disk" + std::to_string(nodeId) + "_" + std::to_string(pdiskId));
+            pdisk->SetPDiskGuid(pdiskGuid);
+            pdisk->SetPDiskCategory(0);
+
+            auto *vdisk = serviceSet->AddVDisks();
+            auto *vdiskId = vdisk->MutableVDiskID();
+            vdiskId->SetGroupID(0);
+            vdiskId->SetGroupGeneration(1);
+            vdiskId->SetRing(0);
+            vdiskId->SetDomain(domainIdx);
+            vdiskId->SetVDisk(0);
+            auto *vdiskLocation = vdisk->MutableVDiskLocation();
+            vdiskLocation->SetNodeID(nodeId);
+            vdiskLocation->SetPDiskID(pdiskId);
+            vdiskLocation->SetVDiskSlotID(0);
+            vdiskLocation->SetPDiskGuid(pdiskGuid);
+
+            auto *failDomain = ring->AddFailDomains();
+            auto *groupLocation = failDomain->AddVDiskLocations();
+            groupLocation->SetNodeID(nodeId);
+            groupLocation->SetPDiskID(pdiskId);
+            groupLocation->SetVDiskSlotID(0);
+            groupLocation->SetPDiskGuid(pdiskGuid);
+        }
+    }
+
+    TIntrusivePtr<TNodeWardenConfig> MakeNodeWardenConfig(const NKikimrBlobStorage::TStorageConfig& storageConfig) {
+        auto config = MakeIntrusive<TNodeWardenConfig>();
+        config->NameserviceConfig = std::make_unique<NKikimrConfig::TStaticNameserviceConfig>();
+        for (const auto& node : storageConfig.GetAllNodes()) {
+            auto *nsNode = config->NameserviceConfig->AddNode();
+            nsNode->SetNodeId(node.GetNodeId());
+            nsNode->SetHost(node.GetHost());
+            nsNode->SetInterconnectHost(node.GetHost());
+            nsNode->SetPort(node.GetPort());
+            nsNode->MutableLocation()->CopyFrom(node.GetLocation());
+        }
+        return config;
+    }
+
+    class TIgnoreActor : public TActor<TIgnoreActor> {
+    public:
+        TIgnoreActor()
+            : TActor(&TThis::StateFunc)
+        {}
+
+        void StateFunc(TAutoPtr<IEventHandle>&) {}
+    };
+
+    struct TNodeWardenTestState {
+        THashSet<ui32> MobileNodes;
+        THashMap<std::pair<ui32, TString>, NKikimrBlobStorage::TPDiskMetadataRecord> Metadata;
+        ui32 RequiredRootNodeId = 0;
+        bool SawCompleteMobileBinding = false;
+        bool SawScatter = false;
+
+        TNodeWardenTestState() = default;
+
+        explicit TNodeWardenTestState(std::initializer_list<ui32> mobileNodes)
+            : MobileNodes(mobileNodes.begin(), mobileNodes.end())
+        {}
+
+        bool ShouldRejectBinding(ui32 senderNodeId, ui32 recipientNodeId,
+                                 const NKikimrBlobStorage::TEvNodeConfigPush& record) {
+            if (RequiredRootNodeId) {
+                return recipientNodeId != RequiredRootNodeId;
+            }
+            const bool senderIsMobile = MobileNodes.contains(senderNodeId);
+            const bool recipientIsMobile = MobileNodes.contains(recipientNodeId);
+            if (senderIsMobile == recipientIsMobile) {
+                return false;
+            }
+
+            if (!senderIsMobile) {
+                return true;
+            }
+
+            THashSet<ui32> boundNodeIds;
+            for (const auto& node : record.GetBoundNodes()) {
+                boundNodeIds.insert(node.GetNodeId().GetNodeId());
+            }
+            if (std::ranges::all_of(MobileNodes, [&](ui32 nodeId) { return boundNodeIds.contains(nodeId); })) {
+                SawCompleteMobileBinding = true;
+                return false;
+            }
+            return true;
+        }
+    };
+
+    class TNodeWardenProxyActor : public TActor<TNodeWardenProxyActor> {
+        const TActorId KeeperId;
+        TNodeWardenTestState& State;
+
+        void RejectBinding(const IEventHandle& request) {
+            auto response = NStorage::TEvNodeConfigReversePush::MakeRejected();
+            auto handle = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(request.Sender.NodeId()), SelfId(),
+                                                         response.release(), 0, request.Cookie);
+            handle->Rewrite(TEvInterconnect::EvForward, request.InterconnectSession);
+            TActivationContext::Send(handle.release());
+        }
+
+    public:
+        TNodeWardenProxyActor(TActorId keeperId, TNodeWardenTestState& state)
+            : TActor(&TThis::StateFunc)
+            , KeeperId(keeperId)
+            , State(state)
+        {}
+
+        void StateFunc(TAutoPtr<IEventHandle>& ev) {
+            const ui32 type = ev->GetTypeRewrite();
+            if (!ev->InterconnectSession) {
+                if (type == NStorage::TEvNodeWardenReadMetadata::EventType) {
+                    const auto *msg = ev->Get<NStorage::TEvNodeWardenReadMetadata>();
+                    const auto it = State.Metadata.find(std::make_pair(SelfId().NodeId(), msg->Path));
+                    const bool found = it != State.Metadata.end();
+                    Send(ev->Sender, new NStorage::TEvNodeWardenReadMetadataResult(
+                        std::nullopt, found ? NPDisk::EPDiskMetadataOutcome::OK : NPDisk::EPDiskMetadataOutcome::NO_METADATA,
+                        found ? it->second : NKikimrBlobStorage::TPDiskMetadataRecord()), 0, ev->Cookie);
+                } else if (type == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                    const auto *msg = ev->Get<NStorage::TEvNodeWardenWriteMetadata>();
+                    State.Metadata[std::make_pair(SelfId().NodeId(), msg->Path)] = msg->Record;
+                    Send(ev->Sender, new NStorage::TEvNodeWardenWriteMetadataResult(
+                        std::nullopt, NPDisk::EPDiskMetadataOutcome::OK), 0, ev->Cookie);
+                }
+                return;
+            }
+
+            if (type == NStorage::TEvNodeConfigPush::EventType) {
+                const auto *msg = ev->Get<NStorage::TEvNodeConfigPush>();
+                if (msg->Record.GetInitial() && State.ShouldRejectBinding(ev->Sender.NodeId(), SelfId().NodeId(), msg->Record)) {
+                    RejectBinding(*ev);
+                    return;
+                }
+            } else if (type == NStorage::TEvNodeConfigScatter::EventType) {
+                State.SawScatter = true;
+            }
+
+            ev->Rewrite(type, KeeperId);
+            TActivationContext::Send(ev.Release());
+        }
+    };
+
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
+    NKikimrBlobStorage::TStorageConfig MakeStorageConfig(ui32 nodeCount, ui64 generation = 1,
+                                                         const std::vector<ui32>& groupNodes = {},
+                                                         i32 erasureSpecies = TBlobStorageGroupType::ErasureNone) {
+        NKikimrBlobStorage::TStorageConfig config;
+        config.SetGeneration(generation);
+        AddStorageConfigNodes(config, nodeCount);
+
+        auto *bsConfig = config.MutableBlobStorageConfig();
+        bsConfig->MutableServiceSet();
+        for (ui32 nodeId = 1; nodeId <= nodeCount; ++nodeId) {
+            auto *hostConfig = bsConfig->AddDefineHostConfig();
+            hostConfig->SetHostConfigId(nodeId);
+            auto *drive = hostConfig->AddDrive();
+            drive->SetPath("/dev/disk" + std::to_string(nodeId) + "_1");
+            drive->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+
+            auto *host = bsConfig->MutableDefineBox()->AddHost();
+            host->SetHostConfigId(nodeId);
+            host->SetEnforcedNodeId(nodeId);
+        }
+
+        if (!groupNodes.empty()) {
+            AddMultiVDiskGroup(config, groupNodes, erasureSpecies);
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        return config;
+    }
+
+    NKikimrBlobStorage::TStorageConfig MakeInitialStorageConfig(ui32 nodeCount) {
+        NKikimrBlobStorage::TStorageConfig config;
+        AddStorageConfigNodes(config, nodeCount);
+        config.MutableBlobStorageConfig();
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        return config;
+    }
+
+    bool HasQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::initializer_list<ui32> nodeIds) {
+        std::vector<NStorage::TNodeIdentifier> successfulNodes;
+        successfulNodes.reserve(nodeIds.size());
+        for (ui32 nodeId : nodeIds) {
+            UNIT_ASSERT(1 <= nodeId && nodeId <= static_cast<ui32>(config.AllNodesSize()));
+            successfulNodes.emplace_back(config.GetAllNodes(nodeId - 1));
+        }
+
+        const auto nodeWardenConfig = MakeNodeWardenConfig(config);
+        const THashMap<TString, TBridgePileId> bridgePileNameMap;
+        return NStorage::HasNodeQuorum(config, successfulNodes, bridgePileNameMap, TBridgePileId(),
+                                       *nodeWardenConfig, nullptr, true);
+    }
+
+    TActorId RegisterKeeper(TTestActorSystem& runtime, const NKikimrBlobStorage::TStorageConfig& config, ui32 nodeId,
+                            TNodeWardenTestState& state, const TString& startupConfigYaml = {}) {
+        auto nodeWardenConfig = MakeNodeWardenConfig(config);
+        nodeWardenConfig->StartupConfigYaml = startupConfigYaml;
+        auto storageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
+        const TActorId keeperId = runtime.Register(
+            new NStorage::TDistributedConfigKeeper(std::move(nodeWardenConfig), storageConfig, true), nodeId);
+
+        const TActorId nodeWardenProxyId = runtime.Register(new TNodeWardenProxyActor(keeperId, state), nodeId);
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), nodeWardenProxyId);
+
+        const TActorId nameserviceId = runtime.Register(new TIgnoreActor, nodeId);
+        runtime.RegisterService(GetNameserviceActorId(), nameserviceId);
+        return keeperId;
+    }
+
+    std::optional<ui32> FindConvergedRoot(TTestActorSystem& runtime, const std::vector<TActorId>& keeperIds) {
+        std::optional<ui32> rootNodeId;
+        for (const TActorId keeperId : keeperIds) {
+            ui32 reportedRootNodeId = 0;
+            bool partOfNodeQuorum = false;
+            const bool found = runtime.WrapInActorContext(keeperId, [&](IActor *actor) {
+                auto *keeper = dynamic_cast<NStorage::TDistributedConfigKeeper*>(actor);
+                UNIT_ASSERT(keeper);
+                reportedRootNodeId = keeper->GetRootNodeId();
+                partOfNodeQuorum = keeper->PartOfNodeQuorum();
+            });
+            UNIT_ASSERT(found);
+
+            if (!partOfNodeQuorum) {
+                return std::nullopt;
+            }
+            if (!rootNodeId) {
+                rootNodeId = reportedRootNodeId;
+            } else if (*rootNodeId != reportedRootNodeId) {
+                return std::nullopt;
+            }
+        }
+        return rootNodeId;
+    }
+
+    template<typename TCondition>
+    bool SimUntil(TTestActorSystem& runtime, TCondition&& condition, TDuration timeout = TDuration::Seconds(30),
+                  ui32 nodeId = 1) {
+        const TInstant deadline = runtime.GetClock() + timeout;
+        runtime.Schedule(deadline, new IEventHandle(TEvents::TSystem::Wakeup, 0, {}, {}, nullptr, 0), nullptr, nodeId);
+        runtime.Sim([&] { return !condition() && runtime.GetClock() < deadline; });
+        return condition();
+    }
+
+    void CheckStaysConverged(TTestActorSystem& runtime, const std::vector<TActorId>& keeperIds) {
+        UNIT_ASSERT_C(!SimUntil(runtime, [&] { return !FindConvergedRoot(runtime, keeperIds); },
+                                TDuration::Seconds(30), keeperIds.front().NodeId()),
+                      "binding tree lost convergence without new failures");
+    }
+
+    auto InvokeKeeper(TTestActorSystem& runtime, TActorId keeperId,
+                      std::unique_ptr<NStorage::TEvNodeConfigInvokeOnRoot> request) {
+        const TActorId edge = runtime.AllocateEdgeActor(keeperId.NodeId());
+        runtime.Send(new IEventHandle(keeperId, edge, request.release()), keeperId.NodeId());
+        auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+                      response->Get()->Record.DebugString());
+        return response;
+    }
+
+    void BootstrapCluster(TTestActorSystem& runtime, TActorId keeperId) {
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableBootstrapCluster()->SetSelfAssemblyUUID("partial-bootstrap-test");
+        InvokeKeeper(runtime, keeperId, std::move(request));
+    }
+
+    NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult QueryKeeper(TTestActorSystem& runtime, TActorId keeperId,
+                                                                    bool workingRootOnly = false) {
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        if (workingRootOnly) {
+            request->Record.MutableQueryWorkingRoot();
+        } else {
+            request->Record.MutableQueryConfig();
+        }
+        return InvokeKeeper(runtime, keeperId, std::move(request))->Get()->Record;
+    }
+
+    ui32 RunUntilConverged(const NKikimrBlobStorage::TStorageConfig& config, TNodeWardenTestState& state,
+                           TDuration timeout = TDuration::Seconds(30), bool waitForScatter = false) {
+        TTestActorSystem runtime(config.AllNodesSize());
+        runtime.Start();
+        Y_DEFER {
+            runtime.Stop();
+        };
+
+        std::vector<TActorId> keeperIds;
+        for (ui32 nodeId = 1; nodeId <= static_cast<ui32>(config.AllNodesSize()); ++nodeId) {
+            keeperIds.push_back(RegisterKeeper(runtime, config, nodeId, state));
+        }
+
+        std::optional<ui32> rootNodeId;
+        const bool converged = SimUntil(runtime, [&] {
+            rootNodeId = FindConvergedRoot(runtime, keeperIds);
+            return rootNodeId && (!waitForScatter || state.SawScatter);
+        }, timeout);
+        UNIT_ASSERT_C(converged, "binding tree did not converge before the deadline");
+        CheckStaysConverged(runtime, keeperIds);
+        return *rootNodeId;
+    }
+
+    Y_UNIT_TEST(InitialConfigBootstrapUsesNodeMajority) {
+        const auto config = MakeInitialStorageConfig(3);
+        for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+            UNIT_ASSERT(!HasQuorum(config, {nodeId}));
+        }
+        UNIT_ASSERT(HasQuorum(config, {1, 2}));
+    }
+
+    Y_UNIT_TEST(InitialConfigConvergesToSingleRootThroughMailbox) {
+        const auto config = MakeInitialStorageConfig(3);
+        TNodeWardenTestState state;
+        const ui32 rootNodeId = RunUntilConverged(config, state, TDuration::Seconds(30), true);
+        UNIT_ASSERT(state.SawScatter);
+        UNIT_ASSERT(1 <= rootNodeId && rootNodeId <= 3);
+    }
+
+    void CheckInitialConfigBindingCycle(TDuration unbindDelay) {
+        const auto config = MakeInitialStorageConfig(3);
+        TNodeWardenTestState state;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        std::vector<std::unique_ptr<IEventHandle>> pending;
+        std::vector<std::unique_ptr<IEventHandle>> delayed;
+        std::array<bool, 4> initialDelivered{};
+        IEventHandle *released = nullptr;
+        bool hold = true;
+        bool delayUnbind = false;
+
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId > keepers.size() || ev->GetRecipientRewrite() != keepers[nodeId - 1]) {
+                return true;
+            }
+            if (delayUnbind && nodeId == 1 && ev->Sender.NodeId() == 2 && ev->InterconnectSession) {
+                delayed.push_back(std::move(ev));
+                return false;
+            }
+            if (!hold) {
+                return true;
+            }
+            if (ev.get() == released) {
+                released = nullptr;
+                return true;
+            }
+            const ui32 type = ev->GetTypeRewrite();
+            if (type == NStorage::TEvNodeConfigReversePush::EventType
+                || type == NStorage::TEvNodeConfigUnbind::EventType
+                || type == NStorage::TEvNodeConfigScatter::EventType
+                || (type == NStorage::TEvNodeConfigPush::EventType
+                    && (ev->Get<NStorage::TEvNodeConfigPush>()->Record.GetInitial()
+                        || !initialDelivered[ev->Sender.NodeId()]))) {
+                pending.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return pending.size() == 3; }));
+        pending.clear(); // Discard undelivered attempts.
+
+        // Form 1 -> 3 -> 2 -> 1.
+        for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+            UNIT_ASSERT(runtime.WrapInActorContext(keepers[nodeId - 1], [&](IActor *actor) {
+                auto *keeper = dynamic_cast<NStorage::TDistributedConfigKeeper*>(actor);
+                UNIT_ASSERT(keeper);
+                keeper->AbortBinding("prepare binding cycle", false, false);
+                keeper->StartBinding(nodeId == 1 ? 3 : nodeId - 1);
+            }));
+        }
+
+        const auto deliver = [&](ui32 type, ui32 sender, ui32 recipient, ui32 root = 0) {
+            const auto matches = [&](const auto& ev) {
+                return ev->GetTypeRewrite() == type && ev->Sender.NodeId() == sender
+                       && ev->GetRecipientRewrite() == keepers[recipient - 1]
+                       && (!root || ev->template Get<NStorage::TEvNodeConfigReversePush>()->Record.GetRootNodeId() == root);
+            };
+            UNIT_ASSERT_C(SimUntil(runtime, [&] { return std::ranges::any_of(pending, matches); },
+                                   TDuration::Seconds(1)),
+                          "missing cycle event " << type << " " << sender << "->" << recipient << " root=" << root);
+            const auto it = std::ranges::find_if(pending, matches);
+            if (root) {
+                UNIT_ASSERT(!(*it)->Get<NStorage::TEvNodeConfigReversePush>()->Record.GetRejected());
+            }
+            released = it->release();
+            pending.erase(it);
+            runtime.Send(released, recipient);
+            UNIT_ASSERT(SimUntil(runtime, [&] { return !released; }, TDuration::Seconds(1)));
+        };
+        for (ui32 nodeId : {1, 3, 2}) {
+            deliver(NStorage::TEvNodeConfigPush::EventType, nodeId, nodeId == 1 ? 3 : nodeId - 1);
+            initialDelivered[nodeId] = true;
+            std::erase_if(pending, [&](auto& ev) {
+                if (ev->Sender.NodeId() != nodeId || ev->GetTypeRewrite() != NStorage::TEvNodeConfigPush::EventType) {
+                    return false;
+                }
+                const ui32 recipient = ev->GetRecipientRewrite().NodeId();
+                runtime.Send(ev.release(), recipient);
+                return true;
+            });
+        }
+        // Replay SPIN's root announcements, preserving each sender's order.
+        for (const auto& [sender, recipient, root] : std::initializer_list<std::tuple<ui32, ui32, ui32>>{
+                 {2, 3, 2}, {1, 2, 1}, {2, 3, 1}, {3, 1, 3}, {1, 2, 3}, {3, 1, 2},
+                 {2, 3, 3}, {1, 2, 2}, {3, 1, 1}}) {
+            deliver(NStorage::TEvNodeConfigReversePush::EventType, sender, recipient, root);
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return std::ranges::count_if(pending, [](const auto& ev) {
+                return ev->GetTypeRewrite() == NStorage::TEvNodeConfigUnbind::EventType;
+            }) == 3;
+        }, TDuration::Seconds(1)));
+        for (TActorId id : keepers) {
+            UNIT_ASSERT(runtime.WrapInActorContext(id, [&](IActor *actor) {
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<NStorage::TDistributedConfigKeeper*>(actor)->GetRootNodeId(),
+                                         id.NodeId());
+            }));
+        }
+
+        hold = false;
+        delayUnbind = true;
+        for (auto& ev : pending) {
+            const ui32 nodeId = ev->GetRecipientRewrite().NodeId();
+            runtime.Send(ev.release(), nodeId);
+        }
+        // Keep Initial behind Unbind by delaying the entire 2 -> 1 stream.
+        SimUntil(runtime, [] { return false; }, unbindDelay);
+        if (unbindDelay) {
+            UNIT_ASSERT(!delayed.empty());
+            UNIT_ASSERT_VALUES_EQUAL(delayed.front()->GetTypeRewrite(), NStorage::TEvNodeConfigUnbind::EventType);
+        }
+        delayUnbind = false;
+        for (auto& ev : delayed) {
+            runtime.Send(ev.release(), 1);
+        }
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers).has_value(); }),
+                      "initial-config binding ring did not recover; unbindDelay=" << unbindDelay);
+        CheckStaysConverged(runtime, keepers);
+        const auto root = *FindConvergedRoot(runtime, keepers);
+        const auto result = QueryKeeper(runtime, keepers[root - 1]);
+        UNIT_ASSERT(result.HasScepter());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetQueryConfig().GetConfig().GetFingerprint(), config.GetFingerprint());
+    }
+
+    Y_UNIT_TEST(InitialConfigBindingCycleRecovers) {
+        CheckInitialConfigBindingCycle(TDuration::Zero());
+    }
+
+    Y_UNIT_TEST(InitialConfigBindingCycleRecoversWithLateUnbind) {
+        CheckInitialConfigBindingCycle(TDuration::Seconds(5));
+    }
+
+    Y_UNIT_TEST(StaticGroupQuorumOverridesNodeMajority) {
+        const auto config = MakeStorageConfig(3, 0, {1});
+        UNIT_ASSERT(HasQuorum(config, {1}));
+        UNIT_ASSERT(!HasQuorum(config, {2, 3}));
+    }
+
+    Y_UNIT_TEST(ConfigDriveQuorum) {
+        const auto config = MakeStorageConfig(3, 1);
+        UNIT_ASSERT(!HasQuorum(config, {1}));
+        UNIT_ASSERT(HasQuorum(config, {1, 2}));
+    }
+
+    Y_UNIT_TEST(ThreeNodeSplitConvergesThroughMailbox) {
+        const auto config = MakeStorageConfig(3, 0, {1});
+        TNodeWardenTestState state{2, 3};
+        const ui32 rootNodeId = RunUntilConverged(config, state);
+        UNIT_ASSERT(state.SawCompleteMobileBinding);
+        UNIT_ASSERT_VALUES_EQUAL(rootNodeId, 1u);
+    }
+
+    void ScheduleSubscriptionFailure(TTestActorSystem& runtime, ui32 nodeId, const IEventHandle& request,
+                                     ui32 peerNodeId, TDuration delay) {
+        auto response = std::make_unique<IEventHandle>(request.Sender, request.GetRecipientRewrite(),
+                                                       new TEvInterconnect::TEvNodeDisconnected(peerNodeId),
+                                                       0, request.Cookie);
+        runtime.Schedule(delay, response.release(), nullptr, nodeId);
+    }
+
+    void CheckRootAfterNodeLoss(bool loseStorageQuorum, bool connectionTimeout) {
+        const auto config = MakeStorageConfig(3, 1, {loseStorageQuorum ? 2u : 1u});
+        const auto initial = MakeStorageConfig(3, 0);
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+
+        std::vector<TActorId> keepers;
+        for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, loseStorageQuorum && nodeId != 1 ? initial : config, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+        CheckStaysConverged(runtime, keepers);
+        const auto before = QueryKeeper(runtime, keepers.front());
+        UNIT_ASSERT(before.HasScepter());
+
+        THashMap<TActorId, ui32> peers;
+        runtime.WrapInActorContext(keepers.front(), [&](IActor*) {
+            for (ui32 nodeId : {2, 3}) {
+                peers.emplace(TActivationContext::InterconnectProxy(nodeId), nodeId);
+            }
+        });
+        THashSet<ui32> attemptedPeers;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvents::TSystem::Subscribe) {
+                if (const auto it = peers.find(ev->GetRecipientRewrite()); it != peers.end()) {
+                    attemptedPeers.insert(it->second);
+                    if (!connectionTimeout) {
+                        ScheduleSubscriptionFailure(runtime, nodeId, *ev, it->second, TDuration::MilliSeconds(10));
+                    }
+                    return false;
+                }
+            }
+            return true;
+        };
+        runtime.StopNode(2);
+        runtime.StopNode(3);
+
+        if (loseStorageQuorum) {
+            UNIT_ASSERT(SimUntil(runtime, [&] { return !FindConvergedRoot(runtime, {keepers.front()}); }));
+        } else {
+            CheckStaysConverged(runtime, {keepers.front()});
+            UNIT_ASSERT(attemptedPeers.empty());
+            const auto after = QueryKeeper(runtime, keepers.front());
+            UNIT_ASSERT(after.HasScepter());
+            UNIT_ASSERT_VALUES_EQUAL(after.GetScepter().GetId(), before.GetScepter().GetId());
+            UNIT_ASSERT_VALUES_EQUAL(after.GetQueryConfig().GetConfig().GetFingerprint(), config.GetFingerprint());
+        }
+    }
+
+    Y_UNIT_TEST(ConfigQuorumLossKeepsEstablishedRoot) {
+        CheckRootAfterNodeLoss(false, false);
+    }
+
+    Y_UNIT_TEST(EstablishedRootDoesNotProbeUnavailablePeers) {
+        CheckRootAfterNodeLoss(false, true);
+    }
+
+    Y_UNIT_TEST(StorageQuorumLossStillReleasesRoot) {
+        CheckRootAfterNodeLoss(true, false);
+    }
+
+    Y_UNIT_TEST(OfflineLowerPeerDoesNotBlockBinding) {
+        const auto config = MakeStorageConfig(3, 1, {3});
+        TNodeWardenTestState state;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        runtime.StopNode(1);
+
+        const TActorId follower = RegisterKeeper(runtime, config, 2, state);
+        TActorId offlineProxy;
+        runtime.WrapInActorContext(follower, [&](IActor*) {
+            offlineProxy = TActivationContext::InterconnectProxy(1);
+        });
+        ui32 attempts = 0;
+        runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvents::TSystem::Subscribe && ev->GetRecipientRewrite() == offlineProxy) {
+                ++attempts;
+                return false; // neither Connected nor Disconnected: the binding deadline must fire
+            }
+            return true;
+        };
+        const TActorId root = RegisterKeeper(runtime, config, 3, state);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, {follower, root}) == 3; },
+                             TDuration::Seconds(30), 2));
+        UNIT_ASSERT(attempts);
+        CheckStaysConverged(runtime, {follower, root});
+    }
+
+    enum class EJoinFault {
+        None,
+        BusyOperation,
+        BusyWorkingRoot,
+        ExpiredProbe,
+        UnsupportedProbe,
+        LostBindingReply,
+        DisconnectBeforeBinding,
+        ObsoleteDisconnect,
+    };
+
+    void CheckJoinWorkingRoot(EJoinFault fault) {
+        const auto initial = MakeStorageConfig(3, 0);
+        const auto working = MakeStorageConfig(3, 1, {1});
+        TNodeWardenTestState state;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        bool partitioned = true;
+        bool allowOldOperation = false;
+        TActorId oldOperation;
+        std::vector<std::unique_ptr<IEventHandle>> oldOperationEvents;
+        bool blockBindingReplies = fault == EJoinFault::LostBindingReply;
+        std::unique_ptr<IEventHandle> oldBindingReply;
+        std::optional<ui64> expiredBindingCookie;
+        ui32 initialPushes = 0;
+        ui32 probesFromWorkingRoot = 0;
+        ui32 workingRootReplies = 0;
+        bool disconnected = false;
+        THashMap<TActorId, std::pair<TActorId, ui64>> workingRootSubscriptions;
+        bool blockProbeReplies = fault == EJoinFault::ExpiredProbe || fault == EJoinFault::UnsupportedProbe;
+        std::unique_ptr<IEventHandle> oldProbeReply;
+        std::optional<ui64> replayProbeCookie;
+
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            const ui32 type = ev->GetTypeRewrite();
+            if (type == NStorage::TEvNodeConfigInvokeOnRoot::EventType
+                && ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasQueryWorkingRoot()
+                && !keepers.empty() && ev->Sender == keepers.front()) {
+                ++probesFromWorkingRoot;
+            }
+            if (fault == EJoinFault::DisconnectBeforeBinding && type == TEvInterconnect::TEvNodeConnected::EventType
+                && ev->Get<TEvInterconnect::TEvNodeConnected>()->NodeId == 1) {
+                workingRootSubscriptions[ev->Recipient] = {ev->Sender, ev->Cookie};
+            }
+            if (ev->InterconnectSession && (ev->Sender.NodeId() == 1 || nodeId == 1) && partitioned) {
+                return false;
+            }
+            const bool holdOperation = (fault == EJoinFault::BusyOperation && nodeId != 1)
+                                       || (fault == EJoinFault::BusyWorkingRoot && nodeId == 1);
+            if (holdOperation && !allowOldOperation) {
+                if (!oldOperation && !ev->InterconnectSession && type == NStorage::TEvNodeConfigGather::EventType
+                    && ev->Sender.NodeId() == nodeId && ev->Recipient.NodeId() == nodeId
+                    && std::ranges::find(keepers, ev->Sender) != keepers.end()
+                    && std::ranges::find(keepers, ev->Recipient) == keepers.end()) {
+                    oldOperation = ev->Recipient;
+                }
+                if (oldOperation && ev->Recipient == oldOperation) {
+                    oldOperationEvents.push_back(std::move(ev));
+                    return false;
+                }
+            }
+            if (type == NStorage::TEvNodeConfigInvokeOnRootResult::EventType
+                && std::ranges::find(keepers, ev->Recipient) != keepers.end()
+                && ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record.HasScepter()) {
+                ++workingRootReplies;
+                if (blockProbeReplies) {
+                    if (fault == EJoinFault::UnsupportedProbe) {
+                        // Older binaries include their scepter even when the request is unknown.
+                        ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record.SetStatus(
+                            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+                    } else if (replayProbeCookie == ev->Cookie) {
+                        replayProbeCookie.reset();
+                    } else {
+                        if (!oldProbeReply) {
+                            oldProbeReply = std::move(ev);
+                        }
+                        return false;
+                    }
+                }
+            }
+            if (type == NStorage::TEvNodeConfigPush::EventType && nodeId == 1
+                && ev->Get<NStorage::TEvNodeConfigPush>()->Record.GetInitial()) {
+                ++initialPushes;
+                if (fault == EJoinFault::DisconnectBeforeBinding && !disconnected) {
+                    disconnected = true;
+                    const auto& [sessionId, cookie] = workingRootSubscriptions.at(ev->Sender);
+                    // The mock cannot reconnect a poisoned session.
+                    runtime.Send(new IEventHandle(ev->Sender, sessionId, new TEvInterconnect::TEvNodeDisconnected(1),
+                                                  0, cookie), ev->Sender.NodeId());
+                    return false;
+                }
+                if (blockBindingReplies && expiredBindingCookie && ev->Cookie != *expiredBindingCookie) {
+                    blockBindingReplies = false;
+                }
+            }
+            if (blockBindingReplies && type == NStorage::TEvNodeConfigReversePush::EventType
+                && ev->Sender.NodeId() == 1) {
+                if (!oldBindingReply) {
+                    expiredBindingCookie = ev->Cookie;
+                    oldBindingReply = std::move(ev);
+                }
+                return false;
+            }
+            return true;
+        };
+        for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, nodeId == 1 ? working : initial, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return FindConvergedRoot(runtime, {keepers[0]}) == 1
+                   && FindConvergedRoot(runtime, {keepers[1], keepers[2]}).has_value()
+                   && ((fault != EJoinFault::BusyOperation && fault != EJoinFault::BusyWorkingRoot) || oldOperation);
+        }));
+        const auto before = QueryKeeper(runtime, keepers[0], true);
+        UNIT_ASSERT(before.HasScepter());
+        const auto otherRoot = *FindConvergedRoot(runtime, {keepers[1], keepers[2]});
+        UNIT_ASSERT(!QueryKeeper(runtime, keepers[otherRoot - 1], true).HasScepter());
+        partitioned = false;
+        if (blockProbeReplies) {
+            UNIT_ASSERT(SimUntil(runtime, [&] { return workingRootReplies != 0; }));
+            const auto beforeProbe = QueryKeeper(runtime, keepers[otherRoot - 1]);
+            CheckStaysConverged(runtime, {keepers[1], keepers[2]});
+            if (oldProbeReply) {
+                replayProbeCookie = oldProbeReply->Cookie;
+                runtime.Send(oldProbeReply.release(), otherRoot);
+                CheckStaysConverged(runtime, {keepers[1], keepers[2]});
+                UNIT_ASSERT(!replayProbeCookie);
+            }
+            const auto afterProbe = QueryKeeper(runtime, keepers[otherRoot - 1]);
+            UNIT_ASSERT(beforeProbe.HasScepter() && afterProbe.HasScepter());
+            UNIT_ASSERT_VALUES_EQUAL(afterProbe.GetScepter().GetId(), beforeProbe.GetScepter().GetId());
+            blockProbeReplies = false;
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+        UNIT_ASSERT(workingRootReplies);
+        UNIT_ASSERT_VALUES_EQUAL(probesFromWorkingRoot, 0u);
+        UNIT_ASSERT(initialPushes >= (fault == EJoinFault::LostBindingReply
+                                      || fault == EJoinFault::DisconnectBeforeBinding ? 2u : 1u));
+
+        // Deliver a retired reply before its queued abort.
+        if (fault == EJoinFault::BusyOperation) {
+            UNIT_ASSERT(SimUntil(runtime, [&] { return oldOperationEvents.size() >= 2; }));
+        }
+        allowOldOperation = true;
+        for (auto& ev : oldOperationEvents) {
+            runtime.Send(ev.release(), oldOperation.NodeId());
+        }
+        if (oldBindingReply) {
+            const ui32 recipientNodeId = oldBindingReply->Recipient.NodeId();
+            runtime.Send(oldBindingReply.release(), recipientNodeId);
+        }
+        if (fault == EJoinFault::ObsoleteDisconnect) {
+            const TActorId keeperId = keepers[otherRoot - 1];
+            runtime.WrapInActorContext(keeperId, [&](IActor*) {
+                // A failed subscription reports from the proxy, not the established session.
+                TActivationContext::Send(new IEventHandle(keeperId, TActivationContext::InterconnectProxy(1),
+                                                          new TEvInterconnect::TEvNodeDisconnected(1)));
+            });
+        }
+        CheckStaysConverged(runtime, keepers);
+        const auto after = QueryKeeper(runtime, keepers[0]);
+        UNIT_ASSERT(after.HasScepter());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetScepter().GetId(), before.GetScepter().GetId());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetQueryConfig().GetConfig().GetFingerprint(), working.GetFingerprint());
+    }
+
+    Y_UNIT_TEST(InitialConfigRootJoinsWorkingRoot) {
+        CheckJoinWorkingRoot(EJoinFault::None);
+    }
+
+    Y_UNIT_TEST(BusyRootJoinsAndIgnoresRetiredOperationReply) {
+        CheckJoinWorkingRoot(EJoinFault::BusyOperation);
+    }
+
+    Y_UNIT_TEST(WorkingRootAnswersDiscoveryWhileBusy) {
+        CheckJoinWorkingRoot(EJoinFault::BusyWorkingRoot);
+    }
+
+    Y_UNIT_TEST(ExpiredRootProbeReplyDoesNotReleaseRoot) {
+        CheckJoinWorkingRoot(EJoinFault::ExpiredProbe);
+    }
+
+    Y_UNIT_TEST(UnknownProbeResponseDoesNotReleaseRoot) {
+        CheckJoinWorkingRoot(EJoinFault::UnsupportedProbe);
+    }
+
+    Y_UNIT_TEST(LostBindingReplyIsRetriedAndLateReplyIsIgnored) {
+        CheckJoinWorkingRoot(EJoinFault::LostBindingReply);
+    }
+
+    Y_UNIT_TEST(WorkingRootDisconnectsBeforeBinding) {
+        CheckJoinWorkingRoot(EJoinFault::DisconnectBeforeBinding);
+    }
+
+    Y_UNIT_TEST(ExpiredSubscriptionFailureDoesNotBreakBinding) {
+        CheckJoinWorkingRoot(EJoinFault::ObsoleteDisconnect);
+    }
+
+    enum class ERestartOrder {
+        ConfigMajorityFirst,
+        StorageQuorumFirst,
+        Simultaneous,
+        Partitioned,
+        PartitionAfterCollection,
+    };
+
+    void CheckPartialBootstrapRestart(ERestartOrder order, TDuration bindFailureDelay = TDuration::Seconds(5),
+                                      bool unevenDrives = false) {
+        auto config = MakeStorageConfig(3, 0);
+        auto *selfManagement = config.MutableSelfManagementConfig();
+        selfManagement->SetEnabled(true);
+        selfManagement->SetAutomaticBootstrap(false);
+        selfManagement->SetErasureSpecies("none");
+        selfManagement->SetPDiskType(NKikimrBlobStorage::EPDiskType::ROT);
+        for (ui32 nodeId : {2, 3}) {
+            config.MutableBlobStorageConfig()->MutableDefineHostConfig(nodeId - 1)->MutableDrive(0)->SetType(
+                NKikimrBlobStorage::EPDiskType::SSD);
+        }
+        if (unevenDrives) {
+            for (auto& node : *config.MutableAllNodes()) {
+                node.MutableLocation()->SetDataCenter("dc-1");
+            }
+            auto *hostConfig = config.MutableBlobStorageConfig()->MutableDefineHostConfig(0);
+            for (ui32 diskId : {2, 3}) {
+                auto *drive = hostConfig->AddDrive();
+                drive->SetPath("/dev/disk1_" + std::to_string(diskId));
+                drive->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+            }
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        const TString startupConfigYaml = R"(metadata:
+  kind: MainConfig
+  version: 0
+  cluster: ""
+config: {}
+allowed_labels: {}
+selector_config: []
+)";
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        const auto metadata = [&](ui32 nodeId) -> const NKikimrBlobStorage::TPDiskMetadataRecord& {
+            return state.Metadata.at(std::pair<ui32, TString>{nodeId, "/dev/disk" + std::to_string(nodeId) + "_1"});
+        };
+
+        {
+            TTestActorSystem runtime(3);
+            runtime.Start();
+            Y_DEFER { runtime.Stop(); };
+
+            std::vector<TActorId> keeperIds;
+            for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+                keeperIds.push_back(RegisterKeeper(runtime, config, nodeId, state, startupConfigYaml));
+            }
+            UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keeperIds) == 1; }));
+
+            runtime.FilterFunction = [](ui32, std::unique_ptr<IEventHandle>& ev) {
+                return ev->GetTypeRewrite() != NStorage::TEvNodeConfigReversePush::EventType
+                       || !ev->Get<NStorage::TEvNodeConfigReversePush>()->Record.HasCommittedStorageConfig();
+            };
+            BootstrapCluster(runtime, keeperIds.front());
+            UNIT_ASSERT(SimUntil(runtime, [&] {
+                return state.Metadata.size() == (unevenDrives ? 5 : 3) && metadata(1).HasCommittedStorageConfig();
+            }));
+
+            const auto& committed = metadata(1).GetCommittedStorageConfig();
+            UNIT_ASSERT_VALUES_EQUAL(committed.GetGeneration(), 1u);
+            UNIT_ASSERT(HasQuorum(committed, {1}));
+            for (ui32 nodeId : {2, 3}) {
+                UNIT_ASSERT(!metadata(nodeId).HasCommittedStorageConfig());
+                UNIT_ASSERT_VALUES_EQUAL(metadata(nodeId).GetProposedStorageConfig().GetGeneration(), 1u);
+            }
+        }
+
+        state.RequiredRootNodeId = 0;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keeperIds;
+        THashMap<TActorId, ui32> peerByProxy;
+        THashSet<ui32> stoppedNodes;
+        auto registerNode = [&](ui32 nodeId) {
+            stoppedNodes.erase(nodeId);
+            keeperIds.push_back(RegisterKeeper(runtime, config, nodeId, state, startupConfigYaml));
+            runtime.WrapInActorContext(keeperIds.back(), [&](IActor*) {
+                for (ui32 peerNodeId = 1; peerNodeId <= 3; ++peerNodeId) {
+                    if (peerNodeId != nodeId) {
+                        peerByProxy.emplace(TActivationContext::InterconnectProxy(peerNodeId), peerNodeId);
+                    }
+                }
+            });
+        };
+
+        bool partitioned = order == ERestartOrder::Partitioned;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvents::TSystem::Subscribe) {
+                const auto it = peerByProxy.find(ev->GetRecipientRewrite());
+                if (it != peerByProxy.end()
+                    && (stoppedNodes.contains(it->second) || (partitioned && (nodeId == 1 || it->second == 1)))) {
+                    ScheduleSubscriptionFailure(runtime, nodeId, *ev, it->second, bindFailureDelay);
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        const auto describeRoots = [&] {
+            TStringBuilder result;
+            for (TActorId id : keeperIds) {
+                result << " " << id.NodeId() << "->" << FindConvergedRoot(runtime, {id}).value_or(0);
+            }
+            return TString(result);
+        };
+        TString rootsBeforeHealing;
+        if (order == ERestartOrder::ConfigMajorityFirst) {
+            runtime.StopNode(1);
+            stoppedNodes.insert(1);
+            registerNode(2);
+            registerNode(3);
+            UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keeperIds).has_value(); },
+                                 TDuration::Seconds(30), 2));
+            runtime.StartNode(1);
+            registerNode(1);
+        } else if (order == ERestartOrder::StorageQuorumFirst) {
+            runtime.StopNode(2);
+            runtime.StopNode(3);
+            stoppedNodes = {2, 3};
+            registerNode(1);
+            SimUntil(runtime, [] { return false; });
+            for (ui32 nodeId : {2, 3}) {
+                runtime.StartNode(nodeId);
+                registerNode(nodeId);
+            }
+        } else if (order == ERestartOrder::PartitionAfterCollection) {
+            runtime.StopNode(3);
+            stoppedNodes.insert(3);
+            state.RequiredRootNodeId = 1;
+            registerNode(1);
+            registerNode(2);
+            UNIT_ASSERT(SimUntil(runtime, [&] {
+                return FindConvergedRoot(runtime, keeperIds) == 1 && metadata(2).HasCommittedStorageConfig();
+            }));
+            CheckStaysConverged(runtime, keeperIds);
+
+            partitioned = true;
+            state.RequiredRootNodeId = 3;
+            runtime.WrapInActorContext(keeperIds.front(), [&](IActor*) {
+                TActivationContext::Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0,
+                                                          TActivationContext::InterconnectProxy(2), {}, nullptr, 0));
+            });
+            runtime.StartNode(3);
+            registerNode(3);
+            UNIT_ASSERT(SimUntil(runtime, [&] {
+                return FindConvergedRoot(runtime, {keeperIds[1], keeperIds[2]}) == 3;
+            }));
+            rootsBeforeHealing = describeRoots();
+            partitioned = false;
+            state.RequiredRootNodeId = 0;
+        } else {
+            for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+                registerNode(nodeId);
+            }
+            if (partitioned) {
+                SimUntil(runtime, [] { return false; });
+                rootsBeforeHealing = describeRoots();
+                partitioned = false;
+            }
+        }
+        const bool converged = SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keeperIds).has_value(); },
+                                        TDuration::Minutes(5));
+        UNIT_ASSERT_C(converged,
+                      "nodes with committed and proposed bootstrap configs did not join the same binding tree"
+                      << "; bindFailureDelay=" << bindFailureDelay
+                      << "; before healing:" << rootsBeforeHealing << "; after healing:" << describeRoots());
+
+        const TString fingerprint = metadata(1).GetCommittedStorageConfig().GetFingerprint();
+        const ui32 rootNodeId = *FindConvergedRoot(runtime, keeperIds);
+        const auto root = std::ranges::find_if(keeperIds, [&](TActorId id) { return id.NodeId() == rootNodeId; });
+        BootstrapCluster(runtime, *root);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] {
+            return std::ranges::all_of(keeperIds, [&](TActorId id) {
+                return metadata(id.NodeId()).GetCommittedStorageConfig().GetFingerprint() == fingerprint;
+            });
+        }), "bootstrap configuration was not recovered on all nodes");
+        CheckStaysConverged(runtime, keeperIds);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapRestartConvergesThroughMailbox) {
+        CheckPartialBootstrapRestart(ERestartOrder::ConfigMajorityFirst);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapStorageQuorumStartsFirst) {
+        CheckPartialBootstrapRestart(ERestartOrder::StorageQuorumFirst);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapStorageQuorumStartsFirstWithFastFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::StorageQuorumFirst, TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapSimultaneousRestart) {
+        CheckPartialBootstrapRestart(ERestartOrder::Simultaneous);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHeals) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHealsAfterFastFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapUnevenDrivesPartitionHeals) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(10), true);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionAfterSuccessfulCollectionHeals) {
+        CheckPartialBootstrapRestart(ERestartOrder::PartitionAfterCollection, TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHealsAfter500msFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(500));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHealsAfter999msFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(999));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHealsAfter1000msFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHealsAfter1001msFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(1001));
+    }
+
+    Y_UNIT_TEST(Block42QuorumOverridesNodeMajority) {
+        const auto config = MakeStorageConfig(17, 0, {1, 2, 3, 4, 5, 6, 7, 8},
+                                              TBlobStorageGroupType::Erasure4Plus2Block);
+        UNIT_ASSERT(HasQuorum(config, {1, 2, 3, 4, 5, 6, 7, 8}));
+        UNIT_ASSERT(!HasQuorum(config, {9, 10, 11, 12, 13, 14, 15, 16, 17}));
+    }
+
+    Y_UNIT_TEST(Block42SplitConvergesThroughMailbox) {
+        const auto config = MakeStorageConfig(17, 0, {1, 2, 3, 4, 5, 6, 7, 8},
+                                              TBlobStorageGroupType::Erasure4Plus2Block);
+        TNodeWardenTestState state{9, 10, 11, 12, 13, 14, 15, 16, 17};
+        const ui32 rootNodeId = RunUntilConverged(config, state, TDuration::Minutes(10), true);
+        UNIT_ASSERT(state.SawCompleteMobileBinding);
+        UNIT_ASSERT(state.SawScatter);
+        UNIT_ASSERT(1 <= rootNodeId && rootNodeId <= 8);
+    }
+}
 
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
@@ -968,45 +2031,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         }
 
         void AddMultiVDiskGroupOn(const std::vector<ui32>& nodeIds, i32 erasureSpecies) {
-            auto *ss = Config.MutableBlobStorageConfig()->MutableServiceSet();
-
-            auto *group = ss->AddGroups();
-            group->SetGroupID(0);
-            group->SetGroupGeneration(1);
-            group->SetErasureSpecies(erasureSpecies);
-            auto *ring = group->AddRings();
-
-            for (ui32 domainIdx = 0; domainIdx < nodeIds.size(); ++domainIdx) {
-                const ui32 nodeId = nodeIds[domainIdx];
-                const ui32 pdiskId = 1;
-
-                auto *pdisk = ss->AddPDisks();
-                pdisk->SetNodeID(nodeId);
-                pdisk->SetPDiskID(pdiskId);
-                pdisk->SetPath("/dev/disk" + std::to_string(nodeId) + "_" + std::to_string(pdiskId));
-                pdisk->SetPDiskGuid(nodeId * 1000 + pdiskId);
-                pdisk->SetPDiskCategory(0);
-
-                auto *vdisk = ss->AddVDisks();
-                auto *vid = vdisk->MutableVDiskID();
-                vid->SetGroupID(0);
-                vid->SetGroupGeneration(1);
-                vid->SetRing(0);
-                vid->SetDomain(domainIdx);
-                vid->SetVDisk(0);
-                auto *loc = vdisk->MutableVDiskLocation();
-                loc->SetNodeID(nodeId);
-                loc->SetPDiskID(pdiskId);
-                loc->SetVDiskSlotID(0);
-                loc->SetPDiskGuid(nodeId * 1000 + pdiskId);
-
-                auto *fd = ring->AddFailDomains();
-                auto *gloc = fd->AddVDiskLocations();
-                gloc->SetNodeID(nodeId);
-                gloc->SetPDiskID(pdiskId);
-                gloc->SetVDiskSlotID(0);
-                gloc->SetPDiskGuid(nodeId * 1000 + pdiskId);
-            }
+            AddMultiVDiskGroup(Config, nodeIds, erasureSpecies);
         }
 
         std::vector<ui32> GetGroupDomainNodes() const {

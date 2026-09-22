@@ -249,6 +249,58 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         UNIT_ASSERT_VALUES_EQUAL_C(collectResult->Get()->Status, NKikimrProto::OK, collectResult->Get()->ToString());
     }
 
+    Y_UNIT_TEST(MaxGenerationBlockCollectsBlobs) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+
+        auto& env = *tenv.Env;
+        const ui32 nodeId = 1;
+        const ui32 groupId = tenv.BlobDepot;
+        const ui64 tabletId = 100;
+        auto sender = env.Runtime->AllocateEdgeActor(nodeId);
+
+        const TString data = tenv.DataGen(100);
+        const TLogoBlobID id(tabletId, 1, 1, 0, data.size(), 0);
+
+        SendTEvPut(env, sender, groupId, id, data);
+        auto putResult = CaptureTEvPutResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(putResult->Get()->Status, NKikimrProto::OK, putResult->Get()->ToString());
+
+        SendTEvGet(env, sender, groupId, id);
+        auto getResult = CaptureTEvGetResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Status, NKikimrProto::OK, getResult->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Responses[0].Status, NKikimrProto::OK,
+            getResult->Get()->ToString());
+
+        // Hive deletes the tablet for good: the Max generation block alone has to collect its data,
+        // because the hard barrier that normally follows may never be observed -- a VDisk that has
+        // seen this block is free to drop the barrier records of this tablet
+        SendTEvBlock(env, sender, groupId, tabletId, Max<ui32>());
+        auto blockResult = CaptureTEvBlockResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(blockResult->Get()->Status, NKikimrProto::OK, blockResult->Get()->ToString());
+
+        env.Sim(TDuration::Seconds(1));
+
+        SendTEvGet(env, sender, groupId, id);
+        getResult = CaptureTEvGetResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Status, NKikimrProto::OK, getResult->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Responses[0].Status, NKikimrProto::NODATA,
+            getResult->Get()->ToString());
+
+        // The hard barrier Hive sends after the block is redundant by now and must not be recorded:
+        // Hive retries it, and each retry would otherwise bring back a barrier row we have purged.
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            SendTEvCollectGarbage(env, sender, groupId, tabletId, Max<ui32>(), Max<ui32>(), id.Channel(),
+                true, Max<ui32>(), Max<ui32>(), nullptr, nullptr, false, true);
+            auto collectResult = CaptureTEvCollectGarbageResult(env, sender, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(collectResult->Get()->Status, NKikimrProto::OK,
+                collectResult->Get()->ToString());
+        }
+    }
+
     Y_UNIT_TEST(TrashBatchReloadAfterRestartWithTinyLimit) {
         ui32 seed;
         LoadSeed(seed);

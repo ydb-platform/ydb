@@ -2,6 +2,9 @@
 
 #include <yt/yt/core/misc/bitmap.h>
 
+#include <cstring>
+#include <new>
+
 namespace NYT {
 namespace {
 
@@ -197,6 +200,26 @@ TEST_P(TBitmapOutputTest, TestAppend)
 }
 
 INSTANTIATE_TEST_SUITE_P(TBitmapOutputTest, TBitmapOutputTest, BitmapTestValues);
+
+TEST(TBitmapOutputPaddingTest, InitializesSerializedStorage)
+{
+    alignas(TBitmapOutput) unsigned char storage[sizeof(TBitmapOutput)];
+    std::memset(storage, 0xff, sizeof(storage));
+
+    auto* bitmap = ::new (storage) TBitmapOutput();
+    bitmap->Set(0);
+
+    ASSERT_EQ(bitmap->GetByteSize(), NBitmapDetail::SerializationAlignment);
+    EXPECT_EQ(bitmap->GetData()[0], 1);
+    for (int index = 1; index < static_cast<int>(bitmap->GetByteSize()); ++index) {
+        EXPECT_EQ(bitmap->GetData()[index], 0);
+    }
+
+    bitmap->Set(3);
+    EXPECT_EQ(static_cast<int>(bitmap->GetBitSize()), 4);
+
+    bitmap->~TBitmapOutput();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,6 +1,6 @@
 # Text: bridge pin of a scanned string column
 
-Shows **WASM Bridge** (`calling_convention: "bridge"`) on the `Text` UDF over a
+Shows **WASM Bridge** on the `Text` UDF over a
 **physical column** of the scanned table.
 
 `RegisterOrReuse` + `BridgeEnsureString` pin each distinct `txt` value into

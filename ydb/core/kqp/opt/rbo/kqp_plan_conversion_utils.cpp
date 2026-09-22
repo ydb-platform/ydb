@@ -446,12 +446,12 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) 
     auto rightInput = ExprNodeToOperator(opJoin.RightInput().Ptr());
 
     auto joinKind = opJoin.JoinKind().StringValue();
-    TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+    TVector<TJoinKey> joinKeys;
     for (auto k : opJoin.JoinKeys()) {
         TInfoUnit leftKey(k.LeftLabel().StringValue(), k.LeftColumn().StringValue());
         TInfoUnit rightKey(k.RightLabel().StringValue(), k.RightColumn().StringValue());
 
-        joinKeys.push_back(std::make_pair(leftKey, rightKey));
+        joinKeys.emplace_back(leftKey, rightKey);
     }
 
     TVector<TExpression> joinFilters;
@@ -538,7 +538,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
         TVector<TMapElement> leftNullableMap;
         TVector<TMapElement> rightNullableMap;
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        TVector<TJoinKey> joinKeys;
 
         for (const auto& t : itemType->GetItems()) {
             // Use stable pickle for nullable columns
@@ -549,10 +549,10 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
                 TInfoUnit newRightKey = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++));
                 leftNullableMap.push_back(TMapElement(newLeftKey, pickleExpr));
                 rightNullableMap.push_back(TMapElement(newRightKey, pickleExpr));
-                joinKeys.push_back(std::make_pair(newLeftKey, newRightKey));
+                joinKeys.emplace_back(newLeftKey, newRightKey);
             } else {
                 auto key = TInfoUnit(TString(t->GetName()));
-                joinKeys.push_back(std::make_pair(key, key));
+                joinKeys.emplace_back(key, key);
             }
         }
 
@@ -686,7 +686,14 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpGroupingSets(TExprNode::TPt
         groupingSets.emplace_back(std::move(keys));
     }
 
-    return MakeIntrusive<TOpGroupingSets>(CastOperator<TOpAggregate>(input), std::move(groupingSets), node->Pos());
+    TOpGroupingSets::TGroupingIndicators groupingIndicators;
+    groupingIndicators.reserve(opGroupingSets.GroupingIndicators().Size());
+    for (const auto& indicator : opGroupingSets.GroupingIndicators()) {
+        Y_ENSURE(indicator.Size() == 2, "Grouping indicator must be a pair of a group by key and a column");
+        groupingIndicators.emplace_back(TInfoUnit(indicator.Item(0).StringValue()), TInfoUnit(indicator.Item(1).StringValue()));
+    }
+
+    return MakeIntrusive<TOpGroupingSets>(CastOperator<TOpAggregate>(input), std::move(groupingSets), std::move(groupingIndicators), node->Pos());
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpWindow(TExprNode::TPtr node) {

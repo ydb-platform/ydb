@@ -1060,7 +1060,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                     ExprText: "a + b"
                     Stored: true
                     DependencyColumnNames: ["a", "b"]
-                    Context: "USE `/MyRoot`;"
                 }
             }
             Columns {
@@ -1070,7 +1069,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                     ExprText: "a - b"
                     Stored: false
                     DependencyColumnNames: ["a", "b"]
-                    Context: ""
                 }
             }
             KeyColumnNames: ["key"]
@@ -1101,7 +1099,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         UNIT_ASSERT_C(sum && sum->HasDefaultFromExpression(), describe.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetExprText(), "a + b");
         UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetStored(), true);
-        UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetContext(), "USE `/MyRoot`;");
         UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().DependencyColumnNamesSize(), 2u);
 
         const auto* diff = findColumn(describe, "diff");

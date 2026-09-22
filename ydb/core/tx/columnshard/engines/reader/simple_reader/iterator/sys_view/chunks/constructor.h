@@ -19,9 +19,9 @@ private:
 
 public:
     TPortionDataConstructor(const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const TPortionInfo::TConstPtr& portion,
-        const ISnapshotSchema::TPtr& schema)
+        const ISnapshotSchema::TPtr& schema, const ESourcesSorting sourcesSorting)
         : TBase(tabletId, TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portion->GetPortionId(), 0, 0),
-              TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portion->GetPortionId(), Max<ui32>(), Max<ui32>()))
+              TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portion->GetPortionId(), Max<ui32>(), Max<ui32>()), sourcesSorting)
         , PathId(pathId)
         , Portion(portion)
         , Schema(schema)

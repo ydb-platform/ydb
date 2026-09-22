@@ -73,6 +73,40 @@ public:
         InitSource(BuildPqTopicSourceSettings(topic));
     }
 
+    NYdb::NTopic::TPartitionConsumerStats DescribeConsumer(const TString& topic) const {
+        NYdb::NTopic::TTopicClient client(Driver, NYdb::NTopic::TTopicClientSettings()
+            .Database(GetDefaultPqDatabase()).DiscoveryEndpoint(GetDefaultPqEndpoint()));
+        const auto result = client.DescribeConsumer(topic, DefaultPqConsumer,
+            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)
+                .ClientTimeout(TDuration::Seconds(10))).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        const auto& partitions = result.GetConsumerDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        UNIT_ASSERT(partitions[0].GetPartitionConsumerStats());
+        return *partitions[0].GetPartitionConsumerStats();
+    }
+
+    void CommitSourceState(const NDqProto::TCheckpoint& checkpoint) const {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            actor.DqAsyncInput->CommitState(checkpoint);
+        });
+    }
+
+    void WaitForConsumerOffset(const TString& topic, ui64 expected) const {
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        ui64 actual = 0;
+        do {
+            UNIT_ASSERT(SourceRead<TString>(UVParser).empty());
+            actual = DescribeConsumer(topic).GetCommittedOffset();
+            UNIT_ASSERT_LE(actual, expected);
+            if (actual == expected) {
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(20));
+        } while (TInstant::Now() < deadline);
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    }
+
     template<typename T>
     void PQRead(
         const std::vector<TWatermarkOr<T>>& expected,
@@ -138,6 +172,23 @@ public:
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
+    Y_UNIT_TEST_F(CommitAfterExplicitReadOffset, TFixture) {
+        const TString topicName = "CommitAfterExplicitReadOffset";
+        PQCreateStream(topicName);
+        PQWrite({Message0, Message1, Message2}, topicName);
+        auto settings = BuildPqTopicSourceSettings(topicName);
+        settings.MutableOffsetPredicate()->AddItem()->SetBegin(1);
+        InitSource(std::move(settings));
+        PQRead<TString>({Message1, Message2});
+
+        UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 0);
+        const auto checkpoint = CreateCheckpoint(1);
+        TSourceState state;
+        SaveSourceState(checkpoint, state);
+        CommitSourceState(checkpoint);
+        WaitForConsumerOffset(topicName, 3);
+    }
+
     Y_UNIT_TEST_F(TestReadFromTopic, TFixture) {
         const TString topicName = "ReadFromTopic";
         PQCreateStream(topicName);

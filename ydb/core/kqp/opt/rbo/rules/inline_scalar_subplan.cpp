@@ -117,9 +117,9 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
             }
         }
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        TVector<TJoinKey> joinKeys;
         for (const auto& iu : dependencies) {
-            joinKeys.push_back(std::make_pair(iu, iu));
+            joinKeys.emplace_back(iu, iu);
         }
         TIntrusivePtr<IOperator> joinLeftInput = child;
         TIntrusivePtr<IOperator> joinRightInput = rightInput;
@@ -143,7 +143,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         renameElements.emplace_back(scalarIU, checkedResIU, subplan->Pos, &ctx.ExprCtx, &props);
         auto rename = MakeIntrusive<TOpMap>(checkedInput, subplan->Pos, renameElements);
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        TVector<TJoinKey> joinKeys;
         auto cross = MakeIntrusive<TOpJoin>(child, rename, subplan->Pos, "Cross", joinKeys);
         unaryOp->SetInput(cross);
     }

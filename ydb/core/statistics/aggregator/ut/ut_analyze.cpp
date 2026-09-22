@@ -10,6 +10,7 @@
 
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 
@@ -791,6 +792,15 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest1.release());
 
         runtime.WaitFor("TEvKqpScan", [&]{ return !block.empty(); });
+
+        // The scan actor starts in the scheduling transaction's Execute(), so
+        // seeing a scan does not imply that the active operation is durable yet.
+        // A read-only tablet transaction completes after earlier writes commit.
+        NTabletFlatScheme::TSchemeChanges scheme;
+        TString error;
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            LocalSchemeTx(runtime, tableInfo.SaTabletId, "", /*dryRun=*/true, scheme, error),
+            NKikimrProto::OK, error);
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
         // After restart, the operation must still appear as IN_PROGRESS, not ENQUEUED.

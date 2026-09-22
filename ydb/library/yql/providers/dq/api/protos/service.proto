@@ -42,6 +42,8 @@ message TFile {
     EFileType ObjectType = 4;
     int64 Size = 5;
     string CustomUdfPrefix = 6;
+    // MD5 of LocalPath contents, if known.
+    string ContentMd5 = 7;
 }
 
 message TWorkerInfo {

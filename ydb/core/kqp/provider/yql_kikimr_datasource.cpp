@@ -463,6 +463,7 @@ public:
                 ) {
                     const auto& viewMetadata = *res.Metadata;
                     auto* viewInfo = preparingQuery->MutablePhysicalQuery()->MutableViewInfos()->Add();
+                    viewInfo->SetTableName(viewMetadata.Name);
                     auto* pathId = viewInfo->MutableTableId();
                     pathId->SetOwnerId(viewMetadata.PathId.OwnerId());
                     pathId->SetTableId(viewMetadata.PathId.TableId());
@@ -525,6 +526,13 @@ protected:
         }
 
         if (!GetDispatcher()->Dispatch(cluster, name, normalizedValue, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
+            return false;
+        }
+
+        // Pragma names arrive here normalized (lowercase, no underscores).
+        if (name == "kqpdisablepessimisticlocks" && !SessionCtx->Query().IsolateEffects) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED, TStringBuilder()
+                << "Pragma kikimr.KqpDisablePessimisticLocks is only supported for ReadCommittedRW isolation level"));
             return false;
         }
 

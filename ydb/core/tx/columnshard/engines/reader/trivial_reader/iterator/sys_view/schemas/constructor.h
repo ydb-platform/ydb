@@ -14,10 +14,11 @@ private:
     std::vector<ISnapshotSchema::TPtr> Schemas;
 
 public:
-    TDataSourceConstructor(const ui64 tabletId, std::vector<ISnapshotSchema::TPtr>&& schemas)
+    TDataSourceConstructor(const ui64 tabletId, std::vector<ISnapshotSchema::TPtr>&& schemas, const ESourcesSorting sourcesSorting)
         : TBase(tabletId,
               TSchemaAdapter::GetPKTrivialRow(tabletId, schemas.front()->GetIndexInfo().GetPresetId(), schemas.front()->GetVersion()),
-              TSchemaAdapter::GetPKTrivialRow(tabletId, schemas.back()->GetIndexInfo().GetPresetId(), schemas.back()->GetVersion()))
+              TSchemaAdapter::GetPKTrivialRow(tabletId, schemas.back()->GetIndexInfo().GetPresetId(), schemas.back()->GetVersion()),
+              sourcesSorting)
         , Schemas(std::move(schemas))
     {
         if (Schemas.size() > 1) {

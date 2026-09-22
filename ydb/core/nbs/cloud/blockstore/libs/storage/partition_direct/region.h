@@ -29,6 +29,7 @@ public:
         ui32 regionIndex,
         const TVector<IDirectBlockGroupPtr>& directBlockGroups,
         const TVChunkConfigs& vChunkConfigs,
+        TRegionVChunks touchedVChunks,
         const TDirtyMapStateProtos& dirtyMapStates,
         ui32 syncRequestsBatchSize,
         // Volume block size, distinct from the 4 KiB DDisk integrity unit.

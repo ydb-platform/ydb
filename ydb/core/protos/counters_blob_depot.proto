@@ -204,4 +204,5 @@ enum ETxTypes {
     TXTYPE_HARD_COLLECT_ASSIMILATED_BLOBS = 22 [(NKikimr.TxTypeOpts) = {Name: "TTxHardCollectAssimilatedBlobs"}];
     TXTYPE_MOVE_DATA_SCAN = 23 [(NKikimr.TxTypeOpts) = {Name: "TTxMoveDataScan"}];
     TXTYPE_MOVE_DATA_UPDATE_INDEX = 24 [(NKikimr.TxTypeOpts) = {Name: "TTxMoveDataUpdateIndex"}];
+    TXTYPE_DELETE_TABLET_DATA = 25 [(NKikimr.TxTypeOpts) = {Name: "TTxDeleteTabletData"}];
 }

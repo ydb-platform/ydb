@@ -1,8 +1,13 @@
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
+#include <ydb/core/statistics/aggregator/analyze_actor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/compilation/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
@@ -25,8 +30,169 @@ Y_UNIT_TEST_SUITE(KqpAnalyze) {
 
 using namespace NStat;
 
+ui64 FailedNewRboCompilations(TTestActorRuntime& runtime) {
+    ui64 result = 0;
+    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+        TKqpCounters counters(runtime.GetAppData(node).Counters);
+        result += counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val();
+    }
+    return result;
+}
+
+Y_UNIT_TEST_TWIN(AnalyzeScansWithNewRboWithoutFallback, PerShard) {
+    TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+        auto* tableService = settings.AppConfig->MutableTableServiceConfig();
+        tableService->SetEnableNewRBO(true);
+        tableService->SetEnableFallbackToYqlOptimizer(false);
+    });
+    auto& runtime = *env.GetServer().GetRuntime();
+    CreateDatabase(env, "Database");
+    const auto table = PrepareMultiColumnAllTypesTable(env, "Database", "nested/Table", true);
+    WaitForSchemeShardStatsUpdate(runtime, table.PathId.OwnerId, true);
+
+    size_t scanRequests = 0;
+    auto observer = runtime.AddObserver<TEvKqp::TEvQueryRequest>([&](auto& ev) {
+        if (ev->Get()->GetRequestType() == NRequestTypes::Analyze) {
+            UNIT_ASSERT(ev->Get()->IsInternalCall());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetQuery().Contains("WITH TabletId"), PerShard);
+            ++scanRequests;
+        }
+    });
+    const auto failedBefore = FailedNewRboCompilations(runtime);
+    // Exercise generated scans with fallback disabled. Persistence uses a
+    // separate query that still needs the normal optimizer fallback.
+    TAnalyzeActor::TConfig config;
+    config.ColumnTableWholeTableScanMaxBytes = PerShard ? 0 : (1ULL << 30);
+    config.TableBytesSize = 1; // The fixture fits in the whole-table threshold.
+    const auto edge = runtime.AllocateEdgeActor(1);
+    runtime.Register(new TAnalyzeActor(edge, "newRbo", "/Root/Database", table.PathId, {}, config), 1);
+    bool haveSummary = false;
+    bool haveSketch = false;
+    bool haveHistogram = false;
+    while (true) {
+        auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeActorResult>(edge);
+        UNIT_ASSERT(response);
+        const auto& result = *response->Get();
+        UNIT_ASSERT_C(result.Status == TEvStatistics::TEvAnalyzeActorResult::EStatus::Success,
+            result.Issues.ToString());
+        for (const auto& item : result.Statistics) {
+            if (item.Type == EStatType::TABLE_SUMMARY) {
+                NKikimrStat::TTableSummaryStatistics summary;
+                UNIT_ASSERT(summary.ParseFromString(item.Data));
+                UNIT_ASSERT_VALUES_EQUAL(summary.GetRowCount(), ColumnTableRowsNumber);
+                haveSummary = true;
+            }
+            const auto* tags = item.ColumnTags.AsMulti();
+            if (tags && *tags == std::vector<ui32>{2, 3}) {
+                UNIT_ASSERT(!item.Data.empty());
+                haveSketch |= item.Type == EStatType::COUNT_MIN_SKETCH;
+                haveHistogram |= item.Type == EStatType::EQ_HEIGHT_HISTOGRAM;
+            }
+        }
+        if (result.Final) {
+            break;
+        }
+    }
+    UNIT_ASSERT(haveSummary);
+    UNIT_ASSERT(haveSketch);
+    UNIT_ASSERT(haveHistogram);
+    UNIT_ASSERT_GT(scanRequests, 0);
+    UNIT_ASSERT_VALUES_EQUAL(FailedNewRboCompilations(runtime), failedBefore);
+}
+
+Y_UNIT_TEST_TWIN(AnalyzeOptimizerCache, AnalyzeFirst) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+    appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+    TKikimrRunner kikimr{TKikimrSettings(appConfig).SetWithSampleTables(false)};
+    const auto session = kikimr.GetTableClient().CreateSession().GetValueSync();
+    UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    const auto edge = runtime.AllocateEdgeActor();
+    const auto service = MakeKqpCompileServiceID(runtime.GetNodeId());
+    TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken("root@builtin", {});
+    auto context = MakeIntrusive<TUserRequestContext>("analyze-cache", "/Root", "analyze-cache");
+    TKqpCounters counters(runtime.GetAppData().Counters);
+    const auto successes = counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success");
+    const auto failures = counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed");
+
+    const auto execute = [&](bool internalCall, bool analyzeRequest) {
+        auto request = std::make_unique<TEvKqp::TEvQueryRequest>();
+        request->Record.SetUserToken(token->GetSerializedToken());
+        if (analyzeRequest) {
+            request->Record.SetRequestType(TString(NRequestTypes::Analyze));
+        }
+        auto& query = *request->Record.MutableRequest();
+        query.SetDatabase("/Root");
+        query.SetSessionId(TString(session.GetSession().GetId()));
+        query.SetKeepSession(true);
+        query.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        query.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        query.SetQuery("SELECT 1 AS value;");
+        query.SetIsInternalCall(internalCall);
+        query.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        query.MutableTxControl()->set_commit_tx(true);
+        query.MutableQueryCachePolicy()->set_keep_in_cache(true);
+        query.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+        runtime.Send(new IEventHandle(MakeKqpProxyID(runtime.GetNodeId()), edge, request.release()));
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvQueryResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(response);
+        const auto& record = response->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), Ydb::StatusIds::SUCCESS, record.DebugString());
+        const auto& result = record.GetResponse();
+        UNIT_ASSERT(!result.GetPreparedQuery().empty());
+        UNIT_ASSERT(result.HasQueryStats());
+        return std::make_pair(result.GetPreparedQuery(), result.GetQueryStats().GetCompilation().GetFromCache());
+    };
+
+    const auto failedBefore = failures->Val();
+    // Go through the session actor: a request-type label alone must not select
+    // the ANALYZE optimizer, and unrelated internal calls must still use new RBO.
+    for (bool internalCall : {true, false}) {
+        TString uids[2];
+        for (bool analyzeRequest : {AnalyzeFirst, !AnalyzeFirst}) {
+            const bool expectCached = !internalCall && analyzeRequest != AnalyzeFirst;
+            const ui64 expectedCompilations = !expectCached && !(internalCall && analyzeRequest) ? 1 : 0;
+            const auto before = successes->Val();
+            const auto [uid, fromCache] = execute(internalCall, analyzeRequest);
+            UNIT_ASSERT_VALUES_EQUAL(fromCache, expectCached);
+            UNIT_ASSERT_VALUES_EQUAL(successes->Val() - before, expectedCompilations);
+            uids[analyzeRequest] = uid;
+            const auto cached = execute(internalCall, analyzeRequest);
+            UNIT_ASSERT(cached.second);
+            UNIT_ASSERT_VALUES_EQUAL(cached.first, uid);
+            UNIT_ASSERT_VALUES_EQUAL(successes->Val() - before, expectedCompilations);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(uids[0] == uids[1], !internalCall);
+        if (internalCall) {
+            // Recompile the session's cached queries by UID, preserving their
+            // optimizer selection without reconstructing IsAnalyze in the test.
+            for (bool analyzeRequest : {false, true}) {
+                const auto before = successes->Val();
+                runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(
+                    token, "", uids[analyzeRequest], Nothing(), /*isQueryActionPrepare=*/false,
+                    TInstant::Max(), nullptr, std::make_shared<TGUCSettings>(), Nothing(),
+                    std::make_shared<std::atomic<bool>>(true), context)));
+                auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
+                UNIT_ASSERT(response && response->Get()->CompileResult);
+                const auto& result = response->Get()->CompileResult;
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+                UNIT_ASSERT(!response->Get()->Stats.FromCache);
+                UNIT_ASSERT(result->Query);
+                UNIT_ASSERT_VALUES_EQUAL(result->Query->Settings.IsAnalyze, analyzeRequest);
+                UNIT_ASSERT_VALUES_EQUAL(successes->Val() - before, analyzeRequest ? 0 : 1);
+            }
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(failures->Val(), failedBefore);
+}
+
 Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
-    TTestEnv env(1, 1, true);
+    TTestEnv env(1, 1, true, [](Tests::TServerSettings& settings) {
+        auto* tableService = settings.AppConfig->MutableTableServiceConfig();
+        tableService->SetEnableNewRBO(true);
+        tableService->SetEnableFallbackToYqlOptimizer(true);
+    });
 
     CreateDatabase(env, "Database");
 
@@ -71,12 +237,15 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     result = client.BulkUpsert("Root/Database/Table", rows.Build()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
+    auto& runtime = *env.GetServer().GetRuntime();
+    const auto failedBefore = FailedNewRboCompilations(runtime);
     result = session.ExecuteSchemeQuery(
         Sprintf(R"(ANALYZE `Root/%s/%s`)", "Database", "Table")
     ).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    // Statistics-save queries retain the normal new-RBO fallback path.
+    UNIT_ASSERT_GT(FailedNewRboCompilations(runtime), failedBefore);
 
-    auto& runtime = *env.GetServer().GetRuntime();
     ui64 saTabletId;
     auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
 

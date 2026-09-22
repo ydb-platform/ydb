@@ -338,7 +338,7 @@ public:
     bool Reset(const TKeeperParams &params, const TColorLimits &limits, TString &outErrorReason) {
         Params = params;
         ColorLimits = limits;
-        ChunkLimits = TColorLimits::MakeChunkLimits(params.ChunkBaseLimit);
+        ChunkLimits = TColorLimits::MakeChunkLimits(params.ChunkBaseLimit, params.TightSpaceColorFloors);
         IsResetting = true;
 
         GlobalQuota->Reset(params.TotalChunks, limits);

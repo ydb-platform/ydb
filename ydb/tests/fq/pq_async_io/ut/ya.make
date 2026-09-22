@@ -5,13 +5,16 @@ SIZE(MEDIUM)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 SRCS(
+    dq_pq_info_aggregator_ut.cpp
     dq_pq_rd_read_actor_ut.cpp
     dq_pq_read_actor_ut.cpp
     dq_pq_write_actor_ut.cpp
 )
 
 PEERDIR(
+    library/cpp/protobuf/interop
     ydb/core/testlib/basics/default
+    ydb/library/testlib/common
     ydb/library/testlib/pq_helpers
     ydb/library/yql/providers/common/ut_helpers
     ydb/library/yql/providers/pq/gateway/native

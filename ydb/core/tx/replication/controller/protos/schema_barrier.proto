@@ -1,0 +1,7 @@
+package NKikimrReplicationController;
+
+// Controller-local snapshot of write transactions to flush before destination DDL.
+// The repeated field preserves source-version order across controller restarts.
+message TSchemaBarrierFlushTxIds {
+    repeated uint64 WriteTxIds = 1 [packed = true];
+}

@@ -857,6 +857,17 @@
             ]
         },
         {
+            "Name": "TKqpStreamingAggregation",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpStreamingAggregation"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Keys", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Handlers", "Type": "TCoAggregateTupleList"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TKqpStreamEnumerate",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpStreamEnumerate"},
@@ -1111,12 +1122,21 @@
             "ListBase": "TKqpOpGroupingSet"
         },
         {
+            "Name": "TKqpOpGroupingIndicator",
+            "ListBase": "TCoAtom"
+        },
+        {
+            "Name": "TKqpOpGroupingIndicatorList",
+            "ListBase": "TKqpOpGroupingIndicator"
+        },
+        {
             "Name": "TKqpOpGroupingSets",
             "Base": "TCallable",
             "Match" : {"Type": "Callable", "Name": "KqpOpGroupingSets"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TKqpOpAggregate"},
-                {"Index": 1, "Name": "GroupingSets", "Type": "TKqpOpGroupingSetList"}
+                {"Index": 1, "Name": "GroupingSets", "Type": "TKqpOpGroupingSetList"},
+                {"Index": 2, "Name": "GroupingIndicators", "Type": "TKqpOpGroupingIndicatorList"}
             ]
         },
         {

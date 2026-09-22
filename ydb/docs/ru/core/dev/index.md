@@ -6,6 +6,7 @@
 
 - [{#T}](getting-started.md)
 - [{#T}](example-app/index.md)
+- [{#T}](sqlc-ydb.md)
 - [{#T}](yql-tutorial/index.md)
 - Выбор первичного ключа для:
   - [Строчных таблиц](primary-key/row-oriented.md)

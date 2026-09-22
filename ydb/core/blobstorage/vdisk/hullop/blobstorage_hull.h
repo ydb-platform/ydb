@@ -145,10 +145,14 @@ namespace NKikimr {
 
         ///////////////// COMPLETE TABLE DELETION ///////////////////////////////
         // Complete table deletion is implemented as 2 commands:
-        // 1. Set BLOCK with gen=Max<ui32>()
+        // 1. Set BLOCK with gen=Max<ui32>() -- this is the persistent tombstone
         // 2. Set BARRIER (i.e. GarbageCollect) with collectGeneration=Max<ui32>() and
         //    collectStep=Max<ui32>(). For this command perGenCounter must also be
         //    set to Max<ui32>()
+        //
+        // Once the Max generation block is present, the tablet is treated as fully
+        // deleted: no blob data is needed, and compaction may drop every barrier
+        // record for that tablet. The Max generation block itself is kept.
 
         ////////////////////////////////////////////////////////////////////////
         // Blocks

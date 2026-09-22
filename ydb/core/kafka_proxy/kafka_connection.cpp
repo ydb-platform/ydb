@@ -83,15 +83,12 @@ public:
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
 
     std::shared_ptr<Msg> Request;
-    std::unordered_map<ui64, Msg::TPtr> PendingRequests;
-    std::deque<Msg::TPtr> PendingRequestsQueue;
+    Msg::TPtr PendingRequest;
 
     enum EReadSteps { SIZE_READ, SIZE_PREPARE, INFLIGHT_CHECK, HEADER_READ, HEADER_PROCESS, MESSAGE_READ, MESSAGE_PROCESS };
     EReadSteps Step;
 
     TReadDemand Demand;
-
-    size_t InflightSize;
 
     TActorId ProduceActorId;
     TActorId AuthActorId;
@@ -117,7 +114,6 @@ public:
         , BufferedWriter(Socket.Get(), config.GetPacketSize())
         , Step(SIZE_READ)
         , Demand(NoDemand)
-        , InflightSize(0)
         , ServerCreds(serverCreds)
         , Context(std::make_shared<TContext>(config))
     {
@@ -178,8 +174,7 @@ protected:
         YDB_LOG_DEBUG("Shutdown",
             {LogPrefix()});
 
-        PendingRequests.clear();
-        PendingRequestsQueue.clear();
+        PendingRequest.reset();
 
         if (Socket) {
             Socket->Shutdown();
@@ -447,8 +442,15 @@ protected:
 
         Request->Method = apiKeyNameIt->second;
 
-        PendingRequestsQueue.push_back(Request);
-        PendingRequests[Request->Header.CorrelationId] = Request;
+        if (PendingRequest) {
+            YDB_LOG_ERROR("Another request is already in flight",
+                {LogPrefix()},
+                {"pendingCorrelationId", PendingRequest->Header.CorrelationId},
+                {"correlationId", Request->Header.CorrelationId});
+            PassAway();
+            return false;
+        }
+        PendingRequest = Request;
 
         SendRequestMetrics(ctx);
         if (Request->Header.ClientId.has_value() && Request->Header.ClientId != "") {
@@ -813,57 +815,49 @@ protected:
     }
 
     void Reply(const ui64 correlationId, TApiMessage::TPtr response, EKafkaErrors errorCode, const TActorContext& ctx) {
-        auto it = PendingRequests.find(correlationId);
-        if (it == PendingRequests.end()) {
+        if (!PendingRequest || PendingRequest->Header.CorrelationId != static_cast<TKafkaInt32>(correlationId)) {
             YDB_LOG_ERROR("Unexpected correlationId",
                 {LogPrefix()},
                 {"correlationId", correlationId});
             return;
         }
 
-        auto& request = it->second;
-        request->Response = response;
-        request->ResponseErrorCode = errorCode;
+        PendingRequest->Response = response;
+        PendingRequest->ResponseErrorCode = errorCode;
 
-        if (!ProcessReplyQueue(ctx)) {
+        if (!TrySendPendingReply(ctx)) {
             return;
         }
         RequestPoller();
     }
 
-    void OnRequestProcessed(const Msg::TPtr& request) {
-        YDB_LOG_TRACE("Request with correlationId processed. Erasing it from PendingRequests and PendingRequestsQueue",
+    void FinishPendingRequest() {
+        if (!PendingRequest) {
+            return;
+        }
+        YDB_LOG_TRACE("Request with correlationId processed",
             {LogPrefix()},
-            {"correlationId", request->Header.CorrelationId});
-        InflightSize -= request->ExpectedSize;
-        PendingRequests.erase(request->Header.CorrelationId);
-        PendingRequestsQueue.pop_front();
+            {"correlationId", PendingRequest->Header.CorrelationId});
+        PendingRequest.reset();
     }
 
-    bool ProcessReplyQueue(const TActorContext& ctx) {
-        while(!PendingRequestsQueue.empty()) {
-            auto& request = PendingRequestsQueue.front();
-            YDB_LOG_TRACE("Processing reply queue for request with correlationId",
-                {LogPrefix()},
-                {"correlationId", request->Header.CorrelationId});
-            if (request->Response.get() == nullptr) {
-                YDB_LOG_TRACE("Response for request with correlationId is empty",
-                    {LogPrefix()},
-                    {"correlationId", request->Header.CorrelationId});
-                break;
-            }
-
-            if (RetryingWriteToSocket || !Reply(&request->Header, request->Response.get(), request->Method, request->StartTime, request->ResponseErrorCode, ctx)) {
-                return false;
-            }
-
-            OnRequestProcessed(request);
-        }
-
+    void TryUnmute(const TActorContext& ctx) {
         if (!CloseConnection && Step == INFLIGHT_CHECK) {
             DoRead(ctx);
         }
+    }
 
+    bool TrySendPendingReply(const TActorContext& ctx) {
+        if (!PendingRequest || PendingRequest->Response.get() == nullptr) {
+            return true;
+        }
+
+        if (RetryingWriteToSocket || !Reply(&PendingRequest->Header, PendingRequest->Response.get(), PendingRequest->Method, PendingRequest->StartTime, PendingRequest->ResponseErrorCode, ctx)) {
+            return false;
+        }
+
+        FinishPendingRequest();
+        TryUnmute(ctx);
         return true;
     }
 
@@ -1013,22 +1007,22 @@ protected:
                         [[fallthrough]];
 
                     case INFLIGHT_CHECK:
-                        if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
-                            // Allow only one message to be processed at a time for non-authenticated users
-                            YDB_LOG_ERROR("DoRead: failed inflight check: there are pending requests and user is not authnicated. Only one paraller request is allowed for a non-authenticated user",
+                        // Apache Kafka: one in-flight request per connection. Mute until the previous
+                        // request is answered. Clients may still pipeline into the OS socket buffer.
+                        if (PendingRequest) {
+                            YDB_LOG_TRACE("DoRead: connection muted until previous request is answered",
                                 {LogPrefix()},
-                                {"pendingRequestsQueue", PendingRequestsQueue.size()});
+                                {"pendingCorrelationId", PendingRequest->Header.CorrelationId});
                             return true;
                         }
-                        if (InflightSize + Request->ExpectedSize > Context->Config.GetMaxInflightSize()) {
+                        if (static_cast<ui64>(Request->ExpectedSize) > Context->Config.GetMaxInflightSize()) {
                             // We limit the size of processed messages so as not to exceed the size of available memory
-                            YDB_LOG_ERROR("DoRead: failed inflight check: InflightSize + >",
+                            YDB_LOG_ERROR("DoRead: failed inflight check: request is bigger than MaxInflightSize",
                                 {LogPrefix()},
-                                {"expectedSize", InflightSize + Request->ExpectedSize},
+                                {"expectedSize", Request->ExpectedSize},
                                 {"getMaxInflightSize", Context->Config.GetMaxInflightSize()});
                             return true;
                         }
-                        InflightSize += Request->ExpectedSize;
                         Step = MESSAGE_READ;
 
                         [[fallthrough]];
@@ -1053,13 +1047,6 @@ protected:
                         NormalizeNumber(Request->ApiVersion);
                         NormalizeNumber(Request->CorrelationId);
 
-                        if (PendingRequests.contains(Request->CorrelationId)) {
-                            YDB_LOG_ERROR("CorrelationId already processing",
-                                {LogPrefix()},
-                                {"correlationId", Request->CorrelationId});
-                            PassAway();
-                            return false;
-                        }
                         if (!Context->Authenticated() && RequireAuthentication(static_cast<EApiKey>(Request->ApiKey))) {
                             YDB_LOG_ERROR("Unauthenticated request",
                                 {LogPrefix()},
@@ -1225,19 +1212,16 @@ protected:
                 return;
             } else if (res > 0 && BufferedWriter.Empty()) { // we successfuly retried sending the response
                 RetryingWriteToSocket = false;
-                auto& request = PendingRequestsQueue.front();
-                auto& header = request->Header;
-                YDB_LOG_DEBUG("Sent reply (after retry)",
-                    {LogPrefix()},
-                    {"apiKey", header.RequestApiKey},
-                    {"version", header.RequestApiVersion},
-                    {"correlation", header.CorrelationId});
-                OnRequestProcessed(request);
-                ProcessReplyQueue(ctx);
-
-                if (!CloseConnection && Step == INFLIGHT_CHECK) {
-                    DoRead(ctx);
+                if (PendingRequest) {
+                    auto& header = PendingRequest->Header;
+                    YDB_LOG_DEBUG("Sent reply (after retry)",
+                        {LogPrefix()},
+                        {"apiKey", header.RequestApiKey},
+                        {"version", header.RequestApiVersion},
+                        {"correlation", header.CorrelationId});
+                    FinishPendingRequest();
                 }
+                TryUnmute(ctx);
             }
         }
 

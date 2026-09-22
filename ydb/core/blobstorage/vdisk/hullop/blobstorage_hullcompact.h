@@ -8,6 +8,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/queue.h>
+#include <optional>
 
 
 namespace NKikimr {
@@ -71,7 +72,7 @@ namespace NKikimr {
         // FreshSegment to compact if any
         TIntrusivePtr<TFreshSegment> FreshSegment;
         std::shared_ptr<TFreshSegmentSnapshot> FreshSegmentSnap;
-        TBarriersSnapshot BarriersSnap;
+        std::optional<TBarriersSnapshot> BarriersSnap;
         TLevelIndexSnapshot LevelSnap;
         TActiveActors ActiveActors;
 
@@ -100,23 +101,31 @@ namespace NKikimr {
 
             YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: Compaction job (%" PRIu64 ") started: fresh# %s freedHugeBlobs# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID, (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
 
-            // bool debug output of brs
-            int brsDebugLevel = 0;
-            // debug output of brs
-            {
-                ::NActors::NLog::TSettings *mSettings = (::NActors::NLog::TSettings*)((ctx).LoggerSettings());
-                ::NActors::NLog::EPriority mPriority = ::NActors::NLog::PRI_INFO;
-                ::NActors::NLog::EComponent mComponent = (::NActors::NLog::EComponent)( NKikimrServices::BS_HULLCOMP);
+            TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> brs;
+            if constexpr (!std::is_same_v<TKey, TKeyBlock>) {
+                // Blocks compaction does not consult barriers: records are merged, never dropped
+                // (except that a Max generation block later lets us drop barriers of that tablet).
+                Y_VERIFY_S(BarriersSnap, HullCtx->VCtx->VDiskLogPrefix);
 
-                bool output = mSettings && mSettings->Satisfies(mPriority, mComponent, 0);
-                brsDebugLevel = output ? 1 : 0;
+                // bool debug output of brs
+                int brsDebugLevel = 0;
+                // debug output of brs
+                {
+                    ::NActors::NLog::TSettings *mSettings = (::NActors::NLog::TSettings*)((ctx).LoggerSettings());
+                    ::NActors::NLog::EPriority mPriority = ::NActors::NLog::PRI_INFO;
+                    ::NActors::NLog::EComponent mComponent = (::NActors::NLog::EComponent)( NKikimrServices::BS_HULLCOMP);
+
+                    bool output = mSettings && mSettings->Satisfies(mPriority, mComponent, 0);
+                    brsDebugLevel = output ? 1 : 0;
+                }
+
+                // build barriers essence
+                brs = BarriersSnap->CreateEssence(HullCtx, 0, Max<ui64>(), brsDebugLevel);
+
+                // free barriers snapshot
+                BarriersSnap->Destroy();
+                BarriersSnap.reset();
             }
-
-            // build barriers essence
-            auto brs = BarriersSnap.CreateEssence(HullCtx, 0, Max<ui64>(), brsDebugLevel);
-
-            // free barriers snapshot
-            BarriersSnap.Destroy();
 
             // build handoff map (use LevelSnap by ref)
             Hmp->BuildMap(LevelSnap, It);
@@ -336,7 +345,7 @@ namespace NKikimr {
                         ui32 minHugeBlobInBytes,
                         TIntrusivePtr<TFreshSegment> freshSegment,
                         std::shared_ptr<TFreshSegmentSnapshot> freshSegmentSnap,
-                        TBarriersSnapshot &&barriersSnap,
+                        std::optional<TBarriersSnapshot> &&barriersSnap,
                         TLevelIndexSnapshot &&levelSnap,
                         const TIterator &it,
                         ui64 firstLsn,

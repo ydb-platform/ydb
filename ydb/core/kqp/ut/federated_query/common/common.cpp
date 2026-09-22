@@ -169,6 +169,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         .SetUseLocalCheckpointsInStreamingQueries(options.UseLocalCheckpointsInStreamingQueries)
         .SetLogSettings(std::move(logSettings))
         .SetNeedsStatsCollectors(options.NeedsStatsCollectors)
+        .SetUseRealThreads(options.UseRealThreads)
         .SetInitFederatedQuerySetupFactory(options.InternalInitFederatedQuerySetupFactory);
 
     settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;

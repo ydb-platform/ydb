@@ -69,6 +69,34 @@ void ResolveConnects(
     }
 }
 
+// Creates and starts a vchunk of the given index on a running dbg.
+std::shared_ptr<TVChunk> StartVChunk(
+    NActors::TActorSystem* actorSystem,
+    ITraceService* traceService,
+    const TDiskDescription& diskDescription,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    TPartitionDirectServiceMock& service,
+    ui32 vChunkIndex)
+{
+    auto vchunk = std::make_shared<TVChunk>(
+        actorSystem,
+        traceService,
+        &service,
+        diskDescription,
+        TVChunkConfig::MakeDefault(
+            vChunkIndex,
+            DirectBlockGroupHostCount,
+            DefaultPrimaryCount),
+        false,
+        TDirtyMapStateProto{},
+        dbg,
+        1000,   // syncRequestsBatchSize
+        DefaultBlockSize,
+        DefaultVChunkSize);
+    vchunk->Start();
+    return vchunk;
+}
+
 NWilson::TTraceId CreateTraceId()
 {
     return NWilson::TTraceId::NewTraceId(
@@ -82,6 +110,59 @@ NWilson::TTraceId CreateTraceId()
 
 Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 {
+    Y_UNIT_TEST_F(ShouldIncludeCurrentFreshDDisksInMonSnapshot, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_shared<TStorageTransportMock>());
+        auto initialReady = RunAndGetInitialReady(dbg);
+        WaitReady(executor, initialReady);
+
+        auto vchunk = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            *Service,
+            0);
+        WaitDirtyMapReady(executor, vchunk);
+
+        auto snapshot =
+            WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        UNIT_ASSERT(snapshot.FreshDDisks.empty());
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                TBaseFixture::AccessBlocksDirtyMap(*vchunk)
+                    .SetReadablePrefixDebugOnly(0, DefaultBlockSize);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        snapshot = WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(1, snapshot.FreshDDisks.size());
+        UNIT_ASSERT(snapshot.FreshDDisks.at(0).Get(0));
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                auto config = vchunk->GetConfig();
+                config.DisableHost(0);
+                TBaseFixture::AccessBlocksDirtyMap(*vchunk).UpdateConfig(
+                    config,
+                    true);
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        snapshot = WaitFuture(executor, dbg->BuildMonSnapshot(), WaitTimeout);
+        UNIT_ASSERT(snapshot.FreshDDisks.at(0).Get(0));
+    }
+
     Y_UNIT_TEST_F(ShouldDelegateCopyRangeBudgetToService, TDBGFixture)
     {
         auto executor = MakeExecutor();
@@ -344,6 +425,158 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             hostStat.InflightCount(EOperation::ReadFromDDisk));
         UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
         UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveSuccessCount);
+    }
+
+    Y_UNIT_TEST_F(ShouldSendPBufferBarrierOfOwnVChunksOnLsnStep, TDBGFixture)
+    {
+        StorageServiceConfig.SetPBufferCleanupLsnStep(3);
+        auto executor = MakeExecutor();
+        const ui64 inflightLsn = 100;
+        auto transport = std::make_shared<TStorageTransportMock>();
+        transport->SetPBufferListing({{.Generation = 1, .Lsn = inflightLsn}});
+        auto dbg = MakeDirectBlockGroup(executor, transport);
+        TPartitionDirectServiceMock service(true /* dropScheduledCallbacks */);
+        service.LsnGenerator = inflightLsn;
+        WaitReady(executor, dbg->Run(TraceService.get(), &service));
+        auto vchunk = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            service,
+            0   // vChunkIndex
+        );
+        WaitDirtyMapReady(executor, vchunk);
+
+        // Lsn 101 is not a step.
+        WriteBlock(
+            executor,
+            vchunk,
+            0   // blockIndex
+        );
+        DoAllExecutorAndRuntimeWork(executor);
+        UNIT_ASSERT_VALUES_EQUAL(0u, transport->BarrierErases.size());
+
+        // Lsn 102 is: the barrier goes out below the restored record.
+        WriteBlock(
+            executor,
+            vchunk,
+            1   // blockIndex
+        );
+        WaitBarrierErases(executor, transport, DirectBlockGroupHostCount);
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            transport->BarrierErases.size());
+        for (const auto& [node, lsn]: transport->BarrierErases) {
+            UNIT_ASSERT_VALUES_EQUAL_C(inflightLsn - 1, lsn, "node " << node);
+        }
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldHoldPBufferBarrierWhileOlderGenerationInflight,
+        TDBGFixture)
+    {
+        StorageServiceConfig.SetPBufferCleanupLsnStep(1);
+        DiskDescription.Generation = 2;
+        auto executor = MakeExecutor();
+
+        // DBG 0 restored a record of the previous generation.
+        auto transport0 =
+            std::make_shared<TStorageTransportMock>(100 /* baseNodeId */);
+        transport0->SetPBufferListing({{.Generation = 1, .Lsn = 5}});
+        auto dbg0 = MakeDirectBlockGroup(
+            executor,
+            transport0,
+            0   // directBlockGroupIndex
+        );
+        // DBG 1 restored a record of the current generation.
+        const ui64 inflightLsn = 100;
+        auto transport1 =
+            std::make_shared<TStorageTransportMock>(200 /* baseNodeId */);
+        transport1->SetPBufferListing(
+            {{.Generation = 2, .Lsn = inflightLsn}},
+            1   // vChunkIndex
+        );
+        auto dbg1 = MakeDirectBlockGroup(
+            executor,
+            transport1,
+            1   // directBlockGroupIndex
+        );
+        TPartitionDirectServiceMock service(true /* dropScheduledCallbacks */);
+        service.LsnGenerator = inflightLsn;
+        WaitReady(executor, dbg0->Run(TraceService.get(), &service));
+        auto vchunk0 = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg0,
+            service,
+            0   // vChunkIndex
+        );
+        WaitDirtyMapReady(executor, vchunk0);
+        WaitReady(executor, dbg1->Run(TraceService.get(), &service));
+        auto vchunk1 = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg1,
+            service,
+            1   // vChunkIndex
+        );
+        WaitDirtyMapReady(executor, vchunk1);
+
+        WriteBlock(
+            executor,
+            vchunk0,
+            0   // blockIndex
+        );
+        WriteBlock(executor, vchunk1, VolumeConfig->BlocksPerStripe);
+        WaitBarrierErases(executor, transport1, DirectBlockGroupHostCount);
+
+        UNIT_ASSERT_VALUES_EQUAL(0u, transport0->BarrierErases.size());
+        for (const auto& [node, lsn]: transport1->BarrierErases) {
+            UNIT_ASSERT_VALUES_EQUAL_C(inflightLsn - 1, lsn, "node " << node);
+        }
+    }
+
+    Y_UNIT_TEST_F(ShouldNotResendNonAdvancingPBufferBarrier, TDBGFixture)
+    {
+        StorageServiceConfig.SetPBufferCleanupLsnStep(1);
+        auto executor = MakeExecutor();
+        const ui64 inflightLsn = 100;
+        auto transport = std::make_shared<TStorageTransportMock>();
+        transport->SetPBufferListing({{.Generation = 1, .Lsn = inflightLsn}});
+        auto dbg = MakeDirectBlockGroup(executor, transport);
+        TPartitionDirectServiceMock service(true /* dropScheduledCallbacks */);
+        service.LsnGenerator = inflightLsn;
+        WaitReady(executor, dbg->Run(TraceService.get(), &service));
+        auto vchunk = StartVChunk(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            DiskDescription,
+            dbg,
+            service,
+            0   // vChunkIndex
+        );
+        WaitDirtyMapReady(executor, vchunk);
+
+        WriteBlock(
+            executor,
+            vchunk,
+            0   // blockIndex
+        );
+        WaitBarrierErases(executor, transport, DirectBlockGroupHostCount);
+        // The minimum did not move: the same bound must not go out again.
+        WriteBlock(
+            executor,
+            vchunk,
+            1   // blockIndex
+        );
+        DoAllExecutorAndRuntimeWork(executor);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            transport->BarrierErases.size());
     }
 
     Y_UNIT_TEST_F(
@@ -1326,6 +1559,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 100,
                 DirectBlockGroupHostCount,
                 DefaultPrimaryCount),
+            false,
             TDirtyMapStateProto(),
             dbg,
             3,
@@ -1419,6 +1653,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             Service.get(),
             DiskDescription,
             config,
+            false,
             TDirtyMapStateProto(),
             dbg,
             3,
@@ -1466,20 +1701,18 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto initialReady = RunAndGetInitialReady(dbg);
         WaitReady(executor, initialReady);
 
-        auto config = TVChunkConfig::MakeDefault(
-            100,
-            grownHostCount,
-            DefaultPrimaryCount);
+        auto config =
+            TVChunkConfig::MakeDefault(0, grownHostCount, DefaultPrimaryCount);
         config.DisableHost(2);
-        // One primary replica is still catching up; the healthy-ddisk count
-        // drops below the quorum.
-        config.SetWatermark(*config.GetDDisks().begin(), 1024);
+        // Disabling one of three primary replicas drops the healthy DDisk
+        // count below the quorum.
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
             TraceService.get(),
             Service.get(),
             DiskDescription,
             config,
+            true,
             TDirtyMapStateProto(),
             dbg,
             3,

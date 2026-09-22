@@ -246,6 +246,7 @@ public:
         }
 
         if (result->Status == NKikimrProto::BLOCKED) {
+            ErrorDescription = result->ErrorReason;
             YDB_LOG_ERROR("Received BLOCKED EvGetResult",
                 {"marker", "KV323"},
                 {"errorDescription", ErrorDescription},
@@ -263,6 +264,7 @@ public:
         }
 
         if (result->Status != NKikimrProto::OK) {
+            ErrorDescription = result->ErrorReason;
             YDB_LOG_ERROR("Unexpected EvGetResult",
                 {"marker", "KV316"},
                 {"errorDescription", ErrorDescription},
@@ -338,6 +340,7 @@ public:
             readItem.InFlight = false;
         }
         if (hasErrorResponses) {
+            ErrorDescription = result->ErrorReason;
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
             return;
         }

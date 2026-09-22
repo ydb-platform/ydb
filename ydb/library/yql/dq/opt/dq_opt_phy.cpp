@@ -849,6 +849,9 @@ TMaybeNode<TDqConnection> DqPushLambdaToStageUnionAll(const TDqConnection& conne
         .Index().Build(connection.Output().Index())
         .Done();
 
+    // Keep all consumers of the old output on the same node after the stage remap.
+    optCtx.RemapNode(connection.Output().Ref(), output.Ptr());
+
     return TDqConnection(ctx.ChangeChild(connection.Ref(), TDqConnection::idx_Output, output.Ptr()));
 }
 

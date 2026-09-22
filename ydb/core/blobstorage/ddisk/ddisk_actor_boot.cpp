@@ -90,6 +90,17 @@ namespace NKikimr::NDDisk {
         }
 #endif
 
+        if (DiskFormat->ChunkSize > ExpectedPDiskChunkSize) {
+            YDB_LOG_NOTICE("TDDiskActor::Handle(TEvYardInitResult) PDisk chunk is bigger than expected, "
+                "the space PDisk reserved for its per-sector metadata is left unused; "
+                "format the PDisk with PhysicalChunkSize to avoid it",
+                {"marker", "BSDD56"},
+                {"DDiskId", DDiskId},
+                {"chunkSize", DiskFormat->ChunkSize},
+                {"userAccessibleChunkSize", DiskFormat->GetUserAccessibleChunkSize()},
+                {"expectedChunkSize", ExpectedPDiskChunkSize});
+        }
+
         if (Config.EnableChecksums) {
             // The integrity manager needs the chunk size, so it is created here rather than in the ctor.
             // VDiskSlotId + PDiskGuid identify this DDisk in TIntegrityChunkHeader.

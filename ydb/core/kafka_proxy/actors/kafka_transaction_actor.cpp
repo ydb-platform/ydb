@@ -136,26 +136,8 @@ namespace NKafka {
 
         bool txnAborted = !ev->Get()->Request->Committed;
         if (CommitStarted) {
-            if (txnAborted) {
-                SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::CONCURRENT_TRANSACTIONS,
-                    "Commit already in progress");
-                return;
-            }
-            if (PendingEndTxnRequests.size() >= MaxPendingEndTxnRequests) {
-                auto& oldest = PendingEndTxnRequests.front();
-                YDB_LOG_WARN("EndTxn retry queue is full; rejecting oldest retry",
-                    {LogPrefix()},
-                    {"correlationId", oldest->Get()->CorrelationId},
-                    {"pending", PendingEndTxnRequests.size()});
-                SendFailResponse<TEndTxnResponseData>(oldest, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
-                    "Too many EndTxn retries while commit is in progress");
-                PendingEndTxnRequests.erase(PendingEndTxnRequests.begin());
-            }
-            YDB_LOG_DEBUG("EndTxn commit already in progress; attaching retry",
-                {LogPrefix()},
-                {"correlationId", ev->Get()->CorrelationId},
-                {"pending", PendingEndTxnRequests.size()});
-            PendingEndTxnRequests.push_back(std::move(ev));
+            SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::CONCURRENT_TRANSACTIONS,
+                "Commit already in progress");
             return;
         } else if (txnAborted) {
             SendOkResponse<TEndTxnResponseData>(ev);
@@ -165,7 +147,7 @@ namespace NKafka {
             Die(ctx);
         } else {
             CommitStarted = true;
-            PendingEndTxnRequests.push_back(std::move(ev));
+            PendingEndTxnRequest = std::move(ev);
             StartKqpSession(ctx);
         }
     }
@@ -315,14 +297,15 @@ namespace NKafka {
     }
 
     void TTransactionActor::ReplyPendingEndTxn(EKafkaErrors errorCode, const TString& errorMessage) {
-        for (auto& request : PendingEndTxnRequests) {
-            if (errorCode == EKafkaErrors::NONE_ERROR) {
-                SendOkResponse<TEndTxnResponseData>(request);
-            } else {
-                SendFailResponse<TEndTxnResponseData>(request, errorCode, errorMessage);
-            }
+        if (!PendingEndTxnRequest) {
+            return;
         }
-        PendingEndTxnRequests.clear();
+        if (errorCode == EKafkaErrors::NONE_ERROR) {
+            SendOkResponse<TEndTxnResponseData>(PendingEndTxnRequest);
+        } else {
+            SendFailResponse<TEndTxnResponseData>(PendingEndTxnRequest, errorCode, errorMessage);
+        }
+        PendingEndTxnRequest.Reset();
     }
 
     void TTransactionActor::FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage, EKafkaErrors errorCode) {

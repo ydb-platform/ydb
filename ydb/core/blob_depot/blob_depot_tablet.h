@@ -141,12 +141,17 @@ namespace NKikimr::NBlobDepot {
             std::set<ui64> AssimilatedBlobsInFlight;
             std::optional<TBlobSeqId> LastReportedLeastId;
 
-            // Obtain the least BlobSeqId that is not yet committed, but may be written by any agent
-            TBlobSeqId GetLeastExpectedBlobId(ui32 generation) {
-                const auto result = TBlobSeqId::FromSequentalNumber(Index, generation, Min(NextBlobSeqId,
+            // Same as GetLeastExpectedBlobId, but without the monotonicity bookkeeping -- for monitoring only
+            TBlobSeqId PeekLeastExpectedBlobId(ui32 generation) const {
+                return TBlobSeqId::FromSequentalNumber(Index, generation, Min(NextBlobSeqId,
                     GivenIdRanges.IsEmpty() ? Max<ui64>() : GivenIdRanges.GetMinimumValue(),
                     SequenceNumbersInFlight.empty() ? Max<ui64>() : *SequenceNumbersInFlight.begin(),
                     AssimilatedBlobsInFlight.empty() ? Max<ui64>() : *AssimilatedBlobsInFlight.begin()));
+            }
+
+            // Obtain the least BlobSeqId that is not yet committed, but may be written by any agent
+            TBlobSeqId GetLeastExpectedBlobId(ui32 generation) {
+                const auto result = PeekLeastExpectedBlobId(generation);
                 // this value can't decrease, because it may lead to data loss
                 Y_VERIFY_S(!LastReportedLeastId || *LastReportedLeastId <= result,
                     "decreasing LeastExpectedBlobId"
@@ -176,7 +181,10 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev);
         TAgent& GetAgent(const TActorId& pipeServerId);
         TAgent& GetAgent(ui32 nodeId);
-        void ResetAgent(TAgent& agent);
+        // Same as GetAgent(pipeServerId), but returns nullptr instead of aborting when the pipe server is already
+        // gone or has been superseded by a newer connection of the same agent
+        TAgent *FindAgent(const TActorId& pipeServerId);
+        void ResetAgent(ui32 nodeId, TAgent& agent);
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
 

@@ -8,8 +8,13 @@
 #include <util/charset/utf8.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/xrange.h>
+#include <util/string/join.h>
+#include <util/string/strip.h>
+#include <util/string/vector.h>
 
 #include <algorithm>
+#include <array>
+#include <memory>
 
 namespace NKikimr::NFulltext {
 
@@ -99,6 +104,156 @@ namespace {
             return &Russian;
         }
         return nullptr;
+    }
+
+    TVector<TString> ParseLanguages(const TString& value) {
+        TVector<TString> languages;
+        THashSet<TString> seen;
+
+        for (TString language : SplitString(value, ",")) {
+            language = StripString(language);
+            if (seen.insert(language).second) {
+                languages.push_back(std::move(language));
+            }
+        }
+
+        return languages;
+    }
+
+    enum class ELanguageScript : ui8 {
+        Armenian,
+        Cyrillic,
+        Greek,
+        Hebrew,
+        Latin,
+        Tamil,
+    };
+
+    constexpr ui32 ScriptBit(ELanguageScript script) {
+        return 1u << static_cast<ui8>(script);
+    }
+
+    std::optional<ui32> GetSnowballLanguageScripts(const TString& language) {
+        if (language == "armenian") {
+            return ScriptBit(ELanguageScript::Armenian);
+        }
+        if (language == "english") {
+            return ScriptBit(ELanguageScript::Latin);
+        }
+        if (language == "greek") {
+            return ScriptBit(ELanguageScript::Greek);
+        }
+        if (language == "russian") {
+            return ScriptBit(ELanguageScript::Cyrillic);
+        }
+        if (language == "tamil") {
+            return ScriptBit(ELanguageScript::Tamil);
+        }
+        if (language == "yiddish") {
+            return ScriptBit(ELanguageScript::Hebrew);
+        }
+        return std::nullopt;
+    }
+
+    std::optional<ELanguageScript> GetCharacterScript(wchar32 c) {
+        if (c >= 0x0530 && c <= 0x058F) {
+            return ELanguageScript::Armenian;
+        }
+        if ((c >= 0x0370 && c <= 0x03FF) || (c >= 0x1F00 && c <= 0x1FFF)) {
+            return ELanguageScript::Greek;
+        }
+        if ((c >= 0x0590 && c <= 0x05FF) || (c >= 0xFB1D && c <= 0xFB4F)) {
+            return ELanguageScript::Hebrew;
+        }
+        if ((c >= 0x0041 && c <= 0x005A) || (c >= 0x0061 && c <= 0x007A) ||
+            (c >= 0x00C0 && c <= 0x024F) || (c >= 0x1E00 && c <= 0x1EFF) ||
+            (c >= 0x2C60 && c <= 0x2C7F) || (c >= 0xA720 && c <= 0xA7FF) ||
+            (c >= 0xAB30 && c <= 0xAB6F))
+        {
+            return ELanguageScript::Latin;
+        }
+        if ((c >= 0x0400 && c <= 0x052F) || (c >= 0x1C80 && c <= 0x1C8F) ||
+            (c >= 0x2DE0 && c <= 0x2DFF) || (c >= 0xA640 && c <= 0xA69F))
+        {
+            return ELanguageScript::Cyrillic;
+        }
+        if (c >= 0x0B80 && c <= 0x0BFF) {
+            return ELanguageScript::Tamil;
+        }
+        return std::nullopt;
+    }
+
+    std::optional<ELanguageScript> DetectWordScript(const TString& word) {
+        const unsigned char* ptr = reinterpret_cast<const unsigned char*>(word.data());
+        const unsigned char* end = ptr + word.size();
+        while (ptr < end) {
+            wchar32 symbol;
+            size_t symbolBytes = 0;
+            if (SafeReadUTF8Char(symbol, symbolBytes, ptr, end) != RECODE_OK) {
+                return std::nullopt;
+            }
+            if (const auto script = GetCharacterScript(symbol)) {
+                return script;
+            }
+            ptr += symbolBytes;
+        }
+        return std::nullopt;
+    }
+
+    struct TSnowballStemmerDeleter {
+        void operator()(sb_stemmer* stemmer) const {
+            sb_stemmer_delete(stemmer);
+        }
+    };
+
+    using TSnowballStemmerPtr = std::unique_ptr<sb_stemmer, TSnowballStemmerDeleter>;
+
+    struct TSnowballStemmer {
+        TString Language;
+        ui32 Scripts;
+        TSnowballStemmerPtr Stemmer;
+    };
+
+    TSnowballStemmerPtr MakeSnowballStemmer(const TString& language) {
+        TSnowballStemmerPtr stemmer(sb_stemmer_new(language.c_str(), nullptr));
+        if (Y_UNLIKELY(!stemmer)) {
+            ythrow yexception() << "sb_stemmer_new returned nullptr";
+        }
+        return stemmer;
+    }
+
+    TSnowballStemmer& GetSnowballStemmer(const TString& language) {
+        static thread_local std::array<TSnowballStemmer, 6> Stemmers = {{
+            {"armenian", ScriptBit(ELanguageScript::Armenian), MakeSnowballStemmer("armenian")},
+            {"english", ScriptBit(ELanguageScript::Latin), MakeSnowballStemmer("english")},
+            {"greek", ScriptBit(ELanguageScript::Greek), MakeSnowballStemmer("greek")},
+            {"russian", ScriptBit(ELanguageScript::Cyrillic), MakeSnowballStemmer("russian")},
+            {"tamil", ScriptBit(ELanguageScript::Tamil), MakeSnowballStemmer("tamil")},
+            {"yiddish", ScriptBit(ELanguageScript::Hebrew), MakeSnowballStemmer("yiddish")},
+        }};
+
+        const auto stemmer = std::find_if(Stemmers.begin(), Stemmers.end(), [&](const auto& item) {
+            return item.Language == language;
+        });
+        if (stemmer != Stemmers.end()) {
+            return *stemmer;
+        }
+
+        ythrow yexception() << "language is not supported by snowball";
+    }
+
+    void ApplySnowball(sb_stemmer& stemmer, TString& token) {
+        const sb_symbol* stemmed = sb_stemmer_stem(
+            &stemmer,
+            reinterpret_cast<const sb_symbol*>(token.data()),
+            token.size()
+        );
+        if (Y_UNLIKELY(stemmed == nullptr)) {
+            ythrow yexception() << "unable to allocate memory for sb_stemmer_stem result";
+        }
+
+        const size_t resultLength = sb_stemmer_length(&stemmer);
+        token = std::string(reinterpret_cast<const char*>(stemmed), resultLength);
     }
 
     inline bool IsNonStandard(wchar32 c) {
@@ -497,6 +652,7 @@ namespace {
             error = "cannot set use_filter_snowball and use_filter_superlemmer at the same time";
             return false;
         }
+        const auto languages = ParseLanguages(settings.language());
         if (settings.use_filter_snowball()) {
             if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
                 error = "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time";
@@ -508,16 +664,18 @@ namespace {
                 return false;
             }
 
-            bool supportedLanguage = false;
-            for (auto ptr = sb_stemmer_list(); *ptr != nullptr; ++ptr) {
-                if (settings.language() == *ptr) {
-                    supportedLanguage = true;
-                    break;
+            ui32 scripts = 0;
+            for (const auto& language : languages) {
+                const auto languageScripts = GetSnowballLanguageScripts(language);
+                if (!languageScripts) {
+                    error = "language is not supported by snowball";
+                    return false;
                 }
-            }
-            if (!supportedLanguage) {
-                error = "language is not supported by snowball";
-                return false;
+                if (scripts & *languageScripts) {
+                    error = "snowball cannot detect a word language when configured languages use the same script";
+                    return false;
+                }
+                scripts |= *languageScripts;
             }
         }
 
@@ -532,9 +690,11 @@ namespace {
                 return false;
             }
 
-            if (!IsSuperLemmerSupportedLanguage(settings.language())) {
-                error = "language is not supported by superlemmer";
-                return false;
+            for (const auto& language : languages) {
+                if (!IsSuperLemmerSupportedLanguage(language)) {
+                    error = "language is not supported by superlemmer";
+                    return false;
+                }
             }
         }
 
@@ -546,10 +706,16 @@ namespace {
         }
 
         if (settings.use_filter_stopwords()) {
-            const TString language = settings.has_language() ? settings.language() : "english";
-            if (!GetStopwords(language)) {
-                error = "language is not supported by stopword filter";
-                return false;
+            auto stopWordsLanguages = languages;
+            if (stopWordsLanguages.size() == 0) {
+                stopWordsLanguages.push_back("english");
+            }
+
+            for (const auto& language : stopWordsLanguages) {
+                if (!GetStopwords(language)) {
+                    error = "language is not supported by stopword filter";
+                    return false;
+                }
             }
         }
 
@@ -660,6 +826,7 @@ Ydb::Table::FulltextIndexSettings::Analyzers GetAnalyzersForQuery(Ydb::Table::Fu
 
 TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, const std::unordered_set<wchar32>& ignoredDelimiters) {
     TVector<TString> tokens = Tokenize(text, settings.tokenizer(), ignoredDelimiters);
+    const auto languages = ParseLanguages(settings.language());
 
     if (settings.use_filter_lowercase()) {
         for (auto i : xrange(tokens.size())) {
@@ -668,11 +835,20 @@ TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexS
     }
 
     if (settings.use_filter_stopwords()) {
-        const TString language = settings.has_language() ? settings.language() : "english";
-        const THashSet<TStringBuf>* stopwords = GetStopwords(language);
-        Y_ENSURE(stopwords);
+        auto stopWordsLanguages = languages;
+        if (stopWordsLanguages.size() == 0) {
+            stopWordsLanguages.push_back("english");
+        }
         tokens.erase(std::remove_if(tokens.begin(), tokens.end(), [&](const TString& token) {
-            return stopwords->contains(ToLowerUTF8(token));
+            const TString lowerToken = ToLowerUTF8(token);
+            for (const auto& language : stopWordsLanguages) {
+                const THashSet<TStringBuf>* stopwords = GetStopwords(language);
+                Y_ENSURE(stopwords);
+                if (stopwords->contains(lowerToken)) {
+                    return true;
+                }
+            }
+            return false;
         }), tokens.end());
     }
 
@@ -690,24 +866,31 @@ TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexS
     }
 
     if (settings.use_filter_snowball()) {
-        struct sb_stemmer* stemmer = sb_stemmer_new(settings.language().c_str(), nullptr);
-        if (Y_UNLIKELY(stemmer == nullptr)) {
-            ythrow yexception() << "sb_stemmer_new returned nullptr";
-        }
-        Y_DEFER { sb_stemmer_delete(stemmer); };
-
-        for (auto& token : tokens) {
-            const sb_symbol* stemmed = sb_stemmer_stem(
-                stemmer,
-                reinterpret_cast<const sb_symbol*>(token.data()),
-                token.size()
-            );
-            if (Y_UNLIKELY(stemmed == nullptr)) {
-                ythrow yexception() << "unable to allocate memory for sb_stemmer_stem result";
+        Y_ENSURE(settings.has_language());
+        if (languages.size() == 1) {
+            auto& stemmer = GetSnowballStemmer(languages.front());
+            for (auto& token : tokens) {
+                ApplySnowball(*stemmer.Stemmer, token);
+            }
+        } else {
+            TVector<TSnowballStemmer*> selectedStemmers;
+            selectedStemmers.reserve(languages.size());
+            for (const auto& language : languages) {
+                selectedStemmers.push_back(&GetSnowballStemmer(language));
             }
 
-            const size_t resultLength = sb_stemmer_length(stemmer);
-            token = std::string(reinterpret_cast<const char*>(stemmed), resultLength);
+            for (auto& token : tokens) {
+                const auto script = DetectWordScript(token);
+                if (!script) {
+                    continue;
+                }
+                const auto stemmer = std::find_if(selectedStemmers.begin(), selectedStemmers.end(), [&](const auto& item) {
+                    return item->Scripts & ScriptBit(*script);
+                });
+                if (stemmer != selectedStemmers.end()) {
+                    ApplySnowball(*(*stemmer)->Stemmer, token);
+                }
+            }
         }
     }
 

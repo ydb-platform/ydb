@@ -468,6 +468,13 @@ TStatus ComputeTypes(TIntrusivePtr<TOpGroupingSets> groupingSets, TRBOContext& c
         resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(item->GetName(), itemType));
     }
 
+    for (const auto& [key, indicator] : groupingSets->GetGroupingIndicators()) {
+        Y_UNUSED(key);
+        const auto indicatorName = indicator.GetFullName();
+        Y_ENSURE(!structType->FindItem(indicatorName), "Duplicate grouping indicator column " << indicatorName);
+        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(indicatorName, ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+    }
+
     groupingSets->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(resultItems));
     return TStatus::Ok;
 }

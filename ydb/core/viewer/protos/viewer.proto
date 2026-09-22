@@ -385,6 +385,7 @@ message TStorageUsage {
     uint64 Limit = 3;
     uint64 SoftQuota = 4;
     uint64 HardQuota = 5;
+    optional uint64 Groups = 6;
 }
 
 message TTenant {

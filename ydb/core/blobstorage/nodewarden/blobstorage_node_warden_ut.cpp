@@ -9,11 +9,13 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_http_request.h>
 #include <ydb/core/blobstorage/vdisk/localrecovery/localrecovery_public.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/cms/console/console.h>
@@ -131,7 +133,8 @@ void SetupLogging(TTestActorRuntime& runtime) {
 }
 
 void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap,
-        TAppPreprocessor appPreprocessor = {}, TNodeWardenConfigPreprocessor nodeWardenConfigPreprocessor = {}) {
+        TAppPreprocessor appPreprocessor = {}, TNodeWardenConfigPreprocessor nodeWardenConfigPreprocessor = {},
+        bool setupController = true) {
     const ui32 domainsNum = 1;
     const ui32 disksInDomain = 1;
 
@@ -313,18 +316,21 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
         runtime.DispatchEvents(options);
     }
 
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(),
-        TTabletTypes::BSController, TBlobStorageGroupType::ErasureMirror3dc, groupId),
-        &CreateFlatBsController);
+    if (setupController) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(),
+            TTabletTypes::BSController, TBlobStorageGroupType::ErasureMirror3dc, groupId),
+            &CreateFlatBsController);
 
-    SetupBoxAndStoragePool(runtime, runtime.AllocateEdgeActor());
+        SetupBoxAndStoragePool(runtime, runtime.AllocateEdgeActor());
+    }
 }
 
 void Setup(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap,
-        TAppPreprocessor appPreprocessor = {}, TNodeWardenConfigPreprocessor nodeWardenConfigPreprocessor = {}) {
+        TAppPreprocessor appPreprocessor = {}, TNodeWardenConfigPreprocessor nodeWardenConfigPreprocessor = {},
+        bool setupController = true) {
     SetupLogging(runtime);
     SetupServices(runtime, extraPath, extraSectorMap,
-        std::move(appPreprocessor), std::move(nodeWardenConfigPreprocessor));
+        std::move(appPreprocessor), std::move(nodeWardenConfigPreprocessor), setupController);
 //    runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG);
 //    runtime.SetLogPriority(NKikimrServices::BS_NODE, NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::BS_PROXY, NLog::PRI_DEBUG);
@@ -396,6 +402,75 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT_C(putResult->Status == expectAnsver,
                 "Status# " << NKikimrProto::EReplyStatus_Name(putResult->Status));
         UNIT_ASSERT_EQUAL(handle->Cookie, cookie);
+    }
+
+    CUSTOM_UNIT_TEST(PhysicalChunkSizeRealVDiskRecovery) {
+        const ui32 groupId = TGroupID(EGroupConfigurationType::Static, DOMAIN_ID, 0).GetRaw();
+        NPDisk::TDiskFormat format;
+        format.Clear(true);
+        format.SectorSize = 4096;
+        format.ChunkSize = 128_MB;
+        // Exercise both the small-blob log/Hull path and huge-heap chunk allocation.
+        const TVector<TString> payloads = {TString(1024, 's'), TString(4_MB, 'h')};
+        TIntrusivePtr<NPDisk::TSectorMap> diskContents;
+        for (ui32 boot = 0; boot < 2; ++boot) {
+            // Preserve only on-device data: the PDisk, all eight VDisks and their queues restart.
+            // Recreate the same node identity on both boots.
+            TTestActorRuntime::ResetFirstNodeId();
+            TTestBasicRuntime runtime(1, false);
+            const ui32 nodeId = runtime.GetNodeId(0);
+            ui32 recoveries = 0;
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvLocalRecoveryDone) {
+                    const auto* result = ev->Get<TEvBlobStorage::TEvLocalRecoveryDone>();
+                    UNIT_ASSERT_VALUES_EQUAL(result->Status, NKikimrProto::OK);
+                    if (result->PDiskCtx->PDiskId == MakeBlobStoragePDiskID(nodeId, 0)) {
+                        UNIT_ASSERT_VALUES_EQUAL(result->PDiskCtx->Dsk->ChunkSize, format.GetUserAccessibleChunkSize());
+                        UNIT_ASSERT_VALUES_EQUAL(result->PDiskCtx->Dsk->ChunkSize % result->PDiskCtx->Dsk->AppendBlockSize, 0);
+                        ++recoveries;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+            Setup(runtime, "", nullptr, {}, [&](ui32 nodeIndex, TNodeWardenConfig& config) {
+                UNIT_ASSERT_VALUES_EQUAL(nodeIndex, 0);
+                const auto& pdisk = config.BlobStorageConfig->GetServiceSet().GetPDisks(0);
+                auto& sectorMap = config.SectorMaps.at(pdisk.GetPath());
+                if (diskContents) {
+                    sectorMap = diskContents;
+                } else {
+                    diskContents = sectorMap;
+                    TFormatOptions options;
+                    options.SectorMap = sectorMap;
+                    options.EnableSmallDiskOptimization = false;
+                    options.PhysicalChunkSizeBytes = 128_MB;
+                    FormatPDisk(pdisk.GetPath(), 0, 4096, 128_MB, pdisk.GetPDiskGuid(),
+                        1, 2, 3, NPDisk::YdbDefaultPDiskSequence, "physical chunk VDisk recovery", options);
+                }
+            }, false /* setupController: only the static group is needed */);
+            UNIT_ASSERT_VALUES_EQUAL(recoveries, 8);
+
+            auto sender = runtime.AllocateEdgeActor();
+            const auto nodeWarden = MakeBlobStorageNodeWardenID(nodeId);
+            for (ui32 i = 0; i < payloads.size(); ++i) {
+                const TLogoBlobID id(1234, 1, 1, 0, payloads[i].size(), i);
+                if (boot == 0) {
+                    Put(runtime, sender, groupId, id, payloads[i]);
+                }
+                runtime.Send(new IEventHandle(MakeBlobStorageProxyID(groupId), sender,
+                    new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                        NKikimrBlobStorage::EGetHandleClass::FastRead),
+                    IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden));
+                auto response = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->ResponseSz, 1);
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Responses[0].Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Responses[0].Buffer.ConvertToString(), payloads[i]);
+            }
+            if (boot == 1) {
+                Put(runtime, sender, groupId, TLogoBlobID(1234, 1, 2, 0, payloads[1].size(), 0), payloads[1]);
+            }
+        }
     }
 
     void CreateStoragePool(TTestBasicRuntime& runtime, TString name, TString kind) {
@@ -721,6 +796,68 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 UNIT_ASSERT_EQUAL(0, warden.DrivePathCounterKeys().size());
             }
         });
+    }
+
+    CUSTOM_UNIT_TEST(PhysicalChunkSizeConfigPrecedence) {
+        TTestActorSystem runtime(1);
+        runtime.SetupNodeSubSystems = [](ui32, TActorSystemSetup* setup) {
+            setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
+        };
+        runtime.Start();
+        auto config = MakeIntrusive<TNodeWardenConfig>();
+        const auto wardenId = runtime.Register(CreateBSNodeWarden(config), 1);
+        UNIT_ASSERT(runtime.WrapInActorContext(wardenId, [&](IActor* actor) {
+            auto& warden = *dynamic_cast<NStorage::TNodeWarden*>(actor);
+            struct TCase {
+                std::optional<ui32> ChunkSize;
+                std::optional<ui32> PhysicalChunkSize;
+                std::optional<ui32> OverlayChunkSize;
+                std::optional<ui32> OverlayPhysicalChunkSize;
+                ui32 ExpectedChunkSize;
+                ui32 ExpectedPhysicalChunkSize;
+                bool Warning;
+            };
+            const TCase cases[] = {
+                {std::nullopt, 128_MB, std::nullopt, std::nullopt, 128_MB, 128_MB, false},
+                {std::nullopt, std::nullopt, std::nullopt, 128_MB, 128_MB, 128_MB, false},
+                {64_MB, 128_MB, std::nullopt, std::nullopt, 64_MB, 0, true},
+                {std::nullopt, std::nullopt, 64_MB, 128_MB, 64_MB, 0, true},
+                {64_MB, std::nullopt, std::nullopt, 128_MB, 64_MB, 0, true},
+                {std::nullopt, 128_MB, 64_MB, std::nullopt, 64_MB, 0, true},
+                {64_MB, 128_MB, 32_MB, std::nullopt, 32_MB, 0, true},
+                {64_MB, 128_MB, std::nullopt, 0, 64_MB, 0, false},
+            };
+            for (const auto& test : cases) {
+                NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk pdisk;
+                pdisk.SetNodeID(1);
+                pdisk.SetPDiskID(1);
+                pdisk.SetPDiskGuid(12345);
+                pdisk.SetPath("/unused-physical-chunk-config-test");
+                if (test.ChunkSize) {
+                    pdisk.MutablePDiskConfig()->SetChunkSize(*test.ChunkSize);
+                }
+                if (test.PhysicalChunkSize) {
+                    pdisk.MutablePDiskConfig()->SetPhysicalChunkSize(*test.PhysicalChunkSize);
+                }
+                config->PDiskConfigOverlay.Clear();
+                if (test.OverlayChunkSize) {
+                    config->PDiskConfigOverlay.SetChunkSize(*test.OverlayChunkSize);
+                }
+                if (test.OverlayPhysicalChunkSize) {
+                    config->PDiskConfigOverlay.SetPhysicalChunkSize(*test.OverlayPhysicalChunkSize);
+                }
+                TString warning;
+                const auto result = warden.CreatePDiskConfig(pdisk, &warning);
+                UNIT_ASSERT_VALUES_EQUAL(result->ChunkSize, test.ExpectedChunkSize);
+                UNIT_ASSERT_VALUES_EQUAL(result->PhysicalChunkSize, test.ExpectedPhysicalChunkSize);
+                if (test.Warning) {
+                    UNIT_ASSERT_STRING_CONTAINS(warning, "PDiskConfig has both ChunkSize and PhysicalChunkSize");
+                    UNIT_ASSERT_STRING_CONTAINS(warning, "ignoring PhysicalChunkSize");
+                } else {
+                    UNIT_ASSERT_C(warning.empty(), warning);
+                }
+            }
+        }));
     }
 
     CUSTOM_UNIT_TEST(TestStopAggregatorRemovesReportedStats) {

@@ -113,8 +113,8 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
             TVector<TInfoUnit> leftShuffleKeys;
             TVector<TInfoUnit> rightShuffleKeys;
             for (const auto& key : join->JoinKeys) {
-                leftShuffleKeys.push_back(key.first);
-                rightShuffleKeys.push_back(key.second);
+                leftShuffleKeys.push_back(key.Left);
+                rightShuffleKeys.push_back(key.Right);
             }
             const TVector<TInfoUnit>& effectiveLeftShuffleKeys =
                 join->Props.LeftShuffleBy ? *join->Props.LeftShuffleBy : leftShuffleKeys;

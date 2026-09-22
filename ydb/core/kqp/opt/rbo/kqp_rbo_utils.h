@@ -26,6 +26,7 @@ bool IsGeneratedIgnoreIU(const TInfoUnit& iu);
 TInfoUnit MakeGeneratedIgnoreIU(TPlanProps& props);
 TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op);
 bool ReferencesUnresolvedSubplan(const TExpression& expr, const TPlanProps& props);
+TVector<TInfoUnit> GetAggregatePreservedShuffling(const TOpAggregate& aggregate, const TRBOContext& ctx);
 bool CanEliminateAggregateShuffle(const TOpAggregate& aggregate, const TRBOContext& ctx);
 
 bool JoinOutputsLeft(const TString& joinKind);

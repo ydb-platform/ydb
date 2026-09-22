@@ -62,7 +62,9 @@ NYql::NPq::NProto::TDqPqTopicSink BuildPqTopicSinkSettings(TString topic) {
     return settings;
 }
 
-TPqIoTestFixture::TPqIoTestFixture() {
+TPqIoTestFixture::TPqIoTestFixture(ui32 nodeCount)
+    : CaSetup(std::make_unique<TFakeCASetup>(nodeCount))
+{
     NTestUtils::SetupSignalHandlers();
 }
 

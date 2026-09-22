@@ -330,6 +330,9 @@ TShuffleEliminationContext BuildShuffleEliminationContext(
     auto hypergraph = MakeJoinHypergraph<std::bitset<256>>(joinTree, {}, false);
     for (const auto& edge : hypergraph.GetEdges()) {
         for (const auto& [lhs, rhs] : Zip(edge.LeftJoinKeys, edge.RightJoinKeys)) {
+            if (IsEqualNullsKey(lhs, rhs)) {
+                continue;
+            }
             fdStorage.AddFD(lhs, rhs, TFunctionalDependency::EEquivalence, false, &tableAliasMap);
         }
 
@@ -443,9 +446,11 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(
         TVector<TJoinColumn> leftKeys;
         TVector<TJoinColumn> rightKeys;
 
-        for (auto [leftKey, rightKey] : join->JoinKeys) {
-            leftKeys.push_back(ConvertRBOColumnToCBO(leaves, leftKey, leftNode));
-            rightKeys.push_back(ConvertRBOColumnToCBO(leaves, rightKey, rightNode));
+        for (const auto& joinKey : join->JoinKeys) {
+            leftKeys.push_back(ConvertRBOColumnToCBO(leaves, joinKey.Left, leftNode));
+            rightKeys.push_back(ConvertRBOColumnToCBO(leaves, joinKey.Right, rightNode));
+            leftKeys.back().EqualNulls = joinKey.EqualNulls;
+            rightKeys.back().EqualNulls = joinKey.EqualNulls;
         }
 
         result = std::make_shared<TJoinOptimizerNode>(leftNode,
@@ -479,11 +484,12 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(
 
         Y_ENSURE(join->LeftJoinKeys.size() == join->RightJoinKeys.size());
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        TVector<TJoinKey> joinKeys;
         for (size_t i=0; i<join->LeftJoinKeys.size(); i++) {
             auto leftKey = ConvertCBOColumnToRBO(leaves, join->LeftJoinKeys[i]);
             auto rightKey = ConvertCBOColumnToRBO(leaves, join->RightJoinKeys[i]);
-            joinKeys.push_back(std::make_pair(leftKey, rightKey));
+            Y_ENSURE(join->LeftJoinKeys[i].EqualNulls == join->RightJoinKeys[i].EqualNulls, "Join keys have different IS NOT DISTINCT FROM semantics.");
+            joinKeys.emplace_back(leftKey, rightKey, join->LeftJoinKeys[i].EqualNulls);
         }
 
         auto joinKind = ConvertToJoinString(join->JoinType);

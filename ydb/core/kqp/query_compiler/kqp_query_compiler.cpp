@@ -757,6 +757,8 @@ public:
 
         queryProto.SetForceImmediateEffectsExecution(
             Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+        queryProto.SetDisablePessimisticLocks(
+            Config->KqpDisablePessimisticLocks.Get().GetOrElse(false));
 
         queryProto.SetDefaultTxMode(
             Config->DefaultTxMode.Get().GetOrElse(NKqpProto::ISOLATION_LEVEL_UNDEFINED));

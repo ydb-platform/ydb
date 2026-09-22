@@ -15,6 +15,23 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+EReportedScanOrder CombineScanOrders(EReportedScanOrder lhs, EReportedScanOrder rhs)
+{
+    if (lhs == rhs || rhs == EReportedScanOrder::Unknown) {
+        return lhs;
+    }
+    if (lhs == EReportedScanOrder::Unknown) {
+        return rhs;
+    }
+    return EReportedScanOrder::Mixed;
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T>
 void TAggregate<T>::Set(T value, EStatisticsAggregation statisticsAggregation)
 {
@@ -137,6 +154,7 @@ void TQueryStatistics::Merge(const TQueryStatistics& statistics)
     IncompleteInput |= statistics.IncompleteInput;
     IncompleteOutput |= statistics.IncompleteOutput;
     QueryCount += statistics.QueryCount;
+    ScanOrder = CombineScanOrders(ScanOrder, statistics.ScanOrder);
 
     if (InnerStatistics.empty() && statistics.InnerStatistics.empty()) {
         return;
@@ -195,6 +213,7 @@ void ToProto(NProto::TQueryStatistics* serialized, const TQueryStatistics& origi
     serialized->set_incomplete_input(original.IncompleteInput);
     serialized->set_incomplete_output(original.IncompleteOutput);
     serialized->set_query_count(original.QueryCount);
+    serialized->set_scan_order(static_cast<NProto::TQueryStatistics::EReportedScanOrder>(original.ScanOrder));
     ToProto(serialized->mutable_inner_statistics(), original.InnerStatistics);
 }
 
@@ -230,6 +249,7 @@ void FromProto(TQueryStatistics* original, const NProto::TQueryStatistics& seria
     original->IncompleteInput = serialized.incomplete_input();
     original->IncompleteOutput = serialized.incomplete_output();
     original->QueryCount = serialized.query_count();
+    original->ScanOrder = static_cast<EReportedScanOrder>(serialized.scan_order());
     FromProto(&original->InnerStatistics, serialized.inner_statistics());
 }
 
@@ -243,7 +263,8 @@ void FormatValue(TStringBuilderBase* builder, const TQueryStatistics& stats, TSt
         "{"
         "RowsRead: %v, DataWeightRead: %v, RowsWritten: %v, GroupedRowCount: %v, "
         "SyncTime: %v, AsyncTime: %v, ExecuteTime: %v, ReadTime: %v, WriteTime: %v, CodegenTime: %v, "
-        "WaitOnReadyEventTime: %v, IncompleteInput: %v, IncompleteOutput: %v, MemoryUsage: %v"
+        "WaitOnReadyEventTime: %v, IncompleteInput: %v, IncompleteOutput: %v, MemoryUsage: %v, "
+        "ScanOrder: %v"
         "}",
         stats.RowsRead.GetTotal(),
         stats.DataWeightRead.GetTotal(),
@@ -258,7 +279,8 @@ void FormatValue(TStringBuilderBase* builder, const TQueryStatistics& stats, TSt
         stats.WaitOnReadyEventTime.GetTotal(),
         stats.IncompleteInput,
         stats.IncompleteOutput,
-        stats.MemoryUsage.GetTotal());
+        stats.MemoryUsage.GetTotal(),
+        stats.ScanOrder);
 }
 
 void Serialize(const TQueryStatistics& statistics, NYson::IYsonConsumer* consumer)
@@ -293,6 +315,7 @@ void Serialize(const TQueryStatistics& statistics, NYson::IYsonConsumer* consume
         .Item("incomplete_input").Value(statistics.IncompleteInput)
         .Item("incomplete_output").Value(statistics.IncompleteOutput)
         .Item("query_count").Value(statistics.QueryCount)
+        .Item("scan_order").Value(statistics.ScanOrder)
         .DoIf(!statistics.InnerStatistics.empty(), [&] (NYTree::TFluentMap fluent) {
             fluent
                 .Item("inner_statistics").DoListFor(statistics.InnerStatistics, [=] (

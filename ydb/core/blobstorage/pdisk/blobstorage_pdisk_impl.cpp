@@ -450,8 +450,7 @@ ui32 TPDisk::SystemChunkSize(const TDiskFormat& format, ui32 userAccessibleChunk
     ui32 usableSectorBytes = format.SectorPayloadSize();
     ui32 userSectors = (userAccessibleChunkSizeBytes + usableSectorBytes - 1) / usableSectorBytes;
     ui32 minChunkSize = userSectors * sectorSizeBytes;
-    const ui32 chunkSizeAlignment = (2 << 20);
-    ui32 alignedChunkSize = ((minChunkSize + chunkSizeAlignment - 1) / chunkSizeAlignment) * chunkSizeAlignment;
+    ui32 alignedChunkSize = ((minChunkSize + ChunkSizeAlignment - 1) / ChunkSizeAlignment) * ChunkSizeAlignment;
     return alignedChunkSize;
 }
 
@@ -1963,7 +1962,8 @@ void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
 void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
         const ui64 &diskGuid, const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
         TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice,
-        std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic) {
+        std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic,
+        std::optional<ui32> physicalChunkSizeBytes) {
     TGuard<TMutex> guard(StateMutex);
     // Prepare format record
     alignas(16) TDiskFormat format = {};
@@ -1973,7 +1973,9 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     format.SectorSize = sectorSizeBytes;
     ui64 erasureFlags = FormatFlagErasureEncodeUserLog;
     format.FormatFlags = (format.FormatFlags & (~erasureFlags)) | (isErasureEncodeUserLog ? erasureFlags : 0);
-    format.ChunkSize = SystemChunkSize(format, userAccessibleChunkSizeBytes, sectorSizeBytes);
+    format.ChunkSize = physicalChunkSizeBytes
+        ? *physicalChunkSizeBytes
+        : SystemChunkSize(format, userAccessibleChunkSizeBytes, sectorSizeBytes);
     format.Guid = diskGuid;
     format.ChunkKey = chunkKey;
     format.LogKey = logKey;

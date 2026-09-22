@@ -1,5 +1,5 @@
-#include "kqp_opt_log_rules.h"
 #include "kqp_opt_cbo.h"
+#include "kqp_opt_log_rules.h"
 
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -9,12 +9,16 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 
+#include <yql/essentials/core/yql_aggregate_expander.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_match_recognize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
@@ -184,6 +188,8 @@ protected:
                 KqpCtx.Config->GetEnableWatermarks(),
                 defaultLatePolicy
             );
+        } else if (KqpCtx.Config->FeatureFlags.GetEnableStreamingAggregation() && KqpCtx.Config->EnableStreamingAggregation.Get().GetOrElse(false)) {
+            output = RewriteAsStreamingAggregation(aggregate, ctx, getParents);
         } else {
             if (node.Ref().GetConstraint<TStreamingConstraintNode>() && Config->OptValidateStreamingConstraints.Get().GetOrElse(true)) {
                 ctx.AddError(TIssue(ctx.GetPosition(node.Ref().Pos()), "Aggregation of streaming input without windows is not supported"));
@@ -199,6 +205,107 @@ protected:
         }
 
         return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteAsStreamingAggregation(TCoAggregateBase aggregate, TExprContext& ctx, const TGetParents& getParents) {
+        const auto& aggregateInput = aggregate.Input();
+        const auto& maybeInputConnection = aggregateInput.Maybe<TDqConnection>();
+        if (maybeInputConnection) {
+            if (!IsSingleConsumerConnection(maybeInputConnection.Cast(), *getParents())) {
+                return aggregate;
+            }
+        } else if (!IsDqCompletePureExpr(aggregateInput, /* isPrecomputePure */ false)
+            || !IsPureIsolatedLambda(aggregateInput.Ref())
+            || !IsKqpPureExpr(aggregateInput, /* checkDqSources */ true, /* checkIndexReads */ true)) {
+            return aggregate;
+        }
+
+        const auto& settings = aggregate.Settings();
+        if (const auto setting = GetSetting(settings.Ref(), "session")) {
+            ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "Session windows are not supported for streaming aggregation"));
+            return {};
+        }
+
+        if (AnyOf(aggregate.Handlers().Ref().ChildrenList(), [](const auto& handler) {
+            return handler->Child(TCoAggregateTuple::idx_Trait)->IsCallable("AggApply");
+        })) {
+            TAggregateExpander expander(/* usePartitionsByKeys */ true, /* useFinalizeByKeys */ false,
+                aggregate.Ptr(), ctx, TypesCtx, /* forceCompact */ false, /* compactForDistinct */ false,
+                /* usePhases */ false, /* useBlocks */ false);
+            return TExprBase(expander.ExpandAggregate());
+        }
+
+        const auto& aggregatePos = aggregate.Ref().Pos();
+        auto cleanedSettings = RemoveSetting(settings.Ref(), "compact", ctx); // Streaming aggregation already processes original rows with Init/Update, without a partial-state merge phase
+
+        if (const auto stateTablePath = KqpCtx.Config->StreamingAggregationStateTablePath.Get()) {
+            if (*stateTablePath && KqpCtx.Config->OptValidateStreamingCheckpoints.Get().GetOrElse(true) && !KqpCtx.Config->DisableCheckpoints.Get().GetOrElse(false)) {
+                ctx.AddError(TIssue(ctx.GetPosition(aggregatePos), "Checkpoints are not supported for streaming aggregation with a state table"));
+                return {};
+            }
+
+            cleanedSettings = AddSetting(*cleanedSettings, settings.Ref().Pos(), "state_table_path", ctx.NewAtom(settings.Ref().Pos(), *stateTablePath), ctx);
+        }
+
+        const auto buildAggregation = [&](TExprBase input) {
+            return Build<TKqpStreamingAggregation>(ctx, aggregatePos)
+                .Input(input)
+                .Keys(aggregate.Keys())
+                .Handlers(aggregate.Handlers())
+                .Settings(cleanedSettings)
+                .Done();
+        };
+
+        if (!maybeInputConnection) {
+            return buildAggregation(aggregateInput);
+        }
+
+        const auto inputConnection = maybeInputConnection.Cast();
+        const auto streamArg = Build<TCoArgument>(ctx, aggregatePos).Name("stream").Done();
+        const auto streamingAggregation = buildAggregation(streamArg);
+
+        if (aggregate.Keys().Empty()) {
+            const auto input = Build<TDqCnUnionAll>(ctx, inputConnection.Ref().Pos())
+                .Output(inputConnection.Output())
+                .Done();
+
+            return Build<TDqCnUnionAll>(ctx, aggregatePos)
+                .Output()
+                    .Stage<TDqStage>()
+                        .Inputs()
+                            .Add(input)
+                            .Build()
+                        .Program()
+                            .Args(streamArg)
+                            .Body(streamingAggregation)
+                            .Build()
+                        .Settings(TDqStageSettings().SetPartitionMode(TDqStageSettings::EPartitionMode::Aggregate).BuildNode(ctx, aggregatePos))
+                        .Build()
+                    .Index().Build("0")
+                    .Build()
+                .Done();
+        }
+
+        const auto hashShuffle = Build<TDqCnHashShuffle>(ctx, inputConnection.Ref().Pos())
+            .Output(inputConnection.Output())
+            .KeyColumns(aggregate.Keys())
+            .Done();
+
+        return Build<TDqCnUnionAll>(ctx, aggregatePos)
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                        .Add(hashShuffle)
+                        .Build()
+                    .Program()
+                        .Args(streamArg)
+                        .Body(streamingAggregation)
+                        .Build()
+                    .Settings(TDqStageSettings().BuildNode(ctx, aggregatePos))
+                    .Build()
+                .Index().Build("0")
+                .Build()
+            .Done();
     }
 
     TMaybeNode<TExprBase> RewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
@@ -297,7 +404,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqExpandWindowFunctions(node, ctx, TypesCtx, true);
+        TExprBase output = DqExpandWindowFunctions(node, ctx, TypesCtx, !KqpCtx.Config->GetWindowFunctionsV2());
         DumpAppliedRule("ExpandWindowFunctions", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

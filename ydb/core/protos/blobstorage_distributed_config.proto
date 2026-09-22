@@ -189,6 +189,11 @@ message TEvNodeConfigInvokeOnRoot {
     message TQueryConfig
     {}
 
+    // Return a scepter only for a local root with a configured static group.
+    // Do not forward or wait for root operations.
+    message TQueryWorkingRoot
+    {}
+
     message TReassignGroupDisk {
         NKikimrBlobStorage.TVDiskID VDiskId = 1; // which one to reassign
         optional NKikimrBlobStorage.TPDiskId PDiskId = 2; // where to put it (optional)
@@ -342,6 +347,7 @@ message TEvNodeConfigInvokeOnRoot {
         TNotifyBridgeSuspended NotifyBridgeSuspended = 21;
         TDescendCommittedStorageConfig DescendCommittedStorageConfig = 22;
         TDemandRetroTrace DemandRetroTrace = 23;
+        TQueryWorkingRoot QueryWorkingRoot = 24;
     }
 }
 

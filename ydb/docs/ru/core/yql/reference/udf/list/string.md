@@ -25,6 +25,7 @@
 
 ```yql
 SELECT String::Base64Encode("YQL"); -- "WVFM"
+SELECT String::Base64Decode("WVFM"); -- "YQL"
 ```
 
 `String::Strip(string:String{Flags:AutoMap}) -> String`

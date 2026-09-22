@@ -814,8 +814,6 @@ NResourcePool::TPoolSettings TYdbSetupSettings::GetDefaultPoolSettings() const {
     poolConfig.ConcurrentQueryLimit = ConcurrentQueryLimit_;
     poolConfig.QueueSize = QueueSize_;
     poolConfig.QueryCancelAfter = QueryCancelAfter_;
-    poolConfig.QueryMemoryLimitPercentPerNode = QueryMemoryLimitPercentPerNode_;
-    poolConfig.TotalMemoryLimitPercentPerNode = TotalMemoryLimitPercentPerNode_;
     poolConfig.DatabaseLoadCpuThreshold = DatabaseLoadCpuThreshold_;
     return poolConfig;
 }

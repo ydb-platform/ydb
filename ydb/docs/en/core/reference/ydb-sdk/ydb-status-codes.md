@@ -438,9 +438,9 @@ Create a new session.
 
 </div>
 
-The request was canceled on the server. For example, a user canceled a long-running query in the [{{ ydb-ui-name }}](../ydb-ui/index.md), or the query included the [cancel_after](../../dev/timeouts.md#cancel) timeout option.
+The request was canceled on the server. For example, a user canceled a long-running query in the [{{ ydb-ui-name }}](../ydb-ui/index.md), the query included the [cancel_after](../../dev/timeouts.md#cancel) timeout option, or the session was closed while the query was running.
 
-If the query took too long to complete, try optimizing it. If you used the `cancel_after` timeout option, increase the timeout value.
+If the session was closed, create a new session before sending another request. If the query took too long to complete, try optimizing it. If you used the `cancel_after` timeout option, increase the timeout value.
 
 <div class="tags_list">
 

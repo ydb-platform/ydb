@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
@@ -83,6 +84,26 @@ private:
 };
 
 using TInfoUnitSet = THashSet<TInfoUnit, TInfoUnit::THashFunction>;
+
+struct TJoinKey {
+    TInfoUnit Left;
+    TInfoUnit Right;
+    bool EqualNulls = false;
+
+    TJoinKey() = default;
+    TJoinKey(TInfoUnit left, TInfoUnit right, bool equalNulls = false)
+        : Left(std::move(left))
+        , Right(std::move(right))
+        , EqualNulls(equalNulls) {
+    }
+    bool operator==(const TJoinKey& other) const {
+        return Left == other.Left && Right == other.Right && EqualNulls == other.EqualNulls;
+    }
+};
+
+inline bool HasEqualNullsKey(const TVector<TJoinKey>& joinKeys) {
+    return AnyOf(joinKeys, [](const TJoinKey& key) { return key.EqualNulls; });
+}
 
 }
 }

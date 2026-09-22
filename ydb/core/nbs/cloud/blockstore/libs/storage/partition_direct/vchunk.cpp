@@ -45,6 +45,21 @@ NProto::TError MakeVChunkStoppedError()
     return MakeError(E_REJECTED, "VChunk stopped");
 }
 
+// Finds DDisks that have Behind in the proto.
+THostMask GetFreshDDisks(const TDirtyMapStateProto& dirtyMapState)
+{
+    THostMask result;
+    THostIndex host = 0;
+    for (const auto& ddiskState: dirtyMapState.GetDDiskStates()) {
+        const auto& behind = ddiskState.GetBehind();
+        if (behind.GetEncodingCase() != TBlockFieldProto::ENCODING_NOT_SET) {
+            result.Set(host);
+        }
+        ++host;
+    }
+    return result;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -96,7 +111,11 @@ TVChunk::TVChunk(
           dirtyMapState,
           BlockSize,
           BlocksCount))
+<<<<<<< HEAD
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
+=======
+    , PersistedFreshDDisks(BlocksDirtyMap->GetOutdatedDDisks())
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 {
     Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
     // ActorSystem thread
@@ -319,7 +338,25 @@ const TVChunkConfig& TVChunk::GetConfig() const
     return VChunkConfig;
 }
 
+<<<<<<< HEAD
 ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
+=======
+THostMask TVChunk::GetHealthyDDisks() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return VChunkConfig.GetEnabledDDisks()
+        .Exclude(PersistedFreshDDisks)
+        .Exclude(BlocksDirtyMap->GetOutdatedDDisks());
+}
+
+TExecutorPtr TVChunk::GetExecutor() const
+{
+    return Executor;
+}
+
+TCountAndSize TVChunk::GetPBuffersUsage(THostIndex hostIndex) const
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -384,9 +421,18 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "PBuffersUsage:\n" << BlocksDirtyMap.DebugPrintPBuffersUsage();
     sb << "DDiskLocks: " << BlocksDirtyMap.DebugPrintLockedDDiskRanges()
        << "\n";
+<<<<<<< HEAD
     sb << "CloneQueue: " << BlocksDirtyMap.DebugPrintReadyToClone() << "\n";
     sb << "FlushQueue: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap.DebugPrintReadyToErase() << "\n";
+=======
+    sb << "CloneQueue: " << BlocksDirtyMap->DebugPrintReadyToClone() << "\n";
+    sb << "FlushQueue: " << BlocksDirtyMap->DebugPrintReadyToFlush() << "\n";
+    sb << "EraseQueue: " << BlocksDirtyMap->DebugPrintReadyToErase() << "\n";
+    sb << "BehindBrief:" << BlocksDirtyMap->DebugPrintBehindBrief() << "\n";
+    sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
+    sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     return sb;
 }
 
@@ -478,6 +524,10 @@ void TVChunk::OnBelatedWriteBlocksResponse(
     BlocksDirtyMap.UpdateBelatedEraseQueue(completedWrites, bundle->GetLsn());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
+<<<<<<< HEAD
+=======
+    StartPersist();
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     ScheduleCleaningUp();
 }
 
@@ -524,25 +574,14 @@ void TVChunk::OnCopyProgress(ui64 totalBytes)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto prepare = [weakSelf = weak_from_this()]()
-    {
-        if (auto self = weakSelf.lock()) {
-            auto newConfig = self->VChunkConfig;
-            for (const auto& [hostIndex, _]: self->Copiers) {
-                const auto freshRange = self->GetFreshRange(hostIndex);
-                newConfig.SetWatermark(
-                    hostIndex,
-                    freshRange ? std::optional<ui64>(
-                                     freshRange->Start * self->BlockSize)
-                               : std::nullopt);
-            }
-            return newConfig;
-        }
-        return TVChunkConfig{};
-    };
-    UpdateConfig(
-        std::move(prepare),
-        TStringBuilder() << "copy progress " << totalBytes << " bytes");
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Copy progress %lu bytes",
+        LogTitle.GetWithTime().c_str(),
+        totalBytes);
+
+    StartPersist();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -561,6 +600,10 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 
     DoFlush(false);
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
+<<<<<<< HEAD
+=======
+    StartPersist();
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 }
 
 void TVChunk::DoStart()
@@ -845,6 +888,10 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
     UpdatePendingCounters();
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
+<<<<<<< HEAD
+=======
+    StartPersist();
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     ScheduleCleaningUp();
 }
 
@@ -951,19 +998,39 @@ void TVChunk::OnEraseBelatedResponse(
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 void TVChunk::DoPersistDirtyMap()
+=======
+void TVChunk::StartPersist()
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 {
-    if (DirtyMapStatePersisting) {
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (Persisting) {
         return;
     }
+
+    if (!PendingVChunkConfigs.empty()) {
+        PersistNextPendingConfig();
+        return;
+    }
+
+    DoPersistDirtyMap();
+}
+
+void TVChunk::DoPersistDirtyMap()
+{
+    Y_ABORT_UNLESS(!Persisting);
+
     if (!BlocksDirtyMap->NeedPersist()) {
         return;
     }
-    DirtyMapStatePersisting = true;
+    Persisting = true;
 
     auto state = BlocksDirtyMap->GetStateForPersist();
     const ui32 stateGeneration = BlocksDirtyMap->GetCurrentGeneration();
+    const THostMask freshDDisks = BlocksDirtyMap->GetOutdatedDDisks();
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -977,23 +1044,24 @@ void TVChunk::DoPersistDirtyMap()
     future.Subscribe(
         [weakSelf = weak_from_this(),
          executor = Executor,
-         stateGeneration]   //
+         stateGeneration,
+         freshDDisks]   //
         (const TPersistResultFuture& f) mutable
         {
             if (f.GetValue() != EPersistResult::Success) {
                 return;
             }
             executor->ExecuteSimple(
-                [weakSelf = std::move(weakSelf), stateGeneration]()
+                [weakSelf = std::move(weakSelf), stateGeneration, freshDDisks]()
                 {
                     if (auto self = weakSelf.lock()) {
-                        self->OnDirtyMapPersisted(stateGeneration);
+                        self->OnDirtyMapPersisted(stateGeneration, freshDDisks);
                     }
                 });
         });
 }
 
-void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
+void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1004,8 +1072,12 @@ void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
         LogTitle.GetWithTime().c_str(),
         stateGeneration);
 
-    DirtyMapStatePersisting = false;
+    Y_ABORT_UNLESS(Persisting);
+    Persisting = false;
     BlocksDirtyMap->StatePersisted(stateGeneration);
+    PersistedFreshDDisks = freshDDisks;
+    StartPersist();
+    DemoteUnavailableHostsIfNeeded();
     ScheduleCleaningUp();
 }
 
@@ -1121,6 +1193,10 @@ void TVChunk::CleaningUp()
 
     DoFlush(true);
     DoErase(true, TBlocksDirtyMap::EEraseType::Standard);
+<<<<<<< HEAD
+=======
+    StartPersist();
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 }
 
 void TVChunk::UpdatePendingCounters()
@@ -1152,20 +1228,35 @@ void TVChunk::UpdateConfig(
 
     PendingVChunkConfigs.push_back(TPendingVChunkConfig{
         .PrepareConfig = std::move(prepareConfig),
+<<<<<<< HEAD
         .ApplyPersisted = std::move(applyPersisted)});
     PersistNextPendingConfig();
+=======
+        .Message = std::move(message)});
+
+    StartPersist();
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 }
 
 void TVChunk::PersistNextPendingConfig()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+<<<<<<< HEAD
     if (PendingVChunkConfigs.size() != 1) {
         return;
     }
+=======
+    Y_ABORT_UNLESS(!Persisting);
+    Y_ABORT_UNLESS(!PendingVChunkConfigs.empty());
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
-    auto& pending = *PendingVChunkConfigs.begin();
+    TPendingVChunkConfig& pending = PendingVChunkConfigs.front();
+    auto config = std::move(pending.PrepareConfig)();
+    auto message = std::move(pending.Message);
+    PendingVChunkConfigs.pop_front();
 
+<<<<<<< HEAD
     pending.Config = std::move(pending.PrepareConfig)();
     Y_ABORT_UNLESS(
         pending.Config.GetVChunkIndex() == VChunkConfig.GetVChunkIndex());
@@ -1176,18 +1267,77 @@ void TVChunk::PersistNextPendingConfig()
     DirectBlockGroup->Schedule(
         TDuration::Seconds(1),
         [weakSelf = weak_from_this()]()
+=======
+    if (config.Empty() || config == VChunkConfig) {
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip update config: %s %s",
+            LogTitle.GetWithTime().c_str(),
+            message.Quote().c_str(),
+            config.DebugPrint().c_str());
+
+        StartPersist();
+        return;
+    }
+
+    Persisting = true;
+
+    Y_ABORT_UNLESS(config.GetVChunkIndex() == VChunkConfig.GetVChunkIndex());
+    Y_ABORT_UNLESS(config.IsValid());
+
+    const ui32 stateGeneration = BlocksDirtyMap->GetCurrentGeneration();
+    auto dirtyMapState = BlocksDirtyMap->MakeFutureState(config, IsTouched());
+    // GetOutdatedDDisks() only sees current DDisks and would miss a newly
+    // promoted DDisk. Use the state that will be persisted with the config.
+    const THostMask freshDDisks = GetFreshDDisks(dirtyMapState);
+    auto onPersisted = PartitionDirectService->UpdateVChunkState(
+        config,
+        std::move(dirtyMapState));
+    onPersisted.Subscribe(
+        [weakSelf = weak_from_this(),
+         executor = Executor,
+         config,
+         message = std::move(message),
+         stateGeneration,
+         freshDDisks]   //
+        (const TPersistResultFuture& f) mutable
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         {
             if (auto self = weakSelf.lock()) {
                 self->OnConfigPersisted();
             }
+<<<<<<< HEAD
+=======
+            executor->ExecuteSimple(
+                [weakSelf = std::move(weakSelf),
+                 config,
+                 message = std::move(message),
+                 stateGeneration,
+                 freshDDisks]() mutable
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnConfigPersisted(
+                            config,
+                            message,
+                            stateGeneration,
+                            freshDDisks);
+                    }
+                });
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         });
 }
 
-void TVChunk::OnConfigPersisted()
+void TVChunk::OnConfigPersisted(
+    const TVChunkConfig& config,
+    const TString& message,
+    ui32 stateGeneration,
+    THostMask freshDDisks)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    Y_ABORT_UNLESS(!PendingVChunkConfigs.empty());
+    Y_ABORT_UNLESS(Persisting);
 
+<<<<<<< HEAD
     auto& pending = *PendingVChunkConfigs.begin();
     VChunkConfig = pending.Config;
     auto apply = std::move(pending.ApplyPersisted);
@@ -1196,10 +1346,20 @@ void TVChunk::OnConfigPersisted()
 <<<<<<< HEAD
     apply();
 =======
+=======
+    Persisting = false;
+
+    BlocksDirtyMap->StatePersisted(stateGeneration);
+    PersistedFreshDDisks = freshDDisks;
+    ApplyConfig(config, message);
+    StartPersist();
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     DemoteUnavailableHostsIfNeeded();
 }
 
-void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
+void TVChunk::ApplyConfig(
+    const TVChunkConfig& newConfig,
+    const TString& message)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1212,7 +1372,7 @@ void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
         VChunkConfig.DebugPrint().c_str(),
         newConfig.DebugPrint().c_str());
 
-    VChunkConfig = std::move(newConfig);
+    VChunkConfig = newConfig;
     BlocksDirtyMap->UpdateConfig(VChunkConfig, IsTouched());
 
     for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
@@ -1300,8 +1460,12 @@ TVChunkConfig TVChunk::PrepareNewConfig(
             const TString message = newConfig.EvacuateHost(hostIndex);
 =======
             newConfig.DisableHost(hostIndex);
+<<<<<<< HEAD
             const TString message = newConfig.PromoteHostIfNeeded(IsTouched());
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
+=======
+            const TString message = newConfig.PromoteHostIfNeeded();
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
             if (!message.empty()) {
                 LOG_WARN(
                     *ActorSystem,
@@ -1428,6 +1592,7 @@ void TVChunk::OnCopyComplete(
         PrintHostIndex(hostIndex).c_str(),
         ToString(result).c_str());
 
+<<<<<<< HEAD
     auto prepare = [weakSelf = weak_from_this(), hostIndex]()
     {
         if (auto self = weakSelf.lock()) {
@@ -1438,13 +1603,52 @@ void TVChunk::OnCopyComplete(
         return TVChunkConfig{};
     };
     auto apply = [weakSelf = weak_from_this()]()
+=======
+    if (result != TDDiskDataCopier::EResult::Ok) {
+        // TODO (drbasic). Decide what to do in case of a copying error.
+        Copiers.erase(hostIndex);
+        return;
+    }
+
+    Copiers.erase(hostIndex);
+    StartPersist();
+}
+
+void TVChunk::DemoteUnavailableHostsIfNeeded()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (GetDDisksForDemote().Empty()) {
+        return;
+    }
+
+    auto prepare = [weakSelf = weak_from_this()]()
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     {
         if (auto self = weakSelf.lock()) {
             self->ApplyConfig();
         }
     };
 
+<<<<<<< HEAD
     UpdateConfig(std::move(prepare), std::move(apply));
+=======
+    UpdateConfig(std::move(prepare), "Demote unavailable hosts");
+}
+
+THostMask TVChunk::GetDDisksForDemote() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    auto healthyDDisks = GetHealthyDDisks();
+    if (healthyDDisks.Count() < QuorumDirectBlockGroupHostCount) {
+        return THostMask::MakeEmpty();
+    }
+
+    auto ddiskToDemote = VChunkConfig.GetDDisks()
+                             .Exclude(VChunkConfig.GetEnabledDDisks())
+                             .Exclude(healthyDDisks);
+    return ddiskToDemote;
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 }
 
 void TVChunk::WaitForDirtyMapReady()

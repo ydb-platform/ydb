@@ -19,9 +19,15 @@ public:
         ui32 vChunkIndex,
         THostRoles pbufferHosts,
         THostRoles ddiskHosts,
-        THostMask enabledHosts,
-        TVector<std::optional<ui64>> watermarks);
+        THostMask enabledHosts);
 
+<<<<<<< HEAD
+=======
+    [[nodiscard]] EHostHumanReadableState GetHostHumanReadableState(
+        THostIndex hostIndex,
+        bool fresh) const;
+    [[nodiscard]] bool Empty() const;
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;
 
@@ -39,11 +45,12 @@ public:
 
     // Disables the host. Demote ddisk and pbuffer. If possible, adds ddisk on
     // the new host. Returns the text of the error or message to be logged.
-    TString EvacuateHost(THostIndex hostIndex, bool fresh);
+    TString EvacuateHost(THostIndex hostIndex);
 
     // Removes ddisk from the host. Demote pbuffer to handoff. Returns error
     // message or empty string when demote executed successfully.
     TString DemoteHost(THostIndex hostIndex);
+<<<<<<< HEAD
 <<<<<<< HEAD
     // Adds ddisk to the host.
     void PromoteHost(THostIndex hostIndex);
@@ -52,6 +59,11 @@ public:
     void PromoteHost(THostIndex hostIndex, bool fresh);
     TString PromoteHostIfNeeded(bool fresh);
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
+=======
+    // Adds ddisk to the host.
+    void PromoteHost(THostIndex hostIndex);
+    TString PromoteHostIfNeeded();
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;
     [[nodiscard]] EHostRole GetDDiskRole(THostIndex hostIndex) const;
@@ -68,6 +80,7 @@ public:
 
     // Get a list of all DDisks (enabled and disabled).
     [[nodiscard]] THostMask GetDDisks() const;
+<<<<<<< HEAD
     // Get a list of all DDisks with full data (enabled or not).
     [[nodiscard]] THostMask GetFullDDisks() const;
     // Get a list of all healthy DDisks (enabled and full filed).
@@ -76,6 +89,10 @@ public:
     void SetWatermark(THostIndex hostIndex, std::optional<ui64> watermark);
     [[nodiscard]] std::optional<ui64> GetWatermark(THostIndex hostIndex) const;
 
+=======
+    // Get a list of all enabled DDisks.
+    [[nodiscard]] THostMask GetEnabledDDisks() const;
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     [[nodiscard]] THostMask GetDisabledHosts() const;
 
     [[nodiscard]] bool IsValid() const;
@@ -89,7 +106,6 @@ private:
     THostRoles PBufferHosts;
     THostRoles DDiskHosts;
     THostMask EnabledHosts;
-    TVector<std::optional<ui64>> Watermarks;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

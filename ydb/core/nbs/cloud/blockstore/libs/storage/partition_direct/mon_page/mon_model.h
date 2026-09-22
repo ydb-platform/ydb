@@ -16,6 +16,12 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
+<<<<<<< HEAD
+=======
+#include <ydb/core/mind/bscontroller/types.h>
+
+#include <util/generic/hash.h>
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
@@ -119,6 +125,8 @@ struct TDbgSnapshot
 <<<<<<< HEAD
 =======
     TVector<TConnectionSnapshot> Connections;
+    // Current Fresh DDisks for vchunks that have any.
+    THashMap<ui32, THostMask> FreshDDisks;
     TArenaPoolStats MemoryStats;
     TArenaAllocatorStats DetailedMemoryStats;
     TDirtyMapStats DirtyMapStats;

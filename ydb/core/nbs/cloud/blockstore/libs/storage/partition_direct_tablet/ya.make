@@ -13,9 +13,8 @@ SRCS(
     part_persist_host_health.cpp
     part_storepartitionids.cpp
     part_storevolumeconfig.cpp
-    part_updatedirtymapstate.cpp
     part_setvchunktouched.cpp
-    part_updatevchunkconfig.cpp
+    part_updatevchunkstate.cpp
     partition_cleanup_actor.cpp
     partition_direct.cpp
     partition_direct_actor.cpp

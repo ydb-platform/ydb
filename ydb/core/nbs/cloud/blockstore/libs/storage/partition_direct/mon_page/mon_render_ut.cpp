@@ -312,9 +312,10 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             0,
             DirectBlockGroupHostCount,
             DefaultPrimaryCount);
-        config.PromoteHost(3, true);
+        config.PromoteHost(3);
         config.DisableHost(0);
         const TVChunkConfigs configs{{0, std::move(config)}};
+        data.Dbgs[0].FreshDDisks[0].Set(3);
 
         TTestTouchedProvider touchedProvider;
         touchedProvider.Touched = {0};
@@ -599,6 +600,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
     }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     Y_UNIT_TEST(DbgListShowsFreshDDisksByVChunk)
     {
@@ -630,6 +632,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
     }
 
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
+=======
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     Y_UNIT_TEST(DbgDetailShowsHostsTable)
     {
         const TMonPageData data{
@@ -708,7 +712,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             /*hostCount*/ 3,
             /*primaryCount*/ 1);
         config.SetDBGIndex(1);
-        config.SetWatermark(0, 7);
         const TMonPageData data{
             .Page = EMonPage::VChunk,
             .TabletInfo = {.TabletId = 42},
@@ -729,8 +732,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "<td>H0</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Primary");
         UNIT_ASSERT_STRING_CONTAINS(html, "HandOff");
-        // Host 0's watermark set above renders in its row.
-        UNIT_ASSERT_STRING_CONTAINS(html, "<td>7</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "DDiskStates: dump-text");
     }
 

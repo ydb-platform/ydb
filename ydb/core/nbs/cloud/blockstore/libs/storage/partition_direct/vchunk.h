@@ -29,6 +29,20 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Owns I/O, synchronization, configuration, and DirtyMap state for one VChunk.
+//
+// Persistence invariants:
+// - At most one config or DirtyMap persist is in flight; queued configs take
+//   priority over DirtyMap-only persists.
+// - A config is persisted atomically with its predicted DirtyMap state and is
+//   applied in memory only after a successful persist. The initial Behind of a
+//   newly promoted DDisk is included in that prediction.
+// - DirtyMap-only persists leave the config unchanged. Behind changes not
+//   covered by a config snapshot advance StateGeneration and are persisted by
+//   a later request.
+// - PersistedStateGeneration advances and PersistedFreshDDisks changes only
+//   after a successful persist.
+// - The touched marker is persisted independently.
 class TVChunk
     : public IWriteClient
     , public std::enable_shared_from_this<TVChunk>
@@ -69,8 +83,12 @@ public:
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
 <<<<<<< HEAD
+<<<<<<< HEAD
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
 =======
+=======
+    [[nodiscard]] THostMask GetHealthyDDisks() const;
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     [[nodiscard]] TExecutorPtr GetExecutor() const;
     [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
@@ -135,9 +153,13 @@ private:
     struct TPendingVChunkConfig
     {
         TPrepareConfigFunc PrepareConfig;
+<<<<<<< HEAD
         TApplyPersistedConfigFunc ApplyPersisted;
 
         TVChunkConfig Config;
+=======
+        TString Message;
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     };
 
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
@@ -163,9 +185,13 @@ private:
         const TEraseRequestExecutor::TResponse& response);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+    void StartPersist();
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     void DoPersistDirtyMap();
-    void OnDirtyMapPersisted(ui32 stateGeneration);
+    void OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks);
 
     // VDisk touch state.
     void Touch();
@@ -185,7 +211,16 @@ private:
         TPrepareConfigFunc prepareConfig,
         TApplyPersistedConfigFunc applyPersisted);
     void PersistNextPendingConfig();
+<<<<<<< HEAD
     void OnConfigPersisted();
+=======
+    void OnConfigPersisted(
+        const TVChunkConfig& config,
+        const TString& message,
+        ui32 stateGeneration,
+        THostMask freshDDisks);
+    void ApplyConfig(const TVChunkConfig& newConfig, const TString& message);
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
     TVChunkConfig PrepareNewConfig(
         THostIndex hostIndex,
@@ -215,12 +250,18 @@ private:
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
 <<<<<<< HEAD
+<<<<<<< HEAD
     TBlocksDirtyMap BlocksDirtyMap;
 =======
     bool DirtyMapStatePersisting = false;
     ETouchedState TouchedState = ETouchedState::NotTouched;
     TBlocksDirtyMapPtr BlocksDirtyMap;
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
+=======
+    ETouchedState TouchedState = ETouchedState::NotTouched;
+    TBlocksDirtyMapPtr BlocksDirtyMap;
+    THostMask PersistedFreshDDisks;
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
     NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;
@@ -229,6 +270,7 @@ private:
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
     bool Stopped = false;
+    bool Persisting = false;
 
     TVector<IRequestExecutorWeakPtr> Inflight;
 

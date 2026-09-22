@@ -130,7 +130,13 @@ public:
         TDuration delay,
         NYdb::NBS::TCallback callback) override;
 
+<<<<<<< HEAD
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
+=======
+    TPersistResultFuture UpdateVChunkState(
+        const TVChunkConfig& cfg,
+        TDirtyMapStateProto state) override;
+>>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
 
 <<<<<<< HEAD
     void RequestAddHost(size_t directBlockGroupId) override;

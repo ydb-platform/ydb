@@ -721,7 +721,7 @@ Y_UNIT_TEST_TWIN(SchemaPathsRespectFlagAndCountersDoNot, relativePathsEnabled) {
 
 Y_UNIT_TEST(SchemaCountersIgnoreExternalPathsAndCountNestedPaths) {
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-    const auto check = [&](const auto& proto, const TString& method, ui64 relative) {
+    const auto check = [&](const auto& proto, const TString& method, ui64 relative, ui64 relativeDatabase = 0) {
         auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), Nothing(), nullptr, method);
         ctx->CounterBlock = NGRpcService::CreateCounterCb(counters, nullptr)("schema_test", method.c_str());
         TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
@@ -729,7 +729,19 @@ Y_UNIT_TEST(SchemaCountersIgnoreExternalPathsAndCountNestedPaths) {
         NGRpcService::CountSchemaRequestPaths(request, proto);
         auto group = GetServiceCounters(counters, "ydb")->GetSubgroup("api_service", "schema_test")->GetSubgroup("method", method);
         UNIT_ASSERT_VALUES_EQUAL(group->GetNamedCounter("name", "api.grpc.request.relative_resource_count", true)->Val(), relative);
+        UNIT_ASSERT_VALUES_EQUAL(group->GetNamedCounter("name", "api.grpc.request.relative_database_count", true)->Val(), relativeDatabase);
     };
+    const auto checkDatabase = [&](auto proto, const TString& method) {
+        for (const TString path : {"", "/Root/db", "db"}) {
+            proto.set_path(path);
+            check(proto, method + path, 0, !path.empty() && !path.StartsWith('/'));
+        }
+    };
+    checkDatabase(Ydb::Cms::CreateDatabaseRequest(), "CreateDatabase");
+    checkDatabase(Ydb::Cms::AlterDatabaseRequest(), "AlterDatabase");
+    checkDatabase(Ydb::Cms::GetDatabaseStatusRequest(), "GetDatabaseStatus");
+    checkDatabase(Ydb::Cms::GetScaleRecommendationRequest(), "GetScaleRecommendation");
+    checkDatabase(Ydb::Cms::RemoveDatabaseRequest(), "RemoveDatabase");
     Ydb::Import::ImportFromFsRequest importRequest;
     importRequest.mutable_settings()->set_base_path("/tmp/backup");
     auto* importItem = importRequest.mutable_settings()->add_items();

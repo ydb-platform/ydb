@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/strbuf.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
@@ -8,7 +9,7 @@
 
 namespace NKikimr::NGRpcService {
 
-// Inspect only schema-object fields in the incoming protobuf. In particular,
+// Inspect database and schema-object paths in the incoming protobuf. In particular,
 // SQL, rate-limiter resource names and external storage paths are not schema paths.
 template <typename TContext, typename TRequest>
 void CountSchemaRequestPaths(const TContext& context, const TRequest& request) {
@@ -18,7 +19,13 @@ void CountSchemaRequestPaths(const TContext& context, const TRequest& request) {
     if constexpr (requires { TStringBuf(request); }) {
         count(request);
     }
-    if constexpr (requires { TStringBuf(request.path()); }) {
+    if constexpr (std::is_same_v<TRequest, Ydb::Cms::CreateDatabaseRequest>
+        || std::is_same_v<TRequest, Ydb::Cms::AlterDatabaseRequest>
+        || std::is_same_v<TRequest, Ydb::Cms::GetDatabaseStatusRequest>
+        || std::is_same_v<TRequest, Ydb::Cms::GetScaleRecommendationRequest>
+        || std::is_same_v<TRequest, Ydb::Cms::RemoveDatabaseRequest>) {
+        context.CountDatabasePath(request.path());
+    } else if constexpr (requires { TStringBuf(request.path()); }) {
         count(request.path());
     } else if constexpr (requires { TStringBuf(*request.path().begin()); }) {
         for (const auto& path : request.path()) {

@@ -1471,8 +1471,8 @@ TString TBlocksDirtyMap::DebugPrintBehind() const
 TString TBlocksDirtyMap::DebugPrintBehindBrief() const
 {
     TStringBuilder result;
-    result << "gen:" << GetCurrentGeneration() << "/"
-           << PersistedStateGeneration << " ";
+    result << "Current gen:" << GetCurrentGeneration()
+           << ", Persisted gen:" << PersistedStateGeneration << " ";
     for (THostIndex h = 0; h < GetHostCount(); ++h) {
         auto brief = DDiskStates[h].DebugPrintBehindBrief();
         if (brief) {

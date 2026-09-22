@@ -235,6 +235,7 @@ void TVChunkConfig::PromoteHost(THostIndex hostIndex)
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 TString TVChunkConfig::PromoteHostIfNeeded(bool fresh)
 =======
@@ -261,6 +262,8 @@ TString TVChunkConfig::PromoteHostIfNeeded()
 }
 
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
+=======
+>>>>>>> c84fdf4fd56 ([NBS-7705] Promote least loaded host (#53749))
 EHostRole TVChunkConfig::GetPBufferRole(THostIndex hostIndex) const
 {
     return PBufferHosts.GetRole(hostIndex);

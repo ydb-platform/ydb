@@ -62,8 +62,11 @@ public:
 =======
     // Adds ddisk to the host.
     void PromoteHost(THostIndex hostIndex);
+<<<<<<< HEAD
     TString PromoteHostIfNeeded();
 >>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
+=======
+>>>>>>> c84fdf4fd56 ([NBS-7705] Promote least loaded host (#53749))
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;
     [[nodiscard]] EHostRole GetDDiskRole(THostIndex hostIndex) const;

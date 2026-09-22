@@ -10,6 +10,8 @@
 
 ## Настройки по умолчанию без явной конфигурации {#default-no-settings}
 
+Подробнее об ограничениях дефолтного автошардирования и типичных сценариях: [{#T}](../../../concepts/datamodel/table.md#default_auto_sharding_limits).
+
 Если при создании строковой таблицы **не задавать** параметры `AUTO_PARTITIONING_*` явно, действуют значения по умолчанию из модели данных (см. [{#T}](../../../concepts/datamodel/table.md#partitioning_row_table)).
 
 * **`AUTO_PARTITIONING_BY_SIZE`** обычно **включён** — значение **`AUTO_PARTITIONING_PARTITION_SIZE_MB`** по умолчанию составляет ровно 2 ГиБ.

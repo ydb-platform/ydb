@@ -45,6 +45,7 @@ private:
     const TVector<TRegionPtr> Regions;   // 4 GiB each
 
     std::atomic<ui64> SequenceGenerator;
+    std::atomic<size_t> InflightWriteCount{0};
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
     TDuration TraceSamplePeriod;
@@ -150,7 +151,12 @@ public:
         size_t hostIndex,
         ui32 dbgConnectionsConfigGeneration) override;
 
-    ui64 GenerateLsn() override;
+    ui64 OnWriteStarted() override;
+
+    void OnWriteFinished() override;
+
+    // IDiskStateProvider implementation
+    size_t GetInflightWriteCount() const override;
 
 <<<<<<< HEAD
 =======

@@ -503,13 +503,28 @@ void TFastPathService::QueryRemoveHost(
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
-ui64 TFastPathService::GenerateLsn()
+ui64 TFastPathService::OnWriteStarted()
 {
+    ++InflightWriteCount;
     return ++SequenceGenerator;
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+void TFastPathService::OnWriteFinished()
+{
+    const size_t previous = InflightWriteCount.fetch_sub(1);
+    Y_ABORT_UNLESS(previous > 0);
+}
+
+size_t TFastPathService::GetInflightWriteCount() const
+{
+    return InflightWriteCount.load();
+}
+
+>>>>>>> 67e4af6a66a ([NBS-6826] Dynamic selection of write mode (#53486))
 void TFastPathService::StopTablet(const TString& reason)
 {
     // Just forward the signal to the actor thread.
@@ -551,6 +566,7 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
         .LsnCounter = SequenceGenerator.load(),
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
         .DbgCount = DirectBlockGroups.size(),
 =======
@@ -558,6 +574,9 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
 >>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
 =======
 >>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
+=======
+        .InflightWriteCount = InflightWriteCount.load(),
+>>>>>>> 67e4af6a66a ([NBS-6826] Dynamic selection of write mode (#53486))
         .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetDetailedStat()},
     };
 }

@@ -437,6 +437,7 @@ void TVChunk::OnWriteBlocksResponse(
         FormatError(response.Error).c_str());
 
     --InflightWritesCount;
+    PartitionDirectService->OnWriteFinished();
 
     {
         auto dirtyMapSpan = bundle->GetSpan().CreateChild(
@@ -729,11 +730,23 @@ void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 
     WaitForDirtyMapReady();
 
+<<<<<<< HEAD
     // Generate the lsn and register the write as inflight on the same executor
     // thread, so the cleanup watermark covers it from the moment of generation.
     const ui64 lsn = PartitionDirectService->GenerateLsn();
     bundle->SetLsn(lsn);
     BlocksDirtyMap.RegisterInflightWrite(lsn, bundle->GetVChunkRange());
+=======
+    // Mint the record id and register the write as inflight on the same
+    // executor thread, so the cleanup watermark covers it from the moment of
+    // minting.
+    const auto lsn = PartitionDirectService->OnWriteStarted();
+    const TPBufferKey pBufferKey{
+        .Generation = DirectBlockGroup->GetTabletGeneration(),
+        .Lsn = lsn};
+    bundle->SetPBufferKey(pBufferKey);
+    BlocksDirtyMap->RegisterInflightWrite(pBufferKey, bundle->GetVChunkRange());
+>>>>>>> 67e4af6a66a ([NBS-6826] Dynamic selection of write mode (#53486))
 
     LOG_DEBUG(
         *ActorSystem,

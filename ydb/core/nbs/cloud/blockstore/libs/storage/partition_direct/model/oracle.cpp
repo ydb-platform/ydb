@@ -172,6 +172,8 @@ TOracle::TOracle(
     , DefaultFlushRequestTimeout(StorageConfig->GetFlushRequestTimeout())
     , DefaultEraseRequestTimeout(StorageConfig->GetEraseRequestTimeout())
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
+    , MaxInflightWritesForDirectWrite(
+          OracleConfig->GetMaxInflightWritesForDirectWrite())
     , HostStatistics(hostHealths.size())
     , HostStates(hostHealths.size())
     , HostsHealths(hostHealths)
@@ -427,7 +429,13 @@ TDuration TOracle::GetReadRequestTimeout() const
 
 EWriteMode TOracle::GetWriteMode() const
 {
-    return DefaultWriteMode;
+    if (!MaxInflightWritesForDirectWrite || !DiskStateProvider) {
+        return DefaultWriteMode;
+    }
+    return DiskStateProvider->GetInflightWriteCount() <=
+                   MaxInflightWritesForDirectWrite
+               ? EWriteMode::DirectWrite
+               : EWriteMode::IndirectWrite;
 }
 
 TDuration TOracle::GetWriteHedgingDelay(THostMask hosts, bool indirect) const
@@ -502,6 +510,71 @@ TString TOracle::Dump() const
     return sb;
 }
 
+<<<<<<< HEAD
+=======
+void TOracle::SetDiskStateProvider(IDiskStateProvider* diskStateProvider)
+{
+    DiskStateProvider = diskStateProvider;
+}
+
+void TOracle::AddHostIfNeeded(THostIndex hostIndex)
+{
+    size_t currentHostCount = HostStatistics.size();
+    const size_t newHostCount = hostIndex + 1;
+
+    Y_ABORT_UNLESS(currentHostCount == HostStates.size());
+    Y_ABORT_UNLESS(currentHostCount == HostsHealths.size());
+    Y_ABORT_UNLESS(currentHostCount == HostsReconnectDelays.size());
+
+    while (currentHostCount < newHostCount) {
+        HostStatistics.emplace_back();
+        HostStates.emplace_back();
+        HostsHealths.push_back(EHostHealth::Online);
+        HostsReconnectDelays.emplace_back(MinReconnectDelay, MaxReconnectDelay);
+
+        currentHostCount = HostStatistics.size();
+    }
+}
+
+void TOracle::MaybeQueryAddHost()
+{
+    if (GetAliveHostCount(HostStates) < DirectBlockGroupHostCount &&
+        GetHostCount() < MaxHostCount)
+    {
+        HostStateController->QueryAddHost();
+    }
+}
+
+TVector<THostSnapshot> TOracle::BuildHostStats(TInstant now) const
+{
+    TVector<THostSnapshot> stats;
+    stats.reserve(HostStatistics.size());
+    for (THostIndex hostIndex = 0; hostIndex < GetHostCount(); ++hostIndex) {
+        // Compute latency stats for monitoring snapshot.
+        TLatencyByOperation latencyByOperation{};
+        for (size_t operation = 0; operation < OperationCount; ++operation) {
+            latencyByOperation[operation] =
+                GetTimePredictor(static_cast<EOperation>(operation))
+                    .GetLatencyStats(hostIndex);
+        }
+        stats.emplace_back(THostSnapshot::Make(
+            hostIndex,
+            HostStates[hostIndex],
+            HostsHealths[hostIndex],
+            HostStatistics[hostIndex],
+            latencyByOperation,
+            now));
+    }
+    return stats;
+}
+
+size_t TOracle::GetLatencyHistoryCapacity() const
+{
+    // All predictors share the same capacity from OracleConfig.
+    return TimePredictors.empty() ? 0 : TimePredictors.front().GetCapacity();
+}
+
+>>>>>>> 67e4af6a66a ([NBS-6826] Dynamic selection of write mode (#53486))
 TTimePredictor& TOracle::AccessTimePredictor(EOperation operation)
 {
     return TimePredictors[static_cast<size_t>(operation)];

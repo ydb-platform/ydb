@@ -58,6 +58,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TVector<TAddHostRequest> AddHostRequests;
     TVector<TRemoveHostRequest> RemoveHostRequests;
     ui64 LsnGenerator = 0;
+    size_t InflightWriteCount = 0;
     size_t BlockedGenerationCount = 0;
     TString LastBlockedReason;
     size_t CopyRangeBudgetRequestCount = 0;
@@ -133,9 +134,21 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
             .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration});
     }
 
-    ui64 GenerateLsn() override
+    ui64 OnWriteStarted() override
     {
+        ++InflightWriteCount;
         return ++LsnGenerator;
+    }
+
+    void OnWriteFinished() override
+    {
+        Y_ABORT_UNLESS(InflightWriteCount > 0);
+        --InflightWriteCount;
+    }
+
+    [[nodiscard]] size_t GetInflightWriteCount() const override
+    {
+        return InflightWriteCount;
     }
 
     void StopTablet(const TString& reason) override

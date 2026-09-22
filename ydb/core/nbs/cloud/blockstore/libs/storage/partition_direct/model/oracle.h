@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include "disk_state_provider.h"
 #include "host.h"
 #include "host_health_policy.h"
 #include "host_mask.h"
@@ -93,6 +94,9 @@ public:
         EDataLocation dataLocation) const = 0;
     [[nodiscard]] virtual TDuration GetReadRequestTimeout() const = 0;
 
+    // Chooses DirectWrite or IndirectWrite for this request.
+    // Low load favours DirectWrite for latency. The disk-wide in-flight
+    // write count is read from the disk-state provider.
     [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
     [[nodiscard]] virtual TDuration GetWriteHedgingDelay(
         THostMask hosts,
@@ -180,7 +184,22 @@ public:
         THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
 
+<<<<<<< HEAD
     [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
+=======
+    // The FastPath service that owns the disk-wide in-flight write count.
+    // Wired from TDirectBlockGroup::Run after FastPath exists.
+    void SetDiskStateProvider(IDiskStateProvider* diskStateProvider);
+
+    // If necessary, adds hosts to make the hostIndex valid.
+    void AddHostIfNeeded(THostIndex hostIndex);
+
+    // Check if it's valid to QueryAddHost from HostStateController and do it.
+    void MaybeQueryAddHost();
+
+    [[nodiscard]] TVector<THostSnapshot> BuildHostStats(TInstant now) const;
+    [[nodiscard]] size_t GetLatencyHistoryCapacity() const;
+>>>>>>> 67e4af6a66a ([NBS-6826] Dynamic selection of write mode (#53486))
 
 private:
     [[nodiscard]] TTimePredictor& AccessTimePredictor(EOperation operation);
@@ -199,7 +218,9 @@ private:
     const TDuration DefaultFlushRequestTimeout;
     const TDuration DefaultEraseRequestTimeout;
     const EWriteMode DefaultWriteMode;
+    const size_t MaxInflightWritesForDirectWrite;
 
+    IDiskStateProvider* DiskStateProvider = nullptr;
     TVector<THostStat> HostStatistics;
     TVector<THostState> HostStates;
     TVector<EHostHealth> HostsHealths;

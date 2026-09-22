@@ -83,6 +83,7 @@ struct TFastPathServiceInfo
     ui64 LsnCounter = 0;
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     size_t TotalVChunks = 0;
     size_t DbgCount = 0;
 =======
@@ -93,6 +94,10 @@ struct TFastPathServiceInfo
 
 =======
 >>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
+=======
+    // Number of writes currently in flight across the whole disk.
+    size_t InflightWriteCount = 0;
+>>>>>>> 67e4af6a66a ([NBS-6826] Dynamic selection of write mode (#53486))
     TArenaMemoryUsage ArenaMemoryUsage;
 };
 

@@ -1,10 +1,12 @@
 # {{ ydb-short-name }} Server changelog
 
-## Version 26.3 RC {#26-3-rc}
+## Version 26.3 {#26-3}
+
+### Release candidate 26.3.1.16 {#26-3-1-16-rc}
 
 Release date: 18.09.26
 
-### Functionality
+#### Functionality
 
 * [Backup export and import are available for column-oriented tables, including S3-compatible storage](./recipes/backup/backup-collections/exporting-to-external-storage.md?version=main).
 * Column-oriented table columns support [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.3#encoding). Use `ENCODING(DICT)` for low-cardinality values.
@@ -21,7 +23,7 @@ Release date: 18.09.26
 * Change Data Capture records can include the [OpenTelemetry trace ID](./concepts/cdc.md?version=v26.3#record-structure) of the request that produced the change.
 * [Topic reads that start from a timestamp](./reference/ydb-cli/topic-read.md?version=v26.3) filter out messages with earlier write timestamps, including messages stored in the same blob as newer messages.
 
-### Disabled functionality
+#### Disabled functionality
 
 The following functionality is not enabled by default.
 

@@ -521,8 +521,7 @@ public:
         return EExecutionStatus::Restart;
     }
 
-    bool OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, ui64 lockTxId, ui64 querySpanId, TTransactionContext& txc, const TActorContext& ctx) {
-        Y_UNUSED(querySpanId);
+    bool OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, ui64 lockTxId, TTransactionContext& txc, const TActorContext& ctx) {
         if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) {
             return false;
         }
@@ -1041,7 +1040,7 @@ public:
             writeOp->ReleaseTxData(txc);
             return EExecutionStatus::Executed;
         } catch (const TUniqueConstrainException&) {
-            if (!OnUniqueConstrainException(userDb, *writeOp, guardLocks.LockTxId, guardLocks.QuerySpanId, txc, ctx)) {
+            if (!OnUniqueConstrainException(userDb, *writeOp, guardLocks.LockTxId, txc, ctx)) {
                 return EExecutionStatus::Continue;
             }
 

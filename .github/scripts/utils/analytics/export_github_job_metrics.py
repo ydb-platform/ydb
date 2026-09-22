@@ -19,12 +19,8 @@ from ci_metrics import metrics_from_workflow_run, upload_rows
 
 DEFAULT_ORG = "ydb-platform"
 DEFAULT_REPO = "ydb"
-DEFAULT_WORKFLOWS = (
-    "pr_check.yml",
-    "nightly_build.yml",
-    "ydbd_clean_build.yml",
-    "build_analytics.yml",
-)
+ALL_WORKFLOWS = "all"
+DEFAULT_WORKFLOWS = (ALL_WORKFLOWS,)
 RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 
 
@@ -56,6 +52,63 @@ def resolve_workflows(explicit: Optional[List[str]] = None) -> List[str]:
     env_value = os.environ.get("CI_METRICS_WORKFLOW")
     workflows = split_workflows(env_value) if env_value else []
     return workflows or list(DEFAULT_WORKFLOWS)
+
+
+def is_all_workflows(workflows: List[str]) -> bool:
+    if not workflows:
+        return True
+    return len(workflows) == 1 and workflows[0].lower() == ALL_WORKFLOWS
+
+
+def workflow_file_name(path: str) -> str:
+    name = str(path or "").rsplit("/", 1)[-1].strip()
+    return name
+
+
+def workflows_from_github_payload(payload: Any) -> List[str]:
+    names: List[str] = []
+    seen = set()
+    for item in (payload or {}).get("workflows") or []:
+        if not isinstance(item, dict) or item.get("state") != "active":
+            continue
+        name = workflow_file_name(str(item.get("path") or ""))
+        if not name.endswith((".yml", ".yaml")) or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    names.sort()
+    return names
+
+
+def list_active_workflow_files(org: str, repo: str) -> List[str]:
+    names: List[str] = []
+    seen = set()
+    page = 1
+    while page <= 10:
+        payload = github_get(
+            f"https://api.github.com/repos/{org}/{repo}/actions/workflows",
+            params={"per_page": 100, "page": page},
+        )
+        batch = workflows_from_github_payload(payload)
+        for name in batch:
+            if name in seen:
+                continue
+            seen.add(name)
+            names.append(name)
+        workflows = payload.get("workflows") or []
+        if len(workflows) < 100:
+            break
+        page += 1
+        time.sleep(0.2)
+    names.sort()
+    return names
+
+
+def expand_workflows(org: str, repo: str, explicit: Optional[List[str]] = None) -> List[str]:
+    resolved = resolve_workflows(explicit)
+    if is_all_workflows(resolved):
+        return list_active_workflow_files(org, repo)
+    return resolved
 
 
 def _github_headers() -> Dict[str, str]:
@@ -217,7 +270,7 @@ def parse_args(argv=None) -> argparse.Namespace:
         action="append",
         default=None,
         help="Workflow file name (repeatable or comma-separated). "
-        "Default: pr_check.yml,nightly_build.yml,ydbd_clean_build.yml,build_analytics.yml",
+        "Default: all active workflows. Use a file name to export one, e.g. pr_check.yml.",
     )
     parser.add_argument("--hours", type=int, default=24, help="Lookback window in hours (default 24)")
     parser.add_argument("--table-path", default=None)
@@ -227,7 +280,7 @@ def parse_args(argv=None) -> argparse.Namespace:
 def main(argv=None) -> int:
     try:
         args = parse_args(argv)
-        workflows = resolve_workflows(args.workflow)
+        workflows = expand_workflows(args.org, args.repo, args.workflow)
         created_since = datetime.now(timezone.utc) - timedelta(hours=args.hours)
         print(
             f"Exporting {args.org}/{args.repo} workflows={workflows} "

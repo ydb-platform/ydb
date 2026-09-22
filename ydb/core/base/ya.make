@@ -170,5 +170,6 @@ RECURSE_FOR_TESTS(
     ut_backtrace
     ut_board_subscriber
     ut_http_database_param
+    ut_statestorage_proxy
 )
 ENDIF()

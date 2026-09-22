@@ -65,6 +65,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     ui32 RepliesMerged;
     ui32 RepliesAfterReply;
     ui32 SignaturesMerged;
+    ui32 NoDataReplies;
 
     TActorId ReplyLeader;
     TActorId ReplyLeaderTablet;
@@ -300,6 +301,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         // NOTE: replicas currently reply with ERROR when there is no data for the tablet
         case NKikimrProto::ERROR:
         case NKikimrProto::NODATA:
+            ++NoDataReplies;
             ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusNoInfo, &ReplyStatus, cookie, false);
             break;
         default:
@@ -432,7 +434,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             ReplyAndDie(NKikimrProto::OK);
             return;
         case TStateStorageInfo::TSelection::StatusNoInfo:
-            ReplyAndDie(NKikimrProto::NODATA);
+            ReplyAndDie(NoDataReplies >= Replicas / 2 + 1 ? NKikimrProto::NODATA : NKikimrProto::TIMEOUT);
             return;
         case TStateStorageInfo::TSelection::StatusOutdated:
             ReplyAndDie(NKikimrProto::RACE);
@@ -459,8 +461,12 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
                 ReplyAndSig(NKikimrProto::OK);
                 return;
             case TStateStorageInfo::TSelection::StatusNoInfo:
-                if (RepliesMerged == Replicas) { // for negative response always waits for full reply set to avoid herding of good replicas by fast retry cycle
+                // StatusNoInfo may include delivery failures. Only actual empty
+                // replica replies count towards a negative lookup quorum.
+                if (NoDataReplies >= majority) {
                     ReplyAndSig(NKikimrProto::NODATA);
+                } else if (RepliesMerged == Replicas) {
+                    ReplyAndSig(NKikimrProto::ERROR);
                 }
                 return;
             case TStateStorageInfo::TSelection::StatusOutdated:
@@ -684,6 +690,7 @@ public:
         , RepliesMerged(0)
         , RepliesAfterReply(0)
         , SignaturesMerged(0)
+        , NoDataReplies(0)
         , ReplyGeneration(0)
         , ReplyStep(0)
         , ReplyLocked(false)

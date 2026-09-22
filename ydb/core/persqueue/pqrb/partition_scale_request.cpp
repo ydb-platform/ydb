@@ -36,8 +36,7 @@ TPartitionScaleRequest::TPartitionScaleRequest(
 
 TStructuredMessage TPartitionScaleRequest::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"topic", Topic},
-        {"topicPath", TopicPath},
+        {"topic", TopicPath},
         {"pathId", PathId});
 }
 

@@ -418,7 +418,7 @@ namespace NPQ {
             if (resp->Overload) {
                 LOG_D(
                     "Have to remove new data from cache. Topic cookie",
-                    {"topicName", TopicName},
+                    {"topicPath", TopicName},
                     {"cookie", resp->Cookie}
                 );
             }

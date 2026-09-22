@@ -92,7 +92,7 @@ void TInitializer::DoNext(const TActorContext& ctx) {
 TStructuredMessage TInitializer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"className", "Initializer"},
-        {"topic", Partition->TopicName()},
+        {"topic", Partition->TopicPath()},
         {"partition", Partition->Partition.ToString()});
 }
 
@@ -145,7 +145,7 @@ TInitializionContext& TInitializerStep::GetContext() {
 TStructuredMessage TInitializerStep::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"className", Name},
-        {"topic", Partition()->TopicName()},
+        {"topic", Partition()->TopicPath()},
         {"partition", PartitionId().ToString()});
 }
 

@@ -92,7 +92,6 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
             if (TenantModeEnabled()) {
                 Cerr << "=== Will create fst-class topics\n";
                 Server->AnnoyingClient->CreateTopicNoLegacy("/Root/acc/topic1", 1);
-                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/PQ/acc/topic1", 1);
             } else {
                 Cerr << "=== Will create legacy-style topics\n";
                 Server->AnnoyingClient->MkDir("/Root", "acc");
@@ -296,7 +295,7 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
             TVector<TString> pathComponents = SplitPath(path);
             const TString account = pathComponents[0];
             if (TenantModeEnabled()) {
-                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/PQ/" + path, 1);
+                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/" + path, 1);
             } else {
                 const TString schemePath = "/Root/" + path;
                 Cerr << "Creating topic \"" << schemePath << "\"" << Endl;
@@ -332,7 +331,7 @@ static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, co
         }
 /*
         THolder<IProducer> StartProducer(const TString& topicPath, bool compress = false) {
-            TString fullPath = TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath;
+            TString fullPath = TenantModeEnabled() ? "/Root/" + topicPath : topicPath;
             TProducerSettings producerSettings;
             producerSettings.Server = TServerSetting("localhost", Server->GrpcPort);
             producerSettings.Topic = fullPath;

@@ -32,6 +32,22 @@ void SkipPathPrefix(TStringBuf& path, const TStringBuf& prefix) {
 }
 
 namespace {
+    // Scheme location is <domain>/<account>/<topic>. Never <pqRoot>/rt3.<dc>--...
+    TString SchemePathFromRoot(TStringBuf rootPrefix, const TString& domain, const TString& account, const TString& fullModernName) {
+        const TString relative = account.empty()
+            ? fullModernName
+            : NKikimr::JoinPath({account, fullModernName});
+        if (!domain.empty()) {
+            return NKikimr::JoinPath({domain, relative});
+        }
+        TStringBuf root(rootPrefix);
+        root.SkipPrefix("/");
+        if (root.empty()) {
+            return relative;
+        }
+        return NKikimr::JoinPath({TString(root), relative});
+    }
+
     TString FullPath(const TMaybe<TString>& database, const TString& path) {
         if (database.Defined() && !path.StartsWith(*database) && !path.Contains('\0')) {
             try {
@@ -289,10 +305,7 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
 
         PrimaryPath = NKikimr::JoinPath({*Database, FullModernName});
         NormalizeAsFullPath(PrimaryPath);
-        if (!FullLegacyName.empty()) {
-            SecondaryPath = NKikimr::JoinPath({PQPrefix, FullLegacyName});
-            NormalizeAsFullPath(SecondaryPath.GetRef());
-        }
+        SecondaryPath = PrimaryPath;
         if (!BuildFromShortModernName())
             return;
     } else {
@@ -377,11 +390,7 @@ bool TDiscoveryConverter::BuildFromFederationPath(const TString& rootPrefix) {
         if (root.TryRSplit("/", parent, leaf) && !parent.empty()) {
             domain = TString(parent);
         }
-        if (!domain.empty()) {
-            PrimaryPath = NKikimr::JoinPath({domain, NKikimr::JoinPath({*Account_, FullModernName})});
-        } else {
-            PrimaryPath = NKikimr::JoinPath({rootPrefix, FullLegacyName});
-        }
+        PrimaryPath = SchemePathFromRoot(rootPrefix, domain, Account_.GetOrElse(""), FullModernName);
     }
     NormalizeAsFullPath(PrimaryPath);
 
@@ -582,15 +591,7 @@ bool TDiscoveryConverter::BuildFromLegacyName(const TString& rootPrefix, bool fo
             domain = TString(parent);
         }
     }
-    if (!domain.empty()) {
-        const TString account = Account_.GetOrElse("");
-        const TString relative = account.empty()
-            ? TString(fullModernName)
-            : NKikimr::JoinPath({account, TString(fullModernName)});
-        PrimaryPath = NKikimr::JoinPath({domain, relative});
-    } else {
-        PrimaryPath = NKikimr::JoinPath({rootPrefix, fullLegacyName});
-    }
+    PrimaryPath = SchemePathFromRoot(rootPrefix, domain, Account_.GetOrElse(""), TString(fullModernName));
     NormalizeAsFullPath(PrimaryPath);
     FullModernName = fullModernName;
     ModernName = modernName;

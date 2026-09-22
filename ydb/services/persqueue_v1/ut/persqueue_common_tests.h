@@ -322,7 +322,7 @@ public:
             server.CreateTopicWithQuota(topicPath, true, 10000000);
             auto driver = server.Server->AnnoyingClient->GetDriver();
             auto start = TInstant::Now();
-            const TString fullTopicPath = server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath;
+            const TString fullTopicPath = server.TenantModeEnabled() ? "/Root/" + topicPath : topicPath;
 
             for (ui32 i = 0; i < 7; ++i) {
                 auto writer = CreateSimpleWriter(*driver, fullTopicPath, TStringBuilder() << "SI-" << i, {}, "raw");
@@ -342,7 +342,7 @@ public:
         server.EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_DEBUG);
 
         const TString topicPath = "account/topic";
-        const TString fullTopicPath = server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath;
+        const TString fullTopicPath = server.TenantModeEnabled() ? "/Root/" + topicPath : topicPath;
 
         server.CreateTopicWithQuota(topicPath, true, 100.0);
         const TString data = TString("123") * 100; // 300 bytes // 3 seconds

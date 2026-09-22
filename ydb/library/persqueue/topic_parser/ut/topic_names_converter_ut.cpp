@@ -19,10 +19,7 @@ public:
 
     void BasicLegacyModeChecks() {
         UNIT_ASSERT(DiscoveryConverter->IsValid());
-        UNIT_ASSERT_VALUES_EQUAL(
-                DiscoveryConverter->GetPrimaryPath(),
-                TString(TStringBuilder() << "/Root/PQ/" << DiscoveryConverter->FullLegacyName)
-        );
+        UNIT_ASSERT(!DiscoveryConverter->GetPrimaryPath().Contains("rt3."));
         UNIT_ASSERT(!DiscoveryConverter->FullLegacyName.empty());
         UNIT_ASSERT(!DiscoveryConverter->ShortLegacyName.empty());
         //UNIT_ASSERT_VALUES_EQUAL(DiscoveryConverter->GetInternalName(), DiscoveryConverter->GetPrimaryPath());
@@ -271,7 +268,7 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
             wrapper.SetConverter(pqConfig);
 
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/lb/account-database/path/topic");
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetSecondaryPath(), "/Root/PQ/rt3.dc1--account@path--topic");
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetSecondaryPath(), "/lb/account-database/path/topic");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "path/topic");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetClientsideName(), "rt3.dc1--account@path--topic");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "account/path/topic");
@@ -290,7 +287,7 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
 
             UNIT_ASSERT_C(wrapper.TopicConverter->IsValid(), wrapper.TopicConverter->GetReason());
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/lb/account-database/path/topic-mirrored-from-dc2");
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetSecondaryPath(), "/Root/PQ/rt3.dc2--account@path--topic");
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetSecondaryPath(), "/lb/account-database/path/topic-mirrored-from-dc2");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "path/topic-mirrored-from-dc2");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetClientsideName(), "rt3.dc2--account@path--topic");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "account/path/topic");

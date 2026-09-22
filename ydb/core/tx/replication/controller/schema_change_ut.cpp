@@ -62,7 +62,8 @@ TEvService::TEvSchemaChangeReport* MakeSchemaChangeReport(
 using TTestEnv = NTestHelpers::TEnv<>;
 
 // TTestEnv uses real actor threads, so runtime observers cannot reliably
-// intercept actor-to-actor events. TBlockEvents is observer-based as well.
+// intercept actor-to-actor events. TBlockEvents is observer-based as well;
+// the synchronization gates below therefore participate in actor routing.
 class TDescribeTopicRequestGate: public TActorBootstrapped<TDescribeTopicRequestGate> {
     static constexpr ui64 RequestBlocked = 1;
     static constexpr ui64 ReleaseRequest = 2;
@@ -122,6 +123,75 @@ private:
     TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr PendingRequest;
 };
 
+class TCommitWritesRequestGate: public TActorBootstrapped<TCommitWritesRequestGate> {
+    static constexpr ui64 RequestBlocked = 3;
+    static constexpr ui64 ReleaseRequests = 4;
+    static constexpr ui64 Ready = 5;
+
+    void Handle(TEvTxUserProxy::TEvProposeTransaction::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.HasTransaction() && record.GetTransaction().HasCommitWrites()) {
+            const auto& commit = record.GetTransaction().GetCommitWrites();
+            if (commit.TablesSize() == 1 && commit.GetTables(0).GetTablePath() == TargetPath) {
+                PendingRequests.push_back(std::move(ev));
+                Send(Notify, new TEvents::TEvWakeup(RequestBlocked), 0, commit.GetWriteTxId());
+                return;
+            }
+        }
+
+        Send(ev->Forward(TxProxy));
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Tag, ReleaseRequests);
+        UNIT_ASSERT(!PendingRequests.empty());
+        for (auto& request : PendingRequests) {
+            Send(request->Forward(TxProxy));
+        }
+        PendingRequests.clear();
+    }
+
+public:
+    TCommitWritesRequestGate(const TActorId& txProxy, const TActorId& notify, TString targetPath)
+        : TxProxy(txProxy)
+        , Notify(notify)
+        , TargetPath(std::move(targetPath))
+    {
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        Send(Notify, new TEvents::TEvWakeup(Ready));
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxUserProxy::TEvProposeTransaction, Handle);
+            hFunc(TEvents::TEvWakeup, Handle);
+            default:
+                Send(ev->Forward(TxProxy));
+        }
+    }
+
+    static ui64 RequestBlockedTag() {
+        return RequestBlocked;
+    }
+
+    static ui64 ReleaseRequestsTag() {
+        return ReleaseRequests;
+    }
+
+    static ui64 ReadyTag() {
+        return Ready;
+    }
+
+private:
+    const TActorId TxProxy;
+    const TActorId Notify;
+    const TString TargetPath;
+    TVector<TEvTxUserProxy::TEvProposeTransaction::TPtr> PendingRequests;
+};
+
 struct TReplicationTestInfo {
     ui64 ControllerId = 0;
     TPathId PathId;
@@ -141,7 +211,12 @@ void CreateSourceTable(TTestEnv& env, const TString& name) {
     }));
 }
 
-TReplicationTestInfo StartReplication(TTestEnv& env, int targetCount = 1, const TString& token = "root@builtin") {
+TReplicationTestInfo StartReplication(
+        TTestEnv& env,
+        int targetCount = 1,
+        const TString& token = "root@builtin",
+        bool globalConsistency = false)
+{
     for (int i = 1; i <= targetCount; ++i) {
         CreateSourceTable(env, Sprintf("table%i", i));
     }
@@ -157,6 +232,10 @@ TReplicationTestInfo StartReplication(TTestEnv& env, int targetCount = 1, const 
     TVector<TString> params = {Sprintf(R"(CONNECTION_STRING = "grpc://%s/?database=/Root")", env.GetEndpoint().c_str())};
     if (token) {
         params.push_back(Sprintf(R"(TOKEN = "%s")", token.c_str()));
+    }
+    if (globalConsistency) {
+        params.push_back(R"(CONSISTENCY_LEVEL = "GLOBAL")");
+        params.push_back(R"(COMMIT_INTERVAL = Interval("PT10S"))");
     }
 
     NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
@@ -178,6 +257,13 @@ TReplicationTestInfo StartReplication(TTestEnv& env, int targetCount = 1, const 
     info.Generation = handshake->Get()->Record.GetController().GetGeneration();
     env.SendAsync(info.ControllerId, new TEvService::TEvStatus());
     return info;
+}
+
+void SendHeartbeat(TTestEnv& env, ui64 controllerId, const TWorkerId& worker, const TRowVersion& version) {
+    auto heartbeat = MakeHolder<TEvService::TEvHeartbeat>();
+    worker.Serialize(*heartbeat->Record.MutableWorker());
+    version.ToProto(heartbeat->Record.MutableVersion());
+    env.SendAsync(controllerId, heartbeat.Release());
 }
 
 void AttachWorkers(TTestEnv& env, ui64 controllerId, std::initializer_list<TWorkerId> workers) {
@@ -239,6 +325,18 @@ void WaitForPaused(TTestEnv& env, const TReplicationTestInfo& info) {
     }
 
     UNIT_FAIL("Replication did not Paused: " << DescribeReplication(env, info)->Get()->Record.GetState());
+}
+
+void WaitForColumnCount(TTestEnv& env, const TString& path, ui32 expected) {
+    for (ui32 attempt = 0; attempt < 50; ++attempt) {
+        if (env.GetDescription(path).GetPathDescription().GetTable().ColumnsSize() == expected) {
+            return;
+        }
+        Sleep(TDuration::MilliSeconds(20));
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        env.GetDescription(path).GetPathDescription().GetTable().ColumnsSize(), expected);
 }
 
 ui32 RestartController(TTestEnv& env, ui64 controllerId) {
@@ -646,6 +744,505 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(worker,
             NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
         WaitForPaused(env, info);
+    }
+
+    Y_UNIT_TEST(GlobalTargetFlushReplaysAfterControllerRestart) {
+        TEnv env;
+        const auto info = StartReplication(env, 2, "root@builtin", true);
+        const auto controllerId = info.ControllerId;
+        auto& runtime = env.GetRuntime();
+
+        const auto firstRun = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto secondRun = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto first = TWorkerId::Parse(firstRun->Get()->Record.GetWorker());
+        const auto second = TWorkerId::Parse(secondRun->Get()->Record.GetWorker());
+        const auto replica1 = env.GetPathId("/Root/replica1");
+        const bool firstWritesReplica1 = TPathId::FromProto(firstRun->Get()->Record
+            .GetCommand().GetLocalTableWriter().GetPathId()) == replica1;
+        const auto barrierWorker = firstWritesReplica1 ? first : second;
+        const auto siblingWorker = firstWritesReplica1 ? second : first;
+        AttachWorkers(env, controllerId, {barrierWorker, siblingWorker});
+        env.SendAsync(controllerId, new TEvPrivate::TEvCompleteWorkerSet(
+            barrierWorker.ReplicationId(), barrierWorker.TargetId()));
+        DescribeReplication(env, info);
+
+        // Allocate the later source interval first, making its write ID
+        // numerically smaller than the earlier interval's ID.
+        const auto laterResult = env.Send<TEvService::TEvTxIdResult>(controllerId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(19000, 0)}));
+        const auto laterTxId = laterResult->Get()->Record.GetVersionTxIds(0).GetTxId();
+        const auto earlierResult = env.Send<TEvService::TEvTxIdResult>(controllerId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(5000, 0)}));
+        const auto earlierTxId = earlierResult->Get()->Record.GetVersionTxIds(0).GetTxId();
+        UNIT_ASSERT(laterTxId);
+        UNIT_ASSERT(earlierTxId);
+        UNIT_ASSERT_VALUES_UNEQUAL(laterTxId, earlierTxId);
+        const auto assignedVersion = TRowVersion(20000, 0);
+
+        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
+        const auto commitGate = runtime.Register(
+            new TCommitWritesRequestGate(txProxy, env.GetSender(), "/Root/replica1"));
+        runtime.RegisterService(MakeTxProxyID(), commitGate);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())
+            ->Get()->Tag, TCommitWritesRequestGate::ReadyTag());
+
+        const auto schema = MakeSchemaChange();
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema));
+        auto blocked = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(blocked->Get()->Tag, TCommitWritesRequestGate::RequestBlockedTag());
+        UNIT_ASSERT_VALUES_EQUAL(blocked->Cookie, earlierTxId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1")
+            .GetPathDescription().GetTable().ColumnsSize(), 2);
+
+        RestartController(env, controllerId);
+        blocked = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(blocked->Get()->Tag, TCommitWritesRequestGate::RequestBlockedTag());
+        UNIT_ASSERT_VALUES_EQUAL(blocked->Cookie, earlierTxId);
+        AttachWorkers(env, controllerId, {barrierWorker, siblingWorker});
+
+        env.SendAsync(commitGate,
+            new TEvents::TEvWakeup(TCommitWritesRequestGate::ReleaseRequestsTag()));
+        blocked = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(blocked->Get()->Tag, TCommitWritesRequestGate::RequestBlockedTag());
+        UNIT_ASSERT_VALUES_EQUAL(blocked->Cookie, laterTxId);
+        runtime.RegisterService(MakeTxProxyID(), txProxy);
+        env.SendAsync(commitGate,
+            new TEvents::TEvWakeup(TCommitWritesRequestGate::ReleaseRequestsTag()));
+
+        const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), barrierWorker);
+        WaitForColumnCount(env, "/Root/replica1", 3);
+
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema, true));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender())
+            ->Get()->Record.GetApplied());
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema, false, true));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender())
+            ->Get()->Record.GetCompleted());
+
+        // The captured IDs must survive recovery in Verifying as well as
+        // recovery while the target-only flush is still in progress.
+        RestartController(env, controllerId);
+        AttachWorkers(env, controllerId, {barrierWorker, siblingWorker});
+        DescribeReplication(env, info);
+
+        RequestPause(env, info, 2000);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+
+        SendHeartbeat(env, controllerId, barrierWorker, assignedVersion);
+        SendHeartbeat(env, controllerId, siblingWorker, assignedVersion);
+
+        for (ui32 i = 0; i < 2; ++i) {
+            runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        }
+        for (const auto& worker : {barrierWorker, siblingWorker}) {
+            env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(worker,
+                NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+        }
+        WaitForPaused(env, info);
+    }
+
+    Y_UNIT_TEST(GlobalBarrierWithoutPendingWritesWaitsForFreshHeartbeat) {
+        TEnv env;
+        const auto info = StartReplication(env, 1, "root@builtin", true);
+        const auto controllerId = info.ControllerId;
+
+        const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, controllerId, {worker});
+
+        const auto schema = MakeSchemaChange();
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema));
+        const auto release = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), worker);
+
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema, true));
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema, false, true));
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+
+        RequestPause(env, info, 2001);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+
+        SendHeartbeat(env, controllerId, worker, TRowVersion(101, 0));
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(worker,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+        WaitForPaused(env, info);
+    }
+
+    Y_UNIT_TEST(PauseRestartsCompletedWorkerNeededForVerification) {
+        TEnv env;
+        const auto info = StartReplication(env, 1, "root@builtin", true);
+        const auto controllerId = info.ControllerId;
+        auto& runtime = env.GetRuntime();
+
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, controllerId, {worker});
+
+        const auto schema = MakeSchemaChange();
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema));
+        runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema, true));
+        runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema, false, true));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender())
+            ->Get()->Record.GetCompleted());
+
+        // The handshake is complete, but no post-DDL heartbeat was reported.
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(worker,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
+            NKikimrReplication::TEvWorkerStatus::REASON_ERROR, "reader failed"));
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasError());
+
+        RequestPause(env, info, 2002);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+        const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), worker);
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(worker,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+
+        const auto replacement = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(replacement->Get()->Record.GetWorker()), worker);
+        AttachWorkers(env, controllerId, {worker});
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+
+        SendHeartbeat(env, controllerId, worker, TRowVersion(101, 0));
+        const auto finalStop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(finalStop->Get()->Record.GetWorker()), worker);
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(worker,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+        WaitForPaused(env, info);
+    }
+
+    Y_UNIT_TEST(PauseRecoversFailedSiblingNeededForVerification) {
+        TEnv env;
+        const auto info = StartReplication(env, 2, "root@builtin", true);
+        const auto controllerId = info.ControllerId;
+        auto& runtime = env.GetRuntime();
+
+        const auto firstRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto secondRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto barrierWorker = TWorkerId::Parse(firstRun->Get()->Record.GetWorker());
+        const auto siblingWorker = TWorkerId::Parse(secondRun->Get()->Record.GetWorker());
+        UNIT_ASSERT_VALUES_UNEQUAL(barrierWorker.TargetId(), siblingWorker.TargetId());
+        AttachWorkers(env, controllerId, {barrierWorker, siblingWorker});
+        env.SendAsync(controllerId, new TEvPrivate::TEvCompleteWorkerSet(
+            barrierWorker.ReplicationId(), barrierWorker.TargetId()));
+        DescribeReplication(env, info);
+
+        const auto schema = MakeSchemaChange();
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema));
+        const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), barrierWorker);
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema, true));
+        runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema, false, true));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender())
+            ->Get()->Record.GetCompleted());
+
+        // The sibling has no schema barrier, but its heartbeat is still
+        // required to move the changed target out of Verifying.
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(siblingWorker,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
+            NKikimrReplication::TEvWorkerStatus::REASON_ERROR, "reader failed"));
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasError());
+
+        RequestPause(env, info, 2003);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+        const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), siblingWorker);
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(siblingWorker,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+
+        const auto replacement = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(replacement->Get()->Record.GetWorker()), siblingWorker);
+        AttachWorkers(env, controllerId, {barrierWorker, siblingWorker});
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+
+        SendHeartbeat(env, controllerId, barrierWorker, TRowVersion(101, 0));
+        SendHeartbeat(env, controllerId, siblingWorker, TRowVersion(101, 0));
+        THashSet<TWorkerId> stopped;
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto finalStop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+            stopped.insert(TWorkerId::Parse(finalStop->Get()->Record.GetWorker()));
+        }
+        UNIT_ASSERT(stopped.contains(barrierWorker));
+        UNIT_ASSERT(stopped.contains(siblingWorker));
+        for (const auto& worker : {barrierWorker, siblingWorker}) {
+            env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(worker,
+                NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+        }
+        WaitForPaused(env, info);
+    }
+
+    Y_UNIT_TEST(PauseRecoversFailedSiblingWhileCollectingSchemaReports) {
+        TEnv env;
+        const auto info = StartReplication(env, 2, "root@builtin", true);
+        const auto controllerId = info.ControllerId;
+        auto& runtime = env.GetRuntime();
+
+        const auto firstRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto secondRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto replica1 = env.GetPathId("/Root/replica1");
+        const bool firstWritesReplica1 = TPathId::FromProto(firstRun->Get()->Record
+            .GetCommand().GetLocalTableWriter().GetPathId()) == replica1;
+        const auto first = TWorkerId::Parse((firstWritesReplica1 ? firstRun : secondRun)
+            ->Get()->Record.GetWorker());
+        const auto other = TWorkerId::Parse((firstWritesReplica1 ? secondRun : firstRun)
+            ->Get()->Record.GetWorker());
+        UNIT_ASSERT_VALUES_UNEQUAL(first.TargetId(), other.TargetId());
+        const auto second = RegisterSecondWorkerAndCompleteSet(env, controllerId, first);
+        AttachWorkers(env, controllerId, {first, second, other});
+        DescribeReplication(env, info);
+
+        const auto schema = MakeSchemaChange();
+        env.SendAsync(controllerId, MakeSchemaChangeReport(first, schema));
+        DescribeReplication(env, info);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1")
+            .GetPathDescription().GetTable().ColumnsSize(), 2);
+
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(other,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
+            NKikimrReplication::TEvWorkerStatus::REASON_ERROR, "reader failed"));
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasError());
+
+        RequestPause(env, info, 2006);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+        const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), other);
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(other,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+        const auto replacement = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(replacement->Get()->Record.GetWorker()), other);
+        AttachWorkers(env, controllerId, {first, second, other});
+
+        // The barrier is still Collecting; the second partition now starts DDL.
+        env.SendAsync(controllerId, MakeSchemaChangeReport(second, schema));
+        THashSet<TWorkerId> released;
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto result = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+            released.insert(TWorkerId::Parse(result->Get()->Record.GetWorker()));
+        }
+        UNIT_ASSERT(released.contains(first));
+        UNIT_ASSERT(released.contains(second));
+        WaitForColumnCount(env, "/Root/replica1", 3);
+
+        for (const auto& worker : {first, second}) {
+            env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema, true));
+            runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+            env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema, false, true));
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender())
+                ->Get()->Record.GetCompleted());
+        }
+
+        for (const auto& worker : {first, second, other}) {
+            SendHeartbeat(env, controllerId, worker, TRowVersion(101, 0));
+        }
+        THashSet<TWorkerId> stopped;
+        for (ui32 i = 0; i < 3; ++i) {
+            const auto finalStop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+            stopped.insert(TWorkerId::Parse(finalStop->Get()->Record.GetWorker()));
+        }
+        UNIT_ASSERT(stopped.contains(first));
+        UNIT_ASSERT(stopped.contains(second));
+        UNIT_ASSERT(stopped.contains(other));
+        for (const auto& worker : {first, second, other}) {
+            env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(worker,
+                NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+        }
+        WaitForPaused(env, info);
+    }
+
+    Y_UNIT_TEST(PauseRecoversFailedSiblingBeforeDestinationDdl) {
+        TEnv env;
+        const auto info = StartReplication(env, 2, "root@builtin", true);
+        const auto controllerId = info.ControllerId;
+        auto& runtime = env.GetRuntime();
+
+        const auto firstRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto secondRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto replica1 = env.GetPathId("/Root/replica1");
+        const bool firstWritesReplica1 = TPathId::FromProto(firstRun->Get()->Record
+            .GetCommand().GetLocalTableWriter().GetPathId()) == replica1;
+        const auto barrierWorker = TWorkerId::Parse((firstWritesReplica1 ? firstRun : secondRun)
+            ->Get()->Record.GetWorker());
+        const auto siblingWorker = TWorkerId::Parse((firstWritesReplica1 ? secondRun : firstRun)
+            ->Get()->Record.GetWorker());
+        AttachWorkers(env, controllerId, {barrierWorker, siblingWorker});
+        env.SendAsync(controllerId, new TEvPrivate::TEvCompleteWorkerSet(
+            barrierWorker.ReplicationId(), barrierWorker.TargetId()));
+        DescribeReplication(env, info);
+
+        const auto assigned = env.Send<TEvService::TEvTxIdResult>(controllerId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(100, 0)}));
+        UNIT_ASSERT(assigned->Get()->Record.GetVersionTxIds(0).GetTxId());
+        const auto boundary = TRowVersion::FromProto(assigned->Get()->Record.GetVersionTxIds(0).GetVersion());
+
+        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
+        const auto commitGate = runtime.Register(
+            new TCommitWritesRequestGate(txProxy, env.GetSender(), "/Root/replica1"));
+        runtime.RegisterService(MakeTxProxyID(), commitGate);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())
+            ->Get()->Tag, TCommitWritesRequestGate::ReadyTag());
+
+        const auto schema = MakeSchemaChange();
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema));
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())
+            ->Get()->Tag, TCommitWritesRequestGate::RequestBlockedTag());
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1")
+            .GetPathDescription().GetTable().ColumnsSize(), 2);
+
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(siblingWorker,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
+            NKikimrReplication::TEvWorkerStatus::REASON_ERROR, "reader failed"));
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasError());
+
+        RequestPause(env, info, 2004);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+        const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), siblingWorker);
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(siblingWorker,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+        const auto replacement = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(replacement->Get()->Record.GetWorker()), siblingWorker);
+        AttachWorkers(env, controllerId, {barrierWorker, siblingWorker});
+
+        // DDL is still blocked; recovery must not wait for Verifying.
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1")
+            .GetPathDescription().GetTable().ColumnsSize(), 2);
+        runtime.RegisterService(MakeTxProxyID(), txProxy);
+        env.SendAsync(commitGate,
+            new TEvents::TEvWakeup(TCommitWritesRequestGate::ReleaseRequestsTag()));
+
+        const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), barrierWorker);
+        WaitForColumnCount(env, "/Root/replica1", 3);
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema, true));
+        runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema, false, true));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender())
+            ->Get()->Record.GetCompleted());
+
+        SendHeartbeat(env, controllerId, barrierWorker, boundary);
+        SendHeartbeat(env, controllerId, siblingWorker, boundary);
+        for (ui32 i = 0; i < 2; ++i) {
+            runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        }
+        for (const auto& worker : {barrierWorker, siblingWorker}) {
+            env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(worker,
+                NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+        }
+        WaitForPaused(env, info);
+    }
+
+    Y_UNIT_TEST(PauseRecoversFreshSiblingNeededForCapturedTxId) {
+        TEnv env;
+        const auto info = StartReplication(env, 2, "root@builtin", true);
+        const auto controllerId = info.ControllerId;
+        auto& runtime = env.GetRuntime();
+
+        const auto firstRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto secondRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto barrierWorker = TWorkerId::Parse(firstRun->Get()->Record.GetWorker());
+        const auto siblingWorker = TWorkerId::Parse(secondRun->Get()->Record.GetWorker());
+        UNIT_ASSERT_VALUES_UNEQUAL(barrierWorker.TargetId(), siblingWorker.TargetId());
+        AttachWorkers(env, controllerId, {barrierWorker, siblingWorker});
+        env.SendAsync(controllerId, new TEvPrivate::TEvCompleteWorkerSet(
+            barrierWorker.ReplicationId(), barrierWorker.TargetId()));
+        DescribeReplication(env, info);
+
+        const auto assigned = env.Send<TEvService::TEvTxIdResult>(controllerId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(15000, 0)}));
+        const auto& captured = assigned->Get()->Record.GetVersionTxIds(0);
+        UNIT_ASSERT(captured.GetTxId());
+        const auto capturedBoundary = TRowVersion::FromProto(captured.GetVersion());
+        UNIT_ASSERT_VALUES_EQUAL(capturedBoundary, TRowVersion(20000, 0));
+
+        const auto schema = MakeSchemaChange();
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema));
+        const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), barrierWorker);
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema, true));
+        runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        env.SendAsync(controllerId, MakeSchemaChangeReport(barrierWorker, schema, false, true));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender())
+            ->Get()->Record.GetCompleted());
+
+        // This is newer than the schema but too old to commit the captured ID.
+        SendHeartbeat(env, controllerId, siblingWorker, TRowVersion(10000, 0));
+        DescribeReplication(env, info);
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(siblingWorker,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
+            NKikimrReplication::TEvWorkerStatus::REASON_ERROR, "reader failed"));
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasError());
+
+        RequestPause(env, info, 2005);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+        const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), siblingWorker);
+        env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(siblingWorker,
+            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+
+        const auto replacement = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(replacement->Get()->Record.GetWorker()), siblingWorker);
+        AttachWorkers(env, controllerId, {barrierWorker, siblingWorker});
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+
+        SendHeartbeat(env, controllerId, barrierWorker, capturedBoundary);
+        SendHeartbeat(env, controllerId, siblingWorker, capturedBoundary);
+        THashSet<TWorkerId> stopped;
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto finalStop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+            stopped.insert(TWorkerId::Parse(finalStop->Get()->Record.GetWorker()));
+        }
+        UNIT_ASSERT(stopped.contains(barrierWorker));
+        UNIT_ASSERT(stopped.contains(siblingWorker));
+        for (const auto& worker : {barrierWorker, siblingWorker}) {
+            env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(worker,
+                NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+        }
+        WaitForPaused(env, info);
+    }
+
+    Y_UNIT_TEST(GlobalBackToBackSchemaChangesProgressDuringVerification) {
+        TEnv env;
+        const auto info = StartReplication(env, 1, "root@builtin", true);
+        const auto controllerId = info.ControllerId;
+
+        const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, controllerId, {worker});
+
+        const auto txIdResult = env.Send<TEvService::TEvTxIdResult>(controllerId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(100, 0)}));
+        UNIT_ASSERT(txIdResult->Get()->Record.GetVersionTxIds(0).GetTxId());
+
+        const auto addColumn = MakeSchemaChange();
+        const auto dropColumn = MakeSchemaChange(200, 20, 3, false);
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, addColumn));
+        auto release = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(release->Get()->Record.GetSchema().SerializeAsString(),
+            addColumn.SerializeAsString());
+
+        // A newer record proves a post-DDL boundary but remains parked until
+        // the current data-plane barrier is fully completed.
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, dropColumn));
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1")
+            .GetPathDescription().GetTable().ColumnsSize(), 3);
+
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, addColumn, true));
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, addColumn, false, true));
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, dropColumn));
+        release = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(release->Get()->Record.GetSchema().SerializeAsString(),
+            dropColumn.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1")
+            .GetPathDescription().GetTable().ColumnsSize(), 2);
     }
 
     Y_UNIT_TEST(WaitsForCompleteMembershipAndReleasesDuplicateReport) {

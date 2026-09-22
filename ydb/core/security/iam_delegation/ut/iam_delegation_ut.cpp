@@ -522,6 +522,7 @@ Y_UNIT_TEST_SUITE(IamDelegationSettings) {
         config.SetTokenServiceEndpoint("ts.example.net:4282");
         config.SetServiceControlEndpoint("iam.example.net:4283");
         config.SetServiceId("ydb");
+        config.SetMicroserviceId("data-plane");
         config.SetResourceType("resource-manager.cloud");
 
         const auto withoutRm = TIamDelegationSettings::FromConfig(config);
@@ -544,20 +545,22 @@ Y_UNIT_TEST_SUITE(IamDelegationSettings) {
         UNIT_ASSERT_C(all.StartsWith(prefix), all);
         UNIT_ASSERT_STRING_CONTAINS(all, " TokenServiceEndpoint");
         UNIT_ASSERT_STRING_CONTAINS(all, " ServiceId");
+        UNIT_ASSERT_STRING_CONTAINS(all, " MicroserviceId");
         UNIT_ASSERT_STRING_CONTAINS(all, " ResourceType");
 
         TIamDelegationSettings settings;
         settings.TokenServiceEndpoint = "ts.example.net:4282";
         settings.ServiceId = "ydb";
-        const TString onlyResourceType = settings.Validate();
-        UNIT_ASSERT_C(onlyResourceType.StartsWith(prefix), onlyResourceType);
-        UNIT_ASSERT_STRING_CONTAINS(onlyResourceType, " ResourceType");
-        UNIT_ASSERT_C(!onlyResourceType.Contains("Endpoint"), onlyResourceType);
-        UNIT_ASSERT_C(!onlyResourceType.Contains("ServiceId"), onlyResourceType);
-
-        // MicroserviceId is optional
         settings.ResourceType = "resource-manager.cloud";
-        UNIT_ASSERT_VALUES_EQUAL(settings.MicroserviceId, "");
+        // MicroserviceId is part of the identity IAM checks (the agent service account is named after it)
+        const TString onlyMicroservice = settings.Validate();
+        UNIT_ASSERT_C(onlyMicroservice.StartsWith(prefix), onlyMicroservice);
+        UNIT_ASSERT_STRING_CONTAINS(onlyMicroservice, " MicroserviceId");
+        UNIT_ASSERT_C(!onlyMicroservice.Contains("Endpoint"), onlyMicroservice);
+        UNIT_ASSERT_C(!onlyMicroservice.Contains("ServiceId"), onlyMicroservice);
+        UNIT_ASSERT_C(!onlyMicroservice.Contains("ResourceType"), onlyMicroservice);
+
+        settings.MicroserviceId = "data-plane";
         UNIT_ASSERT_VALUES_EQUAL(settings.Validate(), "");
     }
 
@@ -568,6 +571,7 @@ Y_UNIT_TEST_SUITE(IamDelegationSettings) {
         NKikimrConfig::TIamConfig config;
         config.SetTokenServiceEndpoint("ts.example.net:4282");
         config.SetServiceId("ydb");
+        config.SetMicroserviceId("data-plane");
         config.SetResourceType("resource-manager.cloud");
 
         const auto tokenServiceOnly = TIamDelegationSettings::FromConfig(config);

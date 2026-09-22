@@ -42,13 +42,18 @@ TIamDelegationSettings TIamDelegationSettings::FromConfig(const NKikimrConfig::T
 
 namespace {
 
-// The identity of YDB as a cloud service, needed by every IAM call this feature makes.
+// The identity of YDB as a cloud service, needed by every IAM call this feature makes. All three identity
+// fields are required by IAM: the agent service account a delegation is granted to is named
+// yc.<ServiceId>.<MicroserviceId>.<cloud>.agent, and IAM checks that both exist in its service registry.
 void CollectMissingIdentity(const TIamDelegationSettings& settings, TStringBuilder& missing) {
     if (settings.TokenServiceEndpoint.empty()) {
         missing << " TokenServiceEndpoint";
     }
     if (settings.ServiceId.empty()) {
         missing << " ServiceId";
+    }
+    if (settings.MicroserviceId.empty()) {
+        missing << " MicroserviceId";
     }
     if (settings.ResourceType.empty()) {
         missing << " ResourceType";

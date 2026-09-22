@@ -3692,6 +3692,8 @@ public:
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
+            txCtx->SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+            txCtx->SnapshotHandle.Handle = NKqp::TSnapshotHandle();
         }
 
         if (isFinal)

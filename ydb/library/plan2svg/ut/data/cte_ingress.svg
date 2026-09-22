@@ -336,13 +336,13 @@
 <svg class='slimable' data-stage='inner 0' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g2' class='selectable'><title>Stage 0</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Iterator: </title><text x='36' y='13' class='texts clipped'>Iterator: </text>
 <g><title>Output Rows 100%, 1</title>
-  <rect x='303' y='2' width='60' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 333,2 363,2 363,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='2' width='50' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 328,2 353,2 353,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='5' width='5' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='13'>1</text>
 </g>
@@ -377,7 +377,11 @@
 <rect x='419' y='37' width='16' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>1ms</text>
 </g>
-<g><title>Stage 0, tasks: 1, finished: 0</title>
+<g><title>Stage 0 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='arup button'><rect x='2' y='34' width='14' height='14' class='transparent'/>
@@ -418,13 +422,13 @@
 <svg class='slimable' data-stage='inner 1' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g4' class='selectable'><title>Stage 1</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Iterator: </title><text x='36' y='13' class='texts clipped'>Iterator: </text>
 <g><title>Output Rows 100%, 1</title>
-  <rect x='303' y='2' width='60' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 333,2 363,2 363,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='2' width='50' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 328,2 353,2 353,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='5' width='5' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='13'>1</text>
 </g>
@@ -459,7 +463,11 @@
 <rect x='419' y='37' width='28' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>521us</text>
 </g>
-<g><title>Stage 1, tasks: 1, finished: 0</title>
+<g><title>Stage 1 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='arup button'><rect x='2' y='34' width='14' height='14' class='transparent'/>
@@ -500,13 +508,13 @@
 <svg class='slimable' data-stage='inner 2' data-height='50' width='1280' height='50' x='0' y='3'>
 <g data-group='g6' class='selectable'><title>Stage 2</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Iterator: </title><text x='36' y='13' class='texts clipped'>Iterator: </text>
 <g><title>Output Rows 100%, 1</title>
-  <rect x='303' y='2' width='60' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 333,2 363,2 363,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='2' width='50' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 328,2 353,2 353,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='5' width='5' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='13'>1</text>
 </g>
@@ -541,7 +549,11 @@
 <rect x='419' y='37' width='28' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>469us</text>
 </g>
-<g><title>Stage 2, tasks: 1, finished: 0</title>
+<g><title>Stage 2 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 50' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,25L13,50L0,50z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='arup button'><rect x='2' y='34' width='14' height='14' class='transparent'/>
@@ -582,13 +594,13 @@
 <svg class='slimable' data-stage='inner 2' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g8' class='selectable'><title>Stage 2</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: </title><text x='36' y='13' class='texts clipped'>Aggregate: </text>
 <g><title>Output Rows 50%, 1</title>
-  <rect x='303' y='2' width='60' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 333,2 363,2 363,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='2' width='50' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 328,2 353,2 353,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='5' width='5' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='13'>1</text>
 </g>
@@ -633,9 +645,13 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>3ms</text>
 </g>
 <g><title>Wait Input Time 99%, 1.86s</title>
-  <rect x='368' y='1%' width='30' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='358' y='1%' width='40' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
-<g><title>Stage 2, tasks: 1, finished: 0</title>
+<g><title>Stage 2 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>
@@ -661,12 +677,12 @@
 <svg data-stage='outer cte' data-height='21' width='1280' height='21' x='0' y='69'>
 <svg data-stage='inner cte' data-height='18' width='1280' height='18' x='0' y='3'>
 <g data-group='g13' class='selectable'><title>Stage 0</title>
-<rect x='368' y='0' width='30' height='18' class='clone'/>
+<rect x='358' y='0' width='40' height='18' class='clone'/>
 <rect x='0' y='0' width='298' height='18' class='clone'/>
 <rect x='401' y='0' width='200' height='18' class='clone'/>
-<rect x='301' y='0' width='64' height='18' class='clone'/>
+<rect x='301' y='0' width='54' height='18' class='clone'/>
 <g><title>Output Rows 50%, 1</title>
-  <rect x='303' y='0' width='60' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,0 333,0 363,0 363,14 303,14' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='0' width='50' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,0 328,0 353,0 353,14 303,14' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='3' width='5' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='11'>1</text>
 </g>
@@ -729,9 +745,9 @@
 <svg class='slimable' data-stage='inner 1' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g11' class='selectable'><title>Stage 1</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: </title><text x='36' y='13' class='texts clipped'>Aggregate: </text>
 <g><title>Output Rows 0%, 1</title>
@@ -780,15 +796,19 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>4ms</text>
 </g>
 <g><title>Wait Input Time 99%, 1.86s</title>
-  <rect x='368' y='1%' width='30' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='358' y='1%' width='40' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <g><title>Input Throughput 4.00K/s</title>
-  <rect x='368' y='0%' width='30' height='1%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.009134088418'/>
+  <rect x='358' y='0%' width='40' height='1%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.009134088418'/>
 </g>
 <g><title>Max CPU 7.39</title>
 <path d='M1272,47c0,0,0,-13,0,-13c0,0,0,13,1,13c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
-<g><title>Stage 1, tasks: 1, finished: 0</title>
+<g><title>Stage 1 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>
@@ -816,9 +836,9 @@
 <svg class='slimable' data-stage='inner 0' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g13' class='selectable'><title>Stage 0</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Stage: </title><text x='36' y='13' class='texts clipped'>Stage: </text>
 <g><title>Output Rows 0%, 1</title>
@@ -829,7 +849,7 @@
 </g>
 <g><title>Source s3: lineitem(l_shipdate)</title><text x='36' y='29' class='texts clipped'>Source s3: lineitem(l_shipdate)</text>
 <g><title>Output Rows 99%, 200.04K</title>
-  <rect x='303' y='18' width='60' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,18 333,18 363,18 363,32 303,32' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='18' width='50' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,18 328,18 353,18 353,32 303,32' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='21' width='39' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='29'>200.04K</text>
 </g>
@@ -869,15 +889,19 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>1.70s</text>
 </g>
 <g><title>Wait Input Time 8%, 0.16s</title>
-  <rect x='368' y='92%' width='30' height='8%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='358' y='92%' width='40' height='8%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <g><title>Input Throughput 218.96K/s</title>
-  <rect x='368' y='0%' width='30' height='92%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.5'/>
+  <rect x='358' y='0%' width='40' height='92%' stroke-width='0' fill='var(--cpu-light, #B78C98)' opacity='0.5'/>
 </g>
 <g><title>Max CPU 30.98</title>
 <path d='M665,47c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,18,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,0,19,0c6,0,12,-13,19,-13c6,0,12,13,19,13c0,0,0,0,0,0z' stroke-width='1' stroke='var(--cpu-medium, #A36D7B)' fill='var(--cpu-light, #B78C98)' />
 </g>
-<g><title>Stage 0, tasks: 1, finished: 0</title>
+<g><title>Stage 0 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='arup button'><rect x='2' y='50' width='14' height='14' class='transparent'/>
@@ -933,13 +957,13 @@
 <svg class='slimable' data-stage='inner 3' data-height='66' width='1280' height='66' x='0' y='3'>
 <g data-group='g15' class='selectable'><title>Stage 3</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
-<rect x='301' y='0' width='64' height='100%' class='stage'/>
+<rect x='301' y='0' width='54' height='100%' class='stage'/>
 <rect x='401' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='358' y='0' width='40' height='100%' class='stage'/>
 <rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: </title><text x='36' y='13' class='texts clipped'>Aggregate: </text>
 <g><title>Output Rows 50%, 1</title>
-  <rect x='303' y='2' width='60' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 333,2 363,2 363,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='2' width='50' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,2 328,2 353,2 353,16 303,16' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='5' width='5' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='13'>1</text>
 </g>
@@ -984,9 +1008,13 @@
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='419' y='45'>1ms</text>
 </g>
 <g><title>Wait Input Time 99%, 1.86s</title>
-  <rect x='368' y='1%' width='30' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
+  <rect x='358' y='1%' width='40' height='99%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
-<g><title>Stage 3, tasks: 1, finished: 0</title>
+<g><title>Stage 3 tasks: finished 0 of 1</title>
+<svg x='358' y='0' width='40' height='100%' viewBox='0 0 40 66' preserveAspectRatio='none'>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+<path d='M0,0L13,0L13,33L13,66L0,66z' stroke='none' fill='var(--cpu-medium, #A36D7B)' opacity='0.5'/>
+</svg>
   <text x='396' y='50%' class='textc'>1</text>
 </g>
 <g class='plus button'><rect x='2' y='20' width='14' height='14' class='transparent'/>
@@ -1012,12 +1040,12 @@
 <svg data-stage='outer cte' data-height='21' width='1280' height='21' x='0' y='69'>
 <svg data-stage='inner cte' data-height='18' width='1280' height='18' x='0' y='3'>
 <g data-group='g13' class='selectable'><title>Stage 0</title>
-<rect x='368' y='0' width='30' height='18' class='clone'/>
+<rect x='358' y='0' width='40' height='18' class='clone'/>
 <rect x='0' y='0' width='298' height='18' class='clone'/>
 <rect x='401' y='0' width='200' height='18' class='clone'/>
-<rect x='301' y='0' width='64' height='18' class='clone'/>
+<rect x='301' y='0' width='54' height='18' class='clone'/>
 <g><title>Output Rows 50%, 1</title>
-  <rect x='303' y='0' width='60' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,0 333,0 363,0 363,14 303,14' stroke='none' fill='var(--output-medium, #5781B9)'/>
+  <rect x='303' y='0' width='50' height='14' stroke-width='0' fill='var(--output-light, #6F93C3)'/>  <polygon points='303,0 328,0 353,0 353,14 303,14' stroke='none' fill='var(--output-medium, #5781B9)'/>
 <rect x='303' y='3' width='5' height='9' stroke-width='0' opacity='0.5' fill='var(--stage-main, #F2F2F2)'/>
 <text font-family='Verdana' font-size='8px' fill='var(--text-summary, #262626)' x='303' y='11'>1</text>
 </g>
@@ -1055,8 +1083,8 @@
 <g id='columnHeaders'>
 <svg width='1280' height='18' x='0' y='0'>
 <rect x='0' y='0' width='298' height='18' class='columns'/>
-<rect x='301' y='0' width='64' height='18' class='columns'/>
-<rect x='368' y='0' width='30' height='18' class='columns'/>
+<rect x='301' y='0' width='54' height='18' class='columns'/>
+<rect x='358' y='0' width='40' height='18' class='columns'/>
 <rect x='401' y='0' width='200' height='18' class='columns'/>
 <rect x='604' y='0' width='676' height='18' class='columns'/>
 <text x='2' y='13' class='texts'>Stages and Operators</text>

@@ -70,7 +70,9 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
         }
     }
 
-    for (const auto& [leftKey, rightKey] : lookup.ResidualJoinKeys) {
+    for (const auto& joinKey : lookup.ResidualJoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         Y_UNUSED(rightKey);
         addLeftMember(leftKey);
     }
@@ -295,7 +297,9 @@ TExprNode::TPtr TPhysicalIndexLookupJoinBuilder::ProcessFetchedRows(TExprNode::T
 
         // The join keys which are not present in the right side index.
         // We have to evaluate them before apply index lookup join.
-        for (const auto& [leftKey, rightKey] : lookup.ResidualJoinKeys) {
+        for (const auto& joinKey : lookup.ResidualJoinKeys) {
+            const auto& leftKey = joinKey.Left;
+            const auto& rightKey = joinKey.Right;
             // clang-format off
             equalities.push_back(Build<TCoCmpEqual>(Ctx, Pos)
                 .Left<TCoMember>()

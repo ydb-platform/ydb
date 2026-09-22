@@ -77,13 +77,15 @@ class DistributedCluster:
         cancelled,
         progress,
         reset_disks=False,
+        deploy=False,
     ):
         self.reference = {"session_id": str(uuid.uuid4()), "coordinator_id": coordinator_id, "run_id": run_id}
         self.template, self.tenant, self.actor_system = template, tenant, actor_system
         self.reset_disks = reset_disks
+        self.deploy = deploy
         self.directory, self.call, self.cancelled, self.progress = directory, call, cancelled, progress
         self.host_ids = list(dict.fromkeys(node["host_id"] for node in template["nodes"]))
-        self.cli_host = next(node["host_id"] for node in template["nodes"] if node["role"] == "cli")
+        self.cli_host = next((node["host_id"] for node in template["nodes"] if node["role"] == "cli"), None)
         self.cli_hosts = list(dict.fromkeys(node["host_id"] for node in template["nodes"] if node["role"] == "cli"))
         self.static_host = next(node["host_id"] for node in template["nodes"] if node["role"] == "static")
         self.dynamic_nodes = [
@@ -227,6 +229,7 @@ class DistributedCluster:
                 "tenant": self.tenant,
                 "actor_system": self.actor_system,
                 "reset_disks": self.reset_disks,
+                "deploy": self.deploy,
             },
         )
         self.hosts.extend(prepared[host] for host in self.host_ids)
@@ -264,7 +267,7 @@ class DistributedCluster:
         self.progress("starting-dynamic-nodes")
         self.operation(self.host_ids, "start-dynamic")
         self.progress("waiting-for-client-endpoints")
-        self.operation(self.cli_hosts, "ready")
+        self.operation([self.static_host] if self.deploy else self.cli_hosts, "ready")
         self.ready = True
         self.progress("cluster-ready", dynamic_nodes=len(self.dynamic_nodes))
 

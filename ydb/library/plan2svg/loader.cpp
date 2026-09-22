@@ -665,6 +665,25 @@ const NJson::TJsonValue* TPlan::LoadStageStats(const std::shared_ptr<TStage>& st
         Tasks += stage->Tasks;
     }
     ReadUi64(*stage->StatsNode, "FinishedTasks", stage->FinishedTasks);
+    if (auto* nodesNode = stage->StatsNode->GetValueByPath("Nodes")) {
+        // Re-read from scratch: a stage with a nested table read is loaded
+        // twice over the same stats (LoadSubPlans re-enters LoadStage).
+        stage->Nodes.clear();
+        for (const auto& subNode : nodesNode->GetArray()) {
+            TStageNodeTasks node;
+            ReadUi64(subNode, "NodeId", node.NodeId);
+            ReadUi64(subNode, "Tasks", node.Tasks);
+            ReadUi64(subNode, "Finished", node.Finished);
+            if (node.Tasks) {
+                stage->Nodes.push_back(node);
+            }
+        }
+        std::sort(stage->Nodes.begin(), stage->Nodes.end(),
+            [](const TStageNodeTasks& a, const TStageNodeTasks& b) {
+                return a.NodeId < b.NodeId;
+            }
+        );
+    }
     ReadUi64(*stage->StatsNode, "PhysicalStageId", stage->PhysicalStageId);
 
     if (auto* baseTimeNode = stage->StatsNode->GetValueByPath("BaseTimeMs")) {

@@ -446,12 +446,12 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) 
     auto rightInput = ExprNodeToOperator(opJoin.RightInput().Ptr());
 
     auto joinKind = opJoin.JoinKind().StringValue();
-    TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+    TVector<TJoinKey> joinKeys;
     for (auto k : opJoin.JoinKeys()) {
         TInfoUnit leftKey(k.LeftLabel().StringValue(), k.LeftColumn().StringValue());
         TInfoUnit rightKey(k.RightLabel().StringValue(), k.RightColumn().StringValue());
 
-        joinKeys.push_back(std::make_pair(leftKey, rightKey));
+        joinKeys.emplace_back(leftKey, rightKey);
     }
 
     TVector<TExpression> joinFilters;
@@ -538,7 +538,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
         TVector<TMapElement> leftNullableMap;
         TVector<TMapElement> rightNullableMap;
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        TVector<TJoinKey> joinKeys;
 
         for (const auto& t : itemType->GetItems()) {
             // Use stable pickle for nullable columns
@@ -549,10 +549,10 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
                 TInfoUnit newRightKey = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++));
                 leftNullableMap.push_back(TMapElement(newLeftKey, pickleExpr));
                 rightNullableMap.push_back(TMapElement(newRightKey, pickleExpr));
-                joinKeys.push_back(std::make_pair(newLeftKey, newRightKey));
+                joinKeys.emplace_back(newLeftKey, newRightKey);
             } else {
                 auto key = TInfoUnit(TString(t->GetName()));
-                joinKeys.push_back(std::make_pair(key, key));
+                joinKeys.emplace_back(key, key);
             }
         }
 

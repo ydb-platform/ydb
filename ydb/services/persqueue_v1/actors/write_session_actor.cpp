@@ -396,7 +396,7 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
             return init.path();
         }
     }();
-    Request->CountRequestPath(topic_path);
+    Request->CountResourcePath(topic_path);
 
     if (State != ES_CREATED) {
         //answer error

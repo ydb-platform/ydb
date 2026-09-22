@@ -13,7 +13,7 @@ namespace NKikimr::NGRpcService {
 template <typename TContext, typename TRequest>
 void CountSchemaRequestPaths(const TContext& context, const TRequest& request) {
     const auto count = [&](TStringBuf path) {
-        context.CountRequestPath(path);
+        context.CountResourcePath(path);
     };
     if constexpr (requires { TStringBuf(request); }) {
         count(request);

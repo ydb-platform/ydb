@@ -771,9 +771,9 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
     const auto& init = ev->Get()->Request.init_request();
     for (const auto& settings : init.topics_read_settings()) {
         if constexpr (Protocol == EProtocol::PQv1) {
-            Request->CountRequestPath(settings.topic());
+            Request->CountResourcePath(settings.topic());
         } else {
-            Request->CountRequestPath(settings.path());
+            Request->CountResourcePath(settings.path());
         }
     }
 

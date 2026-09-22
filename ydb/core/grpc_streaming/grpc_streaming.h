@@ -79,6 +79,9 @@ public:
     virtual grpc_compression_level GetCompressionLevel() const = 0;
     virtual void UseDatabase(const TString& database) = 0;
     virtual TString GetRpcMethodName() const = 0;
+
+    //! Returns a borrowed counter block owned by this context, if available
+    virtual NYdbGrpc::ICounterBlock* GetCounterBlock() const { return nullptr; }
 };
 
 /**
@@ -686,6 +689,10 @@ private:
 
         TString GetRpcMethodName() const override {
             return Self->GetRpcMethodName();
+        }
+
+        NYdbGrpc::ICounterBlock* GetCounterBlock() const override {
+            return Self->Counters.Get();
         }
 
     private:

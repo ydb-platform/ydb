@@ -222,7 +222,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
 
     const auto& init = ev->Get()->Request.init_request();
     for (const auto& topic : init.topics_read_settings()) {
-        Request->CountRequestPath(topic.path());
+        Request->CountResourcePath(topic.path());
     }
 
     if (Initing) {

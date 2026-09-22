@@ -5657,7 +5657,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(TestUncompressedSize) {
-        TRateLimiterTestSetup setup(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE);
+        TRateLimiterTestSetup setup;
 
         setup.CreateTopic("account/topic");
 
@@ -5701,7 +5701,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(TestReadQuotasSimple) {
-        TRateLimiterTestSetup setup(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, 1000, 1000, true);
+        TRateLimiterTestSetup setup(1000, 1000, true);
 
         const TString topicPath = "acc/topic1";
         const TString consumerPath = "acc2/reader1";
@@ -5749,7 +5749,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         if (NSan::ASanIsOn()) {
             return;
         }
-        TRateLimiterTestSetup setup(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, 1000, 1000, true);
+        TRateLimiterTestSetup setup(1000, 1000, true);
 
         const TString topicPath = "acc/topic1";
         const TString consumerPath = "acc2/reader1"; // don't create kesus resources

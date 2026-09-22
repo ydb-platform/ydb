@@ -156,7 +156,7 @@ UPDATE Orders SET Status = 'done' WHERE OrderId = 42
 Утилита выводит:
 
 - **TLI Chain** — `VictimQuerySpanId`, `VictimQueryText`, `BreakerQuerySpanId`, `BreakerQueryText`;
-- **VictimTx** — все запросы транзакции-жертвы в порядке выполнения;
+- **VictimTx** — все запросы транзакции-жертвы;
 - **BreakerTx** — все запросы транзакции-нарушителя.
 
 Дополнительные параметры:

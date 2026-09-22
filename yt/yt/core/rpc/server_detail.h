@@ -111,6 +111,8 @@ public:
     void SetRawRequestInfo(std::string info, bool incremental) override;
     void SuppressMissingRequestInfoCheck() override;
     void SetRawResponseInfo(std::string info, bool incremental) override;
+    NLogging::TLoggingTagList* GetRequestAnnotations() override;
+    NLogging::TLoggingTagList* GetResponseAnnotations() override;
 
     const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const override;
 
@@ -167,6 +169,8 @@ protected:
     ERequestInfoState RequestInfoState_ = ERequestInfoState::Missing;
     TCompactVector<std::string, 4> RequestInfos_;
     TCompactVector<std::string, 4> ResponseInfos_;
+    NLogging::TLoggingTagList RequestLoggingTags_;
+    NLogging::TLoggingTagList ResponseLoggingTags_;
 
     NCompression::ECodec ResponseCodec_ = NCompression::ECodec::None;
     // COMPAT(danilalexeev): legacy RPC codecs
@@ -195,6 +199,9 @@ protected:
 
     virtual void LogRequest();
     virtual void LogResponse() = 0;
+
+    //! Tags identifying the request, spliced into the request info alerts.
+    NLogging::TLoggingTagList MakeRequestInfoAlertTags() const;
 
     //! Installs the request attachments direct placement transfer (adapting the
     //! bus-layer one). Until the service drives it to completion, #RequestAttachments
@@ -292,6 +299,8 @@ public:
     void SetRawRequestInfo(std::string info, bool incremental) override;
     void SuppressMissingRequestInfoCheck() override;
     void SetRawResponseInfo(std::string info, bool incremental) override;
+    NLogging::TLoggingTagList* GetRequestAnnotations() override;
+    NLogging::TLoggingTagList* GetResponseAnnotations() override;
 
     const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const override;
 

@@ -3,6 +3,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
@@ -2844,6 +2845,84 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
 
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+    }
+
+    Y_UNIT_TEST(LocalKMeansInProgressLog) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
+
+        // Build vector index with max_shards_in_flight(1) and wait for level 2
+        TBlockEvents<TEvDataShard::TEvReshuffleKMeansRequest> reshuffleBlocker(runtime, [&](const auto& ) {
+            return true;
+        });
+        const ui64 buildIndexTx = ++txId;
+        auto sender = runtime.AllocateEdgeActor();
+        {
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
+            });
+            auto settings = request->Record.MutableSettings();
+            settings->set_max_shards_in_flight(1);
+            settings->MutableScanSettings()->SetMaxBatchRows(1);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+        runtime.WaitFor("ReshuffleKMeansRequest", [&]{ return reshuffleBlocker.size(); });
+
+        // Capture LocalKMeans requests (probably only 1 request)
+        bool seenLocal = false;
+        NKikimrTxDataShard::TEvLocalKMeansRequest req;
+        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> localBlocker(runtime, [&](const auto& ev) {
+            req = ev->Get()->Record;
+            seenLocal = true;
+            return false;
+        });
+        reshuffleBlocker.Stop().Unblock();
+        runtime.WaitFor("LocalKMeansRequest", [&] { return seenLocal; });
+
+        // Forcibly send IN_PROGRESS to schemeshard on uploadrows
+        // It was crashing index build because of incorrect types
+        auto ackKey = TSerializedCellVec::Serialize({TCell::Make(ui64(0)), TCell::Make(ui32(0))});
+        TBlockEvents<TEvTxUserProxy::TEvUploadRowsResponse> uploadBlocker(runtime, [&](const auto&) {
+            auto progress = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
+            auto& rec = progress->Record;
+            rec.SetId(buildIndexTx);
+            rec.SetTabletId(req.GetTabletId());
+            rec.SetRequestSeqNoGeneration(req.GetSeqNoGeneration());
+            rec.SetRequestSeqNoRound(req.GetSeqNoRound());
+            rec.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
+            rec.SetLastKeyAck(ackKey);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, progress.Release());
+            return false;
+        });
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1)});
+
+        localBlocker.Stop();
+        uploadBlocker.Stop();
     }
 
 }

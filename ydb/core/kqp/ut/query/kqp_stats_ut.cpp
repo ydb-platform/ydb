@@ -926,6 +926,66 @@ Y_UNIT_TEST(LegacySimplifiedPlanQueryServiceTableFullScanActualStats) {
     UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Cpu").GetDoubleSafe() >= 0, simplifiedPlan);
 }
 
+// Per-stage per-node task distribution: Stats.Nodes = [{NodeId, Tasks, Finished}] in FULL mode.
+// Literal phases carry no node info, so only stages that have Nodes are checked against their totals.
+Y_UNIT_TEST(StageNodesFull) {
+    TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
+    auto client = kikimr.GetQueryClient();
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    auto result = client.ExecuteQuery(R"(
+        SELECT COUNT(*) FROM `/Root/EightShard`;
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT(result.GetStats());
+    UNIT_ASSERT(result.GetStats()->GetPlan());
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true), *result.GetStats()->GetPlan());
+
+    auto* runtime = kikimr.GetTestServer().GetRuntime();
+    std::set<ui64> clusterNodeIds;
+    for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
+        clusterNodeIds.insert(runtime->GetNodeId(i));
+    }
+
+    ui32 stagesWithNodes = 0;
+    std::function<void(const NJson::TJsonValue&)> checkStages = [&](const NJson::TJsonValue& node) {
+        if (node.IsMap()) {
+            if (auto* stats = node.GetMapSafe().FindPtr("Stats"); stats && stats->IsMap() && stats->Has("Nodes")) {
+                ++stagesWithNodes;
+                ui64 tasks = 0;
+                ui64 finished = 0;
+                ui64 lastNodeId = 0;
+                for (const auto& nodeStats : stats->GetMapSafe().at("Nodes").GetArraySafe()) {
+                    auto nodeId = nodeStats.GetMapSafe().at("NodeId").GetUIntegerSafe();
+                    auto nodeTasks = nodeStats.GetMapSafe().at("Tasks").GetUIntegerSafe();
+                    auto nodeFinished = nodeStats.GetMapSafe().at("Finished").GetUIntegerSafe();
+                    UNIT_ASSERT_C(clusterNodeIds.contains(nodeId), plan);
+                    UNIT_ASSERT_C(nodeId > lastNodeId, plan);
+                    UNIT_ASSERT_C(nodeTasks > 0, plan);
+                    UNIT_ASSERT_C(nodeFinished <= nodeTasks, plan);
+                    lastNodeId = nodeId;
+                    tasks += nodeTasks;
+                    finished += nodeFinished;
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(tasks, stats->GetMapSafe().at("Tasks").GetUIntegerSafe(), plan);
+                UNIT_ASSERT_VALUES_EQUAL_C(finished, stats->GetMapSafe().at("FinishedTasks").GetUIntegerSafe(), plan);
+            }
+            for (const auto& [_, child] : node.GetMapSafe()) {
+                checkStages(child);
+            }
+        } else if (node.IsArray()) {
+            for (const auto& child : node.GetArraySafe()) {
+                checkStages(child);
+            }
+        }
+    };
+    checkStages(plan);
+    UNIT_ASSERT_C(stagesWithNodes > 0, plan);
+}
+
 Y_UNIT_TEST(StatsProfile) {
     auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();

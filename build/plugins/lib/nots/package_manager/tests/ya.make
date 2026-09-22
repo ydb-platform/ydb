@@ -3,6 +3,7 @@ SUBSCRIBER(g:frontend_build_platform)
 PY3TEST()
 
 TEST_SRCS(
+    test_common_config.py
     test_lockfile.py
     test_node_modules_bundler.py
     test_package_manager.py

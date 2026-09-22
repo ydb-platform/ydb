@@ -23,3 +23,6 @@ RECURSE(
     settings
     v1
 )
+RECURSE_FOR_TESTS(
+    ut
+)

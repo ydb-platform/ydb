@@ -383,20 +383,27 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
     const NArrow::TColumnFilter& columnFilter =
         GetStageData().HasTable() ? GetStageData().GetTable().GetFilter() : context.GetResources().GetFilter();
     const auto readContext = std::static_pointer_cast<TSpecialReadContext>(GetContext());
-    const bool canUseDictionaryOnly = addr.GetUseDictionaryOnly() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
-                                      GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
-                                          NArrow::NAccessor::IChunkedArray::EType::Dictionary &&
-                                      UsageClass == TPKRangeFilter::EUsageClass::FullUsage && !IsConflicting() &&
-                                      readContext->GetDuplicateFilterPortionCount() <= 1 &&
-                                      NCommon::IsDictionaryOnlyFetchCompatible(columnFilter);
-    if (canUseDictionaryOnly) {
+    const bool hasChunks = GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size();
+    // Portion schema may predate ADD COLUMN: no loader and no chunks. Keep DefaultFetchLogic, which fills
+    // defaults, instead of GetColumnLoaderVerified on a schema that does not know the column.
+    if (!hasChunks) {
+        return std::make_shared<NCommon::TDefaultFetchLogic>(addr.GetColumnId(), GetContext()->GetCommonContext()->GetStoragesManager());
+    }
+    const auto accessorType = GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType();
+    // Dictionary-only accessors are indexed by dictionary entries, not portion rows: only when no row-level filter
+    // (PK range, duplicates, deletions) has to be applied to this portion.
+    const bool dictionaryOnlyAllowed = addr.GetUseDictionaryOnly() && UsageClass == TPKRangeFilter::EUsageClass::FullUsage && !IsConflicting() &&
+                                       readContext->GetDuplicateFilterPortionCount() <= 1 &&
+                                       NCommon::IsDictionaryOnlyFetchCompatible(columnFilter);
+    if (dictionaryOnlyAllowed && accessorType == NArrow::NAccessor::IChunkedArray::EType::Dictionary) {
         GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();
         return std::make_shared<NCommon::TDictionaryFetchLogic>(addr.GetColumnId(), source);
-    } else if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
-               GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
-                   NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
-        return std::make_shared<NCommon::TSubColumnsFetchLogic>(
-            addr.GetColumnId(), source, std::vector<TString>(addr.GetSubColumnNames(false).begin(), addr.GetSubColumnNames(false).end()));
+    } else if (addr.HasSubColumns() && accessorType == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+        // A single dictionary encoded sub-column may be fetched as its dictionary values only (DISTINCT over JSON_VALUE);
+        // the fetch logic decides per chunk from the sub-columns header.
+        const bool subColumnDictionaryOnly = dictionaryOnlyAllowed && addr.GetSubColumnNames(false).size() == 1;
+        return std::make_shared<NCommon::TSubColumnsFetchLogic>(addr.GetColumnId(), source,
+            std::vector<TString>(addr.GetSubColumnNames(false).begin(), addr.GetSubColumnNames(false).end()), subColumnDictionaryOnly);
     } else {
         return std::make_shared<NCommon::TDefaultFetchLogic>(addr.GetColumnId(), GetContext()->GetCommonContext()->GetStoragesManager());
     }

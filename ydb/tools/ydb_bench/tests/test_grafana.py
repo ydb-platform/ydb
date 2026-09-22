@@ -130,6 +130,11 @@ assert.equal(url.searchParams.get('var-bench_run'),'run');
 assert.equal(url.searchParams.get('var-bench_attempt'),'verification');
 assert.equal(url.searchParams.get('from'),'1000');
 assert.equal(url.searchParams.get('to'),'2001');
+const deployment=new URL(grafanaLink('https://example/grafana','uid','host:run','host',
+  {benchmark:'distributed-ydb',profile:'reservation',attempt:'deployment'},1000,61000,'p',true));
+assert.equal(deployment.searchParams.get('var-bench_attempt'),'deployment');
+assert.equal(deployment.searchParams.get('var-bench_profile'),'reservation');
+assert.equal(deployment.searchParams.get('to'),'61000');
 '''
         subprocess.run([shutil.which('node'), '-e', script], check=True, capture_output=True, timeout=10)
         self.assertNotIn("value.samples+' / '", monitoring_settings_ui.JS)

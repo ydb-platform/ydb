@@ -618,6 +618,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
         inlineJoinFiltersAfterCBORules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
         inlineJoinFiltersAfterCBORules.emplace_back(std::make_unique<TFuseFiltersRule>());
         inlineJoinFiltersAfterCBORules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
+        inlineJoinFiltersAfterCBORules.emplace_back(std::make_unique<TPushSimpleJoinFilterRule>());
         RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline join filters after CBO", std::move(inlineJoinFiltersAfterCBORules)));
 
         TVector<std::unique_ptr<IRule>> pruningStage_II_Rules;

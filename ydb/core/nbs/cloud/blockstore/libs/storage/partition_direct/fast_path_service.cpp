@@ -434,11 +434,14 @@ void TFastPathService::ScheduleAfterDelay(
         std::move(callback));
 }
 
-TPersistResultFuture TFastPathService::UpdateVChunkConfig(
-    const TVChunkConfig& cfg)
+TPersistResultFuture TFastPathService::UpdateVChunkState(
+    const TVChunkConfig& cfg,
+    TDirtyMapStateProto state)
 {
     auto event =
-        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(cfg);
+        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(
+            cfg,
+            std::move(state));
     auto result = event->UpdateCompleted.GetFuture();
     ActorSystem->Send(PartitionActorId, event.release());
     return result;
@@ -490,9 +493,21 @@ void TFastPathService::QueryRemoveHost(
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
-ui64 TFastPathService::GenerateLsn()
+ui64 TFastPathService::OnWriteStarted()
 {
+    ++InflightWriteCount;
     return ++SequenceGenerator;
+}
+
+void TFastPathService::OnWriteFinished()
+{
+    const size_t previous = InflightWriteCount.fetch_sub(1);
+    Y_ABORT_UNLESS(previous > 0);
+}
+
+size_t TFastPathService::GetInflightWriteCount() const
+{
+    return InflightWriteCount.load();
 }
 
 void TFastPathService::StopTablet(const TString& reason)
@@ -531,6 +546,7 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
     return {
         .LsnCounter = SequenceGenerator.load(),
+        .InflightWriteCount = InflightWriteCount.load(),
         .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetDetailedStat()},
     };
 }

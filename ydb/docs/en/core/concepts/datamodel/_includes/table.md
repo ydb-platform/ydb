@@ -131,27 +131,27 @@ Default parameter values and split/merge mechanics are documented in [Row table 
 
 #### When defaults may be insufficient {#default_auto_sharding_gaps}
 
-If explicit `AUTO_PARTITIONING_*` tuning is insufficient, use [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings), [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md), [partition-count heuristics](#default_auto_sharding_heuristics), and [{#T}](../../../troubleshooting/performance/schemas/splits-merges.md) if partitions split and merge frequently.
+If explicit `AUTO_PARTITIONING_*` tuning is insufficient, use [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings), [partition count guides](#default_auto_sharding_heuristics), and [{#T}](../../../troubleshooting/performance/schemas/splits-merges.md) if partitions split and merge frequently.
 
 The table lists typical **condition → {{ ydb-short-name }} behavior → symptom → what to configure** chains. There is no single min/max pair for every table — **don’t assume** one fixed partition count is universally “better” than another; account for query profile and [database limits](../../limits-ydb.md#schema-object).
 
 | Condition | System behavior | Symptom | What to do |
 | --------- | --------------- | ------- | ---------- |
 | [`AUTO_PARTITIONING_BY_LOAD`](#auto_partitioning_by_load) **disabled** (default), load grows on CPU rather than partition size | No load-based split | One partition hits roughly one CPU core for writes; latency grows | Enable load-based splitting; set aligned [min](#auto_partitioning_min_partitions_count) and [max](#auto_partitioning_max_partitions_count) — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings) |
-| [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](#auto_partitioning_max_partitions_count) reached (default **50**) | Hit max partitions | RPS and data are spread only across the current partition count; partitions grow | Raise max within limits, lower [partition size threshold](#auto_partitioning_partition_size_mb), plan initial partition count — [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md) |
+| [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](#auto_partitioning_max_partitions_count) reached (default **50**) | Hit max partitions | RPS and data are spread only across the current partition count; partitions grow | Raise max within limits, lower [partition size threshold](#auto_partitioning_partition_size_mb), plan initial partition count — see [section below](#default_auto_sharding_heuristics) |
 | [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count) **= 1** (default), long load drop | Merge can leave a single partition | New splits after the next spike; possible latency spikes | Raise min partitions — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings) |
 | Monotonically increasing primary key, splitting mainly **by size** | New rows land in one key range’s “tail” | Hot partition until the size threshold fires | Set [UNIFORM_PARTITIONS](#uniform_partitions) or [PARTITION_AT_KEYS](#partition_at_keys), enable load-based split, revisit the key — [{#T}](../../../dev/primary-key/row-oriented.md) |
 | High contention on **individual keys** (hot key, low cardinality) | Load on one key is not split across partitions | Overload persists with any `AUTO_PARTITIONING_*` | Revise the primary key design — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings), [{#T}](../../../dev/primary-key/row-oriented.md) |
 
 #### Partition count guides {#default_auto_sharding_heuristics}
 
-The table below lists **order-of-magnitude values per partition**; keep in mind that actual limits depend on query profile and cluster configuration. **Estimate** how many partitions the table needs from several angles, **take** the **maximum**, and respect [database limits](../../limits-ydb.md#schema-object); **choose** `AUTO_PARTITIONING_*` per [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md).
+The table below lists **order-of-magnitude values per partition**; keep in mind that actual limits depend on query profile and cluster configuration. **Estimate** how many partitions the table needs from several angles, **take** the **maximum**, and respect [database limits](../../limits-ydb.md#schema-object). **Choose** `AUTO_PARTITIONING_*` using [recommendations for choosing partition count](../../../dev/tables/partitioning/choosing-partition-count.md).
 
-| Heuristic | Order of magnitude | More detail |
-| --------- | ------------------ | ----------- |
-| Requests | ~**1000 RPS** per partition | Depends on query profile; tuning — [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md) |
-| Data volume | ~**1 GiB** per partition | [{#T}](../../../dev/batch-upload.md) |
-| Throughput | ~**10 MB/s** per partition | Depends on row size and operations |
+| Heuristic | Order of magnitude | Note |
+| --------- | ------------------ | ---- |
+| Requests | ~**1000 RPS** per partition | Depends on query profile |
+| Data volume | ~**1 GiB** per partition | Depends on data profile; for bulk load — [data loading recommendations](../../../dev/batch-upload.md) |
+| Throughput | ~**10 MB/s** per partition | Depends on row size and operation type |
 
 {% cut "Example: table with defaults only and a monotonic key" %}
 
@@ -171,7 +171,7 @@ The “monotonic key + defaults” scenario is in the [table above](#default_aut
 
 {% cut "Example: explicit AUTO_PARTITIONING_* settings" %}
 
-If defaults are not enough for the `orders` table, set partitioning parameters explicitly. Specific values depend on workload and cluster topology — see [partition count guides](#default_auto_sharding_heuristics) and [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md).
+If defaults are not enough for the `orders` table, set partitioning parameters explicitly. Specific values depend on workload and cluster topology — see the [guides above](#default_auto_sharding_heuristics).
 
 ```yql
 ALTER TABLE orders SET (

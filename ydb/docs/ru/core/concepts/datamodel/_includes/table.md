@@ -128,27 +128,27 @@ CREATE TABLE article (
 
 #### Когда дефолтов может не хватить {#default_auto_sharding_gaps}
 
-Если явной настройки `AUTO_PARTITIONING_*` недостаточно, см. [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings), [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md), [ориентиры по числу партиций](#default_auto_sharding_heuristics) и [{#T}](../../../troubleshooting/performance/schemas/splits-merges.md) при частых split/merge.
+Если явной настройки `AUTO_PARTITIONING_*` недостаточно, см. [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings), [ориентиры по числу партиций](#default_auto_sharding_heuristics) и [{#T}](../../../troubleshooting/performance/schemas/splits-merges.md) при частых split/merge.
 
 Ниже — типичные **цепочки «условие → поведение {{ ydb-short-name }} → симптом → что настроить»**. Универсального набора min/max для всех таблиц нет — в том числе **не считайте**, что одно фиксированное число партиций «лучше» другого для любой таблицы; учитывайте профиль запросов и [лимиты базы](../../limits-ydb.md#schema-object).
 
 | Условие | Поведение системы | Симптом | Что предпринять |
 | ------- | ----------------- | ------- | --------------- |
 | [`AUTO_PARTITIONING_BY_LOAD`](#auto_partitioning_by_load) **выключен** (дефолт), нагрузка растёт по CPU, а не по размеру партиции | Нет split по нагрузке | Одна партиция упирается примерно в одно ядро CPU на записи; растёт latency | Включить split по нагрузке, задать согласованные [min](#auto_partitioning_min_partitions_count) и [max](#auto_partitioning_max_partitions_count) — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings) |
-| Достигнут [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](#auto_partitioning_max_partitions_count) (дефолт **50**) | Упёрлись в max partitions | RPS и объём данных делятся только между текущим числом партиций; партиции растут | Поднять max с учётом лимитов, уменьшить [порог размера партиции](#auto_partitioning_partition_size_mb), спланировать стартовое число партиций — [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md) |
+| Достигнут [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](#auto_partitioning_max_partitions_count) (дефолт **50**) | Упёрлись в max partitions | RPS и объём данных делятся только между текущим числом партиций; партиции растут | Поднять max с учётом лимитов, уменьшить [порог размера партиции](#auto_partitioning_partition_size_mb), спланировать стартовое число партиций — см. [подраздел ниже](#default_auto_sharding_heuristics) |
 | [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count) **= 1** (дефолт), длительный спад нагрузки | Merge может свести таблицу к одной партиции | После всплеска снова нужны split, возможны задержки | Увеличить min partitions — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings) |
 | Монотонно растущий первичный ключ, split в основном **по размеру** | Новые строки попадают в «хвост» одного диапазона ключей | Горячая партиция до срабатывания порога по размеру | Задать [UNIFORM_PARTITIONS](#uniform_partitions) или [PARTITION_AT_KEYS](#partition_at_keys), включить split по нагрузке, пересмотреть ключ — [{#T}](../../../dev/primary-key/row-oriented.md) |
 | Высокая конкуренция за **отдельные ключи** (горячий ключ, низкая кардинальность) | Нагрузка на один ключ не делится между партициями | Перегрузка сохраняется при любых `AUTO_PARTITIONING_*` | Пересмотреть модель первичного ключа — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings), [{#T}](../../../dev/primary-key/row-oriented.md) |
 
 #### Ориентиры по числу партиций {#default_auto_sharding_heuristics}
 
-Таблица ниже — **порядок величин на одну партицию**; учитывайте, что фактические пределы зависят от профиля запросов и конфигурации кластера. **Оцените**, сколько партиций нужно таблице, с нескольких сторон и возьмите **максимум** из оценок с учётом [лимитов базы](../../limits-ydb.md#schema-object); **подберите** параметры `AUTO_PARTITIONING_*` по [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md).
+Таблица ниже — **порядок величин на одну партицию**; учитывайте, что фактические пределы зависят от профиля запросов и конфигурации кластера. **Оцените**, сколько партиций нужно таблице, с нескольких сторон и возьмите **максимум** из оценок с учётом [лимитов базы](../../limits-ydb.md#schema-object). **Подберите** параметры `AUTO_PARTITIONING_*`, опираясь на [рекомендации по выбору числа партиций](../../../dev/tables/partitioning/choosing-partition-count.md).
 
-| Ориентир | Порядок величины | Где подробнее |
-| -------- | ---------------- | ------------- |
-| Запросы | ~**1000 RPS** на партицию | Зависит от профиля запросов; настройка — [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md) |
-| Объём данных | ~**1 ГиБ** на партицию | [{#T}](../../../dev/batch-upload.md) |
-| Пропускная способность | ~**10 МБ/с** на партицию | Зависит от размера строк и операций |
+| Ориентир | Порядок величины | Примечание |
+| -------- | ---------------- | ---------- |
+| Запросы | ~**1000 RPS** на партицию | Зависит от профиля запросов |
+| Объём данных | ~**1 ГиБ** на партицию | Зависит от профиля данных; при массовой загрузке — [рекомендации по загрузке данных](../../../dev/batch-upload.md) |
+| Пропускная способность | ~**10 МБ/с** на партицию | Зависит от размера строк и типа операций |
 
 {% cut "Пример: таблица только с дефолтами и монотонным ключом" %}
 
@@ -168,7 +168,7 @@ CREATE TABLE orders (
 
 {% cut "Пример: явные настройки AUTO_PARTITIONING_*" %}
 
-Если для таблицы `orders` дефолтов недостаточно, задайте параметры партиционирования явно. Конкретные значения зависят от нагрузки и топологии кластера — см. [ориентиры по числу партиций](#default_auto_sharding_heuristics) и [{#T}](../../../dev/tables/partitioning/choosing-partition-count.md).
+Если для таблицы `orders` дефолтов недостаточно, задайте параметры партиционирования явно. Конкретные значения зависят от нагрузки и топологии кластера — см. [ориентиры выше](#default_auto_sharding_heuristics).
 
 ```yql
 ALTER TABLE orders SET (

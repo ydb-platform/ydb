@@ -102,10 +102,11 @@ additional **direct** writes, first to eligible handoffs and then, when
 needed, to desired hosts. Requested/completed/failed masks prevent counting
 one destination twice. The request timeout bounds the client operation.
 
-Late successful responses still matter after the client reply: they identify
-extra PB copies that need cleanup. `ReplyOrNotifyBelated`,
-`TVChunk::OnBelatedWriteBlocksResponse`, and the belated erase queue implement that
-path. Changes to timeout handling must preserve it.
+Late successful responses still matter after the client reply, even when the
+quorum was never reached: they identify extra PB copies that need cleanup.
+`MaybeReplyOrNotifyBelated`, `TVChunk::OnBelatedWriteBlocksResponse`, and the
+belated erase queue implement that path. Changes to timeout handling must
+preserve it.
 
 The proto enum's zero value is `IndirectWrite`; the C++ fallback for an absent
 configuration field is `DirectWrite`. Inspect the effective config rather

@@ -1,4 +1,5 @@
 #include <ydb/core/statistics/ut_common/ut_common.h>
+#include <ydb/core/statistics/aggregator/aggregator_impl.h>
 
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -19,6 +20,11 @@
 namespace NKikimr {
 namespace NStat {
 
+struct TStatisticsAggregatorTestAccess {
+    using TTraversalTick = TStatisticsAggregator::TEvPrivate::TEvScheduleTraversal;
+    using TTraversalWakeup = TStatisticsAggregator::TEvPrivate::TEvScheduleForceTraversal;
+};
+
 namespace {
 
 void CheckTableSummaryRowCount(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expected) {
@@ -34,6 +40,48 @@ TTableInfo ResolveRowTable(TTestActorRuntime& runtime, const TString& path) {
     tableInfo.Path = path;
     tableInfo.PathId = ResolvePathId(runtime, path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
     return tableInfo;
+}
+
+void WaitForAggregatorCommit(TTestActorRuntime& runtime, ui64 tabletId) {
+    NTabletFlatScheme::TSchemeChanges scheme;
+    TString error;
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        LocalSchemeTx(runtime, tabletId, "", /*dryRun=*/true, scheme, error),
+        NKikimrProto::OK, error);
+}
+
+void CheckTraversalSchedulerRate(TTestActorRuntime& runtime, ui64 tabletId, bool started = true) {
+    const auto aggregator = ResolveTablet(runtime, tabletId);
+    size_t ticks = 0;
+    auto observer = runtime.AddObserver<TStatisticsAggregatorTestAccess::TTraversalTick>([&](auto& ev) {
+        if (ev->GetRecipientRewrite() == aggregator) {
+            ++ticks;
+        }
+    });
+    const auto startedAt = runtime.GetCurrentTime();
+    runtime.SimulateSleep(TDuration::Seconds(5));
+    const auto elapsed = runtime.GetCurrentTime() - startedAt;
+    if (started) {
+        UNIT_ASSERT_GT(ticks, 0);
+        UNIT_ASSERT_C(ticks <= elapsed.Seconds() + 1,
+            "Expected one periodic traversal chain, got " << ticks << " ticks in " << elapsed);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(ticks, 0);
+    }
+}
+
+void SetAggregatorStatisticsConfig(TTestEnv& env, ui64 tabletId, bool enabled, bool background) {
+    auto& runtime = *env.GetServer().GetRuntime();
+    const auto& settings = env.GetServer().GetSettings();
+    auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto* config = request->Record.MutableConfig();
+    *config->MutableFeatureFlags() = settings.FeatureFlags;
+    config->MutableFeatureFlags()->SetEnableColumnStatistics(enabled);
+    *config->MutableStatisticsConfig() = settings.AppConfig->GetStatisticsConfig();
+    config->MutableStatisticsConfig()->SetEnableBackgroundColumnStatsCollection(background);
+    const auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(tabletId, sender, request.release());
+    UNIT_ASSERT(runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender));
 }
 
 } // namespace
@@ -405,7 +453,10 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         CreateDatabase(env, "Database");
         const auto tableInfo = CreateEmptyTable(env, "Database", "Table", ColumnShard);
 
-        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+        for (size_t i = 0; i < 10; ++i) {
+            Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId}, TStringBuilder() << "operation" << i);
+        }
+        CheckTraversalSchedulerRate(runtime, tableInfo.SaTabletId);
 
         // An empty table produces no statistics.
         std::vector<TCountMinSketchProbes> expected = {
@@ -600,13 +651,24 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
             UNIT_ASSERT(body.Contains("ForceTraversals: 1"));
         }
 
-        block.Unblock();
-        block.Stop();
+        SetAggregatorStatisticsConfig(env, tableInfo.SaTabletId, false, false);
+        const auto aggregator = ResolveTablet(runtime, tableInfo.SaTabletId);
+        size_t wakeups = 0;
+        auto observer = runtime.AddObserver<TStatisticsAggregatorTestAccess::TTraversalWakeup>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == aggregator) {
+                ++wakeups;
+            }
+        });
+        block.Stop().Unblock();
 
-        auto analyzeResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        auto analyzeResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender, TDuration::Seconds(30));
+        UNIT_ASSERT(analyzeResponse);
         UNIT_ASSERT_VALUES_EQUAL(analyzeResponse->Get()->Record.GetOperationId(), operationId);
+        UNIT_ASSERT_VALUES_EQUAL(analyzeResponse->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 
         AnalyzeStatus(runtime, sender, tableInfo.SaTabletId, operationId, NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(wakeups, 0);
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeSameOperationId, ColumnShard) {
@@ -626,8 +688,10 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
 
         runtime.WaitFor("TEvSaveStatisticsQueryResponse", [&]{ return block.size(); });
 
-        auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId}, operationId);
-        runtime.SendToPipe(tabletPipe, sender, analyzeRequest2.release());
+        for (size_t i = 0; i < 10; ++i) {
+            runtime.SendToPipe(tabletPipe, sender, MakeAnalyzeRequest({tableInfo.PathId}, operationId).release());
+        }
+        WaitForAggregatorCommit(runtime, tableInfo.SaTabletId);
 
         block.Unblock();
         block.Stop();
@@ -635,9 +699,175 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         auto response1 = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
         UNIT_ASSERT(response1);
         UNIT_ASSERT_VALUES_EQUAL(response1->Get()->Record.GetOperationId(), operationId);
+        UNIT_ASSERT_VALUES_EQUAL(response1->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        CheckTraversalSchedulerRate(runtime, tableInfo.SaTabletId);
 
         auto response2 = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender, TDuration::Seconds(5));
         UNIT_ASSERT(!response2);
+
+        // Terminal retries must not rescan.
+        size_t results = 0;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeActorResult>([&](auto&) { ++results; });
+        runtime.SendToPipe(tabletPipe, sender, MakeAnalyzeRequest({tableInfo.PathId}, operationId).release());
+        const auto replay = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(replay->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        CheckTraversalSchedulerRate(runtime, tableInfo.SaTabletId);
+        UNIT_ASSERT_VALUES_EQUAL(results, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeCompletionStartsQueuedWork, ColumnShard) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto first = CreateEmptyTable(env, "Database", "First", ColumnShard);
+        const auto second = CreateEmptyTable(env, "Database", "Second", ColumnShard);
+        const auto queued = CreateEmptyTable(env, "Database", "Queued", ColumnShard);
+        WaitForSchemeShardStatsUpdate(runtime, first.PathId.OwnerId, true);
+        const auto aggregator = ResolveTablet(runtime, first.SaTabletId);
+        TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> firstResult(runtime, [&](auto& ev) {
+            return ev->GetRecipientRewrite() == aggregator && ev->Get()->Final;
+        });
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(first.SaTabletId, sender,
+            MakeAnalyzeRequest({first.PathId, second.PathId}, "operationA", "/Root/Database").release());
+        runtime.WaitFor("first traversal result", [&] { return !firstResult.empty(); }, TDuration::Seconds(30));
+
+        auto ticks = runtime.AddObserver<TStatisticsAggregatorTestAccess::TTraversalTick>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == aggregator) {
+                ev.Reset();
+            }
+        });
+
+        // Only A's completion may start B.
+        TBlockEvents<TStatisticsAggregatorTestAccess::TTraversalWakeup> wakeup(runtime, [&](auto& ev) {
+            return ev->GetRecipientRewrite() == aggregator;
+        });
+        runtime.SendToPipe(first.SaTabletId, sender,
+            MakeAnalyzeRequest({queued.PathId}, "operationB", "/Root/Database").release());
+        runtime.WaitFor("submission wakeup", [&] { return !wakeup.empty(); }, TDuration::Seconds(30));
+        wakeup.Stop();
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetAnalyzeOp(runtime, first.SaTabletId, "/Root/Database", "operationB").GetAnalyzeOperation().GetState(),
+            Ydb::Table::AnalyzeState::STATE_ENQUEUED);
+
+        firstResult.Stop().Unblock();
+        for (const TString operationId : {"operationA", "operationB"}) {
+            const auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(
+                sender, TDuration::Seconds(30));
+            UNIT_ASSERT_C(response, "Queued traversal did not complete while periodic ticks were held");
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetOperationId(), operationId);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        }
+        CheckTableSummaryRowCount(runtime, queued.PathId, 0);
+        CheckTableSummaryRowCount(runtime, second.PathId, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(AnalyzeBackgroundFailuresWaitForPeriodicTick, ColumnShard) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto table = PrepareTable(env, "Database", "Table", ColumnShard);
+        // Keep the table stale after failed scans.
+        WaitForRowCount(runtime, 0, table.PathId, ColumnTableRowsNumber);
+        const auto aggregator = ResolveTablet(runtime, table.SaTabletId);
+        const auto sender = runtime.AllocateEdgeActor();
+        TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> results(runtime, [&](auto& ev) {
+            return ev->GetRecipientRewrite() == aggregator && ev->Get()->Final;
+        });
+        SetAggregatorStatisticsConfig(env, table.SaTabletId, true, true);
+
+        for (bool queuedAnalyze : {false, true}) {
+            runtime.WaitFor("background traversal result", [&] { return !results.empty(); }, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+            using TTraversalTick = TStatisticsAggregatorTestAccess::TTraversalTick;
+            TTraversalTick::TPtr tick;
+            auto ticks = runtime.AddObserver<TTraversalTick>([&](auto& ev) {
+                if (ev->GetRecipientRewrite() == aggregator) {
+                    UNIT_ASSERT(!tick);
+                    tick = std::move(ev);
+                }
+            });
+            runtime.WaitFor("periodic traversal tick", [&] { return bool(tick); }, TDuration::Seconds(30));
+
+            if (queuedAnalyze) {
+                // Drop the submission wakeup to isolate the completion wakeup.
+                TBlockEvents<TStatisticsAggregatorTestAccess::TTraversalWakeup> wakeup(runtime, [&](auto& ev) {
+                    return ev->GetRecipientRewrite() == aggregator;
+                });
+                runtime.SendToPipe(table.SaTabletId, sender,
+                    MakeAnalyzeRequest({table.PathId}, "operation", "/Root/Database").release());
+                runtime.WaitFor("submission wakeup", [&] { return !wakeup.empty(); }, TDuration::Seconds(30));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    TestGetAnalyzeOp(runtime, table.SaTabletId, "/Root/Database", "operation").GetAnalyzeOperation().GetState(),
+                    Ydb::Table::AnalyzeState::STATE_ENQUEUED);
+            }
+
+            auto& result = *results.front()->Get();
+            UNIT_ASSERT_C(result.Status == TEvStatistics::TEvAnalyzeActorResult::EStatus::Success,
+                result.Issues.ToString());
+            result.Status = TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError;
+            result.Issues.AddIssue(NYql::TIssue("Injected background scan failure"));
+            if (queuedAnalyze) {
+                results.Stop();
+            }
+            results.Unblock();
+
+            if (queuedAnalyze) {
+                const auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(
+                    sender, TDuration::Seconds(30));
+                UNIT_ASSERT_C(response, "Queued ANALYZE did not advance after a failed background traversal");
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetOperationId(), "operation");
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+                CheckTableSummaryRowCount(runtime, table.PathId, ColumnTableRowsNumber);
+            } else {
+                runtime.SimulateSleep(TDuration::Seconds(5));
+                UNIT_ASSERT_C(results.empty(), "Failed background traversal retried while periodic ticks were held");
+                ticks.Remove();
+                runtime.Send(tick.Release(), aggregator.NodeId() - runtime.GetFirstNodeId(), true);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TraversalSchedulerStartsOnceAfterEnable, ColumnShard) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.FeatureFlags.SetEnableColumnStatistics(false);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto table = CreateEmptyTable(env, "Database", "Table", ColumnShard);
+        CheckTraversalSchedulerRate(runtime, table.SaTabletId, /*started=*/false);
+
+        SetAggregatorStatisticsConfig(env, table.SaTabletId, true, false);
+        CheckTraversalSchedulerRate(runtime, table.SaTabletId);
+        for (size_t i = 0; i < 3; ++i) {
+            SetAggregatorStatisticsConfig(env, table.SaTabletId, false, false);
+            SetAggregatorStatisticsConfig(env, table.SaTabletId, true, false);
+        }
+        CheckTraversalSchedulerRate(runtime, table.SaTabletId);
+
+        SetAggregatorStatisticsConfig(env, table.SaTabletId, false, false);
+        // Let the pending tick stop the periodic chain.
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        CheckTraversalSchedulerRate(runtime, table.SaTabletId, /*started=*/false);
+
+        const auto sender = runtime.AllocateEdgeActor();
+        for (double sampleRate : {1.0, 0.5}) {
+            auto request = MakeAnalyzeRequest({table.PathId}, "disabledOperation");
+            request->Record.MutableTables(0)->SetSampleRate(sampleRate);
+            runtime.SendToPipe(table.SaTabletId, sender, request.release());
+            const auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender, TDuration::Seconds(5));
+            UNIT_ASSERT(response);
+            const auto& record = response->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), "disabledOperation");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            UNIT_ASSERT_C(issues.ToString().Contains("Column statistics are disabled"), issues.ToString());
+        }
+
+        SetAggregatorStatisticsConfig(env, table.SaTabletId, true, false);
+        CheckTraversalSchedulerRate(runtime, table.SaTabletId);
+        Analyze(runtime, table.SaTabletId, {table.PathId});
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeMultiOperationId, ColumnShard) {
@@ -698,7 +928,13 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
 
         runtime.WaitFor("op1 collected", [&]{ return finals >= 1 && !block.empty(); });
         const size_t op1Saves = block.size();
-        runtime.AdvanceCurrentTime(TDuration::Days(2));
+
+        // Expire only the first operation.
+        runtime.AdvanceCurrentTime(TDuration::Hours(23));
+        runtime.SendToPipe(tableInfo.SaTabletId, sender,
+            MakeAnalyzeRequest({tableInfo.PathId}, "operationId2").release());
+        WaitForAggregatorCommit(runtime, tableInfo.SaTabletId);
+        runtime.AdvanceCurrentTime(TDuration::Hours(2));
 
         auto analyzeResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(
             sender, TDuration::Seconds(30));
@@ -708,8 +944,6 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
         UNIT_ASSERT(!record.GetIssues().empty());
 
-        auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId}, "operationId2");
-        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
         runtime.WaitFor("op2 collected", [&]{ return finals >= 2 && block.size() > op1Saves; });
 
         // Releasing only op1's blocked saves must not complete op2.
@@ -751,6 +985,11 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
 
         runtime.WaitFor("TEvKqpScan", [&]{ return !block.empty(); });
 
+        const auto sender2 = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(tableInfo.SaTabletId, sender2,
+            MakeAnalyzeRequest({tableInfo.PathId}, "operationId2").release());
+        WaitForAggregatorCommit(runtime, tableInfo.SaTabletId);
+
         auto cancelRequest = MakeHolder<TEvStatistics::TEvAnalyzeCancel>();
         cancelRequest->Record.SetOperationId(operationId);
         runtime.SendToPipe(tableInfo.SaTabletId, sender, cancelRequest.Release());
@@ -762,10 +1001,8 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         block.Unblock();
         block.Stop();
 
-        // Do another ANALYZE
-        auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId}, "operationId2");
-        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
-        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        const auto response2 = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender2);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 
         // Make sure that only 1 AnalyzeActor successfully finished.
         UNIT_ASSERT_VALUES_EQUAL(finalResultsCount, 1);
@@ -793,14 +1030,8 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
 
         runtime.WaitFor("TEvKqpScan", [&]{ return !block.empty(); });
 
-        // The scan actor starts in the scheduling transaction's Execute(), so
-        // seeing a scan does not imply that the active operation is durable yet.
-        // A read-only tablet transaction completes after earlier writes commit.
-        NTabletFlatScheme::TSchemeChanges scheme;
-        TString error;
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            LocalSchemeTx(runtime, tableInfo.SaTabletId, "", /*dryRun=*/true, scheme, error),
-            NKikimrProto::OK, error);
+        // The scan may start before its operation commits.
+        WaitForAggregatorCommit(runtime, tableInfo.SaTabletId);
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
         // After restart, the operation must still appear as IN_PROGRESS, not ENQUEUED.
@@ -826,6 +1057,7 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         UNIT_ASSERT_VALUES_EQUAL(finalResultsCount, 2);
 
         ValidateStatistics(runtime, tableInfo.PathId);
+        CheckTraversalSchedulerRate(runtime, tableInfo.SaTabletId);
     }
 
     Y_UNIT_TEST_TWIN(DropTableNavigateError, ColumnShard) {

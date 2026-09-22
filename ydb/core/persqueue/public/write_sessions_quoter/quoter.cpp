@@ -187,7 +187,7 @@ STFUNC(TWriteSessionsQuoter::StateWork) {
 } // namespace
 
 NActors::TActorId MakeWriteSessionsQuoterId() {
-    return NActors::TActorId(0, "init_wr_quota");
+    return NActors::TActorId(0, "pq_wr_quota");
 }
 
 NActors::IActor* CreateWriteSessionsQuoter() {

@@ -327,6 +327,10 @@ public:
         return Portion->GetEntityStorageId(entityId, Schema->GetIndexInfo());
     }
 
+    virtual TString GetIndexStorageId(const ui32 indexId) const override {
+        return Portion->GetIndexStorageId(indexId, Schema->GetIndexInfo());
+    }
+
     virtual TString GetColumnStorageId(const ui32 columnId) const override {
         return Portion->GetColumnStorageId(columnId, Schema->GetIndexInfo());
     }
@@ -546,6 +550,11 @@ public:
     }
 
     virtual TString GetEntityStorageId(const ui32 /*entityId*/) const override {
+        AFL_VERIFY(false);
+        return "";
+    }
+
+    virtual TString GetIndexStorageId(const ui32 /*indexId*/) const override {
         AFL_VERIFY(false);
         return "";
     }

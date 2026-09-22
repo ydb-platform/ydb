@@ -333,6 +333,8 @@ public:
 
     virtual TString GetEntityStorageId(const ui32 /*entityId*/) const;
 
+    virtual TString GetIndexStorageId(const ui32 /*indexId*/) const;
+
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const;
 
     IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const bool isConflicting,

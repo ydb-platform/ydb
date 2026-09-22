@@ -211,6 +211,11 @@ TString IDataSource::GetEntityStorageId(const ui32 /*entityId*/) const {
     return "";
 }
 
+TString IDataSource::GetIndexStorageId(const ui32 /*indexId*/) const {
+    AFL_VERIFY(false);
+    return "";
+}
+
 TBlobRange IDataSource::RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const {
     AFL_VERIFY(false);
     return TBlobRange();

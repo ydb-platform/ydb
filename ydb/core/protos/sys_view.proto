@@ -2,6 +2,7 @@ package NKikimrSysView;
 
 option java_package = "ru.yandex.kikimr.proto";
 
+import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/labeled_counters.proto";
 import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/core/protos/tablet.proto";
@@ -302,6 +303,9 @@ message TGroupInfo {
     optional uint64 BridgeSyncFirstErrorTimestamp = 27; // first error timestamp
     optional uint32 BridgeSyncErrorCount = 28; // number of errors reported during this stage
     optional bool BridgeSyncRunning = 29; // is the syncer running right now?
+
+    // Also set for groups being decommitted, starting from PENDING.
+    optional NKikimrBlobStorage.EVirtualGroupState VirtualGroupState = 30;
 }
 
 message TGroupEntry {
@@ -380,6 +384,7 @@ message TStorageStatsEntry {
     optional uint64 ImmediateSizeToCreate = 11;
 
     optional bytes PDiskFilterData = 9;
+    optional uint32 CurrentVirtualGroupsCreated = 12;
 }
 
 message TEvGetStorageStatsRequest {

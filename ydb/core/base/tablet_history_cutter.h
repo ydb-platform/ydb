@@ -79,6 +79,7 @@ public:
                 ++allHistoryIt;
             }
             if (!seenGroups.contains(historyEntry->GroupID)) {
+                Y_ENSURE(historyEntry != &channelHistory.back());
                 const auto nextFromGeneration = std::next(historyEntry)->FromGeneration;
                 auto& collectGeneration = hardBarriers[historyEntry->GroupID];
                 collectGeneration = Max(collectGeneration, nextFromGeneration - 1);

@@ -1,10 +1,18 @@
 #include "snapshot.h"
 
-#include <algorithm>
-
 #include "dynamic.h" // IWYU pragma: keep
 
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
+
+namespace {
+
+constexpr ui64 MicroCoresPerCore = 1'000'000;
+
+ui64 CeilToCpu(ui64 microCores) {
+    return (microCores + MicroCoresPerCore - 1) / MicroCoresPerCore;
+}
+
+} // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 // TTreeElement
@@ -14,33 +22,39 @@ TPool* TTreeElement::GetParent() const {
     return dynamic_cast<TPool*>(Parent);
 }
 
-void TTreeElement::AccountSnapshotDuration(const TDuration& period) {
+void TTreeElement::AccountSnapshotDuration(TDuration period) {
     ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
         child->AccountSnapshotDuration(period);
     });
 }
 
-void TTreeElement::UpdateBottomUp(ui64 totalLimit) {
-    TotalLimit = totalLimit;
-    CpuLimit = Min<ui64>(GetCpuLimit(), TotalLimit);
+void TTreeElement::UpdateBottomUp(ui64 totalLimit, TDuration period) {
+    CpuLimit = Min<ui64>(GetCpuLimit(), totalLimit);
 
     if (IsPool()) {
-        CpuDemand = 0;
-        CpuUsage = 0;
+        Tasks = 0;
+        CpuMaxDemand = 0;
+        PreciseCpuActualDemand = 0;
         CpuBurstUsage = 0;
         CpuBurstThrottle = 0;
-        ReadBurstUsage = 0;
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
-            child->UpdateBottomUp(totalLimit);
-            CpuDemand += child->CpuDemand;
-            CpuUsage += child->CpuUsage;
+            child->UpdateBottomUp(totalLimit, period);
+            Tasks += child->Tasks;
+            CpuMaxDemand += child->CpuMaxDemand;
+            PreciseCpuActualDemand += child->PreciseCpuActualDemand;
             CpuBurstUsage += child->CpuBurstUsage;
             CpuBurstThrottle += child->CpuBurstThrottle;
-            ReadBurstUsage += child->ReadBurstUsage;
         });
+
+        if (Tasks > 0) {
+            PreciseCpuActualDemand = Max<ui64>(PreciseCpuActualDemand, MicroCoresPerCore);
+        }
     }
 
-    CpuDemand = Min<ui64>(CpuDemand, GetCpuLimit());
+    CpuMaxDemand = Min<ui64>(CpuMaxDemand, GetCpuLimit());
+
+    CpuActualDemand = Min<ui64>(CeilToCpu(PreciseCpuActualDemand), GetCpuLimit());
+    PreciseCpuActualDemand = Min<ui64>(PreciseCpuActualDemand, CpuActualDemand * MicroCoresPerCore);
 }
 
 namespace {
@@ -131,17 +145,13 @@ void TTreeElement::DistributeFairShare() {
     ForEachChild<TTreeElement>([&](TTreeElement* child, size_t i) {
         children.at(i) = child;
         child->FairShare = 0;
-        unsatisfiedDemand.at(i) = child->CpuDemand;
+        unsatisfiedDemand.at(i) = child->CpuMaxDemand;
     });
 
     FillDemand(children, unsatisfiedDemand, FairShare);
 }
 
 void TTreeElement::UpdateTopDown() {
-    if (IsRoot()) {
-        FairShare = CpuDemand;
-    }
-
     // At this moment we know own fair-share. Need to calibrate children.
 
     if (!IsPool()) {
@@ -160,7 +170,7 @@ void TTreeElement::UpdateTopDown() {
     // TODO: it's workaround mode - the queries should get their own fair-share in the future.
     else {
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
-            if (query->CpuDemand > 0) {
+            if (query->CpuMaxDemand > 0) {
                 query->FairShare = FairShare;
             }
 
@@ -183,6 +193,31 @@ TQuery::TQuery(const TQueryId& id, const NDynamic::TQueryPtr& query)
 {
 }
 
+void TQuery::UpdateBottomUp(ui64 totalLimit, TDuration period) {
+    RawCpuActualDemand = CalculateRawCpuActualDemand(period);
+
+    // The actual demand grows immediately, but falls only when it stays low for two snapshots in a row: otherwise
+    // a query which just paused between the bursts of work would lose its share on every other snapshot.
+    // It's smoothed only here, and summed up above - so that the actual demand of every element is the sum of its children's.
+    PreciseCpuActualDemand = Max(RawCpuActualDemand, PrevRawCpuActualDemand);
+
+    // Every task is able to use at most one CPU - and the departed tasks don't want anything anymore.
+    PreciseCpuActualDemand = Min<ui64>(PreciseCpuActualDemand, Tasks * MicroCoresPerCore);
+
+    TTreeElement::UpdateBottomUp(totalLimit, period);
+}
+
+ui64 TQuery::CalculateRawCpuActualDemand(TDuration period) const {
+    // The actual demand is the time the tasks wanted CPU - running or being throttled.
+    // The tasks parked on external waits (e.g. network) want nothing and don't contribute.
+    ui64 actualDemand = (CpuUsage + CpuThrottle) * MicroCoresPerCore;
+    if (period) {
+        actualDemand = Max<ui64>(actualDemand, (CpuBurstUsage + CpuBurstThrottle) * MicroCoresPerCore / period.MicroSeconds());
+    }
+
+    return actualDemand;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // TPool
 ///////////////////////////////////////////////////////////////////////////////
@@ -192,19 +227,16 @@ TPool::TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, co
     , TTreeElement(id, attrs)
     , NHdrf::TPool<ETreeType::SNAPSHOT>(id, attrs)
 {
-    if (counters) {
-        Counters = TPoolCounters();
-        Counters->AdjustedSatisfaction = counters->AdjustedSatisfaction;
-        Counters->Demand    = counters->Demand;
-        Counters->FairShare = counters->FairShare;
-    }
+    Counters = counters;
 }
 
-void TPool::AccountSnapshotDuration(const TDuration& period) {
+void TPool::AccountSnapshotDuration(TDuration period) {
     if (Counters) {
         const auto fairShare = FairShare * period.MicroSeconds();
 
+        Counters->Demand->Set(CpuMaxDemand * 1'000'000);
         Counters->FairShare->Add(fairShare);
+        Counters->ActualDemand->Add(CpuActualDemand * period.MicroSeconds());
 
         const auto wanted = CpuBurstUsage + CpuBurstThrottle;
         float adjustedSatisfaction = 1.0; // nothing was wanted - so nothing is missing
@@ -218,13 +250,6 @@ void TPool::AccountSnapshotDuration(const TDuration& period) {
         Counters->AdjustedSatisfaction->Add(adjustedSatisfaction * period.MicroSeconds());
     }
     TTreeElement::AccountSnapshotDuration(period);
-}
-
-void TPool::UpdateBottomUp(ui64 totalLimit) {
-    TTreeElement::UpdateBottomUp(totalLimit);
-    if (Counters) {
-        Counters->Demand->Set(CpuDemand * 1'000'000);
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -259,8 +284,17 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
     return std::static_pointer_cast<TDatabase>(GetPool(databaseId));
 }
 
-void TRoot::AccountPreviousSnapshot(const TRootPtr& snapshot) {
-    AccountSnapshotDuration(Timestamp - snapshot->Timestamp);
+void TRoot::Update(const TRootPtr& previous) {
+    const auto period = previous && Timestamp > previous->Timestamp ? Timestamp - previous->Timestamp : TDuration::Zero();
+
+    UpdateBottomUp(TotalLimit, period);
+
+    FairShare = CpuMaxDemand;
+    UpdateTopDown();
+
+    if (period) {
+        AccountSnapshotDuration(period);
+    }
 }
 
 } // namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot

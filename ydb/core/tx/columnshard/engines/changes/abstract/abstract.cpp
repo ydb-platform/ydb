@@ -100,18 +100,12 @@ void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
     LockGuard = self.DataLocksManager->RegisterLock(BuildDataLock());
     Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Created);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), *this);
-    if (self.HasIndex()) {
-        const auto consumer = BlobsAction.GetConsumerId();
-        const bool isWriteOrIndexation = consumer == NBlobOperations::EConsumer::INDEXATION;
-        const bool isCompaction = consumer == NBlobOperations::EConsumer::GENERAL_COMPACTION;
-        bool schemaEnabled = false;
-        const auto& versionedIndex = self.GetIndexVerified().GetVersionedIndex();
-        if (!PortionsToAccess.empty()) {
-            schemaEnabled = PortionsToAccess.front()->GetSchema(versionedIndex)->GetIndexInfo().GetCacheBlobsAfterWrite();
-        } else {
-            schemaEnabled = versionedIndex.GetLastSchema()->GetIndexInfo().GetCacheBlobsAfterWrite();
-        }
-        BlobsAction.SetCacheAfterWrite(NBlobCache::ShouldCacheAfterWrite(schemaEnabled, isWriteOrIndexation, isCompaction,
+    if (self.HasIndex() && BlobsAction.GetConsumerId() == NBlobOperations::EConsumer::GENERAL_COMPACTION) {
+        // Compaction writes its result with the newest schema, so the opt-in must be read from the last schema,
+        // not from the (possibly older) schema of the source portions. This makes ALTER TABLE ... CACHE_BLOBS_AFTER_WRITE
+        // take effect for the very next compaction of pre-existing data.
+        const bool schemaEnabled = self.GetIndexVerified().GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetCacheBlobsAfterWrite();
+        BlobsAction.SetCacheAfterWrite(NBlobCache::ShouldCacheAfterWrite(schemaEnabled, NBlobOperations::EConsumer::GENERAL_COMPACTION,
             (ui64)self.Settings.CacheDataAfterIndexing != 0, (ui64)self.Settings.CacheDataAfterCompaction != 0));
     }
     DoStart(self);

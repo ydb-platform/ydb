@@ -5,6 +5,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -676,7 +677,10 @@ private:
         const TDuration protectFor = TDuration::MilliSeconds(WriteProtectDurationMs);
         const TInstant stickyUntil = (sticky && protectFor) ? (now + protectFor) : TInstant::Zero();
 
-        auto existing = Cache.FindWithoutPromote(blobRange);
+        // A sticky (re)insert is a fresh write: refresh its protection window AND move it to MRU in the main LRU,
+        // so it is the last candidate for the emergency (sticky) eviction path. An unprotected insert over an
+        // existing entry is a no-op and must not touch the LRU order.
+        auto existing = stickyUntil ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
         if (existing != Cache.End()) {
             if (stickyUntil) {
                 PromoteToSticky(blobRange, *existing, stickyUntil);
@@ -809,14 +813,28 @@ private:
 
 }   // namespace
 
-NActors::IActor* CreateBlobCache(const TBlobCacheSettings& settings, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-    return new TBlobCache(settings, counters);
+TBlobCacheSettings TBlobCacheSettings::FromProto(const NKikimrConfig::TBlobCacheConfig& cfg) {
+    TBlobCacheSettings settings;
+    if (cfg.HasMaxSizeBytes()) {
+        settings.MaxCacheDataSize = cfg.GetMaxSizeBytes();
+    }
+    if (cfg.HasMaxInFlightBytes()) {
+        settings.MaxInFlightBytes = cfg.GetMaxInFlightBytes();
+    }
+    if (cfg.HasMaxRequestBytes()) {
+        settings.MaxRequestBytes = cfg.GetMaxRequestBytes();
+    }
+    if (cfg.HasReadDeadlineMs()) {
+        settings.ReadDeadlineMs = cfg.GetReadDeadlineMs();
+    }
+    if (cfg.HasWriteProtectDurationMs()) {
+        settings.WriteProtectDurationMs = cfg.GetWriteProtectDurationMs();
+    }
+    return settings;
 }
 
-NActors::IActor* CreateBlobCache(const std::optional<ui64>& maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-    TBlobCacheSettings settings;
-    settings.MaxCacheDataSize = maxBytes;
-    return CreateBlobCache(settings, counters);
+NActors::IActor* CreateBlobCache(const TBlobCacheSettings& settings, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
+    return new TBlobCache(settings, counters);
 }
 
 }   // namespace NKikimr::NBlobCache

@@ -53,6 +53,7 @@ public:
     void Merge(const std::shared_ptr<IBlobsWritingAction>& action) {
         AFL_VERIFY(action);
         AFL_VERIFY(!WritingStarted);
+        CacheAfterWrite = CacheAfterWrite || action->CacheAfterWrite;
         for (auto&& i : action->BlobsForWrite) {
             AddDataForWrite(i.first, i.second);
         }

@@ -38,6 +38,7 @@ SRCS(
     ut_backup.cpp
     ut_flow_control_manager.cpp
     ut_blob_cache.cpp
+    ut_blob_cache_write_fill.cpp
 )
 
 END()

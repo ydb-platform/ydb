@@ -5,6 +5,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/logoblob.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/ctor_logger.h>
 
 #include <ydb/library/actors/core/actorid.h>
@@ -13,6 +14,10 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/vector.h>
+
+namespace NKikimrConfig {
+class TBlobCacheConfig;
+}
 
 namespace NKikimr::NBlobCache {
 
@@ -38,6 +43,9 @@ struct TBlobCacheSettings {
     std::optional<ui64> MaxRequestBytes;
     std::optional<ui64> ReadDeadlineMs;
     std::optional<ui64> WriteProtectDurationMs;
+
+    // Only fields explicitly present in the proto are set; everything else stays at the actor's built-in default.
+    static TBlobCacheSettings FromProto(const NKikimrConfig::TBlobCacheConfig& cfg);
 };
 
 struct TEvBlobCache {
@@ -134,20 +142,23 @@ inline NActors::TActorId MakeBlobCacheServiceId() {
 }
 
 NActors::IActor* CreateBlobCache(const TBlobCacheSettings& settings, TIntrusivePtr<::NMonitoring::TDynamicCounters>);
-NActors::IActor* CreateBlobCache(const std::optional<ui64>& maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters>);
 
+// Write-fill gate: the table must opt in (CacheBlobsAfterWrite) AND the node-wide ICB switch
+// for the producing consumer must be on. Only WRITING_OPERATOR (user writes) and GENERAL_COMPACTION
+// produce write-fills; every other consumer (TTL, cleanup, export, ...) never fills the cache.
 inline bool ShouldCacheAfterWrite(
-    const bool schemaEnabled, const bool isWriteOrIndexation, const bool isCompaction, const bool icbIndexing, const bool icbCompaction) {
+    const bool schemaEnabled, const NOlap::NBlobOperations::EConsumer consumer, const bool icbIndexing, const bool icbCompaction) {
     if (!schemaEnabled) {
         return false;
     }
-    if (isWriteOrIndexation) {
-        return icbIndexing;
+    switch (consumer) {
+        case NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR:
+            return icbIndexing;
+        case NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION:
+            return icbCompaction;
+        default:
+            return false;
     }
-    if (isCompaction) {
-        return icbCompaction;
-    }
-    return false;
 }
 
 // Explicitly add and remove data from cache. This is usefull for newly written data that is likely to be read by

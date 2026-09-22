@@ -1470,25 +1470,7 @@ void TBlobCacheInitializer::InitializeServices(
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> blobCacheGroup = tabletGroup->GetSubgroup("type", "BLOB_CACHE");
 
-    NBlobCache::TBlobCacheSettings settings;
-    if (Config.HasBlobCacheConfig()) {
-        const auto& cfg = Config.GetBlobCacheConfig();
-        if (cfg.HasMaxSizeBytes()) {
-            settings.MaxCacheDataSize = cfg.GetMaxSizeBytes();
-        }
-        if (cfg.HasMaxInFlightBytes()) {
-            settings.MaxInFlightBytes = cfg.GetMaxInFlightBytes();
-        }
-        if (cfg.HasMaxRequestBytes()) {
-            settings.MaxRequestBytes = cfg.GetMaxRequestBytes();
-        }
-        if (cfg.HasReadDeadlineMs()) {
-            settings.ReadDeadlineMs = cfg.GetReadDeadlineMs();
-        }
-        if (cfg.HasWriteProtectDurationMs()) {
-            settings.WriteProtectDurationMs = cfg.GetWriteProtectDurationMs();
-        }
-    }
+    const NBlobCache::TBlobCacheSettings settings = NBlobCache::TBlobCacheSettings::FromProto(Config.GetBlobCacheConfig());
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NBlobCache::MakeBlobCacheServiceId(),
         TActorSetupCmd(NBlobCache::CreateBlobCache(settings, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 }

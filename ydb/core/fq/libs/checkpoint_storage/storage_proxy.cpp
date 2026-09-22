@@ -1,36 +1,29 @@
-#include "storage_proxy.h"
-
 #include "gc.h"
+#include "storage_proxy.h"
+#include "ydb_checkpoint_storage.h"
+#include "ydb_state_storage.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
-
+#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
+#include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
-#include "ydb_checkpoint_storage.h"
-#include "ydb_state_storage.h"
-
-#include <ydb/core/fq/libs/checkpointing_common/defs.h>
-#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
-
-#include <ydb/library/actors/core/log.h>
-#include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/util.h>
-
+#include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
-
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+
+#include <library/cpp/retry/retry_policy.h>
 
 #include <util/stream/file.h>
 #include <util/string/join.h>
 #include <util/string/strip.h>
-
-#include <library/cpp/retry/retry_policy.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::STREAMS_STORAGE_SERVICE
 
@@ -111,6 +104,7 @@ private:
     TString IdsPrefix;
     TExternalStorageSettings StorageConfig;
     TCheckpointStoragePtr CheckpointStorage;
+    const TCheckpointProviderIntegrations CheckpointProviderIntegrations;
     TStateStoragePtr StateStorage;
     TActorId ActorGC;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
@@ -135,7 +129,8 @@ public:
         const TString& idsPrefix,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         NYdb::TDriver driver,
-        const ::NMonitoring::TDynamicCounterPtr& counters);
+        const ::NMonitoring::TDynamicCounterPtr& counters,
+        TCheckpointProviderIntegrations checkpointProviderIntegrations);
 
     void Bootstrap();
     void StartInitialization();
@@ -201,10 +196,12 @@ TStorageProxy::TStorageProxy(
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYdb::TDriver driver,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    TCheckpointProviderIntegrations checkpointProviderIntegrations)
     : Config(config)
     , IdsPrefix(idsPrefix)
     , StorageConfig(Config.GetExternalStorage())
+    , CheckpointProviderIntegrations(std::move(checkpointProviderIntegrations))
     , CredentialsProviderFactory(credentialsProviderFactory)
     , Driver(std::move(driver))
     , Metrics(MakeIntrusive<TStorageProxyMetrics>(counters))
@@ -227,7 +224,7 @@ void TStorageProxy::Bootstrap() {
         YDB_LOG_INFO("Create local ydb connection");
         ydbConnection = CreateLocalYdbConnection(NKikimr::AppData()->TenantName, CHECKPOINTS_TABLE_PREFIX, StorageConfig.GetMaxActiveQuerySessions());
     }
-    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnection);
+    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnection, CheckpointProviderIntegrations);
     Config.SetEnableCompression(NKikimr::AppData()->FeatureFlags.GetEnableCheckpointsCompression());
     StateStorage = NewYdbStateStorage(Config, ydbConnection);
 
@@ -812,9 +809,10 @@ std::unique_ptr<NActors::IActor> NewStorageProxy(
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYdb::TDriver driver,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    TCheckpointProviderIntegrations checkpointProviderIntegrations)
 {
-    return std::unique_ptr<NActors::IActor>(new TStorageProxy(config, idsPrefix, credentialsProviderFactory, std::move(driver), counters));
+    return std::unique_ptr<NActors::IActor>(new TStorageProxy(config, idsPrefix, credentialsProviderFactory, std::move(driver), counters, std::move(checkpointProviderIntegrations)));
 }
 
 } // namespace NFq

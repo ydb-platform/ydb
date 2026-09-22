@@ -554,9 +554,11 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
 
             StalePublications.reserve(publications.size());
             for (const auto& publication : publications) {
-                if (publication.IntPublicationId == RestoredPublicationIntId || publication.WriterIdentity != WriterIdentity) {
+                if (publication.IntPublicationId == RestoredPublicationIntId) {
                     continue;
                 }
+
+                Y_VALIDATE(publication.WriterIdentity == WriterIdentity, "Unexpected writer identity in list result for writer: " << WriterIdentity << ", got identity: " << publication.WriterIdentity);
 
                 // External IDs have the form <writer>:<generation>:<sequence>.
                 TStringBuf identity(publication.ExtPublicationId);

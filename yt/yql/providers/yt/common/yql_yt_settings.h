@@ -288,6 +288,7 @@ public:
     NCommon::TConfSetting<bool, Dynamic> EnforceJobUtc;
     NCommon::TConfSetting<ui64, Static> _EnforceRegexpProbabilityFail;
     NCommon::TConfSetting<bool, Dynamic> UseRPCReaderInDQ;
+    NCommon::TConfSetting<bool, Dynamic> PassOptLLVMToDqCodecs;
     NCommon::TConfSetting<size_t, Dynamic> DQRPCReaderInflight;
     NCommon::TConfSetting<TDuration, Dynamic> DQRPCReaderTimeout;
     NCommon::TConfSetting<TSet<TString>, Dynamic> BlockReaderSupportedTypes;

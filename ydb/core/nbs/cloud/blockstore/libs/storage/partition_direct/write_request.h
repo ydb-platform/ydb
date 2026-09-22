@@ -43,7 +43,7 @@ private:
     void SendIndirectWriteRequest(THostMask hosts);
     void OnIndirectWriteResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
-    void SendAdditionalDirectWrites();
+    void MaybeSendAdditionalDirectWrites();
     void SendDirectWriteRequestsToDesired(size_t count);
     void SendDirectWriteRequestsToHandoffs(size_t count);
     void SendDirectWriteRequest(THostIndex host);
@@ -52,9 +52,7 @@ private:
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
-    void ReplyOrNotifyBelated(
-        NProto::TError error,
-        THostMask completedOnCurrentResponse);
+    void MaybeReplyOrNotifyBelated(THostMask completedOnCurrentResponse);
     void Reply(NProto::TError error);
     void NotifyBelated(THostMask completedOnCurrentResponse);
 
@@ -93,6 +91,7 @@ using TWriteRequestExecutorPtr = std::shared_ptr<TWriteRequestExecutor>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Creates a write executor. The bundle must already have PBufferKey set.
 TWriteRequestExecutorPtr CreateWriteRequestExecutor(
     NActors::TActorSystem* const actorSystem,
     const TLogTitle& logTitle,

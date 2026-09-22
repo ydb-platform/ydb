@@ -3450,6 +3450,15 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["PhysicalStageId"] = (*stat)->GetStageId();
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
                 stats["FinishedTasks"] = (*stat)->GetFinishedTasksCount();
+                if (!(*stat)->GetNodes().empty()) {
+                    auto& nodesStats = stats.InsertValue("Nodes", NJson::JSON_ARRAY);
+                    for (const auto& node : (*stat)->GetNodes()) {
+                        auto& nodeInfo = nodesStats.AppendValue(NJson::JSON_MAP);
+                        nodeInfo["NodeId"] = node.GetNodeId();
+                        nodeInfo["Tasks"] = node.GetTasks();
+                        nodeInfo["Finished"] = node.GetFinished();
+                    }
+                }
                 if (auto updateTimeUs = (*stat)->GetUpdateTimeMs(); updateTimeUs) {
                     stats["UpdateTimeMs"] = updateTimeUs;
                 }

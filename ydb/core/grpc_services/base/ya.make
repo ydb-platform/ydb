@@ -5,6 +5,7 @@ SRCS(
     base_service.h
     base.h
     request_paths.h
+    http_database_access_verdict.h
 )
 
 PEERDIR(
@@ -20,5 +21,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(http_database_access_verdict.h)
 
 END()

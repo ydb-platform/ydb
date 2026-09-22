@@ -3,6 +3,7 @@
 #include "partition_direct_service.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
@@ -36,6 +37,7 @@ struct TEvPartitionDirectPrivate
         EvUpdateDirtyMapState,
         EvSetVChunkTouched,
         EvFastPathServiceReady,
+        EvRenderMonPage,
 
         EvFastPathServiceShutdown,
         EvFastPathServiceStopped,
@@ -54,11 +56,15 @@ struct TEvPartitionDirectPrivate
               TEventLocal<TEvUpdateVChunkConfig, EvUpdateVChunkConfig>
     {
         TVChunkConfig VChunkConfig;
+        TDirtyMapStateProto DirtyMapState;
         TPersistResultPromise UpdateCompleted =
             NThreading::NewPromise<EPersistResult>();
 
-        explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
+        TEvUpdateVChunkConfig(
+            TVChunkConfig cfg,
+            TDirtyMapStateProto dirtyMapState)
             : VChunkConfig(std::move(cfg))
+            , DirtyMapState(std::move(dirtyMapState))
         {}
     };
 
@@ -94,6 +100,18 @@ struct TEvPartitionDirectPrivate
         : public NActors::
               TEventLocal<TEvFastPathServiceReady, EvFastPathServiceReady>
     {
+    };
+
+    struct TEvRenderMonPage
+        : public NActors::TEventLocal<TEvRenderMonPage, EvRenderMonPage>
+    {
+        NActors::TActorId Requester;
+        TMonPageData Data;
+
+        TEvRenderMonPage(NActors::TActorId requester, TMonPageData data)
+            : Requester(requester)
+            , Data(std::move(data))
+        {}
     };
 
     // Triggers the shutdown of the fast path service

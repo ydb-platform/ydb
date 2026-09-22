@@ -31,9 +31,9 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 #include <algorithm>
-#include <limits>
 #include <queue>
 #include <variant>
 
@@ -63,6 +63,8 @@ struct TEvPrivate {
         EvExecuteTopicEvent,
         EvDeferredPublicationCreated,
         EvDeferredPublicationCommitted,
+        EvDeferredPublicationsListed,
+        EvDeferredPublicationCanceled,
 
         EvEnd
     };
@@ -91,11 +93,12 @@ struct TEvPrivate {
 
     using TEvDeferredPublicationCreated = TEvApiResult<NYdb::NTopic::TBeginPublicationResult, EvDeferredPublicationCreated>;
     using TEvDeferredPublicationCommitted = TEvApiResult<NYdb::NTopic::TPublishResult, EvDeferredPublicationCommitted>;
+    using TEvDeferredPublicationsListed = TEvApiResult<NYdb::NTopic::TListPublicationsResult, EvDeferredPublicationsListed>;
+    using TEvDeferredPublicationCanceled = TEvApiResult<NYdb::NTopic::TCancelPublicationResult, EvDeferredPublicationCanceled>;
 };
 
 class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExceptionHandler, public IDqComputeActorAsyncOutput, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     static constexpr ui32 STATE_VERSION = 1;
-    static constexpr ui32 MAX_MESSAGE_SIZE = 1_MB;
     static constexpr TDuration SLOW_CHECKPOINT_DURATION = TDuration::Minutes(1);
 
     using TBase = TActor<TDqPqWriteActor>;
@@ -132,6 +135,12 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             if (enableDeferredPublication) {
                 LastBeginPublicationLatency = task->GetCounter("DeferredPublication/LastBeginLatencyMs");
                 LastPublishLatency = task->GetCounter("DeferredPublication/LastPublishLatencyMs");
+                ListedPublications = task->GetCounter("DeferredPublication/Listed", true);
+                CanceledPublications = task->GetCounter("DeferredPublication/Canceled", true);
+                ListRequests = task->GetCounter("DeferredPublication/ListRequests", true);
+                CancelRequests = task->GetCounter("DeferredPublication/CancelRequests", true);
+                LastListLatencyUs = task->GetCounter("DeferredPublication/LastListLatencyUs");
+                LastAvgCancelLatencyMs = task->GetCounter("DeferredPublication/LastAvgCancelLatencyMs");
                 LastPublicationActiveDuration = task->GetCounter("DeferredPublication/LastActiveDurationMs");
                 InFlyActivePublications = task->GetCounter("DeferredPublication/InFlyActive");
                 InFlyPendingCommitPublications = task->GetCounter("DeferredPublication/InFlyPendingCommit");
@@ -149,6 +158,12 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             }
         }
 
+        void ReportCancelLatency(TDuration latency) {
+            TotalCancelLatency += latency;
+            ++CancelLatencySamples;
+            LastAvgCancelLatencyMs->Set(TotalCancelLatency.MicroSeconds() / CancelLatencySamples / 1000);
+        }
+
         // Common counters
         NMonitoring::TDynamicCounters::TCounterPtr LastAckLatency;
         NMonitoring::TDynamicCounters::TCounterPtr InFlyCheckpoints;
@@ -161,6 +176,12 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
         // Deferred publication counters
         NMonitoring::TDynamicCounters::TCounterPtr LastBeginPublicationLatency;
         NMonitoring::TDynamicCounters::TCounterPtr LastPublishLatency;
+        NMonitoring::TDynamicCounters::TCounterPtr ListedPublications;
+        NMonitoring::TDynamicCounters::TCounterPtr CanceledPublications;
+        NMonitoring::TDynamicCounters::TCounterPtr ListRequests;
+        NMonitoring::TDynamicCounters::TCounterPtr CancelRequests;
+        NMonitoring::TDynamicCounters::TCounterPtr LastListLatencyUs;
+        NMonitoring::TDynamicCounters::TCounterPtr LastAvgCancelLatencyMs;
         NMonitoring::TDynamicCounters::TCounterPtr LastPublicationActiveDuration;
         NMonitoring::TDynamicCounters::TCounterPtr InFlyActivePublications;
         NMonitoring::TDynamicCounters::TCounterPtr InFlyPendingCommitPublications;
@@ -172,6 +193,8 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
         const NMonitoring::TDynamicCounterPtr SubGroup;
 
         NMonitoring::TDynamicCounters::TCounterPtr FirstContinuationTokenMs;
+        TDuration TotalCancelLatency;
+        ui64 CancelLatencySamples = 0;
     };
 
     // Store for messages to write and acks for inflight writes into topic
@@ -422,6 +445,7 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
     };
 
     // Deferred publication lifecycle:
+    // Stale publications from previous generations are canceled before the first creation.
     // 1. Created when first message arrived and work until all data for current checkpoint was not written
     // 2. When checkpoint receive commit request publication will be committed
     // 3. After successful commit checkpoint marked as committed
@@ -442,7 +466,8 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
     public:
         TDeferredPublishState(const i64 currentExecutionGeneration, const ui64 taskId, const ui64 outputIndex, const NPq::NProto::TDqPqTopicSink& sinkParams, const TMetrics& metrics)
             : Metrics(metrics)
-            , WriterIdentity(!sinkParams.GetDeferredPublicationExtIdPrefix().empty() ? TStringBuilder() << sinkParams.GetDeferredPublicationExtIdPrefix() << ":" << taskId << ":" << outputIndex << ":" << currentExecutionGeneration : TStringBuilder())
+            , CurrentExecutionGeneration(currentExecutionGeneration)
+            , WriterIdentity(!sinkParams.GetDeferredPublicationExtIdPrefix().empty() ? TStringBuilder() << sinkParams.GetDeferredPublicationExtIdPrefix() << ":" << taskId << ":" << outputIndex : TStringBuilder())
         {}
 
         operator bool() const {
@@ -455,6 +480,11 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
 
         bool NeedToCreatePublication() const {
             return WriterIdentity && !DeferredPublicationIntId;
+        }
+
+        ui64 GetCancelingPublicationIntId() const {
+            Y_VALIDATE(!StalePublications.empty(), "No publication being canceled");
+            return StalePublications.back();
         }
 
         ui64 GetCommittingPublicationIntId() const {
@@ -499,18 +529,55 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             Y_VALIDATE(SelfId, "Deferred publish state is not initialized");
             Y_VALIDATE(NeedToCreatePublication(), "Unexpected publication creation");
 
-            if (std::exchange(PublicationCreationStartTime, TInstant::Now())) {
+            if (PublicationCreationStartTime) {
+                return;
+            }
+            PublicationCreationStartTime = TInstant::Now();
+
+            if (PublicationSeqNo == 0) {
+                // Clean up stale publications for the current graph.
+                NYdb::NTopic::TListPublicationsSettings settings;
+                settings.WriterIdentity(WriterIdentity);
+
+                const auto* actorSystem = TActivationContext::ActorSystem();
+                client.ListPublications(settings).Subscribe([actorSystem, selfId = SelfId, startedAt = PublicationCreationStartTime](const NYdb::NTopic::TAsyncListPublicationsResult& result) {
+                    actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationsListed(result.GetValue(), startedAt));
+                });
                 return;
             }
 
-            NYdb::NTopic::TBeginPublicationSettings settings;
-            settings.WriterIdentity(WriterIdentity);
-            const auto publicationExtId = TStringBuilder() << WriterIdentity << ":" << PublicationSeqNo++;
+            ContinuePublicationCreation(client);
+        }
 
-            const auto* actorSystem = TActivationContext::ActorSystem();
-            client.BeginPublication(publicationExtId, settings).Subscribe([actorSystem, selfId = SelfId, startedAt = PublicationCreationStartTime](const NYdb::NTopic::TAsyncBeginPublicationResult& result) {
-                actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationCreated(result.GetValue(), startedAt));
-            });
+        void OnPublicationsListed(const std::vector<NYdb::NTopic::TPublicationSummary>& publications, IDeferredPublishClient& client) {
+            Y_VALIDATE(PublicationCreationStartTime && PublicationSeqNo == 0, "Unexpected publications list");
+
+            StalePublications.reserve(publications.size());
+            for (const auto& publication : publications) {
+                if (publication.IntPublicationId == RestoredPublicationIntId || publication.WriterIdentity != WriterIdentity) {
+                    continue;
+                }
+
+                // External IDs have the form <writer>:<generation>:<sequence>.
+                TStringBuf identity(publication.ExtPublicationId);
+                TStringBuf generationStr;
+                TStringBuf sequenceStr;
+                i64 generation = 0;
+                ui64 sequence = 0;
+                if (identity.SkipPrefix(WriterIdentity + ":") && identity.TrySplit(':', generationStr, sequenceStr)
+                    && TryFromString(generationStr, generation) && generation >= 0 && generation < CurrentExecutionGeneration
+                    && TryFromString(sequenceStr, sequence)) {
+                    StalePublications.push_back(publication.IntPublicationId);
+                }
+            }
+
+            ContinuePublicationCreation(client);
+        }
+
+        void OnPublicationCanceled(IDeferredPublishClient& client) {
+            Y_VALIDATE(!StalePublications.empty(), "Unexpected publication cancellation");
+            StalePublications.pop_back();
+            ContinuePublicationCreation(client);
         }
 
         void OnPublicationCreated(const ui64 publicationIntId) {
@@ -548,11 +615,32 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
         }
 
     private:
+        void ContinuePublicationCreation(IDeferredPublishClient& client) {
+            const auto* actorSystem = TActivationContext::ActorSystem();
+            const auto startedAt = TInstant::Now();
+            if (!StalePublications.empty()) {
+                client.CancelPublication(NYdb::NTopic::TDeferredPublication(StalePublications.back())).Subscribe([actorSystem, selfId = SelfId, startedAt](const NYdb::NTopic::TAsyncCancelPublicationResult& result) {
+                    actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationCanceled(result.GetValue(), startedAt));
+                });
+                return;
+            }
+
+            NYdb::NTopic::TBeginPublicationSettings settings;
+            settings.WriterIdentity(WriterIdentity);
+            const auto publicationExtId = TStringBuilder() << WriterIdentity << ":" << CurrentExecutionGeneration << ":" << PublicationSeqNo++;
+            client.BeginPublication(publicationExtId, settings).Subscribe([actorSystem, selfId = SelfId, startedAt](const NYdb::NTopic::TAsyncBeginPublicationResult& result) {
+                actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationCreated(result.GetValue(), startedAt));
+            });
+        }
+
         const TMetrics& Metrics;
+        const i64 CurrentExecutionGeneration = 0;
         const TString WriterIdentity;
         YDB_ACCESSOR_DEF(TActorId, SelfId);
 
         YDB_READONLY(ui64, DeferredPublicationIntId, 0);
+        YDB_ACCESSOR(ui64, RestoredPublicationIntId, 0);
+        std::vector<ui64> StalePublications;
         ui64 PublicationSeqNo = 0;
         TInstant PublicationStartTime;
         TInstant PublicationCreationStartTime;
@@ -648,6 +736,8 @@ public:
         hFunc(TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(TEvPrivate::TEvDeferredPublicationCreated, Handle);
         hFunc(TEvPrivate::TEvDeferredPublicationCommitted, Handle);
+        hFunc(TEvPrivate::TEvDeferredPublicationsListed, Handle);
+        hFunc(TEvPrivate::TEvDeferredPublicationCanceled, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
     )
 
@@ -719,12 +809,6 @@ private:
             SINK_LOG_T("Received data for sending: " << data);
 
             const auto messageSize = GetItemSize(data);
-            if (messageSize > MAX_MESSAGE_SIZE) {
-                Fail(TStringBuilder() << "Max message size for YDS is " << MAX_MESSAGE_SIZE
-                    << " bytes but received message with size of " << messageSize << " bytes");
-                return false;
-            }
-
             FreeSpace -= messageSize;
             Buffer.PushMessage(std::move(data));
             return true;
@@ -776,6 +860,7 @@ private:
 
         // Register checkpoint for committing in case of restoring from partially saved checkpoint
         CheckpointsState.LoadPendingCommitCheckpoint(confirmedSeqNo, checkpoint, stateProto.GetDeferredPublicationIntId());
+        DeferredPublishState.SetRestoredPublicationIntId(stateProto.GetDeferredPublicationIntId());
     }
 
     // Events
@@ -800,6 +885,46 @@ private:
         DeferredPublishState.OnPublicationCreated(intPublicationId);
 
         Process();
+    }
+
+    void Handle(TEvPrivate::TEvDeferredPublicationsListed::TPtr& ev) {
+        if (Failed) {
+            return;
+        }
+
+        Metrics.LastListLatencyUs->Set(ev->Get()->Latency.MicroSeconds());
+        Metrics.ListRequests->Inc();
+
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess()) {
+            Fail(result, "Failed to list stale deferred publications");
+            return;
+        }
+
+        Metrics.ListedPublications->Add(result.GetPublications().size());
+        DeferredPublishState.OnPublicationsListed(result.GetPublications(), GetDeferredPublishClient());
+    }
+
+    void Handle(TEvPrivate::TEvDeferredPublicationCanceled::TPtr& ev) {
+        if (Failed) {
+            return;
+        }
+
+        Metrics.ReportCancelLatency(ev->Get()->Latency);
+        Metrics.CancelRequests->Inc();
+
+        const auto publicationIntId = DeferredPublishState.GetCancelingPublicationIntId();
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess() && result.GetStatus() != NYdb::EStatus::NOT_FOUND) {
+            Fail(result, TStringBuilder() << "Failed to cancel stale deferred publication #" << publicationIntId);
+            return;
+        }
+
+        SINK_LOG_D("Stale publication #" << publicationIntId << " canceled, status: " << result.GetStatus());
+        if (result.IsSuccess()) {
+            Metrics.CanceledPublications->Inc();
+        }
+        DeferredPublishState.OnPublicationCanceled(GetDeferredPublishClient());
     }
 
     void Handle(TEvPrivate::TEvDeferredPublicationCommitted::TPtr& ev) {
@@ -903,7 +1028,7 @@ private:
         auto settings = NYdb::NTopic::TWriteSessionSettings()
             .Path(SinkParams.GetTopicPath())
             .TraceId(LogPrefix())
-            .MaxMemoryUsage(FreeSpace)
+            .MaxMemoryUsage(FreeSpace > 0 ? FreeSpace : DqPqDefaultFreeSpace)
             .DeduplicationEnabled(EnableDeduplication)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW
@@ -1126,7 +1251,7 @@ private:
     const IPqStaticGateway::TPtr PqGateway;
     const NYdb::TCredentialsProviderFactoryPtr CredentialsProviderFactory;
     const NYdb::TDriver Driver;
-    const TMetrics Metrics;
+    TMetrics Metrics;
     const bool EnableDeduplication = false;
     const bool HasCheckpoints = false;
 

@@ -550,7 +550,7 @@ public:
     TError GetCanceledError() const
     {
         auto error = TError(NYT::EErrorCode::Canceled, "RPC request is canceled");
-        if (ThrottledError_) {
+        if (ThrottledError_ && !ThrottledError_->IsOK()) {
             error.Add(*ThrottledError_);
         }
         return error;
@@ -1174,6 +1174,10 @@ private:
             delimitedBuilder->AppendString(info);
         }
 
+        if (!RequestLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", RequestLoggingTags_);
+        }
+
         if (RuntimeInfo_->Descriptor.Cancelable && !Cancelable_) {
             delimitedBuilder->AppendFormat("Cancelable: %v", Cancelable_);
         }
@@ -1227,6 +1231,10 @@ private:
 
         for (const auto& info : ResponseInfos_) {
             delimitedBuilder->AppendString(info);
+        }
+
+        if (!ResponseLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", ResponseLoggingTags_);
         }
 
         delimitedBuilder->AppendFormat("ExecutionTime: %v, TotalTime: %v",
@@ -1924,7 +1932,7 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
             .With("method_limit", incomingRequest.RuntimeInfo->QueueSizeLimit.load(std::memory_order::relaxed))
             .With("queue_limit", incomingRequest.RequestQueue->GetQueueSizeLimit())
             .With("queue", incomingRequest.RequestQueue->GetName());
-        if (incomingRequest.ThrottledError) {
+        if (incomingRequest.ThrottledError && !incomingRequest.ThrottledError->IsOK()) {
             error.Add(*incomingRequest.ThrottledError);
         }
         ReplyError(std::move(error), std::move(incomingRequest));
@@ -1937,7 +1945,7 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
             .With("method_limit", incomingRequest.RuntimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed))
             .With("queue_limit", incomingRequest.RequestQueue->GetQueueByteSizeLimit())
             .With("queue", incomingRequest.RequestQueue->GetName());
-        if (incomingRequest.ThrottledError) {
+        if (incomingRequest.ThrottledError && !incomingRequest.ThrottledError->IsOK()) {
             error.Add(*incomingRequest.ThrottledError);
         }
         ReplyError(std::move(error), std::move(incomingRequest));
@@ -2740,9 +2748,9 @@ void TServiceBase::ReplyDiscoverRequest(const TCtxDiscoverPtr& context, bool isU
     response.set_up(isUp);
     ToProto(response.mutable_suggested_addresses(), SuggestAddresses());
 
-    context->SetResponseInfo("Up: %v, SuggestedAddresses: %v",
-        response.up(),
-        response.suggested_addresses());
+    context->AnnotateResponse()
+        .With("Up", response.up())
+        .With("SuggestedAddresses", response.suggested_addresses());
 
     context->Reply();
 }
@@ -3049,8 +3057,8 @@ DEFINE_RPC_SERVICE_METHOD(TServiceBase, Discover)
 {
     auto replyDelay = FromProto<TDuration>(request->reply_delay());
 
-    context->SetRequestInfo("ReplyDelay: %v",
-        replyDelay);
+    context->AnnotateRequest()
+        .With("ReplyDelay", replyDelay);
 
     auto isUp = IsUp(context);
     EnrichDiscoverResponse(response);

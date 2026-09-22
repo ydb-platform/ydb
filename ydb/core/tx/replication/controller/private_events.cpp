@@ -173,6 +173,56 @@ TString TEvPrivate::TEvAlterDstResult::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {" << ToStringBody() << " }";
 }
 
+TEvPrivate::TEvSchemaChangeDstAlterResult::TEvSchemaChangeDstAlterResult(
+        ui64 rid, ui64 tid, ui64 dstAlterTxId, NKikimrScheme::EStatus status, const TString& error)
+    : TBase(rid, tid, status, error)
+    , DstAlterTxId(dstAlterTxId)
+{
+}
+
+TString TEvPrivate::TEvSchemaChangeDstAlterResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {" << ToStringBody()
+        << " DstAlterTxId: " << DstAlterTxId
+    << " }";
+}
+
+TEvPrivate::TEvSchemaChangeDstAlterTxId::TEvSchemaChangeDstAlterTxId(ui64 rid, ui64 tid, ui64 txId)
+    : ReplicationId(rid)
+    , TargetId(tid)
+    , TxId(txId)
+{
+}
+
+TString TEvPrivate::TEvSchemaChangeDstAlterTxId::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+       << " ReplicationId: " << ReplicationId
+       << " TargetId: " << TargetId
+       << " TxId: " << TxId
+    << " }";
+}
+
+TEvPrivate::TEvSchemaChangeDstAlterTxIdSaved::TEvSchemaChangeDstAlterTxIdSaved(ui64 txId)
+    : TxId(txId)
+{
+}
+
+TString TEvPrivate::TEvSchemaChangeDstAlterTxIdSaved::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+       << " TxId: " << TxId
+    << " }";
+}
+
+TEvPrivate::TEvResumeDeferredAlter::TEvResumeDeferredAlter(ui64 rid)
+    : ReplicationId(rid)
+{
+}
+
+TString TEvPrivate::TEvResumeDeferredAlter::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+       << " ReplicationId: " << ReplicationId
+    << " }";
+}
+
 TEvPrivate::TEvRemoveWorker::TEvRemoveWorker(ui64 rid, ui64 tid, ui64 wid)
     : Id(rid, tid, wid)
 {

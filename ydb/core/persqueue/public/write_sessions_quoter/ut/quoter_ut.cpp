@@ -24,6 +24,7 @@ public:
 
 protected:
     void Notify(const TBucketKey& key = {});
+    void Remove(const TBucketKey& key = {});
     TActorId Acquire(const TBucketKey& key = {});
     void ExpectReplies(const TActorId& actor, size_t count);
     void WakeupAfter(TDuration elapsed);
@@ -43,6 +44,11 @@ void TWriteSessionsQuoterTest::SetUp(NUnitTest::TTestContext&) {
     });
     Quoter = Runtime.Register(CreateWriteSessionsQuoter());
     Runtime.RegisterService(MakeWriteSessionsQuoterId(), Quoter);
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([this](IEventHandle& event) {
+        return event.GetRecipientRewrite() == Quoter && event.GetTypeRewrite() == TEvents::TSystem::Bootstrap;
+    });
+    UNIT_ASSERT(Runtime.DispatchEvents(options, TDuration::Seconds(1)));
 }
 
 void TWriteSessionsQuoterTest::Notify(const TBucketKey& key) {
@@ -52,6 +58,11 @@ void TWriteSessionsQuoterTest::Notify(const TBucketKey& key) {
     auto reply = Runtime.GrabEdgeEvent<TEvQuoter::TEvQuoterInitialized>(edge, TDuration::MilliSeconds(10));
     UNIT_ASSERT(reply);
     UNIT_ASSERT_VALUES_EQUAL(reply->Sender, Quoter);
+}
+
+void TWriteSessionsQuoterTest::Remove(const TBucketKey& key) {
+    Runtime.Send(new IEventHandle(Quoter, Runtime.AllocateEdgeActor(),
+        new TEvQuoter::TEvRemove(key.Topic, key.Partition, key.Generation)));
 }
 
 TActorId TWriteSessionsQuoterTest::Acquire(const TBucketKey& key) {
@@ -204,6 +215,55 @@ Y_UNIT_TEST_F(LongIdleDoesNotAccumulateMoreThanBucketCapacity, TWriteSessionsQuo
     ExpectReplies(second, 1);
     ExpectReplies(third, 0);
     ExpectReplies(Acquire(), 0);
+}
+
+Y_UNIT_TEST_F(RemoveAllowsFreshRegistration, TWriteSessionsQuoterTest) {
+    Notify();
+    ExpectReplies(Acquire(), 1);
+    Remove();
+    Notify();
+    ExpectReplies(Acquire(), 1);
+    ExpectReplies(Acquire(), 0);
+}
+
+Y_UNIT_TEST_F(RemoveIsIdempotentAndAcceptsUnknownKeys, TWriteSessionsQuoterTest) {
+    Remove();
+    Notify();
+    ExpectReplies(Acquire(), 1);
+    Remove();
+    Remove();
+    Notify();
+    ExpectReplies(Acquire(), 1);
+}
+
+Y_UNIT_TEST_F(RemoveOldGenerationPreservesNewGenerationQuota, TWriteSessionsQuoterTest) {
+    const TBucketKey nextGeneration{"/Root/topic", 0, 2};
+    Notify();
+    Notify(nextGeneration);
+    ExpectReplies(Acquire(), 1);
+    ExpectReplies(Acquire(nextGeneration), 1);
+
+    Remove();
+    Notify(nextGeneration);
+    ExpectReplies(Acquire(nextGeneration), 0);
+    Notify();
+    ExpectReplies(Acquire(), 1);
+}
+
+Y_UNIT_TEST_F(RemoveDoesNotAffectOtherTopicsOrPartitions, TWriteSessionsQuoterTest) {
+    const TBucketKey otherTopic{"/Root/other", 0, 1};
+    const TBucketKey otherPartition{"/Root/topic", 1, 1};
+    Notify();
+    Notify(otherTopic);
+    Notify(otherPartition);
+    ExpectReplies(Acquire(otherTopic), 1);
+    ExpectReplies(Acquire(otherPartition), 1);
+
+    Remove();
+    Notify(otherTopic);
+    Notify(otherPartition);
+    ExpectReplies(Acquire(otherTopic), 0);
+    ExpectReplies(Acquire(otherPartition), 0);
 }
 
 } // Y_UNIT_TEST_SUITE

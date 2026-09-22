@@ -12,11 +12,14 @@ namespace NTable {
 TLoader::TLoader(TPartComponents components, TVector<TIntrusivePtr<TPageCollection>> prebuiltPageCollections)
     : PageCollections(std::move(prebuiltPageCollections))
     , Components(std::move(components))
-    , Legacy(Components.Legacy)
-    , Opaque(Components.Opaque)
+    , Legacy(std::move(Components.Legacy))
+    , Opaque(std::move(Components.Opaque))
     , Deltas(std::move(Components.Deltas))
     , Epoch(Components.Epoch)
 {
+    if (PageCollections.empty() && Components.PageCollectionComponents.empty()) {
+        Y_TABLET_ERROR("Cannot load TPart from " << PageCollections.size() << " page collections");
+    }
 }
 
 TLoader::~TLoader() { }
@@ -464,7 +467,7 @@ TLoader::TFetch TLoader::StagePreloadData()
 {
     auto partStore = PartView.As<TPartStore>();
 
-    // V2 preload: walk current and historic B-trees to discover room 0 pages
+    // V2 preload: one index format per part, so walk the current and historic B-trees for room 0 pages.
     if (partStore->IndexPages.HasBTree() && !BTreeGroupIndexes.empty() && BTreeGroupIndexes[0].HasRootV2())
     {
         if (PreloadBTreeWalkers.empty()) {
@@ -514,7 +517,7 @@ TLoader::TFetch TLoader::StagePreloadData()
     auto* part = PartView.Part.Get();
 
     for (TPageId pageId : xrange(total)) {
-        if (pageCollection->Page(pageId).Type == ui32(NPage::EPage::Skip)) {
+        if (NPageCollection::IsDeadPage(*pageCollection, pageId)) {
             continue;
         }
         LoaderEnv->TryGetPage(part, pageCollection->GetLocation(pageId), {});

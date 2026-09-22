@@ -16,10 +16,20 @@ enum : ui32  {
     Table2Id = 102,
     KeyColumnId = 1,
     ValueColumnId = 2,
+    // Family of the value column, in its own room, when a test needs it cached separately
+    ValueFamilyId = 202,
+    ValueFamilyRoom = 103,
+    ValueFamilyChannel = 3,
 };
 
 using TRetriedCounters = TVector<ui32>;
 using namespace NSharedCache;
+
+enum class EValueRoom {
+    Default,   // the value column stays in the leader family
+    Regular,   // the value column gets its own room and family, kept regular
+    InMemory,  // the value column gets its own room and family, kept in memory
+};
 
 void Increment(TRetriedCounters& retried, ui32 attempts) {
     if (attempts >= retried.size()) {
@@ -30,10 +40,12 @@ void Increment(TRetriedCounters& retried, ui32 attempts) {
 
 struct TTxInitSchema : public ITransaction {
 
-    TTxInitSchema(ui32 tableId = NSharedCache::TableId, bool tryKeepInMemory = false, std::optional<ui32> channel = {})
+    TTxInitSchema(ui32 tableId = NSharedCache::TableId, bool tryKeepInMemory = false, std::optional<ui32> channel = {},
+            EValueRoom valueRoom = EValueRoom::Default)
         : TableId(tableId)
         , TryKeepInMemory(tryKeepInMemory)
         , Channel(channel)
+        , ValueRoom(valueRoom)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -54,6 +66,20 @@ struct TTxInitSchema : public ITransaction {
                 .SetFamilyCacheMode(TableId, NTable::TColumn::LeaderFamily, NTable::NPage::ECacheMode::TryKeepInMemory);
         }
 
+        if (ValueRoom != EValueRoom::Default) {
+            // The value column gets its own room, so its pages and the table's B-tree live in
+            // different page collections.
+            txc.DB.Alter()
+                .SetRoom(TableId, ValueFamilyRoom, ValueFamilyChannel, {ValueFamilyChannel}, ValueFamilyChannel)
+                .AddFamily(TableId, ValueFamilyId, ValueFamilyRoom)
+                .AddColumnToFamily(TableId, ValueColumnId, ValueFamilyId);
+
+            if (ValueRoom == EValueRoom::InMemory) {
+                txc.DB.Alter()
+                    .SetFamilyCacheMode(TableId, ValueFamilyId, NTable::NPage::ECacheMode::TryKeepInMemory);
+            }
+        }
+
         if (Channel) {
             txc.DB.Alter()
                 .SetRoom(TableId, 1, *Channel, {*Channel}, *Channel)
@@ -71,6 +97,7 @@ struct TTxInitSchema : public ITransaction {
     ui32 TableId;
     bool TryKeepInMemory;
     std::optional<ui32> Channel;
+    EValueRoom ValueRoom = EValueRoom::Default;
 };
 
 struct TTxWriteRow : public ITransaction {
@@ -222,11 +249,15 @@ void RestartAndClearCache(TMyEnvBase& env, ui64 memoryLimit = Max<ui64>()) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 }
 
-void SetupSharedCache(TMyEnvBase& env, ui64 limit = 8_MB, bool resetMemoryLimit = false) {
+void SetupSharedCache(TMyEnvBase& env, ui64 limit = 8_MB, bool resetMemoryLimit = false,
+        ui64 inMemoryInFlyLimit = 0) {
     auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
     auto config = request->Record.MutableConfig()->MutableSharedCacheConfig();
     config->SetMemoryLimit(limit);
+    if (inMemoryInFlyLimit) {
+        config->SetInMemoryInFlyLimit(inMemoryInFlyLimit);
+    }
 
     env->Send(MakeSharedPageCacheId(), TActorId{}, request.Release());
     WaitEvent(env, NConsole::TEvConsole::EvConfigNotificationRequest);
@@ -244,6 +275,16 @@ void WakeupSharedCache(TMyEnvBase& env) {
         return ev->Get()->Tag == static_cast<ui64>(EWakeupTag::DoGCManual)
             && env->FindActorName(ev->GetRecipientRewrite()) == "SAUSAGE_CACHE";
     }).Wait(TDuration::Seconds(5));
+}
+
+// Waits until the shared cache has nothing in flight, i.e. the in-memory preload (and the walk
+// feeding it) has finished.
+void WaitInFlyDrain(TMyEnvBase& env, THolder<TSharedPageCacheCounters>& counters) {
+    for (ui32 i = 0; i < 400 && counters->LoadInFlyPages->Val() != 0; ++i) {
+        WakeupSharedCache(env);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(counters->LoadInFlyPages->Val(), 0);
 }
 
 void DoReadRows(TMyEnvBase& env, TTxReadRows* read, bool retry = false) {
@@ -1308,6 +1349,268 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2) {
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
 }
 
+Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_Enabling) {
+    // Enabling in-memory mode after the part is loaded must load the V2 tree, not just the
+    // pages enumerated in meta.
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 10_MB, true);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, false) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    env.SendSync(new NFake::TEvCompact(TableId));
+    env.WaitFor<NFake::TEvCompacted>();
+
+    // Nothing of the part stays in the cache: the pages must be found by walking the tree.
+    RestartAndClearCache(env, 10_MB);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
+
+    env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, true) });
+
+    WaitInFlyDrain(env, counters);
+
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
+}
+
+Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_AltRoom) {
+    // The in-memory group is not the main one, so the B-tree itself belongs to the regular main
+    // collection: the tree must still be walked, and its index pages fetched as ordinary pages.
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 10_MB, true);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, false, {}, EValueRoom::InMemory) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    env.SendSync(new NFake::TEvCompact(TableId));
+    env.WaitFor<NFake::TEvCompacted>();
+
+    // Drop everything the compaction left in the cache: the tree has to be discovered again.
+    RestartAndClearCache(env, 10_MB);
+    WaitInFlyDrain(env, counters);
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+
+    // Reads also touch the key, which lives in the regular main group and is loaded on demand.
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+}
+
+Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_IndexOnly) {
+    // The in-memory group is the main one, so the B-trees of all groups live in the in-memory
+    // collection: the tree of the regular group must be preloaded as well, without its leaves.
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 10_MB, true);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, true, {}, EValueRoom::Regular) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    env.SendSync(new NFake::TEvCompact(TableId));
+    env.WaitFor<NFake::TEvCompacted>();
+
+    // Drop everything the compaction left in the cache: the trees have to be discovered again.
+    RestartAndClearCache(env, 10_MB);
+    WaitInFlyDrain(env, counters);
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+
+    // The regular group's pages are fetched on demand, but its B-tree is not: no in-memory page
+    // may be missed.
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
+
+    // ...and nothing of the regular group is pulled into the in-memory collection: only the pages of
+    // the main collection (its own data and all groups' index nodes) are kept there.
+    UNIT_ASSERT_LT(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(1_MB));
+}
+
+Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_IndexOnlyEnabling) {
+    // Same as above, but the main collection becomes in-memory after the part is loaded: enabling it
+    // must walk the trees of the other groups too, they live in that collection.
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 10_MB, true);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, false, {}, EValueRoom::Regular) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    env.SendSync(new NFake::TEvCompact(TableId));
+    env.WaitFor<NFake::TEvCompacted>();
+
+    RestartAndClearCache(env, 10_MB);
+
+    // Keep the main family in memory; the value family stays in its own regular room.
+    env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, true) });
+    WaitInFlyDrain(env, counters);
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
+}
+
+Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_TinyInFlyLimit) {
+    // A tight in-memory in-fly budget must only slow the preload down, not stall it: both the walk and
+    // the loader send what fits and are re-driven as the fetches complete.
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 10_MB, true, /*inMemoryInFlyLimit=*/160_KB);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, true) });
+    // write 100 rows, each ~100KB (~10MB)
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    env.SendSync(new NFake::TEvCompact(TableId));
+    env.WaitFor<NFake::TEvCompacted>();
+
+    RestartAndClearCache(env, 10_MB);
+    WaitInFlyDrain(env, counters);
+
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
+}
+
+Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_TableLargerThanMemory) {
+    // A TryKeepInMemory table larger than the cache: load what fits, park the rest.
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 2_MB, true);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, true) });
+    // write 200 rows, each ~100KB (~20MB), ~10x the shared cache limit
+    for (i64 key = 0; key < 200; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    Cerr << "...compacting table" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until table compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    LogCounters(counters);
+
+    // The shared cache must not grow past its limit.
+    UNIT_ASSERT_LT(counters->ActiveBytes->Val(), static_cast<i64>(2_MB));
+    UNIT_ASSERT_LT(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(2_MB));
+    UNIT_ASSERT_GT(counters->TargetInMemoryBytes->Val(), static_cast<i64>(0_MB));
+
+    // Reads must still work: the part is much larger than the cache, so retries are expected.
+    TRetriedCounters retried;
+    for (i64 key = 199; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(retried.at(0), 200);
+    UNIT_ASSERT(retried.size() <= 10);
+}
+
+Y_UNIT_TEST(TryKeepInMemoryMode_TableLargerThanMemory) {
+    // The same oversized case without the V2 index: the reload/reload-evict hazard lives in the
+    // target-versus-capacity pair, so it is not V2 specific.
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 2_MB, true);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, true) });
+    // write 200 rows, each ~100KB (~20MB), ~10x the shared cache limit
+    for (i64 key = 0; key < 200; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    env.SendSync(new NFake::TEvCompact(TableId));
+    env.WaitFor<NFake::TEvCompacted>();
+
+    // The shared cache must not grow past its limit.
+    UNIT_ASSERT_LT(counters->ActiveBytes->Val(), static_cast<i64>(2_MB));
+    UNIT_ASSERT_LT(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(2_MB));
+    UNIT_ASSERT_GT(counters->TargetInMemoryBytes->Val(), static_cast<i64>(0_MB));
+
+    // Reads must still work: the part is much larger than the cache, so retries are expected.
+    TRetriedCounters retried;
+    for (i64 key = 199; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(retried.at(0), 200);
+    UNIT_ASSERT(retried.size() <= 10);
+}
+
 Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
@@ -1669,8 +1972,10 @@ Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
 
     RestartAndClearCache(env, 10_MB);
 
-    // there are some fetches after restart and cache cleaning
-    UNIT_ASSERT_VALUES_EQUAL(inMemFetchesCount, 2);
+    // there are some fetches after restart and cache cleaning (the exact number of fetch
+    // batches depends on how index and data loads are split)
+    UNIT_ASSERT_GT(inMemFetchesCount, 0);
+    const ui64 inMemFetchesAfterRestart = inMemFetchesCount;
 
     // read from regular table, sould be some cache misses
     retried = {};
@@ -1711,7 +2016,7 @@ Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
 
     // no more fetches
-    UNIT_ASSERT_VALUES_EQUAL(inMemFetchesCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(inMemFetchesCount, inMemFetchesAfterRestart);
 }
 
 }

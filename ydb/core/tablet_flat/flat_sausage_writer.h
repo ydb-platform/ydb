@@ -42,9 +42,8 @@ namespace NPageCollection {
                 }
             }
 
-            // Must match skipType condition in TBlocks::Write
-            bool pageSkipped = V2OnlyMode && (type == ui32(NTable::NPage::EPage::BTreeIndexV2) ||
-                                              type == ui32(NTable::NPage::EPage::DataPage));
+            bool pageSkipped = V2OnlyMode
+                && NTable::NPage::IsAbsorbedInV2Only(static_cast<NTable::NPage::EPage>(type));
             /* No TEntry/TExtra entry created */
             if (pageSkipped) {
                 SkippedBytes += body.size();

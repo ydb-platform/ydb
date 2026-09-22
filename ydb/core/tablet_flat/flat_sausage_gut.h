@@ -31,5 +31,18 @@ namespace NPageCollection {
         virtual void SetSkipBTreeIndexV1Shadow(bool) const noexcept { }
     };
 
+    /// A page that must not be loaded: an excluded page, or a dead V1 shadow index.
+    inline bool IsDeadPage(NTable::NPage::EPage type, bool skipBTreeIndexV1Shadow) noexcept
+    {
+        return type == NTable::NPage::EPage::Skip
+            || (skipBTreeIndexV1Shadow && type == NTable::NPage::EPage::BTreeIndex);
+    }
+
+    inline bool IsDeadPage(const IPageCollection& collection, TPageId pageId)
+    {
+        return IsDeadPage(static_cast<NTable::NPage::EPage>(collection.Page(pageId).Type),
+            collection.SkipBTreeIndexV1Shadow());
+    }
+
 }
 }

@@ -1436,11 +1436,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         THashSet<i64> simplifiedOperatorIds;
         CollectOperatorIds(planMap.at("Plan"), executionOperatorIds);
         CollectOperatorIds(simplifiedPlan, simplifiedOperatorIds);
-        UNIT_ASSERT_C(!simplifiedOperatorIds.empty(), plan);
-        for (const auto operatorId : simplifiedOperatorIds) {
-            UNIT_ASSERT_C(executionOperatorIds.contains(operatorId),
-                "OperatorId " << operatorId << " is missing from the execution plan\n" << plan);
-        }
+        UNIT_ASSERT_C(executionOperatorIds.empty(), plan);
+        UNIT_ASSERT_C(simplifiedOperatorIds.empty(), plan);
+    }
+
+    Y_UNIT_TEST(ExplainHidesOperatorIds) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        const auto plan = ExecuteExplain(session, "SELECT a FROM `/Root/t1`;");
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        const auto& planMap = planJson.GetMapSafe();
+        const auto& simplifiedPlan = planMap.at("SimplifiedPlan");
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "TableFullScan"), plan);
+
+        THashSet<i64> operatorIds;
+        CollectOperatorIds(planMap.at("Plan"), operatorIds);
+        CollectOperatorIds(simplifiedPlan, operatorIds);
+        UNIT_ASSERT_C(operatorIds.empty(), plan);
     }
 
     Y_UNIT_TEST(ExplainStageConnections) {

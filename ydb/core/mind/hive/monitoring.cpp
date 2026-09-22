@@ -4925,16 +4925,14 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SHRINK_POOL; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_UNUSED(txc);
+    bool Execute(TTransactionContext& /*txc*/, const TActorContext& ctx) override {
         TStringStream str;
         RenderHTMLPage(str);
         ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         return true;
     }
 
-    void Complete(const TActorContext& ctx) override {
-        Y_UNUSED(ctx);
+    void Complete(const TActorContext& /*ctx*/) override {
     }
 
     void RenderHTMLPage(IOutputStream& out) {

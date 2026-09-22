@@ -42,6 +42,7 @@ class PlanConverter {
     TTypeAnnotationContext &TypeCtx;
     TExprContext &Ctx;
     THashMap<TExprNode*, TIntrusivePtr<IOperator>> Converted;
+    THashMap<IOperator*, TVector<TInfoUnit>> Projections;
     TPlanProps PlanProps;
 
 };

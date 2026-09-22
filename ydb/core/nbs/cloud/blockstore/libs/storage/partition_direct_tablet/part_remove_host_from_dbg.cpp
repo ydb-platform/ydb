@@ -349,6 +349,14 @@ bool TPartitionActor::ValidateRemoveHostFromDBGRequest(
             "Another RemoveHost is already in progress");
         return false;
     }
+    if (VolumeGrowInFlight) {
+        RejectRemoveHost(
+            ctx,
+            dbgId,
+            hostIndex,
+            "A volume grow is already in progress");
+        return false;
+    }
 
     const auto& dbgConn =
         DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);

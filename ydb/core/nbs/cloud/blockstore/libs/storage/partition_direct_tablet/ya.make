@@ -19,6 +19,7 @@ SRCS(
     partition_cleanup_actor.cpp
     partition_direct.cpp
     partition_direct_actor.cpp
+    volume_grow.cpp
 )
 
 PEERDIR(

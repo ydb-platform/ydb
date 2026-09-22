@@ -188,11 +188,13 @@ class NbsTestBase:
 
     def resize_disk(self, disk_id, blocks_count):
         """
-        Grow a disk to ``blocks_count`` blocks via ResizePartition.
+        Grow a disk to ``blocks_count`` blocks.
 
-        Returns the BlocksCount reported by the RPC (scheme size). The
-        partition tablet currently accepts the alter as a no-op, so IO
-        still uses the original capacity.
+        Returns the BlocksCount reported by ResizePartition.
+
+        The RPC returns after the new config is persisted; the partition
+        tablet then restarts before the new capacity is live. Callers that
+        need the new size must wait (e.g. a write at the new tail).
         """
         output = self.resize_partition(disk_id, blocks_count)
         assert output.get('status') == 'SUCCESS', (

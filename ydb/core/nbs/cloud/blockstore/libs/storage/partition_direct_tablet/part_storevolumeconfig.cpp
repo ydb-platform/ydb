@@ -41,7 +41,11 @@ void TPartitionActor::CompleteStoreVolumeConfig(
     VolumeConfig = args.VolumeConfig;
     Y_ABORT_UNLESS(VolumeConfig.PartitionsSize() == 1);
 
-    AllocateDDiskBlockGroup(ctx);
+    if (VolumeGrowInFlight) {
+        FinishVolumeGrow(ctx);
+    } else if (!DDiskBlockGroupAllocated) {
+        AllocateDDiskBlockGroup(ctx);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

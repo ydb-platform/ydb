@@ -85,8 +85,8 @@ component=SessionActor message="Query was a victim of broken locks" victimTxSpan
 | `tabletId` | Идентификатор таблета DataShard | Логи DataShard |
 | `victimQuerySpanId` | Идентификатор запроса, чьи блокировки были сломаны | Логи жертвы DataShard, логи нарушителя DataShard |
 | `breakerQuerySpanId` | Идентификатор запроса, который сломал блокировки | Логи нарушителя DataShard |
-| `victimTxSpanId` | Идентификатор транзакции-жертвы (запрос, который установил сломанные блокировки) | Логи жертвы SessionActor |
-| `breakerTxSpanId` | Идентификатор транзакции-нарушителя | Логи нарушителя SessionActor |
+| `victimTxSpanId` | Идентификатор запроса-жертвы, чьи блокировки были сломаны. Совпадает с victimQuerySpanId в логах DataShard. | Логи жертвы SessionActor |
+| `breakerTxSpanId` | Идентификатор запроса-нарушителя, который сломал блокировки. Совпадает с breakerQuerySpanId в логах DataShard. | Логи нарушителя SessionActor |
 | `querySpanId` | Идентификатор конкретного запроса в записи SessionActor | Логи SessionActor |
 | `queryText` | SQL конкретного запроса в записи SessionActor | Логи SessionActor |
 

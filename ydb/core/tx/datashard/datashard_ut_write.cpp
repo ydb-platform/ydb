@@ -5509,7 +5509,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const auto& columns = opts.Columns_;
 
         const ui64 txId = 1001;
-        const ui64 cookie = 0x1BADB002;
+        const ui64 cookie = 0xC0FFEE11;
 
         Cout << "========= Send immediate write with a cookie =========\n";
         {
@@ -5546,7 +5546,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
         const ui64 txId = 1234567890011;
-        const ui64 cookie = 0xCAFEBABE;
+        const ui64 cookie = 0xC0FFEE11;
 
         auto txSender = runtime.AllocateEdgeActor();
 
@@ -5704,7 +5704,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
         const ui64 txId = 1234567890012;
-        const ui64 cookie = 0xBADF00D1;
+        const ui64 cookie = 0xC0FFEE11;
 
         auto txSender = runtime.AllocateEdgeActor();
 
@@ -5794,7 +5794,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const auto& columns = opts.Columns_;
 
         const ui64 txId = 1002;
-        const ui64 cookie = 0xFEEDFACE;
+        const ui64 cookie = 0xC0FFEE11;
 
         Cout << "========= Send a write with an unknown txmode and a cookie =========\n";
         {

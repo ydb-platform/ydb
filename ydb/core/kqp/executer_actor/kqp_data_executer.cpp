@@ -309,7 +309,19 @@ public:
         AFL_ENSURE(ev->Sender == BufferActorId);
         KQP_STLOG_W(KQPDATA, "Got Undelivered from BufferActor",
             (sender, ev->Sender),
+            (source_type, ev->Get()->SourceType),
             (trace_id, TraceId()));
+
+        switch (ev->Get()->SourceType) {
+            case TEvKqpBuffer::TEvCommit::EventType:
+            case TEvKqpBuffer::TEvRollback::EventType:
+            case TEvKqpBuffer::TEvFlush::EventType:
+                // No result will arrive from the missing buffer. Cleanup has no
+                // deadline, and write finalization may have ignored CancelAfter.
+                ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                    NYql::TIssue("Cannot deliver finalization request to the transaction buffer actor"));
+                break;
+        }
     }
 
     void MakeResponseAndPassAway() {

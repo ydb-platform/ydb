@@ -3546,6 +3546,7 @@ public:
             (workload_service_cleanup, CleanupCtx ? CleanupCtx->IsWaitingForWorkloadServiceCleanup : false),
             (trace_id, TraceId()));
         if (CleanupCtx) {
+            CleanupCtx->Final = isFinal;
             Become(&TKqpSessionActor::CleanupState);
         } else {
             EndCleanup(isFinal);
@@ -3899,6 +3900,8 @@ private:
             return "ExecuteState";
         } else if (func == &TThis::CleanupState) {
             return "CleanupState";
+        } else if (func == &TThis::FinalCleanupState) {
+            return "FinalCleanupState";
         } else {
             return "unknown state";
         }

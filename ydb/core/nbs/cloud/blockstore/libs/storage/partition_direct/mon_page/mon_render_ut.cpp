@@ -155,6 +155,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             html,
             "Volume DirectBlockGroup Count</td><td>32</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
+        UNIT_ASSERT(!html.Contains("Inflight writes"));
         UNIT_ASSERT_STRING_CONTAINS(html, "vol-1");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
@@ -744,6 +745,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         const TMonPageData data{
             .Page = EMonPage::Latency,
             .TabletInfo = {.TabletId = 42},
+            .FastPathServiceInfo =
+                TFastPathServiceInfo{.InflightWriteCount = 7},
             .Dbgs =
                 {// Same node, two pdisks — exercises pdisk grouping.
                  MakeLatencyDbg(
@@ -765,7 +768,11 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
         const TString html =
             RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
-        // No top-level "Latency" section heading — only the three subsections.
+        UNIT_ASSERT_STRING_CONTAINS(html, "<h3>Overview</h3>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Inflight writes");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<td>Inflight writes</td><td>7</td>");
+        // No top-level "Latency" section heading — Overview plus the three
+        // latency subsections.
         UNIT_ASSERT(!html.Contains("<h3>Latency</h3>"));
         UNIT_ASSERT_STRING_CONTAINS(html, "Latency by node");
         UNIT_ASSERT_STRING_CONTAINS(html, "Latency by slot");
@@ -915,11 +922,15 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         const TMonPageData data{
             .Page = EMonPage::Latency,
             .TabletInfo = {.TabletId = 42},
+            .FastPathServiceInfo =
+                TFastPathServiceInfo{.InflightWriteCount = 3},
             .Dbgs = {dbg},
         };
 
         const TString html =
             RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(html, "<h3>Overview</h3>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<td>Inflight writes</td><td>3</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "TimePredictionHistorySize");
         UNIT_ASSERT(!html.Contains("Latency by node"));
         UNIT_ASSERT(!html.Contains("Latency by slot"));

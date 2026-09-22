@@ -717,20 +717,10 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
                 { NYql::TIssue("Usage of old secrets is disabled now. Please use new secrets") }
             )
         );
-    } else {
-        for (const auto& secretName : secretNames) {
-            if (IsSchemeSecret(secretName) != IsSchemeSecret(secretNames.front())) {
-                promise.SetValue(NKqp::TEvDescribeSecretsResponse::TDescription(
-                    Ydb::StatusIds::BAD_REQUEST,
-                    { NYql::TIssue("Cannot mix old and schema secrets in one request") }
-                ));
-                return promise.GetFuture();
-            }
-        }
-
-        actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", secretNames, promise));
+        return promise.GetFuture();
     }
 
+    actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", secretNames, promise));
     return promise.GetFuture();
 }
 

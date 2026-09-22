@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import time
+import zipfile
 
 import pytest
 import yaml
@@ -487,6 +488,26 @@ def test_ydb_udf_cli_library_roundtrip():
         assert "ModuleType" in _run_ydb_udf(endpoint, database, "list", "--format", "table")
 
         _run_ydb_udf(endpoint, database, "delete", "--name", library_name)
+
+        package_name = "cli_sdk_package"
+        package_path = yatest.common.output_path(package_name + ".zip")
+        manifest_path = _write_manifest(package_name)
+        with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as package:
+            package.write(manifest_path, "manifest.json")
+            package.write(sdk_path, "sdk_stub.wat")
+        package_upload = json.loads(_run_ydb_udf(
+            endpoint, database, "upload", "--package", package_path, "--format", "json"
+        ))
+        assert package_upload["name"] == package_name
+        assert package_upload["size"] == os.path.getsize(sdk_path)
+        packaged = json.loads(_run_ydb_udf(
+            endpoint, database, "describe", "--name", package_name, "--format", "json"
+        ))
+        with open(sdk_path, "rb") as package_body:
+            package_md5 = hashlib.md5(package_body.read()).hexdigest()
+        assert packaged["module"]["md5"] == package_md5
+        assert json.loads(packaged["manifest_json"])["module_name"] == package_name
+        _run_ydb_udf(endpoint, database, "delete", "--name", package_name)
 
         list_after = json.loads(
             _run_ydb_udf(endpoint, database, "list", "--type", "library", "--format", "json")

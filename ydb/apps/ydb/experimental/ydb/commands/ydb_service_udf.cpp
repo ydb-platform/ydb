@@ -1,4 +1,5 @@
 #include "ydb_service_udf.h"
+#include "udf_package.h"
 
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 
@@ -170,13 +171,17 @@ TCommandUdfUpload::TCommandUdfUpload()
 void TCommandUdfUpload::Config(TConfig& config) {
     TYdbOperationCommand::Config(config);
     config.Opts->AddLongOption('f', "file", "Path to the module body (format is specified in the manifest)")
-        .Required()
+        .Optional()
         .RequiredArgument("PATH")
         .StoreResult(&FilePath);
     config.Opts->AddLongOption("manifest", "Path to the required module or library manifest.json")
-        .Required()
+        .Optional()
         .RequiredArgument("PATH")
         .StoreResult(&ManifestPath);
+    config.Opts->AddLongOption("package", "Path to a ZIP, TAR, TAR.GZ, or TGZ package containing manifest.json and one binary")
+        .Optional()
+        .RequiredArgument("PATH")
+        .StoreResult(&PackagePath);
     config.Opts->AddLongOption(
             "write-mode",
             "Module write mode: create-or-replace (default) | create-only | replace-only")
@@ -204,6 +209,8 @@ void TCommandUdfUpload::Config(TConfig& config) {
     config.Opts->MutuallyExclusive("create-only", "replace-only");
     config.Opts->MutuallyExclusive("create-only", "write-mode");
     config.Opts->MutuallyExclusive("replace-only", "write-mode");
+    config.Opts->MutuallyExclusive("package", "file");
+    config.Opts->MutuallyExclusive("package", "manifest");
     config.SetFreeArgsNum(0);
 }
 
@@ -216,11 +223,31 @@ void TCommandUdfUpload::Parse(TConfig& config) {
     if (config.ParseResult->Has("expected-md5") && ExpectedMd5.empty()) {
         throw TMisuseException() << "--expected-md5 must not be empty";
     }
+    const bool hasPackage = config.ParseResult->Has("package");
+    const bool hasFile = config.ParseResult->Has("file");
+    const bool hasManifest = config.ParseResult->Has("manifest");
+    if ((hasPackage && PackagePath.empty()) || (hasFile && FilePath.empty()) ||
+        (hasManifest && ManifestPath.empty()))
+    {
+        throw TMisuseException() << "Upload paths must not be empty";
+    }
+    if (!hasPackage && (!hasFile || !hasManifest)) {
+        throw TMisuseException() << "Specify either --package or both --file and --manifest";
+    }
 }
 
 int TCommandUdfUpload::Run(TConfig& config) {
-    const auto manifest = TFileInput(ManifestPath).ReadAll();
-    NUdfManifest::Parse(manifest);
+    std::string manifest;
+    std::string packageBody;
+    if (PackagePath) {
+        auto package = ReadUdfPackage(PackagePath);
+        manifest = std::move(package.Manifest);
+        packageBody = std::move(package.Body);
+    } else {
+        const TString manifestData = TFileInput(ManifestPath).ReadAll();
+        manifest.assign(manifestData.data(), manifestData.size());
+    }
+    NUdfManifest::Parse(TStringBuf(manifest.data(), manifest.size()));
     auto settings = FillSettings(NUdf::TUploadModuleSettings()).ManifestJson(manifest);
     if (CreateOnly) {
         settings.WriteMode(NUdf::EWriteMode::CreateOnly);
@@ -247,7 +274,9 @@ int TCommandUdfUpload::Run(TConfig& config) {
 
     auto driver = CreateDriver(config);
     NUdf::TUdfClient client(driver);
-    auto result = client.UploadModuleFromFile(FilePath, settings).GetValueSync();
+    auto result = PackagePath
+        ? client.UploadModule(std::move(packageBody), settings).GetValueSync()
+        : client.UploadModuleFromFile(FilePath, settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     if (Format == "json") {

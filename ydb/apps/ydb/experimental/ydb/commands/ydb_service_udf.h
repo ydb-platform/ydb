@@ -25,6 +25,7 @@ private:
     TString Format = "text";
     TString FilePath;
     TString ManifestPath;
+    TString PackagePath;
     TString WriteMode;
     TString ExpectedUid;
     TString ExpectedMd5;

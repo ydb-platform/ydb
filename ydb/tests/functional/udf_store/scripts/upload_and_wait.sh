@@ -4,6 +4,7 @@
 # Usage:
 #   upload_and_wait.sh --file path/to/libwasm-sdk.so --manifest path/to/sdk.manifest.json
 #   upload_and_wait.sh --file path/to/mod.so --manifest path/to/manifest.json
+#   upload_and_wait.sh --package path/to/module.tar.gz
 #   upload_and_wait.sh --wait-only --name Md5 --uid <uid>   # poll existing upload
 #
 # Env (optional):
@@ -24,6 +25,7 @@ SETTLE_SEC="${SETTLE_SEC:-0}"
 NAME=""
 FILE=""
 MANIFEST=""
+PACKAGE=""
 UID_EXPECT=""
 WAIT_ONLY=0
 EXTRA_UPLOAD_ARGS=()
@@ -54,6 +56,7 @@ while [[ $# -gt 0 ]]; do
         --name) NAME="$2"; shift 2 ;;
         --file|-f) FILE="$2"; shift 2 ;;
         --manifest) MANIFEST="$2"; shift 2 ;;
+        --package) PACKAGE="$2"; shift 2 ;;
         --uid) UID_EXPECT="$2"; shift 2 ;;
         --wait-only) WAIT_ONLY=1; shift ;;
         --endpoint|-e) ENDPOINT="$2"; shift 2 ;;
@@ -76,10 +79,19 @@ need_jq() { command -v jq >/dev/null 2>&1 || die "jq is required"; }
 need_jq
 
 upload_module() {
-    [[ -n "$MANIFEST" ]] || die "--manifest is required"
-    [[ -f "$MANIFEST" ]] || die "manifest not found: $MANIFEST"
-    local -a args=(experimental udf upload --file "$FILE" --manifest "$MANIFEST" --format json)
-    [[ -f "$FILE" ]] || die "file not found: $FILE"
+    local -a args=(experimental udf upload)
+    if [[ -n "$PACKAGE" ]]; then
+        [[ -z "$FILE" && -z "$MANIFEST" ]] || die "--package cannot be combined with --file or --manifest"
+        [[ -f "$PACKAGE" ]] || die "package not found: $PACKAGE"
+        args+=(--package "$PACKAGE")
+    else
+        [[ -n "$FILE" ]] || die "--file is required"
+        [[ -f "$FILE" ]] || die "file not found: $FILE"
+        [[ -n "$MANIFEST" ]] || die "--manifest is required"
+        [[ -f "$MANIFEST" ]] || die "manifest not found: $MANIFEST"
+        args+=(--file "$FILE" --manifest "$MANIFEST")
+    fi
+    args+=(--format json)
     if (( ${#EXTRA_UPLOAD_ARGS[@]} )); then
         args+=("${EXTRA_UPLOAD_ARGS[@]}")
     fi
@@ -149,7 +161,6 @@ wait_ready() {
 if (( WAIT_ONLY )); then
     wait_ready
 else
-    [[ -n "$FILE" ]] || die "--file is required (or use --wait-only)"
     upload_module
     wait_ready
 fi

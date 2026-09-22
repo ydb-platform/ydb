@@ -2,6 +2,7 @@ LIBRARY(commands)
 
 SRCS(
     generate.cpp
+    udf_package.cpp
     ydb_root.cpp
     ydb_service_experimental_fq.cpp
     ydb_service_experimental.cpp
@@ -14,6 +15,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/protobuf
     contrib/libs/yaml-cpp
+    library/cpp/digest/old_crc
     library/cpp/json
     library/cpp/protobuf/json
     library/cpp/protobuf/util
@@ -42,3 +44,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

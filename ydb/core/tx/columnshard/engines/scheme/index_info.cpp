@@ -235,6 +235,9 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
     if (optionsProto.HasDeduplicationEnabled()) {
         DeduplicationEnabled = optionsProto.GetDeduplicationEnabled();
     }
+    if (optionsProto.HasCacheBlobsAfterWrite()) {
+        CacheBlobsAfterWrite = optionsProto.GetCacheBlobsAfterWrite();
+    }
     if (optionsProto.HasInsertOptions()) {
         const auto& options = optionsProto.GetInsertOptions();
         if (options.HasBuildIndexesEnabled()) {

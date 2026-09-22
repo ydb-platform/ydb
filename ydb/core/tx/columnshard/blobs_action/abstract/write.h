@@ -26,6 +26,7 @@ private:
     bool Aborted = false;
     std::shared_ptr<NBlobOperations::TWriteCounters> Counters;
     YDB_FLAG_ACCESSOR(Bulk, false);
+    YDB_ACCESSOR(bool, CacheAfterWrite, false);
     void AddDataForWrite(const TUnifiedBlobId& blobId, const TString& data);
 
 protected:

@@ -326,7 +326,8 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
         new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
             source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetSourceId(), blobBytes,
-            sSource->GetUsedRawBytes(), recordsCount, source->GetRecordsCount(), source->GetReservedMemory()));
+            sSource->GetUsedRawBytes(), recordsCount, source->GetRecordsCount(), source->GetReservedMemory(), source->GetCacheBytesRead(),
+            source->GetBsBytesRead(), source->GetTierBytesRead()));
     return false;
 }
 
@@ -380,7 +381,8 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
         NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
             new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
                 source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetSourceId(), blobBytes,
-                sSource->GetUsedRawBytes(), 0, source->GetRecordsCount(), source->GetReservedMemory()));
+                sSource->GetUsedRawBytes(), 0, source->GetRecordsCount(), source->GetReservedMemory(), source->GetCacheBytesRead(),
+                source->GetBsBytesRead(), source->GetTierBytesRead()));
         return false;
     }
     source->MutableAs<IDataSource>()->InitFetchingPlan(plan);

@@ -11,6 +11,15 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("fbf"));
+    ui64 cacheBytes = 0;
+    ui64 bsBytes = 0;
+    ui64 tierBytes = 0;
+    for (auto&& [_, action] : GetAgents()) {
+        cacheBytes += action->GetCacheBytes();
+        bsBytes += action->GetBsBytes();
+        tierBytes += action->GetTierBytes();
+    }
+    Source->AddReadIoBytes(cacheBytes, bsBytes, tierBytes);
     Source->MutableStageData().AddBlobs(Source->DecodeBlobAddresses(ExtractBlobsData()));
     AFL_VERIFY(Step.Next());
     auto task = std::make_shared<TStepAction>(std::move(Source), std::move(Step), Context->GetCommonContext()->GetScanActorId(), false);
@@ -50,6 +59,17 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
     const TMonotonic start = TMonotonic::Now();
     NBlobOperations::NRead::TCompositeReadBlobs blobsData = ExtractBlobsData();
     blobsData.Merge(std::move(ProvidedBlobs));
+    {
+        ui64 cacheBytes = 0;
+        ui64 bsBytes = 0;
+        ui64 tierBytes = 0;
+        for (auto&& [_, action] : GetAgents()) {
+            cacheBytes += action->GetCacheBytes();
+            bsBytes += action->GetBsBytes();
+            tierBytes += action->GetTierBytes();
+        }
+        Source->AddReadIoBytes(cacheBytes, bsBytes, tierBytes);
+    }
     TReadActionsCollection readActions;
     auto* signals = Source->GetExecutionContext().GetCurrentStepSignalsOptional();
     if (signals) {

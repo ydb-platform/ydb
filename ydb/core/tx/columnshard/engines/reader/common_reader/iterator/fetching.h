@@ -27,6 +27,9 @@ private:
     ui32 CachedFilteredRows = 0;
     ui32 CachedTotalRows = 0;
     ui64 CachedTotalReservedBytes = 0;
+    ui64 CachedCacheBytes = 0;
+    ui64 CachedBsBytes = 0;
+    ui64 CachedTierBytes = 0;
 
     void CacheSourceStats();
 
@@ -61,6 +64,18 @@ public:
 
     virtual ui64 GetTotalReservedBytes() const override {
         return CachedTotalReservedBytes;
+    }
+
+    virtual ui64 GetCacheBytes() const override {
+        return CachedCacheBytes;
+    }
+
+    virtual ui64 GetBsBytes() const override {
+        return CachedBsBytes;
+    }
+
+    virtual ui64 GetTierBytes() const override {
+        return CachedTierBytes;
     }
 
     template <class T>

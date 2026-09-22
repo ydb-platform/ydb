@@ -212,6 +212,9 @@ struct TEvPrivate {
         ui32 FilteredRows = 0;
         ui32 TotalRows = 0;
         ui64 TotalReservedBytes = 0;
+        ui64 CacheBytes = 0;
+        ui64 BsBytes = 0;
+        ui64 TierBytes = 0;
 
     public:
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& MutableResult() {
@@ -242,8 +245,21 @@ struct TEvPrivate {
             return TotalReservedBytes;
         }
 
+        ui64 GetCacheBytes() const {
+            return CacheBytes;
+        }
+
+        ui64 GetBsBytes() const {
+            return BsBytes;
+        }
+
+        ui64 GetTierBytes() const {
+            return TierBytes;
+        }
+
         TEvTaskProcessedResult(TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>&& result, TCounterGuard&& scanCounters,
-            ui64 sourceId = 0, ui64 blobBytes = 0, ui64 rawBytes = 0, ui32 filteredRows = 0, ui32 totalRows = 0, ui64 totalReservedBytes = 0)
+            ui64 sourceId = 0, ui64 blobBytes = 0, ui64 rawBytes = 0, ui32 filteredRows = 0, ui32 totalRows = 0, ui64 totalReservedBytes = 0,
+            ui64 cacheBytes = 0, ui64 bsBytes = 0, ui64 tierBytes = 0)
             : Result(std::move(result))
             , ScanCounter(std::move(scanCounters))
             , SourceId(sourceId)
@@ -252,6 +268,9 @@ struct TEvPrivate {
             , FilteredRows(filteredRows)
             , TotalRows(totalRows)
             , TotalReservedBytes(totalReservedBytes)
+            , CacheBytes(cacheBytes)
+            , BsBytes(bsBytes)
+            , TierBytes(tierBytes)
         {
         }
     };

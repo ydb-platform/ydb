@@ -10,6 +10,9 @@ bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate
     if (schemaUpdate.GetDeduplicationEnabled()) {
         DeduplicationEnabled = *schemaUpdate.GetDeduplicationEnabled();
     }
+    if (schemaUpdate.GetCacheBlobsAfterWrite()) {
+        CacheBlobsAfterWrite = *schemaUpdate.GetCacheBlobsAfterWrite();
+    }
     if (schemaUpdate.GetCompactionPlannerConstructor().HasObject()) {
         CompactionPlannerConstructor = schemaUpdate.GetCompactionPlannerConstructor();
     }
@@ -32,6 +35,9 @@ void TOlapOptionsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
     }
     if (tableSchema.GetOptions().HasDeduplicationEnabled()) {
         DeduplicationEnabled = tableSchema.GetOptions().GetDeduplicationEnabled();
+    }
+    if (tableSchema.GetOptions().HasCacheBlobsAfterWrite()) {
+        CacheBlobsAfterWrite = tableSchema.GetOptions().GetCacheBlobsAfterWrite();
     }
     if (tableSchema.GetOptions().HasCompactionPlannerConstructor()) {
         AFL_VERIFY(CompactionPlannerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetCompactionPlannerConstructor()));
@@ -57,6 +63,9 @@ void TOlapOptionsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     }
     if (DeduplicationEnabled) {
         tableSchema.MutableOptions()->SetDeduplicationEnabled(*DeduplicationEnabled);
+    }
+    if (CacheBlobsAfterWrite) {
+        tableSchema.MutableOptions()->SetCacheBlobsAfterWrite(*CacheBlobsAfterWrite);
     }
     if (CompactionPlannerConstructor.HasObject()) {
         CompactionPlannerConstructor.SerializeToProto(*tableSchema.MutableOptions()->MutableCompactionPlannerConstructor());

@@ -58,6 +58,9 @@ void TStepAction::CacheSourceStats() {
     CachedFilteredRows = Source->GetFilteredRowsCount();
     CachedTotalRows = Source->GetRecordsCountOptional().value_or(0);
     CachedTotalReservedBytes = Source->GetReservedMemory();
+    CachedCacheBytes = Source->ExtractCacheBytesRead();
+    CachedBsBytes = Source->ExtractBsBytesRead();
+    CachedTierBytes = Source->ExtractTierBytesRead();
 }
 
 TStepAction::TStepAction(

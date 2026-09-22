@@ -8,6 +8,7 @@
 #include <ydb/core/tx/ctor_logger.h>
 
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -29,6 +30,14 @@ struct TReadBlobRangeOptions {
         return TStringBuilder() << "cache: " << (ui32)CacheAfterRead << " background: " << (ui32)IsBackgroud
                                 << " dedlined: " << (ui32)WithDeadline;
     }
+};
+
+struct TBlobCacheSettings {
+    std::optional<ui64> MaxCacheDataSize;
+    std::optional<ui64> MaxInFlightBytes;
+    std::optional<ui64> MaxRequestBytes;
+    std::optional<ui64> ReadDeadlineMs;
+    std::optional<ui64> WriteProtectDurationMs;
 };
 
 struct TEvBlobCache {
@@ -96,10 +105,12 @@ struct TEvBlobCache {
     struct TEvCacheBlobRange: public NActors::TEventLocal<TEvCacheBlobRange, EvCacheBlobRange> {
         TBlobRange BlobRange;
         TString Data;
+        bool Sticky = true;
 
-        TEvCacheBlobRange(const TBlobRange& blobRange, const TString& data)
+        TEvCacheBlobRange(const TBlobRange& blobRange, const TString& data, const bool sticky = true)
             : BlobRange(blobRange)
             , Data(data)
+            , Sticky(sticky)
         {
         }
     };
@@ -122,11 +133,39 @@ inline NActors::TActorId MakeBlobCacheServiceId() {
     return TActorId(0, TStringBuf(x, 12));
 }
 
+NActors::IActor* CreateBlobCache(const TBlobCacheSettings& settings, TIntrusivePtr<::NMonitoring::TDynamicCounters>);
 NActors::IActor* CreateBlobCache(const std::optional<ui64>& maxBytes, TIntrusivePtr<::NMonitoring::TDynamicCounters>);
+
+inline bool ShouldCacheAfterWrite(
+    const bool schemaEnabled, const bool isWriteOrIndexation, const bool isCompaction, const bool icbIndexing, const bool icbCompaction) {
+    if (!schemaEnabled) {
+        return false;
+    }
+    if (isWriteOrIndexation) {
+        return icbIndexing;
+    }
+    if (isCompaction) {
+        return icbCompaction;
+    }
+    return false;
+}
 
 // Explicitly add and remove data from cache. This is usefull for newly written data that is likely to be read by
 // indexing, compaction and user queries and for the data that has been compacted and will not be read again.
-void AddRangeToCache(const TBlobRange& blobRange, const TString& data);
-void ForgetBlob(const TUnifiedBlobId& blobId);
+inline void AddRangeToCache(const TBlobRange& blobRange, const TString& data) {
+    if (!NActors::TlsActivationContext) {
+        return;
+    }
+    NActors::TlsActivationContext->Send(
+        new NActors::IEventHandle(MakeBlobCacheServiceId(), NActors::TActorId(), new TEvBlobCache::TEvCacheBlobRange(blobRange, data, true)));
+}
+
+inline void ForgetBlob(const TUnifiedBlobId& blobId) {
+    if (!NActors::TlsActivationContext) {
+        return;
+    }
+    NActors::TlsActivationContext->Send(
+        new NActors::IEventHandle(MakeBlobCacheServiceId(), NActors::TActorId(), new TEvBlobCache::TEvForgetBlob(blobId)));
+}
 
 }   // namespace NKikimr::NBlobCache

@@ -603,21 +603,21 @@ public:
             Y_ABORT("unexpected EDriveStatus");
         }
 
-        void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
+        void ExtractInferredPDiskSettings(ui32& expectedSlotCount, ui32& slotSizeInUnits) const {
             if (Metrics.HasExpectedSlotCount()) {
-                slotCount = Metrics.GetExpectedSlotCount();
+                expectedSlotCount = Metrics.GetExpectedSlotCount();
                 slotSizeInUnits = Metrics.GetSlotSizeInUnits();
             } else {
-                slotCount = ExpectedSlotCount;
+                expectedSlotCount = ExpectedSlotCount;
                 slotSizeInUnits = SlotSizeInUnits;
             }
         }
 
         ui32 GetEffectiveExpectedSlotCount() const {
-            ui32 slotCount = 0;
+            ui32 expectedSlotCount = 0;
             ui32 slotSizeInUnits = 0;
-            ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
-            return slotCount;
+            ExtractInferredPDiskSettings(expectedSlotCount, slotSizeInUnits);
+            return expectedSlotCount;
         }
 
         ui64 GetEffectiveExpectedSlotSize() const {

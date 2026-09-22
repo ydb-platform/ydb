@@ -566,21 +566,21 @@ namespace NKikimr::NStorage {
                 ? settingsIt->second
                 : TPDiskMapperSettings{};
 
-            ui32 maxSlots = defaultMaxSlots;
+            ui32 expectedSlotCount = defaultMaxSlots;
             if (settings.ExpectedSlotCount) {
-                maxSlots = settings.ExpectedSlotCount;
+                expectedSlotCount = settings.ExpectedSlotCount;
             } else if (settings.SlotSizeInBytes) {
                 // Slot count for byte-sized slots is calculated by NodeWarden and arrives via PDisk config or
                 // metrics. Until then MaxSlots is its upper bound (ExpectedSlotCount = min(size/slot, MaxSlots)),
                 // which keeps fresh drives usable for static group allocation during bootstrap.
-                maxSlots = settings.MaxSlots;
+                expectedSlotCount = settings.MaxSlots;
             }
 
             const bool nodeAllowFilter = !restrictSelfHealNodes || selfHealAllowedNodeSet.contains(pdiskId.NodeId);
 
             auto pdiskState = item.State;
             pdiskState.Location = it->second;
-            pdiskState.MaxSlots = maxSlots;
+            pdiskState.ExpectedSlotCount = expectedSlotCount;
             pdiskState.SlotSizeInUnits = settings.SlotSizeInUnits;
             pdiskState.SlotSizeInBytes = settings.SlotSizeInBytes;
             pdiskState.BridgePileId = ResolveNodePileId(pdiskState.Location);

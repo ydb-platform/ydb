@@ -307,9 +307,12 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
-    if (UserRequestContext->IsStreamingQuery || UserRequestContext->CollectCurrentQueryStats) {
+    if (UserRequestContext->IsStreamingQuery) {
         request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(1000);
         request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(5000);
+    } else if (const auto interval = UserRequestContext->CurrentQueryStatsInterval) {
+        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(interval.MilliSeconds());
+        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(interval.MilliSeconds());
     }
 
     if (UserToken) {
@@ -580,8 +583,9 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .TxInfo = TxInfo,
         .TaskQuotaManager = CreateTaskQuotaManager(ResourceManager_, TxInfo, taskId, initialMemoryLimit),
         .ChannelQuotaManager = nullptr,
-        .ReportStatsSettings = UserRequestContext->CollectCurrentQueryStats
-            ? TMaybe<NYql::NDq::TReportStatsSettings>(NYql::NDq::TReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(5)})
+        .ReportStatsSettings = UserRequestContext->CurrentQueryStatsInterval
+            ? TMaybe<NYql::NDq::TReportStatsSettings>(NYql::NDq::TReportStatsSettings{
+                UserRequestContext->CurrentQueryStatsInterval, UserRequestContext->CurrentQueryStatsInterval})
             : Nothing(),
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),

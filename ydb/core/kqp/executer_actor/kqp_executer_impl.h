@@ -949,7 +949,7 @@ protected:
                 StatCollectInflightBytes = collectBytes;
                 Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
             }
-            if (GetUserRequestContext()->CollectCurrentQueryStats) {
+            if (GetUserRequestContext()->CurrentQueryStatsInterval) {
                 this->Send(Target, new TEvKqpExecuter::TEvCurrentExecutionStats(Stats->TakeCurrentStats()));
             }
             ProcessStreamingQueryCounters();
@@ -1614,7 +1614,7 @@ protected:
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
             .StatsMode = Request.StatsMode,
-            .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero() || GetUserRequestContext()->CollectCurrentQueryStats,
+            .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero() || GetUserRequestContext()->CurrentQueryStatsInterval,
             .RlPath = Request.RlPath,
             .ExecuterSpan =  ExecuterSpan,
             .ResourcesSnapshot = std::move(ResourcesSnapshot),
@@ -1928,7 +1928,7 @@ protected:
             ReportEventElapsedTime();
 
             Stats->FinishTs = TInstant::Now();
-            if (GetUserRequestContext()->CollectCurrentQueryStats) {
+            if (GetUserRequestContext()->CurrentQueryStatsInterval) {
                 ResponseEv->CurrentExecutionStats = Stats->TakeCurrentStats(true);
             }
 

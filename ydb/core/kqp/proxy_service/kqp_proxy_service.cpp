@@ -839,7 +839,8 @@ public:
                 return;
             }
             LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
-            ev->Get()->GetUserRequestContext()->CollectCurrentQueryStats = true;
+            ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval =
+                TDuration::Seconds(TableServiceConfig.GetCurrentQueryStatsIntervalSeconds());
 
             // Pass WmState from session to the event
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");

@@ -121,9 +121,7 @@ void WriteCompletedFields(NJsonWriter::TBuf& json, const TCompletedFields& f) {
     }
     if (f.Resources) {
         json.WriteKey("cpu_time_us").WriteULongLong(f.Resources->CpuTimeUs);
-        json.WriteKey("compute_memory_bytes").WriteULongLong(f.Resources->ComputeMemoryBytes);
         json.WriteKey("observed_peak_compute_memory_bytes").WriteULongLong(f.Resources->ObservedPeakComputeMemoryBytes);
-        json.WriteKey("table_read_bytes").WriteULongLong(f.Resources->TableReadBytes);
         json.WriteKey("read_ingress_bytes").WriteULongLong(f.Resources->ReadIngressBytes);
     }
     if (f.AstLen) {

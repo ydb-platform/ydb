@@ -5,7 +5,6 @@
 #include <ydb/core/kqp/tools/combiner_perf/dq_block.h>
 #include <ydb/core/kqp/tools/combiner_perf/printout.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple.h>
-#include <ydb/core/kqp/tools/combiner_perf/simple_block.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple_grace_join.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple_last.h>
 #include <ydb/core/kqp/tools/combiner_perf/subprocess.h>
@@ -199,8 +198,6 @@ void DoFullPass(TRunParams runParams, bool withSpilling)
     const std::vector<size_t> numKeys = {4u, 1000u, 100'000u, 1'000'000u, 10'000'000};
     // const std::vector<size_t> numKeys = {60'000'000, 120'000'000};
     // const std::vector<size_t> numKeys = {30'000'000u};
-    const std::vector<size_t> blockSizes = {128u, 8192u};
-
     auto doSimple = [&printout, numKeys](const TRunParams& params) {
         for (size_t memLimit : {0ULL, 30ULL << 20}) {
             for (size_t keyCount : numKeys) {
@@ -226,29 +223,14 @@ void DoFullPass(TRunParams runParams, bool withSpilling)
         }
     };
 
-    auto doBlockHashed = [&printout, &numKeys, &blockSizes](const TRunParams& params) {
-        for (size_t keyCount : numKeys) {
-            for (size_t blockSize : blockSizes) {
-                auto runParams = params;
-                runParams.NumKeys = keyCount;
-                runParams.BlockSize = blockSize;
-                RunTestBlockCombineHashedSimple<false, false>(runParams, printout);
-            }
-        }
-    };
-
-    Y_UNUSED(doBlockHashed, doSimple, doSimpleLast);
-
     doSimple(runParams);
     doSimpleLast(runParams);
-    doBlockHashed(runParams);
 }
 
 enum class ETestType {
     All,
     SimpleCombiner,
     SimpleLastCombiner,
-    BlockCombiner,
     DqHashCombinerVs,
     DqBlock,
     SimpleGraceJoin,
@@ -263,12 +245,6 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
             NKikimr::NMiniKQL::RunTestSimple<true>(params, printout);
         } else {
             NKikimr::NMiniKQL::RunTestSimple<false>(params, printout);
-        }
-    } else if (testType == ETestType::BlockCombiner) {
-        if (llvm) {
-            NKikimr::NMiniKQL::RunTestBlockCombineHashedSimple<true, false>(params, printout);
-        } else {
-            NKikimr::NMiniKQL::RunTestBlockCombineHashedSimple<false, false>(params, printout);
         }
     } else if (testType == ETestType::SimpleLastCombiner) {
         if (spilling) {
@@ -419,7 +395,7 @@ int main(int argc, const char* argv[])
         .Help("Hash map type (std::unordered_map or absl::dense_hash_map)");
 
     options.AddLongOption('t', "test")
-        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "dq-block", "grace-join"})
+        .Choices({"combiner", "last-combiner", "dq-hash-combiner", "dq-block", "grace-join"})
         .RequiredArgument("TEST_TYPE")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
@@ -427,8 +403,6 @@ int main(int argc, const char* argv[])
                 testType = ETestType::SimpleCombiner;
             } else if (val == "last-combiner") {
                 testType = ETestType::SimpleLastCombiner;
-            } else if (val == "block-combiner") {
-                testType = ETestType::BlockCombiner;
             } else if (val == "dq-hash-combiner") {
                 testType = ETestType::DqHashCombinerVs;
             } else if (val == "dq-block") {

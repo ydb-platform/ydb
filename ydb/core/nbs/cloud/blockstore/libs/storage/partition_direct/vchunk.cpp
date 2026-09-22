@@ -429,7 +429,7 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "CloneQueue: " << BlocksDirtyMap->DebugPrintReadyToClone() << "\n";
     sb << "FlushQueue: " << BlocksDirtyMap->DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap->DebugPrintReadyToErase() << "\n";
-    sb << "BehindBrief:" << BlocksDirtyMap->DebugPrintBehindBrief() << "\n";
+    sb << "BehindBrief: " << BlocksDirtyMap->DebugPrintBehindBrief() << "\n";
     sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
     sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
 >>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
@@ -1304,8 +1304,14 @@ void TVChunk::PersistNextPendingConfig()
         (const TPersistResultFuture& f) mutable
 >>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
         {
+<<<<<<< HEAD
             if (auto self = weakSelf.lock()) {
                 self->OnConfigPersisted();
+=======
+            if (f.GetValue() != EPersistResult::Success) {
+                // Config persistence must never fail.
+                return;
+>>>>>>> c84fdf4fd56 ([NBS-7705] Promote least loaded host (#53749))
             }
 <<<<<<< HEAD
 =======
@@ -1352,6 +1358,7 @@ void TVChunk::OnConfigPersisted(
     BlocksDirtyMap->StatePersisted(stateGeneration);
     PersistedFreshDDisks = freshDDisks;
     ApplyConfig(config, message);
+    DirectBlockGroup->CommitDDiskPromotion(config);
     StartPersist();
 >>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
     DemoteUnavailableHostsIfNeeded();
@@ -1461,18 +1468,32 @@ TVChunkConfig TVChunk::PrepareNewConfig(
 =======
             newConfig.DisableHost(hostIndex);
 <<<<<<< HEAD
+<<<<<<< HEAD
             const TString message = newConfig.PromoteHostIfNeeded(IsTouched());
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 =======
             const TString message = newConfig.PromoteHostIfNeeded();
 >>>>>>> f52f47482ee ([NBS-7655] Remove watermarks and ahead state (#53653))
             if (!message.empty()) {
+=======
+            if (newConfig.GetEnabledDDisks().Count() <
+                QuorumDirectBlockGroupHostCount)
+            {
+                const THostIndex hostToPromote =
+                    DirectBlockGroup->AllocateDDiskForPromote(newConfig);
+                if (hostToPromote == InvalidHostIndex) {
+                    break;
+                }
+>>>>>>> c84fdf4fd56 ([NBS-7705] Promote least loaded host (#53749))
                 LOG_WARN(
                     *ActorSystem,
                     NKikimrServices::NBS_PARTITION,
-                    "%s %s",
+                    "%s Promote %s %s",
                     LogTitle.GetWithTime().c_str(),
-                    message.c_str());
+                    PrintHostIndex(hostToPromote).c_str(),
+                    newConfig.DebugPrint().c_str());
+
+                newConfig.PromoteHost(hostToPromote);
             }
 
             break;

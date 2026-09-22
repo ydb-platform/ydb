@@ -968,8 +968,53 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
 =======
+=======
+    Y_UNIT_TEST_F(ShouldNotAllocateDDiskWhenQuorumRemains, TBaseFixture)
+    {
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            false,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            3,
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]
+            {
+                vchunk->SetHostState(3, EHostState::Offline);
+                return true;
+            })
+            .GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        const auto& config =
+            PartitionDirectService->UpdateConfigRequests.front().Config;
+        UNIT_ASSERT_VALUES_EQUAL(
+            QuorumDirectBlockGroupHostCount,
+            config.GetEnabledDDisks().Count());
+        UNIT_ASSERT_VALUES_EQUAL(EHostRole::None, config.GetDDiskRole(4));
+
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+    }
+
+>>>>>>> c84fdf4fd56 ([NBS-7705] Promote least loaded host (#53749))
     Y_UNIT_TEST_F(ShouldPromoteOperationalHostWhenDDiskUntouched, TBaseFixture)
     {
         Init();

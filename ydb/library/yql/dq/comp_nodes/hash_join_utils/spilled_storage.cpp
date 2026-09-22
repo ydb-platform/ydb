@@ -42,7 +42,7 @@ TPackResult Parse(NYql::TChunkedBuffer&& buff, const NPackedTuple::TTupleLayout*
 
     str.To = std::span<char>{reinterpret_cast<char*>(&res.NTuples), sizeof(res.NTuples)}; 
     fillTo();
-
+    
     res.PackedTuples.resize(res.NTuples*layout->TotalRowSize);
     str.To = std::span<char>{reinterpret_cast<char*>(res.PackedTuples.data()), res.PackedTuples.size()};
     fillTo();

@@ -1674,16 +1674,14 @@ TJoinTestData LeftOnlyCommonFilterTestDataLeftIsBuild() {
     return td;
 }
 
-void AsCrossJoin(TJoinTestData& td) {
-    td.Kind = EJoinKind::Cross;
-    td.LeftKeyColmns = {};
-    td.RightKeyColmns = {};
-}
-
 void AsKeylessJoin(TJoinTestData& td, EJoinKind kind) {
     td.Kind = kind;
     td.LeftKeyColmns = {};
     td.RightKeyColmns = {};
+}
+
+void AsCrossJoin(TJoinTestData& td) {
+    AsKeylessJoin(td, EJoinKind::Cross);
 }
 
 TJoinTestData KeylessJoinCommonFilterTestData(EJoinKind kind) {

@@ -61,6 +61,8 @@ struct TSpillingPage {
     int BucketIndex;
 };
 
+using TProbeMatchFlags = TMKQLHashMap<ISpiller::TKey, TMKQLVector<ui8>>;
+
 template <TSpillerSettings Settings> class TBucketsSpiller {
     static_assert(Settings.Buckets > 0 && (Settings.Buckets & (Settings.Buckets - 1)) == 0);
 
@@ -191,7 +193,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
     struct State {
         TMKQLVector<Bucket> Buckets;
         TMKQLVector<TSpillingPage> InMemoryPages;
-        std::unordered_map<ISpiller::TKey, TMKQLVector<ui8>> ProbeMatchFlags;
+        TProbeMatchFlags ProbeMatchFlags;
     };
 
     TProbeSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout, State state)

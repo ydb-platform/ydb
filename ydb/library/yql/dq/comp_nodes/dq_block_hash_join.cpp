@@ -28,7 +28,6 @@ struct TDqBlockJoinContext {
     TVector<TBlockType*> ResultItemTypes;
     TDqJoinImplRenames Renames;
     EJoinKind Kind;
-    bool IsGrid = false;
     TSides<i32> TempStateIndes;
     TBlockHashJoinSettings Settings;
     // Pre-computed during graph construction in WrapDqBlockHashJoin using the
@@ -78,7 +77,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         IBlockLayoutConverter::TPackResult result;
         const size_t cols = UserDataCols();
         if (cols == 0) {
-            MKQL_ENSURE(Meta_->IsGrid, "empty payload side is only allowed for a keyless join");
+            MKQL_ENSURE(Meta_->KeyColumns.Build.empty(), "empty payload side is only allowed for a keyless join");
             const auto* layout = ArrowBlockToInternalConverter_->GetTupleLayout();
             const ui64 n = GetBlockCount(Buff_[0]);
             result.PackedTuples.resize(layout->TotalRowSize * n, 0);
@@ -349,12 +348,12 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto joinKind = parsed.Kind;
     meta.Kind = joinKind;
     meta.KeyColumns = parsed.KeyColumns;
-    meta.IsGrid = meta.KeyColumns.Build.empty();
+    const bool isGrid = meta.KeyColumns.Build.empty();
 
     MKQL_ENSURE(!joinComponents.empty(), "Expected at least block length column");
     MKQL_ENSURE(!leftStreamComponents.empty(), "Expected at least block length column");
     MKQL_ENSURE(!rightStreamComponents.empty(), "Expected at least block length column");
-    if (!meta.IsGrid) {
+    if (!isGrid) {
         MKQL_ENSURE(joinComponents.size() > 1, "Expected at least one data column");
         MKQL_ENSURE(leftStreamComponents.size() > 1, "Expected at least one data column");
         MKQL_ENSURE(rightStreamComponents.size() > 1, "Expected at least one data column");
@@ -414,7 +413,6 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         filters.SwapSides();
     }
 
-    const bool isGrid = meta.IsGrid;
     return DispatchHashJoinByKind<TBlockHashJoinWrapper, IComputationNode>(
         joinKind, preservedSide, isGrid, "unsupported join type in block hash join", ctx.Mutables,
         std::move(meta), streams, std::move(filters));

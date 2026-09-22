@@ -87,7 +87,7 @@ private:
             return;
         default:
             ReplyAndDie(TStatus::ERROR_TEMP,
-                TStringBuilder() << "Unknown DBSController maintenance decision: " << record.GetDecision());
+                TStringBuilder() << "Unknown DBSController maintenance decision: " << static_cast<int>(record.GetDecision()));
             return;
         }
     }

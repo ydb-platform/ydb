@@ -26,6 +26,7 @@ SRCS(
     downtime_ut.cpp
     http_dump_ut.cpp
     json_proxy_toggle_config_validator_ut.cpp
+    nbs2_maintenance_ut.cpp
     ut_helpers.cpp
 )
 

@@ -206,7 +206,9 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row) {
             // The raw row has been consumed by the compressor, do not keep it in memory.
             // Otherwise the raw data is accumulated until the compressed output reaches MinBytes,
             // which is unbounded for highly compressible data.
-            Buffer.Resize(beforeSize);
+            // With compression the buffer holds only the current row, so it is empty on entry.
+            Y_ENSURE(beforeSize == 0);
+            Buffer.Clear();
         }
     }
 

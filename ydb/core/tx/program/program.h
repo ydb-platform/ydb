@@ -113,7 +113,7 @@ public:
     }
 
     [[nodiscard]] TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> ApplyProgram(
-        std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection, const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const;
+        std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> ApplyProgram(
         const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const;
 

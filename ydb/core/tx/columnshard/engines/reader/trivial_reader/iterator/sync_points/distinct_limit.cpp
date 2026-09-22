@@ -2,11 +2,11 @@
 
 #include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/abstract.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections/abstract.h>
 
 #include <util/string/builder.h>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NTrivial {
 
 ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& /*reader*/) {
     auto& source = lease.GetSource();
@@ -35,10 +35,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NC
     }
 
     const auto keyAccessor = batch->GetAccessorByNameOptional(std::string(columnName.data(), columnName.size()));
-    if (!keyAccessor) {
-        // Column may not be materialized yet at this sync point; do not abort the scan.
-        return ESourceAction::ProvideNext;
-    }
+    AFL_VERIFY(keyAccessor)("column", columnName)("key_column_id", KeyColumnId);
 
     const ui32 recordsCount = keyAccessor->GetRecordsCount();
     if (!recordsCount) {
@@ -47,14 +44,18 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NC
 
     const auto existing = source.GetStageResult().GetNotAppliedFilter();
     const bool hasRowFilter = existing && !existing->IsTotalAllowFilter();
-    const bool isDictionaryOnlyFetch = sr.IsDictionaryOnlyFetch(KeyColumnId);
+    // The key is either the fetched column itself or derived from it (JSON_VALUE over a sub-column). The SSA optimizer
+    // enables dictionary-only fetching only when the whole request needs exactly one data column and the DISTINCT key
+    // is computed from it, so any dictionary-only fetch means the key values are dictionary entries, not rows.
+    const bool isDictionaryOnlyFetch = sr.IsDictionaryOnlyFetch(KeyColumnId) || !sr.GetDictionaryOnlyFetchColumns().empty();
     bool applyRowFilter = false;
     std::optional<NArrow::TColumnFilter::TIterator> filterIterator;
-    if (isDictionaryOnlyFetch) {
-        // Dictionary accessor is indexed by dict entries; portion-row deny filters are incompatible.
-        AFL_VERIFY(!hasRowFilter);
-    } else if (hasRowFilter) {
-        AFL_VERIFY(existing->GetRecordsCountVerified() == recordsCount);
+    if (hasRowFilter) {
+        // Dictionary-only accessors are indexed by dictionary entries: portion-row deny filters (PK range, duplicates,
+        // deletions) are excluded by the fetch guards, so a filter here was produced by the program over the same
+        // entries (e.g. the projection cut to the requested limit) and its length must match the accessor.
+        AFL_VERIFY(existing->GetRecordsCountVerified() == recordsCount)("filter", existing->GetRecordsCountVerified())("records", recordsCount)(
+            "dictionary_only", isDictionaryOnlyFetch);
         applyRowFilter = true;
         filterIterator.emplace(existing->GetBegin(false, recordsCount));
     }
@@ -110,4 +111,4 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NC
     return ESourceAction::ProvideNext;
 }
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NTrivial

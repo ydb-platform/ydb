@@ -6,7 +6,7 @@
 #include <memory>
 #include <unordered_set>
 
-namespace NKikimr::NOlap::NReader::NSimple {
+namespace NKikimr::NOlap::NReader::NTrivial {
 
 struct TDistinctScalarPtrEq {
     bool operator()(const std::shared_ptr<arrow::Scalar>& a, const std::shared_ptr<arrow::Scalar>& b) const {
@@ -47,4 +47,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NTrivial

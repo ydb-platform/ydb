@@ -18,8 +18,8 @@ TSyncPointLimitControl::TSyncPointLimitControl(const ui32 limit, const ui32 poin
 
 bool TSyncPointLimitControl::DrainToLimit() {
     std::optional<TSourceIterator> nextInHeap;
-    if (Collection->GetNextSource()) {
-        nextInHeap = TSourceIterator(Collection->GetNextSource());
+    if (const auto& nextSource = Collection->GetNextSource()) {
+        nextInHeap = TSourceIterator(nextSource->ShareReadOnly());
     }
 
     while (FilledIterators.size() &&
@@ -40,27 +40,27 @@ bool TSyncPointLimitControl::DrainToLimit() {
     return false;
 }
 
-std::shared_ptr<NCommon::IDataSource> TSyncPointLimitControl::OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) {
+std::unique_ptr<NCommon::TDataSourceLease> TSyncPointLimitControl::OnAddSource(std::unique_ptr<NCommon::TDataSourceLease> lease) {
     AFL_VERIFY(FetchedCount < Limit)("fetched", FetchedCount)("limit", Limit);
-    UnfilledIterators.emplace_back(TSourceIterator(source));
+    UnfilledIterators.emplace_back(TSourceIterator(lease->ShareReadOnly()));
 
-    return TBase::OnAddSource(source);
+    return TBase::OnAddSource(std::move(lease));
 }
 
-ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
-    const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/) {
+ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& /*reader*/) {
+    auto& source = lease.GetSource();
     const NActors::TLogContextGuard verifyContext =
-        NActors::TLogContextBuilder::Build()("source_schema", source->GetSourceSchema()->DebugString());
-    LWTRACK(LimitSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
-        source->GetSourceId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
-        source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
+        NActors::TLogContextBuilder::Build()("source_schema", source.GetSourceSchema()->DebugString());
+    LWTRACK(LimitSyncPoint, source.GetDataSourceOrbit(), source.GetRawPathId(), source.GetTabletId(), source.GetTxId(), source.GetSourceId(),
+        GetPointName(), source.GetFilteredRowsCount(), source.GetReservedMemory(), source.GetSourcesAheadQueueWaitDuration(),
+        source.GetSourcesAhead(), DebugString());
     if (FetchedCount >= Limit) {
         return ESourceAction::Finish;
     }
 
     AFL_VERIFY(UnfilledIterators.size());
 
-    if (UnfilledIterators.front().GetSourceIdx() != source->GetSourceIdx()) {
+    if (UnfilledIterators.front().GetSourceIdx() != source.GetSourceIdx()) {
         for (auto it : UnfilledIterators) {
             YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"unfilledIterators", it.DebugString()});
@@ -69,19 +69,26 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
             YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"filledIterators", it.DebugString()});
         }
-        for (auto it : SourcesSequentially) {
+        for (const auto& it : SourcesSequentially) {
             YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-                {"sourcesSequentially", it->GetSourceIdx()});
+                {"sourcesSequentially", it.SourceIdx});
         }
         if (FindIf(UnfilledIterators, [&](const auto& item) {
-                return item.GetSourceIdx() == source->GetSourceIdx();
+                return item.GetSourceIdx() == source.GetSourceIdx();
             }) != UnfilledIterators.end()) {
+<<<<<<< HEAD
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in UnfilledIterators")("front", UnfilledIterators.front().DebugString())(
                     "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
                     "source_idx", source->GetSourceIdx());
+=======
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx())("issue #28037", "portion is in UnfilledIterators")("front", UnfilledIterators.front().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source.GetAs<IDataSource>()->GetFirstPK().DebugString())(
+                    "source_idx", source.GetSourceIdx());
+>>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
         } else if (FindIf(FilledIterators, [&](const auto& item) {
-                       return item.GetSourceIdx() == source->GetSourceIdx();
+                       return item.GetSourceIdx() == source.GetSourceIdx();
                    }) != FilledIterators.end()) {
+<<<<<<< HEAD
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in FilledIterators")("front", UnfilledIterators.front().DebugString())(
                     "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
                     "source_idx", source->GetSourceIdx());
@@ -89,14 +96,29 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
             AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "unknown portion")("front", UnfilledIterators.front().DebugString())(
                     "back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())(
                     "source_idx", source->GetSourceIdx());
+=======
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx())("issue #28037", "portion is in FilledIterators")("front", UnfilledIterators.front().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source.GetAs<IDataSource>()->GetFirstPK().DebugString())(
+                    "source_idx", source.GetSourceIdx());
+        } else {
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx())("issue #28037", "unknown portion")("front", UnfilledIterators.front().DebugString())(
+                    "back", UnfilledIterators.back().DebugString())("source", source.GetAs<IDataSource>()->GetFirstPK().DebugString())(
+                    "source_idx", source.GetSourceIdx());
+>>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
         }
     }
 
     UnfilledIterators.pop_front();
 
+<<<<<<< HEAD
     const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
     const auto& g = source->GetStageResult().GetBatch();
 
+=======
+    const auto& rk = *source.GetSourceSchema()->GetIndexInfo().GetReplaceKey();
+    const auto& g = source.GetStageResult().GetBatch();
+    bool hasRows = false;
+>>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
     if (g && g->GetRecordsCount()) {
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrs;
         for (auto&& i : rk.fields()) {
@@ -114,12 +136,22 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         }
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
             {"event", "DoOnSourceCheckLimitFillIterator"},
-            {"sourceIdx", source->GetSourceIdx()},
+            {"sourceIdx", source.GetSourceIdx()},
             {"fetched", FetchedCount},
             {"limit", Limit});
+<<<<<<< HEAD
         FilledIterators.emplace_back(arrs, source->GetStageResult().GetNotAppliedFilter(), source);
         AFL_VERIFY(FilledIterators.back().IsFilled());
         std::push_heap(FilledIterators.begin(), FilledIterators.end());
+=======
+        TSourceIterator iterator(arrs, source.GetStageResult().GetNotAppliedFilter(), lease.ShareReadOnly());
+        AFL_VERIFY(iterator.IsFilled());
+        if (iterator.IsValid()) {
+            hasRows = true;
+            FilledIterators.emplace_back(std::move(iterator));
+            std::push_heap(FilledIterators.begin(), FilledIterators.end());
+        }
+>>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
     }
     if (DrainToLimit()) {
         Collection->Clear();

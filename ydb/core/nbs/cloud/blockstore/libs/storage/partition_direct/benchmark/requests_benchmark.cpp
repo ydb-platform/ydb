@@ -332,9 +332,8 @@ static void BM_RestoreRequestExecutorCreation(benchmark::State& state)
         }
         state.ResumeTiming();
 
-        auto executor = std::make_shared<TRestoreRequestExecutor>(
-            fixture.Runtime->GetActorSystem(0),
-            fixture.DirectBlockGroup);
+        auto executor =
+            std::make_shared<TRestoreRequestExecutor>(fixture.DirectBlockGroup);
         auto* executorPtr = &executor;
         benchmark::DoNotOptimize(executorPtr);
         previous = std::move(executor);

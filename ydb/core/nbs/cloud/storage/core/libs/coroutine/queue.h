@@ -137,6 +137,12 @@ public:
 
         return false;
     }
+
+    // Non-blocking. Used to destroy tasks left behind a stop signal.
+    bool TryDequeue(T* item)
+    {
+        return Queue.Dequeue(item);
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////

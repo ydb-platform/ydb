@@ -387,11 +387,18 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
          childSpan = std::move(childSpan),
          hostIndex,
          startAt,
-         executor = Executor,
+         weakExecutor = Executor->weak_from_this(),
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
         (const TEvReadResultFuture& f) mutable
         {
-            // ActorSystem thread
+            // ActorSystem thread. The transport future must not own the
+            // executor, or Stop() cannot destroy it.
+            auto executor = weakExecutor.lock();
+            if (!executor) {
+                promise.SetValue(TDBGReadBlocksResponse{
+                    .Error = MakeDirectBlockGroupDestroyedError()});
+                return;
+            }
 
             executor->ExecuteSimple(
                 [weakSelf,
@@ -465,11 +472,17 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
          childSpan = std::move(childSpan),
          hostIndex,
          startAt,
-         executor = Executor,
+         weakExecutor = Executor->weak_from_this(),
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
         (const TEvReadPersistentBufferResultFuture& f) mutable
         {
             // ActorSystem thread
+            auto executor = weakExecutor.lock();
+            if (!executor) {
+                promise.SetValue(TDBGReadBlocksResponse{
+                    .Error = MakeDirectBlockGroupDestroyedError()});
+                return;
+            }
 
             executor->ExecuteSimple(
                 [weakSelf,
@@ -589,11 +602,17 @@ TDirectBlockGroup::WriteBlocksToDDisk(
          childSpan = std::move(childSpan),
          hostIndex,
          startAt,
-         executor = Executor,
+         weakExecutor = Executor->weak_from_this(),
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
         (const TEvWriterResultFuture& f) mutable
         {
             // ActorSystem thread
+            auto executor = weakExecutor.lock();
+            if (!executor) {
+                promise.SetValue(TDBGWriteBlocksResponse{
+                    .Error = MakeDirectBlockGroupDestroyedError()});
+                return;
+            }
 
             executor->ExecuteSimple(
                 [weakSelf,
@@ -668,11 +687,17 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
          childSpan = std::move(childSpan),
          hostIndex,
          startAt,
-         executor = Executor,
+         weakExecutor = Executor->weak_from_this(),
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
         (const TEvWritePersistentBufferResultFuture& f) mutable
         {
             // ActorSystem thread
+            auto executor = weakExecutor.lock();
+            if (!executor) {
+                promise.SetValue(TDBGWriteBlocksResponse{
+                    .Error = MakeDirectBlockGroupDestroyedError()});
+                return;
+            }
 
             executor->ExecuteSimple(
                 [weakSelf,
@@ -751,7 +776,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
         [startAt,
          coordinatorHostIndex,
          hostIndexes,
-         executor = Executor,
+         weakExecutor = Executor->weak_from_this(),
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          callback = std::move(callback),
          weakSelf = weak_from_this()]   //
@@ -759,6 +784,14 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
          std::shared_ptr<NWilson::TSpan> span) mutable
     {
         // ActorSystem thread
+        auto executor = weakExecutor.lock();
+        if (!executor) {
+            callback(MakeWriteToManyPBuffersResponse(
+                hostIndexes,
+                MakeDirectBlockGroupDestroyedError()));
+            return;
+        }
+
         auto responseSpan =
             span ? std::make_shared<NWilson::TSpan>(span->CreateChild(
                        NKikimr::TWilsonNbs::NbsBasic,
@@ -931,12 +964,22 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
          pbufferHostIndex,
          ddiskHostIndex,
          startAt,
-         executor = Executor,
+         weakExecutor = Executor->weak_from_this(),
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          segmentCount = segments.size()]   //
         (const TFuture<TEvSyncResult>& f) mutable
         {
             // ActorSystem thread
+            auto executor = weakExecutor.lock();
+            if (!executor) {
+                TDBGFlushResponse flushResponse;
+                for (size_t i = 0; i < segmentCount; ++i) {
+                    flushResponse.Errors.push_back(
+                        MakeDirectBlockGroupDestroyedError());
+                }
+                promise.SetValue(std::move(flushResponse));
+                return;
+            }
 
             executor->ExecuteSimple(
                 [weakSelf,
@@ -1052,12 +1095,18 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
          childSpan = std::move(childSpan),
          hostIndex,
          startAt,
-         executor = Executor,
+         weakExecutor = Executor->weak_from_this(),
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          segmentCount = segments.size()]   //
         (const TFuture<TEvErasePersistentBufferResult>& f) mutable
         {
             // ActorSystem thread
+            auto executor = weakExecutor.lock();
+            if (!executor) {
+                promise.SetValue(TDBGEraseResponse{
+                    .Error = MakeDirectBlockGroupDestroyedError()});
+                return;
+            }
 
             executor->ExecuteSimple(
                 [weakSelf,
@@ -1169,11 +1218,15 @@ void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
          childSpan = std::move(childSpan),
          hostIndex,
          startAt,
-         executor = Executor,
+         weakExecutor = Executor->weak_from_this(),
          threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
         (const TFuture<TEvErasePersistentBufferResult>& f) mutable
         {
             // ActorSystem thread
+            auto executor = weakExecutor.lock();
+            if (!executor) {
+                return;
+            }
 
             executor->ExecuteSimple(
                 [weakSelf,
@@ -1259,12 +1312,19 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
 
     future.Subscribe(
         [promise = std::move(promise),
-         executor = Executor,
+         weakExecutor = Executor->weak_from_this(),
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          blockSize = BlockSize]   //
         (const TFuture<TEvListPersistentBufferResult>& f) mutable
         {
             // ActorSystem thread
+            auto executor = weakExecutor.lock();
+            if (!executor) {
+                promise.SetValue(TListPBufferResponse{
+                    .Error = MakeDirectBlockGroupDestroyedError()});
+                return;
+            }
+
             executor->ExecuteSimple(
                 [promise = std::move(promise),
                  threadChecker,
@@ -1602,9 +1662,18 @@ void TDirectBlockGroup::DoEstablishConnection(
     auto futures = StorageTransport->Connect(connection.HostConnection);
     if (connectionType == EConnectionType::DDisk) {
         futures.DisconnectFuture.Subscribe(
-            [hostIndex, weakSelf = weak_from_this(), executor = Executor]   //
+            [hostIndex,
+             weakSelf = weak_from_this(),
+             weakExecutor = Executor->weak_from_this()]   //
             (const TFuture<ui32>& f)
             {
+                // Stored on the transport until disconnect. A strong
+                // TExecutorPtr here keeps the executor alive after Stop().
+                auto executor = weakExecutor.lock();
+                if (!executor) {
+                    return;
+                }
+
                 executor->ExecuteSimple(
                     [hostIndex, nodeId = f.GetValue(), weakSelf]   //
                     () mutable -> void
@@ -1618,12 +1687,17 @@ void TDirectBlockGroup::DoEstablishConnection(
 
     futures.ConnectFuture.Subscribe(
         [weakSelf = weak_from_this(),
-         executor = Executor,
+         weakExecutor = Executor->weak_from_this(),
          connectionType = connection.HostConnection.ConnectionType,
          hostIndex,
          actualSeqNo]   //
         (const TFuture<TEvConnectResult>& f) mutable
         {
+            auto executor = weakExecutor.lock();
+            if (!executor) {
+                return;
+            }
+
             executor->ExecuteSimple(
                 [weakSelf = std::move(weakSelf),
                  connectionType,
@@ -1881,9 +1955,8 @@ TString TDirectBlockGroup::ValidateRemoveHost(THostIndex hostIndex) const
 void TDirectBlockGroup::DoListPBuffers()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    auto restoreExecutor = std::make_shared<TRestoreRequestExecutor>(
-        ActorSystem,
-        shared_from_this());
+    auto restoreExecutor =
+        std::make_shared<TRestoreRequestExecutor>(weak_from_this());
 
     auto future = restoreExecutor->GetFuture();
     future.Subscribe(

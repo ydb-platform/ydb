@@ -63,6 +63,13 @@ public:
         e->Create<TDispatcher, &TDispatcher::Dispatch>(this, "dispatch");
     }
 
+    ~TDispatcher()
+    {
+        // Stop() leaves every task queued after the nullptr in place.
+        // The queue stores raw pointers, so they have to be deleted here.
+        DropQueuedTasks();
+    }
+
     void Stop()
     {
         Queue.Enqueue(nullptr);
@@ -103,7 +110,16 @@ private:
             c->Yield();
         }
 
+        DropQueuedTasks();
         executor->Abort();
+    }
+
+    void DropQueuedTasks()
+    {
+        ITask* task = nullptr;
+        while (Queue.TryDequeue(&task)) {
+            delete task;
+        }
     }
 };
 
@@ -123,6 +139,10 @@ private:
 public:
     std::unique_ptr<TContExecutor> Executor;
     TIntrusivePtr<TDispatcher> Dispatcher;
+    // Set when ~TExecutor runs on this worker. ThreadProc deletes itself
+    // after Execute returns: ~TThread joins, and joining the current thread
+    // fails with EDEADLK.
+    bool DeleteSelfAfterExecute = false;
 
     TThread(TString name, TAffinity affinity, size_t contStackSize)
         : Name(std::move(name))
@@ -136,19 +156,33 @@ public:
         StartEvent.WaitI();
     }
 
+    bool IsCurrent() const
+    {
+        return Id() == ::TThread::CurrentThreadId();
+    }
+
     void* ThreadProc() override
     {
-        TAffinityGuard affinityGuard(Affinity);
+        {
+            TAffinityGuard affinityGuard(Affinity);
 
-        ::NYdb::NBS::SetCurrentThreadName(Name);
+            ::NYdb::NBS::SetCurrentThreadName(Name);
 
-        Executor = std::make_unique<TContExecutor>(ContStackSize);
-        Dispatcher = MakeIntrusive<TDispatcher>(Executor.get());
+            Executor = std::make_unique<TContExecutor>(ContStackSize);
+            Dispatcher = MakeIntrusive<TDispatcher>(Executor.get());
 
-        Dispatcher->Start(Executor.get());
-        StartEvent.Signal();
+            Dispatcher->Start(Executor.get());
+            StartEvent.Signal();
 
-        Executor->Execute();
+            Executor->Execute();
+        }
+
+        if (DeleteSelfAfterExecute) {
+            // Detach first so ~TThread::Join does not join this thread.
+            Detach();
+            delete this;
+            return nullptr;
+        }
         return nullptr;
     }
 };
@@ -161,6 +195,17 @@ TExecutor::TExecutor(TString name, TAffinity affinity, size_t contStackSize)
 
 TExecutor::~TExecutor()
 {
+    if (Thread && Thread->IsCurrent()) {
+        // The last owner was a coroutine on this worker. Join would deadlock,
+        // and destroying TContExecutor here would free the engine that is
+        // still running this coroutine. Stop the dispatcher and let ThreadProc
+        // destroy the thread once Execute returns.
+        Stop();
+        Thread->DeleteSelfAfterExecute = true;
+        Thread.release();
+        return;
+    }
+
     Stop();
 }
 
@@ -171,10 +216,26 @@ void TExecutor::Start()
 
 void TExecutor::Stop()
 {
-    if (Thread->Dispatcher) {
-        Thread->Dispatcher->Stop();
-        Thread->Join();
+    // Before Start the dispatcher does not exist yet. Joining in that window
+    // deadlocks if ThreadProc then enters Execute.
+    if (!Thread->Dispatcher) {
+        return;
     }
+
+    const bool onWorker = Thread->IsCurrent();
+    if (!Stopped.exchange(true)) {
+        Thread->Dispatcher->Stop();
+    }
+
+    if (onWorker) {
+        return;
+    }
+
+    // An earlier Stop from the worker only asks the dispatcher to exit.
+    // Join from the outside so that Stop does not return while the thread
+    // is still inside Execute. A second Join after the thread has finished
+    // is a no-op.
+    Thread->Join();
 }
 
 void TExecutor::Enqueue(ITaskPtr task)

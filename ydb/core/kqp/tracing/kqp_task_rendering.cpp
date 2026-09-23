@@ -140,11 +140,13 @@ TString TTaskTraceDescription::Name(TStringBuf prefix) const {
     TStringBuilder name;
     name << prefix;
     size_t count = 0;
+    bool truncated = false;
     for (const auto& [operation, operationName] : OPERATION_NAMES) {
         if (!(Operations_ & static_cast<ui32>(operation))) {
             continue;
         }
         if (count == NQueryTraceSettings::MAX_TASK_NAME_OPERATIONS) {
+            truncated = true;
             break;
         }
         if (count++) {
@@ -154,6 +156,8 @@ TString TTaskTraceDescription::Name(TStringBuf prefix) const {
     }
     if (!count) {
         name << "Compute";
+    } else if (truncated) {
+        name << " + ...";
     }
     return name;
 }
@@ -235,11 +239,9 @@ void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqCo
     if (!span) {
         return;
     }
-    const auto cpuUs = stats.TasksSize() == 1
-        ? stats.GetTasks(0).GetCpuTimeUs() : stats.GetCpuTimeUs();
-    span.Attribute("ydb.cpu_us", static_cast<i64>(cpuUs));
     if (stats.TasksSize() == 1) {
         const auto& task = stats.GetTasks(0);
+        span.Attribute("ydb.cpu_us", static_cast<i64>(task.GetCpuTimeUs()));
         span.Attribute("ydb.input_rows", static_cast<i64>(task.GetInputRows()));
         span.Attribute("ydb.output_rows", static_cast<i64>(task.GetOutputRows()));
         span.Attribute("ydb.wait_us", static_cast<i64>(task.GetWaitInputTimeUs() + task.GetWaitOutputTimeUs()));
@@ -266,6 +268,8 @@ void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqCo
         if (task.GetExtra().UnpackTo(&extra)) {
             span.Attribute("ydb.read_retries", static_cast<i64>(extra.GetReadRetriesCount()));
         }
+    } else if (stats.TasksSize() > 1) {
+        span.Attribute("ydb.cpu_us_shared", true);
     }
 }
 

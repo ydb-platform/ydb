@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         stage.AddSources()->MutableReadRangesSource();
         stage.SetProgramAst("(lambda '(arg) (block '((let j (GraceJoinCore arg arg)) (let f (Filter j)) (return (Aggregate f)))))");
         const auto description = NKqp::TTaskTraceDescription::FromStage(stage);
-        UNIT_ASSERT_VALUES_EQUAL(description.Name(), "Task: Read + Join");
+        UNIT_ASSERT_VALUES_EQUAL(description.Name(), "Task: Read + Join + ...");
         NYql::NDqProto::TDqTask task;
         description.Save(task);
         NYql::NDqProto::TDqTask received;
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         NKqp::TTaskTraceDescription::Annotate(span, received);
         span.EndOk();
         runtime.SimulateSleep(TDuration::Seconds(1));
-        const auto* result = FindSpan(*uploader, "Task: Read + Join");
+        const auto* result = FindSpan(*uploader, "Task: Read + Join + ...");
         UNIT_ASSERT(result);
         const auto& operations = FindAttribute(*result, "ydb.task.operations")->value().array_value();
         UNIT_ASSERT_VALUES_EQUAL(operations.values_size(), 4);
@@ -166,6 +166,22 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.queue_delay_us")->value().int_value(), 20000);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.spilled_bytes")->value().int_value(), 100);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.duration_us")->value().int_value(), 1000);
+
+        ClearUploader(*uploader);
+        NYql::NDqProto::TDqComputeActorStats sharedStats;
+        sharedStats.SetCpuTimeUs(90);
+        sharedStats.AddTasks()->SetCpuTimeUs(40);
+        sharedStats.AddTasks()->SetCpuTimeUs(50);
+        NWilson::TSpan sharedSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+            NWilson::TTraceId::NewTraceId(15, 4095), "Task: Shared", NWilson::EFlags::NONE,
+            runtime.GetActorSystem(0));
+        NKqp::AddKqpTaskTraceAttributes(sharedSpan, sharedStats, true);
+        sharedSpan.EndOk();
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        const auto* shared = FindSpan(*uploader, "Task: Shared");
+        UNIT_ASSERT(shared);
+        UNIT_ASSERT(!FindAttribute(*shared, "ydb.cpu_us"));
+        UNIT_ASSERT(FindAttribute(*shared, "ydb.cpu_us_shared")->value().bool_value());
     }
 
     Y_UNIT_TEST(StageSpansCloseWithTasksAndPreserveCompletedStagesOnCancellation) {
@@ -222,8 +238,8 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
                     }
                 } else {
                     UNIT_ASSERT(stage.end_time_unix_nano() > completedEnd);
-                    UNIT_ASSERT(!FindAttribute(stage, "ydb.task_stats_incomplete")->value().bool_value());
-                    UNIT_ASSERT(FindAttribute(stage, "ydb.task_stats_failed")->value().bool_value());
+                    UNIT_ASSERT(FindAttribute(stage, "ydb.task_stats_incomplete")->value().bool_value());
+                    UNIT_ASSERT(!FindAttribute(stage, "ydb.task_stats_failed")->value().bool_value());
                 }
             }
         }
@@ -321,7 +337,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         UNIT_ASSERT(hasFailed && hasSpill);
         NKqpProto::TKqpExecutionExtraStats extra;
         UNIT_ASSERT(stats.GetExtra().UnpackTo(&extra));
-        UNIT_ASSERT(extra.GetTaskStatsIncomplete());
+        UNIT_ASSERT(!extra.GetTaskStatsIncomplete());
         UNIT_ASSERT_VALUES_EQUAL(extra.GetWaitTimeUs(), 100);
         UNIT_ASSERT_VALUES_EQUAL(extra.GetSpilledBytes(), 200);
 

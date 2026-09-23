@@ -532,4 +532,112 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
         }
     }
 
+    Y_UNIT_TEST(SystemColumnTabletIdIntersection) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        {
+            const auto result = session
+                                    .ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                )
+                WITH (STORE = COLUMN, PARTITION_COUNT = 3);
+            )")
+                                    .GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                    INSERT INTO `/Root/ColumnTable` (Key, Value) VALUES
+                        (1u, "a"), (2u, "b"), (3u, "c"), (4u, "d"), (5u, "e"),
+                        (6u, "f"), (7u, "g"), (8u, "h"), (9u, "i"), (10u, "j"),
+                        (11u, "k"), (12u, "l"), (13u, "m"), (14u, "n"), (15u, "o"),
+                        (16u, "p"), (17u, "q"), (18u, "r"), (19u, "s"), (20u, "t");
+                )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        THashMap<ui64, ui64> tabletRows;
+        {
+            auto rows = ExecuteScanQuery(tableClient, R"(
+                SELECT TabletId, SUM(Rows) AS Rows
+                FROM `/Root/ColumnTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+                GROUP BY TabletId
+            )");
+            UNIT_ASSERT_C(rows.size() >= 2, rows.size());
+            for (const auto& row : rows) {
+                tabletRows[GetUint64(row.at("TabletId"))] = GetUint64(row.at("Rows"));
+            }
+        }
+
+        auto it = tabletRows.begin();
+        const ui64 tabletX = it->first;
+        const ui64 rowsX = it->second;
+        ++it;
+        const ui64 tabletY = it->first;
+        const ui64 rowsY = it->second;
+        UNIT_ASSERT(tabletX != tabletY);
+
+        const auto scanOnTablet = [&](ui64 tabletId, const TString& predicate) {
+            TStringBuilder query;
+            query << "PRAGMA kikimr.EnableSystemColumns = \"true\";\n";
+            query << "SELECT Key FROM `/Root/ColumnTable`";
+            if (tabletId) {
+                query << " WITH TabletId = '" << tabletId << "'";
+            }
+            if (predicate) {
+                query << " WHERE " << predicate;
+            }
+            query << " ORDER BY Key";
+            return ExecuteScanQuery(tableClient, query);
+        };
+
+        {
+            auto rows = scanOnTablet(tabletY, "");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), rowsY);
+        }
+        {
+            auto rows = scanOnTablet(0, TStringBuilder() << "_yql_partition_id = " << tabletX << "ul");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), rowsX);
+        }
+
+        {
+            const TString predicate = TStringBuilder() << "_yql_partition_id = " << tabletX << "ul";
+            auto rows = scanOnTablet(tabletY, predicate);
+            // Conflicting pin and point must read nothing. SetTabletId(X) would return rowsX.
+            UNIT_ASSERT_VALUES_EQUAL_C(rows.size(), 0, TStringBuilder() << "tablet " << tabletY << " x partition " << tabletX
+                                                                        << " returned " << rows.size() << ", partition rows " << rowsX);
+
+            NYdb::NTable::TStreamExecScanQuerySettings scanSettings;
+            scanSettings.Explain(true);
+            TStringBuilder query;
+            query << "PRAGMA kikimr.EnableSystemColumns = \"true\";\n";
+            query << "SELECT Key FROM `/Root/ColumnTable` WITH TabletId = '" << tabletY << "' WHERE " << predicate;
+            auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto result = CollectStreamResult(it);
+            UNIT_ASSERT(result.QueryStats);
+            const auto& ast = result.QueryStats->Getquery_ast();
+            UNIT_ASSERT_C(ast.find("TabletId\" '\"" + std::to_string(tabletY)) != std::string::npos, ast);
+            UNIT_ASSERT_C(ast.find("(Uint64 '\"" + std::to_string(tabletX)) != std::string::npos, ast);
+            UNIT_ASSERT_C(ast.find("'??") != std::string::npos, ast);
+        }
+    }
+}
+
 }   // namespace NKikimr::NKqp

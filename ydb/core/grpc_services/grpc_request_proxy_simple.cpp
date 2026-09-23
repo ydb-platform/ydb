@@ -208,6 +208,10 @@ bool TGRpcRequestProxySimple::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     }
 
     const bool authorizationParamsAreSet = ctx.GetYdbToken() || !ctx.FindClientCertPropertyValues().empty();
+    if (!authorizationParamsAreSet && IsAnonymousGrpcMethodAllowed(ctx)) {
+        return true;
+    }
+
     if (!state.NeedAuth && !authorizationParamsAreSet) {
         return true;
     }

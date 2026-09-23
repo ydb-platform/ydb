@@ -203,12 +203,15 @@ public:
         AFL_ENSURE(!FindPtr(toShardIds, fromShardId));
         auto fromIt = ShardsInfo.find(fromShardId);
         AFL_ENSURE(fromIt != ShardsInfo.end());
-        auto& from = fromIt->second;
+        const TShardInfo from = std::move(fromIt->second);
+        ShardsInfo.erase(fromIt);
+        ShardsIds.erase(fromShardId);
         AFL_ENSURE(from.State == EShardState::PROCESSING);
         AFL_ENSURE(!from.IsOlap);
 
         bool locksConsistent = true;
         for (const ui64 toShardId : toShardIds) {
+            AFL_ENSURE(toShardId != fromShardId);
             // MoveShard to may be called for toShardIds several times in case of merge.
             auto [toIt, inserted] = ShardsInfo.try_emplace(toShardId);
             auto& to = toIt->second;
@@ -244,8 +247,6 @@ public:
             }
             ShardsIds.insert(toShardId);
         }
-        ShardsIds.erase(fromShardId);
-        ShardsInfo.erase(fromIt);
         ShardsTransferred = true;
         return locksConsistent;
     }

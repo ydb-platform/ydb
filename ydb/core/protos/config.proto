@@ -2569,6 +2569,15 @@ message TImmediateControlsConfig {
             DefaultValue: 10 }];
     }
     optional TRetroTracingControls RetroTracingControls = 23;
+
+    message TViewerControls {
+        optional uint64 LimitTraceVerbosity = 1 [(ControlOptions) = {
+            Description: "Limit viewer trace verbosity to dynamic nodes only",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
+    }
+    optional TViewerControls ViewerControls = 24;
 };
 
 message TMeteringConfig {

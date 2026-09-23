@@ -20,4 +20,14 @@ ui64 GetSimpleCounter(TTestActorRuntime& runtime, ui64 tabletId,
       .GetValue();
 }
 
+ui64 GetCumulativeCounter(TTestActorRuntime& runtime, ui64 tabletId,
+        NHive::ECumulativeCounters counter)
+{
+  return GetCounters(runtime, tabletId)
+      .GetTabletCounters()
+      .GetAppCounters()
+      .GetCumulativeCounters(counter)
+      .GetValue();
+}
+
 }

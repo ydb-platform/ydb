@@ -3752,7 +3752,7 @@ public:
             }
         }
 
-        YDB_LOG_INFO("Cleanup start",
+        YDB_LOG(QueryState && QueryState->IsWarmupCompilation_ ? PRI_DEBUG : PRI_INFO, "Cleanup start",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
             {"isFinal", isFinal},

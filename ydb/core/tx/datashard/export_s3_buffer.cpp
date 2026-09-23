@@ -208,7 +208,7 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row) {
             // which is unbounded for highly compressible data.
             // With compression the buffer holds only the current row, so it is empty on entry.
             Y_ENSURE(beforeSize == 0);
-            Buffer.Clear();
+            Buffer.Reset();
         }
     }
 

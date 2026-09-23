@@ -199,8 +199,6 @@ class StreamingTestBase:
             self.output_topic,
         )
 
-        self.wait_query_checkpoint()
-
     def do_test_part1(self: Self, acceptor: MessageAcceptor) -> None:
         suffix = 'value1'
         input_data = [

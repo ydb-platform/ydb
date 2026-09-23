@@ -609,7 +609,8 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckRequest) {
         setup.FakeMonActor,
         NGRpcService::TAuditMode::NonModifying(),
         "192.168.0.101",
-        "grpc-tracing-test-request-id");
+        "grpc-tracing-test-request-id",
+        NGRpcService::EAuthAndCheckRequestSource::Http);
     ev->StartTracing(MakeGrpcRequestProxySpan(*setup.GetRuntime()));
     AssertGrpcRequestProxySpanNotSent(*uploader);
 
@@ -634,7 +635,8 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckErrorReply) {
         setup.FakeMonActor,
         NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
         "192.168.0.101",
-        "grpc-tracing-error-test-request-id");
+        "grpc-tracing-error-test-request-id",
+        NGRpcService::EAuthAndCheckRequestSource::Http);
     ev->StartTracing(MakeGrpcRequestProxySpan(*setup.GetRuntime()));
     AssertGrpcRequestProxySpanNotSent(*uploader);
 

@@ -1924,6 +1924,11 @@ public:
     EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
 };
 
+enum class EAuthAndCheckRequestSource {
+    Http,
+    Grpc,
+};
+
 class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
@@ -1934,7 +1939,9 @@ public:
         NActors::TActorId sender,
         TAuditMode auditMode,
         TString peerName,
-        TString requestId)
+        TString requestId,
+        EAuthAndCheckRequestSource source
+    )
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
@@ -1942,7 +1949,12 @@ public:
         , AuditMode(auditMode)
         , PeerName(std::move(peerName))
         , RequestId(std::move(requestId))
+        , Source(source)
     {}
+
+    bool FromHttp() const {
+        return Source == EAuthAndCheckRequestSource::Http;
+    }
 
     // IRequestProxyCtx
     const TMaybe<TString> GetYdbToken() const override {
@@ -2152,6 +2164,7 @@ public:
     TString PeerName;
     TString RequestId;
     EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
+    const EAuthAndCheckRequestSource Source;
 
     inline static const TString EmptySerializedTokenMessage;
 };

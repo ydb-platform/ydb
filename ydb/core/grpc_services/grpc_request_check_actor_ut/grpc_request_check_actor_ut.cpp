@@ -196,7 +196,8 @@ Y_UNIT_TEST(CanSetAllPermissions) {
         setup.FakeMonActor,
         NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
         "192.168.0.101",
-        requestId);
+        requestId,
+        NGRpcService::EAuthAndCheckRequestSource::Http);
     UNIT_ASSERT(ev->GetTraceId());
     UNIT_ASSERT_VALUES_EQUAL(*ev->GetTraceId(), requestId);
 
@@ -444,11 +445,12 @@ struct THttpAuthCheckResponse {
     const NGRpcService::TEvRequestAuthAndCheckResult* Result = nullptr;
 };
 
-THttpAuthCheckResponse RunHttpAuthCheck(
+THttpAuthCheckResponse RunAuthAndCheck(
     TTestSetup& setup,
     const TString& requestDatabase,
     TSchemeBoardEvents::TDescribeSchemeResult& describeSchemeResult,
-    TIntrusivePtr<TSecurityObject> securityObject
+    TIntrusivePtr<TSecurityObject> securityObject,
+    NGRpcService::EAuthAndCheckRequestSource source
 )
 {
     TTestActorRuntime* runtime = setup.GetRuntime();
@@ -461,7 +463,8 @@ THttpAuthCheckResponse RunHttpAuthCheck(
         setup.FakeMonActor,
         NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
         "192.168.0.101",
-        "http-auth-check-request-id");
+        "http-auth-check-request-id",
+        source);
 
     std::unique_ptr<IEventHandle> ieh = std::make_unique<IEventHandle>(
         NGRpcService::CreateGRpcRequestProxyId(),
@@ -492,6 +495,18 @@ THttpAuthCheckResponse RunHttpAuthCheck(
     response.Result = runtime->GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(response.Handle);
     UNIT_ASSERT_C(response.Result, "Expected TEvRequestAuthAndCheckResult");
     return response;
+}
+
+THttpAuthCheckResponse RunHttpAuthCheck(
+    TTestSetup& setup,
+    const TString& requestDatabase,
+    TSchemeBoardEvents::TDescribeSchemeResult& describeSchemeResult,
+    TIntrusivePtr<TSecurityObject> securityObject
+)
+{
+    return RunAuthAndCheck(
+        setup, requestDatabase, describeSchemeResult, std::move(securityObject),
+        NGRpcService::EAuthAndCheckRequestSource::Http);
 }
 
 THttpAuthCheckResponse RunHttpAuthCheckWithDatabaseAccessEnforce(
@@ -705,6 +720,19 @@ Y_UNIT_TEST(ServerlessNoConnectRightUnauthorized) {
         setup, "/Root/foreign", describeSchemeResult, MakeSecurityObjectWithoutConnect());
     UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::UNAUTHORIZED);
     UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
+}
+
+Y_UNIT_TEST(GrpcAuthAndCheckSkipsMonitoringEnforce) {
+    TTestSetup setup("database-only", "/Root/db", {});
+    ConfigureSecurityConfig(setup.GetRuntime());
+    setup.GetRuntime()->GetAppData().FeatureFlags.SetEnableDatabaseAccessCheckForHttpMonitoring(true);
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    const auto response = RunAuthAndCheck(
+        setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect(),
+        NGRpcService::EAuthAndCheckRequestSource::Grpc);
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
 }
 
 } // HttpDatabaseAccessEnforceMode

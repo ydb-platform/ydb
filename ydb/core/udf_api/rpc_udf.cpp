@@ -168,7 +168,8 @@ public:
             SelfId(),
             TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin),
             Context_->GetPeerName(),
-            TString()));
+            TString(),
+            EAuthAndCheckRequestSource::Grpc));
     }
 
     STATEFN(StateWork) {

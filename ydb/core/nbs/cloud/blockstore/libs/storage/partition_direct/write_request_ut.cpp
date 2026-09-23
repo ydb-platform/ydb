@@ -159,6 +159,80 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             WriteClient->AllCompletedWrites.Get(THostIndex{1}));
     }
 
+    // A hedged direct write and the indirect write can both be in flight to
+    // one host. That host is reported to the record only when both answered,
+    // otherwise the record could be forgotten while the second copy lands.
+    Y_UNIT_TEST_F(
+        ShouldReportHostOnlyWhenAllItsWritesAnswered,
+        TWriteRequestTestFixture)
+    {
+        Init();
+
+        TMap<THostIndex, TPromise<TDBGWriteBlocksResponse>> directPromises;
+        DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
+            (ui32 vChunkIndex,
+             THostIndex hostIndex,
+             TPBufferKey pBufferKey,
+             TBlockRange16 range,
+             const TGuardedSgList& guardedSglist,
+             const NWilson::TTraceId& traceId)
+        {
+            Y_UNUSED(vChunkIndex, pBufferKey, range, guardedSglist, traceId);
+            directPromises.emplace(
+                hostIndex,
+                NewPromise<TDBGWriteBlocksResponse>());
+            return directPromises[hostIndex].GetFuture();
+        };
+
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::IndirectWrite);
+        writeRequest->Run();
+        UNIT_ASSERT(ManyPBufferCallback);
+
+        // The hedge sends direct writes to both handoffs and, as the quorum
+        // is still one short, to a desired host the coordinator writes to.
+        RunScheduledHedge();
+        UNIT_ASSERT_VALUES_EQUAL(3, directPromises.size());
+        UNIT_ASSERT(directPromises.contains(THostIndex{1}));
+        UNIT_ASSERT(directPromises.contains(THostIndex{3}));
+        UNIT_ASSERT(directPromises.contains(THostIndex{4}));
+
+        directPromises[THostIndex{1}].SetValue(CreateOkDirectResponse());
+        directPromises[THostIndex{3}].SetValue(CreateOkDirectResponse());
+        directPromises[THostIndex{4}].SetValue(CreateOkDirectResponse());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, WriteClient->Response.has_value());
+        const auto& response = *WriteClient->Response;
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H0,H1,H2,H3,H4]",
+            response.RequestedWrites.Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H1,H3,H4]",
+            response.CompletedWrites.Print());
+        // H1 holds a copy, but its indirect write is still in flight.
+        UNIT_ASSERT_VALUES_EQUAL("[H3,H4]", response.AnsweredWrites.Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[]",
+            WriteClient->BelatedCompletedWrites.Print());
+
+        // The indirect write answers for H1: only now H1 is settled.
+        ManyPBufferCallback(CreateOneOkResponse(THostIndex{1}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H1]",
+            WriteClient->BelatedCompletedWrites.Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[]",
+            WriteClient->BelatedFailedWrites.Print());
+
+        ManyPBufferCallback(CreateOneOkResponse(THostIndex{0}));
+        ManyPBufferCallback(CreateOneOkResponse(THostIndex{2}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H0,H1,H2]",
+            WriteClient->BelatedCompletedWrites.Print());
+    }
+
     Y_UNIT_TEST_F(ShouldNotHedgeAfterReply, TWriteRequestTestFixture)
     {
         Init();

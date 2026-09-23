@@ -33,12 +33,6 @@ class TBlocksDirtyMap
     , public std::enable_shared_from_this<TBlocksDirtyMap>
 {
 public:
-    enum class EEraseType
-    {
-        Standard,
-        Belated
-    };
-
     TBlocksDirtyMap(
         TArenaAllocatorPoolPtr arenaAllocatorPool,
         const TVChunkConfig& vChunkConfig,
@@ -62,7 +56,6 @@ public:
     [[nodiscard]] TReadHint MakeReadHint(TBlockRange16 range);
     [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
-    [[nodiscard]] TEraseHints MakeEraseBelatedHint();
 
     // Registers a write as pending (lsn generated, data not in any PBuffer
     // yet) so that the cleanup bound covers it from the moment of generation.
@@ -72,7 +65,17 @@ public:
         TPBufferKey pBufferKey,
         TBlockRange16 range,
         THostMask requested,
-        THostMask confirmed);
+        THostMask confirmed,
+        // Hosts with no write request in flight, whatever they answered.
+        THostMask answered);
+
+    // Answers that came after the client had been replied to. A record that
+    // has already left the map is ignored: its copy is left to the cleanup
+    // barrier.
+    void OnBelatedWrite(
+        TPBufferKey pBufferKey,
+        THostMask completed,
+        THostMask failed);
     void FlushFinished(
         THostRoute route,
         const TVector<TPBufferKey>& flushOk,
@@ -81,10 +84,6 @@ public:
         THostIndex host,
         const TVector<TPBufferKey>& eraseOk,
         const TVector<TPBufferKey>& eraseFailed);
-
-    void UpdateBelatedEraseQueue(
-        THostMask completedWrites,
-        TPBufferKey pBufferKey);
 
     // Sets the readable prefix of one DDisk for tests.
     void SetReadablePrefixDebugOnly(THostIndex host, ui64 bytesOffset);
@@ -106,7 +105,6 @@ public:
     [[nodiscard]] size_t GetInflightCount() const;
     [[nodiscard]] size_t GetFlushPendingCount() const;
     [[nodiscard]] size_t GetErasePendingCount() const;
-    [[nodiscard]] size_t GetEraseBelatedCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
     [[nodiscard]] std::optional<TPBufferKey> GetSafeBarrierForErase() const;
@@ -189,16 +187,6 @@ private:
         THostMask,
         TBlockRange16>;
 
-    struct TInfoEraseBelated
-    {
-        TPBufferKey PBufferKey;
-        THostMask Hosts;
-
-        bool operator<(const TInfoEraseBelated& other) const;
-    };
-
-    using TInfoEraseBelatedSet = TArenaSet<TInfoEraseBelated>;
-
     struct TInflightDDiskSync
     {
         THostIndex DestinationHost = InvalidHostIndex;
@@ -240,7 +228,9 @@ private:
         TBlockRange16 range,
         TInflightInfo& inflightInfo);
 
-    void RemovePBuffer(TPBufferKey pBufferKey);
+    // Drops a record that has nothing left to erase. Returns true if it is
+    // gone from the map.
+    bool RemoveIfErased(TPBufferKey pBufferKey, const TInflightInfo& inflight);
 
     const TArenaAllocatorPoolPtr ArenaAllocatorPool;
     const IArenaAllocatorPtr ArenaAllocator;
@@ -265,8 +255,6 @@ private:
     // Ranges that are fully transferred to DDisk and can be erased.
     // Using TSet for O(1) min LSN access.
     TPBufferKeySet ReadyToErase{ArenaAllocatorPool.get()};
-
-    TInfoEraseBelatedSet ReadyToEraseBelated{ArenaAllocatorPool.get()};
 
     // In-flight reads and the locks they create.
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;

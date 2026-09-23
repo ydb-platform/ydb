@@ -810,6 +810,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             MakeKey(123),
             overlapped_0,
             MakePrimariesMask(),
+            MakePrimariesMask(),
             MakePrimariesMask());
         DirtyMap->RegisterInflightWrite(
             MakeKey(124),
@@ -818,6 +819,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             MakeKey(124),
             overlapped_01,
             MakePrimariesMask(),
+            MakePrimariesMask(),
             MakePrimariesMask());
         DirtyMap->RegisterInflightWrite(
             MakeKey(125),
@@ -825,6 +827,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         DirtyMap->WriteFinished(
             MakeKey(125),
             overlapped_1,
+            MakePrimariesMask(),
             MakePrimariesMask(),
             MakePrimariesMask());
 

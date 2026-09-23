@@ -1,6 +1,7 @@
 #include "cms_impl.h"
 #include "erasure_checkers.h"
 #include "info_collector.h"
+#include "nbs2_maintenance.h"
 #include "node_checkers.h"
 #include "scheme.h"
 #include "sentinel.h"
@@ -28,6 +29,8 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
+
+#include <google/protobuf/util/message_differencer.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
@@ -398,6 +401,111 @@ bool TCms::CollectNbs2MaintenanceNodes(const TPermissionRequest &request,
 
     nodeIds.assign(nodes.begin(), nodes.end());
     return true;
+}
+
+void TCms::StartNbs2MaintenanceCheck(TAutoPtr<IEventHandle> request,
+    const TPermissionRequest &permissionRequest, const TString &requestId,
+    TVector<ui32> nodeIds, TDuration timeout,
+    TNbs2MaintenanceContinuation continuation, const TActorContext &ctx)
+{
+    Y_ABORT_UNLESS(!PendingNbs2MaintenanceCheck);
+    Y_ABORT_UNLESS(request && !nodeIds.empty() && continuation);
+
+    auto pending = MakeHolder<TPendingNbs2MaintenanceCheck>();
+    pending->AttemptId = ++NextNbs2MaintenanceAttemptId;
+    pending->Request = std::move(request);
+    pending->PermissionRequest = permissionRequest;
+    pending->NodeIds = std::move(nodeIds);
+    pending->RequestId = requestId;
+    if (requestId) {
+        if (const auto it = State->ScheduledRequests.find(requestId); it != State->ScheduledRequests.end()) {
+            // Keep the stored request separately: the effective request can
+            // override availability mode or priority for this attempt.
+            pending->ScheduledRequest.ConstructInPlace(it->second);
+        }
+        if (const auto it = State->MaintenanceRequests.find(requestId); it != State->MaintenanceRequests.end()) {
+            pending->MaintenanceTaskId.ConstructInPlace(it->second);
+        }
+    }
+    pending->Continue = std::move(continuation);
+    pending->Checker = RegisterWithSameMailbox(CreateNbs2MaintenanceChecker(
+        SelfId(), pending->AttemptId, pending->NodeIds, timeout));
+    PendingNbs2MaintenanceCheck = std::move(pending);
+}
+
+bool TCms::IsNbs2MaintenanceRequestCurrent(const TPendingNbs2MaintenanceCheck &pending) const
+{
+    if (!pending.RequestId) {
+        // Another create may have persisted the same task id while we waited.
+        return !pending.PermissionRequest.HasMaintenanceTaskId()
+            || !State->MaintenanceTasks.contains(pending.PermissionRequest.GetMaintenanceTaskId());
+    }
+
+    const auto it = State->ScheduledRequests.find(pending.RequestId);
+    if (it == State->ScheduledRequests.end() || !pending.ScheduledRequest) {
+        return false;
+    }
+    const auto &current = it->second;
+    const auto &original = *pending.ScheduledRequest;
+    if (!google::protobuf::util::MessageDifferencer::Equals(current.Request, original.Request)) {
+        return false;
+    }
+
+    const auto taskId = State->MaintenanceRequests.find(pending.RequestId);
+    if (!pending.MaintenanceTaskId) {
+        return taskId == State->MaintenanceRequests.end();
+    }
+    if (taskId == State->MaintenanceRequests.end() || taskId->second != *pending.MaintenanceTaskId) {
+        return false;
+    }
+    const auto task = State->MaintenanceTasks.find(*pending.MaintenanceTaskId);
+    // RequestId also distinguishes a task dropped and recreated with the same uid.
+    return task != State->MaintenanceTasks.end()
+        && task->second.RequestId == pending.RequestId && task->second.Owner == original.Owner;
+}
+
+void TCms::CancelNbs2MaintenanceCheck(const TActorContext &ctx)
+{
+    if (PendingNbs2MaintenanceCheck) {
+        ctx.Send(PendingNbs2MaintenanceCheck->Checker, new TEvents::TEvPoisonPill);
+        PendingNbs2MaintenanceCheck.Reset();
+    }
+}
+
+void TCms::Handle(TEvPrivate::TEvNbs2MaintenanceResult::TPtr &ev, const TActorContext &ctx)
+{
+    if (!PendingNbs2MaintenanceCheck
+        || ev->Sender != PendingNbs2MaintenanceCheck->Checker
+        || ev->Get()->AttemptId != PendingNbs2MaintenanceCheck->AttemptId)
+    {
+        return;
+    }
+
+    auto pending = std::move(PendingNbs2MaintenanceCheck);
+    auto &result = *ev->Get();
+    // Manual approval bypasses DisableMaintenance, but still requires the NBS2 check.
+    const bool isManualApproval = pending->Request->GetTypeRewrite() == TEvCms::TEvManageRequestRequest::EventType
+        && pending->Request->Get<TEvCms::TEvManageRequestRequest>()->Record.GetCommand() == TManageRequestRequest::APPROVE;
+    bool outdated = (State->Config.DisableMaintenance && !isManualApproval)
+        || !IsNbs2MaintenanceChecksEnabled(ctx)
+        || !IsNbs2MaintenanceRequestCurrent(*pending);
+
+    if (!outdated) {
+        // Recollect with current locks, configuration and time. Changes to
+        // unrelated tasks do not invalidate an otherwise unchanged batch.
+        TVector<ui32> nodeIds;
+        TErrorInfo error;
+        outdated = !CollectNbs2MaintenanceNodes(pending->PermissionRequest, nodeIds, error, ctx)
+            || nodeIds != pending->NodeIds;
+    }
+    if (outdated) {
+        result.Status = TStatus::ERROR_TEMP;
+        result.Reason = "Maintenance request, configuration or node set changed during DBSController check; retry the request";
+        result.BlockingPartitionIds.clear();
+    }
+
+    pending->Continue(pending->Request, result, ctx);
+    ResumeQueue();
 }
 
 namespace {
@@ -1502,6 +1610,8 @@ void TCms::Cleanup(const TActorContext &ctx)
 {
     YDB_LOG_DEBUG_CTX(ctx, "TCms::Cleanup");
 
+    CancelNbs2MaintenanceCheck(ctx);
+
     NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
 
     if (State->Sentinel)
@@ -1911,7 +2021,7 @@ bool TCms::RemoveNotification(const TString &id, const TString &user, bool remov
 
 void TCms::EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx)
 {
-    if (Queue.empty() && NextQueue.empty()) {
+    if (!PendingNbs2MaintenanceCheck && Queue.empty() && NextQueue.empty()) {
         ctx.Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvStartCollecting);
     }
 
@@ -1921,7 +2031,7 @@ void TCms::EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx)
 
 void TCms::StartCollecting()
 {
-    if (!Queue.empty()) {
+    if (PendingNbs2MaintenanceCheck || !Queue.empty()) {
         return;
     }
 
@@ -2091,6 +2201,10 @@ void TCms::SentinelUpdateHostMarkers(TVector<TCms::THostMarkers> &&updateMarkers
 
 void TCms::ProcessQueue()
 {
+    if (PendingNbs2MaintenanceCheck) {
+        return;
+    }
+
     // To avoid getting stuck in the processing queue for too long,
     // we'll process queue by one.
     if (!Queue.empty()) {
@@ -2099,6 +2213,15 @@ void TCms::ProcessQueue()
 
         ProcessRequest(Queue.front().Request);
         Queue.pop();
+    }
+
+    ResumeQueue();
+}
+
+void TCms::ResumeQueue()
+{
+    if (PendingNbs2MaintenanceCheck) {
+        return;
     }
 
     if (!Queue.empty()) {

@@ -25,6 +25,8 @@
 #include <util/generic/stack.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
+#include <functional>
+
 namespace NKikimr::NCms {
 
 namespace TEvConsole = NConsole::TEvConsole;
@@ -152,6 +154,21 @@ private:
         {}
     };
 
+    using TNbs2MaintenanceContinuation = std::function<void(TAutoPtr<IEventHandle>&,
+        const TEvPrivate::TEvNbs2MaintenanceResult&, const TActorContext&)>;
+
+    struct TPendingNbs2MaintenanceCheck {
+        ui64 AttemptId = 0;
+        TActorId Checker;
+        TAutoPtr<IEventHandle> Request;
+        NKikimrCms::TPermissionRequest PermissionRequest;
+        TVector<ui32> NodeIds;
+        TString RequestId;
+        TMaybe<TRequestInfo> ScheduledRequest;
+        TMaybe<TString> MaintenanceTaskId;
+        TNbs2MaintenanceContinuation Continue;
+    };
+
     ITransaction *CreateTxGetLogTail(TEvCms::TEvGetLogTailRequest::TPtr &ev);
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
@@ -271,6 +288,7 @@ private:
             cFunc(TEvPrivate::EvStartCollecting, StartCollecting);
             cFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
             HFunc(TEvPrivate::TEvPersistDDiskInfo, Handle);
+            HFunc(TEvPrivate::TEvNbs2MaintenanceResult, Handle);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
             HFuncChecked(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);
@@ -353,6 +371,21 @@ private:
         TVector<ui32> &nodeIds,
         TErrorInfo &error,
         const TActorContext &ctx) const;
+    // Called from a dequeued request, after tenant expansion and before any
+    // local permission checks or temporary changes to ClusterInfo. The caller
+    // checks the feature gate and collects a non-empty batch first.
+    // requestId is empty for create; refresh/manual approval pass the existing
+    // scheduled request id. Their effective request must not modify State.
+    // The continuation must finish local checks and publish accepted in-memory
+    // locks before returning, recalculating the quota from the live task.
+    // It must not defer processing to another event or use a saved quota.
+    void StartNbs2MaintenanceCheck(TAutoPtr<IEventHandle> request,
+        const NKikimrCms::TPermissionRequest &permissionRequest, const TString &requestId,
+        TVector<ui32> nodeIds, TDuration timeout,
+        TNbs2MaintenanceContinuation continuation, const TActorContext &ctx);
+    bool IsNbs2MaintenanceRequestCurrent(const TPendingNbs2MaintenanceCheck &pending) const;
+    // Tablet shutdown: discard the continuation without resuming the queue.
+    void CancelNbs2MaintenanceCheck(const TActorContext &ctx);
     bool CheckPermissionRequest(const NKikimrCms::TPermissionRequest &request,
         NKikimrCms::TPermissionResponse &response,
         NKikimrCms::TPermissionRequest &scheduled,
@@ -459,6 +492,7 @@ private:
     void CheckAndEnqueueRequest(TEvCms::TEvConditionalPermissionRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvNotification::TPtr &ev, const TActorContext &ctx);
     void ProcessQueue();
+    void ResumeQueue();
     void ProcessRequest(TAutoPtr<IEventHandle> &ev);
 
     void AddPermissionExtensions(const NKikimrCms::TAction &action, NKikimrCms::TPermission &perm) const;
@@ -476,6 +510,7 @@ private:
     bool IsDDiskAvailable(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
     TString GetDDiskStateName(const NKikimrBlobStorage::NDDisk::TDDiskId &id) const;
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvNbs2MaintenanceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr &ev, const TActorContext &ctx);
@@ -526,6 +561,9 @@ private:
 
     TQueue<TRequestsQueueItem> Queue;
     TQueue<TRequestsQueueItem> NextQueue;
+
+    ui64 NextNbs2MaintenanceAttemptId = 0;
+    THolder<TPendingNbs2MaintenanceCheck> PendingNbs2MaintenanceCheck;
 
     static constexpr ui32 MaxDDiskInfoRequestsInFlight = 16;
     ui32 DDiskInfoRequestsInFlight = 0;

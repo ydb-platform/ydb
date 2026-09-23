@@ -670,9 +670,11 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     if (RBOCtx.EmptyPreamble) {
         listElements.push_back(ctx.NewList(Roots[0]->Pos, {}));
     }
-    listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery}));
+
     if (!phyTxSettings.WithEffects) {
-        listElements.push_back(queryColumns);
+        listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery, queryColumns}));
+    } else {
+        listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery}));
     }
 
     return ctx.NewList(Roots[0]->Pos, std::move(listElements));

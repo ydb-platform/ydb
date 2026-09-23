@@ -890,7 +890,10 @@
         {
             "Name": "TKqpOpEmptySource",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqpOpEmptySource"}
+            "Match": {"Type": "Callable", "Name": "KqpOpEmptySource"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase", "Optional": true}
+            ]
         },
         {
             "Name": "TKqpOpMapElementBase",

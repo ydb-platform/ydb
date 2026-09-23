@@ -26,11 +26,16 @@ TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, 
     , ConfirmedOnSendStep(0)
     , AllowGarbageCollection(false)
 {
-    for (const auto& channel : TabletStorageInfo->Channels) {
-        // Reassigned data channels need GC even when they have never had blobs.
-        // Channel 0 is collected by the system tablet's log GC.
-        if (channel.Channel != 0 && channel.History.size() > 1) {
-            ChannelInfo.try_emplace(channel.Channel);
+    // The coordinator delegates all data-channel GC to the executor. Other
+    // tablet types may collect their own channels (e.g. KeyValue), so declared
+    // channels alone are not evidence of executor ownership.
+    if (TabletStorageInfo->TabletType == TTabletTypes::Coordinator) {
+        for (const auto& channel : TabletStorageInfo->Channels) {
+            // Reassigned data channels need GC even when they have never had blobs.
+            // Channel 0 is collected by the system tablet's log GC.
+            if (channel.Channel != 0 && channel.History.size() > 1) {
+                ChannelInfo.try_emplace(channel.Channel);
+            }
         }
     }
 }

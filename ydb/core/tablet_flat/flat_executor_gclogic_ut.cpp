@@ -86,14 +86,16 @@ struct THistoryCutEnv {
     };
 
     TTestBasicRuntime Runtime{1};
-    TIntrusivePtr<TTabletStorageInfo> Info = new TTabletStorageInfo(TabletId, TTabletTypes::Dummy);
+    TIntrusivePtr<TTabletStorageInfo> Info;
     THolder<TExecutorGCLogic> Logic;
     TVector<TCollect> Collects;
     TVector<std::pair<ui32, ui32>> Cuts;
     TActorId Edge;
     ui32 Step = 0;
 
-    THistoryCutEnv() {
+    explicit THistoryCutEnv(TTabletTypes::EType tabletType = TTabletTypes::Coordinator)
+        : Info(new TTabletStorageInfo(TabletId, tabletType))
+    {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         app->FeatureFlags.SetEnableCutHistory(true);
         Runtime.Initialize(app->Unwrap());
@@ -290,6 +292,33 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorGC) {
 
 
 Y_UNIT_TEST_SUITE(THistoryCutter) {
+    Y_UNIT_TEST(UnusedChannelsWithUnprovenOwnershipAreNotCollected) {
+        for (const auto type : {TTabletTypes::KeyValue, TTabletTypes::ColumnShard,
+                TTabletTypes::BlobDepot, TTabletTypes::Dummy}) {
+            THistoryCutEnv env(type);
+            env.Snapshot();
+            env.Snapshot();
+            UNIT_ASSERT_C(env.Collects.empty(), "executor must not collect unowned channels");
+            UNIT_ASSERT_C(env.Cuts.empty(), "executor must not cut unowned channel history");
+        }
+    }
+
+    Y_UNIT_TEST(ExecutorOwnedKeyValueChannelIsCollected) {
+        THistoryCutEnv env(TTabletTypes::KeyValue);
+        TGCBlobDelta delta;
+        delta.Created.push_back(HistoryCutterUtBlob(THistoryCutEnv::TabletId, 15, 1));
+        TGCLogEntry entry(TGCTime(15, 0), delta);
+        env.Logic->ApplyLogEntry(entry);
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects[0].Channel, 1);
+        UNIT_ASSERT(!env.Collects[0].Hard);
+        env.Reply(0);
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 1);
+        UNIT_ASSERT(env.Cuts.empty());
+    }
+
     Y_UNIT_TEST(UnusedChannelHistoryIsCut) {
         THistoryCutEnv env;
         env.Snapshot();

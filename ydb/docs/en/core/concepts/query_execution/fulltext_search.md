@@ -24,6 +24,8 @@ Fulltext indexes build an inverted index over a text column and allow:
 
 Search behavior (what counts as a term, case/word-form handling, wildcard support) is configured at index creation time via tokenizers and filters (for example, lowercase, Snowball stemming, n-grams). For details, see the index creation syntax [{#T}](../../yql/reference/syntax/create_table/fulltext_index.md).
 
+[SuperLemmer](../../dev/fulltext-indexes.md#superlemmer) provides dictionary-based word normalization for fulltext search, primarily optimized for Russian. It is available only in [Yandex Enterprise Database](../../downloads/yandex-enterprise-database.md).
+
 Learn more:
 
 * [Fulltext indexes](../../dev/fulltext-indexes.md)

@@ -10,7 +10,7 @@ Fulltext indexes in {{ ydb-short-name }} are built by tokenizing text and creati
 
 * fast filtering with [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match)
 * relevance ranking ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) with [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) when using [fulltext_relevance](#relevance)
-* case normalization, stemming, and n-gram matching via index filters
+* case normalization, stemming, [lemmatization with SuperLemmer](#superlemmer), and n-gram matching via index filters
 
 The current implementation supports two indexes:
 
@@ -148,6 +148,81 @@ LIMIT 20;
 ```
 
 Multiple filter columns are supported. The equality predicates may appear in any order in `WHERE`; {{ ydb-short-name }} reorders them internally to match the index column order.
+
+## Lemmatization with SuperLemmer {#superlemmer}
+
+[SuperLemmer](../concepts/glossary.md#superlemmer) is a text normalization filter that maps word forms to common forms using a built-in dictionary and suffix replacement. This allows fulltext search to match different forms of a word. SuperLemmer processes UTF-8 text and is primarily optimized for Russian.
+
+{% include [feature_enterprise.md](../_includes/feature_enterprise.md) %}
+
+Use SuperLemmer when you need dictionary-based word normalization, particularly for Russian text. The [Snowball](https://snowballstem.org/) filter performs algorithmic stemming and is also available in the open-source version of {{ ydb-short-name }}.
+
+### Enabling SuperLemmer {#superlemmer-enable}
+
+Before creating an index, check that the `enable_super_lemmer` feature flag (`EnableSuperLemmer`) is enabled in the [cluster configuration](../devops/configuration-management/index.md). The flag defaults to `false`. The corresponding YAML configuration fragment is:
+
+```yaml
+feature_flags:
+  enable_super_lemmer: true
+```
+
+If the flag is disabled, index creation fails with `SuperLemmer support is disabled`. Enabling the flag in an open-source build does not make SuperLemmer available: that build does not contain its implementation.
+
+### Creating an index with SuperLemmer {#superlemmer-create}
+
+SuperLemmer can be used with both [fulltext_plain](#basic) and [fulltext_relevance](#relevance). Configure the filter in the index's `WITH` clause:
+
+- Set `use_filter_superlemmer=true` to enable the filter. It is disabled by default.
+- Set `language` to the text language, for example, `"russian"` or `"english"`. A language is required; unsupported languages are rejected when the index settings are validated.
+- Set `tokenizer=standard` to split text into words and `use_filter_lowercase=true` to convert them to lowercase before applying SuperLemmer.
+
+The current implementation rejects combinations of `use_filter_superlemmer=true` with `use_filter_snowball=true`, `use_filter_ngram=true`, or `use_filter_edge_ngram=true`. Choose one of these approaches for each index.
+
+The following [CREATE TABLE](../yql/reference/syntax/create_table/fulltext_index.md) statement creates a table with a fulltext index for Russian text. The `fulltext_relevance` type also allows relevance ranking, and `COVER (title)` stores the title in the index:
+
+```yql
+CREATE TABLE articles (
+    id Uint64,
+    title String,
+    body String,
+    INDEX ft_superlemmer GLOBAL USING fulltext_relevance
+    ON (body) COVER (title)
+    WITH (
+        tokenizer=standard,
+        use_filter_lowercase=true,
+        use_filter_superlemmer=true,
+        language="russian"
+    ),
+    PRIMARY KEY (id)
+);
+```
+
+If the `articles` table already exists, use [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#add-index) instead. This alternative creates a `fulltext_plain` index for filtering without relevance ranking:
+
+```yql
+ALTER TABLE articles
+    ADD INDEX ft_superlemmer GLOBAL USING fulltext_plain
+    ON (body) COVER (title)
+    WITH (
+        tokenizer=standard,
+        use_filter_lowercase=true,
+        use_filter_superlemmer=true,
+        language="russian"
+    );
+```
+
+### Searching with SuperLemmer {#superlemmer-search}
+
+When indexing documents and processing search terms, {{ ydb-short-name }} applies SuperLemmer using the index settings. Queries do not need to normalize words themselves or specify the filter again. After populating the table, use [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match) and explicitly select the index with [VIEW](../yql/reference/syntax/select/fulltext_index.md):
+
+```yql
+SELECT id, title
+FROM articles VIEW ft_superlemmer
+WHERE FulltextMatch(body, "поисковые запросы")
+LIMIT 20;
+```
+
+For relevance ranking, use [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) with a `fulltext_relevance` index as shown [above](#relevance). Changes to the table automatically update the index using the same filter settings; see [Updating Fulltext Indexes](#update).
 
 ## Primary key types {#primary-key}
 

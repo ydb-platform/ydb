@@ -233,6 +233,10 @@
 
 Возможности полнотекстового поиска и параметры индекса описаны в статьях [{#T}](../dev/fulltext-indexes.md) и [{#T}](query_execution/fulltext_search.md).
 
+##### SuperLemmer {#superlemmer}
+
+**SuperLemmer** приводит формы слов к общему виду с помощью словаря для полнотекстового поиска и оптимизирован прежде всего для русского языка. Доступен только в [Корпоративной СУБД Яндекса](../downloads/yandex-enterprise-database.md). Настройки и примеры приведены в разделе [Лемматизация с SuperLemmer](../dev/fulltext-indexes.md#superlemmer).
+
 #### JSON-индекс {#json-index}
 
 **JSON-индекс** или **JSON index** — это дополнительная структура данных, используемая для ускорения предикатов с функциями [JSON_EXISTS](../yql/reference/builtins/json.md#json_exists) и [JSON_VALUE](../yql/reference/builtins/json.md#json_value) по колонке типа `Json` или `JsonDocument`. В отличие от традиционных вторичных индексов, оптимизированных для поиска по равенству или диапазону отдельных колонок таблицы, JSON-индекс работает с произвольными путями [JsonPath](../yql/reference/builtins/json.md#jsonpath) внутри JSON-документа.

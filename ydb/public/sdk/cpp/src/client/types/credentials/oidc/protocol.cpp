@@ -9,6 +9,7 @@
 
 #include <util/generic/string.h>
 #include <util/stream/output.h>
+#include <util/string/builder.h>
 
 #include <algorithm>
 
@@ -26,6 +27,11 @@ public:
 private:
     void DoWrite(const void* buffer, size_t size) override;
 };
+
+std::string String(const NJson::TJsonValue& json, const TString& name, bool required);
+std::string ScopeString(const TOidcConfig& config);
+bool IsBearer(const std::string& value);
+void CheckToken(const std::string& token);
 
 void TResponseBuffer::DoWrite(const void* buffer, size_t size) {
     if (size > MaxResponseSize - Body.size()) {
@@ -107,6 +113,15 @@ NJson::TJsonValue TProtocol::Request(const std::string& endpoint, const TCgiPara
     const auto remaining = deadline - now;
     const auto host = url.PrintS(NUri::TUri::FlagScheme | NUri::TUri::FlagHost | NUri::TUri::FlagHostAscii);
     const auto path = url.PrintS(NUri::TUri::FlagPath | NUri::TUri::FlagQuery);
+    const auto encodedBody = body.Print();
+    TStringBuilder request;
+    request << (form != nullptr ? "POST " : "GET ") << path << " HTTP/1.1\r\n"
+            << "Host: " << url.PrintS(NUri::TUri::FlagHost | NUri::TUri::FlagHostAscii | NUri::TUri::FlagPort) << "\r\n"
+            << "Content-Length: " << encodedBody.size() << "\r\n";
+    for (const auto& [name, value] : headers) {
+        request << name << ": " << value << "\r\n";
+    }
+    request << "\r\n" << encodedBody;
     TResponseBuffer response;
     unsigned status;
     try {
@@ -115,9 +130,7 @@ NJson::TJsonValue TProtocol::Request(const std::string& endpoint, const TCgiPara
         NThreading::TCancellationTokenSource requestCancellation;
         TKeepAliveHttpClient client(host, url.GetPort(),
             std::min(SocketTimeout, remaining), std::min(ConnectTimeout, remaining), false, false, true);
-        status = (form != nullptr)
-            ? client.DoPost(path, body.Print(), &response, headers, nullptr, requestCancellation.Token())
-            : client.DoGet(path, &response, headers, nullptr, requestCancellation.Token());
+        status = client.DoRequestRaw(request, &response, nullptr, requestCancellation.Token());
         Cancellation.ThrowIfCancellationRequested();
     } catch (const TError&) {
         throw;

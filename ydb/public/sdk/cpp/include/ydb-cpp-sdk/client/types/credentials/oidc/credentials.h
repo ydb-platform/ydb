@@ -88,11 +88,6 @@ struct TOidcConfig {
     FLUENT_SETTING(std::shared_ptr<IAuthAcceptor>, Acceptor);
 };
 
-void ValidateOidcConfig(const TOidcConfig& config);
-
-// Deterministic credential fingerprint; excludes cacher/acceptor instances.
-std::string GetOidcClientIdentity(const TOidcConfig& config);
-
 // Factory identity is stable for the same credentials and custom hook instances.
 // Different hook instances isolate independent user sessions.
 // Parameterless CreateProvider() reuses one provider; CreateProvider(facility) creates an independent provider for each call.

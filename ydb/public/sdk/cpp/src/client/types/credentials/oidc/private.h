@@ -9,6 +9,12 @@
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 
+void ValidateOidcConfig(const TOidcConfig& config);
+std::string HashIdentity(const std::string& data);
+
+// Deterministic credential fingerprint; excludes cacher/acceptor instances.
+std::string GetOidcClientIdentity(const TOidcConfig& config);
+
 class TError: public std::runtime_error {
 public:
     explicit TError(const std::string& message, bool retryable, std::string code);

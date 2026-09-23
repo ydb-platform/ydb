@@ -17,6 +17,12 @@ using namespace NYdb::NOidc::NPrivate;
 
 namespace {
 
+NJson::TJsonValue Json(const TString& text);
+NJson::TJsonValue Metadata(const TOidcTestServer& server);
+NJson::TJsonValue DeviceResponse(const TOidcTestServer& server);
+TOidcConfig DeviceConfig(const TOidcTestServer& server);
+std::string Jwt(const TString& payload);
+
 NJson::TJsonValue Json(const TString& text) {
     NJson::TJsonValue result;
     UNIT_ASSERT(NJson::ReadJsonTree(text, &result));
@@ -50,6 +56,23 @@ std::string Jwt(const TString& payload) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TOidcProtocol) {
+Y_UNIT_TEST(DiscoveryAndTokenRequestsIncludePortInHost) {
+    TOidcTestServer server;
+    server.Enqueue(R"({"access_token":"access","token_type":"Bearer","expires_in":600})", HTTP_OK);
+    const auto config = server.ClientConfig();
+    NThreading::TCancellationTokenSource cancellation;
+    TProtocol protocol(config, cancellation.Token());
+    UNIT_ASSERT_VALUES_EQUAL(protocol.ClientGrant().AccessToken.Token, "access");
+    // Issuer is https://localhost:<allocated port>/realm.
+    const auto expectedHost = config.Issuer.substr(8, config.Issuer.size() - 8 - 6);
+    const auto requests = server.HostHeaders();
+    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
+    for (const auto& hosts : requests) {
+        UNIT_ASSERT_VALUES_EQUAL(hosts.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(hosts.front(), expectedHost);
+    }
+}
+
 Y_UNIT_TEST(RejectsInvalidDurations) {
     for (const TString& value : {"-1", "1.5", "true", "null", "\"10\"", "18446744073709551615"}) {
         UNIT_ASSERT_EXCEPTION(Seconds(Json(value), "expires_in", false), TError);

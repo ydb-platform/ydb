@@ -7,6 +7,9 @@
 namespace NYdb::inline Dev::NOidc::NPrivate {
 namespace {
 
+std::exception_ptr StoppedError();
+void SetException(NThreading::TPromise<std::string> promise, std::exception_ptr error) noexcept;
+
 std::exception_ptr StoppedError() {
     return std::make_exception_ptr(TError("provider stopped", false, {}));
 }

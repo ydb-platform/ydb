@@ -4,13 +4,11 @@
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/client_provider.h>
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/device_provider.h>
 
-#include <library/cpp/openssl/crypto/sha.h>
-
 #include <util/generic/overloaded.h>
 #include <util/system/mutex.h>
 
-#include <algorithm>
 #include <cstdint>
+#include <utility>
 
 namespace NYdb::inline Dev::NOidc {
 
@@ -25,17 +23,6 @@ bool TOAuthToken::IsValid(TInstant now) const {
 namespace NPrivate {
 
 namespace {
-
-std::string HashIdentity(const std::string& data) {
-    const auto hash = NOpenSsl::NSha256::Calc(data.data(), data.size());
-    static constexpr char Hex[] = "0123456789abcdef";
-    std::string identity = "oidc:";
-    for (const auto byte : hash) {
-        identity += Hex[byte >> 4];
-        identity += Hex[byte & 0xF];
-    }
-    return identity;
-}
 
 class TFactory final: public ICredentialsProviderFactory {
 public:
@@ -104,65 +91,11 @@ TCredentialsProviderPtr TFactory::CreateProviderImpl(std::weak_ptr<ICoreFacility
 }
 
 } // namespace
+
 } // namespace NPrivate
 
-void ValidateOidcConfig(const TOidcConfig& config) {
-    using namespace NPrivate;
-    ParseUrl(config.Issuer, true);
-    std::visit(TOverloaded{
-        [](const TStaticOidcConfig& flow) {
-            if (flow.AccessToken.empty()) {
-                throw std::invalid_argument("OIDC credentials: static_credentials requires access_token");
-            }
-        },
-        [](const TClientOidcConfig& flow) {
-            if (flow.ClientId.empty()) {
-                throw std::invalid_argument("OIDC credentials: client_id is required");
-            }
-            if (flow.ClientSecret.empty()) {
-                throw std::invalid_argument("OIDC credentials: client_secret is required");
-            }
-        },
-        [](const TDeviceOidcConfig& flow) {
-            if (flow.ClientId.empty()) {
-                throw std::invalid_argument("OIDC credentials: client_id is required");
-            }
-        },
-    }, config.FlowConfig);
-    for (const auto& scope : Scopes(config)) {
-        if (scope.empty() || std::any_of(scope.begin(), scope.end(), [](unsigned char c) {
-                return c <= 0x20 || c >= 0x7f || c == '"' || c == '\\';
-            })) {
-            throw std::invalid_argument("OIDC credentials: invalid scope");
-        }
-    }
-}
-
-std::string GetOidcClientIdentity(const TOidcConfig& config) {
-    using namespace NPrivate;
-    std::string data;
-    const auto append = [&data](const std::string& value) {
-        data += std::to_string(value.size()) + ":" + value;
-    };
-    append(config.Issuer);
-    append(std::to_string(config.FlowConfig.index()));
-    append(ClientId(config));
-    append(ClientSecret(config));
-    auto scopes = Scopes(config);
-    std::sort(scopes.begin(), scopes.end());
-    scopes.erase(std::unique(scopes.begin(), scopes.end()), scopes.end());
-    for (const auto& scope : scopes) {
-        append(scope);
-    }
-    if (const auto* flow = std::get_if<TStaticOidcConfig>(&config.FlowConfig); flow != nullptr) {
-        append(flow->AccessToken);
-        append(flow->ExpiresAt.has_value() ? std::to_string(flow->ExpiresAt->MicroSeconds()) : "");
-    }
-    return HashIdentity(data);
-}
-
 std::shared_ptr<ICredentialsProviderFactory> CreateOidcProviderFactory(const TOidcConfig& config) {
-    ValidateOidcConfig(config);
+    NPrivate::ValidateOidcConfig(config);
     return std::make_shared<NPrivate::TFactory>(config);
 }
 

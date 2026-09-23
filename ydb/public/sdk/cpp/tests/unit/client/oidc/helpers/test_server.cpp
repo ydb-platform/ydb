@@ -72,6 +72,23 @@ Bmc27AR902ceiZY5oPAoe82wGTBqTMvfeLZSNGZ67WxDqNH/2Vy52/21IM/KAEVk
 -----END PRIVATE KEY-----
 )PEM";
 
+SSL_CTX* ServerContext();
+
+class TTlsStreams: public THttpServerConn::ISocketStreams, public IInputStream, public IOutputStream {
+public:
+    explicit TTlsStreams(const TSocket& socket);
+    IInputStream* Input() override;
+    IOutputStream* Output() override;
+    void Reset() override;
+
+private:
+    size_t DoRead(void* buffer, size_t size) override;
+    void DoWrite(const void* buffer, size_t size) override;
+
+    TSocket Socket;
+    std::unique_ptr<SSL, decltype(&SSL_free)> Ssl;
+};
+
 SSL_CTX* ServerContext() {
     static const auto context = [] {
         std::unique_ptr<BIO, decltype(&BIO_free)> certificateBio(
@@ -100,21 +117,6 @@ SSL_CTX* ServerContext() {
     }();
     return context.get();
 }
-
-class TTlsStreams: public THttpServerConn::ISocketStreams, public IInputStream, public IOutputStream {
-public:
-    explicit TTlsStreams(const TSocket& socket);
-    IInputStream* Input() override;
-    IOutputStream* Output() override;
-    void Reset() override;
-
-private:
-    size_t DoRead(void* buffer, size_t size) override;
-    void DoWrite(const void* buffer, size_t size) override;
-
-    TSocket Socket;
-    std::unique_ptr<SSL, decltype(&SSL_free)> Ssl;
-};
 
 TTlsStreams::TTlsStreams(const TSocket& socket)
     : Socket(socket)
@@ -167,6 +169,12 @@ TOidcTestServer::TOidcTestServer()
 
 TOidcTestServer::~TOidcTestServer() {
     Server.Stop();
+}
+
+std::vector<std::vector<TString>> TOidcTestServer::HostHeaders() const {
+    with_lock (Mutex) {
+        return RecordedHosts;
+    }
 }
 
 std::string TOidcTestServer::Issuer() const {
@@ -246,6 +254,13 @@ bool TOidcTestServer::TRequest::DoReply(const TReplyParams& params) {
     NThreading::TFuture<void> replyGate;
     TDuration replyDelay;
     with_lock (Server.Mutex) {
+        std::vector<TString> hosts;
+        for (const auto& header : params.Input.Headers()) {
+            if (header.Name() == "Host") {
+                hosts.push_back(header.Value());
+            }
+        }
+        Server.RecordedHosts.push_back(std::move(hosts));
         if (parsed.Path == "/realm/.well-known/openid-configuration") {
             ++Server.Discoveries;
             NJson::TJsonValue metadata;

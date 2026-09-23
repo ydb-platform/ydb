@@ -14,6 +14,7 @@
 
 using namespace NYdb;
 using namespace NYdb::NOidc;
+using NYdb::NOidc::NPrivate::GetOidcClientIdentity;
 
 namespace {
 
@@ -21,10 +22,6 @@ class TThrowingOidcFacility: public TQueuedOidcFacility {
 public:
     void PostToResponseQueue(TPostTaskCb&& callback) override;
 };
-
-void TThrowingOidcFacility::PostToResponseQueue(TPostTaskCb&&) {
-    throw std::runtime_error("response queue unavailable");
-}
 
 class TFailingOidcCacher: public TMemoryTokenCacher {
 public:
@@ -37,6 +34,18 @@ private:
     const bool FailRead;
     const bool FailWrite;
 };
+
+class TGatedOidcAcceptor: public TTestAcceptor {
+public:
+    void Accept(const TDeviceAuthInfo& info) override;
+
+    NThreading::TPromise<void> Release = NThreading::NewPromise<void>();
+    NThreading::TPromise<void> Finished = NThreading::NewPromise<void>();
+};
+
+void TThrowingOidcFacility::PostToResponseQueue(TPostTaskCb&&) {
+    throw std::runtime_error("response queue unavailable");
+}
 
 TFailingOidcCacher::TFailingOidcCacher(bool failRead, bool failWrite)
     : FailRead(failRead)
@@ -57,14 +66,6 @@ void TFailingOidcCacher::Write(const TTokenCache& cache) {
     }
     TMemoryTokenCacher::Write(cache);
 }
-
-class TGatedOidcAcceptor: public TTestAcceptor {
-public:
-    void Accept(const TDeviceAuthInfo& info) override;
-
-    NThreading::TPromise<void> Release = NThreading::NewPromise<void>();
-    NThreading::TPromise<void> Finished = NThreading::NewPromise<void>();
-};
 
 void TGatedOidcAcceptor::Accept(const TDeviceAuthInfo& info) {
     TTestAcceptor::Accept(info);

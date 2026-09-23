@@ -49,6 +49,8 @@ public:
 
     std::vector<TRequestInfo> Requests() const;
 
+    std::vector<std::vector<TString>> HostHeaders() const;
+
     size_t DiscoveryCount() const;
 
     bool WaitRequests(size_t count);
@@ -75,6 +77,7 @@ private:
     std::deque<TReply> Replies;
     std::optional<TReply> DiscoveryReply;
     std::vector<TRequestInfo> Recorded;
+    std::vector<std::vector<TString>> RecordedHosts;
     size_t Discoveries = 0;
     NThreading::TFuture<void> TokenReplyGate;
     NThreading::TFuture<void> TlsHandshakeGate;

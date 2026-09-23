@@ -191,7 +191,8 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanPing::TPtr&) {
 }
 
 void TColumnShardScan::HandleScan(NActors::TEvents::TEvPoison::TPtr& /*ev*/) noexcept {
-    PassAway();
+    AbortReason = "poisoned";
+    Finish(NColumnShard::TScanCounters::EStatusFinish::Poisoned);
 }
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noexcept {

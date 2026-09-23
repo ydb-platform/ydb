@@ -15,6 +15,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
@@ -839,8 +840,9 @@ public:
                 return;
             }
             LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
-            ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval =
-                TDuration::Seconds(TableServiceConfig.GetCurrentQueryStatsIntervalSeconds());
+            if (FeatureFlags.GetEnableKqpCurrentQueryStats()) {
+                ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval = CurrentQueryStatsReportInterval;
+            }
 
             // Pass WmState from session to the event
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");

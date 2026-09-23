@@ -1,8 +1,8 @@
 # Рекомендации по безопасности Developer UI
 
-Эта статья — чеклист требований безопасности для разработчиков и контрибьюторов {{ ydb-short-name }}, которые пишут на C++ страницы мониторинга ([Developer UI](../reference/ydb-ui/index.md)). Такие страницы генерируются во время выполнения кода с помощью макросов `HTML(str) { ... }` и отдаются встроенным HTTP-сервером мониторинга.
+Эта статья — чеклист требований безопасности для разработчиков и контрибьюторов {{ ydb-short-name }}, которые пишут на C++ страницы мониторинга [Developer UI](../reference/ydb-ui/index.md). Такие страницы генерируются во время выполнения кода с помощью макросов `HTML(str) { ... }` и отдаются встроенным HTTP-сервером мониторинга.
 
-Механизмы [политики безопасности контента](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) (Content Security Policy, CSP), включая `nonce`, и защиты от [межсайтовой подделки запросов](https://ru.wikipedia.org/wiki/Межсайтовая_подделка_запроса) (Cross-Site Request Forgery, CSRF) в HTTP-слое мониторинга описаны ниже по текущему поведению кода. Они появились в pull-запросе [#36981](https://github.com/ydb-platform/ydb/pull/36981).
+Защита от [межсайтовой подделки запросов](https://ru.wikipedia.org/wiki/Межсайтовая_подделка_запроса), Cross-Site Request Forgery или CSRF, и политика безопасности контента появились в HTTP-слое мониторинга в pull-запросе [#36981](https://github.com/ydb-platform/ydb/pull/36981).
 
 ## Content Security Policy (CSP) и nonce {#csp-and-nonce}
 
@@ -16,15 +16,15 @@ Content-Security-Policy: script-src 'nonce-AbCd…=='
 
 В заголовке отсутствуют `style-src`, `font-src`, `connect-src`, `frame-src`, `img-src` и `default-src`. В текущей версии браузер контролирует только выполнение `<script>`; правила ниже для остальных типов ресурсов — рекомендации защитного программирования для совместимости с будущими версиями, а не требования, которые браузер уже принудительно обеспечивает.
 
-Преобразование `nonce` в заголовок CSP выполняется в [THttpMonLegacyActorRequest::Handle(TEvHttpInfoRes…)](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp). Это legacy-путь мониторинга, который доставляет `TEvHttpInfoRes` и `TEvRemoteHttpInfoRes`. Обработчики, отвечающие «сырым» `THttpOutgoingResponse`, обеспечивают безопасность самостоятельно.
+Если обработчик возвращает `THttpOutgoingResponse` напрямую, заголовок CSP нужно добавить в самом обработчике.
 
 {% endnote %}
 
-### Встроенные теги `<script>` и nonce {#inline-script-nonce}
+### Встроенные теги script и nonce {#inline-script-nonce}
 
 {% note alert %}
 
-Встроенный скрипт без атрибута `nonce` не выполняется. Без него браузер блокирует выполнение скрипта согласно политике CSP.
+Браузер блокирует выполнение встроенного скрипта без атрибута `nonce` согласно политике CSP.
 
 ```cpp
 // ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl_http.cpp
@@ -68,11 +68,11 @@ void RenderMainPage(IOutputStream& s, const TString& nonce) {
 }
 ```
 
-Для страниц локального мониторинга, отдаваемых через `TEvHttpInfoRes` без проксирования через [таблетки](../concepts/glossary.md#tablet), действует то же присваивание `res->Nonce = nonce`. См. функцию `Notify(...)` в [tablet_monitoring_proxy.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Nonce не переиспользуется между ответами: для каждого вызова `OnRenderAppHtmlPage` генерируется новое значение.
+Для страниц локального мониторинга, отдаваемых через `TEvHttpInfoRes`, действует то же присваивание `res->Nonce = nonce`. Реализацию можно посмотреть в функции `Notify(...)` из [tablet_monitoring_proxy.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Nonce не переиспользуется между ответами: для каждого вызова `OnRenderAppHtmlPage` генерируется новое значение.
 
 При пересылке ответа между узлами nonce сохраняется: [TEvRemoteHttpInfoRes::SerializeToArcadiaStream](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.cpp) упаковывает его вместе с HTML, поэтому тот же подход работает для удалённого мониторинга таблеток.
 
-### Политика `script-src` {#script-src-csp}
+### Политика script-src {#script-src-csp}
 
 {% note alert %}
 
@@ -86,14 +86,6 @@ response << "Content-Security-Policy: script-src 'self' https://cdn.example.com\
 {% endnote %}
 
 ### Встроенные стили {#inline-styles}
-
-В текущем заголовке CSP нет директивы `style-src`, поэтому встроенные стили, такие как атрибуты `style="..."` и блоки `<style>`, браузером не блокируются. Они широко используются на существующих страницах Developer UI: hive monitoring, pdisk, tablet_flat, graph, cms, columnshard, tracing и т. д.
-
-{% note info %}
-
-Планируется миграция этих мест и последующее добавление более строгой директивы `style-src` в заголовок.
-
-{% endnote %}
 
 {% note warning %}
 
@@ -121,7 +113,7 @@ str << "<div class='mon-warning'>...</div>";
 
 {% note info %}
 
-**Статус принудительного применения.** Только строка `script-src` в таблице ниже обеспечивается текущим заголовком CSP. Остальные строки описывают целевую политику, к которой движется кодовая база; её соблюдение в новом коде позволит включить более строгий заголовок позже без поломки UI.
+**Статус принудительного применения.** Только строка `script-src` в таблице ниже обеспечивается текущим заголовком CSP. Остальные строки описывают целевую политику, к которой движется кодовая база.
 
 {% endnote %}
 
@@ -130,24 +122,19 @@ str << "<div class='mon-warning'>...</div>";
 | `script-src` | `'self'` + nonce, без внешних скриптов | Да — `script-src 'nonce-…'` |
 | `style-src` | только `'self'`, без внешних таблиц стилей | Нет |
 | `font-src` | `'self'`, без внешних шрифтов | Нет |
-| `connect-src` | `'self'`, без внешних `fetch()`/XMLHttpRequest (XHR) | Нет |
+| `connect-src` | `'self'`, без внешних `fetch()` и запросов XMLHttpRequest, XHR | Нет |
 | `frame-src` | `'self'`, без внешних iframe | Нет |
 | `img-src` | `'self'`, `data:` и `https:` — внешние URL допустимы | Нет |
 
 ### Относительные ссылки в HTML {#relative-links}
 
-Страницы мониторинга могут отдаваться под разными префиксами, поэтому в генерируемом HTML не задаются абсолютные пути. В `href`, `src`, `action`, `formaction`, `fetch()`, `$.ajax()` и т. п. используются только относительные ссылки. Не используются:
-
-- полные URL: `https://example.com/...`;
-- URL без схемы, protocol-relative: `//example.com/...`;
-- пути от корня сайта: `/get_blob`, `/static/js/...`.
-
 {% note alert %}
 
-Абсолютные URL и пути от корня сайта в генерируемом HTML не используются.
+В генерируемом HTML не используются абсолютные URL, URL без схемы и пути от корня сайта. Страницы мониторинга могут отдаваться под разными префиксами, поэтому в `href`, `src`, `action`, `formaction`, `fetch()` и `$.ajax()` указываются только относительные ссылки.
 
 ```cpp
 out << "<a href='https://ydb.tech/docs'>docs</a>\n";
+out << "<a href='//ydb.tech/docs'>docs</a>\n";
 out << "<button type='submit' formaction='/get_blob'>Query</button>\n";
 out << "fetch('/api/data')\n";
 ```
@@ -177,7 +164,7 @@ out << "<link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesh
 
 {% endnote %}
 
-Bootstrap, jQuery и tablesorter уже включены в набор встроенных ресурсов и отдаются обёрткой страницы мониторинга. Повторные теги `<script>`/`<link>` для них не добавляют. У библиотек разные префиксы: Bootstrap и jQuery — из `/static/`, tablesorter — из корня (`/jquery.tablesorter.js`, `/jquery.tablesorter.css`), а не из `/static/js/jquery.tablesorter.js`.
+[Bootstrap](https://getbootstrap.com/), [jQuery](https://jquery.com/) и [tablesorter](https://mottie.github.io/tablesorter/docs/) уже включены в набор встроенных ресурсов и отдаются обёрткой страницы мониторинга. Повторные теги `<script>` и `<link>` для них не добавляют. У библиотек разные префиксы: Bootstrap и jQuery отдаются из `/static/`, а tablesorter — из корня (`/jquery.tablesorter.js`, `/jquery.tablesorter.css`), а не из `/static/js/jquery.tablesorter.js`.
 
 Если странице всё же нужно сослаться на встроенный ресурс из C++, действуют относительные ссылки: пути от корня в генерируемый HTML не зашиваются.
 
@@ -264,9 +251,9 @@ str << "</form>\n";
 
 {% endnote %}
 
-#### Вариант A: <form> со скрытым полем csrf_token
+#### Вариант A: форма со скрытым полем csrf_token
 
-Серверный обработчик читает cookie `csrf_token` из входящего `TEvRemoteHttpInfo` через `ev->Get()->GetCookie("csrf_token")` и передаёт её в код отрисовки. Токен экранируется для HTML при вставке в значение атрибута. Подходит небольшое inline-экранирование, как в [self_heal.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mind/bscontroller/self_heal.cpp), или `HtmlEscape`, см. [{#T}](#output-escaping):
+Серверный обработчик читает cookie `csrf_token` из входящего `TEvRemoteHttpInfo` через `ev->Get()->GetCookie("csrf_token")` и передаёт её в код отрисовки. Токен экранируется для HTML при вставке в значение атрибута. Используйте `HtmlEscape` или локальное экранирование, как в [self_heal.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mind/bscontroller/self_heal.cpp). Подробнее см. [{#T}](#output-escaping).
 
 ```cpp
 void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
@@ -284,7 +271,7 @@ void RenderMonPage(IOutputStream& out, bool selfHealEnabled, const TString& csrf
 }
 ```
 
-#### Вариант B: fetch из блока <script nonce='...'> с заголовком X-CSRF-Token
+#### Вариант B: fetch с заголовком X-CSRF-Token
 
 ```cpp
 str << "<button id='restartBtn'>Restart</button>\n";
@@ -365,11 +352,9 @@ void HandlePost(NMon::TEvHttpInfo::TPtr& ev) {
 
 ## Встроенные обработчики событий {#no-inline-handlers}
 
-Встроенные обработчики событий, такие как `onclick="..."` и `onchange="..."`, блокируются политикой CSP `script-src` даже при наличии nonce, поскольку nonce относится только к блокам `<script>`, а не к inline-атрибутам.
-
 {% note alert %}
 
-Атрибуты HTML вроде `onclick` и `onchange` не используются для привязки обработчиков событий.
+Атрибуты HTML вроде `onclick` и `onchange` не используются для привязки обработчиков событий. Политика CSP `script-src` блокирует такие обработчики даже при наличии nonce: он относится только к блокам `<script>`.
 
 ```cpp
 str << "<input type='checkbox' id='ignoreChecks' onchange='toggleButtonColor()'>";
@@ -394,8 +379,6 @@ str << "</script>\n";
 
 ## Экранирование вывода {#output-escaping}
 
-Любые управляемые пользователем или полученные извне данные, выводимые в HTML, экранируются.
-
 {% note alert %}
 
 Пользовательские и внешние данные без экранирования могут привести к инъекции разметки.
@@ -416,14 +399,19 @@ TABLED() { str << HtmlEscape(pathName); }
 TABLED() { str << HtmlEscape(errorMessage); }
 ```
 
-В HTML-текст и в значения HTML-атрибутов подставляют `HtmlEscape`. Для значений в query-части `href` — URL-кодирование через `CGIEscapeRet`. Числовой идентификатор в query можно не экранировать; строку — нужно. Сами пути остаются относительными, см. [{#T}](#relative-links):
+Выбирайте функцию экранирования по контексту:
+
+- для текста и значений атрибутов HTML — `HtmlEscape`;
+- для значений параметров URL — `CGIEscapeRet`.
+
+Сами пути остаются относительными, см. [{#T}](#relative-links).
 
 ```cpp
-str << "<a href='tablets?TabletID=" << tabletId << "'>";       // число — безопасно
-str << "<a href='path?name=" << CGIEscapeRet(name) << "'>";    // строка — нужно экранировать
+str << "<a href='tablets?TabletID=" << tabletId << "'>";
+str << "<a href='path?name=" << CGIEscapeRet(name) << "'>";
 ```
 
-### Динамические значения и <script> {#no-script-interpolation}
+### Динамические значения и теги script {#no-script-interpolation}
 
 У JavaScript свои правила экранирования, и `HtmlEscape` их **не покрывает**: не обрабатываются `'`, `\`, символы конца строки `U+2028` и `U+2029` и подстроки `</script>`. Значения вроде `O'Brien`, `foo\nbar` или `</script><script>alert(1)//` выходят из JS-литерала даже после `HtmlEscape`.
 
@@ -431,7 +419,7 @@ str << "<a href='path?name=" << CGIEscapeRet(name) << "'>";    // строка �
 
 {% note alert %}
 
-Интерполяция динамических значений в блок `<script>` приводит к [межсайтовому скриптингу](https://ru.wikipedia.org/wiki/Межсайтовый_скриптинг) (XSS).
+Интерполяция динамических значений в блок `<script>` приводит к XSS, [межсайтовому скриптингу](https://ru.wikipedia.org/wiki/Межсайтовый_скриптинг).
 
 ```cpp
 str << "<script nonce='" << nonce << "'>\n";
@@ -471,13 +459,7 @@ str << "</script>";
 
 ## HTTP-ответы и GetHTTPOK() {#get-httpok}
 
-HTTP-ответы формируются через [TViewer::GetHTTPOK()](https://github.com/ydb-platform/ydb/blob/main/ydb/core/viewer/viewer.cpp) и связанные методы; сырые HTTP-строки не собираются вручную.
-
-В заголовке `Content-Type` указывается `charset=utf-8` — `GetHTTPOK()` не добавляет его автоматически.
-
-```cpp
-ReplyAndPassAway(Viewer->GetHTTPOK(Request, "text/html; charset=utf-8", htmlContent));
-```
+HTTP-ответы формируются через [TViewer::GetHTTPOK()](https://github.com/ydb-platform/ydb/blob/main/ydb/core/viewer/viewer.cpp) и связанные методы.
 
 {% note alert %}
 

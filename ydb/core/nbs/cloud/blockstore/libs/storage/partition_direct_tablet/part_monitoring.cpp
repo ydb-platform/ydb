@@ -310,17 +310,24 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         return true;
     }
 
-    if (page == EMonPage::Overview && cgi.Get("action") == "balance" &&
+    const bool isBalancePage =
+        page == EMonPage::Overview ||
+        (page == EMonPage::Dbg && data.SelectedDbg.has_value());
+    if (isBalancePage && cgi.Get("action") == "balance" &&
         ev->Get()->GetMethod() == HTTP_METHOD_POST)
     {
         ui32 from = 0;
         ui32 to = 0;
         bool requested = false;
-        if (cgi.Has("from") && cgi.Has("to") &&
+        const bool hasValidRange =
+            cgi.Has("from") && cgi.Has("to") &&
             TryFromString(cgi.Get("from"), from) &&
             TryFromString(cgi.Get("to"), to) && from < to &&
-            to <= data.TabletInfo.VolumeDirectBlockGroupCount)
-        {
+            to <= data.TabletInfo.VolumeDirectBlockGroupCount;
+        const bool isSelectedDbgRange =
+            page != EMonPage::Dbg ||
+            (from == *data.SelectedDbg && to == from + 1);
+        if (hasValidRange && isSelectedDbgRange) {
             for (ui32 i = from; i < to; ++i) {
                 if (auto dbg = FastPathService->GetDirectBlockGroup(i)) {
                     dbg->BalanceDDisks(data.SelectedDDiskBalanceStrategy);
@@ -329,16 +336,19 @@ bool TPartitionActor::OnRenderAppHtmlPage(
             }
         }
 
-        const TString querySuffix =
-            TStringBuilder()
-            << "&strategy="
-            << DDiskBalanceStrategyParam(data.SelectedDDiskBalanceStrategy);
+        TStringBuilder querySuffix;
+        if (page == EMonPage::Dbg) {
+            querySuffix << "&dbg=" << *data.SelectedDbg;
+        }
+        querySuffix << "&strategy="
+                    << DDiskBalanceStrategyParam(
+                           data.SelectedDDiskBalanceStrategy);
 
         ctx.Send(
             ev->Sender,
             new NMon::TEvRemoteHttpInfoRes(MakeRedirectResponse(
                 TabletID(),
-                "overview",
+                PageParam(page),
                 requested ? "DDisk balancing requested."
                           : "Invalid DDisk balancing request.",
                 querySuffix)));

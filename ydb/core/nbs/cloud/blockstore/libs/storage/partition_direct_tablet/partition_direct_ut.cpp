@@ -3160,14 +3160,14 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             __FILE__,
             __LINE__);
 
-        const auto query = [&](TStringBuf range)
+        const auto query = [&](TStringBuf page, TStringBuf range)
         {
             runtime->SendToPipe(
                 tabletId,
                 edge,
                 new NActors::NMon::TEvRemoteHttpInfo(
-                    "/app?TabletID=" + ToString(tabletId) +
-                        "&page=overview&action=balance&" + range,
+                    "/app?TabletID=" + ToString(tabletId) + "&page=" + page +
+                        "&action=balance&" + range,
                     HTTP_METHOD_POST),
                 0,
                 TTestActorSystem::GetPipeConfigWithRetries());
@@ -3181,22 +3181,28 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         };
 
         UNIT_ASSERT_STRING_CONTAINS(
-            query("from=0&to=1"),
+            query("overview", "from=0&to=1"),
             "DDisk balancing requested.");
         UNIT_ASSERT_STRING_CONTAINS(
-            query("from=0&to=32"),
+            query("overview", "from=0&to=32"),
             "DDisk balancing requested.");
         UNIT_ASSERT_STRING_CONTAINS(
-            query("from=0&to=1&strategy=configured"),
+            query("overview", "from=0&to=1&strategy=configured"),
             "&page=overview&strategy=configured");
         UNIT_ASSERT_STRING_CONTAINS(
-            query("from=0&to=9999"),
+            query("overview", "from=0&to=9999"),
             "Invalid DDisk balancing request.");
         UNIT_ASSERT_STRING_CONTAINS(
-            query("from=invalid&to=1"),
+            query("overview", "from=invalid&to=1"),
             "Invalid DDisk balancing request.");
         UNIT_ASSERT_STRING_CONTAINS(
-            query("from=1&to=1"),
+            query("overview", "from=1&to=1"),
+            "Invalid DDisk balancing request.");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("dbg&dbg=1", "from=1&to=2&strategy=configured"),
+            "&page=dbg&dbg=1&strategy=configured");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("dbg&dbg=1", "from=0&to=2"),
             "Invalid DDisk balancing request.");
     }
 

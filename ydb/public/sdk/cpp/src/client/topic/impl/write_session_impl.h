@@ -13,10 +13,6 @@
 
 namespace NYdb::inline Dev::NTopic {
 
-namespace NTests {
-    class TWriteSessionMemoryTestAdapter;
-}
-
 class TWriteSessionEventsQueue: public TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor> {
     using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor>;
 
@@ -158,7 +154,6 @@ class TWriteSessionImpl : public TContinuationTokenIssuer,
 private:
     friend class TWriteSession;
     friend class TSimpleBlockingWriteSession;
-    friend class NTests::TWriteSessionMemoryTestAdapter;
 
 private:
     using TClientMessage = Ydb::Topic::StreamWriteMessage::FromClient;

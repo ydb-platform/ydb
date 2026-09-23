@@ -161,6 +161,9 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
 
     i64 SizeTuples() const {
         AssertSizeIsSane();
+        if constexpr (LeftSemiOrOnly(Kind)) {
+            return PreservedSidePack().NTuples;
+        }
         return Output_.Probe.NTuples;
     }
 
@@ -187,7 +190,9 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
                         this->operator()(TSides<TSingleTuple>{.Build = null, .Probe = tuple});
                     }
                 } else if constexpr(SemiOrOnlyJoin(Kind)) {
-                    self.Output_.Probe.AppendTuple(tuple, self.Converters_.Probe->GetTupleLayout());
+                    const ESide preserved = self.PreservedSide();
+                    self.Output_.SelectSide(preserved).AppendTuple(
+                        tuple, self.Converters_.SelectSide(preserved)->GetTupleLayout());
                 }
             }
         };
@@ -197,11 +202,12 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     TVector<arrow::Datum> FlushAndApplyRenames() {
         if constexpr(LeftSemiOrOnly(Kind)) {
             TVector<arrow::Datum> out;
-            Converters_.Probe->Unpack(Output_.Probe, out);
-            Output_.Probe.Clear();
+            const ESide preserved = PreservedSide();
+            Converters_.SelectSide(preserved)->Unpack(Output_.SelectSide(preserved), out);
+            Output_.SelectSide(preserved).Clear();
             TVector<arrow::Datum> renamed;
             for(auto rename: *Renames_){
-                MKQL_ENSURE(rename.Side == ESide::Probe, "renames in Semi or Only Left Join shouldn't contain columns from right side");
+                MKQL_ENSURE(rename.Side == preserved, "renames in Semi or Only Left Join shouldn't contain columns from the non-preserved side");
                 renamed.push_back(out[rename.Index]);
             }
             return renamed;
@@ -233,10 +239,19 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     }
     void AssertSizeIsSane() const{
         if constexpr (Kind == EJoinKind::LeftOnly || Kind==EJoinKind::LeftSemi) {
-            MKQL_ENSURE(Output_.Build.NTuples == 0, "Left Only and Left Semi join types shouldn't collect any Build(right) tuples");
+            const ESide dropped = PreservedSide() == ESide::Build ? ESide::Probe : ESide::Build;
+            MKQL_ENSURE(Output_.SelectSide(dropped).NTuples == 0, "Left Only and Left Semi join types shouldn't collect any tuples on the non-output side");
         } else if constexpr (Kind == EJoinKind::Left || Kind == EJoinKind::Inner) {
             MKQL_ENSURE(Output_.Build.NTuples == Output_.Probe.NTuples, "Inner and Left join types must collect same amount of tuples from build and probe");
         }
+    }
+
+    ESide PreservedSide() const {
+        return LeftIsBuild_ ? ESide::Build : ESide::Probe;
+    }
+
+    const TPackResult& PreservedSidePack() const {
+        return Output_.SelectSide(PreservedSide());
     }
 
     TuplePairs Output_;

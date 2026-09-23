@@ -125,6 +125,8 @@ namespace NKikimr {
         const TIntrusivePtr<TVDiskConfig> VCfg;
         const TIntrusivePtr<TIngressCache> IngressCache;
         const ui32 ChunkSize;
+        // Granularity PDisk appends in; the SST writer pads to it (see TFreshOutputGeometry).
+        const ui32 AppendBlockSize;
         const ui32 CompWorthReadSize;
         const bool FreshCompaction;
         const bool GCOnlySynced;
@@ -160,7 +162,8 @@ namespace NKikimr {
                 TDuration hullCompStorageRatioMaxCalcDuration,
                 ui32 hullCompLevel0MaxSstsAtOnce,
                 ui32 hullCompSortedPartsNum,
-                bool enableFreshSpaceProjection = false
+                bool enableFreshSpaceProjection = false,
+                ui32 appendBlockSize = 4096
         );
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);

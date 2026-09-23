@@ -517,8 +517,10 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
         rightInputPtr = MaybeForceColumnToOptional(node->GetTypeAnn(), rightInputPtr, Ctx) ;
     }
 
-    auto leftInput = ExprNodeToOperator(leftInputPtr);
-    auto rightInput = ExprNodeToOperator(rightInputPtr);
+    auto originalLeftInput = ExprNodeToOperator(leftInputPtr);
+    auto originalRightInput = ExprNodeToOperator(rightInputPtr);
+    auto leftInput = originalLeftInput;
+    auto rightInput = originalRightInput;
 
     TString setOpKind = opSetOp.SetOp().StringValue();
     TIntrusivePtr<IOperator> result;
@@ -604,8 +606,8 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
 
     }
 
-    Y_ENSURE(Projections.contains(leftInput.Get()));
-    Projections.insert({result.Get(), Projections.at(leftInput.Get())});
+    Y_ENSURE(Projections.contains(originalLeftInput.Get()));
+    Projections.insert({result.Get(), Projections.at(originalLeftInput.Get())});
 
     return result;
 }

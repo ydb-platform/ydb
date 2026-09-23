@@ -710,14 +710,9 @@ bool CheckSequences(TSchemeShard* ss, const TIndexBuildInfo& buildInfo, bool sho
     return true;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateDropSequencePropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+static void AddDropSequencePropose(TSchemeShard* ss, const TIndexBuildInfo& buildInfo,
+    TEvSchemeShard::TEvModifySchemeTransaction& propose)
 {
-    Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building CreateDropSequencePropose");
-    Y_ENSURE(buildInfo.HasFromSequenceBuildColumn());
-
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.CreateBuildSequenceTxId), ss->TabletID());
-
     auto tablePath = TPath::Init(buildInfo.TablePathId, ss);
 
     for (const auto& colInfo : buildInfo.BuildColumns) {
@@ -729,13 +724,23 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateDropSequencePropose(
             continue;
         }
         // Drop the old sequence if it's left from a failed build attempt
-        auto& drop = *propose->Record.AddTransaction();
+        auto& drop = *propose.Record.AddTransaction();
         drop.SetOperationType(NKikimrSchemeOp::ESchemeOpDropSequence);
         drop.SetInternal(true);
         drop.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
         drop.SetWorkingDir(tablePath.PathString());
         drop.MutableDrop()->SetName(colInfo.DefaultFromSequence);
     }
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateDropSequencePropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building CreateDropSequencePropose");
+    Y_ENSURE(buildInfo.HasFromSequenceBuildColumn());
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.CreateBuildSequenceTxId), ss->TabletID());
+    AddDropSequencePropose(ss, buildInfo, *propose);
 
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CreateDropSequencePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
@@ -1059,8 +1064,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     auto* columnBuild = modifyScheme.MutableDropColumnBuild();
     columnBuild->SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     columnBuild->SetBuildIndexId(ui64(buildInfo.Id));
-
     buildInfo.SerializeToProto(ss, columnBuild->MutableSettings());
+
+    AddDropSequencePropose(ss, buildInfo, *propose);
 
     YDB_LOG_NOTICE("DropColumnsPropose",
         {"buildId", buildInfo.Id},

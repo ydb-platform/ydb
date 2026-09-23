@@ -648,51 +648,14 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        ui64 buildColumnId = 0;
-        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> buildColumnBlocker(runtime, [&](const auto& ev) {
-            buildColumnId = ev->Get()->Record.GetId();
-            return true;
-        });
-        ui64 buildIndexTx = ++txId;
-        AsyncBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard,
-            "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false));
-        runtime.WaitFor("build column request", [&]{ return buildColumnBlocker.size() > 0; });
+        // The easiest way to check is to create it by hand
+        TestCreateSequence(runtime, ++txId, "/MyRoot/texts", Sprintf(R"(
+            Name: "%s"
+        )", NTableIndex::NFulltext::RowIdSequenceName));
+        env.TestWaitNotification(runtime, txId);
 
-        // Intentionally corrupt schemeshard DB to prevent column build from completing
-        {
-            TString writeQuery = Sprintf(R"(
-                (
-                    (let key '( '('Id (Uint64 '%lu)) ) )
-                    (let value '('('State (Uint32 '%u)) ) )
-                    (return (AsList (UpdateRow 'IndexBuild key value) ))
-                )
-            )", buildColumnId, TIndexBuildInfo::EState::Rejection_DroppingColumns);
-            NKikimrMiniKQL::TResult result;
-            TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, writeQuery, result, err);
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
-        }
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        // It won't complete correctly and the sequence will be left
-        // Currently it doesn't cleanup the sequence (it probably should and it may be fixed separately),
-        // but in this test we anyway WANT it to behave that way, to handle all possible situations!
-        env.TestWaitNotification(runtime, buildIndexTx);
-        buildColumnBlocker.Stop();
-
-        // Check that the sequence exists, but not the __ydb_row_id column
-        TestDescribeResult(DescribePrivatePath(runtime,
-            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdSequenceName), {
-            NLs::PathExist,
-        });
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"), {
-            NLs::PathExist,
-            NLs::IndexesCount(0),
-            NLs::CheckColumns("texts", {"pk", "text", "data"}, {}, {"pk"}, true)
-        });
-
-        // Build the index again - now it should succeed
-        buildIndexTx = ++txId;
+        // Index build should succeed
+        auto buildIndexTx = ++txId;
         AsyncBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard,
             "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false));
         env.TestWaitNotification(runtime, buildIndexTx);
@@ -700,6 +663,46 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
         UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
             Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+    }
+
+    Y_UNIT_TEST(AutoProvisionDropSequenceOnFailure) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk" Type: "Utf8" NotNull: true }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> buildColumnBlocker(runtime, [&](const auto& ev) {
+            // Corrupt the request to force datashard to reply with a failure
+            ev->Get()->Record.SetOwnerId(0);
+            ev->Get()->Record.SetPathId(0);
+            return true;
+        });
+        ui64 buildIndexTx = ++txId;
+        AsyncBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false));
+        runtime.WaitFor("build column request", [&]{ return buildColumnBlocker.size() > 0; });
+        buildColumnBlocker.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        // Check that neither the sequence nor the __ydb_row_id column exist
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdSequenceName), {
+            NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"), {
+            NLs::PathExist,
+            NLs::IndexesCount(0),
+            NLs::CheckColumns("texts", {"pk", "text", "data"}, {}, {"pk"}, true)
+        });
     }
 
     Y_UNIT_TEST(RowIdDisabled_RejectsCustomPkBuild) {

@@ -91,6 +91,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.IndexOnGeneratedKeyUpdatesEntry
 ydb/core/kqp/ut/scheme GeneratedStored.NotNullFailingCastRejected
 ydb/core/kqp/ut/scheme GeneratedStored.NullableOptionalExprAccepted
 ydb/core/kqp/ut/scheme GeneratedStored.RandomGeneratedConsistentWithIndex
+ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningIndependentColumn
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMissingAndExistingRows
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnWithIndexOnGenerated
@@ -250,6 +251,7 @@ ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.UnauthorizedPurger
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.EmptyTopic
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.UnauthorizedWriter
+ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteShouldBeCharged
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteToAutopartitioningTopic
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
 ydb/core/persqueue/public/schema/ut DescribeOperationActor.FiltersPartitionsByStrategy

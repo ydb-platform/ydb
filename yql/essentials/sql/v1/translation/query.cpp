@@ -131,6 +131,11 @@ TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAto
 
 class TTopicKey: public ITableKeys {
 public:
+    TTopicKey(TPosition pos, TDeferredAtom cluster, const TDeferredAtom& name)
+        : TTopicKey(pos, TString{}, std::move(cluster), name)
+    {
+    }
+
     TTopicKey(TPosition pos, const TString& service, TDeferredAtom cluster, const TDeferredAtom& name)
         : ITableKeys(pos)
         , Service_(service)
@@ -162,7 +167,7 @@ private:
 };
 
 TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name) {
-    return BuildTopicKey(pos, TString{}, cluster, name);
+    return new TTopicKey(pos, cluster, name);
 }
 
 TNodePtr BuildTopicKey(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name) {

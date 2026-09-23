@@ -54,4 +54,5 @@ RECURSE_FOR_TESTS(
     ut/new_schemecache_ut
     ut/describes_ut
     ut/direct_read_restore_ut
+    ut/tablet_restart_session_ut
 )

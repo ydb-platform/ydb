@@ -681,36 +681,55 @@ def test_wasm_chunk_query_error_is_persisted(module_type):
     cluster = _make_cluster(enable_udf_store=True, enable_wasm_udf=True)
     db_nodes = _create_database(cluster, database)
     try:
-        node = cluster.nodes[1]
+        node = db_nodes[0]
         config = ydb.DriverConfig(endpoint="%s:%s" % (node.host, node.port), database=database)
         assert _wait_for_condition(lambda: _table_exists(config, database))
         chunks_path = ".metadata/udf_store/module_chunks"
         assert _wait_for_condition(lambda: _table_exists(config, database, chunks_path))
-        # Publish metadata after removing the source table: ReadModuleChunks /
-        # ReadLibraryChunks must fail as a query, before parsing or compiling.
-        _run_query(config, f"DROP TABLE `{database}/{chunks_path}`")
         manifest_path = yatest.common.source_path(
             "ydb/tests/functional/udf_store/data/wasm/local_udf_manifest.json"
         )
         with open(manifest_path) as manifest_file:
             manifest = json.dumps(manifest_file.read())
-        _run_query(config, f'''UPSERT INTO `{database}/{UDF_TABLE_MODULES_PATH}`
-            (name, type, uid, md5, size, chunk_count, version, manifest, created_at)
-            VALUES ("LocalUdf", "{module_type}", "missing-chunks", "00000000000000000000000000000000",
-                    1ul, 1ul, 1ul, CAST({manifest} AS Json), CurrentUtcTimestamp());''')
-        observed = {}
+
+        def publish(uid):
+            _run_query(config, f'''UPSERT INTO `{database}/{UDF_TABLE_MODULES_PATH}`
+                (name, type, uid, md5, size, chunk_count, version, manifest, created_at)
+                VALUES ("LocalUdf", "{module_type}", "{uid}", "00000000000000000000000000000000",
+                        1ul, 1ul, 1ul, CAST({manifest} AS Json), CurrentUtcTimestamp());''')
+
         with grpc.insecure_channel("%s:%s" % (node.host, node.port)) as channel:
             stub = UdfServiceStub(channel)
 
-            def failed():
+            def describe():
                 response = stub.DescribeModule(
                     udf.DescribeModuleRequest(name="LocalUdf"),
                     metadata=(("x-ydb-database", database),),
                     timeout=30,
                 )
                 result = udf.DescribeModuleResult()
-                if not response.operation.result.Unpack(result):
-                    return False
+                assert response.operation.result.Unpack(result), response.operation
+                return result
+
+            # Database creation returns before its compile controller is always
+            # available. First let a harmless corrupt-source attempt prove that
+            # the controller and worker are connected; otherwise dropping the
+            # chunks table can race startup and no compile is ever assigned.
+            publish("controller-probe")
+            assert _wait_for_condition(
+                lambda: any(platform.status == udf.FAILED for platform in describe().platforms),
+                timeout_seconds=180,
+                description="compile controller readiness",
+            )
+
+            # Publish a new uid after removing the source table: ReadModuleChunks /
+            # ReadLibraryChunks must fail as a query, before parsing or compiling.
+            _run_query(config, f"DROP TABLE `{database}/{chunks_path}`")
+            publish("missing-chunks")
+            observed = {}
+
+            def failed():
+                result = describe()
                 failed_platforms = [platform for platform in result.platforms if platform.status == udf.FAILED]
                 if not failed_platforms:
                     return False

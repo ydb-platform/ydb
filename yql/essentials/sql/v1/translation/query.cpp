@@ -170,8 +170,10 @@ public:
     }
 
 private:
+    TString Service_;
     TTablePathPrefix Prefix_;
     TDeferredAtom Name_;
+    TString View_;
     TString Full_;
 };
 
@@ -765,7 +767,7 @@ public:
                 each = L(each, key);
             }
             if (ctx.PragmaUseTablePrefixForEach) {
-                const auto prefixPath = Prefix_.Get(ctx);
+                TStringBuf prefixPath = Prefix_.Get(ctx);
                 if (prefixPath) {
                     each = L(each, BuildQuotedAtom(Pos_, TString(prefixPath)));
                 }
@@ -983,7 +985,7 @@ public:
 
             auto partitionList = Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
             if (ctx.PragmaUseTablePrefixForEach) {
-                const auto prefixPath = Prefix_.Get(ctx);
+                TStringBuf prefixPath = Prefix_.Get(ctx);
                 if (prefixPath) {
                     partitionList = L(partitionList, BuildQuotedAtom(Pos_, TString(prefixPath)));
                 }
@@ -2114,7 +2116,7 @@ TNodePtr BuildAlterTable(TContext& ctx, const TTableRef& tr, TAlterTableParamete
 {
     if (ctx.Settings.EnableTablePathPrefixMultiScopes && params.RenameTo) {
         params.RenameTo->Name = BuildTablePath(
-            ctx.GetResolvedPrefixPath(ctx.Scoped->CurrService, ctx.Scoped->CurrCluster), params.RenameTo->Name);
+            ctx.GetPrefixPath(ctx.Scoped->CurrService, ctx.Scoped->CurrCluster), params.RenameTo->Name);
     }
     return new TAlterTableNode(ctx.Pos(), tr, std::move(params), ctx.Scoped, ctx.Settings.EnableTablePathPrefixMultiScopes);
 }

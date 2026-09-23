@@ -107,7 +107,7 @@ class TTablePathPrefix {
 public:
     TTablePathPrefix(const TString& service, const TDeferredAtom& cluster);
     TTablePathPrefix(TContext& ctx, const TString& service, const TDeferredAtom& cluster);
-    TString Get(TContext& ctx) const;
+    TStringBuf Get(TContext& ctx) const;
 
 private:
     struct TDeferred {
@@ -199,7 +199,6 @@ public:
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
-    TString GetResolvedPrefixPath(const TString& service, const TDeferredAtom& cluster);
 
     TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
 
@@ -325,7 +324,7 @@ private:
     THolder<TStringOutput> IssueMsgHolder_;
     NSQLTranslation::TClusterMapping ClusterMapping_;
     TString PathPrefix_;
-    bool HasTablePathPrefixReferences_ = false;
+    mutable bool HasTablePathPrefixReferences_ = false;
     THashMap<TString, TString> ProviderPathPrefixes_;
     THashMap<TString, TString> ClusterPathPrefixes_;
     bool IntoHeading_ = true;

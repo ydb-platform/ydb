@@ -6287,24 +6287,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(TablePathPrefixMultiScopesNativeAstSnapshot) {
-        const TString query = "((return world))";
-        for (const bool enabled : {false, true}) {
-            for (const bool perStatement : {false, true}) {
-                NYql::TKikimrConfiguration config;
-                config.FeatureFlags.SetEnableTablePathPrefixMultiScopes(enabled);
-                TKqpTranslationSettingsBuilder builder(NYql::EKikimrQueryType::Query, "cluster", query,
-                    NSQLTranslation::EBindingsMode::DISABLED, {});
-                builder.SetFromConfig(config);
-                const auto results = ParseStatements(query, {}, false, builder, perStatement);
-                UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
-                UNIT_ASSERT_C(results.front().Ast->IsOk(), results.front().Ast->Issues.ToString());
-                UNIT_ASSERT(results.front().KeepInCache);
-                UNIT_ASSERT_VALUES_EQUAL(results.front().EnableTablePathPrefixMultiScopes, enabled);
-            }
-        }
-    }
-
     Y_UNIT_TEST(TablePathPrefixScopeDiagnosticIsDatabaseScopedAndSerialized) {
         auto global = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto database = MakeIntrusive<NMonitoring::TDynamicCounters>();

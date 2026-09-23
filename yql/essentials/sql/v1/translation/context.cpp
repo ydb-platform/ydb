@@ -28,20 +28,20 @@ TTablePathPrefix::TTablePathPrefix(const TString& service, const TDeferredAtom& 
 }
 
 TTablePathPrefix::TTablePathPrefix(TContext& ctx, const TString& service, const TDeferredAtom& cluster) {
-    const TString prefix(ctx.GetResolvedPrefixPath(service, cluster));
+    const TStringBuf prefix = ctx.GetPrefixPath(service, cluster);
     if (ctx.Settings.EnableTablePathPrefixMultiScopes) {
-        Prefix_ = prefix;
+        Prefix_ = TString(prefix);
     } else {
         Prefix_ = TDeferred{service, cluster};
     }
 }
 
-TString TTablePathPrefix::Get(TContext& ctx) const {
+TStringBuf TTablePathPrefix::Get(TContext& ctx) const {
     if (const auto* prefix = std::get_if<TString>(&Prefix_)) {
         return *prefix;
     }
     const auto& deferred = std::get<TDeferred>(Prefix_);
-    return ctx.GetResolvedPrefixPath(deferred.Service, deferred.Cluster);
+    return ctx.GetPrefixPath(deferred.Service, deferred.Cluster);
 }
 
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
@@ -443,19 +443,15 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
-    const TString prefixPath = GetResolvedPrefixPath(service, cluster);
+    TStringBuf prefixPath = GetPrefixPath(service, cluster);
     if (prefixPath) {
         return AddTablePathPrefix(*this, prefixPath, path);
     }
     return path.Build();
 }
 
-TString TContext::GetResolvedPrefixPath(const TString& service, const TDeferredAtom& cluster) {
-    HasTablePathPrefixReferences_ = true;
-    return TString(GetPrefixPath(service, cluster));
-}
-
 TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {
+    HasTablePathPrefixReferences_ = true;
     if (IsDynamicCluster(cluster)) {
         return {};
     }

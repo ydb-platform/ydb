@@ -1264,7 +1264,7 @@ private:
 };
 
 TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, const TString& label) {
-    return new TInnerSource(pos, std::move(node), service, cluster, label);
+    return new TInnerSource(pos, node, service, cluster, label);
 }
 
 TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, TTablePathPrefix prefix, const TString& label) {

@@ -394,11 +394,6 @@ void TDistributedTransaction::OnTxDone(const TEvPQ::TEvTxDone& event)
     ++PartitionRepliesCount;
 }
 
-void TDistributedTransaction::AddPlanStepSender(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event)
-{
-    PlanStepSenders[sender] = std::move(event);
-}
-
 auto TDistributedTransaction::GetDecision() const -> EDecision
 {
     constexpr EDecision commit = NKikimrTx::TReadSetData::DECISION_COMMIT;

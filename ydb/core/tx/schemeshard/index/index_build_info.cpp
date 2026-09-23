@@ -64,6 +64,16 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
             Y_DEBUG_ABORT_S(InvalidIndexType(IndexType));
             break;
     }
+<<<<<<< HEAD
+=======
+
+    if (IsRebuild) {
+        result->SetIsRebuild(true);
+        if (!RebuildIndexName.empty()) {
+            result->SetRebuildIndexName(RebuildIndexName);
+        }
+    }
+>>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
@@ -362,6 +372,7 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
         case ESubState::FulltextIndexBorders:
         case ESubState::FulltextRowIdSrc:
         case ESubState::FulltextIndexPrefixBorders:
+        case ESubState::RebuildReplacing:
             return true;
     }
     return false;

@@ -104,7 +104,35 @@ public:
             return makeReply("unable to build index and column in the single operation");
         } else if (settings.has_index()) {
             const auto& indexPath = tablePath.Child(settings.index().name());
+<<<<<<< HEAD
             {
+=======
+            if (isRebuild) {
+                // For REBUILD INDEX, the index must already exist and be Ready
+                const auto checks = indexPath.Check();
+                checks
+                    .IsAtLocalSchemeShard()
+                    .IsResolved()
+                    .NotDeleted()
+                    .NotUnderDeleting();
+
+                if (!checks) {
+                    return Reply(checks.GetStatus(), TStringBuilder()
+                        << "REBUILD INDEX: index '" << settings.index().name() << "' check failed: " << checks.GetError());
+                }
+
+                if (indexPath.Base()->PathType != TPathElement::EPathType::EPathTypeTableIndex) {
+                    return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                        << "REBUILD INDEX: '" << settings.index().name() << "' is not an index");
+                }
+
+                buildInfo->IsRebuild = true;
+                buildInfo->RebuildIndexName = TStringBuilder() << "__ydb_rebuild_" << ui64(BuildId);
+                if (Self->Indexes.at(indexPath.Base()->PathId)->State != NKikimrSchemeOp::EIndexStateReady) {
+                    return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "REBUILD INDEX requires a Ready index");
+                }
+            } else {
+>>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
                 const auto checks = indexPath.Check();
                 checks
                     .IsAtLocalSchemeShard();

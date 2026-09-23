@@ -123,6 +123,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
         FulltextRowIdSrc = 203,
         FulltextIndexPrefixBorders = 204,
+
+        RebuildReplacing = 300,
     };
 
     struct TColumnBuildInfo {
@@ -205,6 +207,13 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     EBuildKind BuildKind = EBuildKind::BuildKindUnspecified;
 
     TString IndexName;
+    // Empty for builds started before online rebuilds were supported.
+    TString RebuildIndexName;
+
+    const TString& GetBuildIndexName() const {
+        return RebuildIndexName.empty() ? IndexName : RebuildIndexName;
+    }
+
     TVector<TString> IndexColumns;
     TVector<TString> DataColumns;
     TVector<TString> FillIndexColumns;
@@ -575,6 +584,7 @@ public:
                     row.template GetValue<Schema::IndexBuild::TableLocalId>());
 
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
+        indexInfo->RebuildIndexName = row.template GetValueOrDefault<Schema::IndexBuild::RebuildIndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
         indexInfo->CancelRequested =

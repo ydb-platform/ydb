@@ -57,6 +57,11 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     const auto& op = tx.GetInitiateIndexBuild();
     NKikimrSchemeOp::TIndexCreationConfig indexDesc = op.GetIndex();
+<<<<<<< HEAD
+=======
+    const bool isOnlineRebuild = op.GetIsRebuild() && op.HasRebuildIndexName();
+    const bool isRebuild = op.GetIsRebuild() && !isOnlineRebuild;
+>>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
 
     switch (GetIndexType(indexDesc)) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -91,6 +96,13 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
+<<<<<<< HEAD
+=======
+    if (op.GetIsRebuild() && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "REBUILD INDEX is only supported for vector_kmeans_tree indexes")};
+    }
+
+>>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
     auto counts = GetIndexObjectCounts(indexDesc);
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
@@ -99,6 +111,24 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     if (counts.SequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
         ++counts.IndexTableShards;
+    }
+
+    if (isOnlineRebuild) {
+        const auto source = table.Child(indexDesc.GetName());
+        const auto checks = source.Check();
+        checks.IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsTableIndex()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+        if (!checks) {
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        }
+        if (context.SS->Indexes.at(source.Base()->PathId)->State != NKikimrSchemeOp::EIndexStateReady) {
+            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "REBUILD INDEX requires a Ready index")};
+        }
+        indexDesc.SetName(op.GetRebuildIndexName());
     }
 
     const auto index = table.Child(indexDesc.GetName());
@@ -118,9 +148,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 .NotResolved();
         }
 
-        checks
-            .IsValidLeafName(context.UserToken.Get())
-            .PathsLimit(1 + counts.IndexTableCount + counts.SequenceCount)
+        if (!isOnlineRebuild || !tx.GetInternal()) {
+            checks.IsValidLeafName(context.UserToken.Get());
+        }
+        checks.PathsLimit(1 + counts.IndexTableCount + counts.SequenceCount)
             .DirChildrenLimit();
 
         if (!tx.GetInternal()) {
@@ -134,12 +165,23 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         }
     }
 
+<<<<<<< HEAD
     const ui64 aliveIndices = context.SS->GetAliveChildren(table.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
     if (aliveIndices + 1 > domainInfo->GetSchemeLimits().MaxTableIndices) {
         return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
             << "indexes count has reached maximum value in the table"
             << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
             << ", intention to create new children: " << aliveIndices + 1)};
+=======
+    if (!op.GetIsRebuild()) {
+        const ui64 aliveIndices = context.SS->GetAliveChildren(table.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
+        if (aliveIndices + 1 > domainInfo->GetSchemeLimits().MaxTableIndices) {
+            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
+                << "indexes count has reached maximum value in the table"
+                << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
+                << ", intention to create new children: " << aliveIndices + 1)};
+        }
+>>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
     }
 
     TString errStr;

@@ -1120,6 +1120,10 @@ public:
                 ResetRead(id);
                 return ResolveShard(shard);
             }
+            case Ydb::StatusIds::SCHEME_ERROR: {
+                // Let the session invalidate cached query plans before retrying a schema change.
+                return replyError("Read schema error", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            }
             default: {
                 return replyError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED);
             }

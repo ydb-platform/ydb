@@ -98,6 +98,15 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             NIceDb::TUpdate<Schema::IndexBuild::UserSID>(*info.UserSID)
         );
     }
+<<<<<<< HEAD
+=======
+    if (info.IsRebuild) {
+        persistedBuildIndex.Update(
+            NIceDb::TUpdate<Schema::IndexBuild::IsRebuild>(true),
+            NIceDb::TUpdate<Schema::IndexBuild::RebuildIndexName>(info.RebuildIndexName)
+        );
+    }
+>>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
     // Persist details of the index build operation: ImplTableDescriptions and SpecializedIndexDescription.
     // We have chosen TIndexCreationConfig's string representation as the serialization format.
     if (bool hasSpecializedDescription = !std::holds_alternative<std::monostate>(info.SpecializedIndexDescription);

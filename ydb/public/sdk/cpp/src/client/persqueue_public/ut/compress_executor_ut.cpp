@@ -24,7 +24,6 @@ public:
             request.mutable_write_request();
         }
         const auto size = init ? 0 : request.SpaceUsedLong();
-        Impl->OnMemoryUsageChangedImpl(static_cast<i64>(size));
         auto original = std::exchange(Impl->Processor, processor);
         Impl->WriteToProcessorImpl(std::move(request), size);
         Impl->Processor = std::move(original);

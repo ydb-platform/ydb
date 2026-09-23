@@ -98,6 +98,10 @@ void CheckWriteRequestMemory(TAdapter& adapter, TSession& session) {
     // and that completion must not issue another token.
     complete(NYdbGrpc::TGrpcStatus());
     UNIT_ASSERT_VALUES_EQUAL(adapter.MemoryUsage(), 0);
+    // A credential refresh can abort SendImpl before WriteToProcessorImpl.
+    // Such a request is never queued and must not leave a memory charge.
+    UNIT_ASSERT(!adapter.QueueRequest());
+    UNIT_ASSERT_VALUES_EQUAL(adapter.MemoryUsage(), 0);
     for (const auto& event : session.GetEvents()) {
         UNIT_ASSERT(!std::holds_alternative<typename TAdapter::TReadyEvent>(event));
     }

@@ -1132,6 +1132,7 @@ void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&&
         }
     };
 
+    OnMemoryUsageChangedImpl(static_cast<i64>(requestMemoryUsage));
     Processor->Write(std::move(req), callback);
 }
 
@@ -2089,7 +2090,6 @@ void TWriteSessionImpl::SendImpl() {
                 << writeRequest->messages(0).seq_no()
         );
         const size_t requestMemoryUsage = clientMessage.SpaceUsedLong();
-        OnMemoryUsageChangedImpl(static_cast<i64>(requestMemoryUsage));
         WriteToProcessorImpl(std::move(clientMessage), requestMemoryUsage);
     }
 }

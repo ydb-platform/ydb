@@ -12,6 +12,47 @@ public:
     {}
 };
 
+namespace NYdbGrpc::inline Dev {
+
+// The processor already grants TServiceConnection access to its queue and completion handler.
+template <>
+class TServiceConnection<TTestStub> {
+public:
+    static void CheckDroppedWriteLifetime(bool finishOk) {
+        using TProcessor = TStreamRequestReadWriteProcessor<TTestStub, grpc::ByteBuffer, grpc::ByteBuffer>;
+        size_t destroyed = 0;
+        size_t callbacks = 0;
+        char data = 0;
+        auto processor = MakeIntrusive<TProcessor>([](TGrpcStatus&&, TProcessor::TBase::TPtr) {});
+        for (size_t i = 0; i != 3; ++i) {
+            grpc::Slice slice(&data, sizeof(data), [](void* counter) {
+                ++*static_cast<size_t*>(counter);
+            }, &destroyed);
+            grpc::ByteBuffer request(&slice, 1);
+            auto& item = processor->WriteQueue.emplace_back();
+            item.Request.Swap(&request);
+            item.Callback = [&, expected = i + 1](TGrpcStatus&& status) {
+                UNIT_ASSERT(!status.Ok());
+                UNIT_ASSERT_VALUES_EQUAL(destroyed, expected);
+                UNIT_ASSERT_VALUES_EQUAL(++callbacks, expected);
+            };
+        }
+        UNIT_ASSERT_VALUES_EQUAL(destroyed, 0);
+        processor->OnFinished(finishOk);
+        UNIT_ASSERT_VALUES_EQUAL(destroyed, 3);
+        UNIT_ASSERT_VALUES_EQUAL(callbacks, 3);
+    }
+};
+
+} // namespace NYdbGrpc::inline Dev
+
+Y_UNIT_TEST_SUITE(StreamWriteTests) {
+    Y_UNIT_TEST(DroppedRequestsAreReleasedBeforeCallbacks) {
+        TServiceConnection<TTestStub>::CheckDroppedWriteLifetime(false);
+        TServiceConnection<TTestStub>::CheckDroppedWriteLifetime(true);
+    }
+}
+
 Y_UNIT_TEST_SUITE(ChannelPoolTests) {
     Y_UNIT_TEST(UnusedStubsHoldersDeletion) {
         TGRpcClientConfig clientConfig("invalid_host:invalid_port");

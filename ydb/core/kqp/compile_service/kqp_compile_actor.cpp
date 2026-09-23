@@ -469,9 +469,9 @@ private:
 
     void Reply() {
         Y_ENSURE(KqpCompileResult);
-        KqpCompileResult->EnableTablePathPrefixMultiScopes = KqpCompileResult->QueryAst
-            ? KqpCompileResult->QueryAst->EnableTablePathPrefixMultiScopes
-            : Config->FeatureFlags.GetEnableTablePathPrefixMultiScopes();
+        KqpCompileResult->EnableSequentialTablePathPrefix = KqpCompileResult->QueryAst
+            ? KqpCompileResult->QueryAst->EnableSequentialTablePathPrefix
+            : Config->FeatureFlags.GetEnableSequentialTablePathPrefix();
         YDB_LOG_DEBUG("Send response",
             {"self", SelfId()},
             {"owner", Owner},

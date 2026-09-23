@@ -91,7 +91,7 @@ struct TTranslationSettings {
     THashMap<TString, TString> ClusterMapping;
     TString PathPrefix;
     // Opt in only after the embedding application is ready for source-order prefixes.
-    bool EnableTablePathPrefixMultiScopes = false;
+    bool EnableSequentialTablePathPrefix = false;
     // keys (cluster name) should be normalized
     THashMap<TString, TString> ClusterPathPrefixes;
     THashMap<TString, TString> ModuleMapping;

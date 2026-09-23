@@ -144,8 +144,8 @@ public:
         return IsAmbiguityError;
     }
 
-    bool GetEnableTablePathPrefixMultiScopes() const {
-        return EnableTablePathPrefixMultiScopes;
+    bool GetEnableSequentialTablePathPrefix() const {
+        return EnableSequentialTablePathPrefix;
     }
 
     TKqpTranslationSettingsBuilder& SetYqlSelect(TMaybe<NSQLTranslation::EYqlSelect> yqlSelect) {
@@ -175,7 +175,7 @@ private:
     bool IsAmbiguityError = false;
     TMaybe<NSQLTranslation::EYqlSelect> YqlSelect = {};
     bool ValidateViewStatement = true;
-    bool EnableTablePathPrefixMultiScopes = true;
+    bool EnableSequentialTablePathPrefix = true;
     NSQLTranslation::TIncrementMonCounterFunction IncrementCounter;
 };
 

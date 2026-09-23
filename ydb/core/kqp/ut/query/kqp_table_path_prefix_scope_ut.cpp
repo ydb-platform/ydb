@@ -11,7 +11,7 @@ Y_UNIT_TEST_SUITE(KqpTablePathPrefixScopeRollout) {
     Y_UNIT_TEST(SameSessionAndCachedQueryFollowFlagUpdates) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        runtime.GetAppData().FeatureFlags.SetEnableTablePathPrefixMultiScopes(false);
+        runtime.GetAppData().FeatureFlags.SetEnableSequentialTablePathPrefix(false);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto scheme = kikimr.GetSchemeClient();
         for (const TString& path : {TString("/Root/first"), TString("/Root/second")}) {
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(KqpTablePathPrefixScopeRollout) {
             CompareYson("[[22u]]", FormatResultSetYson(result.GetResultSets()[1]));
         };
         for (bool enabled : {false, true, false}) {
-            runtime.GetAppData().FeatureFlags.SetEnableTablePathPrefixMultiScopes(enabled);
+            runtime.GetAppData().FeatureFlags.SetEnableSequentialTablePathPrefix(enabled);
             for (unsigned repeat = 0; repeat < 2; ++repeat) {
                 const auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
                     TExecDataQuerySettings().KeepInQueryCache(true).CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();

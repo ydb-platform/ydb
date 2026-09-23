@@ -2120,11 +2120,11 @@ TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTablePa
 
 TNodePtr BuildAlterTable(TContext& ctx, const TTableRef& tr, TAlterTableParameters params)
 {
-    if (ctx.Settings.EnableTablePathPrefixMultiScopes && params.RenameTo) {
+    if (ctx.Settings.EnableSequentialTablePathPrefix && params.RenameTo) {
         params.RenameTo->Name = BuildTablePath(
             ctx.GetPrefixPath(ctx.Scoped->CurrService, ctx.Scoped->CurrCluster), params.RenameTo->Name);
     }
-    return new TAlterTableNode(ctx.Pos(), tr, std::move(params), ctx.Scoped, ctx.Settings.EnableTablePathPrefixMultiScopes);
+    return new TAlterTableNode(ctx.Pos(), tr, std::move(params), ctx.Scoped, ctx.Settings.EnableSequentialTablePathPrefix);
 }
 
 class TDropTableNode final: public TAstListNode {

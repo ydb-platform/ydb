@@ -832,7 +832,7 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
     Y_UNIT_TEST(LegacyAlterTableFactoryKeepsDeferredRenameWithOptInContext) {
         NYql::TIssues issues;
         auto parserContext = CreateDefaultParserContext(issues);
-        parserContext.Settings.EnableTablePathPrefixMultiScopes = true;
+        parserContext.Settings.EnableSequentialTablePathPrefix = true;
         UNIT_ASSERT(parserContext.SetPathPrefix("/first"));
         TTableRef tableRef("Input", parserContext.Scoped->CurrService, parserContext.Scoped->CurrCluster, {});
         tableRef.Keys = BuildTableKey(parserContext.Pos(), tableRef.Service, tableRef.Cluster,
@@ -851,7 +851,7 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
         for (const TString destination : {"Renamed", "/absolute/Renamed"}) {
             NYql::TIssues issues;
             auto parserContext = CreateDefaultParserContext(issues);
-            parserContext.Settings.EnableTablePathPrefixMultiScopes = true;
+            parserContext.Settings.EnableSequentialTablePathPrefix = true;
             UNIT_ASSERT(parserContext.SetPathPrefix("/first"));
 
             TTableRef tableRef("Input", parserContext.Scoped->CurrService, parserContext.Scoped->CurrCluster, {});

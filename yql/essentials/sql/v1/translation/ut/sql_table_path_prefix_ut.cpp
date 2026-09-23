@@ -11,9 +11,9 @@ using namespace NSQLTranslationV1;
 
 namespace {
 
-NYql::TAstParseResult SqlToYqlWithMultiScopes(const TString& query, size_t maxErrors = 10, const TString& provider = {}) {
+NYql::TAstParseResult SqlToYqlWithSequentialTablePathPrefix(const TString& query, size_t maxErrors = 10, const TString& provider = {}) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.EnableTablePathPrefixMultiScopes = true;
+    settings.EnableSequentialTablePathPrefix = true;
     return SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, maxErrors, provider,
                           EDebugOutput::None, false, settings);
 }
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TablePathPrefixScope) {
 
 Y_UNIT_TEST(GenericTranslationKeepsLegacyDefault) {
     const NSQLTranslation::TTranslationSettings settings;
-    UNIT_ASSERT(!settings.EnableTablePathPrefixMultiScopes);
+    UNIT_ASSERT(!settings.EnableSequentialTablePathPrefix);
     AssertPaths(SqlToYql(R"sql(
         USE plato;
         PRAGMA TablePathPrefix = '/first';
@@ -59,7 +59,7 @@ Y_UNIT_TEST(LegacyFactorySignaturesRemainAvailable) {
 
 Y_UNIT_TEST(LegacyKeyFactoriesKeepDeferredLookupWithOptInContext) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.EnableTablePathPrefixMultiScopes = true;
+    settings.EnableSequentialTablePathPrefix = true;
     settings.DefaultCluster = "plato";
     settings.ClusterMapping["plato"] = "kikimr";
     NYql::TIssues issues;
@@ -86,7 +86,7 @@ Y_UNIT_TEST(LegacyKeyFactoriesKeepDeferredLookupWithOptInContext) {
 Y_UNIT_TEST(KeyFactorySnapshotsKeepClusterAndProviderSeparate) {
     for (const bool enabled : {false, true}) {
         NSQLTranslation::TTranslationSettings settings;
-        settings.EnableTablePathPrefixMultiScopes = enabled;
+        settings.EnableSequentialTablePathPrefix = enabled;
         settings.DefaultCluster = "plato";
         for (const auto* cluster : {"plato", "target", "providerOnly"}) {
             settings.ClusterMapping[cluster] = "kikimr";
@@ -131,14 +131,14 @@ Y_UNIT_TEST(FollowingStatementsOnly) {
             << "PRAGMA TablePathPrefix(" << target << "'/second'); SELECT * FROM Input;"
             << "SELECT * FROM `/absolute/Input`;"
             << "PRAGMA TablePathPrefix(" << target << "'/unused');";
-        AssertPaths(SqlToYqlWithMultiScopes(query, 10, TString(NYql::KikimrProviderName)),
+        AssertPaths(SqlToYqlWithSequentialTablePathPrefix(query, 10, TString(NYql::KikimrProviderName)),
                     {"Before", "/first/Input", "/second/Input", "/absolute/Input"},
                     {"/unused/Before", "/unused/Input", "/second/Before"});
     }
 }
 
 Y_UNIT_TEST(NamedSourcesKeepDefinitionPrefix) {
-    AssertPaths(SqlToYqlWithMultiScopes(R"sql(
+    AssertPaths(SqlToYqlWithSequentialTablePathPrefix(R"sql(
         USE plato;
         PRAGMA TablePathPrefix = '/first';
         $query = SELECT * FROM Input;
@@ -150,7 +150,7 @@ Y_UNIT_TEST(NamedSourcesKeepDefinitionPrefix) {
 }
 
 Y_UNIT_TEST(TableNamesFromExpressions) {
-    const auto result = SqlToYqlWithMultiScopes(R"sql(
+    const auto result = SqlToYqlWithSequentialTablePathPrefix(R"sql(
         USE plato;
         $literal = 'Input';
         $expression = 'In' || 'put';
@@ -167,7 +167,7 @@ Y_UNIT_TEST(TableNamesFromExpressions) {
 }
 
 Y_UNIT_TEST(ClonedExpressionSourcesKeepDefinitionPrefix) {
-    const auto result = SqlToYqlWithMultiScopes(R"sql(
+    const auto result = SqlToYqlWithSequentialTablePathPrefix(R"sql(
         USE plato;
         $table = 'In' || 'put';
         PRAGMA TablePathPrefix = '/first';
@@ -193,12 +193,12 @@ Y_UNIT_TEST(WritesAndTableDdl) {
         const TString query = TStringBuilder()
             << "USE plato; PRAGMA TablePathPrefix = '/first';" << statement
             << "PRAGMA TablePathPrefix = '/second';" << statement;
-        AssertPaths(SqlToYqlWithMultiScopes(query, 10, TString(NYql::KikimrProviderName)), {"/first/Input", "/second/Input"});
+        AssertPaths(SqlToYqlWithSequentialTablePathPrefix(query, 10, TString(NYql::KikimrProviderName)), {"/first/Input", "/second/Input"});
     }
 }
 
 Y_UNIT_TEST(RenameDestination) {
-    AssertPaths(SqlToYqlWithMultiScopes(R"sql(
+    AssertPaths(SqlToYqlWithSequentialTablePathPrefix(R"sql(
         USE plato;
         PRAGMA TablePathPrefix = '/first';
         ALTER TABLE Input RENAME TO Output;
@@ -208,7 +208,7 @@ Y_UNIT_TEST(RenameDestination) {
 }
 
 Y_UNIT_TEST(TopicsAndBackupTables) {
-    AssertPaths(SqlToYqlWithMultiScopes(R"sql(
+    AssertPaths(SqlToYqlWithSequentialTablePathPrefix(R"sql(
         USE plato;
         PRAGMA TablePathPrefix = '/first';
         CREATE TOPIC Input;
@@ -224,7 +224,7 @@ Y_UNIT_TEST(TopicsAndBackupTables) {
 }
 
 Y_UNIT_TEST(TopicsUseProviderPrefixInSourceOrder) {
-    AssertPaths(SqlToYqlWithMultiScopes(R"sql(
+    AssertPaths(SqlToYqlWithSequentialTablePathPrefix(R"sql(
         USE plato;
         PRAGMA TablePathPrefix('kikimr', '/provider_first');
         CREATE TOPIC Created;
@@ -239,7 +239,7 @@ Y_UNIT_TEST(TopicsUseProviderPrefixInSourceOrder) {
 }
 
 Y_UNIT_TEST(TopicClusterPrefixOverridesProviderAndGlobal) {
-    AssertPaths(SqlToYqlWithMultiScopes(R"sql(
+    AssertPaths(SqlToYqlWithSequentialTablePathPrefix(R"sql(
         USE plato;
         PRAGMA TablePathPrefix('kikimr', '/provider');
         CREATE TOPIC BeforeCluster;
@@ -261,9 +261,9 @@ Y_UNIT_TEST(TableFunctions) {
         const TString query = TStringBuilder()
             << "USE plato; PRAGMA TablePathPrefix = '/first'; SELECT * FROM " << source << ";"
             << "PRAGMA TablePathPrefix = '/second'; SELECT * FROM " << source << ";";
-        AssertPaths(SqlToYqlWithMultiScopes(query), {"/first/Input", "/second/Input"});
+        AssertPaths(SqlToYqlWithSequentialTablePathPrefix(query), {"/first/Input", "/second/Input"});
     }
-    AssertPaths(SqlToYqlWithMultiScopes(R"sql(
+    AssertPaths(SqlToYqlWithSequentialTablePathPrefix(R"sql(
         USE plato;
         PRAGMA UseTablePrefixForEach;
         PRAGMA TablePathPrefix = '/first';
@@ -275,7 +275,7 @@ Y_UNIT_TEST(TableFunctions) {
 
 Y_UNIT_TEST(YqlSelectSources) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.EnableTablePathPrefixMultiScopes = true;
+    settings.EnableSequentialTablePathPrefix = true;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
     const auto result = SqlToYqlWithSettings(R"sql(
         USE plato;
@@ -296,7 +296,7 @@ Y_UNIT_TEST(YqlSelectSources) {
 Y_UNIT_TEST(SplitStatementsKeepNamedSourcePrefix) {
     google::protobuf::Arena arena;
     NSQLTranslation::TTranslationSettings settings;
-    settings.EnableTablePathPrefixMultiScopes = true;
+    settings.EnableSequentialTablePathPrefix = true;
     settings.Arena = &arena;
     settings.ClusterMapping["plato"] = TString(NYql::KikimrProviderName);
     NSQLTranslationV1::TLexers lexers;
@@ -320,7 +320,7 @@ Y_UNIT_TEST(SplitStatementsKeepNamedSourcePrefix) {
 
 Y_UNIT_TEST(LegacyModeUsesFinalPrefix) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.EnableTablePathPrefixMultiScopes = false;
+    settings.EnableSequentialTablePathPrefix = false;
     for (const TString statement : {
             "SELECT * FROM Input;",
             "INSERT INTO Input (key) VALUES (1);",
@@ -342,7 +342,7 @@ Y_UNIT_TEST(LegacyModeUsesFinalPrefix) {
 
 Y_UNIT_TEST(LegacyModeKeepsDeferredExpressionAndNamedSourceLookup) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.EnableTablePathPrefixMultiScopes = false;
+    settings.EnableSequentialTablePathPrefix = false;
     AssertPaths(SqlToYqlWithSettings(R"sql(
         USE plato;
         $literal = 'Input';
@@ -359,7 +359,7 @@ Y_UNIT_TEST(LegacyModeKeepsDeferredExpressionAndNamedSourceLookup) {
 
 Y_UNIT_TEST(LegacyModeKeepsProviderAndClusterPrecedence) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.EnableTablePathPrefixMultiScopes = false;
+    settings.EnableSequentialTablePathPrefix = false;
     AssertPaths(SqlToYqlWithSettings(R"sql(
         USE plato;
         PRAGMA TablePathPrefix('yt', '/provider_first');
@@ -375,7 +375,7 @@ Y_UNIT_TEST(LegacyModeKeepsProviderAndClusterPrecedence) {
 
 Y_UNIT_TEST(LegacyModeKeepsTableFunctionsAndBackupLookup) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.EnableTablePathPrefixMultiScopes = false;
+    settings.EnableSequentialTablePathPrefix = false;
     AssertPaths(SqlToYqlWithSettings(R"sql(
         USE plato;
         PRAGMA UseTablePrefixForEach;
@@ -393,7 +393,7 @@ Y_UNIT_TEST(LegacyModeKeepsTableFunctionsAndBackupLookup) {
 
 Y_UNIT_TEST(LegacyModeKeepsTopicProviderBehavior) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.EnableTablePathPrefixMultiScopes = false;
+    settings.EnableSequentialTablePathPrefix = false;
     const auto result = SqlToYqlWithMode(R"sql(
         USE plato;
         PRAGMA TablePathPrefix('kikimr', '/provider');
@@ -406,7 +406,7 @@ Y_UNIT_TEST(LegacyModeKeepsTopicProviderBehavior) {
 
 Y_UNIT_TEST(LegacyModeKeepsYqlSelectLookup) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.EnableTablePathPrefixMultiScopes = false;
+    settings.EnableSequentialTablePathPrefix = false;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
     AssertPaths(SqlToYqlWithSettings(R"sql(
         USE plato;
@@ -425,7 +425,7 @@ Y_UNIT_TEST(ScopeSwitchDiagnosticCountsChangedAssignmentsAfterReferences) {
         const auto check = [enabled](const TString& query, size_t expected) {
             size_t switches = 0;
             NSQLTranslation::TTranslationSettings settings;
-            settings.EnableTablePathPrefixMultiScopes = enabled;
+            settings.EnableSequentialTablePathPrefix = enabled;
             settings.IncrementCounter = [&](const TString& group, const TString& name) {
                 if (group == "TablePathPrefix" && name == "SwitchedScopeToGlobal") {
                     ++switches;

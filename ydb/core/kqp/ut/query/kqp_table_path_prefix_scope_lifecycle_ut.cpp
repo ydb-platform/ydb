@@ -14,7 +14,7 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpTablePathPrefixScopeLifecycle) {
     Y_UNIT_TEST_TWIN(InFlightCompilationDoesNotServeRequestsAfterFlagUpdate, AstCache) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
-        settings.FeatureFlags.SetEnableTablePathPrefixMultiScopes(false);
+        settings.FeatureFlags.SetEnableSequentialTablePathPrefix(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(AstCache);
         TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(KqpTablePathPrefixScopeLifecycle) {
         UNIT_ASSERT_C(!oldCompilation.empty(), "Query must reach compilation before the flag update");
         UNIT_ASSERT_VALUES_EQUAL(oldCompilation.front()->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS);
 
-        runtime.GetAppData().FeatureFlags.SetEnableTablePathPrefixMultiScopes(true);
+        runtime.GetAppData().FeatureFlags.SetEnableSequentialTablePathPrefix(true);
         TKqpCounters counters(runtime.GetAppData().Counters);
         auto newFuture = kikimr.RunInThreadPool([&] { return execute(newSession); });
         runtime.WaitFor("new request queued behind old compilation", [&] {

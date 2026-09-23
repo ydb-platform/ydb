@@ -34,7 +34,7 @@ using namespace NYql;
 namespace {
 
 bool HasCurrentTablePathPrefixSemantics(const TKqpCompileResult& result, const TActorContext& ctx) {
-    return result.EnableTablePathPrefixMultiScopes == AppData(ctx)->FeatureFlags.GetEnableTablePathPrefixMultiScopes();
+    return result.EnableSequentialTablePathPrefix == AppData(ctx)->FeatureFlags.GetEnableSequentialTablePathPrefix();
 }
 
 } // namespace
@@ -190,7 +190,7 @@ public:
         return {};
     }
 
-    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpQueryId& query, bool enableTablePathPrefixMultiScopes) {
+    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpQueryId& query, bool enableSequentialTablePathPrefix) {
         auto queryIt = QueryIndex.find(query);
         if (queryIt == QueryIndex.end()) {
             return {};
@@ -200,7 +200,7 @@ public:
         for (auto it = queryIt->second.begin(); it != queryIt->second.end();) {
             auto requestIt = *it;
             Y_ENSURE(requestIt != Queue.end());
-            if (requestIt->QueryAst && requestIt->QueryAst->EnableTablePathPrefixMultiScopes != enableTablePathPrefixMultiScopes) {
+            if (requestIt->QueryAst && requestIt->QueryAst->EnableSequentialTablePathPrefix != enableSequentialTablePathPrefix) {
                 ++it;
                 continue;
             }
@@ -704,7 +704,7 @@ private:
                 // A compilation may finish after a flag update. Its original request
                 // can complete, but requests translated with other semantics must wait.
                 auto requests = hasCurrentTablePathPrefixSemantics
-                    ? RequestsQueue.ExtractByQuery(*compileResult->Query, compileResult->EnableTablePathPrefixMultiScopes)
+                    ? RequestsQueue.ExtractByQuery(*compileResult->Query, compileResult->EnableSequentialTablePathPrefix)
                     : TVector<TKqpCompileRequest>{};
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
@@ -804,10 +804,10 @@ private:
             {"ast", queryAst.Ast->Root->ToString()});
 
         TKqpCompileResult::TConstPtr compileResult;
-        const bool enableTablePathPrefixMultiScopes = AppData(ctx)->FeatureFlags.GetEnableTablePathPrefixMultiScopes();
-        if (compileRequest.FindInCache && queryAst.EnableTablePathPrefixMultiScopes == enableTablePathPrefixMultiScopes) {
+        const bool enableSequentialTablePathPrefix = AppData(ctx)->FeatureFlags.GetEnableSequentialTablePathPrefix();
+        if (compileRequest.FindInCache && queryAst.EnableSequentialTablePathPrefix == enableSequentialTablePathPrefix) {
             compileResult = QueryCache->FindByAst(
-                compileRequest.Query, *queryAst.Ast, enableTablePathPrefixMultiScopes,
+                compileRequest.Query, *queryAst.Ast, enableSequentialTablePathPrefix,
                 compileRequest.CompileSettings.KeepInCache,
                 compileRequest.CompileSettings.IsWarmupCompilation
                     ? EWarmupAttributionMode::Warmup
@@ -900,7 +900,7 @@ private:
             return false;
         }
         if (compileResult->GetAst() && QueryCache->FindByAst(
-                query, *compileResult->GetAst(), compileResult->EnableTablePathPrefixMultiScopes, keepInCache,
+                query, *compileResult->GetAst(), compileResult->EnableSequentialTablePathPrefix, keepInCache,
                 EWarmupAttributionMode::None, /*counters=*/nullptr)) {
             return false;
         }
@@ -908,7 +908,7 @@ private:
             false, {}, compileResult->ReplayMessageUserView);
         newCompileResult->AllowCache = compileResult->AllowCache;
         newCompileResult->UsedNewRbo = compileResult->UsedNewRbo;
-        newCompileResult->EnableTablePathPrefixMultiScopes = compileResult->EnableTablePathPrefixMultiScopes;
+        newCompileResult->EnableSequentialTablePathPrefix = compileResult->EnableSequentialTablePathPrefix;
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
         YDB_LOG_DEBUG_CTX(ctx, "Insert preparing query with params",
             {"queryId", compileResult->Query->SerializeToString()});
@@ -1422,7 +1422,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
 TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
     const TKqpQueryId& query,
     const NYql::TAstParseResult& ast,
-    bool enableTablePathPrefixMultiScopes,
+    bool enableSequentialTablePathPrefix,
     bool promote,
     EWarmupAttributionMode warmupAttribution,
     TIntrusivePtr<TKqpCounters> counters,
@@ -1437,7 +1437,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
 
     auto compileResult = FindByUidImpl(*uid, promote);
     RejectOnTempTableClash(compileResult, tempTablesState);
-    if (compileResult && compileResult->EnableTablePathPrefixMultiScopes != enableTablePathPrefixMultiScopes) {
+    if (compileResult && compileResult->EnableSequentialTablePathPrefix != enableSequentialTablePathPrefix) {
         EraseByUidImpl(compileResult->Uid);
         compileResult = nullptr;
     }

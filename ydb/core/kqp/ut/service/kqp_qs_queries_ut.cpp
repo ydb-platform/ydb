@@ -6249,7 +6249,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(TablePathPrefixMultiScopesFlagAndDiagnostic) {
+    Y_UNIT_TEST(SequentialTablePathPrefixFlagAndDiagnostic) {
         const TString query = R"sql(
             PRAGMA TablePathPrefix = '/first';
             $query = SELECT * FROM Input;
@@ -6261,7 +6261,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             for (const bool perStatement : {false, true}) {
                 size_t switches = 0;
                 NYql::TKikimrConfiguration config;
-                config.FeatureFlags.SetEnableTablePathPrefixMultiScopes(enabled);
+                config.FeatureFlags.SetEnableSequentialTablePathPrefix(enabled);
                 config.IncrementTranslationCounter = [&](const TString& group, const TString& name) {
                     if (group == "TablePathPrefix" && name == "SwitchedScopeToGlobal") {
                         ++switches;
@@ -6275,7 +6275,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 TString program;
                 for (const auto& result : results) {
                     UNIT_ASSERT_C(result.Ast->IsOk(), result.Ast->Issues.ToString());
-                    UNIT_ASSERT_VALUES_EQUAL(result.EnableTablePathPrefixMultiScopes, enabled);
+                    UNIT_ASSERT_VALUES_EQUAL(result.EnableSequentialTablePathPrefix, enabled);
                     program += result.Ast->Root->ToString();
                 }
                 UNIT_ASSERT_STRING_CONTAINS(program, enabled ? "/first/Input" : "/second/Input");
@@ -6294,7 +6294,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto dbCounters = MakeIntrusive<TKqpDbCounters>(external, database);
         TKqpCounters counters(global);
         NYql::TKikimrConfiguration config;
-        config.FeatureFlags.SetEnableTablePathPrefixMultiScopes(false);
+        config.FeatureFlags.SetEnableSequentialTablePathPrefix(false);
         config.IncrementTranslationCounter = [&](const TString& group, const TString& name) {
             counters.ReportTranslationCounter(dbCounters, group, name);
         };

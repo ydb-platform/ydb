@@ -24,7 +24,7 @@ namespace NSQLTranslationV1 {
 
 TTablePathPrefix::TTablePathPrefix(TContext& ctx, const TString& service, const TDeferredAtom& cluster) {
     const TStringBuf prefix = ctx.GetPrefixPath(service, cluster);
-    if (ctx.Settings.EnableTablePathPrefixMultiScopes) {
+    if (ctx.Settings.EnableSequentialTablePathPrefix) {
         Prefix_ = TString(prefix);
     }
 }

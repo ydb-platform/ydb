@@ -87,7 +87,7 @@ Supported units of measurement:
 
 - Seconds. `30s`
 - Minutes. `20m`
-- Clock. `5h`
+- Hours. `5h`
 - Days. `3d`
 
 It is not allowed to combine units of measurement in one line. For example, the following entry is incorrect: `1d12h`. This entry should be replaced with an equivalent one, for example `36h`.

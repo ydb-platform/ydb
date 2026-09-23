@@ -892,7 +892,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
         Y_ENSURE(false, "Unexpected table effects operation");
     }
 
-    return MakeIntrusive<TOpTableEffect>(input, node->Pos(), opTableEffect.Table().Ptr(), type, options);
+    return MakeIntrusive<TOpTableEffect>(input, node->Pos(), opTableEffect.Table().Ptr(), type, options, Projections.at(input.Get()));
 }
 
 } // namespace NKikimr::Nkqp

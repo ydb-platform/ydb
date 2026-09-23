@@ -1705,19 +1705,18 @@ TString TOpCBOTree::ToString(TExprContext& ctx) {
 /**
 * Table Effect operator methods: these are inserts/updates/deletes
 */
-TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options)
+TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options, const TVector<TInfoUnit>& usedColumns)
     : IUnaryOperator(EOperator::TableEffect, pos, input)
     , Table(table)
     , EffectType(type)
-    , Options(options) {
+    , Options(options)
+    , UsedIUs(usedColumns) {
 
     if (options.ReturningColumns.has_value()) {
         for (const auto & c : options.ReturningColumns.value()) {
             OutputIUs.push_back(TInfoUnit(c));
         }
     }
-
-    UsedIUs = GetInput()->GetOutputIUs();
 }
 
 TVector<TInfoUnit> TOpTableEffect::GetUsedIUs(TPlanProps& props) {

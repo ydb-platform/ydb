@@ -79,8 +79,8 @@ public:
         TString Id;
     };
 
-    virtual void GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) = 0;
-    virtual void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) = 0;
+    virtual void GetUsedNodes(const TExprNode::TPtr& node, TVector<TString>& usedNodeIds) = 0;
+    virtual void GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) = 0;
     virtual IGraphTransformer& GetCleanupTransformer() = 0;
 };
 

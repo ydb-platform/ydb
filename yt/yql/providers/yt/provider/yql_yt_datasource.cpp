@@ -36,32 +36,61 @@ using namespace NNodes;
 
 class TYtDataSourceTrackableNodeProcessor : public TTrackableNodeProcessorBase {
 public:
-    TYtDataSourceTrackableNodeProcessor(bool collectNodes)
-        : CollectNodes(collectNodes)
+    TYtDataSourceTrackableNodeProcessor(TYtState::TPtr state, bool collectTempData, bool collectSnapshotLocks)
+        : CollectTempData(collectTempData)
+        , CollectSnapshotLocks(collectSnapshotLocks)
+        , CleanupTransformer(collectSnapshotLocks ? CreateYtDataSourceTrackableNodesCleanupTransformer(state) : nullptr)
     {
     }
 
-    void GetUsedNodes(const TExprNode& input, TVector<TString>& usedNodeIds) override {
+    void GetUsedNodes(const TExprNode::TPtr& input, TVector<TString>& usedNodeIds) override {
         usedNodeIds.clear();
-        if (!CollectNodes) {
-            return;
+
+        if (CollectSnapshotLocks) {
+            ScanForUsedInputTables(input, usedNodeIds);
         }
 
-        if (auto maybeResPull = TMaybeNode<TResPull>(&input)) {
-            ScanForUsedOutputTables(maybeResPull.Cast().Data().Ref(), usedNodeIds);
-        } else if (auto maybeResFill = TMaybeNode<TResFill>(&input)){
-            ScanForUsedOutputTables(maybeResFill.Cast().Data().Ref(), usedNodeIds);
-        } else if (auto maybeResIf = TMaybeNode<TResIf>(&input)){
-            ScanForUsedOutputTables(maybeResIf.Cast().Condition().Ref(), usedNodeIds);
-        } else if (TMaybeNode<TYtReadTable>(&input)) {
-            ScanForUsedOutputTables(*input.Child(TYtReadTable::idx_Input), usedNodeIds);
-        } else if (TMaybeNode<TYtReadTableScheme>(&input)) {
-            ScanForUsedOutputTables(*input.Child(TYtReadTableScheme::idx_Type), usedNodeIds);
+        if (CollectTempData) {
+            if (auto maybeResPull = TMaybeNode<TResPull>(input)) {
+                ScanForUsedOutputTables(maybeResPull.Cast().Data().Ptr(), usedNodeIds);
+            } else if (auto maybeResFill = TMaybeNode<TResFill>(input)){
+                ScanForUsedOutputTables(maybeResFill.Cast().Data().Ptr(), usedNodeIds);
+            } else if (auto maybeResIf = TMaybeNode<TResIf>(input)){
+                ScanForUsedOutputTables(maybeResIf.Cast().Condition().Ptr(), usedNodeIds);
+            } else if (TMaybeNode<TYtReadTable>(input)) {
+                ScanForUsedOutputTables(input->Child(TYtReadTable::idx_Input), usedNodeIds);
+            } else if (TMaybeNode<TYtReadTableScheme>(input)) {
+                ScanForUsedOutputTables(input->Child(TYtReadTableScheme::idx_Type), usedNodeIds);
+            }
         }
     }
 
+    void GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& created, TExprContext& /*ctx*/) override {
+        created.clear();
+        if (!CollectSnapshotLocks) {
+            return;
+        }
+
+        if (auto maybeTable = TMaybeNode<TYtTable>(node)) {
+            auto table = maybeTable.Cast();
+
+            auto name = MakeUsedSnapshotNodeId(
+                table.Cluster().StringValue(),
+                table.Name().StringValue(),
+                TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0));
+
+            created.push_back(TExprNodeAndId{table.Ptr(), name});
+        }
+    }
+
+    IGraphTransformer& GetCleanupTransformer() override {
+        return CollectSnapshotLocks ? *CleanupTransformer : NullTransformer_;
+    }
+
 private:
-    const bool CollectNodes;
+    const bool CollectTempData;
+    const bool CollectSnapshotLocks;
+    THolder<IGraphTransformer> CleanupTransformer;
 };
 
 namespace {
@@ -88,9 +117,11 @@ public:
         , ConstraintTransformer_([this]() { return CreateYtDataSourceConstraintTransformer(State_); })
         , ExecTransformer_([this]() { return CreateYtDataSourceExecTransformer(State_); })
         , TrackableNodeProcessor_([this]() {
-            auto mode = GetReleaseTempDataMode(*State_->Configuration);
-            bool collectNodes = mode == EReleaseTempDataMode::Immediate;
-            return MakeHolder<TYtDataSourceTrackableNodeProcessor>(collectNodes);
+            auto dataMode = GetReleaseTempDataMode(*State_->Configuration);
+            auto locksMode = GetReleaseSnapshotLocksMode(*State_->Configuration);
+            bool collectTempData = dataMode == EReleaseTempDataMode::Immediate;
+            bool collectLocks = locksMode == EReleaseSnapshotLocksMode::Immediate;
+            return MakeHolder<TYtDataSourceTrackableNodeProcessor>(State_, collectTempData, collectLocks);
         })
         , DqOptimizer_([this]() { return CreateYtDqOptimizers(State_); })
     {

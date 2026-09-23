@@ -37,36 +37,40 @@ using namespace NNodes;
 
 class TYtDataSinkTrackableNodeProcessor : public TTrackableNodeProcessorBase {
 public:
-    TYtDataSinkTrackableNodeProcessor(const TYtState::TPtr& state, bool collectNodes)
-        : CollectNodes(collectNodes)
-        , CleanupTransformer(collectNodes ? CreateYtDataSinkTrackableNodesCleanupTransformer(state) : nullptr)
+    TYtDataSinkTrackableNodeProcessor(const TYtState::TPtr& state, bool collectTempData, bool collectSnapshotLocks)
+        : CollectTempData(collectTempData)
+        , CollectSnapshotLocks(collectSnapshotLocks)
+        , CleanupTransformer(collectTempData ? CreateYtDataSinkTrackableNodesCleanupTransformer(state) : nullptr)
     {
     }
 
-    void GetUsedNodes(const TExprNode& input, TVector<TString>& usedNodeIds) override {
+    void GetUsedNodes(const TExprNode::TPtr& input, TVector<TString>& usedNodeIds) override {
         usedNodeIds.clear();
-        if (!CollectNodes) {
-            return;
+
+        if (CollectSnapshotLocks) {
+            ScanForUsedInputTables(input, usedNodeIds);
         }
 
-        if (TMaybeNode<TYtOutputOpBase>(&input)) {
-            for (size_t i = TYtOutputOpBase::idx_Output + 1; i < input.ChildrenSize(); ++i) {
-                ScanForUsedOutputTables(*input.Child(i), usedNodeIds);
+        if (CollectTempData) {
+            if (TMaybeNode<TYtOutputOpBase>(input)) {
+                for (size_t i = TYtOutputOpBase::idx_Output + 1; i < input->ChildrenSize(); ++i) {
+                    ScanForUsedOutputTables(input->Child(i), usedNodeIds);
+                }
+            } else if (TMaybeNode<TYtPublish>(input)) {
+                ScanForUsedOutputTables(input->Child(TYtPublish::idx_Input), usedNodeIds);
+            } else if (TMaybeNode<TYtStatOut>(input)) {
+                ScanForUsedOutputTables(input->Child(TYtStatOut::idx_Input), usedNodeIds);
             }
-        } else if (TMaybeNode<TYtPublish>(&input)) {
-            ScanForUsedOutputTables(*input.Child(TYtPublish::idx_Input), usedNodeIds);
-        } else if (TMaybeNode<TYtStatOut>(&input)) {
-            ScanForUsedOutputTables(*input.Child(TYtStatOut::idx_Input), usedNodeIds);
         }
     }
 
-    void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& created, TExprContext& ctx) override {
+    void GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& created, TExprContext& ctx) override {
         created.clear();
-        if (!CollectNodes) {
+        if (!CollectTempData) {
             return;
         }
 
-        if (auto maybeOp = TMaybeNode<TYtOutputOpBase>(&node)) {
+        if (auto maybeOp = TMaybeNode<TYtOutputOpBase>(node)) {
             TString clusterName = TString{maybeOp.Cast().DataSink().Cast<TYtDSink>().Cluster().Value()};
             auto clusterPtr = maybeOp.Cast().DataSink().Ptr();
             for (auto table: maybeOp.Cast().Output()) {
@@ -83,11 +87,12 @@ public:
     }
 
     IGraphTransformer& GetCleanupTransformer() override {
-        return CollectNodes ? *CleanupTransformer : NullTransformer_;
+        return CollectTempData ? *CleanupTransformer : NullTransformer_;
     }
 
 private:
-    const bool CollectNodes;
+    const bool CollectTempData;
+    const bool CollectSnapshotLocks;
     THolder<IGraphTransformer> CleanupTransformer;
 };
 
@@ -111,9 +116,11 @@ public:
         })
         , FinalizingTransformer_([this]() { return CreateYtDataSinkFinalizingTransformer(State_); })
         , TrackableNodeProcessor_([this]() {
-            auto mode = GetReleaseTempDataMode(*State_->Configuration);
-            bool collectNodes = mode == EReleaseTempDataMode::Immediate;
-            return MakeHolder<TYtDataSinkTrackableNodeProcessor>(State_, collectNodes);
+            auto dataMode = GetReleaseTempDataMode(*State_->Configuration);
+            auto locksMode = GetReleaseSnapshotLocksMode(*State_->Configuration);
+            bool collectTempData = dataMode == EReleaseTempDataMode::Immediate;
+            bool collectLocks = locksMode == EReleaseSnapshotLocksMode::Immediate;
+            return MakeHolder<TYtDataSinkTrackableNodeProcessor>(State_, collectTempData, collectLocks);
         })
     {
     }

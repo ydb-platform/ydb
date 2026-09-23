@@ -74,7 +74,7 @@ public:
             });
         }
 
-        auto status = CollectUnusedNodes(*input, ctx);
+        auto status = CollectUnusedNodes(input, ctx);
         YQL_CLOG(INFO, CoreExecution) << "Collect unused nodes for root #" << input->UniqueId() << ", status: " << status;
         if (status != TStatus::Ok) {
             return status;
@@ -641,7 +641,7 @@ public:
         }
 
         TVector<ITrackableNodeProcessor::TExprNodeAndId> createdNodes;
-        dataProvider->GetTrackableNodeProcessor().GetCreatedNodes(*node, createdNodes, ctx);
+        dataProvider->GetTrackableNodeProcessor().GetCreatedNodes(node, createdNodes, ctx);
 
         TVector<TString> ids;
         for (const auto& c : createdNodes) {
@@ -654,21 +654,21 @@ public:
                                       << " trackable nodes: " << JoinSeq(", ", ids);
     }
 
-    TStatus CollectUnusedNodes(const TExprNode& root, TExprContext& ctx) {
+    TStatus CollectUnusedNodes(const TExprNode::TPtr& root, TExprContext& ctx) {
         if (TrackableNodes_.empty()) {
             return TStatus::Ok;
         }
 
-        YQL_CLOG(TRACE, CoreExecution) << "Collecting unused nodes on root #" << root.UniqueId();
+        YQL_CLOG(TRACE, CoreExecution) << "Collecting unused nodes on root #" << root->UniqueId();
 
         THashSet<ui64> visited;
         THashSet<TString> usedIds;
-        VisitExpr(root, [&](const TExprNode& node) {
-            if (node.GetState() == TExprNode::EState::ExecutionComplete) {
+        VisitExpr(root, [&](const TExprNode::TPtr& node) {
+            if (node->GetState() == TExprNode::EState::ExecutionComplete) {
                 return false;
             }
 
-            auto nodeId = node.UniqueId();
+            auto nodeId = node->UniqueId();
             visited.insert(nodeId);
 
             TIntrusivePtr<IDataProvider> dataProvider;
@@ -677,7 +677,7 @@ public:
                 YQL_ENSURE(providerIt->second);
                 dataProvider = providerIt->second;
             } else {
-                dataProvider = GetDataProvider(node);
+                dataProvider = GetDataProvider(*node);
                 if (dataProvider) {
                     ProvidersCache_[nodeId] = dataProvider;
                 }

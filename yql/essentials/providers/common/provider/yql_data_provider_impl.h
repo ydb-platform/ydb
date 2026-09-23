@@ -32,8 +32,8 @@ class TTrackableNodeProcessorBase: public ITrackableNodeProcessor {
 public:
     TTrackableNodeProcessorBase() = default;
 
-    void GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) override;
-    void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) override;
+    void GetUsedNodes(const TExprNode::TPtr& node, TVector<TString>& usedNodeIds) override;
+    void GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) override;
     IGraphTransformer& GetCleanupTransformer() override;
 
 protected:

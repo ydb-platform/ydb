@@ -88,12 +88,12 @@ void TPlanFormatterBase::WriteTypeDetails(NYson::TYsonWriter& writer, const TTyp
     Y_UNUSED(type);
 }
 
-void TTrackableNodeProcessorBase::GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) {
+void TTrackableNodeProcessorBase::GetUsedNodes(const TExprNode::TPtr& node, TVector<TString>& usedNodeIds) {
     Y_UNUSED(node);
     usedNodeIds.clear();
 }
 
-void TTrackableNodeProcessorBase::GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) {
+void TTrackableNodeProcessorBase::GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) {
     Y_UNUSED(node);
     Y_UNUSED(ctx);
     createdNodes.clear();

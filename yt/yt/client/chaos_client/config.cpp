@@ -76,7 +76,7 @@ void TChaosLeaseCacheConfig::Register(TRegistrar registrar)
 {
     // Override the one-day expiration times when disabling watching.
     registrar.Parameter("enable_watching", &TThis::EnableWatching)
-        .Default(true)
+        .Default(false)
         .DontSerializeDefault();
 
     registrar.Preprocessor([] (auto* config) {

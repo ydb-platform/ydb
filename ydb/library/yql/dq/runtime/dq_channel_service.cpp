@@ -1369,8 +1369,17 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
             std::lock_guard lock(Mutex);
             if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
                 if (Reconciliation.load() == 0) { // ignore errors in recovery
-                    LOG_W(LogPrefix << "UNDELIVERED/UNKNOWN, InputNodeActorId " << InputNodeActorId << ", Sender=" << ev->Sender);
-                    StartReconciliation(true, 'U');
+                    // The bounce names the actor the message was addressed to. InputNodeActorId changes
+                    // only with a major reconciliation, which resends the queue to the actor replacing it,
+                    // so a bounce naming anyone else is the echo of a superseded copy: acting on it would
+                    // advance the generation under a live peer, which then fails the unfinished channels
+                    // bound to the previous one.
+                    if (ev->Sender != InputNodeActorId) {
+                        LOG_W(LogPrefix << "UNDELIVERED/STALE, InputNodeActorId " << InputNodeActorId << ", Sender=" << ev->Sender);
+                    } else {
+                        LOG_W(LogPrefix << "UNDELIVERED/UNKNOWN, InputNodeActorId " << InputNodeActorId << ", Sender=" << ev->Sender);
+                        StartReconciliation(true, 'U');
+                    }
                 }
             } else {
                 LOG_W(LogPrefix << "UNDELIVERED/OTHER");

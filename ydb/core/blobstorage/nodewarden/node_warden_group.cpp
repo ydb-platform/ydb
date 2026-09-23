@@ -10,7 +10,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 

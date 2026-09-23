@@ -1063,7 +1063,7 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            if (!InconsistentTx)  {
+            if (!InconsistentTx) {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(

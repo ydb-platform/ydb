@@ -57,9 +57,7 @@ Automatically run [COMMIT](commit.md) after every statement.
 | --- | --- |
 | String | — |
 
-Add the specified prefix to table paths. When the `EnableTablePathPrefixRelativePaths` feature flag is enabled, a relative prefix, such as `folder` or `./folder`, is resolved from the root of the database specified in the connection. An absolute prefix (starting with `/`) is resolved from the cluster root.
-
-The flag is enabled by default. If it is disabled, relative prefixes retain the legacy behavior and are resolved from the cluster root.
+Add the specified prefix to table paths. A relative prefix, such as `folder` or `./folder`, is resolved from the root of the database specified in the connection. An absolute prefix (starting with `/`) is resolved from the cluster root.
 
 Paths are combined using file system rules: `.` and `..` are supported, and a trailing slash is optional. For example, when connected to the `/local` database:
 
@@ -69,7 +67,7 @@ SELECT * FROM users; -- /local/folder/users
 SELECT * FROM `../users`; -- /local/users
 ```
 
-Each relative prefix is resolved from the database root, even if another prefix was set earlier. An empty prefix refers to the database root.
+Each relative prefix is resolved from the database root, even if another prefix was set earlier. An empty global prefix refers to the database root.
 
 `..` can resolve a path above the database root. For the database `/Root/database`, the prefix `../sibling` resolves to `/Root/sibling`. The resulting path is subject to the same access checks and operation-specific database restrictions as an explicitly absolute path.
 

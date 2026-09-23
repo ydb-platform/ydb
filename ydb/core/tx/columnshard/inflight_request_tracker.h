@@ -42,6 +42,10 @@ public:
         return false;
     }
 
+    bool HasActiveRequests() const {
+        return !Requests.empty();
+    }
+
     static TSnapshotLiveInfo BuildFromRequest(const NOlap::TSnapshot& reqSnapshot) {
         return TSnapshotLiveInfo(reqSnapshot);
     }
@@ -110,6 +114,19 @@ public:
             }
 
             result.push_back(snapshot);
+        }
+        return result;
+    }
+
+    std::vector<NOlap::TSnapshot> GetActiveSnapshots(const NOlap::TSnapshot until) const {
+        std::vector<NOlap::TSnapshot> result;
+        for (auto&& [snapshot, info] : SnapshotsLive) {
+            if (snapshot >= until) {
+                break;
+            }
+            if (info.HasActiveRequests()) {
+                result.push_back(snapshot);
+            }
         }
         return result;
     }

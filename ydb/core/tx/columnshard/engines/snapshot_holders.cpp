@@ -5,13 +5,17 @@
 namespace NKikimr::NOlap {
 
 TRegistrySnapshotHolders::TRegistrySnapshotHolders(const TSnapshot minSnapshotForNewReads,
-    TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry, const ui64 schemeShardId, const IPathIdTranslator& pathIdTranslator)
+    TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry, const ui64 schemeShardId, const IPathIdTranslator& pathIdTranslator,
+    std::vector<TSnapshot> localActiveSnapshots)
     : MinSnapshotForNewReads(minSnapshotForNewReads)
     , Registry(std::move(registry))
     , SchemeShardId(schemeShardId)
     , PathIdTranslator(pathIdTranslator)
+    , LocalActiveSnapshots(std::move(localActiveSnapshots))
 {
     AFL_VERIFY(Registry);
+    AFL_VERIFY(std::is_sorted(LocalActiveSnapshots.begin(), LocalActiveSnapshots.end()));
+    AFL_VERIFY(LocalActiveSnapshots.empty() || LocalActiveSnapshots.back() < MinSnapshotForNewReads);
 }
 
 TSnapshotHoldersPerTable TRegistrySnapshotHolders::BuildHoldersForTable(
@@ -31,6 +35,7 @@ TSnapshotHoldersPerTable TRegistrySnapshotHolders::BuildHoldersForTable(
             }
         }
     }
+    snapshots.insert(LocalActiveSnapshots.begin(), LocalActiveSnapshots.end());
     std::vector<TSnapshot> txInFlight(snapshots.begin(), snapshots.end());
     return TSnapshotHoldersPerTable(MinSnapshotForNewReads, std::move(txInFlight));
 }

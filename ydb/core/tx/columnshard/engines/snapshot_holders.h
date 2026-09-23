@@ -109,6 +109,7 @@ private:
     const TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> Registry;
     const ui64 SchemeShardId;
     const IPathIdTranslator& PathIdTranslator;
+    const std::vector<TSnapshot> LocalActiveSnapshots;
     mutable THashMap<TInternalPathId, TSnapshotHoldersPerTable> HoldersByPathId;
 
 private:
@@ -117,7 +118,7 @@ private:
 
 public:
     TRegistrySnapshotHolders(const TSnapshot minSnapshotForNewReads, TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry,
-        const ui64 schemeShardId, const IPathIdTranslator& pathIdTranslator);
+        const ui64 schemeShardId, const IPathIdTranslator& pathIdTranslator, std::vector<TSnapshot> localActiveSnapshots = {});
 
     TSnapshot GetMinSnapshotForNewReads() const override {
         return MinSnapshotForNewReads;

@@ -21,8 +21,8 @@ TString TObjectKey::Make(const TLogoBlobID& blobId) const {
         key << *StorageId.GetObjectKeyPrefix() << '/';
     }
 
-    return key << blobId.TabletID() << '/' << blobId.Generation()
-               << '/' << digits[hash % 36] << '/' << digits[hash / 36 % 36] << '/' << blobId.ToString();
+    return key << blobId.TabletID() << '/' << blobId.Generation() << '/' << digits[hash % 36] << '/' << digits[hash / 36 % 36] << '/'
+               << blobId.ToString();
 }
 
 bool TObjectKey::Parse(const TString& key, TLogoBlobID& blobId, TString& error) const {
@@ -45,4 +45,4 @@ bool TObjectKey::Parse(const TString& key, TLogoBlobID& blobId, TString& error) 
     return true;
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NTier

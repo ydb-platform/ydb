@@ -133,8 +133,8 @@ class TTiering {
 
     static NColumnShard::NTiers::TExternalStorageId MakeExternalStorageId(
         const NKikimrSchemeOp::TTTLSettings::TEvictionToExternalStorageSettings& settings) {
-        return NColumnShard::NTiers::TExternalStorageId(settings.GetStorage(),
-            settings.HasObjectKeyPrefix() ? std::make_optional(settings.GetObjectKeyPrefix()) : std::nullopt);
+        return NColumnShard::NTiers::TExternalStorageId(
+            settings.GetStorage(), settings.HasObjectKeyPrefix() ? std::make_optional(settings.GetObjectKeyPrefix()) : std::nullopt);
     }
 
 public:

@@ -1,5 +1,5 @@
-#include "write.h"
 #include "object_key.h"
+#include "write.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/wrappers/events/common.h>
@@ -34,7 +34,8 @@ void TWriteAction::DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/
 }
 
 NKikimr::NOlap::TUnifiedBlobId TWriteAction::AllocateNextBlobId(const TString& data) {
-    return TUnifiedBlobId(Max<ui32>(), TLogoBlobID(TabletId, Generation, Step, TObjectKey(GetStorageId()).GetChannelForWriting(), data.size(), ++BlobIdsCounter));
+    return TUnifiedBlobId(
+        Max<ui32>(), TLogoBlobID(TabletId, Generation, Step, TObjectKey(GetStorageId()).GetChannelForWriting(), data.size(), ++BlobIdsCounter));
 }
 
 void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool blobsWroteSuccessfully) {

@@ -27,4 +27,4 @@ public:
     bool Parse(const TString& key, TLogoBlobID& blobId, TString& error) const;
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NTier

@@ -30,7 +30,8 @@ TTiering::TTieringContext TTiering::GetTierToMove(const std::shared_ptr<arrow::S
             continue;
         }
 
-        const TString tierName = tierInfo.GetExternalStorageId() ? tierInfo.GetExternalStorageId()->ToString() : NTiering::NCommon::DeleteTierName;
+        const TString tierName =
+            tierInfo.GetExternalStorageId() ? tierInfo.GetExternalStorageId()->ToString() : NTiering::NCommon::DeleteTierName;
         auto mpiOpt = tierInfo.ScalarToInstant(max);
         Y_ABORT_UNLESS(mpiOpt);
         const TInstant maxTieringPortionInstant = *mpiOpt;

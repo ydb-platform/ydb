@@ -401,14 +401,14 @@ namespace NKikimr::NBridge {
 #define MSG(TYPE) \
             case TEvBlobStorage::TYPE: { \
                 auto& msg = static_cast<TEvBlobStorage::T##TYPE&>(*ev); \
-                YDB_LOG_DEBUG(#TYPE,
-                    {"marker", "BRSS07"},
-                    {"logId", LogId},
-                    {"toTargetGroup", toTargetGroup},
-                    {"msg", msg},
-                    {"queriesInFlight", QueriesInFlight},
-                    {"#_PendingQueries.size", PendingQueries.size()},
-                    {"maxQueriesInFlight", MaxQueriesInFlight},
+                YDB_LOG_DEBUG(#TYPE, \
+                    {"marker", "BRSS07"}, \
+                    {"logId", LogId}, \
+                    {"toTargetGroup", toTargetGroup}, \
+                    {"msg", msg}, \
+                    {"queriesInFlight", QueriesInFlight}, \
+                    {"#_PendingQueries.size", PendingQueries.size()}, \
+                    {"maxQueriesInFlight", MaxQueriesInFlight}, \
                     {"#_Payloads.size", Payloads.size()}); \
                 msg.ForceGroupGeneration.emplace(toTargetGroup ? TargetGroupGeneration : SourceGroupGeneration); \
                 break; \

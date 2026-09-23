@@ -2,6 +2,7 @@
 #include "blob_checker_actors.h"
 #include "blob_checker_events.h"
 
+#include <ydb/library/actors/core/log.h>
 
 #include <unordered_set>
 

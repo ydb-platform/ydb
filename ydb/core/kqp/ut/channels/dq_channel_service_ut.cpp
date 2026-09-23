@@ -1337,8 +1337,6 @@ struct TStaleBounceTest : public TSessionTest {
         // a node session logs through the actor system from its destructor, so it may not outlive it
         sender.reset();
         receiver.reset();
-        Destroy();
-        CheckQuota();
     }
 
     // the bounce names the session actor of the peer, as one from a peer which really died

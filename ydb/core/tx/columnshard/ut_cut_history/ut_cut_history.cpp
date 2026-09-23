@@ -357,12 +357,13 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
     }
 
     Y_UNIT_TEST(ColdCacheBatchingAndLateSharing) {
+        constexpr ui64 portionCount = TSettings::CutHistoryPreparationBatchSize + 1;
         TFixture f;
         f.Schema(false, 2);
         f.Controller->DisableBackground(EBackground::Compaction);
         f.Controller->DisableBackground(EBackground::Cleanup);
         f.Restart(NewGroup);
-        for (ui32 i = 0; i < 1025; ++i) {
+        for (ui64 i = 0; i < portionCount; ++i) {
             f.Write(i + 1, i, i + 1, TableId + i % 2);
         }
         TAutoPtr<IEventHandle> continuation;
@@ -388,7 +389,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                 ev.Reset();
             } else if (const auto* chunk = dynamic_cast<TEvPrivate::TEvCutHistoryPortionsBatch*>(ev->GetBase())) {
                 ++preparationChunks;
-                UNIT_ASSERT(chunk->Portions.size() <= 1024);
+                UNIT_ASSERT(chunk->Portions.size() <= TSettings::CutHistoryPreparationBatchSize);
             } else if (dynamic_cast<TEvPrivate::TEvCutHistoryPortionsReady*>(ev->GetBase())) {
                 if (ev.Get() == replayingPrepared) {
                     replayingPrepared = nullptr;
@@ -465,8 +466,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             }
         }
         Sort(expectedPortions);
-        UNIT_ASSERT_VALUES_EQUAL(expectedPortions.size(), 1025u);
-        f.Write(5000, 1025, 1026);
+        UNIT_ASSERT_VALUES_EQUAL(expectedPortions.size(), portionCount);
+        f.Write(5000, portionCount, portionCount + 1);
         prepare();
         const auto& preparedPortions = prepared->Get<TEvPrivate::TEvCutHistoryPortionsReady>()->Portions;
         UNIT_ASSERT_VALUES_EQUAL(preparedPortions.size(), expectedPortions.size());
@@ -483,10 +484,10 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         expectedPortions.resize(scanPortions.size());
         Sort(scanPortions);
         UNIT_ASSERT_VALUES_EQUAL_C(scanPortions, expectedPortions, "first batch must contain the lowest PortionIds across all tables");
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), 1025u);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), portionCount);
         misses = 0;
-        f.Write(5001, 2048, 2049);
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), 1026u);
+        f.Write(5001, portionCount + 1, portionCount + 2);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), portionCount + 1);
         while (continuation) {
             resume();
         }
@@ -520,8 +521,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Restart();
         UNIT_ASSERT(continuation);
         prepare();
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), 1026u);
-        f.Write(5002, 4096, 4097);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), portionCount + 1);
+        f.Write(5002, portionCount + 2, portionCount + 3);
         NOlap::NDataSharing::TTaskForTablet task((NOlap::TTabletId)TabletId);
         f.Runtime.SendToPipe(TabletId, f.Sender, new NOlap::NDataSharing::NEvents::TEvApplyLinksModification((NOlap::TTabletId)TabletId,
                                                      "late-sharing", 0, task), 0, GetPipeConfigWithRetries());

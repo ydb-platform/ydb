@@ -14,7 +14,6 @@
 
 namespace NKikimr::NColumnShard {
 namespace {
-constexpr size_t CutHistoryPreparationBatchSize = 1024;
 constexpr size_t CutHistoryScanBatchSize = 32;
 constexpr ui64 CutHistoryScanMemoryTarget = 8_MB;
 constexpr TDuration CutHistoryContinuationDelay = TDuration::MilliSeconds(1);
@@ -95,12 +94,12 @@ public:
             MaxKey = std::make_pair(last.GetValue<TPortions::PathId>(), last.GetValue<TPortions::PortionId>());
         }
         size_t visited = 0;
-        while (visited < CutHistoryPreparationBatchSize && !Finished) {
+        while (visited < TSettings::CutHistoryPreparationBatchSize && !Finished) {
             auto rows = db.Table<TPortions>().GreaterOrEqual(Cursor.first, Cursor.second).Select<TPortions::PathId, TPortions::PortionId>();
             if (!rows.IsReady()) {
                 return false;
             }
-            while (!rows.EndOfSet() && visited < CutHistoryPreparationBatchSize) {
+            while (!rows.EndOfSet() && visited < TSettings::CutHistoryPreparationBatchSize) {
                 const std::pair<ui64, ui64> key{ rows.GetValue<TPortions::PathId>(), rows.GetValue<TPortions::PortionId>() };
                 if (key > *MaxKey) {
                     Finished = true;
@@ -123,7 +122,7 @@ public:
                     break;
                 }
                 Cursor = { key.first, key.second + 1 };
-                if (visited == CutHistoryPreparationBatchSize) {
+                if (visited == TSettings::CutHistoryPreparationBatchSize) {
                     break;
                 }
                 if (!rows.Next()) {

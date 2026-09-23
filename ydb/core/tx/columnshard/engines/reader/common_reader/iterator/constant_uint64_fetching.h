@@ -22,7 +22,7 @@ private:
     }
 
     virtual TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) override {
-        const ui32 recordsCount = context.GetSource()->GetRecordsCount();
+        const ui32 recordsCount = context.GetSource().GetRecordsCount();
         auto array = NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(Value), recordsCount));
         context.GetAccessors().AddVerified(GetEntityId(), std::make_shared<NArrow::NAccessor::TTrivialArray>(array), true);
         return TConclusionStatus::Success();

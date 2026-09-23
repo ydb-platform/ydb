@@ -633,6 +633,7 @@ private:
         auto queryType = QueryId.Settings.QueryType;
 
         KqpCompileResult = TKqpCompileResult::Make(Uid, status, CollectIssues(kqpResult.Issues()), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
+        KqpCompileResult->UsedNewRbo = EnableNewRBO;
         KqpCompileResult->CommandTagName = kqpResult.CommandTagName;
 
         if (status == Ydb::StatusIds::SUCCESS) {

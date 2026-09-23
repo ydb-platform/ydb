@@ -12,7 +12,6 @@ expected_lite = NixSourceProject(
     nixattr="expected-lite",
     copy_sources=["include/**"],
     disable_includes=[
-        "expected",
         "nonstd/expected.tweak.hpp",
     ],
     post_install=post_install,

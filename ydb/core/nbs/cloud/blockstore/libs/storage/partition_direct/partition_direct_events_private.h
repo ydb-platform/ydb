@@ -56,11 +56,15 @@ struct TEvPartitionDirectPrivate
               TEventLocal<TEvUpdateVChunkConfig, EvUpdateVChunkConfig>
     {
         TVChunkConfig VChunkConfig;
+        TDirtyMapStateProto DirtyMapState;
         TPersistResultPromise UpdateCompleted =
             NThreading::NewPromise<EPersistResult>();
 
-        explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
+        TEvUpdateVChunkConfig(
+            TVChunkConfig cfg,
+            TDirtyMapStateProto dirtyMapState)
             : VChunkConfig(std::move(cfg))
+            , DirtyMapState(std::move(dirtyMapState))
         {}
     };
 

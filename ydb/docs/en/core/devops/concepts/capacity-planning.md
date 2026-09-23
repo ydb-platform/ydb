@@ -48,9 +48,9 @@ These quantities can be approximately related by the ratio:
 Database Storage = Tablet Storage × RF × Overhead
 ```
 
-In all calculations:
-1 KB = 1000 bytes, 1 MB = 1000 KB, 1 GB = 1000 MB, 1 TB = 1000 GB;
-1 KiB = 1024 bytes, 1 MiB = 1024 KiB, 1 GiB = 1024 MiB, 1 TiB = 1024 GiB.
+In all calculations the unit symbols are in accordance with IEC 60027-2:
+1 kB = 1000 byte, 1 MB = 1000 kB, 1 GB = 1000 MB, 1 TB = 1000 GB;
+1 KiB = 1024 byte, 1 MiB = 1024 KiB, 1 GiB = 1024 MiB, 1 TiB = 1024 GiB.
 
 ## Estimating Required Equipment {#hardware-estimation}
 
@@ -92,7 +92,7 @@ To estimate the required equipment, perform the following steps.
 
    About 28.08 GB of PDisk capacity is reserved for system needs; the remaining space is evenly distributed among slots.
 
-   This formula is applicable for disks with a capacity of ~839 GB (800 GiB) or more. Using smaller disks is not recommended if optimal performance is required. For more details on disk subsystem requirements, see the [{#T}](system-requirements.md) section.
+   This formula is applicable for disks with a capacity of ~859 GB (800 GiB) or more. Using smaller disks is not recommended if optimal performance is required. For more details on disk subsystem requirements, see the [{#T}](system-requirements.md) section.
 
 3. Estimate the number of storage groups:
 

@@ -4,7 +4,7 @@ This mode was originally called `parquet`. It is now named `dq-block` because Pa
 
 ## Task
 
-Add a new `-t dq-block` mode to `ydb/core/kqp/tools/combiner_perf/bin` for quick isolated performance, profiling, correctness, crash, and sanitizer checks of `DqHashAggregate` with Arrow block input sourced from a Parquet file (initially `hits.parquet`, the ClickBench dataset).
+Add a new `-t dq-block` mode to `ydb/core/kqp/tools/combiner_perf/bin` for quick isolated performance, profiling, correctness, crash, and sanitizer checks of block aggregation implementations with Arrow block input sourced from a Parquet file (initially `hits.parquet`, the ClickBench dataset).
 
 Requirements were:
 
@@ -40,13 +40,15 @@ Relevant CLI options:
 - `--rows-per-run ROWS` — maximum rows to preload from a file, or the generated row count. It defaults to 10 million. For a file source, `0` reads the entire dataset; a generator requires a positive value.
 - `--num-keys KEYS` — number of distinct values produced by the shuffle generator. The generator fills the input by repeating `[0, KEYS)`, then shuffles it reproducibly. It defaults to 1,000 and cannot exceed `--rows-per-run`.
 - `--dq-block-columns NAME,...` — selected file columns, preserving input order. This is required for file input and defaults to `i` for the generator.
-- `--dq-block-keys NAME,...` — key columns for synthesized aggregation; every key must be in `--dq-block-columns`.
-- `--dq-block-aggregations AGG,...` — synthesized aggregations containing `sum:column_name` and/or `count`; sum columns must be selected.
+- `--dq-block-keys NAME,...` — key columns for synthesized aggregation. Names refer to `--dq-block-columns` normally, or to one-based post-transform column names `1`, `2`, ... when `--dq-block-generator-ast` is used.
+- `--dq-block-aggregations AGG,...` — synthesized aggregations containing `sum:column_name` and/or `count`, using the same pre- or post-transform column set as `--dq-block-keys`.
+- `--dq-block-impl DqHashAggregate|BlockCombineHashed` — measured implementation; defaults to `DqHashAggregate`.
 - `--dq-block-ast PATH` — external textual AST defining the four aggregation lambdas and output key width.
+- `--dq-block-generator-ast PATH` — external textual AST whose input transform is applied before synthesized aggregation. Any aggregation lambdas and key width in the file are ignored.
 
-The caller must provide exactly one of `--dq-block-file` and `--dq-block-generator`. It must also provide either both `--dq-block-keys` and `--dq-block-aggregations`, or `--dq-block-ast`; the two aggregation forms are mutually exclusive.
+The caller must provide exactly one of `--dq-block-file` and `--dq-block-generator`. It must also provide either both `--dq-block-keys` and `--dq-block-aggregations`, or `--dq-block-ast`; the two aggregation forms are mutually exclusive. `--dq-block-generator-ast` belongs to the synthesized form and cannot be combined with `--dq-block-ast`. `BlockCombineHashed` only supports the synthesized form.
 
-The mode accepts the existing `--rows-per-run`, `--num-keys`, `--block-size`, `--run-count`, `--num-attempts`, `--no-verify`, `--llvm`, and `--spilling` controls. It accepts only `--mode=all` and `--mode=graph`; no timed reference-only/generator-only path exists. DQ-block-specific options are rejected for every other `-t` mode.
+The mode accepts the existing `--rows-per-run`, `--num-keys`, `--block-size`, `--run-count`, `--num-attempts`, `--no-verify`, `--llvm`, and `--spilling` controls. `BlockCombineHashed` rejects `--llvm` and `--spilling`, which it does not support. The mode accepts only `--mode=all` and `--mode=graph`; no timed reference-only/generator-only path exists. DQ-block-specific options are rejected for every other `-t` mode.
 
 ### Input and graph construction
 
@@ -56,9 +58,10 @@ The mode accepts the existing `--rows-per-run`, `--num-keys`, `--block-size`, `-
 - Handles integer, floating-point, Boolean, UTF-8/binary string, date32/date64, and timestamp physical types. Arrays are cast to the physical Arrow representation expected by MKQL blocks where necessary (for example Boolean to `uint8`). Unsupported complex types fail with an explicit error.
 - Uses the requested block size as the Parquet record-batch size, stops precisely at `--rows-per-run` when it is nonzero, retains all selected arrays in RAM, and reports inferred types.
 - Builds a block-wide stream type containing one `TBlockType::Many` per selected column plus the scalar `Uint64` block-length column.
-- If the custom AST contains an input transform, compiles it into a separate non-LLVM graph, runs it once over the preloaded input block stream, and retains its complete output stream as Arrow datums before constructing the measured aggregation graph. The datums are rewrapped in the aggregation graph's allocator, so the Arrow data stays zero-copy without sharing allocator-owned MKQL wrappers.
+- If `--dq-block-ast` or `--dq-block-generator-ast` contains an input transform, compiles it into a separate non-LLVM graph, runs it once over the preloaded input block stream, and retains its complete output stream as Arrow datums before constructing the measured aggregation graph. The datums are rewrapped in the aggregation graph's allocator, so the Arrow data stays zero-copy without sharing allocator-owned MKQL wrappers.
 - Either synthesizes key extraction, initialization, update, and finalization lambdas from the CLI aggregation description, or loads them from `--dq-block-ast`.
-- Builds `DqHashAggregate` through `TKqpProgramBuilder` in both cases.
+- Builds the selected implementation in its own measured graph. `DqHashAggregate` accepts either aggregation form. `BlockCombineHashed` receives the synthesized key indexes and `sum`/`count_all` descriptors directly and emits the matching key and aggregate block columns without `BlockMergeFinalize`. Although this operator is normally the pre-aggregation half of a two-stage plan, its direct output has the same grouped `sum`/`count` values needed by this benchmark.
+- Uses the native `BlockCombineHashed` sum-state types: narrow signed and unsigned integers are promoted to `Int64` and `Uint64`, respectively. The correctness graph applies the same promotion before comparison.
 - Wraps retained arrays and block lengths into `TUnboxedValue` Arrow blocks before measurements. `--run-count` replays the prebuilt blocks without rereading the file.
 
 ### Custom aggregation AST
@@ -85,6 +88,13 @@ The AST file has the following shape (the older `AsTuple` root is also accepted)
 - No YQL optimizer pipeline is run. Simple UDF and Arrow resolvers backed by the test function registry are installed for type annotation.
 - Lambda arities are checked against the arguments supplied by the aggregation builder.
 - Transform output types are derived from the returned stream's `TMultiType` and retain their full MKQL item types, including complex types such as structs. The trailing scalar `Uint64` height block is validated and omitted from the aggregation-lambda arguments. Final aggregation output types are also derived from RuntimeNodes, but every final output must currently be a DataSlot or optional DataSlot.
+- This aggregation-lambda form is only supported by `DqHashAggregate`.
+
+### Input transform AST
+
+`--dq-block-generator-ast` reuses only the input-transform element described above and is used together with `--dq-block-keys` and `--dq-block-aggregations`. It accepts the full six-element custom aggregation tuple, a shorter tuple/list whose first element is the transform, or the transform lambda itself. Elements after the transform are parsed as source text but are otherwise ignored, including invalid aggregation-lambda shapes and key-width values.
+
+The transform output forms a new column set independent of `--dq-block-columns`. Its data columns are named `1`, `2`, ... in output order; the trailing block-height column is not named. Synthesized keys and sums refer to these generated names, so transforms may add, remove, reorder, merge, or change the types of columns. Selected keys must be DataSlots, and sum columns must be numeric. The effective types used to construct and verify the aggregation are derived from this post-transform schema.
 
 ### Measurement isolation
 
@@ -96,7 +106,7 @@ The AST file has the following shape (the older `AsTuple` root is also accepted)
 
 ### Correctness checking
 
-- Unless `--no-verify` is specified, a separate untimed fork consumes the block `DqHashAggregate` result.
+- Unless `--no-verify` is specified, a separate untimed fork consumes the selected block aggregation result.
 - The retained Arrow input is scalarized lazily into a separate scalar WideCombiner graph.
 - For a custom AST, this reference graph uses the exact same four parsed and type-annotated lambdas as `DqHashAggregate`.
 - WideCombiner uses memory limit `0`, which selects full aggregation mode. Any nonzero value selects pre-aggregation and can emit partial duplicate groups.
@@ -144,6 +154,21 @@ ydb/core/kqp/tools/combiner_perf/bin/combiner_perf \
 
 The generator also supports the synthesized aggregation path, for example `--dq-block-keys i --dq-block-aggregations count`, without `--dq-block-columns`. `--run-count` replays the shuffled dataset that many times for both the measured aggregation and correctness verification.
 
+The same transform can be combined with synthesized aggregation and `BlockCombineHashed`:
+
+```bash
+ydb/core/kqp/tools/combiner_perf/bin/combiner_perf \
+  -t dq-block \
+  --dq-block-generator shuffle \
+  --rand-seed 42 \
+  --rows-per-run 100000 \
+  --num-keys 1000 \
+  --dq-block-generator-ast ydb/core/kqp/tools/combiner_perf/bin/ast_generator_example.txt \
+  --dq-block-keys 1 \
+  --dq-block-aggregations count \
+  --dq-block-impl BlockCombineHashed
+```
+
 ## Validation performed
 
 - Built from the checkout root:
@@ -167,6 +192,11 @@ The generator also supports the synthesized aggregation path, for example `--dq-
 - Verified `shuffle` produces 1,000 generated rows without an explicit column list, and that the synthesized `count` path produces and verifies 1,000 groups.
 - Verified the scalar `WideFromBlocks`/`WideToBlocks` transform over the generated input: `% 100` precomputed 1,000 transformed rows and both aggregation implementations produced 100 groups.
 - Confirmed that specifying both input sources is rejected and that invalid generated row/key cardinalities are rejected.
+- Verified `BlockCombineHashed` `sum` and `count` together over generated `Uint32` input and `Int64` Parquet input.
+- Verified both implementations with `--dq-block-generator-ast`, including a shortened tuple with ignored trailing elements and a standalone transform lambda.
+- Verified synthesized key and sum output decoding after casting the generated `Uint32` column to `Int64` and `Uint64`; both implementations produced and verified 1,000 groups.
+- Verified that synthesized aggregation addresses transformed output columns by generated one-based names rather than source-column names.
+- Verified that `BlockCombineHashed` rejects custom aggregation lambdas and LLVM mode.
 - Confirmed DQ-block-specific options produce an error with another test mode.
 - After the rename, rebuilt `ydb/core/kqp/tools/combiner_perf/bin` and verified the synthesized `sum`/`count` path over 1,000 rows through the new `dq-block` CLI and JSON field names.
 - Rebuilt after replacing `--dq-block-row-limit` with `--rows-per-run`.

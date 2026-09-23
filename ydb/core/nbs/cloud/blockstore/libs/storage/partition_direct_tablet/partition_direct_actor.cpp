@@ -155,29 +155,16 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
     // respond to all pending requests so that there are no leakage resources.
     // We will do this after the initiator of the request is stopped.
     auto failUpdateRequests =
-        [executingConfigPromises =
-             std::move(ExecutingUpdateVChunkConfigPromises),
-         pendingConfigRequests = std::move(PendingUpdateVChunkConfigRequests),
-         executingDirtyMapPromises =
-             std::move(ExecutingUpdateDirtyMapStatePromises),
-         pendingDirtyMapRequests =
-             std::move(PendingUpdateDirtyMapStateRequests),
+        [executingStatePromises = std::move(ExecutingUpdateVChunkStatePromises),
+         pendingStateRequests = std::move(PendingUpdateVChunkStateRequests),
          touchedVChunks = std::move(TouchedVChunks)]() mutable
     {
-        for (auto& promise: executingConfigPromises) {
+        for (auto& promise: executingStatePromises) {
             promise.TrySetValue(EPersistResult::Cancelled);
         }
-        for (auto& req: pendingConfigRequests) {
+        for (auto& req: pendingStateRequests) {
             req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
         }
-
-        for (auto& promise: executingDirtyMapPromises) {
-            promise.TrySetValue(EPersistResult::Cancelled);
-        }
-        for (auto& req: pendingDirtyMapRequests) {
-            req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
-        }
-
         touchedVChunks.OnSaveInterrupted();
     };
 
@@ -837,23 +824,15 @@ void TPartitionActor::HandleUpdateVChunkConfig(
         "%s Handle UpdateVChunkConfig %s %s",
         LogTitle.GetWithTime().c_str(),
         msg->VChunkConfig.DebugPrint().c_str(),
-        ExecutingUpdateVChunkConfig ? "later" : "now");
+        ExecutingUpdateVChunkState ? "later" : "now");
 
-    if (ExecutingUpdateVChunkConfig) {
-        PendingUpdateVChunkConfigRequests.push_back(
-            {.VChunkConfig = std::move(msg->VChunkConfig),
-             .UpdateCompleted = std::move(msg->UpdateCompleted)});
-    } else {
-        Y_DEBUG_ABORT_UNLESS(PendingUpdateVChunkConfigRequests.empty());
-
-        ExecutingUpdateVChunkConfig = true;
-        ExecuteTx(
-            ctx,
-            CreateTx<TUpdateVChunkConfig>(
-                TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests{
-                    {.VChunkConfig = std::move(msg->VChunkConfig),
-                     .UpdateCompleted = std::move(msg->UpdateCompleted)}}));
-    }
+    const ui32 vChunkIndex = msg->VChunkConfig.GetVChunkIndex();
+    EnqueueUpdateVChunkState(
+        {.VChunkIndex = vChunkIndex,
+         .VChunkConfig = std::move(msg->VChunkConfig),
+         .DirtyMapState = std::move(msg->DirtyMapState),
+         .UpdateCompleted = std::move(msg->UpdateCompleted)},
+        ctx);
 }
 
 void TPartitionActor::HandleUpdateDirtyMapState(
@@ -868,24 +847,30 @@ void TPartitionActor::HandleUpdateDirtyMapState(
         "%s Handle UpdateDirtyMapState vchunk %u %s",
         LogTitle.GetWithTime().c_str(),
         msg->VChunkIndex,
-        ExecutingUpdateDirtyMapState ? "later" : "now");
+        ExecutingUpdateVChunkState ? "later" : "now");
 
-    if (ExecutingUpdateDirtyMapState) {
-        PendingUpdateDirtyMapStateRequests.push_back(
-            {.VChunkIndex = msg->VChunkIndex,
-             .State = std::move(msg->State),
-             .UpdateCompleted = std::move(msg->UpdateCompleted)});
+    EnqueueUpdateVChunkState(
+        {.VChunkIndex = msg->VChunkIndex,
+         .DirtyMapState = std::move(msg->State),
+         .UpdateCompleted = std::move(msg->UpdateCompleted)},
+        ctx);
+}
+
+void TPartitionActor::EnqueueUpdateVChunkState(
+    TTxPartition::TUpdateVChunkState::TUpdateStateRequest request,
+    const NActors::TActorContext& ctx)
+{
+    if (ExecutingUpdateVChunkState) {
+        PendingUpdateVChunkStateRequests.push_back(std::move(request));
     } else {
-        Y_DEBUG_ABORT_UNLESS(PendingUpdateDirtyMapStateRequests.empty());
+        Y_DEBUG_ABORT_UNLESS(PendingUpdateVChunkStateRequests.empty());
 
-        ExecutingUpdateDirtyMapState = true;
+        ExecutingUpdateVChunkState = true;
         ExecuteTx(
             ctx,
-            CreateTx<TUpdateDirtyMapState>(
-                TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests{
-                    {.VChunkIndex = msg->VChunkIndex,
-                     .State = std::move(msg->State),
-                     .UpdateCompleted = std::move(msg->UpdateCompleted)}}));
+            CreateTx<TUpdateVChunkState>(
+                TTxPartition::TUpdateVChunkState::TUpdateStateRequests{
+                    std::move(request)}));
     }
 }
 

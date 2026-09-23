@@ -2171,6 +2171,38 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     consumer->ScheduleBalance(ctx);
 }
 
+void TBalancer::StopReadingSession(const TString& consumer, const TString& sessionName, const TActorContext& ctx) {
+    if (consumer.empty() || sessionName.empty()) {
+        LOG_N("Ignored kill request with empty consumer or session name",
+            {"consumer", consumer},
+            {"session", sessionName});
+        return;
+    }
+
+    size_t stopped = 0;
+    for (auto& [pipe, session] : Sessions) {
+        if (session->ClientId != consumer || session->SessionName != sessionName || !session->Sender) {
+            continue;
+        }
+
+        LOG_N("Stopping reading session from tablet monitoring",
+            {"consumer", consumer},
+            {"session", sessionName},
+            {"pipe", pipe},
+            {"sender", session->Sender});
+
+        auto response = std::make_unique<TEvPersQueue::TEvError>();
+        response->Record.SetCode(NPersQueue::NErrorCode::ERROR);
+        response->Record.SetDescription("Reading session stopped from tablet monitoring");
+        ctx.Send(session->Sender, std::move(response));
+        ++stopped;
+    }
+
+    if (!stopped) {
+        LOG_N("Reading session not found for kill request", {"consumer", consumer}, {"session", sessionName});
+    }
+}
+
 void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx) {
     const auto& r = ev->Get()->Record;
 

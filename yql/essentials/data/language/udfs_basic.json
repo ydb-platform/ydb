@@ -406,6 +406,22 @@
       "resolvedCallableTypes": "[[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Uint16\"]];[[[\"ResourceType\";\"DateTime2.TM\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]];[\"CallableType\";[];[[\"DataType\";\"Int32\"]];[[[\"ResourceType\";\"DateTime2.TM64\"];1u]]]]"
     },
     {
+      "argCount": 8,
+      "callableType": "[\"CallableType\";[8u];[[\"OptionalType\";[\"ResourceType\";\"DateTime2.TM\"]]];[[[\"OptionalType\";[\"DataType\";\"Uint16\"]];\"Year\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Month\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Day\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Hour\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Minute\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Second\"];[[\"OptionalType\";[\"DataType\";\"Uint32\"]];\"Microsecond\"];[[\"OptionalType\";[\"DataType\";\"Uint16\"]];\"TimezoneId\"]]]",
+      "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Init",
+      "optionalArgCount": 8
+    },
+    {
+      "argCount": 8,
+      "callableType": "[\"CallableType\";[8u];[[\"OptionalType\";[\"ResourceType\";\"DateTime2.TM64\"]]];[[[\"OptionalType\";[\"DataType\";\"Int32\"]];\"Year\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Month\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Day\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Hour\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Minute\"];[[\"OptionalType\";[\"DataType\";\"Uint8\"]];\"Second\"];[[\"OptionalType\";[\"DataType\";\"Uint32\"]];\"Microsecond\"];[[\"OptionalType\";[\"DataType\";\"Uint16\"]];\"TimezoneId\"]]]",
+      "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Init64",
+      "optionalArgCount": 8
+    },
+    {
       "argCount": 1,
       "callableType": "[\"CallableType\";[];[[\"OptionalType\";[\"DataType\";\"Interval64\"]]];[[[\"DataType\";\"Int32\"];1u]]]",
       "isStrict": true,

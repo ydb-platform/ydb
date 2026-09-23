@@ -2,7 +2,9 @@
 #include "yaml_config_impl.h"
 
 #include <util/digest/sequence.h>
+#include <util/generic/algorithm.h>
 #include <functional>
+#include <limits>
 #include <stack>
 
 template <>
@@ -1356,6 +1358,379 @@ void ResolveUniqueDocs(
 
             seenPaths.insert(currentPath);
         });
+}
+
+namespace {
+
+// Reduced ordered binary decision diagram. Each label value is encoded by its
+// domain index; equal subtrees are shared. An edge's low bit complements its
+// region, so negation is constant-time and equality updates touch O(log N) bits.
+class TLabelRegions {
+public:
+    using TId = size_t;
+
+    explicit TLabelRegions(const TVector<std::pair<TString, TSet<TLabel>>>& labels) {
+        Nodes.push_back({std::numeric_limits<size_t>::max(), 0, 0});
+        size_t firstBit = 0;
+        TVector<TId> domainRegions;
+        for (const auto& [name, values] : labels) {
+            size_t bits = 0;
+            for (size_t last = values.size() - 1; last; last >>= 1) {
+                ++bits;
+            }
+            TDomain domain{firstBit, bits, &values, {}};
+            size_t index = 0;
+            for (const auto& value : values) {
+                if (value.Type != TLabel::EType::Negative) {
+                    domain.Values.emplace(value.Value, index);
+                }
+                ++index;
+            }
+            // Padding bit patterns must not create extra label assignments.
+            // Build the comparison index < domain size, unless all codes fit.
+            if ((values.size() & (values.size() - 1)) != 0) {
+                TId valid = 0;
+                size_t bound = values.size();
+                for (size_t bit = bits; bit > 0; --bit, bound >>= 1) {
+                    valid = (bound & 1)
+                        ? Intern(firstBit + bit - 1, 1, valid)
+                        : Intern(firstBit + bit - 1, valid, 0);
+                }
+                domainRegions.push_back(valid);
+            }
+            Domains.emplace(name, std::move(domain));
+            firstBit += bits;
+        }
+        // Prepend earlier labels, sharing the already-built suffix instead of
+        // copying every growing prefix of the domain constraint.
+        for (auto it = domainRegions.rbegin(); it != domainRegions.rend(); ++it) {
+            Universe = And(*it, Universe);
+        }
+    }
+
+    TId All() const {
+        return Universe;
+    }
+
+    TId MatchValues(const TString& name, const TSet<TString>& values) {
+        const auto it = Domains.find(name);
+        if (it == Domains.end()) {
+            return 0;
+        }
+        TId result = 0;
+        for (const auto& value : values) {
+            if (auto index = it->second.Values.find(value); index != it->second.Values.end()) {
+                result = Or(result, Equal(it->second, index->second));
+            }
+        }
+        return result;
+    }
+
+    template <class TPredicate>
+    TId Match(const TString& name, TPredicate predicate) {
+        const auto it = Domains.find(name);
+        if (it == Domains.end()) {
+            return 0; // Mirrors IsCompatible for a missing label.
+        }
+        TId result = 0;
+        size_t index = 0;
+        for (const auto& value : *it->second.Labels) {
+            if (predicate(value)) {
+                result = Or(result, Equal(it->second, index));
+            }
+            ++index;
+        }
+        return result;
+    }
+
+    TId Not(TId value) const {
+        return value ^ 1;
+    }
+
+    TId And(TId lhs, TId rhs) {
+        if (lhs > rhs) {
+            std::swap(lhs, rhs);
+        }
+        if (lhs == 0 || lhs == rhs) {
+            return lhs;
+        }
+        if (lhs == Not(rhs)) {
+            return 0;
+        }
+        if (lhs == 1) {
+            return rhs;
+        }
+        const auto key = std::pair{lhs, rhs};
+        if (auto it = Intersections.find(key); it != Intersections.end()) {
+            return it->second;
+        }
+        // Copy before recursing: interning can reallocate Nodes.
+        const auto left = Nodes[lhs >> 1];
+        const auto right = Nodes[rhs >> 1];
+        const auto bit = Min(left.Bit, right.Bit);
+        const auto low = And(left.Bit == bit ? left.Low ^ (lhs & 1) : lhs,
+            right.Bit == bit ? right.Low ^ (rhs & 1) : rhs);
+        const auto high = And(left.Bit == bit ? left.High ^ (lhs & 1) : lhs,
+            right.Bit == bit ? right.High ^ (rhs & 1) : rhs);
+        const auto result = Intern(bit, low, high);
+        Intersections[key] = result;
+        return result;
+    }
+
+    TId Or(TId lhs, TId rhs) {
+        return Not(And(Not(lhs), Not(rhs)));
+    }
+
+    // Only call between operations, with every region that remains in use.
+    void CollectGarbage(const TVector<TId*>& roots) {
+        if (Nodes.size() + Intersections.size() < CollectionThreshold) {
+            return;
+        }
+        TVector<bool> reachable(Nodes.size(), false);
+        TVector<TId> pending;
+        auto mark = [&](TId edge) {
+            const auto id = edge >> 1;
+            if (id != 0 && !reachable[id]) {
+                reachable[id] = true;
+                pending.push_back(id);
+            }
+        };
+        mark(Universe);
+        for (auto root : roots) {
+            mark(*root);
+        }
+        while (!pending.empty()) {
+            const auto id = pending.back();
+            pending.pop_back();
+            mark(Nodes[id].Low);
+            mark(Nodes[id].High);
+        }
+
+        Unique.clear();
+        Intersections.clear();
+        TVector<TId> remap(Nodes.size(), 0);
+        auto remapEdge = [&](TId edge) { return remap[edge >> 1] | (edge & 1); };
+        TVector<TNode> live;
+        live.push_back(Nodes[0]);
+        // Children are always interned before parents; preserve that order.
+        for (TId id = 1; id < Nodes.size(); ++id) {
+            if (!reachable[id]) {
+                continue;
+            }
+            const auto& node = Nodes[id];
+            const auto low = remapEdge(node.Low);
+            const auto high = remapEdge(node.High);
+            remap[id] = live.size() << 1;
+            Unique.emplace(std::tuple{node.Bit, low, high}, remap[id]);
+            live.push_back({node.Bit, low, high});
+        }
+        Universe = remapEdge(Universe);
+        for (auto root : roots) {
+            *root = remapEdge(*root);
+        }
+        Nodes = std::move(live);
+        CollectionThreshold = Max(size_t{1024}, 2 * Nodes.size());
+    }
+
+private:
+    struct TNode {
+        size_t Bit;
+        TId Low;
+        TId High;
+    };
+
+    struct TDomain {
+        size_t FirstBit;
+        size_t Bits;
+        const TSet<TLabel>* Labels;
+        THashMap<TString, size_t> Values;
+    };
+
+    TId Equal(const TDomain& domain, size_t index) {
+        TId result = 1;
+        for (size_t bit = domain.Bits; bit > 0; --bit, index >>= 1) {
+            result = (index & 1)
+                ? Intern(domain.FirstBit + bit - 1, 0, result)
+                : Intern(domain.FirstBit + bit - 1, result, 0);
+        }
+        return result;
+    }
+
+    TId Intern(size_t bit, TId low, TId high) {
+        if (low == high) {
+            return low;
+        }
+        // Normalize the low edge so a region and its complement share a node.
+        const auto complement = low & 1;
+        low ^= complement;
+        high ^= complement;
+        auto [it, inserted] = Unique.emplace(std::tuple{bit, low, high}, Nodes.size() << 1);
+        if (inserted) {
+            Nodes.push_back({bit, low, high});
+        }
+        return it->second ^ complement;
+    }
+
+    THashMap<TString, TDomain> Domains;
+    TVector<TNode> Nodes;
+    THashMap<std::tuple<size_t, TId, TId>, TId> Unique;
+    THashMap<std::pair<TId, TId>, TId> Intersections;
+    TId Universe = 1;
+    size_t CollectionThreshold = 1024;
+};
+
+// Map order and presentation whitespace do not affect merging. Keep scalar
+// styles, tags and aliases in the key: their YAML semantics can differ.
+TString ProjectionStateKey(NFyaml::TNodeRef node) {
+    TStringStream out;
+    out << static_cast<int>(node.Type()) << ':';
+    if (auto tag = node.Tag()) {
+        out << tag->size() << ':' << *tag;
+    }
+    out << ';';
+    if (node.Type() == NFyaml::ENodeType::Mapping) {
+        TMap<TString, TString> entries;
+        for (auto pair : node.Map()) {
+            entries[pair.Key().Scalar()] = ProjectionStateKey(pair.Value());
+        }
+        for (const auto& [key, value] : entries) {
+            out << key.size() << ':' << key << value.size() << ':' << value;
+        }
+    } else if (node.Type() == NFyaml::ENodeType::Sequence) {
+        for (auto child : node.Sequence()) {
+            const auto value = ProjectionStateKey(child);
+            out << value.size() << ':' << value;
+        }
+    } else {
+        const auto value = node.Scalar();
+        out << static_cast<int>(node.Style()) << ':' << value.size() << ':' << value;
+    }
+    return out.Str();
+}
+
+NFyaml::TDocument ProjectSections(NFyaml::TNodeRef config, const TVector<TString>& sections) {
+    auto result = NFyaml::TDocument::Parse("{}");
+    auto map = result.Root().Map();
+    for (auto pair : config.Map()) {
+        const auto path = TString("/") + pair.Key().Scalar();
+        if (AnyOf(sections, [&](const TString& section) {
+            return section == "/" || section == path;
+        })) {
+            map.Append(pair.Key().Copy(result).Ref(), pair.Value().Copy(result).Ref());
+        }
+    }
+    return result;
+}
+
+} // namespace
+
+void TIncompatibilityRules::ForEachActiveRule(
+    const std::function<void(const TIncompatibilityRule&)>& callback) const
+{
+    for (const auto& [name, rule] : RulesByName) {
+        if (!DisabledRules.contains(name)) {
+            callback(rule);
+        }
+    }
+}
+
+void EnumerateDistinctProjections(
+    NFyaml::TDocument& doc,
+    const TVector<TString>& sectionPrefixes,
+    const std::function<void(NFyaml::TNodeRef)>& onProjection)
+{
+    auto model = ParseConfig(doc);
+    TVector<TString> names;
+    TVector<std::pair<TString, TSet<TLabel>>> labels;
+    BuildLabelDomain(doc, ComputeUsedNames(model), names, labels);
+    TLabelRegions regions(labels);
+    TLabelRegions::TId compatible = regions.All();
+    model.IncompatibilityRules.ForEachActiveRule([&](const TIncompatibilityRule& rule) {
+        TLabelRegions::TId forbidden = 1;
+        for (const auto& pattern : rule.Patterns) {
+            forbidden = regions.And(forbidden, regions.Match(pattern.Name, [&](const TLabel& label) {
+                return pattern.Matches(label, pattern.Name);
+            }));
+        }
+        compatible = regions.And(compatible, regions.Not(forbidden));
+        regions.CollectGarbage({&compatible});
+    });
+
+    struct TOverlay {
+        NFyaml::TDocument Config;
+        const TSelector* Selector;
+    };
+    TVector<TOverlay> overlays;
+    for (const auto& selector : model.Selectors) {
+        auto overlay = ProjectSections(selector.Config, sectionPrefixes);
+        if (overlay.Root().Map().size() == 0) {
+            continue;
+        }
+        overlays.push_back({std::move(overlay), &selector.Selector});
+    }
+
+    struct TState {
+        NFyaml::TDocument Config;
+        TLabelRegions::TId Region;
+    };
+    TMap<TString, TState> states;
+    auto insert = [&](auto& into, NFyaml::TDocument config, TLabelRegions::TId region) {
+        if (region == 0) {
+            return;
+        }
+        // Tags on the destination do not affect Apply; only overlay tags do.
+        RemoveTags(config);
+        auto key = ProjectionStateKey(config.Root());
+        if (auto it = into.find(key); it != into.end()) {
+            it->second.Region = regions.Or(it->second.Region, region);
+        } else {
+            into.emplace(std::move(key), TState{std::move(config), region});
+        }
+    };
+    insert(states, ProjectSections(model.Config, sectionPrefixes), compatible);
+
+    for (auto& overlay : overlays) {
+        TLabelRegions::TId matches = 1;
+        for (const auto& [name, values] : overlay.Selector->In) {
+            matches = regions.And(matches, regions.MatchValues(name, values.Values));
+        }
+        for (const auto& [name, values] : overlay.Selector->NotIn) {
+            matches = regions.And(matches, regions.Not(regions.MatchValues(name, values.Values)));
+        }
+        const auto misses = regions.Not(matches);
+        TMap<TString, TState> next;
+        for (auto& [key, state] : states) {
+            const auto hit = regions.And(state.Region, matches);
+            const auto miss = regions.And(state.Region, misses);
+            if (hit != 0) {
+                auto config = state.Config.Clone();
+                auto root = config.Root();
+                // Destroy the detached patch before deduplication can discard its document.
+                {
+                    auto patch = overlay.Config.Root().Copy(config);
+                    Apply(root, patch.Ref());
+                }
+                insert(next, std::move(config), hit);
+            }
+            if (miss != 0) {
+                if (auto it = next.find(key); it != next.end()) {
+                    it->second.Region = regions.Or(it->second.Region, miss);
+                } else {
+                    next.emplace(key, TState{std::move(state.Config), miss});
+                }
+            }
+        }
+        states = std::move(next);
+        TVector<TLabelRegions::TId*> roots;
+        roots.reserve(states.size());
+        for (auto& [key, state] : states) {
+            roots.push_back(&state.Region);
+        }
+        regions.CollectGarbage(roots);
+    }
+    for (auto& [key, state] : states) {
+        onProjection(state.Config.Root());
+    }
 }
 
 size_t Hash(const TResolvedConfig& config)

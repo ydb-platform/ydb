@@ -68,6 +68,7 @@ public:
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
         const TActorId& CheckpointCoordinator;
         const bool EnableWatermarks;
+        TActorId StreamingQueryNodesManager;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -107,7 +108,7 @@ private:
 
     void LogMemoryStatistics(const TLogFunc& logFunc);
     void PrepareCheckpoints();
-    void SendReadyStateToCheckpointCoordinator();
+    void SendReadyState();
 
 private:
     const ui64 TxId;
@@ -150,7 +151,8 @@ private:
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     TActorId CheckpointCoordinatorId;
     const bool EnableWatermarks;
-    bool CheckpointsReadyStateSent = false;
+    const TActorId StreamingQueryNodesManagerId;
+    bool ReadyStateSent = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
     THashMap<ui32, TActorId> ResultChannels;

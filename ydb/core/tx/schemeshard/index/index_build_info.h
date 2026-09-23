@@ -821,7 +821,7 @@ public:
         return CancelRequested;
     }
 
-    TString InvalidBuildKind() {
+    TString InvalidBuildKind() const {
         return TStringBuilder() << "Invalid index build kind " << static_cast<int>(BuildKind)
             << " for index type " << static_cast<int>(IndexType);
     }

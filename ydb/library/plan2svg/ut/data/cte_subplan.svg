@@ -617,7 +617,7 @@
 <text x='396' y='13' class='texte'>Tasks</text>
 <text x='403' y='13' class='texts'>Statistics</text>
 <g><title>1970-01-01T00:00:00.000000Z</title>
-<text x='608' y='13' class='texts'>0:00</text>
+<text x='608' y='13' class='texts'>0</text>
 </g>
 </svg>
 <line x1='0' y1='18' x2='1280' y2='18' class='columns' />

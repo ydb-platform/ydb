@@ -15,7 +15,8 @@ public:
         Size,
         Minus,
         Abs,
-        Just
+        Just,
+        ToString
     };
 
     enum class EBinaryOp {

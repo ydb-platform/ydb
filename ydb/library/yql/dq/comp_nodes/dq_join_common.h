@@ -248,8 +248,9 @@ struct TFutureTableData {
 struct TTableAndSomeData {
     NJoinTable::TNeumannJoinTable Table;
     TMKQLDeque<TFuturePage> Futures;
-    std::optional<TPackResult> CurrentProbePack;
-    ui32 ProbeResumeIndex = 0;
+                    std::optional<TPackResult> CurrentProbePack;
+                    ui32 ProbeResumeIndex = 0;
+                    size_t BuildCursor = 0;
 };
 
 namespace NJoinPackedTuples {
@@ -424,6 +425,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         TProbeSpiller<Settings> Spiller;
         std::optional<TPackResult> FetchedPack;
         ui32 ResumeIndex = 0;
+        size_t BuildCursor = 0;
     };
 
     using DumpedBuckets = std::unordered_map<int, TSpilledBucket>;
@@ -517,34 +519,27 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         auto notEnoughMemory = [hasSpiller = !!Spiller_] {
             return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
-        auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
-            bool found = false;
+        auto lookupToTable = [&](TTable& table, TSingleTuple tuple, size_t& buildCursor) -> bool {
+            // A non-zero cursor means this probe already emitted a match on a previous call.
+            bool found = buildCursor > 0;
+            auto onMatch = [&](TSingleTuple tableMatch) {
+                found = true;
+                if constexpr (Kind == EJoinKind::Left || Kind == EJoinKind::Inner) {
+                    consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                }
+            };
+            if (!table.Lookup(tuple, buildCursor, onMatch, isFull)) {
+                return false;
+            }
             if constexpr (Kind == EJoinKind::Left) {
-                if (Settings_.LeftIsBuild()) {
-                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                        found = true;
-                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
-                    });
-                } else {
-                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                        found = true;
-                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
-                    });
-                    if (!found) {
-                        consume(tuple);
-                    }
+                if (!Settings_.LeftIsBuild() && !found) {
+                    consume(tuple);
                 }
             } else {
                 // Left semi/only with the SQL left side hashed keep those rows in the build table.
                 // Probe matches only mark them; the rows themselves are emitted after the probe.
                 const bool preservedInBuild = Settings_.LeftIsBuild() && PreservedBuildKind(Kind)
                     && Kind != EJoinKind::Left;
-                table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                    found = true;
-                    if constexpr (Kind == EJoinKind::Inner) {
-                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
-                    }
-                });
                 if (!preservedInBuild) {
                     if constexpr (Kind == EJoinKind::LeftOnly) {
                         if (!found) {
@@ -558,6 +553,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     }
                 }
             }
+            return true;
         };
         if (std::get_if<Init>(&State_)) {
             State_ = FetchingBuild{*this};
@@ -712,7 +708,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     } else {
                         TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
                         MKQL_ENSURE(thisTable, "sanity check");
-                        lookupToTable(*thisTable, tuple);
+                        if (!lookupToTable(*thisTable, tuple, state.BuildCursor)) {
+                            state.ResumeIndex = idx - 1;
+                            return EFetchResult::One;
+                        }
                     }
                     if (isFull()) {
                         state.ResumeIndex = idx;
@@ -780,7 +779,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                             if (idx++ < table->ProbeResumeIndex) {
                                 continue;
                             }
-                            lookupToTable(table->Table, probeTuple);
+                            if (!lookupToTable(table->Table, probeTuple, table->BuildCursor)) {
+                                table->ProbeResumeIndex = idx - 1;
+                                return EFetchResult::One;
+                            }
                             if (isFull()) {
                                 table->ProbeResumeIndex = idx;
                                 return EFetchResult::One;

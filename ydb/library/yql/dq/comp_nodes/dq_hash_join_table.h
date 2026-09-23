@@ -119,17 +119,33 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
     }
 
     void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
-        if (Empty()){
-            return;
+        size_t resumeIndex = 0;
+        const bool done = Lookup(row, resumeIndex, consume, [] { return false; });
+        MKQL_ENSURE(done, "lookup without a full check must consume every match");
+    }
+
+    // resumeIndex is where the scan of this probe continues, 0 once every match was consumed.
+    // Returns false when isFull stopped the scan before the chain ended.
+    bool Lookup(TSingleTuple row, size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
+                std::predicate auto isFull) {
+        if (Empty()) {
+            resumeIndex = 0;
+            return true;
         }
-        Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
+        const bool finished = Table_.Apply(row.PackedData, row.OverflowBegin, resumeIndex, [&](const ui8* tuplePackedData) {
             if (TrackUsed_) {
                 const size_t index = Table_.IndexOfPackedRow(tuplePackedData);
                 MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
                 Used_[index] = 1;
             }
             consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
+            return !isFull();
         });
+        if (!finished) {
+            return false;
+        }
+        resumeIndex = 0;
+        return true;
     }
 
     void ForEachUnused(std::invocable<TSingleTuple> auto consume) const {

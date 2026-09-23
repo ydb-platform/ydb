@@ -2463,9 +2463,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
         ])", ysonString);
     }
 
-    Y_UNIT_TEST(QuerySessionsRuntimeStats) {
+    Y_UNIT_TEST_TWIN(QuerySessionsRuntimeStats, Enabled) {
         NKqp::TKikimrSettings settings = NKqp::TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableKqpCurrentQueryStats(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableKqpCurrentQueryStats(Enabled);
         NKqp::TKikimrRunner kikimr(settings);
         constexpr ui32 totalRows = 2000;
         kikimr.RunCall([&] { NKqp::CreateManyShardsTable(kikimr, totalRows, 50, 20); return true; });
@@ -2512,8 +2512,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NYdb::TResultSetParser parser(result.GetResultSet(0));
             UNIT_ASSERT(parser.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("State").GetOptionalUtf8().value(), executing ? "EXECUTING" : "IDLE");
-            for (const auto* name : {"DurationUs", "CpuTimeUs", "ComputeMemoryBytes", "ReadIngressBytesRate"}) {
-                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(name).GetOptionalUint64().has_value(), executing, name);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("DurationUs").GetOptionalUint64().has_value(), executing);
+            for (const auto* name : {"CpuTimeUs", "ComputeMemoryBytes", "ReadIngressBytesRate"}) {
+                UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(name).GetOptionalUint64().has_value(), executing && Enabled, name);
             }
         };
         checkSysView(true);

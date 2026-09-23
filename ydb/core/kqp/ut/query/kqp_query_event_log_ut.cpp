@@ -147,12 +147,13 @@ void SendKqpQueryAsUser(TTestActorRuntime& runtime,
 
 Y_UNIT_TEST_SUITE(KqpQueryEventLog) {
 
-// At KQP_REQUEST=DEBUG a successful query emits one completed envelope at
-// DEBUG with the full per-query field set.
-Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
+// At KQP_REQUEST=DEBUG a successful query emits one completed envelope at DEBUG.
+Y_UNIT_TEST_TWIN(ExecuteSuccessAtDebugLogsCompleted, CollectResources) {
     TStringStream logStream;
     {
-        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        auto settings = MakeStreamSettings(logStream);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableKqpCurrentQueryStats(CollectResources);
+        TKikimrRunner kikimr(settings);
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
 
         auto db = kikimr.GetQueryClient();
@@ -187,9 +188,9 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
     UNIT_ASSERT_C(req.Has("type"), "type field");
     UNIT_ASSERT_C(req.Has("duration_us"), "duration_us field");
     UNIT_ASSERT(!req["ast"].GetStringSafe("").empty());
-    UNIT_ASSERT(req.Has("cpu_time_us"));
-    UNIT_ASSERT(req.Has("observed_peak_compute_memory_bytes"));
-    UNIT_ASSERT(req.Has("read_ingress_bytes"));
+    UNIT_ASSERT_VALUES_EQUAL(req.Has("cpu_time_us"), CollectResources);
+    UNIT_ASSERT_VALUES_EQUAL(req.Has("observed_peak_compute_memory_bytes"), CollectResources);
+    UNIT_ASSERT_VALUES_EQUAL(req.Has("read_ingress_bytes"), CollectResources);
     UNIT_ASSERT(!req.Has("compute_memory_bytes"));
     UNIT_ASSERT(!req.Has("table_read_bytes"));
     UNIT_ASSERT_C(req.Has("query_len"), "query_len field");
@@ -793,7 +794,9 @@ Y_UNIT_TEST_TWIN(TableReadResourcesWithoutClientStats, DropProgress) {
     TStringStream logStream;
     size_t progressEvents = 0;
     {
-        TKikimrRunner kikimr(MakeStreamSettings(logStream).SetUseRealThreads(false));
+        auto settings = MakeStreamSettings(logStream).SetUseRealThreads(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableKqpCurrentQueryStats(true);
+        TKikimrRunner kikimr(settings);
         SetKqpRequestLevel(kikimr, NLog::PRI_DEBUG);
         kikimr.GetTestServer().GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvCurrentExecutionStats::EventType
@@ -830,7 +833,9 @@ Y_UNIT_TEST(BatchQueryResources) {
     const TString query = "BATCH DELETE FROM `/Root/EightShard` WHERE Key > 0";
     TStringStream logStream;
     {
-        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        auto settings = MakeStreamSettings(logStream);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableKqpCurrentQueryStats(true);
+        TKikimrRunner kikimr(settings);
         SetKqpRequestLevel(kikimr, NLog::PRI_DEBUG);
         auto result = kikimr.GetQueryClient().ExecuteQuery(
             query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();

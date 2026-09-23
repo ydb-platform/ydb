@@ -415,31 +415,34 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
-    TStringBuf prefixPath = GetPrefixPath(service, cluster);
+    const auto prefixPath = GetPrefixPath(service, cluster);
     if (prefixPath) {
         return AddTablePathPrefix(*this, prefixPath, path);
     }
     return path.Build();
 }
 
-TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {
+TString TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {
     if (IsDynamicCluster(cluster)) {
         return {};
     }
     auto* clusterPrefix = cluster.GetLiteral()
                               ? ClusterPathPrefixes_.FindPtr(*cluster.GetLiteral())
                               : nullptr;
+    auto* providerPrefix = ProviderPathPrefixes_.FindPtr(service);
+    TStringBuf prefixPath = PathPrefix_;
     if (clusterPrefix && !clusterPrefix->empty()) {
-        return *clusterPrefix;
-    } else {
-        auto* providerPrefix = ProviderPathPrefixes_.FindPtr(service);
-        if (providerPrefix && !providerPrefix->empty()) {
-            return *providerPrefix;
-        } else if (!PathPrefix_.empty()) {
-            return PathPrefix_;
-        }
-        return {};
+        prefixPath = *clusterPrefix;
+    } else if (providerPrefix && !providerPrefix->empty()) {
+        prefixPath = *providerPrefix;
     }
+
+    if (service == KikimrProviderName && Settings.PathPrefix.StartsWith('/')) {
+        // KQP supplies the database root in the immutable translation settings.
+        // Later pragmas replace the prefix, but do not change its base directory.
+        return BuildTablePath(Settings.PathPrefix, prefixPath);
+    }
+    return TString(prefixPath);
 }
 
 TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {

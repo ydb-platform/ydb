@@ -9,6 +9,111 @@
 
 using namespace NSQLTranslationV1;
 
+Y_UNIT_TEST_SUITE(RelativeTablePathPrefix) {
+
+NYql::TAstParseResult Translate(const TString& query, const TString& provider = "kikimr") {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.PathPrefix = "/Root/database";
+    return SqlToYqlWithMode("USE plato; " + query, NSQLTranslation::ESqlMode::QUERY,
+        10, provider, EDebugOutput::None, false, settings);
+}
+
+void AssertPath(const NYql::TAstParseResult& result, const TString& path) {
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(result), TStringBuilder() << "(String '\"" << path << "\")");
+}
+
+Y_UNIT_TEST(ResolveFromDatabase) {
+    const struct {
+        TString Prefix;
+        TString Table;
+        TString Expected;
+    } cases[] = {
+        {"folder", "users", "/Root/database/folder/users"},
+        {"./folder", "users", "/Root/database/folder/users"},
+        {"folder/", "users", "/Root/database/folder/users"},
+        {"folder/child/..", "users", "/Root/database/folder/users"},
+        {"folder/child", "../users", "/Root/database/folder/users"},
+        {".", "users", "/Root/database/users"},
+        {"", "users", "/Root/database/users"},
+        {"../sibling", "users", "/Root/sibling/users"},
+        {"/Other/folder", "users", "/Other/folder/users"},
+        {"folder", "/Other/users", "/Other/users"},
+        {"./folder", "/Other/users", "/Other/users"},
+        {"/Other/folder", "/Root/database/users", "/Root/database/users"},
+    };
+    for (const auto& test : cases) {
+        const TString query = TStringBuilder() << "PRAGMA TablePathPrefix = '" << test.Prefix
+            << "'; SELECT * FROM `" << test.Table << "`;";
+        AssertPath(Translate(query), test.Expected);
+    }
+    AssertPath(Translate("SELECT * FROM users;"), "/Root/database/users");
+}
+
+Y_UNIT_TEST(RepeatedPrefixesUseDatabaseRoot) {
+    AssertPath(Translate(R"(
+        PRAGMA TablePathPrefix = 'folder1';
+        PRAGMA TablePathPrefix = './folder2';
+        SELECT * FROM users;
+    )"), "/Root/database/folder2/users");
+}
+
+Y_UNIT_TEST(ProviderAndClusterPrefixes) {
+    for (const TString& scope : {TString("kikimr"), TString("plato")}) {
+        AssertPath(Translate(TStringBuilder()
+            << "PRAGMA TablePathPrefix = '/Other';"
+            << "PRAGMA TablePathPrefix('" << scope << "', './folder');"
+            << "SELECT * FROM users;"), "/Root/database/folder/users");
+    }
+    AssertPath(Translate(R"(
+        PRAGMA TablePathPrefix = '/Other';
+        PRAGMA TablePathPrefix('kikimr', 'provider');
+        PRAGMA TablePathPrefix('plato', 'cluster');
+        SELECT * FROM users;
+    )"), "/Root/database/cluster/users");
+}
+
+Y_UNIT_TEST(OtherProvidersKeepRelativePrefixes) {
+    for (const TString& provider : {TString("yt"), TString("rtmr"), TString("ydb")}) {
+        AssertPath(Translate("PRAGMA TablePathPrefix = './folder'; SELECT * FROM users;", provider), "folder/users");
+    }
+}
+
+Y_UNIT_TEST(DynamicClustersKeepUnprefixedPaths) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.PathPrefix = "/Root/database";
+    settings.DynamicClusterProvider = NYql::KikimrProviderName;
+    const auto result = SqlToYqlWithMode(R"(
+        PRAGMA TablePathPrefix = './folder';
+        SELECT * FROM extcluster.`nested/users`;
+    )", NSQLTranslation::ESqlMode::QUERY, 10, "kikimr", EDebugOutput::None, false, settings);
+    AssertPath(result, "nested/users");
+}
+
+Y_UNIT_TEST(DeferredTablePathsUseDatabaseRoot) {
+    const auto result = Translate(R"(
+        PRAGMA TablePathPrefix = './folder';
+        $table = 'us' || 'ers';
+        SELECT * FROM $table;
+    )");
+    AssertPath(result, "/Root/database/folder");
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(result), "BuildTablePath");
+}
+
+Y_UNIT_TEST(ObjectPathsUseDatabaseRoot) {
+    for (const TString& statement : {
+        TString("CREATE TABLE users (id Uint64, PRIMARY KEY (id));"),
+        TString("DROP TABLE users;"),
+        TString("CREATE TOPIC users;"),
+        TString("DROP TOPIC users;"),
+        TString("CREATE EXTERNAL DATA SOURCE users WITH (SOURCE_TYPE='ObjectStorage', LOCATION='bucket', AUTH_METHOD='NONE');"),
+    }) {
+        AssertPath(Translate("PRAGMA TablePathPrefix = './folder'; " + statement), "/Root/database/folder/users");
+    }
+}
+
+} // Y_UNIT_TEST_SUITE(RelativeTablePathPrefix)
+
 Y_UNIT_TEST_SUITE(QuerySplit) {
 
 TVector<TString> Statements(const TString& query) {

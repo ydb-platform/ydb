@@ -50,6 +50,50 @@ static auto ExecuteQueryAndCheckResultSets(NYdb::NQuery::TQueryClient& db, const
 }
 
 Y_UNIT_TEST_SUITE(KqpQuery) {
+    Y_UNIT_TEST_TWIN(TablePathPrefixRelativeToDatabase, QueryService) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto schemeClient = kikimr.GetSchemeClient();
+        auto mkdirResult = schemeClient.MakeDirectory("/Root/folder").ExtractValueSync();
+        UNIT_ASSERT_C(mkdirResult.IsSuccess(), mkdirResult.GetIssues().ToString());
+
+        auto createResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/users` (id Uint64 NOT NULL, PRIMARY KEY (id));
+            CREATE TABLE `/Root/folder/users` (id Uint64 NOT NULL, PRIMARY KEY (id));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+        auto writeResult = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/users` (id) VALUES (99u);
+            UPSERT INTO `/Root/folder/users` (id) VALUES (42u);
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+        const auto check = [&](const TString& query, const TString& expected) {
+            if constexpr (QueryService) {
+                auto result = queryClient.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+                CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            } else {
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+                CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            }
+        };
+        for (const TString& prefix : {TString("folder"), TString("./folder"), TString("folder/child/.."), TString("/Root/folder")}) {
+            check(TStringBuilder() << "PRAGMA TablePathPrefix = '" << prefix << "'; SELECT id FROM users;", "[[42u]]");
+            check(TStringBuilder() << "PRAGMA TablePathPrefix = '" << prefix << "'; SELECT id FROM `/Root/users`;", "[[99u]]");
+        }
+        check("PRAGMA TablePathPrefix = './folder'; SELECT id FROM `../users`;", "[[99u]]");
+        check("PRAGMA TablePathPrefix = '.'; SELECT id FROM users;", "[[99u]]");
+        check("PRAGMA TablePathPrefix = ''; SELECT id FROM users;", "[[99u]]");
+        check("PRAGMA TablePathPrefix = 'unused'; PRAGMA TablePathPrefix = 'folder'; SELECT id FROM users;", "[[42u]]");
+        check("SELECT id FROM users;", "[[99u]]");
+    }
+
     Y_UNIT_TEST(PreparedQueryInvalidate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

@@ -180,7 +180,7 @@ public:
     bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
-    TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
+    TString GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
 
     TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
 

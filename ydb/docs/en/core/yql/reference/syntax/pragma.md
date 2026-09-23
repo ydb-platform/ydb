@@ -57,12 +57,19 @@ Automatically run [COMMIT](commit.md) after every statement.
 | --- | --- |
 | String | — |
 
-Add the specified prefix to the cluster table paths. It uses standard file system path concatenation, supporting parent folder `..` referencing and requiring no trailing slash. For example,
+Add the specified prefix to table paths. A relative prefix, such as `folder` or `./folder`, is resolved from the root of the database specified in the connection. An absolute prefix (starting with `/`) is resolved from the cluster root.
 
-`PRAGMA TablePathPrefix = "home/yql";
-SELECT * FROM test;`
+Paths are combined using file system rules: `.` and `..` are supported, and a trailing slash is optional. For example, when connected to the `/local` database:
 
-The prefix is not added if the table name is an absolute path (starts with /).
+```yql
+PRAGMA TablePathPrefix = "./folder";
+SELECT * FROM users; -- /local/folder/users
+SELECT * FROM `../users`; -- /local/users
+```
+
+Each relative prefix is resolved from the database root, even if another prefix was set earlier. An empty prefix refers to the database root.
+
+The prefix is not added if the table name is an absolute path (starts with `/`). For example, the table path `/other/users` is used as is, regardless of the prefix.
 
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 

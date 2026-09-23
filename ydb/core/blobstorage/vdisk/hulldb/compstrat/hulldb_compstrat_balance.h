@@ -647,6 +647,8 @@ namespace NKikimr {
                 , RankThreshold(params.RankThreshold)
                 , FullCompactionAttrs(params.FullCompactionAttrs)
                 , FreeChunksBudget(params.FreeChunksBudget)
+                , AppendBlockSize(params.AppendBlockSize)
+                , StripeSstBytes(params.StripeSstBytes)
                 , Sublog({})
                 , BalanceLevel0(HullCtx, Sublog, params.Boundaries, LevelSnap.SliceSnap, Task->CompactSsts,
                         Task->IsFullCompaction)
@@ -679,6 +681,8 @@ namespace NKikimr {
             const double RankThreshold;
             const std::optional<TFullCompactionAttrs> FullCompactionAttrs;
             const ui32 FreeChunksBudget;
+            const ui32 AppendBlockSize;
+            const ui32 StripeSstBytes;
             TSublog<> Sublog;
             TBalanceLevel0 BalanceLevel0;
             TBalancePartiallySortedLevels BalancePartiallySortedLevels;
@@ -709,7 +713,7 @@ namespace NKikimr {
                     return true;
                 }
                 const ui32 estimated = TUtils<TKey, TMemRec>::EstimateCompactSstsOutputChunks(
-                    Task->CompactSsts, HullCtx->ChunkSize);
+                    Task->CompactSsts, HullCtx->ChunkSize, AppendBlockSize, StripeSstBytes);
                 if (estimated <= FreeChunksBudget) {
                     return true;
                 }

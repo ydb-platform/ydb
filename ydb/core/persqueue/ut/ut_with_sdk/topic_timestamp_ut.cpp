@@ -290,6 +290,52 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         }
     }
 
+    Y_UNIT_TEST(ReadSkipsMessagesOlderThanRetention) {
+        const TDuration retention = TDuration::Seconds(5);
+        auto setup = TTopicSdkTestSetup("ReadInsideRetention", TTopicSdkTestSetup::MakeServerSettings(), false);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, std::nullopt, retention, false);
+
+        setup.Write("old-message");
+        // This setup runs on the wall clock. Stay inside the cleanup grace (lifetime + 5s)
+        // so the old blob is still stored and the read filter is what drops it.
+        Sleep(retention + TDuration::Seconds(2));
+        setup.Write("fresh-message");
+
+        TTopicClient client(setup.MakeDriver());
+        TReadSessionSettings settings;
+        settings.ConsumerName(TEST_CONSUMER);
+        settings.AppendTopics(TTopicReadSettings().Path(setup.GetFullTopicPath()).AppendPartitionIds(0));
+        auto session = client.CreateReadSession(settings);
+
+        TVector<TString> messages;
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(20);
+        while (TInstant::Now() < deadline) {
+            if (!session->WaitEvent().Wait(TDuration::Seconds(1))) {
+                continue;
+            }
+            auto event = session->GetEvent();
+            if (!event) {
+                continue;
+            }
+            if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                start->Confirm();
+                continue;
+            }
+            if (auto* received = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                for (const auto& message : received->GetMessages()) {
+                    messages.push_back(TString{message.GetData()});
+                }
+                if (!messages.empty() && messages.back() == "fresh-message") {
+                    break;
+                }
+            }
+        }
+        session->Close(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0], "fresh-message");
+    }
+
     struct TTestRegistration {
         TTestRegistration() {
             [[maybe_unused]] constexpr bool xfail = false;

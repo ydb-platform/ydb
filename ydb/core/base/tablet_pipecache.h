@@ -153,4 +153,9 @@ IActor* CreatePipePerNodeCache(const TIntrusivePtr<TPipePerNodeCacheConfig> &con
 TActorId MakePipePerNodeCacheID(EPipePerNodeCache kind);
 TActorId MakePipePerNodeCacheID(bool allowFollower);
 
+// Independent follower connections let concurrent vector searches use more
+// than one read replica. Each read retains its selected cache for its lifetime.
+inline constexpr ui32 VectorReadFollowerPipeCacheCount = 32;
+TActorId MakeVectorReadFollowerPipeCacheID(ui32 index);
+
 }

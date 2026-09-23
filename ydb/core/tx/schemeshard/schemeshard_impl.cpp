@@ -8487,6 +8487,36 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
     }
     tableDescr->CopyFrom(tinfo->TableDescription);
 
+    // A split creates the destination from SchemeShard metadata, not from the
+    // source tablet's schema. Recover posting-table cache settings from the
+    // owning index, including indexes created before these settings were
+    // persisted by DataShard.
+    if (pinfo->Name == NTableIndex::NKMeans::PostingTable) {
+        const auto indexIt = Indexes.find(pinfo->ParentPathId);
+        if (indexIt != Indexes.end()
+                && indexIt->second->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+                && indexIt->second->State == NKikimrSchemeOp::EIndexStateReady
+                && !indexIt->second->IndexKeys.empty()) {
+            const auto& index = *indexIt->second;
+            const auto& embedding = index.IndexKeys.back();
+            for (const auto& [columnId, column] : tinfo->Columns) {
+                if (column.Name != embedding || column.IsDropped()) {
+                    continue;
+                }
+                tableDescr->MutableVectorIndexKmeansTreeDescription()->CopyFrom(
+                    std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription));
+                tableDescr->SetVectorIndexEmbeddingColumn(embedding);
+                tableDescr->SetVectorIndexEmbeddingColumnId(columnId);
+                const auto indexPath = PathsById.at(pinfo->ParentPathId);
+                indexPath->PathId.ToProto(tableDescr->MutableVectorIndexPathId());
+                tableDescr->SetVectorIndexPath(PathToString(indexPath));
+                indexPath->ParentPathId.ToProto(tableDescr->MutableVectorIndexTablePathId());
+                tableDescr->SetVectorIndexTablePath(PathToString(PathsById.at(indexPath->ParentPathId)));
+                break;
+            }
+        }
+    }
+
     if (rangeBegin.empty()) {
         // First partition starts with <NULL, NULL, ..., NULL> key
         TVector<TCell> nullKey(keyColumnIds.size());

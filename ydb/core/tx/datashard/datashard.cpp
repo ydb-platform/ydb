@@ -425,6 +425,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         SyncConfig();
         State = TShardState::Readonly;
         FollowerState = { };
+        InvalidateHnswIndexes();
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
@@ -434,10 +435,6 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         YDB_LOG_INFO_CTX(ctx, "Follower switched to work state",
             {"tabletId", TabletID()});
     }
-}
-
-void TDataShard::OnFollowerDataUpdated() {
-    InvalidateHnswIndexes();
 }
 
 void TDataShard::SwitchToWork(const TActorContext &ctx) {

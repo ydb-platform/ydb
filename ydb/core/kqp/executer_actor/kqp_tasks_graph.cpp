@@ -3120,7 +3120,15 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
             settings->SetPoolId(poolId);
         }
 
-        settings->SetIsTableImmutable(source.GetIsTableImmutable());
+        // Direct full-range posting-table searches do not load the main
+        // table's index metadata, so the compiler cannot mark them like the
+        // vector-index lookup path. Resolve the actual table kind here and
+        // apply the same stale-read policy, including across partitions.
+        const bool staleVectorPosting = source.HasVectorTopK()
+            && GetMeta().RequestIsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_STALE
+            && stageInfo.Meta.ShardKind == NSchemeCache::ETableKind::KindVectorIndexTable
+            && stageInfo.Meta.TablePath.EndsWith(TStringBuilder() << '/' << NTableIndex::NKMeans::PostingTable);
+        settings->SetIsTableImmutable(source.GetIsTableImmutable() || staleVectorPosting);
         settings->SetIsolationLevel(GetMeta().RequestIsolationLevel);
 
         for (const auto& keyColumn : keyTypes) {

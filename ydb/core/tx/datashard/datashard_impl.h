@@ -1570,7 +1570,6 @@ class TDataShard
     bool ReadOnlyLeaseEnabled() override;
     TDuration ReadOnlyLeaseDuration() override;
     void OnActivateExecutor(const TActorContext &ctx) override;
-    void OnFollowerDataUpdated() override;
 
     void Cleanup(const TActorContext &ctx);
     void SwitchToWork(const TActorContext &ctx);
@@ -1911,22 +1910,40 @@ public:
         return it != HnswIndexCache.end() && it->second.BuildObsolete;
     }
 
+    void PrepareFollowerHnswIndex(ui32 localTid, const NTable::TDatabase& db,
+            const TRowVersion& readVersion) {
+        auto& entry = HnswIndexCache[localTid];
+        const auto changeCounter = db.Head(localTid);
+        if (entry.FollowerChangeCounter != changeCounter || entry.FollowerReadVersion != readVersion) {
+            // Follower redo also contains system-table writes. Only a change
+            // to this table or to the visible snapshot invalidates its graph.
+            entry.Index.reset();
+            entry.RowCountAtBuild = 0;
+            entry.DeltaReservations.clear();
+            entry.NextScanAttemptAt = TInstant::Zero();
+            entry.BuildObsolete = entry.Building;
+            entry.FollowerChangeCounter = changeCounter;
+            entry.FollowerReadVersion = readVersion;
+        }
+    }
+
     void InvalidateHnswIndexes() {
         for (auto& [_, entry] : HnswIndexCache) {
             entry.Index.reset();
             entry.RowCountAtBuild = 0;
             entry.VectorColumnTag = 0;
             entry.Settings.Clear();
+            entry.FollowerChangeCounter.reset();
             entry.DeltaReservations.clear();
             entry.NextScanAttemptAt = TInstant::Zero();
             entry.BuildObsolete = entry.Building;
         }
     }
 
-    void RegisterHnswScanPageFault(ui32 localTid) {
+    void DeferHnswIndexBuild(ui32 localTid, TDuration delay) {
         auto& entry = HnswIndexCache[localTid];
         entry.Building = false;
-        entry.NextScanAttemptAt = TInstant::Now() + TDuration::MilliSeconds(500);
+        entry.NextScanAttemptAt = TInstant::Now() + delay;
     }
 
     void DisableHnswIndexBuild(ui32 localTid) {
@@ -3160,9 +3177,8 @@ private:
     // In-memory HNSW index cache for accelerated vector top-K search, keyed by
     // local table id (i.e. one entry per posting table hosted by this tablet).
     //
-    // Leader writes maintain an installed index with per-key deltas. Follower
-    // redo does not expose row-level changes, so it invalidates the whole cache
-    // and the read path reconstructs it lazily from the updated follower data.
+    // Leader writes maintain per-key deltas. Follower reads validate the
+    // posting table's change counter and visible version before using a graph.
     struct THnswIndexCacheEntry {
         std::shared_ptr<NDataShard::THnswIndex> Index;
         ui64 RowCountAtBuild = 0;
@@ -3171,6 +3187,8 @@ private:
         THashMap<TString, std::shared_ptr<void>> DeltaReservations;
         bool Building = false;
         bool BuildObsolete = false;
+        std::optional<NTable::TDatabase::TChangeCounter> FollowerChangeCounter;
+        TRowVersion FollowerReadVersion = TRowVersion::Max();
         TInstant NextScanAttemptAt;
         ui64 CacheHits = 0;
         ui64 CacheMisses = 0;

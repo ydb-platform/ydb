@@ -239,10 +239,12 @@ struct TLostUpdateTest : public TOutboundTest {
         ProducerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 50000, .MaxMessageSize = 50000 };
         ConsumerSettings = ProducerSettings;
 
-        // the side which is to ping ignores the discoveries of the other, so that they cannot refresh it
+        // only the side which is to ping runs its cleanup: a ping of the other would refresh it, and one
+        // of the receiver resends its updates as well, which would unblock the producer on its own
         auto& pinger = ReceiverPings ? Debug1 : Debug0;
+        auto& other = ReceiverPings ? Debug0 : Debug1;
         Debug0->DropUpdateCount.store(1000000);
-        pinger->DropDiscoveryCount.store(1000000);
+        other->CleanupPaused.store(true);
         StartOutbound(1);
 
         // the producer fills the cold window and the consumer drains all of it, the updates saying so lost
@@ -262,8 +264,7 @@ struct TLostUpdateTest : public TOutboundTest {
         Debug0->DropUpdateCount.store(0);
         UNIT_ASSERT_C(WaitFor([&]() { return descriptor->RemotePopBytes.load() > 0; }, TDuration::Seconds(10)),
             TStringBuilder() << "the producer was not unblocked, " << SessionDetails());
-        // the other side has a reconciliation of its own open by now, its next retry gets through
-        pinger->DropDiscoveryCount.store(0);
+        other->CleanupPaused.store(false);
 
         WaitOutbound(1);
         auto details = TStringBuilder() << "pings " << pingsBefore << " -> " << CountPings(pinger) << ", " << SessionDetails();

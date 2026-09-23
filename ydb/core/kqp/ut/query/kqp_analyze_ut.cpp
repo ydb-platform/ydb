@@ -471,6 +471,75 @@ Y_UNIT_TEST(RetryPreservesSampleRate) {
     UNIT_ASSERT_VALUES_EQUAL(attempts, 2);
 }
 
+Y_UNIT_TEST(AnalyzeEmptyTableWithDeclaredHistograms) {
+    TTestEnv env(1, 1, false);
+    auto& runtime = *env.GetServer().GetRuntime();
+    CreateDatabase(env, "Database");
+    TTableClient client(env.GetDriver());
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    auto session = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
+    const auto executeScheme = [&](const TString& query) {
+        const auto result = env.RunInThreadPool([&] { return session.ExecuteSchemeQuery(query).GetValueSync(); });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    };
+
+    executeScheme(R"(
+        CREATE TABLE `/Root/Database/Table` (
+            `Category` Int32 NOT NULL,
+            `CreatedAt` Timestamp64 NOT NULL,
+            `Amount` Decimal(7, 0) NOT NULL,
+            `Key` Utf8 NOT NULL,
+            PRIMARY KEY (`Key`)
+        ) WITH (
+            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+            AUTO_PARTITIONING_PARTITION_SIZE_MB = 1024
+        );
+    )");
+    executeScheme(R"(
+        ALTER TABLE `/Root/Database/Table`
+        ADD STATISTICS `AmountCategoryStats` ON (`Amount`, `Category`) WITH (EQ_HEIGHT_HISTOGRAM),
+        ADD STATISTICS `AmountTimeStats` ON (`Amount`, `CreatedAt`) WITH (EQ_HEIGHT_HISTOGRAM);
+    )");
+
+    // ANALYZE immediately after DDL.
+    const auto result = env.RunInThreadPool([&] {
+        return queryClient.ExecuteQuery(R"(
+            PRAGMA OrderedColumns;
+            ANALYZE `/Root/Database/Table`;
+        )", NQuery::TTxControl::NoTx()).GetValueSync();
+    });
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    const TString path = "/Root/Database/Table";
+    const auto pathId = ResolvePathId(runtime, path);
+    const auto description = NStat::DescribeTable(runtime, runtime.AllocateEdgeActor(), path);
+    THashMap<TString, ui32> columnTags;
+    for (const auto& column : description.GetPathDescription().GetTable().GetColumns()) {
+        columnTags.emplace(column.GetName(), column.GetId());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(columnTags.size(), 4);
+
+    const auto summary = GetStatistics(runtime, pathId, EStatType::TABLE_SUMMARY, {std::nullopt});
+    UNIT_ASSERT_VALUES_EQUAL(summary.size(), 1);
+    UNIT_ASSERT(summary[0].Success && summary[0].TableSummary.Data);
+    UNIT_ASSERT_VALUES_EQUAL(summary[0].TableSummary.Data->GetRowCount(), 0);
+    for (const auto& [name, tag] : columnTags) {
+        const auto columns = GetStatistics(runtime, pathId, EStatType::SIMPLE_COLUMN, {tag});
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
+        UNIT_ASSERT_C(columns[0].Success && columns[0].SimpleColumn.Data, name);
+        UNIT_ASSERT_VALUES_EQUAL(columns[0].SimpleColumn.Data->GetCount(), 0);
+    }
+
+    for (const TString& secondColumn : {TString("Category"), TString("CreatedAt")}) {
+        const std::vector<ui32> tags{columnTags.at("Amount"), columnTags.at(secondColumn)};
+        const auto histogram = GetStatisticsMultiColumn(runtime, pathId, EStatType::EQ_HEIGHT_HISTOGRAM, tags);
+        UNIT_ASSERT_VALUES_EQUAL(histogram.size(), 1);
+        UNIT_ASSERT(!histogram[0].Success && !histogram[0].EqHeightHistogram.Data);
+        UNIT_ASSERT_VALUES_EQUAL(CountStatisticsV2Rows(env, "Database", pathId,
+            EStatType::EQ_HEIGHT_HISTOGRAM, TStringBuilder() << tags[0] << ',' << tags[1]), 0);
+    }
+}
+
 } // suite
 
 Y_UNIT_TEST_SUITE(KqpAnalyzeOperations) {

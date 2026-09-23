@@ -39,6 +39,11 @@ enum ESimpleCounters {
     COUNTER_DELETE_TABLET_QUEUE_SIZE = 29 [(CounterOpts) = {Name: "DeleteTabletQueueSize"}];
     COUNTER_TABLETS_DELETING = 30 [(CounterOpts) = {Name: "TabletsDeleting"}];
     COUNTER_TABLETS_REASSIGNING = 31 [(CounterOpts) = {Name: "TabletsMarkedForReassign"}];
+    COUNTER_SHRINK_POOLS = 32 [(CounterOpts) = {Name: "ShrinkingStoragePools"}];
+    COUNTER_SHRINK_HISTORY_ENTRIES = 33 [(CounterOpts) = {Name: "ShrinkRemainingHistoryEntries"}];
+    COUNTER_SHRINK_HISTORY_TABLETS = 34 [(CounterOpts) = {Name: "ShrinkRemainingHistoryTablets"}];
+    COUNTER_SHRINK_MOVE_DATA_INFLIGHT = 35 [(CounterOpts) = {Name: "ShrinkMoveDataInFlight"}];
+    COUNTER_SHRINK_MOVE_DATA_QUEUED = 36 [(CounterOpts) = {Name: "ShrinkMoveDataQueued"}];
 }
 
 enum ECumulativeCounters {
@@ -59,6 +64,9 @@ enum ECumulativeCounters {
     COUNTER_HISTORY_CUT = 14 [(CounterOpts) = {Name: "TabletHistoryCut"}];
     COUNTER_HISTORY_RESTORED = 15 [(CounterOpts) = {Name: "TabletHistoryRestored"}];
     COUNTER_REASSIGN_EXECUTED = 16 [(CounterOpts) = {Name: "ReassignExecuted"}];
+    COUNTER_SHRINK_MOVE_DATA_SENT = 17 [(CounterOpts) = {Name: "ShrinkMoveDataSent"}];
+    COUNTER_SHRINK_MOVE_DATA_ANSWERED = 18 [(CounterOpts) = {Name: "ShrinkMoveDataAnswered"}];
+    COUNTER_SHRINK_MOVE_DATA_RETRIED = 19 [(CounterOpts) = {Name: "ShrinkMoveDataRetried"}];
 }
 
 enum EPercentileCounters {
@@ -192,4 +200,5 @@ enum ETxTypes {
     TXTYPE_PROCESS_TABLET_METRICS = 70                    [(TxTypeOpts) = {Name: "TxProcessTabletMetrics"}];
     TXTYPE_SHRINK_POOL = 71                               [(TxTypeOpts) = {Name: "TxShrinkPool"}];
     TXTYPE_SHRINK_POOL_REPLY = 72                         [(TxTypeOpts) = {Name: "TxShrinkPoolReply"}];
+    TXTYPE_MON_SHRINK_POOL = 73                           [(TxTypeOpts) = {Name: "TxMonShrinkPool"}];
 }

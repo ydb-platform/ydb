@@ -1436,11 +1436,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         THashSet<i64> simplifiedOperatorIds;
         CollectOperatorIds(planMap.at("Plan"), executionOperatorIds);
         CollectOperatorIds(simplifiedPlan, simplifiedOperatorIds);
-        UNIT_ASSERT_C(!simplifiedOperatorIds.empty(), plan);
-        for (const auto operatorId : simplifiedOperatorIds) {
-            UNIT_ASSERT_C(executionOperatorIds.contains(operatorId),
-                "OperatorId " << operatorId << " is missing from the execution plan\n" << plan);
-        }
+        UNIT_ASSERT_C(executionOperatorIds.empty(), plan);
+        UNIT_ASSERT_C(simplifiedOperatorIds.empty(), plan);
+    }
+
+    Y_UNIT_TEST(ExplainHidesOperatorIds) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        const auto plan = ExecuteExplain(session, "SELECT a FROM `/Root/t1`;");
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        const auto& planMap = planJson.GetMapSafe();
+        const auto& simplifiedPlan = planMap.at("SimplifiedPlan");
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "TableFullScan"), plan);
+
+        THashSet<i64> operatorIds;
+        CollectOperatorIds(planMap.at("Plan"), operatorIds);
+        CollectOperatorIds(simplifiedPlan, operatorIds);
+        UNIT_ASSERT_C(operatorIds.empty(), plan);
     }
 
     Y_UNIT_TEST(ExplainStageConnections) {
@@ -2290,6 +2304,68 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             .ExtractValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(QualifiedStarSubqueryFallsBackToYqlOptimizer) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `doc` (
+                `id` String,
+                `flag` Bool,
+                PRIMARY KEY (`id`)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").String("disabled")
+            .AddMember("flag").Bool(false)
+            .EndStruct();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").String("enabled")
+            .AddMember("flag").Bool(true)
+            .EndStruct();
+        rows.EndList();
+
+        auto upsertResult = tableClient.BulkUpsert("/Root/doc", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        const auto compileCountersBefore = GetNewRBOCompileCounters(kikimr);
+        auto result = querySession.ExecuteQuery(R"(
+            SELECT `d`.`id` FROM (SELECT `d_src`.* FROM `doc` AS `d_src` WHERE `d_src`.`flag`) AS `d`;
+        )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[["enabled"]]])");
+        UNIT_ASSERT_C(result.GetStats().has_value(), "Missing full query statistics");
+        UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing query plan in full statistics");
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        UNIT_ASSERT_C(planJson.GetMapSafe().contains("SimplifiedPlan"), plan);
+        const auto& planRoot = planJson.GetMapSafe().at("Plan").GetMapSafe();
+        UNIT_ASSERT_VALUES_EQUAL_C(planRoot.at("Node Type").GetStringSafe(), "Query", plan);
+        UNIT_ASSERT_C(planRoot.contains("Stats"), plan);
+
+        const auto compileCountersAfter = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.first, compileCountersBefore.first);
+        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.second, compileCountersBefore.second + 1);
     }
 
     Y_UNIT_TEST(CorrelatedScalarAggregateReuseDoesNotDuplicateVisibleColumns) {

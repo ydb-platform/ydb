@@ -297,6 +297,18 @@ public:
         (override));
 
     MOCK_METHOD(
+        NLogging::TLoggingTagList*,
+        GetRequestAnnotations,
+        (),
+        (override));
+
+    MOCK_METHOD(
+        NLogging::TLoggingTagList*,
+        GetResponseAnnotations,
+        (),
+        (override));
+
+    MOCK_METHOD(
         const IMemoryUsageTrackerPtr&,
         GetMemoryUsageTracker,
         (),

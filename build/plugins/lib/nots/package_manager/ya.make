@@ -6,6 +6,7 @@ STYLE_PYTHON()
 
 PY_SRCS(
     __init__.py
+    common_config.py
     constants.py
     lockfile.py
     node_modules_bundler.py

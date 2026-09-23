@@ -103,6 +103,7 @@ def _parameter_schema(parameter):
 def _profile_schema(benchmark):
     if benchmark.profile_kind == "distributed-ydb":
         schema = _profile_schema(BENCHMARKS.get("local-ydb"))
+        schema["properties"]["actor-system"]["properties"].pop("use-waker")
         for field in ("geometry", "affinity", "ydbd-binary"):
             schema["properties"].pop(field, None)
         schema["properties"]["cluster-template"] = {
@@ -180,6 +181,7 @@ def _profile_schema(benchmark):
                         "use-shared-threads": {"type": "boolean", "default": False},
                         "use-united-pool": {"type": "boolean", "default": False},
                         "use-ring-queue": {"type": "boolean", "default": True},
+                        "use-waker": {"type": "boolean", "default": False},
                         **{
                             role: {
                                 "type": "object",
@@ -623,14 +625,17 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
             _config_error(location + ".ydbd-binary", "must be an absolute path on the benchmark host")
         binary_config["ydbd_binary"] = binary_path
 
+    actor_flags = (("use-shared-threads", False), ("use-united-pool", False), ("use-ring-queue", True))
+    if benchmark.profile_kind == "local-ydb":
+        actor_flags += (("use-waker", False),)
     actor_system = _mapping(
         value.get("actor-system"),
         location + ".actor-system",
-        ("use-shared-threads", "use-united-pool", "use-ring-queue", "static-nodes", "dynamic-nodes"),
+        tuple(name for name, _ in actor_flags) + ("static-nodes", "dynamic-nodes"),
     )
     actor_system_config = {
         name.replace("-", "_"): _boolean(actor_system.get(name, default), location + ".actor-system." + name)
-        for name, default in (("use-shared-threads", False), ("use-united-pool", False), ("use-ring-queue", True))
+        for name, default in actor_flags
     }
     for role in ("static-nodes", "dynamic-nodes"):
         if role in actor_system:

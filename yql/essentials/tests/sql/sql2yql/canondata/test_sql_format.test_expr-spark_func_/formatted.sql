@@ -1,0 +1,3 @@
+SELECT
+    Spark::length('😀'u)
+;

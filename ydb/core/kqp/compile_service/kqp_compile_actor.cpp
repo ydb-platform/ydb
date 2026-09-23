@@ -633,6 +633,7 @@ private:
         auto queryType = QueryId.Settings.QueryType;
 
         KqpCompileResult = TKqpCompileResult::Make(Uid, status, CollectIssues(kqpResult.Issues()), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
+        KqpCompileResult->UsedNewRbo = EnableNewRBO;
         KqpCompileResult->CommandTagName = kqpResult.CommandTagName;
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -684,6 +685,13 @@ private:
             }
         }
         meta["parameters"] = parameters;
+        if (UserToken && !UserToken->GetUserSID().empty()) {
+            NJson::TJsonValue groups(NJson::JSON_ARRAY);
+            for (const auto& sid : UserToken->GetGroupSIDs()) {
+                groups.AppendValue(sid);
+            }
+            meta["user_group_sids"] = std::move(groups);
+        }
         return meta;
     }
 

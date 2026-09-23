@@ -26,7 +26,12 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
 
+#include <optional>
+
 namespace NKikimr::NReplication::NController {
+
+THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(
+    ui64 writeTxId, const TVector<TString>& tables);
 
 class TController
     : public TActor<TController>
@@ -53,6 +58,8 @@ private:
         Altering = 2,
         Applied = 3,
         Error = 4,
+        FlushingTarget = 5,
+        Verifying = 6,
     };
 
     struct TSchemaBarrier {
@@ -64,6 +71,31 @@ private:
         THashSet<TWorkerId> CompletedWorkers;
         THashMap<TWorkerId, ui64> WorkerOffsets;
         ui64 DstAlterTxId = 0;
+
+        // These IDs remain in AssignedTxIds after their target-only commits.
+        // The next ordinary global commit retires them across all targets.
+        TVector<ui64> TargetFlushTxIds;
+        size_t NextTargetFlushTxId = 0;
+
+        bool IsDestinationSchemaReady() const {
+            return Phase == ESchemaBarrierPhase::Verifying || Phase == ESchemaBarrierPhase::Applied;
+        }
+
+        bool AreAllWorkersCompleted() const {
+            return CompletedWorkers.size() == ExpectedWorkers.size();
+        }
+
+        // Applied and Error are terminal phases; earlier phases may still
+        // need a global heartbeat quorum, even before DDL starts.
+        bool IsInProgress() const {
+            return Phase != ESchemaBarrierPhase::Applied && Phase != ESchemaBarrierPhase::Error;
+        }
+
+        // Lifecycle changes also wait for the worker handshake after Applied.
+        bool IsActive() const {
+            return IsInProgress()
+                || (Phase == ESchemaBarrierPhase::Applied && !AreAllWorkersCompleted());
+        }
     };
 
 public:
@@ -213,7 +245,13 @@ private:
 
     void StartSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
     void StopSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    void StartSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    void StopSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key);
     bool HasActiveSchemaBarrier(ui64 replicationId) const;
+    bool HasFreshHeartbeatQuorum(const TSchemaBarrier& barrier) const;
+    bool HasPendingTargetFlushTxId(const TSchemaBarrier& barrier) const;
+    bool BlocksGlobalCommit(const TSchemaBarrier& barrier) const;
+    void AdvanceVerifyingSchemaBarriers(NIceDb::TNiceDb& db);
 
     // other
     template <typename T>
@@ -281,6 +319,8 @@ private:
     THashMap<TWorkerId, TRowVersion> PendingHeartbeats;
     bool ProcessHeartbeatsInFlight = false;
     ui64 CommittingTxId = 0;
+    THashMap<ui64, std::pair<ui64, ui64>> SchemaTargetFlushes;
+    std::optional<std::pair<ui64, ui64>> ActiveSchemaTargetFlush;
 
 }; // TController
 

@@ -1402,11 +1402,14 @@ void TVisualizer::PrintColumnHeaders(TStringBuilder& svg, ui64 maxSec, ui64 delt
         << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight, "Tasks")
         << SvgTextS(Config.SummaryLeft + 2, titleHeight, "Statistics");
     // The timeline column is titled by its own scale: the ticks the grid lines
-    // running down the document are drawn at.
+    // running down the document are drawn at. Each mark ends at its grid line,
+    // so the label reads as the time elapsed up to it; the origin is the one
+    // exception, a bare "0" starting at the line, since nothing lies to its left.
     for (ui64 t = 0; t <= maxSec; t += deltaSec) {
         ui64 x1 = t * w * 1000 / MaxTime;
         svg << "<g><title>" << TInstant::MilliSeconds(BaseTime + t * 1000) << "</title>" << Endl
-            << SvgTextS(x + x1 + 2, titleHeight, Sprintf("%lu:%.2lu", t / 60, t % 60))
+            << (t ? SvgTextE(x + x1 - 2, titleHeight, Sprintf("%lu:%.2lu", t / 60, t % 60))
+                  : SvgTextS(x + 2, titleHeight, "0"))
             << "</g>" << Endl;
     }
     svg << "</svg>" << Endl

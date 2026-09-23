@@ -55,6 +55,7 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::Bootstrap(const NActors::TActorContext& ctx) {
+        Cerr << TInstant::Now() << "Context->ResourceDatabasePath=" << Context->ResourceDatabasePath << ", AppData(ctx)->TenantName=" << AppData(ctx)->TenantName << ", TransactionalId.has_value()=" << TransactionalId.has_value() << Endl;
         if (IsTransactionalProducerInitialization()) {
             if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
                 YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.",

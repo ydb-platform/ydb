@@ -19,7 +19,6 @@
 #include <ydb/core/tx/data_events/events.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NColumnShard {
 

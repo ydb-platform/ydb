@@ -77,7 +77,7 @@ private:
         if (!SortHeap.Current().IsDeleted()) {
             foundResult = true;
             //        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-                          {"keyAdd", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
+            //              {"keyAdd", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
             if (builder) {
                 builder->AddRecord(SortHeap.Current());
             }
@@ -87,7 +87,7 @@ private:
             }
         } else {
             //        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-                          {"keySkip", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
+            //              {"keySkip", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
             if (builder) {
                 builder->SkipRecord(SortHeap.Current());
             }

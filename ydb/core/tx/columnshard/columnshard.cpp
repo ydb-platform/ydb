@@ -568,7 +568,7 @@ void TColumnShard::FillColumnTableStats(
             tableStatsBuilder.FillTableStats(internalPathId, *(periodicTableStats->MutableTableStats()));
             YDB_LOG_DEBUG("",
                 {"event", "Add stats for table"},
-                {"tableLocalID", "schemeShardLocalPathId"});
+                {"tableLocalID", schemeShardLocalPathId});
         }
     }
 }

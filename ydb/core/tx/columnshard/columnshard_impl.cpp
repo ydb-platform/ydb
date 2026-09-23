@@ -60,13 +60,6 @@
 #include <ydb/services/metadata/service.h>
 
 #include <util/generic/object_counter.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
-#include <ydb/library/actors/struct_log/log_stack.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 

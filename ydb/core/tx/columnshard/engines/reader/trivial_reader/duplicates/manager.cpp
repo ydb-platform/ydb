@@ -13,8 +13,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
-
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 namespace {

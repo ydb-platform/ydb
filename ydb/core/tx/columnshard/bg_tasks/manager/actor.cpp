@@ -5,8 +5,6 @@
 
 #include <ydb/library/actors/core/log.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_BACKGROUND
 
 namespace NKikimr::NOlap::NBackground {
@@ -35,7 +33,7 @@ void TSessionActor::SaveSessionProgress() {
 
 void TSessionActor::SaveSessionState() {
     if (SaveSessionStateTx) {
-        YDB_LOG_WARN("",
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "save_session_state_skipped"},
             {"selfId", SelfId()},
             {"tabletId", TabletId},
@@ -52,7 +50,7 @@ void TSessionActor::SaveSessionState() {
 }
 
 void TSessionActor::Handle(TEvLocalTransactionCompleted::TPtr& ev) {
-    YDB_LOG_DEBUG("",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "session_actor_local_tx_completed"},
         {"selfId", SelfId()},
         {"tabletId", TabletId},
@@ -66,7 +64,7 @@ void TSessionActor::Handle(TEvLocalTransactionCompleted::TPtr& ev) {
         SaveSessionStateTx.reset();
         OnSessionStateSaved();
     } else {
-        YDB_LOG_DEBUG("",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "session_actor_on_tx_completed"},
             {"selfId", SelfId()},
             {"tabletId", TabletId},
@@ -76,7 +74,7 @@ void TSessionActor::Handle(TEvLocalTransactionCompleted::TPtr& ev) {
 }
 
 void TSessionActor::Handle(TEvSessionControl::TPtr& ev) {
-    YDB_LOG_DEBUG("",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "session_actor_handle_control"},
         {"selfId", SelfId()},
         {"tabletId", TabletId},
@@ -97,7 +95,7 @@ void TSessionActor::Handle(TEvSessionControl::TPtr& ev) {
             return;
         }
     }
-    YDB_LOG_DEBUG("",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "session_actor_control_saving_state"},
         {"selfId", SelfId()},
         {"tabletId", TabletId});

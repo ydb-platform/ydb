@@ -1156,11 +1156,93 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             "Generated columns require EnableIndexStreamWrite");
     }
 
-    Y_UNIT_TEST(NonDeterministicAccepted) {
-        CheckGeneratedColumnsAccepted({
-            {"CAST(RandomNumber(k) AS Int32)", ""},
-            {"CAST(Random(k) * 100 AS Int32)", ""},
-            {"k + CAST(RandomNumber(k) AS Int32)", ""},
+    Y_UNIT_TEST(WhitelistRejectsNonDeterministic) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("CAST(RandomNumber(k) AS Int32)"), "is not allowed in a generated column expression"},
+            {GeneratedColumnDDL("CAST(Random(k) * 100 AS Int32)"), "is not allowed in a generated column expression"},
+            {GeneratedColumnDDL("k + CAST(RandomNumber(k) AS Int32)"), "is not allowed in a generated column expression"},
+            {GeneratedColumnDDL("CAST(RandomNumber(k) AS Int32)", "", "VIRTUAL"),
+                "is not allowed in a generated column expression"},
+            {R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    v Uuid GENERATED ALWAYS AS (RandomUuid(k)) STORED,
+                    PRIMARY KEY (k)
+                );
+            )",
+                "is not allowed in a generated column expression"},
+            {R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    v Timestamp GENERATED ALWAYS AS (CurrentUtcTimestamp()) STORED,
+                    PRIMARY KEY (k)
+                );
+            )",
+                "is not allowed in a generated column expression"},
+            {GeneratedColumnDDL("COALESCE(ListHead(ListShuffle(AsList(k, k + 1))), 0)"),
+                "is not allowed in a generated column expression"},
+            {GeneratedColumnDDL("COALESCE(ListHead(ListUniq(AsList(k, k + 1))), 0)"),
+                "is not allowed in a generated column expression"},
+            {GeneratedColumnDDL("COALESCE(ListHead(DictKeys(AsDict(AsTuple(k, 0), AsTuple(k + 1, 1)))), 0)"),
+                "is not allowed in a generated column expression"},
+        });
+    }
+
+    Y_UNIT_TEST(WhitelistRejectsExceptionProducingCallables) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("Unwrap(Just(k))"), "is not allowed in a generated column expression"},
+            {GeneratedColumnDDL("Ensure(k, k > 0, \"k must be positive\")"),
+                "is not allowed in a generated column expression"},
+        });
+    }
+
+    Y_UNIT_TEST(WhitelistRejectsUnauditedUdf) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("CAST(Unicode::ToUpper(CAST(s AS Utf8)) AS Int32)"),
+                "is not allowed in a generated column expression"},
+        });
+    }
+
+    Y_UNIT_TEST(WhitelistRejectsUnsafeJsonExpressions) {
+        CheckGeneratedColumnsRejected({
+            {R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    v Json,
+                    hasKey Bool GENERATED ALWAYS AS (JSON_EXISTS(v, "$.key" ERROR ON ERROR)) STORED,
+                    PRIMARY KEY (k)
+                );
+            )",
+                "is not allowed in a generated column expression"},
+            {R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    v Json,
+                    value Utf8 GENERATED ALWAYS AS (JSON_VALUE(v, "$.key" ERROR ON ERROR)) STORED,
+                    PRIMARY KEY (k)
+                );
+            )",
+                "is not allowed in a generated column expression"},
+            {R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    v Json,
+                    value Int32 GENERATED ALWAYS AS (
+                        JSON_VALUE(v, "$.key" RETURNING Int32 DEFAULT "invalid" ON ERROR)
+                    ) STORED,
+                    PRIMARY KEY (k)
+                );
+            )",
+                "is not allowed in a generated column expression"},
+            {R"(
+                CREATE TABLE TestTable (
+                    k Int32 NOT NULL,
+                    v Json,
+                    value JsonDocument GENERATED ALWAYS AS (JSON_QUERY(v, "$.key" ERROR ON ERROR)) STORED,
+                    PRIMARY KEY (k)
+                );
+            )",
+                "is not allowed in a generated column expression"},
         });
     }
 
@@ -1367,10 +1449,123 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             {"k + 1", ""},
             {"CASE WHEN k > 0 THEN COALESCE(a, 0) ELSE -1 END", ""},
             {"CAST(ListLength(ListMap(AsList(k, k + 1), ($e) -> { RETURN $e * 2 })) AS Int32)", ""},
+            {"CAST(ListLength(ListUniqStable(AsList(k, k + 1, k))) AS Int32)", ""},
             {"CAST(Unicode::ToLower(CAST(s AS Utf8)) AS Int32)", ""},
             {"k + 1", "PRAGMA AnsiInForEmptyOrNullableItemsCollections;\n"},
             {"k + 1", "$unused = SELECT MAX(a) FROM OtherTable;\n"},
         });
+    }
+
+    Y_UNIT_TEST(LiteralsUseGeneratedExpressionOperandType) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Uint32 NOT NULL,
+                u Uint32 NOT NULL,
+                nullableU Uint32,
+                f Float NOT NULL,
+                s Utf8 NOT NULL,
+                flag Bool NOT NULL,
+                uintStored Uint32 NOT NULL GENERATED ALWAYS AS (u * 10) STORED,
+                uintVirtual Uint32 NOT NULL GENERATED ALWAYS AS (10 * u) VIRTUAL,
+                uintNested Uint32 NOT NULL GENERATED ALWAYS AS (u * 10 + 20) STORED,
+                uintGrouped Uint32 NOT NULL GENERATED ALWAYS AS (u * (10 + 20)) STORED,
+                uintGroupedLeft Uint32 NOT NULL GENERATED ALWAYS AS ((10 + 20) * u) STORED,
+                uintConditionalPeer Uint32 NOT NULL GENERATED ALWAYS AS (IF(flag, u * 10, u)) STORED,
+                nullableStored Uint32 GENERATED ALWAYS AS (nullableU * 10) STORED,
+                floatStored Float NOT NULL GENERATED ALWAYS AS (f * 1.5) STORED,
+                floatConditionalBranch Float NOT NULL GENERATED ALWAYS AS (IF(flag, f * 1.5, 0.0)) STORED,
+                floatConditionalFactor Float NOT NULL GENERATED ALWAYS AS (f * IF(flag, 1.5, 2.5)) STORED,
+                floatConditionalPeer Float NOT NULL GENERATED ALWAYS AS (IF(flag, f * 1.5, f)) STORED,
+                doubleStored Double NOT NULL GENERATED ALWAYS AS (f + 1.00000006) STORED,
+                textVirtual Utf8 NOT NULL GENERATED ALWAYS AS (Concat(s, " suffix")) VIRTUAL,
+                textConditional Utf8 NOT NULL GENERATED ALWAYS AS (
+                    Concat(s, IF(flag, " enabled", " disabled"))
+                ) VIRTUAL,
+                textConditionalPeer Utf8 NOT NULL GENERATED ALWAYS AS (IF(flag, Concat(s, " enabled"), s)) VIRTUAL,
+                boolStored Bool NOT NULL GENERATED ALWAYS AS (flag AND true) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
+
+        fixture.Exec(R"(
+            UPSERT INTO TestTable (k, u, nullableU, f, s, flag)
+            VALUES (1u, 3u, 4u, 2.0f, "value"u, true);
+        )");
+
+        fixture.Check(R"(
+            SELECT
+                uintStored = 30u,
+                uintVirtual = 30u,
+                uintNested = 50u,
+                uintGrouped = 90u,
+                uintGroupedLeft = 90u,
+                uintConditionalPeer = 30u,
+                COALESCE(nullableStored = 40u, false),
+                floatStored = 3.0f,
+                floatConditionalBranch = 3.0f,
+                floatConditionalFactor = 3.0f,
+                floatConditionalPeer = 3.0f,
+                doubleStored = 3.00000006,
+                textVirtual = "value suffix"u,
+                textConditional = "value enabled"u,
+                textConditionalPeer = "value enabled"u,
+                boolStored
+            FROM TestTable;
+        )", "[[%true;%true;%true;%true;%true;%true;%true;%true;%true;%true;%true;%true;%true;%true;%true;%true]]");
+    }
+
+    Y_UNIT_TEST(LiteralCoercionDoesNotAffectCondition) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Uint32 NOT NULL,
+                f Float NOT NULL,
+                value Float NOT NULL GENERATED ALWAYS AS (
+                    IF(f == 1.00000006, f * 2.5, f * 1.5)
+                ) STORED,
+                PRIMARY KEY (k)
+            );
+        )");
+
+        fixture.Exec("UPSERT INTO TestTable (k, f) VALUES (1u, 1.0000001f);");
+        fixture.Check("SELECT value = f * 1.5f FROM TestTable;", "[[%true]]");
+    }
+
+    Y_UNIT_TEST(InvalidNarrowingLiteralsRemainRejected) {
+        CheckGeneratedColumnsRejected({
+            {R"(
+                CREATE TABLE TestTable (
+                    k Uint32 NOT NULL,
+                    u Uint32 NOT NULL,
+                    v Uint32 GENERATED ALWAYS AS (u * -1) STORED,
+                    PRIMARY KEY (k)
+                );
+            )", "expression type mismatch"},
+            {R"(
+                CREATE TABLE TestTable (
+                    k Uint32 NOT NULL,
+                    u Uint32 NOT NULL,
+                    v Uint32 GENERATED ALWAYS AS (u * 4294967296) STORED,
+                    PRIMARY KEY (k)
+                );
+            )", "expression type mismatch"},
+        });
+    }
+
+    Y_UNIT_TEST(WhitelistAcceptsSafeJsonExpressions) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v Json,
+                hasKey Bool GENERATED ALWAYS AS (JSON_EXISTS(v, "$.key" FALSE ON ERROR)) STORED,
+                value Utf8 GENERATED ALWAYS AS (JSON_VALUE(v, "$.key" NULL ON ERROR)) STORED,
+                number Int32 GENERATED ALWAYS AS (
+                    JSON_VALUE(v, "$.number" RETURNING Int32 DEFAULT 0 ON ERROR)
+                ) STORED,
+                object JsonDocument GENERATED ALWAYS AS (JSON_QUERY(v, "$.object" NULL ON ERROR)) STORED,
+                nextKey Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL,
+                PRIMARY KEY (k)
+            );
+        )");
     }
 
     Y_UNIT_TEST(TypeMismatchRejected) {
@@ -2381,27 +2576,6 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
         fixture.Check("SELECT k, a, g FROM TestTable ORDER BY k;", "[[1;[10];[510]];[2;[25];[225]]]");
         fixture.Check("SELECT a, g FROM TestTable VIEW idx_a ORDER BY a;", "[[[10];[510]];[[25];[225]]]");
-    }
-
-    Y_UNIT_TEST(RandomGeneratedConsistentWithIndex) {
-        TTestFixture fixture(R"(
-            CREATE TABLE TestTable (
-                k Int32 NOT NULL,
-                a Int32,
-                r Uint64 GENERATED ALWAYS AS (RandomNumber(1)) STORED,
-                PRIMARY KEY (k),
-                INDEX idx_a GLOBAL SYNC ON (a) COVER (r)
-            );
-        )");
-
-        fixture.Exec("INSERT INTO TestTable (k, a) VALUES (1, 10), (2, 20), (3, 30);");
-
-        const TString fromTable = fixture.QueryYson("SELECT a, r FROM TestTable ORDER BY a;");
-        const TString fromIndex = fixture.QueryYson("SELECT a, r FROM TestTable VIEW idx_a ORDER BY a;");
-
-        UNIT_ASSERT_C(!fromTable.Contains("#"), "random generated column is NULL in base table: " << fromTable);
-        UNIT_ASSERT_VALUES_EQUAL_C(fromIndex, fromTable,
-            "non-deterministic generated value diverged between the base table and the covering index");
     }
 
     Y_UNIT_TEST(GeneratedInPrimaryKeyRejected) {

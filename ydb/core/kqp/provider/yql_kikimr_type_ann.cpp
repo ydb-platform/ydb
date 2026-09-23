@@ -201,6 +201,253 @@ bool ValidateInteger(TExprContext& ctx, const TMaybeNode<TExprBase>& value, TStr
     return true;
 }
 
+bool IsGeneratedLiteralPeerTypeCallable(const TExprNode& node) {
+    // Only callables whose data operands are peers. Function-specific arguments such as substring
+    // offsets must not inherit the generated column type.
+    return node.IsCallable({
+        "+", "-", "*", "/", "%",
+        "Add", "Sub", "Mul", "Div", "Mod",
+        "CheckedAdd", "CheckedSub", "CheckedMul", "CheckedDiv", "CheckedMod",
+        "Concat", "SqlConcat",
+        "And", "Or", "Xor",
+        "Min", "Max", "Coalesce",
+    });
+}
+
+const TExprNode* FindGeneratedDataLiteral(const TExprNode& node, bool& negate) {
+    negate = false;
+    const TExprNode* current = &node;
+
+    while (current->ChildrenSize() == 1 && current->IsCallable({"Plus", "Minus"})) {
+        negate ^= current->IsCallable("Minus");
+        current = current->Child(0);
+    }
+
+    return TCoDataCtor::Match(current) && current->ChildrenSize() == 1 && current->Head().IsAtom()
+        ? current
+        : nullptr;
+}
+
+const TDataExprType* GetGeneratedDataType(const TTypeAnnotationNode* type) {
+    bool isOptional = false;
+    const TDataExprType* dataType = nullptr;
+    return type && IsDataOrOptionalOfData(type, isOptional, dataType) ? dataType : nullptr;
+}
+
+bool CanCoerceGeneratedDataLiteral(EDataSlot source, EDataSlot target) {
+    return (IsDataTypeNumeric(source) && IsDataTypeNumeric(target))
+        || ((source == EDataSlot::String || source == EDataSlot::Utf8)
+            && (target == EDataSlot::String || target == EDataSlot::Utf8))
+        || (source == EDataSlot::Bool && target == EDataSlot::Bool);
+}
+
+TExprNode::TPtr CoerceGeneratedDataLiteral(const TExprNode::TPtr& node, const TDataExprType& targetType,
+    TExprContext& ctx, TTypeAnnotationContext& typeCtx)
+{
+    bool negate = false;
+    const TExprNode* literal = FindGeneratedDataLiteral(*node, negate);
+    const TDataExprType* sourceType = GetGeneratedDataType(node->GetTypeAnn());
+    if (!literal || !sourceType || !CanCoerceGeneratedDataLiteral(sourceType->GetSlot(), targetType.GetSlot())
+        || IsSameAnnotation(*sourceType, targetType))
+    {
+        return node;
+    }
+
+    auto converted = node;
+    if (TrySilentConvertTo(converted, *node->GetTypeAnn(), targetType, ctx, typeCtx)
+        != IGraphTransformer::TStatus::Error)
+    {
+        return converted;
+    }
+
+    // YQL intentionally does not implicitly narrow floating-point expressions. A literal can still
+    // be created directly with the peer's type when its text is valid for that data slot.
+    if (!IsDataTypeNumeric(sourceType->GetSlot()) || !IsDataTypeFloat(targetType.GetSlot())
+        || literal->Head().Flags() & TNodeFlags::BinaryContent)
+    {
+        return node;
+    }
+
+    TString value(literal->Head().Content());
+    if (negate) {
+        if (value.StartsWith('-')) {
+            value.erase(0, 1);
+        } else {
+            value.prepend('-');
+        }
+    }
+
+    if (!NKikimr::NMiniKQL::IsValidStringValue(targetType.GetSlot(), value)) {
+        return node;
+    }
+
+    return ctx.NewCallable(node->Pos(), targetType.GetName(), {
+        ctx.NewAtom(node->Pos(), value, TNodeFlags::Default),
+    });
+}
+
+struct TGeneratedLiteralRewrite {
+    TExprNode::TPtr Node;
+    bool Valid = false;
+    bool HasTypedPeer = false;
+};
+
+TGeneratedLiteralRewrite RewriteGeneratedPeerTree(const TExprNode::TPtr& node,
+    const TDataExprType& generatedType, TExprContext& ctx, TTypeAnnotationContext& typeCtx)
+{
+    bool negate = false;
+    if (FindGeneratedDataLiteral(*node, negate)) {
+        const TDataExprType* sourceType = GetGeneratedDataType(node->GetTypeAnn());
+        if (!sourceType) {
+            return {node};
+        }
+
+        if (IsSameAnnotation(*sourceType, generatedType)) {
+            return {node, true, false};
+        }
+
+        auto coerced = CoerceGeneratedDataLiteral(node, generatedType, ctx, typeCtx);
+        return {coerced, coerced != node, false};
+    }
+
+    // Type annotation inserts these wrappers when choosing a common type for peer operands or If
+    // branches. Remove them only while rebuilding that implicit common type. Explicit SQL CAST is
+    // represented by SafeCast and remains an opaque boundary below.
+    if ((node->IsCallable("Convert") && node->ChildrenSize() == 2)
+        || (node->IsCallable("ToString") && node->ChildrenSize() == 1))
+    {
+        const TDataExprType* nodeType = GetGeneratedDataType(node->GetTypeAnn());
+        if (nodeType && IsSameAnnotation(*nodeType, generatedType)) {
+            return {node, true, true};
+        }
+
+        auto rewritten = RewriteGeneratedPeerTree(node->HeadPtr(), generatedType, ctx, typeCtx);
+        return rewritten.Valid ? rewritten : TGeneratedLiteralRewrite{node};
+    }
+
+    if (node->IsCallable({"If", "IfStrict"}) && node->ChildrenSize() == 3) {
+        bool changed = false;
+        bool hasTypedPeer = false;
+        auto children = node->ChildrenList();
+        for (ui32 index : {1U, 2U}) {
+            auto rewritten = RewriteGeneratedPeerTree(children[index], generatedType, ctx, typeCtx);
+            if (!rewritten.Valid) {
+                return {node};
+            }
+
+            hasTypedPeer = hasTypedPeer || rewritten.HasTypedPeer;
+            if (rewritten.Node != children[index]) {
+                children[index] = std::move(rewritten.Node);
+                changed = true;
+            }
+        }
+
+        return {
+            changed ? ctx.ChangeChildren(*node, std::move(children)) : node,
+            true,
+            hasTypedPeer,
+        };
+    }
+
+    if (node->IsCallable({"Just", "ToOptional", "DependsOn", "WithWorld"}) && node->ChildrenSize() > 0) {
+        auto rewritten = RewriteGeneratedPeerTree(node->HeadPtr(), generatedType, ctx, typeCtx);
+        if (!rewritten.Valid) {
+            return {node};
+        }
+
+        return {
+            rewritten.Node != node->HeadPtr() ? ctx.ChangeChild(*node, 0, std::move(rewritten.Node)) : node,
+            true,
+            rewritten.HasTypedPeer,
+        };
+    }
+
+    if (!IsGeneratedLiteralPeerTypeCallable(*node)) {
+        const TDataExprType* nodeType = GetGeneratedDataType(node->GetTypeAnn());
+        const bool isTypedPeer = nodeType && IsSameAnnotation(*nodeType, generatedType);
+        return {node, isTypedPeer, isTypedPeer};
+    }
+
+    if (node->ChildrenSize() < 2) {
+        return {node};
+    }
+
+    bool changed = false;
+    bool hasTypedPeer = false;
+    auto children = node->ChildrenList();
+    for (auto& child : children) {
+        auto rewritten = RewriteGeneratedPeerTree(child, generatedType, ctx, typeCtx);
+        if (!rewritten.Valid) {
+            return {node};
+        }
+
+        hasTypedPeer = hasTypedPeer || rewritten.HasTypedPeer;
+        if (rewritten.Node != child) {
+            child = std::move(rewritten.Node);
+            changed = true;
+        }
+    }
+
+    return {
+        changed ? ctx.ChangeChildren(*node, std::move(children)) : node,
+        true,
+        hasTypedPeer,
+    };
+}
+
+TExprNode::TPtr CoerceGeneratedResultLiterals(const TExprNode::TPtr& node,
+    const TDataExprType& generatedType, TExprContext& ctx, TTypeAnnotationContext& typeCtx)
+{
+    auto rewritten = RewriteGeneratedPeerTree(node, generatedType, ctx, typeCtx);
+    if (rewritten.Valid && rewritten.HasTypedPeer) {
+        return rewritten.Node;
+    }
+
+    return node;
+}
+
+IGraphTransformer::TStatus CoerceGeneratedLiterals(TExprNode::TPtr& lambda, const TTypeAnnotationNode* rowType,
+    const TTypeAnnotationNode& columnType, TExprContext& ctx, TTypeAnnotationContext& typeCtx, bool& changed)
+{
+    changed = false;
+
+    const TDataExprType* generatedType = GetGeneratedDataType(&columnType);
+    if (!generatedType) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    for (;;) {
+        if (!lambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsSameAnnotation(RemoveOptionality(columnType), RemoveOptionality(*lambda->GetTypeAnn()))) {
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        auto converted = lambda->TailPtr();
+        if (TrySilentConvertTo(converted, columnType, ctx, typeCtx) != IGraphTransformer::TStatus::Error) {
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        auto rewrittenBody = CoerceGeneratedResultLiterals(lambda->TailPtr(), *generatedType, ctx, typeCtx);
+
+        if (rewrittenBody == lambda->TailPtr()) {
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        changed = true;
+        lambda = ctx.NewLambda(lambda->Pos(), lambda->HeadPtr(), std::move(rewrittenBody));
+        ClearExprTypeAnnotations(*lambda);
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {rowType}, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!InstantAnnotateTypes(lambda, ctx, /* wholeProgram */ false, typeCtx) || !lambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+}
+
 IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& lambda, const TTypeAnnotationNode* rowType,
     const TTypeAnnotationNode& columnType, const TString& columnName, TExprContext& ctx, TTypeAnnotationContext& typeCtx)
 {
@@ -219,7 +466,20 @@ IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& la
         return IGraphTransformer::TStatus::Error;
     }
 
+    bool literalsChanged = false;
+    if (const auto status = CoerceGeneratedLiterals(probe, rowType, columnType, ctx, typeCtx, literalsChanged);
+        status != IGraphTransformer::TStatus::Ok)
+    {
+        return status;
+    }
+
     if (IsSameAnnotation(RemoveOptionality(columnType), RemoveOptionality(*probe->GetTypeAnn()))) {
+        if (!ValidateGeneratedExpr(*probe, columnName, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (literalsChanged) {
+            lambda = probe;
+        }
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -230,8 +490,13 @@ IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& la
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (converted != probe->TailPtr()) {
+    const bool convertedBody = converted != probe->TailPtr();
+    if (convertedBody || literalsChanged) {
         lambda = ctx.NewLambda(probe->Pos(), probe->HeadPtr(), std::move(converted));
+    }
+
+    if (!ValidateGeneratedExpr(convertedBody || literalsChanged ? *lambda : *probe, columnName, ctx)) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     return IGraphTransformer::TStatus::Ok;
@@ -815,7 +1080,14 @@ namespace {
                 return IGraphTransformer::TStatus::Error;
             }
 
+            bool literalsChanged = false;
             const auto* columnAnnType = columnTuple.Item(1).Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            if (const auto status = CoerceGeneratedLiterals(lambda, rowType, *columnAnnType, ctx, typeCtx, literalsChanged);
+                status != IGraphTransformer::TStatus::Ok)
+            {
+                return status;
+            }
+
             if (auto status = ValidateGeneratedExprType(columnName, *columnAnnType, *lambda, ctx, typeCtx);
                 status != IGraphTransformer::TStatus::Ok)
             {
@@ -831,6 +1103,10 @@ namespace {
                 {
                     lambda = ctx.NewLambda(lambda->Pos(), lambda->HeadPtr(), std::move(converted));
                 }
+            }
+
+            if (!ValidateGeneratedExpr(*lambda, columnName, ctx)) {
+                return IGraphTransformer::TStatus::Error;
             }
 
             columnMeta.DefaultExpression->Expr = lambda;

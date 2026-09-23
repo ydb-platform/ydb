@@ -1,3 +1,5 @@
+* Topic and PersQueue writers now respect the driver's outbound gRPC message size limit when batching writes and reject individual blocks that cannot fit.
+
 * Added `Float16` and `BFloat16` vector index types.
 
 ## v3.23.0

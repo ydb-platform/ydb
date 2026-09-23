@@ -14,6 +14,7 @@
 
 #include <google/protobuf/wire_format_lite.h>
 
+#include <algorithm>
 #include <queue>
 #include <condition_variable>
 #include <optional>
@@ -38,8 +39,9 @@ namespace NWriteSessionGrpc {
 
 inline constexpr std::string_view PARTITION_KEY_META_KEY = "__partition_key";
 
-inline size_t GetMaxGrpcMessageSize() {
-    return 120_MB;
+inline size_t GetMaxGrpcMessageSize(const TGRpcConnectionsImpl& connections) {
+    // Keep the existing batching cap, but never exceed the driver's send limit.
+    return std::min<uint64_t>(120_MB, connections.GetMaxOutboundMessageSize());
 }
 
 using TWireFormatLite = google::protobuf::internal::WireFormatLite;
@@ -106,7 +108,7 @@ inline size_t ProtoMessageFieldSize(ui32 fieldNumber, size_t size) {
 
 class TRequestSizeLimiter {
 public:
-    explicit TRequestSizeLimiter(ui32 envelopeFieldNumber, size_t maxSize = GetMaxGrpcMessageSize())
+    explicit TRequestSizeLimiter(ui32 envelopeFieldNumber, size_t maxSize)
         : EnvelopeFieldNumber(envelopeFieldNumber)
         , MaxSize(maxSize)
     {
@@ -117,7 +119,7 @@ public:
     }
 
     bool CanAdd(size_t deltaSize) const {
-        return Empty() || ProtoMessageFieldSize(EnvelopeFieldNumber, BodySize + deltaSize) <= MaxSize;
+        return ProtoMessageFieldSize(EnvelopeFieldNumber, BodySize + deltaSize) <= MaxSize;
     }
 
     void Add(size_t deltaSize) {

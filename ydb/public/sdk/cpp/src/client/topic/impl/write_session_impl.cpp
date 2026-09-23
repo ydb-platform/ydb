@@ -1990,14 +1990,15 @@ void TWriteSessionImpl::SendStandardBlock(
 void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB.
+    // Split ready blocks into requests bounded by the driver's outbound limit.
     while (IsReadyToSendNextImpl()) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
 
         ui32 prevCodec = 0;
 
-        NGrpc::TRequestSizeLimiter sizeLimiter(2);
+        const size_t maxRequestSize = NGrpc::GetMaxGrpcMessageSize(*Connections);
+        NGrpc::TRequestSizeLimiter sizeLimiter(2, maxRequestSize);
 
         // Send blocks while we can without messages reordering.
         while (IsReadyToSendNextImpl()) {
@@ -2014,7 +2015,9 @@ void TWriteSessionImpl::SendImpl() {
             }
 
             const size_t blockSize = NGrpc::EstimateTopicWriteRequestBlockSize(block, OriginalMessagesToSend, sizeLimiter.Empty());
-            if (!sizeLimiter.CanAdd(blockSize)) {
+            // The estimate is conservative. Always assemble the first block
+            // so a block that fits exactly is not rejected by the estimate.
+            if (!sizeLimiter.Empty() && !sizeLimiter.CanAdd(blockSize)) {
                 break;
             }
 
@@ -2034,6 +2037,14 @@ void TWriteSessionImpl::SendImpl() {
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
             sizeLimiter.Add(blockSize);
+        }
+        // Only an oversized first-block estimate needs an exact size check.
+        // Normal requests have already been bounded without walking the proto.
+        if (!sizeLimiter.CanAdd(0) && clientMessage.ByteSizeLong() > maxRequestSize) {
+            CloseImpl(EStatus::BAD_REQUEST, TStringBuilder()
+                << "Write block exceeds the maximum outbound gRPC request size of "
+                << maxRequestSize << " bytes (including protobuf overhead)");
+            return;
         }
         UpdateTokenIfNeededImpl();
         LOG_LAZY(DbDriverState->Log,

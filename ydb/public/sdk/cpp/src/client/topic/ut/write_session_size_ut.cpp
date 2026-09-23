@@ -125,10 +125,12 @@ Y_UNIT_TEST_SUITE(WriteSessionGrpcSize) {
         const size_t maxSize = NGrpc::ProtoMessageFieldSize(2, 10);
         NGrpc::TRequestSizeLimiter limiter(2, maxSize);
 
-        // The first block is allowed even when it is larger than the limit:
-        // otherwise a single oversized block would make the send loop stuck.
+        // An oversized first block must be rejected too; the writer closes
+        // the session instead of sending it or spinning on an empty request.
         UNIT_ASSERT(limiter.Empty());
-        UNIT_ASSERT(limiter.CanAdd(maxSize * 2));
+        UNIT_ASSERT(!limiter.CanAdd(maxSize * 2));
+        UNIT_ASSERT(limiter.CanAdd(10));
+        UNIT_ASSERT(!limiter.CanAdd(11));
 
         limiter.Add(5);
         UNIT_ASSERT(!limiter.Empty());

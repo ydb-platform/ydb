@@ -36,24 +36,34 @@ jobs:
       - name: Install diagnostic dependencies
         run: python -m pip install -e './ydbdoc-review-ng[runtime,dev]'
 
-      - name: Report protected-token mismatch from saved attempts
+      - name: Locate document assembly failure from saved attempts
         working-directory: ydbdoc-review-ng
         run: |
           python - <<'PY'
           import json
           import os
-          import re
-          from collections import Counter
-          from ydbdoc_review_ng.runtime_ydb import DEFAULT_YDB_DATABASE, DEFAULT_YDB_ENDPOINT, SDKExecutor
+          import urllib.request
 
+          from ydbdoc_review_ng.domain import GitSha, ModelRole, RepoPath, RepositoryId, SnapshotRef
+          from ydbdoc_review_ng.models import ModelRequest
+          from ydbdoc_review_ng.parser.markdown import build_markdown_plan
+          from ydbdoc_review_ng.runtime_content import (
+              _assemble_segment_translation,
+              _has_only_missing_placeholders,
+              _segment_translation_request,
+          )
+          from ydbdoc_review_ng.runtime_ydb import DEFAULT_YDB_DATABASE, DEFAULT_YDB_ENDPOINT, SDKExecutor
+          from ydbdoc_review_ng.translation import (
+              AssemblyError,
+              TranslationRequest,
+              assemble_candidate,
+              build_translation_request,
+              parse_translation_response,
+              validate_translation_values,
+          )
+
+          source_path = "ydb/docs/ru/core/changelog-enterprise.md"
           target_path = "ydb/docs/en/core/changelog-enterprise.md"
-          field_id = "f1-000260-074267b067b0dbb67971a198ee4a83c5ab894fb13b0b92e3b3bf008dc84d1fc8"
-          required = [
-              "[[LINK_OPEN_0001]]", "[[LINK_CLOSE_0002]]",
-              "[[LINK_OPEN_0003]]", "[[LINK_CLOSE_0004]]",
-              "[[INLINE_CODE_0005]]", "[[INLINE_CODE_0006]]",
-              "[[LINK_OPEN_0007]]", "[[LINK_CLOSE_0008]]",
-          ]
           executor = SDKExecutor(
               os.environ.get("YDB_ENDPOINT", DEFAULT_YDB_ENDPOINT),
               os.environ.get("YDB_DATABASE", DEFAULT_YDB_DATABASE),
@@ -62,38 +72,108 @@ jobs:
           )
           try:
               jobs = executor.execute(
-                  "SELECT job_id, started_at FROM `ydbdoc_review/jobs` "
-                  "WHERE pr_number = $pr_number AND source_sha = $source_sha "
+                  "SELECT job_id, source_sha, started_at FROM `ydbdoc_review/jobs` "
+                  "WHERE pr_number = $pr_number "
                   "ORDER BY started_at DESC LIMIT 1;",
-                  {
-                      "pr_number": 50858,
-                      "source_sha": "b3cd5e6f975a489a3e4edcf6f2939b5f2068a692",
-                  },
+                  {"pr_number": 50858},
               )
               if len(jobs) != 1:
                   raise RuntimeError(f"expected one latest job, got {len(jobs)}")
+              source_sha = str(jobs[0]["source_sha"])
               rows = executor.execute(
                   "SELECT response, started_at FROM `ydbdoc_review/attempts` "
                   "WHERE job_id = $job_id AND target_path = $target_path;",
                   {"job_id": jobs[0]["job_id"], "target_path": target_path},
               )
-              rows = sorted(rows, key=lambda row: row["started_at"])[-2:]
-              for number, row in enumerate(rows, 1):
+              response_maps = []
+              for row in sorted(rows, key=lambda row: row["started_at"]):
+                  if row["response"] is None:
+                      continue
                   outer = json.loads(bytes(row["response"]).decode())
                   text = outer["result"]["alternatives"][0]["message"]["text"]
-                  value = json.loads(text).get(field_id)
-                  returned = re.findall(r"\[\[[A-Z_]+_[0-9]+\]\]", value or "")
-                  expected_counts = Counter(required)
-                  returned_counts = Counter(returned)
+                  try:
+                      value = json.loads(text)
+                  except json.JSONDecodeError:
+                      continue
+                  if isinstance(value, dict):
+                      response_maps.append((text, value))
+
+              url = (
+                  "https://raw.githubusercontent.com/ydb-platform/ydb/"
+                  + source_sha
+                  + "/"
+                  + source_path
+              )
+              with urllib.request.urlopen(url, timeout=30) as response:
+                  source = response.read()
+              snapshot = SnapshotRef(RepositoryId("ydb-platform/ydb"), GitSha(source_sha))
+              plan = build_markdown_plan(snapshot, RepoPath(source_path), source)
+              request = build_translation_request(source, plan)
+              values = {}
+              cursor = 0
+              for field_index, field in enumerate(request.fields, 1):
+                  field_request = TranslationRequest((field.field_id,), (field,))
+                  rejected = None
+                  while cursor < len(response_maps):
+                      raw, decoded = response_maps[cursor]
+                      cursor += 1
+                      if set(decoded) == {field.field_id}:
+                          try:
+                              candidate = parse_translation_response(raw, field_request)
+                              validate_translation_values(field_request, candidate)
+                          except AssemblyError:
+                              value = decoded.get(field.field_id)
+                              rejected = value if isinstance(value, str) else None
+                              continue
+                          values.update(candidate)
+                          break
+                      if rejected is not None and _has_only_missing_placeholders(field, rejected):
+                          base = ModelRequest(
+                              ModelRole.TRANSLATE,
+                              "diagnostic",
+                              "diagnostic",
+                              {},
+                              1,
+                              RepoPath(target_path),
+                          )
+                          _, fallback, segments = _segment_translation_request(
+                              base, field, "ru", "en"
+                          )
+                          values[field.field_id] = _assemble_segment_translation(
+                              field, fallback, segments, raw
+                          )
+                          break
+                  else:
+                      raise RuntimeError(f"missing response for field {field_index}")
+
+              if len(values) != len(request.fields):
+                  raise RuntimeError(
+                      f"reconstructed {len(values)} of {len(request.fields)} fields"
+                  )
+              try:
+                  assemble_candidate(source, plan, request, values)
+              except AssemblyError as error:
                   print(json.dumps({
-                      "attempt": number,
-                      "field_id": field_id,
-                      "value_is_string": isinstance(value, str),
-                      "required": required,
-                      "returned": returned,
-                      "missing": list((expected_counts - returned_counts).elements()),
-                      "unexpected": list((returned_counts - expected_counts).elements()),
+                      "all_fields_reason": error.reason.value,
+                      "fields": len(request.fields),
+                      "responses_consumed": cursor,
+                      "responses_total": len(response_maps),
                   }, sort_keys=True))
+
+              incremental = {field.field_id: field.text for field in request.fields}
+              assemble_candidate(source, plan, request, incremental)
+              for field_index, field in enumerate(request.fields, 1):
+                  incremental[field.field_id] = values[field.field_id]
+                  try:
+                      assemble_candidate(source, plan, request, incremental)
+                  except AssemblyError as error:
+                      print(json.dumps({
+                          "first_failing_field": field_index,
+                          "field_id": field.field_id,
+                          "reason": error.reason.value,
+                          "placeholders": [item.token for item in field.placeholders],
+                      }, sort_keys=True))
+                      break
           finally:
               executor.close()
           PY

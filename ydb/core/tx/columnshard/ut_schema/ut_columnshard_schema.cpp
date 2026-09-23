@@ -1125,9 +1125,9 @@ void TestEmptyDroppedTableCleanupWaitsForReadWindow(const bool enableSnapshotsLo
     PlanSchemaTx(runtime, sender, dropSnapshot);
 
     const auto pathId =
-        *controller->GetTheOnlyShard()->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(tableId), false);
+        *controller->GetShard()->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(tableId), false);
     auto isPendingDrop = [&] {
-        for (const auto& [_, pathIds] : controller->GetTheOnlyShard()->GetTablesManager().GetPathsToDrop()) {
+        for (const auto& [_, pathIds] : controller->GetShard()->GetTablesManager().GetPathsToDrop()) {
             if (pathIds.contains(pathId)) {
                 return true;
             }
@@ -1191,7 +1191,7 @@ void TestEmptyDroppedTableCleanupWaitsForReadWindow(const bool enableSnapshotsLo
         triggerCleanup();
     }
     UNIT_ASSERT_C(!isPendingDrop(), "empty dropped table metadata must be erased after CouldUseTable allows cleanup");
-    UNIT_ASSERT(!controller->GetTheOnlyShard()->GetTablesManager().HasTable(pathId, /*withDeleted=*/true));
+    UNIT_ASSERT(!controller->GetShard()->GetTablesManager().HasTable(pathId, /*withDeleted=*/true));
 }
 
 void TestCompaction(bool standalone, std::optional<ui32> numWrites = {}) {

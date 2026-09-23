@@ -275,12 +275,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Finish() {
-<<<<<<< HEAD
-=======
             DropPendingBlockNotifications();
-            auto& record = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
-            record.SetActualGeneration(Max(ActualGeneration, record.GetActualGeneration()));
->>>>>>> a4405989561 (Fix hanging BlobDepot pipeline (#53160))
             TActivationContext::Send(Response.release());
             PassAway();
         }

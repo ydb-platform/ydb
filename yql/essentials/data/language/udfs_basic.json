@@ -1163,6 +1163,13 @@
       "argCount": 1,
       "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
       "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Expm1"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
       "name": "Fabs"
     },
     {
@@ -1231,6 +1238,13 @@
       "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
       "isStrict": true,
       "name": "Log10"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Double\"]];[[[\"DataType\";\"Double\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Log1p"
     },
     {
       "argCount": 1,

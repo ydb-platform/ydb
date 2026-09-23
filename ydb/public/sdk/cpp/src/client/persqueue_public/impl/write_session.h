@@ -12,6 +12,7 @@ namespace NYdb::inline Dev::NPersQueue {
 
 namespace NTests {
     class TSimpleWriteSessionTestAdapter;
+    class TWriteSessionMemoryTestAdapter;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -22,6 +23,7 @@ class TWriteSession : public IWriteSession,
 private:
     friend class TSimpleBlockingWriteSession;
     friend class TPersQueueClient;
+    friend class NTests::TWriteSessionMemoryTestAdapter;
     friend class NTests::TSimpleWriteSessionTestAdapter;
 
 public:

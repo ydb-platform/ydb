@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/tests/integration/topic/utils/managed_executor.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/write_session_memory_test.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -40,6 +41,59 @@ static const bool EnableDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_D
 
 
 namespace NYdb::inline Dev::NTopic::NTests {
+
+class TWriteSessionMemoryTestAdapter {
+    using TProcessor = TMemoryTestProcessor<TWriteSessionImpl::TClientMessage, TWriteSessionImpl::TServerMessage>;
+
+public:
+    using TReadyEvent = TWriteSessionEvent::TReadyToAcceptEvent;
+    using TClosedEvent = TSessionClosedEvent;
+
+    explicit TWriteSessionMemoryTestAdapter(const std::shared_ptr<IWriteSession>& session)
+        : Impl(std::static_pointer_cast<TWriteSession>(session)->TryGetImpl())
+    {}
+
+    TProcessor::TWriteCallback QueueRequest(bool rejectInline = false, bool init = false) {
+        auto processor = MakeIntrusive<TProcessor>(rejectInline);
+        std::lock_guard guard(Impl->Lock);
+        TWriteSessionImpl::TClientMessage request;
+        if (init) {
+            request.mutable_init_request();
+        } else {
+            request.mutable_write_request();
+        }
+        const auto size = init ? 0 : request.SpaceUsedLong();
+        Impl->OnMemoryUsageChangedImpl(static_cast<i64>(size));
+        auto original = std::exchange(Impl->Processor, processor);
+        Impl->WriteToProcessorImpl(std::move(request), size);
+        Impl->Processor = std::move(original);
+        return std::move(processor->Callback);
+    }
+
+    size_t MemoryUsage() {
+        std::lock_guard guard(Impl->Lock);
+        return Impl->MemoryUsage;
+    }
+
+    void ChangeMemoryUsage(i64 diff) {
+        std::lock_guard guard(Impl->Lock);
+        Impl->OnMemoryUsageChangedImpl(diff);
+    }
+
+    void ConsumeToken() {
+        std::lock_guard guard(Impl->Lock);
+        UNIT_ASSERT(Impl->ContinuationTokenIssued);
+        Impl->ContinuationTokenIssued = false;
+    }
+
+    void NextConnectionGeneration() {
+        std::lock_guard guard(Impl->Lock);
+        ++Impl->ConnectionGeneration;
+    }
+
+private:
+    const std::shared_ptr<TWriteSessionImpl> Impl;
+};
 
 // Serialize data in the format expected by the PQ tablet (TDataChunk proto)
 TString SerializeDataChunk(ui64 seqNo, const TString& payload) {
@@ -364,6 +418,22 @@ void CreateEmptyTopic(TTopicClient& client, const TString& topicName) {
 }
 
 Y_UNIT_TEST_SUITE(BasicUsage) {
+    Y_UNIT_TEST(WriteRequestMemoryAndContinuationToken) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto client = setup.MakeClient();
+        auto session = client.CreateWriteSession(TWriteSessionSettings()
+            .Path(setup.GetTopicPath())
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .RetryPolicy(IRetryPolicy::GetNoRetryPolicy())
+            .MaxMemoryUsage(1));
+        UNIT_ASSERT(session->WaitEvent().Wait(TDuration::Seconds(30)));
+        auto event = session->GetEvent();
+        UNIT_ASSERT(event && std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(*event));
+
+        TWriteSessionMemoryTestAdapter adapter(session);
+        CheckWriteRequestMemory(adapter, *session);
+    }
+
     Y_UNIT_TEST(CreateTopicWithCustomName) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());

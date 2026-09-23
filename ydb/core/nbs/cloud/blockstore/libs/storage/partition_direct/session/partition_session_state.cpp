@@ -1,6 +1,5 @@
 #include "partition_session_state.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/overlapped_requests_guard_wrapper.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/split_requests_wrapper.h>
@@ -9,6 +8,7 @@
 #include <ydb/core/protos/blockstore_config.pb.h>
 
 #include <util/generic/guid.h>
+#include <util/system/yassert.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -33,24 +33,24 @@ TPartitionSessionState::Create(
     IStoragePtr storage,
     TVolumeConfigPtr ioGeometry)
 {
-    if (volumeMetadata.GetDiskId().empty() ||
-        volumeMetadata.PartitionsSize() != 1 ||
-        !IsSupportedBlockSize(volumeMetadata.GetBlockSize()) ||
-        !volumeMetadata.GetPartitions(0).GetBlockCount() ||
-        volumeMetadata.GetStorageMediaKind() != NProto::STORAGE_MEDIA_SSD)
-    {
-        return MakeError(E_ARGUMENT, "Invalid NBS2 partition metadata");
-    }
-    if (!storage || !ioGeometry ||
-        ioGeometry->DiskId != volumeMetadata.GetDiskId() ||
-        ioGeometry->BlockSize != volumeMetadata.GetBlockSize() ||
-        ioGeometry->BlockCount !=
-            volumeMetadata.GetPartitions(0).GetBlockCount() ||
-        !ioGeometry->BlocksPerStripe || !ioGeometry->VChunkSize)
-    {
+    // The owner supplies validated partition metadata and its matching backend.
+    Y_ABORT_UNLESS(!volumeMetadata.GetDiskId().empty());
+    Y_ABORT_UNLESS(volumeMetadata.GetPartitions(0).GetBlockCount());
+    Y_ABORT_UNLESS(storage);
+    Y_ABORT_UNLESS(ioGeometry);
+    Y_ABORT_UNLESS(ioGeometry->DiskId == volumeMetadata.GetDiskId());
+    Y_ABORT_UNLESS(ioGeometry->BlockSize == volumeMetadata.GetBlockSize());
+    Y_ABORT_UNLESS(
+        ioGeometry->BlockCount ==
+        volumeMetadata.GetPartitions(0).GetBlockCount());
+    Y_ABORT_UNLESS(ioGeometry->BlocksPerStripe);
+    Y_ABORT_UNLESS(ioGeometry->VChunkSize);
+
+    // MVP: both the device handler and the classic Mount response assume SSD.
+    if (volumeMetadata.GetStorageMediaKind() != NProto::STORAGE_MEDIA_SSD) {
         return MakeError(
             E_ARGUMENT,
-            "Missing or inconsistent partition backend");
+            "NBS2 frontend MVP supports only SSD partitions");
     }
     return TIntrusivePtr<TPartitionSessionState>(new TPartitionSessionState(
         volumeMetadata,

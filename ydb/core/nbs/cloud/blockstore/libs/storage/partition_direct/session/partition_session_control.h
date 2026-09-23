@@ -1,10 +1,10 @@
 #pragma once
 
+#include "public.h"
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <library/cpp/threading/future/future.h>
-
-#include <memory>
 
 namespace NActors {
 class TActorSystem;
@@ -32,7 +32,7 @@ struct IPartitionSessionControl
 // Binds commands to a partition actor owning one frontend registration.
 // Does not own the actor system: all command submissions must finish before
 // actor-system shutdown. The actor may disappear while commands are in flight.
-std::shared_ptr<IPartitionSessionControl> CreatePartitionSessionControl(
+IPartitionSessionControlPtr CreatePartitionSessionControl(
     NActors::TActorSystem* actorSystem,
     const NActors::TActorId& actorId);
 

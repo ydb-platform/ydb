@@ -49,8 +49,7 @@ public:
     void UnregisterVolume(const TString& diskId, const TString& registrationId);
 
     // Tests exercise the production facade directly.
-    const std::shared_ptr<TNbsBlockStoreFacade> Facade =
-        CreateNbsBlockStoreFacade(TLog{});
+    const INbsBlockStoreFacadePtr Facade = CreateNbsBlockStoreFacade(TLog{});
 
 private:
     struct TRegistration;

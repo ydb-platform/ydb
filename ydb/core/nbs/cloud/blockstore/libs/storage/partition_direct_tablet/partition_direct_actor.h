@@ -12,7 +12,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_events_private.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/events.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_state.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/public.h>
 
@@ -65,7 +65,7 @@ private:
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
-    TPartitionSessionStateHolderPtr SessionState;
+    TPartitionSessionPtr Session;
     // A queued Ready event must not republish metadata after backend shutdown.
     bool FrontendRegistrationClosed = false;
 

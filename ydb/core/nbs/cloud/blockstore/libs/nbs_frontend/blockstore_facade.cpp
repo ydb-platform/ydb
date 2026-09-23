@@ -1,15 +1,21 @@
 #include "blockstore_facade.h"
 
+#include "partition_registry.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_prefix.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_control.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 
-#include <util/generic/hash.h>
-#include <util/generic/size_literals.h>
+#include <util/string/builder.h>
 
+#include <atomic>
 #include <limits>
 
 namespace NYdb::NBS::NBlockStore {
@@ -74,11 +80,6 @@ NNbs1CompatApi::NBlockStore::NProto::TVolume MakeClassicVolume(
     return volume;
 }
 
-// Payload limit, excluding protobuf overhead. GRpcConfig.MaxMessageSize and
-// client message limits must allow the serialized request/response. Smaller
-// transport limits can fail with RESOURCE_EXHAUSTED instead of an NBS error.
-constexpr ui64 MaxIoBytes = 32_MB;
-
 NProto::TError ValidateIoMode(ui32 flags, const NCompatProto::THeaders& headers)
 {
     if (flags || headers.GetReplicaIndex() || headers.GetReplicaCount()) {
@@ -96,10 +97,11 @@ NProto::TError ValidateIoRange(
     if (blockSize && blockSize != config.BlockSize) {
         return MakeError(E_ARGUMENT, "BlockSize does not match the partition");
     }
-    if (!blocksCount || blocksCount > MaxIoBytes / config.BlockSize) {
+    if (!blocksCount || blocksCount > MaxGrpcIoBytes / config.BlockSize) {
         return MakeError(
             E_ARGUMENT,
-            "I/O must be nonempty and contain at most 32 MiB");
+            TStringBuilder() << "I/O must be nonempty and contain at most "
+                             << MaxGrpcIoBytes << " bytes");
     }
     if (startIndex >= config.BlockCount ||
         blocksCount > config.BlockCount - startIndex)
@@ -124,9 +126,10 @@ void LogRequestError(
     const NProto::TError& error)
 {
     STORAGE_WARN(
-        TMethod::Name << " RequestId=" << request.GetHeaders().GetRequestId()
-                      << " DiskId=" << request.GetDiskId()
-                      << " Error=" << FormatError(error));
+        (TLogPrefix(
+            {{"d", request.GetDiskId()},
+             {"r", request.GetHeaders().GetRequestId()}}))
+        << " " << TMethod::Name << " Error=" << FormatError(error));
 }
 
 template <typename TResponse>
@@ -137,25 +140,58 @@ NThreading::TFuture<TResponse> ErrorResponse(NProto::TError error)
     return NThreading::MakeFuture(std::move(response));
 }
 
-}   // namespace
-
-// Control and data references must always come from the same registration.
-struct TNbsBlockStoreFacade::TPartitionRegistration
+// Implements the classic API; registry and session publication stay behind
+// their own interfaces.
+class TNbsBlockStoreFacade final
+    : public NNbs1CompatApi::NBlockStore::
+          TBlockStoreImpl<TNbsBlockStoreFacade, INbsBlockStoreFacade>
 {
-    TPartitionSessionStateHolderPtr SessionState;
-    std::shared_ptr<IPartitionSessionControl> SessionControl;
-};
+public:
+    explicit TNbsBlockStoreFacade(TLog log);
+    ~TNbsBlockStoreFacade() noexcept override;
 
-// Registry updates are rare; I/O reads a single immutable map snapshot.
-struct TNbsBlockStoreFacade::TPartitionRegistry
-    : public TAtomicRefCount<TPartitionRegistry>
-{
-    THashMap<TString, std::shared_ptr<const TPartitionRegistration>> Partitions;
+    void Start() override;
+    void Stop() override;
+    NNbs1CompatApi::NBlockStore::TStorageBuffer AllocateBuffer(
+        size_t bytesCount) override;
+    TResultOrError<TString> RegisterVolume(
+        TPartitionSessionPtr session,
+        IPartitionSessionControlPtr control) override;
+    void UnregisterVolume(
+        const TString& diskId,
+        const TString& registrationId) override;
+
+    template <typename TMethod>
+    NThreading::TFuture<typename TMethod::TResponse> Execute(
+        TCallContextPtr callContext,
+        std::shared_ptr<typename TMethod::TRequest> request);
+
+private:
+    NThreading::TFuture<NCompatProto::TMountVolumeResponse> ExecuteMountVolume(
+        const NCompatProto::TMountVolumeRequest& request,
+        const TPartitionRegistration& registration);
+    NThreading::TFuture<NCompatProto::TUnmountVolumeResponse>
+    ExecuteUnmountVolume(
+        const NCompatProto::TUnmountVolumeRequest& request,
+        const TPartitionRegistration& registration);
+    NThreading::TFuture<NCompatProto::TReadBlocksResponse> ExecuteReadBlocks(
+        TCallContextPtr callContext,
+        std::shared_ptr<NCompatProto::TReadBlocksRequest> request,
+        TPartitionIoBackend backend);
+    NThreading::TFuture<NCompatProto::TWriteBlocksResponse> ExecuteWriteBlocks(
+        TCallContextPtr callContext,
+        std::shared_ptr<NCompatProto::TWriteBlocksRequest> request,
+        TPartitionIoBackend backend);
+
+    std::atomic_bool AcceptingRequests = false;
+    // Serializes admission closure with session command dispatch.
+    TMutex SessionDispatchMutex;
+    TPartitionRegistry PartitionRegistry;
+    TLog Log;
 };
 
 TNbsBlockStoreFacade::TNbsBlockStoreFacade(TLog log)
-    : PartitionRegistry(MakeIntrusive<TPartitionRegistry>())
-    , Log(std::move(log))
+    : Log(std::move(log))
 {}
 
 TNbsBlockStoreFacade::~TNbsBlockStoreFacade() noexcept = default;
@@ -170,7 +206,7 @@ void TNbsBlockStoreFacade::Stop()
     // Synchronize with control calls so none is started after Stop() returns
     // unless Start() reopens admission. Already submitted requests
     // and admitted I/O are not drained.
-    with_lock (RegistryMutex) {
+    with_lock (SessionDispatchMutex) {
         AcceptingRequests.store(false);
     }
 }
@@ -183,66 +219,17 @@ TNbsBlockStoreFacade::AllocateBuffer(size_t bytesCount)
 }
 
 TResultOrError<TString> TNbsBlockStoreFacade::RegisterVolume(
-    TPartitionSessionStateHolderPtr sessionState,
-    std::shared_ptr<IPartitionSessionControl> sessionControl)
+    TPartitionSessionPtr session,
+    IPartitionSessionControlPtr control)
 {
-    if (!sessionState || !sessionControl) {
-        return MakeError(
-            E_ARGUMENT,
-            "Missing partition control or session target");
-    }
-    const auto state = sessionState->AtomicLoad();
-    if (!state) {
-        return MakeError(E_ARGUMENT, "Missing partition session state");
-    }
-    const auto& diskId = state->GetVolumeMetadata().GetDiskId();
-    const TString registrationId = state->GetRegistrationId();
-    with_lock (RegistryMutex) {
-        auto next =
-            MakeIntrusive<TPartitionRegistry>(*PartitionRegistry.AtomicLoad());
-        next->Partitions[diskId] =
-            std::make_shared<TPartitionRegistration>(TPartitionRegistration{
-                std::move(sessionState),
-                std::move(sessionControl)});
-        PartitionRegistry.AtomicStore(next);
-    }
-    return registrationId;
+    return PartitionRegistry.Register(std::move(session), std::move(control));
 }
 
 void TNbsBlockStoreFacade::UnregisterVolume(
     const TString& diskId,
     const TString& registrationId)
 {
-    with_lock (RegistryMutex) {
-        const auto registry = PartitionRegistry.AtomicLoad();
-        const auto it = registry->Partitions.find(diskId);
-        if (it == registry->Partitions.end() ||
-            it->second->SessionState->AtomicLoad()->GetRegistrationId() !=
-                registrationId)
-        {
-            return;
-        }
-        auto next = MakeIntrusive<TPartitionRegistry>(*registry);
-        next->Partitions.erase(diskId);
-        PartitionRegistry.AtomicStore(next);
-    }
-}
-
-TResultOrError<
-    std::shared_ptr<const TNbsBlockStoreFacade::TPartitionRegistration>>
-TNbsBlockStoreFacade::FindPartition(const TString& diskId) const
-{
-    if (!AcceptingRequests.load()) {
-        return MakeError(E_REJECTED, "NBS2 frontend is not accepting requests");
-    }
-    const auto registry = PartitionRegistry.AtomicLoad();
-    const auto it = registry->Partitions.find(diskId);
-    if (it == registry->Partitions.end()) {
-        return MakeError(
-            E_NOT_FOUND,
-            "Disk is not registered on this NBS2 host");
-    }
-    return it->second;
+    PartitionRegistry.Unregister(diskId, registrationId);
 }
 
 template <typename TMethod>
@@ -256,21 +243,26 @@ NThreading::TFuture<typename TMethod::TResponse> TNbsBlockStoreFacade::Execute(
     STORAGE_DEBUG(
         TMethod::Name << " RequestId=" << request->GetHeaders().GetRequestId());
 
+    if (!AcceptingRequests.load()) {
+        const auto error =
+            MakeError(E_REJECTED, "NBS2 frontend is not accepting requests");
+        if constexpr (!std::is_same_v<TMethod, TBlockStorePingMethod>) {
+            LogRequestError<TMethod>(Log, *request, error);
+        }
+        return ErrorResponse<TResponse>(error);
+    }
+
     if constexpr (std::is_same_v<TMethod, TBlockStorePingMethod>) {
-        TResponse response;
-        if (!AcceptingRequests.load()) {
-            *response.MutableError() = MakeError(
-                E_REJECTED,
-                "NBS2 frontend is not accepting requests");
-        }
-        return NThreading::MakeFuture(std::move(response));
+        return NThreading::MakeFuture<TResponse>();
     } else {
-        auto found = FindPartition(request->GetDiskId());
-        if (HasError(found)) {
-            LogRequestError<TMethod>(Log, *request, found.GetError());
-            return ErrorResponse<TResponse>(found.GetError());
+        const auto partition = PartitionRegistry.Find(request->GetDiskId());
+        if (!partition) {
+            const auto error = MakeError(
+                E_NOT_FOUND,
+                "Disk is not registered on this NBS2 host");
+            LogRequestError<TMethod>(Log, *request, error);
+            return ErrorResponse<TResponse>(error);
         }
-        const auto partition = found.ExtractResult();
 
         if constexpr (std::is_same_v<TMethod, TBlockStoreMountVolumeMethod>) {
             return ExecuteMountVolume(*request, *partition);
@@ -284,8 +276,7 @@ NThreading::TFuture<typename TMethod::TResponse> TNbsBlockStoreFacade::Execute(
                     std::is_same_v<TMethod, TBlockStoreWriteBlocksMethod>,
                 "Unsupported classic NBS method");
 
-            const auto state = partition->SessionState->AtomicLoad();
-            auto backend = state->AcquireIoBackend(
+            auto backend = partition->Session->AcquireIoBackend(
                 request->GetHeaders().GetClientId(),
                 request->GetSessionId());
             if (HasError(backend)) {
@@ -323,11 +314,11 @@ TNbsBlockStoreFacade::ExecuteMountVolume(
     if (const auto error = ValidateMountParameters(request); HasError(error)) {
         return ErrorResponse<NCompatProto::TMountVolumeResponse>(error);
     }
-    auto state = registration.SessionState->AtomicLoad();
+    auto session = registration.Session;
     NThreading::TFuture<TResultOrError<TString>> mounted;
     // Stop() may close admission after lookup; recheck it under the same lock
     // as dispatch. Partition teardown is handled by the command recipient.
-    with_lock (RegistryMutex) {
+    with_lock (SessionDispatchMutex) {
         if (!AcceptingRequests.load()) {
             const auto error = MakeError(
                 E_REJECTED,
@@ -335,11 +326,11 @@ TNbsBlockStoreFacade::ExecuteMountVolume(
             LogRequestError<TMethod>(Log, request, error);
             return ErrorResponse<NCompatProto::TMountVolumeResponse>(error);
         }
-        mounted = registration.SessionControl->Mount(
-            request.GetHeaders().GetClientId());
+        mounted =
+            registration.Control->Mount(request.GetHeaders().GetClientId());
     }
     return mounted.Apply(
-        [state = std::move(state)](const auto& future)
+        [session = std::move(session)](const auto& future)
         {
             NCompatProto::TMountVolumeResponse response;
             const auto& result = future.GetValue();
@@ -348,7 +339,7 @@ TNbsBlockStoreFacade::ExecuteMountVolume(
             } else {
                 response.SetSessionId(result.GetResult());
                 *response.MutableVolume() =
-                    MakeClassicVolume(state->GetVolumeMetadata());
+                    MakeClassicVolume(session->GetVolumeMetadata());
                 // No inactivity expiry in MVP.
                 response.SetInactiveClientsTimeout(0);
             }
@@ -363,7 +354,7 @@ TNbsBlockStoreFacade::ExecuteUnmountVolume(
 {
     using TMethod = NNbs1CompatApi::NBlockStore::TBlockStoreUnmountVolumeMethod;
     NThreading::TFuture<NProto::TError> unmounted;
-    with_lock (RegistryMutex) {
+    with_lock (SessionDispatchMutex) {
         if (!AcceptingRequests.load()) {
             const auto error = MakeError(
                 E_REJECTED,
@@ -371,7 +362,7 @@ TNbsBlockStoreFacade::ExecuteUnmountVolume(
             LogRequestError<TMethod>(Log, request, error);
             return ErrorResponse<NCompatProto::TUnmountVolumeResponse>(error);
         }
-        unmounted = registration.SessionControl->Unmount(
+        unmounted = registration.Control->Unmount(
             request.GetHeaders().GetClientId(),
             request.GetSessionId());
     }
@@ -478,10 +469,11 @@ TNbsBlockStoreFacade::ExecuteWriteBlocks(
     const auto& config = *backend.IoGeometry;
     ui64 length = 0;
     for (const auto& buffer: request->GetBlocks().GetBuffers()) {
-        if (buffer.empty() || buffer.size() > MaxIoBytes - length) {
+        if (buffer.empty() || buffer.size() > MaxGrpcIoBytes - length) {
             const auto error = MakeError(
                 E_ARGUMENT,
-                "Empty write buffer or payload exceeds 32 MiB");
+                TStringBuilder() << "Empty write buffer or payload exceeds "
+                                 << MaxGrpcIoBytes << " bytes");
             LogRequestError<TMethod>(Log, *request, error);
             return ErrorResponse<TResponse>(error);
         }
@@ -533,7 +525,9 @@ TNbsBlockStoreFacade::ExecuteWriteBlocks(
             });
 }
 
-std::shared_ptr<TNbsBlockStoreFacade> CreateNbsBlockStoreFacade(TLog log)
+}   // namespace
+
+INbsBlockStoreFacadePtr CreateNbsBlockStoreFacade(TLog log)
 {
     return std::make_shared<TNbsBlockStoreFacade>(std::move(log));
 }

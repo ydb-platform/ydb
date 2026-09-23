@@ -2,9 +2,12 @@ LIBRARY()
 
 SRCS(
     blockstore_facade.cpp
+    partition_registry.cpp
 )
 
 PEERDIR(
+    ydb/core/nbs/cloud/blockstore/libs/common
+    ydb/core/nbs/cloud/blockstore/libs/storage/model
     ydb/core/nbs/cloud/blockstore/libs/service
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session
     library/cpp/logger

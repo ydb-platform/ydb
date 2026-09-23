@@ -1,10 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
-
-#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
-
-#include <library/cpp/threading/hot_swap/hot_swap.h>
+#include "partition_session.h"
 
 namespace NKikimrBlockStore {
 class TVolumeConfig;
@@ -16,21 +12,15 @@ class TStorageGate;
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-// A handler and geometry from the same admitted partition session.
-struct TPartitionIoBackend
-{
-    IDeviceHandlerPtr Handler;
-    TVolumeConfigPtr IoGeometry;
-};
-
 // One published version of a partition's process-local session. Readers never
-// mutate it; the owner actor modifies a copy before publishing it through the
-// shared THotSwap. Unmount does not drain admitted I/O.
+// mutate it; TPartitionSession owns mutations and publication.
+// Unmount does not drain admitted I/O.
 class TPartitionSessionState final
     : public TAtomicRefCount<TPartitionSessionState>
 {
 public:
-    // Validates partition metadata and builds its shared storage chain.
+    // Builds the storage chain for validated partition metadata and a matching
+    // backend. Only SSD partitions are supported in MVP.
     static TResultOrError<TIntrusivePtr<TPartitionSessionState>> Create(
         const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
         IStoragePtr storage,
@@ -82,10 +72,5 @@ private:
     TString SessionId;
     IDeviceHandlerPtr Handler;
 };
-
-// The actor and facade share this container, not independent THotSwap copies.
-using TPartitionSessionStateHolder = THotSwap<TPartitionSessionState>;
-using TPartitionSessionStateHolderPtr =
-    std::shared_ptr<TPartitionSessionStateHolder>;
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

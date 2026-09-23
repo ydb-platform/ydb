@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    partition_session.cpp
     partition_session_control.cpp
     partition_session_state.cpp
     events.cpp

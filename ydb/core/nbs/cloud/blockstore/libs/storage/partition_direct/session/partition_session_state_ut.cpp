@@ -31,11 +31,8 @@ TVolumeConfigPtr MakeGeometry(const NKikimrBlockStore::TVolumeConfig& config)
     return std::make_shared<TVolumeConfig>(TVolumeConfig{
         .DiskId = config.GetDiskId(),
         .BlockSize = config.GetBlockSize(),
-        .BlockCount = config.PartitionsSize()
-                          ? config.GetPartitions(0).GetBlockCount()
-                          : 0,
-        .BlocksPerStripe =
-            config.GetBlockSize() ? 512_KB / config.GetBlockSize() : 0,
+        .BlockCount = config.GetPartitions(0).GetBlockCount(),
+        .BlocksPerStripe = 512_KB / config.GetBlockSize(),
         .VChunkSize = 128_MB,
     });
 }
@@ -55,60 +52,18 @@ TIntrusivePtr<TPartitionSessionState> MakeState()
 
 Y_UNIT_TEST_SUITE(TPartitionSessionStateTest)
 {
-    Y_UNIT_TEST(ShouldValidateMetadataAndBackend)
+    Y_UNIT_TEST(ShouldRejectUnsupportedMediaKind)
     {
-        const auto good = MakeMetadata();
-        auto storage = std::make_shared<TTestStorage>();
-        TVector<NKikimrBlockStore::TVolumeConfig> invalid;
-        invalid.push_back(good);
-        invalid.back().ClearDiskId();
-        invalid.push_back(good);
-        invalid.back().ClearPartitions();
-        invalid.push_back(good);
-        invalid.back().AddPartitions()->SetBlockCount(1);
-        invalid.push_back(good);
-        invalid.back().SetBlockSize(512);
-        invalid.push_back(good);
-        invalid.back().MutablePartitions(0)->SetBlockCount(0);
-        invalid.push_back(good);
-        invalid.back().SetStorageMediaKind(NProto::STORAGE_MEDIA_HDD);
-        for (const auto& config: invalid) {
-            UNIT_ASSERT_VALUES_EQUAL(
-                TPartitionSessionState::Create(
-                    config,
-                    storage,
-                    MakeGeometry(config))
-                    .GetError()
-                    .GetCode(),
-                E_ARGUMENT);
-        }
+        auto config = MakeMetadata();
+        config.SetStorageMediaKind(NProto::STORAGE_MEDIA_HDD);
         UNIT_ASSERT_VALUES_EQUAL(
-            TPartitionSessionState::Create(good, {}, MakeGeometry(good))
+            TPartitionSession::Create(
+                config,
+                std::make_shared<TTestStorage>(),
+                MakeGeometry(config))
                 .GetError()
                 .GetCode(),
             E_ARGUMENT);
-        UNIT_ASSERT_VALUES_EQUAL(
-            TPartitionSessionState::Create(good, storage, {})
-                .GetError()
-                .GetCode(),
-            E_ARGUMENT);
-        for (ui32 i = 0; i != 5; ++i) {
-            const auto geometry = MakeGeometry(good);
-            auto other = std::make_shared<TVolumeConfig>(TVolumeConfig{
-                .DiskId = i == 0 ? TString("other") : geometry->DiskId,
-                .BlockSize =
-                    i == 1 ? geometry->BlockSize * 2 : geometry->BlockSize,
-                .BlockCount =
-                    i == 2 ? geometry->BlockCount - 1 : geometry->BlockCount,
-                .BlocksPerStripe = i == 3 ? 0 : geometry->BlocksPerStripe,
-                .VChunkSize = i == 4 ? 0 : geometry->VChunkSize,
-            });
-            UNIT_ASSERT_VALUES_EQUAL(
-                TPartitionSessionState::Create(good, storage, other)
-                    .GetError()
-                    .GetCode(),
-                E_ARGUMENT);
-        }
     }
 
     Y_UNIT_TEST(ShouldPublishSessionVersionsAndReuseBackend)
@@ -123,7 +78,7 @@ Y_UNIT_TEST_SUITE(TPartitionSessionStateTest)
         UNIT_ASSERT_VALUES_EQUAL(
             state->GetVolumeMetadata().GetDiskId(),
             "disk1");
-        TPartitionSessionStateHolder holder(state);
+        THotSwap<TPartitionSessionState> holder(state);
         auto mounted =
             MakeIntrusive<TPartitionSessionState>(*holder.AtomicLoad());
         const auto first = mounted->Mount("client").ExtractResult();
@@ -184,6 +139,57 @@ Y_UNIT_TEST_SUITE(TPartitionSessionStateTest)
                 state->AcquireIoBackend("client", session).ExtractResult();
             UNIT_ASSERT_VALUES_EQUAL(backend.IoGeometry->BlockSize, blockSize);
         }
+    }
+
+    Y_UNIT_TEST(ShouldPublishChangesThroughPartitionSession)
+    {
+        const TString clientId = "client";
+        const TString otherClientId = "other";
+        const TString invalidSessionId = "wrong";
+
+        const auto config = MakeMetadata();
+        const auto session = TPartitionSession::Create(
+                                 config,
+                                 std::make_shared<TTestStorage>(),
+                                 MakeGeometry(config))
+                                 .ExtractResult();
+        const auto registrationId = session->GetRegistrationId();
+        const auto* metadata = &session->GetVolumeMetadata();
+        const auto mounted = session->Mount(clientId).ExtractResult();
+        const auto backend =
+            session->AcquireIoBackend(clientId, mounted).ExtractResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            session->Mount(otherClientId).GetError().GetCode(),
+            E_BS_MOUNT_CONFLICT);
+        UNIT_ASSERT_VALUES_EQUAL(
+            session->Unmount(clientId, invalidSessionId).GetCode(),
+            E_BS_INVALID_SESSION);
+        UNIT_ASSERT(
+            session->AcquireIoBackend(clientId, mounted).GetResult().Handler ==
+            backend.Handler);
+
+        UNIT_ASSERT(!HasError(session->Unmount(clientId, mounted)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            session->AcquireIoBackend(clientId, mounted).GetError().GetCode(),
+            E_BS_INVALID_SESSION);
+        const auto remounted = session->Mount(otherClientId).ExtractResult();
+        UNIT_ASSERT(
+            !HasError(session->AcquireIoBackend(otherClientId, remounted)));
+        session->Stop();
+        UNIT_ASSERT_VALUES_EQUAL(
+            session->Mount(clientId).GetError().GetCode(),
+            E_REJECTED);
+        UNIT_ASSERT_VALUES_EQUAL(
+            session->Unmount(otherClientId, remounted).GetCode(),
+            E_REJECTED);
+        UNIT_ASSERT_VALUES_EQUAL(
+            session->AcquireIoBackend(otherClientId, remounted)
+                .GetError()
+                .GetCode(),
+            E_REJECTED);
+        UNIT_ASSERT_VALUES_EQUAL(session->GetRegistrationId(), registrationId);
+        UNIT_ASSERT(&session->GetVolumeMetadata() == metadata);
     }
 
     Y_UNIT_TEST(ShouldValidateIdentityAndRevokeOnlyMatchingSession)

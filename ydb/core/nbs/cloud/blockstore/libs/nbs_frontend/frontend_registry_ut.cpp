@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session.h>
 
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
@@ -21,7 +22,7 @@ using namespace NTests;
 namespace NCompatProto = NNbs1CompatApi::NBlockStore::NProto;
 
 NCompatProto::TMountVolumeResponse Mount(
-    const std::shared_ptr<TNbsBlockStoreFacade>& facade,
+    const INbsBlockStoreFacadePtr& facade,
     const NCompatProto::TMountVolumeRequest& request)
 {
     auto future = facade->MountVolume(
@@ -32,7 +33,7 @@ NCompatProto::TMountVolumeResponse Mount(
 }
 
 NProto::TError Unmount(
-    const std::shared_ptr<TNbsBlockStoreFacade>& facade,
+    const INbsBlockStoreFacadePtr& facade,
     const TString& diskId,
     const TString& clientId,
     const TString& sessionId)
@@ -48,7 +49,7 @@ NProto::TError Unmount(
 
 // Checks backend access and returned data for an otherwise valid I/O request.
 ui32 ReadBlock(
-    const std::shared_ptr<TNbsBlockStoreFacade>& facade,
+    const INbsBlockStoreFacadePtr& facade,
     const TString& diskId,
     const TString& clientId,
     const TString& sessionId,
@@ -91,16 +92,13 @@ Y_UNIT_TEST_SUITE(TFrontendRegistryTest)
         const auto mounted = Mount(env.Facade, MakeTestMountRequest());
         UNIT_ASSERT(!HasError(mounted));
 
-        auto state = NStorage::NPartitionDirect::TPartitionSessionState::Create(
+        auto state = NStorage::NPartitionDirect::TPartitionSession::Create(
             config,
             std::make_shared<TTestStorage>(),
             MakeTestIoConfig(config));
         UNIT_ASSERT(!HasError(state));
-        const auto registration = env.Facade->RegisterVolume(
-            std::make_shared<
-                NStorage::NPartitionDirect::TPartitionSessionStateHolder>(
-                state.ExtractResult()),
-            {});
+        const auto registration =
+            env.Facade->RegisterVolume(state.ExtractResult(), {});
         UNIT_ASSERT_VALUES_EQUAL(registration.GetError().GetCode(), E_ARGUMENT);
 
         // A rejected replacement must preserve the original control and I/O
@@ -317,7 +315,7 @@ Y_UNIT_TEST_SUITE(TFrontendRegistryTest)
         const auto first = Mount(env.Facade, MakeTestMountRequest());
         UNIT_ASSERT(!HasError(first));
         auto invalid = config;
-        invalid.SetBlockSize(1);
+        invalid.SetStorageMediaKind(NProto::STORAGE_MEDIA_HDD);
         UNIT_ASSERT_VALUES_EQUAL(
             RegisterTestVolume(env, invalid).GetError().GetCode(),
             E_ARGUMENT);

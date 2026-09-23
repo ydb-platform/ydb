@@ -59,7 +59,7 @@ NThreading::TFuture<NProto::TError> TPartitionSessionControl::Unmount(
 
 }   // namespace
 
-std::shared_ptr<IPartitionSessionControl> CreatePartitionSessionControl(
+IPartitionSessionControlPtr CreatePartitionSessionControl(
     NActors::TActorSystem* actorSystem,
     const NActors::TActorId& actorId)
 {

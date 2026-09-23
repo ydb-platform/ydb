@@ -240,6 +240,10 @@ THostIndex TInflightInfo::RequestFlush(
 
 void TInflightInfo::ConfirmFlush(THostIndex host)
 {
+    if (!DesiredDDisks.Get(host)) {
+        return;
+    }
+
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
     Y_ABORT_UNLESS(FlushRequested.Get(host));
     Y_ABORT_UNLESS(!FlushConfirmed.Get(host));
@@ -266,6 +270,10 @@ void TInflightInfo::ConfirmFlush(THostIndex host)
 
 void TInflightInfo::FlushFailed(THostIndex host)
 {
+    if (!DesiredDDisks.Get(host)) {
+        return;
+    }
+
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
     Y_ABORT_UNLESS(FlushRequested.Get(host));
     Y_ABORT_UNLESS(!FlushConfirmed.Get(host));
@@ -340,6 +348,7 @@ THostMask TInflightInfo::GetEraseNeeded() const
 
 void TInflightInfo::RemoveHosts(THostMask removed)
 {
+<<<<<<< HEAD
     const THostMask removedFromWrite = WriteRequested.LogicalAnd(removed);
     if (removedFromWrite.Empty()) {
         return;
@@ -379,6 +388,8 @@ void TInflightInfo::RemoveHosts(THostMask removed)
     if (State == EState::PBufferErasing && EraseConfirmed == WriteRequested) {
         SetState(EState::PBufferErased);
 =======
+=======
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
     switch (State) {
         case EState::PBufferPendingWrite:
         case EState::PBufferIncompleteWrite:
@@ -390,12 +401,14 @@ void TInflightInfo::RemoveHosts(THostMask removed)
         }
         case EState::PBufferFlushing: {
             // Just update DesiredDDisks and Disabled.
+            const auto unavailableDDisks = disabled.Include(removed);
             const auto droppedFlushes =
-                GetInflightFlushes().LogicalAnd(disabled);
+                GetInflightFlushes().LogicalAnd(unavailableDDisks);
 
             DesiredDDisks = DesiredDDisks.Include(added).Exclude(removed);
             Disabled = disabled;
-            FlushRequested = FlushRequested.Exclude(disabled);
+            FlushRequested = FlushRequested.Exclude(unavailableDDisks);
+            FlushConfirmed = FlushConfirmed.Exclude(removed);
 
             auto notRequestsFlushes =
                 DesiredDDisks.Exclude(Disabled).Exclude(FlushRequested);

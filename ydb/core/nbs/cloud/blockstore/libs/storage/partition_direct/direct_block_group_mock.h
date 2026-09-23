@@ -192,16 +192,23 @@ public:
     TOnRemoveHostSucceededHandler OnRemoveHostSucceededHandler;
     TOnRemoveHostFailedHandler OnRemoveHostFailedHandler;
     TTakeCopyRangeBudgetHandler TakeCopyRangeBudgetHandler;
+<<<<<<< HEAD
 >>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
+=======
+    std::function<void(EDDiskBalanceStrategy)> BalanceDDisksHandler;
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 
     TVector<TVChunkWeakPtr> VChunks;
+    THashMap<ui32, THostIndex> PendingDDiskAllocations;
     TArenaAllocatorPoolPtr ArenaAllocatorPool;
 
     TDirectBlockGroupMock();
 
     void Register(TVChunkWeakPtr vChunk) override;
     THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) override;
+    void AllocateDDiskPromotion(ui32 vChunkId, THostIndex hostIndex) override;
     void CommitDDiskPromotion(const TVChunkConfig& config) override;
+    THostMask SelectDDiskForDemote(THostMask candidates) const override;
 
     TExecutorPtr GetExecutor() override;
 <<<<<<< HEAD
@@ -334,7 +341,14 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
+<<<<<<< HEAD
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
+=======
+    void BalanceDDisks(EDDiskBalanceStrategy strategy) override;
+
+    NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
+        EVChunkStatsDetail detail) const override;
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

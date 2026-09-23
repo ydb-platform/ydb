@@ -182,6 +182,10 @@ public:
 
     [[nodiscard]] const THostStat& GetHostStatistics(
         THostIndex hostIndex) const override;
+
+    // Returns the current group-wide state of a host.
+    [[nodiscard]] EHostState GetHostState(THostIndex hostIndex) const;
+
     [[nodiscard]] TString Dump() const override;
 
 <<<<<<< HEAD

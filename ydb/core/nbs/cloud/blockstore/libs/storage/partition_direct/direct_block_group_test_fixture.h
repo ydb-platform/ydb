@@ -70,6 +70,37 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     // Dispatches everything currently queued in the runtime.
     void DrainRuntime() const;
 
+<<<<<<< HEAD
+=======
+    [[nodiscard]] static TBlockedDetectedState GetBlockedDetected(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        THostIndex hostIndex,
+        TDuration waitTimeout);
+    [[nodiscard]] static std::array<size_t, MaxHostCount>
+    CountDDisksByHostDebugOnly(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        EDDiskBalanceStrategy strategy,
+        TDuration waitTimeout);
+    [[nodiscard]] static TVector<ui64> ReadAllDDiskSeqNos(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        TDuration waitTimeout);
+    [[nodiscard]] ui64 GetDDiskSessionSeqNo(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        size_t index,
+        TDuration waitTimeout);
+    [[nodiscard]] static std::optional<NKikimr::NDDisk::TConnectionToken>
+    GetConnectionToken(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        NTransport::THostConnection::EConnectionType connectionType,
+        size_t index,
+        TDuration waitTimeout);
+
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
     [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,
         std::unique_ptr<NTransport::IStorageTransport> transport,

@@ -5,8 +5,14 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+<<<<<<< HEAD
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ddisk_balance.h>
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -33,6 +39,44 @@ constexpr size_t MinLockedDDiskSessionsToStart =
 
 ////////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD
+=======
+EDBGConnectionType ToDBGConnectionType(
+    NTransport::THostConnection::EConnectionType connectionType)
+{
+    switch (connectionType) {
+        case NTransport::THostConnection::EConnectionType::DDisk:
+            return EDBGConnectionType::DDisk;
+        case NTransport::THostConnection::EConnectionType::PBuffer:
+            return EDBGConnectionType::PBuffer;
+    }
+    Y_ABORT("Unknown EConnectionType: %d", static_cast<int>(connectionType));
+}
+
+NProto::TError MakeDirectBlockGroupDestroyedError()
+{
+    return MakeError(E_REJECTED, "TDirectBlockGroup destroyed");
+}
+
+NProto::TError MakeSessionError(ui32 nodeId, THostIndex host)
+{
+    TStringBuilder result;
+    result << "DDisk " << PrintHostAndNodeId(host, nodeId)
+           << " session is not established";
+
+    return MakeError(E_REJECTED, result);
+}
+
+bool MatchesBalanceStrategy(
+    const TVChunk& vChunk,
+    EDDiskBalanceStrategy strategy)
+{
+    return strategy == EDDiskBalanceStrategy::Configured || vChunk.IsTouched();
+}
+
+// Converts a PBuffer list result into volume-block ranges using the volume
+// block size, not the 4 KiB DDisk integrity unit.
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 TListPBufferResponse MakeListPBufferResponse(
     const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& response)
 {
@@ -273,15 +317,49 @@ THostIndex TDirectBlockGroup::AllocateDDiskForPromote(
     }
 
     if (selected != InvalidHostIndex) {
-        PendingDDiskAllocations.emplace(config.GetVChunkIndex(), selected);
+        AllocateDDiskPromotion(config.GetVChunkIndex(), selected);
     }
     return selected;
+}
+
+void TDirectBlockGroup::AllocateDDiskPromotion(
+    ui32 vChunkId,
+    THostIndex hostIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(hostIndex < GetHostCount());
+    Y_ABORT_UNLESS(!PendingDDiskAllocations.contains(vChunkId));
+
+    PendingDDiskAllocations.emplace(vChunkId, hostIndex);
 }
 
 void TDirectBlockGroup::CommitDDiskPromotion(const TVChunkConfig& config)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     PendingDDiskAllocations.erase(config.GetVChunkIndex());
+}
+
+THostMask TDirectBlockGroup::SelectDDiskForDemote(THostMask candidates) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (candidates.Empty()) {
+        return THostMask::MakeEmpty();
+    }
+
+    const auto ddiskCountByHost =
+        CountDDisksByHost(EDDiskBalanceStrategy::Configured, candidates);
+
+    THostIndex selected = InvalidHostIndex;
+    for (THostIndex host: candidates) {
+        if (selected == InvalidHostIndex ||
+            ddiskCountByHost[host] > ddiskCountByHost[selected])
+        {
+            selected = host;
+        }
+    }
+
+    return THostMask::MakeOne(selected);
 }
 
 TExecutorPtr TDirectBlockGroup::GetExecutor()
@@ -1408,7 +1486,22 @@ NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot()
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+void TDirectBlockGroup::BalanceDDisks(EDDiskBalanceStrategy strategy)
+{
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(), strategy]   //
+        ()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->DoBalanceDDisks(strategy);
+            }
+        });
+}
+
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 NThreading::TFuture<TVChunkStatsGatherResult>
 TDirectBlockGroup::GatherVChunkStats(EVChunkStatsDetail detail) const
 {
@@ -2174,6 +2267,7 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
     return result;
 }
 
+<<<<<<< HEAD
 TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -2185,6 +2279,116 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
     for (const auto& stat: hostStats) {
         hosts.push_back(MakeHostSnapshot(stat));
 =======
+=======
+THostMask TDirectBlockGroup::GetBalancingAllowedHosts() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    auto allowedForBalancing = THostMask::MakeEmpty();
+    for (THostIndex host = 0; host < GetHostCount(); ++host) {
+        if (!Connections.IsSlotDead(host) &&
+            Oracle.GetHostState(host) == EHostState::Online)
+        {
+            allowedForBalancing.Set(host);
+        }
+    }
+    return allowedForBalancing;
+}
+
+std::array<size_t, MaxHostCount> TDirectBlockGroup::CountDDisksByHost(
+    EDDiskBalanceStrategy strategy,
+    THostMask allowedForBalancing) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    std::array<size_t, MaxHostCount> ddiskCountByHost{};
+    for (const auto& weakVChunk: VChunks) {
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk || !MatchesBalanceStrategy(*vChunk, strategy)) {
+            continue;
+        }
+
+        const auto& config = vChunk->GetConfig();
+        for (THostIndex host: config.GetEnabledDDisks()) {
+            if (allowedForBalancing.Get(host)) {
+                ++ddiskCountByHost[host];
+            }
+        }
+
+        if (const auto* pending =
+                PendingDDiskAllocations.FindPtr(config.GetVChunkIndex());
+            pending && !config.GetDisabledHosts().Get(*pending) &&
+            allowedForBalancing.Get(*pending))
+        {
+            ++ddiskCountByHost[*pending];
+        }
+    }
+    return ddiskCountByHost;
+}
+
+bool TDirectBlockGroup::IsBalancingAllowed(
+    const TVChunk& vChunk,
+    EDDiskBalanceStrategy strategy) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return MatchesBalanceStrategy(vChunk, strategy) &&
+           !PendingDDiskAllocations.contains(
+               vChunk.GetConfig().GetVChunkIndex());
+}
+
+void TDirectBlockGroup::DoBalanceDDisks(EDDiskBalanceStrategy strategy)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    const auto allowedForBalancing = GetBalancingAllowedHosts();
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s DDisk balancing requested: %s",
+        LogTitle.GetWithTime().c_str(),
+        ToString(strategy).c_str());
+
+    const auto ddiskCountByHost =
+        CountDDisksByHost(strategy, allowedForBalancing);
+
+    THashMap<ui32, TVChunkPtr> vChunksById;
+    TVector<const TVChunkConfig*> balanceVChunks;
+    for (const auto& weakVChunk: VChunks) {
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk || !IsBalancingAllowed(*vChunk, strategy)) {
+            continue;
+        }
+        const auto& config = vChunk->GetConfig();
+        const ui32 vChunkId = config.GetVChunkIndex();
+        balanceVChunks.push_back(&config);
+        vChunksById.emplace(vChunkId, std::move(vChunk));
+    }
+
+    for (
+        const auto& request:
+        PlanDDiskBalance(balanceVChunks, allowedForBalancing, ddiskCountByHost))
+    {
+        vChunksById.at(request.VChunkId)
+            ->BalanceDDisks(request.SourceHost, request.TargetHost);
+    }
+}
+
+TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const auto allowedForBalancing = GetBalancingAllowedHosts();
+    const auto configuredImbalance = CalculateDDiskImbalance(
+        CountDDisksByHost(
+            EDDiskBalanceStrategy::Configured,
+            allowedForBalancing),
+        allowedForBalancing);
+    const auto touchedImbalance = CalculateDDiskImbalance(
+        CountDDisksByHost(EDDiskBalanceStrategy::Touched, allowedForBalancing),
+        allowedForBalancing);
+
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
     TVector<TConnectionSnapshot> connections;
     connections.reserve(Connections.GetSlotCount());
     for (size_t host = 0; host < Connections.GetSlotCount(); ++host) {
@@ -2227,6 +2431,8 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
 =======
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
+        .ConfiguredDDiskImbalance = configuredImbalance,
+        .TouchedDDiskImbalance = touchedImbalance,
         .FreshDDisks = std::move(freshDDisks),
         .MemoryStats = ArenaAllocatorPool->GetMemoryStats(),
         .DetailedMemoryStats = ArenaAllocatorPool->GetDetailedStat(),

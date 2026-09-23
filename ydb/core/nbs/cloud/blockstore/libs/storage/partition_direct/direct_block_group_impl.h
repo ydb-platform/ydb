@@ -73,7 +73,9 @@ public:
 
     void Register(TVChunkWeakPtr vChunk) override;
     THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) override;
+    void AllocateDDiskPromotion(ui32 vChunkId, THostIndex hostIndex) override;
     void CommitDDiskPromotion(const TVChunkConfig& config) override;
+    THostMask SelectDDiskForDemote(THostMask candidates) const override;
 
     TExecutorPtr GetExecutor() override;
     TArenaAllocatorPoolPtr GetArenaAllocatorPool() override;
@@ -201,7 +203,14 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
+<<<<<<< HEAD
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
+=======
+    void BalanceDDisks(EDDiskBalanceStrategy strategy) override;
+
+    NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
+        EVChunkStatsDetail detail) const override;
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 
     void PersistHostHealth(
         THostIndex hostIndex,
@@ -324,7 +333,28 @@ private:
 
     TDBGDumpResponse DoDebugPrintDirtyMap();
 
+<<<<<<< HEAD
     TDbgSnapshot DoBuildMonSnapshot();
+=======
+    [[nodiscard]] THostMask GetBalancingAllowedHosts() const;
+    [[nodiscard]] std::array<size_t, MaxHostCount> CountDDisksByHost(
+        EDDiskBalanceStrategy strategy,
+        THostMask allowedForBalancing) const;
+    [[nodiscard]] bool IsBalancingAllowed(
+        const TVChunk& vChunk,
+        EDDiskBalanceStrategy strategy) const;
+    void DoBalanceDDisks(EDDiskBalanceStrategy strategy);
+
+    [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot() const;
+
+    [[nodiscard]] TVChunkStatsGatherResult DoGatherVChunkStats(
+        EVChunkStatsDetail detail) const;
+
+    [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
+        size_t hostIndex) const;
+
+    [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 
     const TArenaAllocatorPoolPtr ArenaAllocatorPool;
     NActors::TActorSystem* const ActorSystem = nullptr;

@@ -2801,6 +2801,119 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
+    // A single-shard Read Committed transaction (exactly one write action) whose only
+    // shard is quietly split after the write was acknowledged: the pre-prepare resolve
+    // round transfers the shard's participant state to both covering shards
+    // (MoveShardTo) without adding actions, so the transaction stops being
+    // single-shard while ActionsCount stays 1. The commit must fall back from the
+    // immediate commit to the distributed prepare (both covering shards join) and
+    // succeed with every row applied exactly once.
+    class TUncommittedWriteSeqNumSingleShardQuietSplitSurvives : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            SetupUncommittedWriteSeqNum(settings);
+        }
+
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+
+            auto create = Kikimr->RunCall([&] {
+                return client.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/SplitKVSingleShard` (
+                        Key Uint32 not null,
+                        Value String,
+                        PRIMARY KEY (Key)
+                    ) WITH (
+                        AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                        AUTO_PARTITIONING_BY_LOAD = DISABLED,
+                        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                        UNIFORM_PARTITIONS = 1
+                    );
+                )"), TTxControl::NoTx()).GetValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+            auto edgeActor = runtime.AllocateEdgeActor();
+            const auto shards = GetTableShards(&Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVSingleShard");
+            UNIT_ASSERT_VALUES_EQUAL_C(shards.size(), 1u, "expected /Root/SplitKVSingleShard to have a single shard");
+            const ui64 splitShard = shards[0];
+            const THashSet<ui64> initialShards(shards.begin(), shards.end());
+
+            TUncommittedWriteWire wire;
+            wire.InitialShards = initialShards;
+            auto observer = [&wire](TAutoPtr<IEventHandle>& ev) { return wire.Observe(ev); };
+            auto saveObserver = runtime.SetObserverFunc(observer);
+
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto tx = Kikimr->RunCall([&] {
+                return session.BeginTransaction(TTxSettings::ReadCommittedRW()).ExtractValueSync().GetTransaction(); });
+
+            // A plain UPSERT touching only the single shard: exactly one write action
+            // (ActionsCount == 1). No SELECT: a read would add a second action. The
+            // statement completes with its write acknowledged — the split below is
+            // quiet (no in-flight traffic, no pending batches).
+            auto result = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/SplitKVSingleShard` (Key, Value) VALUES
+                        (1u, "V1"), (2u, "V2"), (3u, "V3"), (4u, "V4"), (5u, "V5"),
+                        (6u, "V6"), (7u, "V7"), (8u, "V8"), (9u, "V9"), (10u, "V10"),
+                        (11u, "V11"), (12u, "V12"), (13u, "V13"), (14u, "V14"), (15u, "V15"),
+                        (16u, "V16"), (17u, "V17"), (18u, "V18"), (19u, "V19"), (20u, "V20");
+                )"), TTxControl::Tx(tx)).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            SetSplitMergePartCountLimit(&runtime, -1);
+
+            const ui64 splitTxId = AsyncSplitTable(Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVSingleShard", splitShard, 10u);
+            WaitTxNotification(Kikimr->GetTestServer(), edgeActor, splitTxId);
+
+            const auto shardsAfterSplit = GetTableShards(&Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVSingleShard");
+            THashSet<ui64> newShards;
+            for (const ui64 shardId : shardsAfterSplit) {
+                if (!initialShards.contains(shardId)) {
+                    newShards.insert(shardId);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(newShards.size(), 2u, "the split must produce two new shards");
+
+            // The commit must survive the quiet split: the resolve round reveals it,
+            // MoveShardTo transfers the single shard's state to both covering shards
+            // and the commit falls back to the distributed prepare.
+            auto commitResult = Kikimr->RunCall([&] { return tx.Commit().ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+            runtime.SetObserverFunc(saveObserver);
+
+            {
+                const auto prepareReceiving = wire.PrepareReceivingSnapshot();
+                for (const ui64 shardId : newShards) {
+                    UNIT_ASSERT_C(prepareReceiving.contains(shardId),
+                        "no prepare message was sent to a covering shard");
+                }
+            }
+
+            {
+                auto check = Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(Q_(R"(
+                        SELECT Key, Value FROM `/Root/SplitKVSingleShard` WHERE Key IN (
+                            1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,
+                            11u,12u,13u,14u,15u,16u,17u,18u,19u,20u
+                        ) ORDER BY Key;
+                    )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(check.GetStatus(), EStatus::SUCCESS, check.GetIssues().ToString());
+                CompareYson(R"([[1u;["V1"]];[2u;["V2"]];[3u;["V3"]];[4u;["V4"]];[5u;["V5"]];[6u;["V6"]];[7u;["V7"]];[8u;["V8"]];[9u;["V9"]];[10u;["V10"]];[11u;["V11"]];[12u;["V12"]];[13u;["V13"]];[14u;["V14"]];[15u;["V15"]];[16u;["V16"]];[17u;["V17"]];[18u;["V18"]];[19u;["V19"]];[20u;["V20"]]])",
+                    FormatResultSetYson(check.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(UncommittedWriteSeqNumSingleShardQuietSplitSurvives) {
+        TUncommittedWriteSeqNumSingleShardQuietSplitSurvives tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
     // Multi-hop re-route: the first re-route sends the batch to a brand-new shard with
     // OriginalShard = the original removed shard; the batch is held undelivered there,
     // the intermediate shard is split as well, and the second re-route must keep the
@@ -3140,12 +3253,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
-    // A Read Committed transaction that reads from the shard that is about to split
-    // marks its lock with read tables: the split does not transfer such a lock (the
-    // transfer predicate requires write-only locks), so the re-routed batch cannot
-    // validate against a transferred ancestor chain. The transaction must fail cleanly
-    // (no hang, no endless retries against the dead tablet) and no rows must be
-    // applied.
     // A Read Committed SELECT over the splitting shard's keys must not prevent the
     // write-stage split handling: RC reads take no read locks (no read-tables on the
     // tx's lock), so the write-only lock still transfers with its uncommitted chain

@@ -153,6 +153,10 @@ message TStorageServiceConfig
     // path when no direct session is available for the destination node.
     optional bool UseDirectSessionTransport = 31;
 
+    // Defaults to true. When false, NBS does not calculate or attach per-block
+    // checksums and DDisk/PersistentBuffer ignore checksum machinery.
+    optional bool EnableChecksums = 32;
+
     // Maximum aggregate bandwidth in megabytes per second for copying ranges
     // within a DirectBlockGroup. 0 disables throttling.
     optional uint32 CopyRangeBandwidthMbs = 33;

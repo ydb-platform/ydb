@@ -79,6 +79,7 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
     bool CleanupEraseSent = false;
     bool DisconnectSent = false;
     bool TestStarted = false;
+    bool EnableChecksums = true;
 
     std::vector<TWriteInfo> WriteInfos;
     TWeightedIndices WriteInfosByWeight;
@@ -120,10 +121,12 @@ public:
     }
 
     TPersistentBufferWriterLoadTestActor(const NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad& cmd, const TActorId& parent,
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 /*index*/, ui64 tag)
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 /*index*/, ui64 tag,
+            bool enableChecksums)
         : Parent(parent)
         , Tag(tag)
         , MaxInFlight(4, 0, 65536)
+        , EnableChecksums(enableChecksums)
         , Rng(Now().GetValue())
         , Report(new TEvLoad::TLoadReport())
     {
@@ -403,7 +406,11 @@ public:
             auto ev = std::make_unique<NDDisk::TEvWritePersistentBuffer>(Credentials,
                 NDDisk::TBlockSelector(1, 0, write.Size),
                 requestIdx, NDDisk::TWriteInstruction(0));
-            ev->AddPayloadThenChecksum(TRope(write.Data));
+            if (EnableChecksums) {
+                ev->AddPayloadThenChecksum(TRope(write.Data));
+            } else {
+                ev->AddPayload(TRope(write.Data));
+            }
             SendRequest(ctx, std::move(ev), requestIdx);
             ++Write_RequestsSent;
             ++InFlight;
@@ -641,8 +648,9 @@ public:
 } // namespace
 
 IActor *CreatePersistentBufferWriterLoadTest(const NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad& cmd,
-        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
-    return new TPersistentBufferWriterLoadTestActor(cmd, parent, counters, index, tag);
+        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag,
+        bool enableChecksums) {
+    return new TPersistentBufferWriterLoadTestActor(cmd, parent, counters, index, tag, enableChecksums);
 }
 
 } // NKikimr

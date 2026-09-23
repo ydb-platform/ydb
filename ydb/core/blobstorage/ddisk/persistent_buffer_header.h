@@ -31,8 +31,10 @@ namespace NKikimr::NDDisk {
         ui32 PDiskId;
         ui32 SlotId;
         ui32 BatchSize;
-
-        ui32 Reserved[13];
+        // Number of bytes at the start of this sector (starting from Signature) that are actually
+        // meaningful and therefore covered by Checksum.
+        ui32 HeaderDataSize;
+        ui32 Reserved[12];
     };
 
     static_assert(sizeof(TPersistentBufferHeader) == 128);

@@ -50,7 +50,13 @@ bool ValidateNameIsUnique(TContext& ctx, THashSet<TString>& seenNames, const TId
 
 class TUniqueTableKey: public ITableKeys {
 public:
-    TUniqueTableKey(TPosition pos, TString service, TString prefix,
+    TUniqueTableKey(TPosition pos, TString service, TDeferredAtom cluster,
+                    const TDeferredAtom& name, TViewDescription view)
+        : TUniqueTableKey(pos, service, TTablePathPrefix(service, cluster), name, std::move(view))
+    {
+    }
+
+    TUniqueTableKey(TPosition pos, TString service, TTablePathPrefix prefix,
                     const TDeferredAtom& name, TViewDescription view)
         : ITableKeys(pos)
         , Service_(std::move(service))
@@ -98,7 +104,7 @@ public:
             ctx.Error(Pos_) << "Table view can not be created with CREATE TABLE clause";
             return nullptr;
         }
-        auto path = AddTablePathPrefix(ctx, Prefix_, Name_);
+        auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), Name_);
         if (!path) {
             return nullptr;
         }
@@ -119,20 +125,30 @@ public:
 
 private:
     TString Service_;
-    TString Prefix_;
+    TTablePathPrefix Prefix_;
     TDeferredAtom Name_;
     TViewDescription View_;
     TString Full_;
 };
 
-TNodePtr BuildTableKey(TPosition pos, const TString& service, TStringBuf prefix,
+TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster,
                        const TDeferredAtom& name, const TViewDescription& view) {
-    return new TUniqueTableKey(pos, service, TString(prefix), name, view);
+    return new TUniqueTableKey(pos, service, cluster, name, view);
+}
+
+TNodePtr BuildTableKey(TPosition pos, const TString& service, TTablePathPrefix prefix,
+                       const TDeferredAtom& name, const TViewDescription& view) {
+    return new TUniqueTableKey(pos, service, std::move(prefix), name, view);
 }
 
 class TTopicKey: public ITableKeys {
 public:
-    TTopicKey(TPosition pos, TString prefix, const TDeferredAtom& name)
+    TTopicKey(TPosition pos, TDeferredAtom cluster, const TDeferredAtom& name)
+        : TTopicKey(pos, TTablePathPrefix({}, cluster), name)
+    {
+    }
+
+    TTopicKey(TPosition pos, TTablePathPrefix prefix, const TDeferredAtom& name)
         : ITableKeys(pos)
         , Prefix_(std::move(prefix))
         , Name_(name)
@@ -145,7 +161,7 @@ public:
     }
 
     TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode) override {
-        const auto path = AddTablePathPrefix(ctx, Prefix_, Name_);
+        const auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), Name_);
         if (!path) {
             return nullptr;
         }
@@ -154,13 +170,17 @@ public:
     }
 
 private:
-    TString Prefix_;
+    TTablePathPrefix Prefix_;
     TDeferredAtom Name_;
     TString Full_;
 };
 
-TNodePtr BuildTopicKey(TPosition pos, TStringBuf prefix, const TDeferredAtom& name) {
-    return new TTopicKey(pos, TString(prefix), name);
+TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name) {
+    return new TTopicKey(pos, cluster, name);
+}
+
+TNodePtr BuildTopicKey(TPosition pos, TTablePathPrefix prefix, const TDeferredAtom& name) {
+    return new TTopicKey(pos, std::move(prefix), name);
 }
 
 namespace {
@@ -511,7 +531,13 @@ INode::TPtr CreateGeneratedValue(const TGeneratedColumn& generated, TPosition po
 
 class TPrepTableKeys: public ITableKeys {
 public:
-    TPrepTableKeys(TPosition pos, TString service, TString prefix,
+    TPrepTableKeys(TPosition pos, TString service, TDeferredAtom cluster,
+                   TString func, const TVector<TTableArg>& args)
+        : TPrepTableKeys(pos, service, TTablePathPrefix(service, cluster), std::move(func), args)
+    {
+    }
+
+    TPrepTableKeys(TPosition pos, TString service, TTablePathPrefix prefix,
                    TString func, const TVector<TTableArg>& args)
         : ITableKeys(pos)
         , Service_(std::move(service))
@@ -555,7 +581,7 @@ public:
                 if (arg.HasAt) {
                     key = Y("TempTable", arg.Id.Build());
                 } else {
-                    auto path = AddTablePathPrefix(ctx, Prefix_, arg.Id);
+                    auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), arg.Id);
                     if (!path) {
                         return nullptr;
                     }
@@ -578,7 +604,7 @@ public:
                 if (arg.HasAt) {
                     key = Y("TempTable", arg.Id.Build());
                 } else {
-                    auto path = AddTablePathPrefix(ctx, Prefix_, arg.Id);
+                    auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), arg.Id);
                     if (!path) {
                         return nullptr;
                     }
@@ -639,7 +665,7 @@ public:
                 }
             }
 
-            auto path = AddTablePathPrefix(ctx, Prefix_, Args_[0].Id);
+            auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), Args_[0].Id);
             if (!path) {
                 return nullptr;
             }
@@ -739,7 +765,7 @@ public:
                 each = L(each, key);
             }
             if (ctx.PragmaUseTablePrefixForEach) {
-                const auto& prefixPath = Prefix_;
+                const auto prefixPath = Prefix_.Get(ctx);
                 if (prefixPath) {
                     each = L(each, BuildQuotedAtom(Pos_, TString(prefixPath)));
                 }
@@ -957,7 +983,7 @@ public:
 
             auto partitionList = Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
             if (ctx.PragmaUseTablePrefixForEach) {
-                const auto& prefixPath = Prefix_;
+                const auto prefixPath = Prefix_.Get(ctx);
                 if (prefixPath) {
                     partitionList = L(partitionList, BuildQuotedAtom(Pos_, TString(prefixPath)));
                 }
@@ -995,7 +1021,7 @@ public:
                 ExtractTableName(ctx, arg);
             }
 
-            auto path = AddTablePathPrefix(ctx, Prefix_, Args_[0].Id);
+            auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), Args_[0].Id);
             if (!path) {
                 return nullptr;
             }
@@ -1017,14 +1043,19 @@ public:
 
 private:
     TString Service_;
-    TString Prefix_;
+    TTablePathPrefix Prefix_;
     TString Func_;
     TVector<TTableArg> Args_;
 };
 
-TNodePtr BuildTableKeys(TPosition pos, const TString& service, TStringBuf prefix,
+TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster,
                         const TString& func, const TVector<TTableArg>& args) {
-    return new TPrepTableKeys(pos, service, TString(prefix), func, args);
+    return new TPrepTableKeys(pos, service, cluster, func, args);
+}
+
+TNodePtr BuildTableKeys(TPosition pos, const TString& service, TTablePathPrefix prefix,
+                        const TString& func, const TVector<TTableArg>& args) {
+    return new TPrepTableKeys(pos, service, std::move(prefix), func, args);
 }
 
 class TInputOptions final: public TAstListNode {
@@ -1713,10 +1744,17 @@ TNodePtr BuildTruncateTable(
 class TAlterTableNode final: public TAstListNode {
 public:
     TAlterTableNode(TPosition pos, const TTableRef& tr, TAlterTableParameters params, TScopedStatePtr scoped)
+        : TAlterTableNode(pos, tr, std::move(params), scoped, false)
+    {
+    }
+
+    TAlterTableNode(TPosition pos, const TTableRef& tr, TAlterTableParameters params, TScopedStatePtr scoped,
+                    bool renameDestinationResolved)
         : TAstListNode(pos)
         , Table_(tr)
         , Params_(std::move(params))
         , Scoped_(scoped)
+        , RenameDestinationResolved_(renameDestinationResolved)
     {
         scoped->UseCluster(Table_.Service, Table_.Cluster);
     }
@@ -1995,7 +2033,10 @@ public:
         }
 
         if (Params_.RenameTo) {
-            auto destination = BuildQuotedAtom(Params_.RenameTo->Pos, Params_.RenameTo->Name);
+            auto destination = RenameDestinationResolved_
+                ? BuildQuotedAtom(Params_.RenameTo->Pos, Params_.RenameTo->Name)
+                : ctx.GetPrefixedPath(Scoped_->CurrService, Scoped_->CurrCluster,
+                                     TDeferredAtom(Params_.RenameTo->Pos, Params_.RenameTo->Name));
             actions = L(actions, Q(Y(Q("renameTo"), destination)));
         }
 
@@ -2061,15 +2102,21 @@ private:
     TTableRef Table_;
     const TAlterTableParameters Params_;
     TScopedStatePtr Scoped_;
+    const bool RenameDestinationResolved_;
 };
+
+TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped)
+{
+    return new TAlterTableNode(pos, tr, params, scoped);
+}
 
 TNodePtr BuildAlterTable(TContext& ctx, const TTableRef& tr, TAlterTableParameters params)
 {
-    if (params.RenameTo) {
+    if (ctx.Settings.EnableTablePathPrefixMultiScopes && params.RenameTo) {
         params.RenameTo->Name = BuildTablePath(
-            ctx.GetPrefixPath(ctx.Scoped->CurrService, ctx.Scoped->CurrCluster), params.RenameTo->Name);
+            ctx.GetResolvedPrefixPath(ctx.Scoped->CurrService, ctx.Scoped->CurrCluster), params.RenameTo->Name);
     }
-    return new TAlterTableNode(ctx.Pos(), tr, std::move(params), ctx.Scoped);
+    return new TAlterTableNode(ctx.Pos(), tr, std::move(params), ctx.Scoped, ctx.Settings.EnableTablePathPrefixMultiScopes);
 }
 
 class TDropTableNode final: public TAstListNode {

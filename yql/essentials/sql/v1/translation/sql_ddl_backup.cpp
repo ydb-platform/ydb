@@ -204,7 +204,7 @@ TNodePtr TBackupTranslation::Build(const TRule_create_backup_collection_stmt& no
     const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
     return BuildCreateBackupCollection(
         Ctx_.Pos(),
-        TString(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster)),
+        TString(Ctx_.GetResolvedPrefixPath(context.ServiceId, context.Cluster)),
         objectId,
         TCreateBackupCollectionParameters{
             .Settings = std::move(kv),
@@ -263,7 +263,7 @@ TNodePtr TBackupTranslation::Build(const TRule_alter_backup_collection_stmt& nod
     const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
     return BuildAlterBackupCollection(
         Ctx_.Pos(),
-        TString(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster)),
+        TString(Ctx_.GetResolvedPrefixPath(context.ServiceId, context.Cluster)),
         objectId,
         TAlterBackupCollectionParameters{
             .Settings = std::move(kv),
@@ -290,7 +290,7 @@ TNodePtr TBackupTranslation::Build(const TRule_drop_backup_collection_stmt& node
     const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
     return BuildDropBackupCollection(
         Ctx_.Pos(),
-        TString(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster)),
+        TString(Ctx_.GetResolvedPrefixPath(context.ServiceId, context.Cluster)),
         objectId,
         TDropBackupCollectionParameters{
             .MissingOk = false,
@@ -312,7 +312,7 @@ TNodePtr TBackupTranslation::Build(const TRule_backup_stmt& node) {
     const TString& objectId = Id(node.GetRule_object_ref2().GetRule_id_or_at2(), *this).second;
     return BuildBackup(
         Ctx_.Pos(),
-        TString(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster)),
+        TString(Ctx_.GetResolvedPrefixPath(context.ServiceId, context.Cluster)),
         objectId,
         TBackupParameters{
             .Incremental = incremental,
@@ -342,7 +342,7 @@ TNodePtr TBackupTranslation::Build(const TRule_restore_stmt& node) {
     const TString& objectId = Id(node.GetRule_object_ref2().GetRule_id_or_at2(), *this).second;
     return BuildRestore(
         Ctx_.Pos(),
-        TString(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster)),
+        TString(Ctx_.GetResolvedPrefixPath(context.ServiceId, context.Cluster)),
         objectId,
         TRestoreParameters{
             .At = at,

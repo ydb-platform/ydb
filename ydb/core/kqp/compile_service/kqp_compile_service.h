@@ -121,6 +121,7 @@ public:
     TKqpCompileResult::TConstPtr FindByAst(
         const TKqpQueryId& query,
         const NYql::TAstParseResult& ast,
+        bool enableTablePathPrefixMultiScopes,
         bool promote,
         EWarmupAttributionMode warmupAttribution,
         TIntrusivePtr<TKqpCounters> counters,

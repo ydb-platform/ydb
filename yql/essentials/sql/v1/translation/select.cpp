@@ -1118,7 +1118,12 @@ TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString
 
 class TInnerSource: public IProxySource {
 public:
-    TInnerSource(TPosition pos, TNodePtr node, TString service, TDeferredAtom cluster, TString prefix, const TString& label)
+    TInnerSource(TPosition pos, TNodePtr node, TString service, TDeferredAtom cluster, const TString& label)
+        : TInnerSource(pos, std::move(node), service, cluster, TTablePathPrefix(service, cluster), label)
+    {
+    }
+
+    TInnerSource(TPosition pos, TNodePtr node, TString service, TDeferredAtom cluster, TTablePathPrefix prefix, const TString& label)
         : IProxySource(pos, /*src=*/nullptr)
         , Node_(std::move(node))
         , Service_(std::move(service))
@@ -1243,7 +1248,7 @@ protected:
     TSourcePtr NewSource_;
 
 private:
-    TString Prefix_;
+    TTablePathPrefix Prefix_;
     TMaybe<TPosition> SamplingPos_;
     ESampleClause SamplingClause_;
     ESampleMode SamplingMode_;
@@ -1258,8 +1263,12 @@ private:
     TTableHints ContextHints_;
 };
 
-TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, TStringBuf prefix, const TString& label) {
-    return new TInnerSource(pos, node, service, cluster, TString(prefix), label);
+TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, const TString& label) {
+    return new TInnerSource(pos, std::move(node), service, cluster, label);
+}
+
+TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, TTablePathPrefix prefix, const TString& label) {
+    return new TInnerSource(pos, node, service, cluster, std::move(prefix), label);
 }
 
 namespace {

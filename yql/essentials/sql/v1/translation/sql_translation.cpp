@@ -1374,7 +1374,7 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
     tr.Cluster = TDeferredAtom(Ctx_.Pos(), bindingInfo.Cluster);
 
     const TString view = "";
-    tr.Keys = BuildTableKey(Ctx_.Pos(), tr.Service, Ctx_.GetPrefixPath(tr.Service, tr.Cluster), TDeferredAtom(Ctx_.Pos(), bindingInfo.Path), {.ViewName = view});
+    tr.Keys = BuildTableKey(Ctx_.Pos(), tr.Service, TTablePathPrefix(Ctx_, tr.Service, tr.Cluster), TDeferredAtom(Ctx_.Pos(), bindingInfo.Path), {.ViewName = view});
 
     return true;
 }
@@ -1426,7 +1426,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                     return false;
                 }
             } else {
-                tr.Keys = BuildTableKey(pos, service, Ctx_.GetPrefixPath(service, cluster), TDeferredAtom(pos, pair.first), pair.second);
+                tr.Keys = BuildTableKey(pos, service, TTablePathPrefix(Ctx_, service, cluster), TDeferredAtom(pos, pair.first), pair.second);
             }
             break;
         }
@@ -1457,7 +1457,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                 }
             }
             tableHints = GetTableFuncHints(*keyFunc);
-            tr.Keys = BuildTableKeys(pos, service, Ctx_.GetPrefixPath(service, cluster), *keyFunc, args);
+            tr.Keys = BuildTableKeys(pos, service, TTablePathPrefix(Ctx_, service, cluster), *keyFunc, args);
             break;
         }
         case TRule_table_ref::TBlock3::kAlt3: {
@@ -1487,7 +1487,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                     return false;
                 }
 
-                auto source = TryMakeSourceFromExpression(Ctx_.Pos(), Ctx_, service, cluster, namedNode, Ctx_.GetPrefixPath(service, cluster), "@");
+                auto source = TryMakeSourceFromExpression(Ctx_.Pos(), Ctx_, service, cluster, namedNode, TTablePathPrefix(Ctx_, service, cluster), "@");
                 if (!source) {
                     Ctx_.Error() << "Cannot infer cluster and table name";
                     return false;
@@ -1531,7 +1531,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                 return true;
             }
 
-            auto ret = BuildInnerSource(Ctx_.Pos(), nodePtr, service, cluster, Ctx_.GetPrefixPath(service, cluster));
+            auto ret = BuildInnerSource(Ctx_.Pos(), nodePtr, service, cluster, TTablePathPrefix(Ctx_, service, cluster));
             if (alt.HasBlock3()) {
                 auto view = Id(alt.GetBlock3().GetRule_view_name2(), *this);
                 Ctx_.IncrementMonCounter("sql_features", "View");
@@ -4242,7 +4242,7 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
             result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
             auto tableOrAt = Id(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2(), *this);
             auto tableAndView = TableKeyImpl(tableOrAt, {}, *this);
-            result.Keys = BuildTableKey(Context().Pos(), result.Service, Context().GetPrefixPath(result.Service, result.Cluster),
+            result.Keys = BuildTableKey(Context().Pos(), result.Service, TTablePathPrefix(Context(), result.Service, result.Cluster),
                                         TDeferredAtom(Context().Pos(), tableAndView.first), tableAndView.second);
             break;
         }
@@ -4271,7 +4271,7 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
             TDeferredAtom table;
             MakeTableFromExpression(Context().Pos(), Context(), named, table);
             result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
-            result.Keys = BuildTableKey(Context().Pos(), result.Service, Context().GetPrefixPath(result.Service, result.Cluster), table, {.ViewName = at ? "@" : ""});
+            result.Keys = BuildTableKey(Context().Pos(), result.Service, TTablePathPrefix(Context(), result.Service, result.Cluster), table, {.ViewName = at ? "@" : ""});
             break;
         }
         case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:
@@ -4302,7 +4302,7 @@ bool TSqlTranslation::TopicRefImpl(const TRule_topic_ref& node, TTopicRef& resul
 
     result = TTopicRef(Context().MakeName("topic"), cluster, nullptr);
     auto topic = Id(node.GetRule_an_id2(), *this);
-    result.Keys = BuildTopicKey(Context().Pos(), Context().GetPrefixPath(service, result.Cluster), TDeferredAtom(Context().Pos(), topic));
+    result.Keys = BuildTopicKey(Context().Pos(), TTablePathPrefix(Context(), Context().Settings.EnableTablePathPrefixMultiScopes ? service : TString(), result.Cluster), TDeferredAtom(Context().Pos(), topic));
 
     return true;
 }
@@ -5995,7 +5995,7 @@ TMaybe<TDeferredAtom> TSqlTranslation::DoParseObjectPath(const TRule_object_ref&
         Error() << "'@' is not allowed prefix for object name";
         return Nothing();
     }
-    return TDeferredAtom(Ctx_.Pos(), useTablePrefix ? BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId) : objectId);
+    return TDeferredAtom(Ctx_.Pos(), useTablePrefix ? BuildTablePath(Ctx_.GetResolvedPrefixPath(context.ServiceId, context.Cluster), objectId) : objectId);
 }
 
 TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_simple_table_ref_core& node, TObjectOperatorContext& context) {
@@ -6024,7 +6024,7 @@ TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_simple_table_
             Error() << "Temporary object is not supported";
             return {};
         }
-        result = TDeferredAtom(Ctx_.Pos(), BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId));
+        result = TDeferredAtom(Ctx_.Pos(), BuildTablePath(Ctx_.GetResolvedPrefixPath(context.ServiceId, context.Cluster), objectId));
     } else {
         // (cluster_expr DOT)? COMMAT? bind_parameter
         TString bindName;

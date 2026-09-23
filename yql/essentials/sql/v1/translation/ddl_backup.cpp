@@ -78,7 +78,9 @@ public:
             entries->Add(Q(Y(Q(Y(Q("type"), Q("database"))))));
         }
         for (auto& table : Params_.Tables) {
-            auto path = AddTablePathPrefix(ctx, Prefix_, table);
+            auto path = ctx.Settings.EnableTablePathPrefixMultiScopes
+                ? AddTablePathPrefix(ctx, Prefix_, table)
+                : ctx.GetPrefixedPath(ServiceId, Cluster, table);
             entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)))));
         }
         options->Add(Q(Y(Q("entries"), Q(entries))));
@@ -130,11 +132,15 @@ public:
             entries->Add(Q(Y(Q(Y(Q("type"), Q("database"))), Q(Y(Q("action"), Q(Params_.Database == TAlterBackupCollectionParameters::EDatabase::Add ? "add" : "drop"))))));
         }
         for (auto& table : Params_.TablesToAdd) {
-            auto path = AddTablePathPrefix(ctx, Prefix_, table);
+            auto path = ctx.Settings.EnableTablePathPrefixMultiScopes
+                ? AddTablePathPrefix(ctx, Prefix_, table)
+                : ctx.GetPrefixedPath(ServiceId, Cluster, table);
             entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)), Q(Y(Q("action"), Q("add"))))));
         }
         for (auto& table : Params_.TablesToDrop) {
-            auto path = AddTablePathPrefix(ctx, Prefix_, table);
+            auto path = ctx.Settings.EnableTablePathPrefixMultiScopes
+                ? AddTablePathPrefix(ctx, Prefix_, table)
+                : ctx.GetPrefixedPath(ServiceId, Cluster, table);
             entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)), Q(Y(Q("action"), Q("drop"))))));
         }
         options->Add(Q(Y(Q("alterEntries"), Q(entries))));

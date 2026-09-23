@@ -20,6 +20,7 @@
 #include <util/generic/vector.h>
 
 #include <utility>
+#include <variant>
 
 namespace NSQLTranslationV1 {
 inline bool IsAnonymousName(const TString& name) {
@@ -100,6 +101,21 @@ enum class EFlattenAndAggrExprsPersistence {
 };
 
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path);
+
+// Keep a value for source-order semantics, or defer lookup for legacy compatibility.
+class TTablePathPrefix {
+public:
+    TTablePathPrefix(const TString& service, const TDeferredAtom& cluster);
+    TTablePathPrefix(TContext& ctx, const TString& service, const TDeferredAtom& cluster);
+    TString Get(TContext& ctx) const;
+
+private:
+    struct TDeferred {
+        TString Service;
+        TDeferredAtom Cluster;
+    };
+    std::variant<TString, TDeferred> Prefix_;
+};
 
 class TContext {
 public:
@@ -183,6 +199,7 @@ public:
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
+    TString GetResolvedPrefixPath(const TString& service, const TDeferredAtom& cluster);
 
     TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
 
@@ -308,6 +325,7 @@ private:
     THolder<TStringOutput> IssueMsgHolder_;
     NSQLTranslation::TClusterMapping ClusterMapping_;
     TString PathPrefix_;
+    bool HasTablePathPrefixReferences_ = false;
     THashMap<TString, TString> ProviderPathPrefixes_;
     THashMap<TString, TString> ClusterPathPrefixes_;
     bool IntoHeading_ = true;

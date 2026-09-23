@@ -3561,7 +3561,13 @@ TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr) {
 }
 
 TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
-                                       TNodePtr node, TStringBuf prefix, const TString& view) {
+                                       TNodePtr node, const TString& view) {
+    return TryMakeSourceFromExpression(pos, ctx, currService, currCluster, std::move(node),
+                                      TTablePathPrefix(currService, currCluster), view);
+}
+
+TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
+                                       TNodePtr node, TTablePathPrefix prefix, const TString& view) {
     if (currCluster.Empty()) {
         ctx.Error() << "No cluster name given and no default cluster is selected";
         return nullptr;

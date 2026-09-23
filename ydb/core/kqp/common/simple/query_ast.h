@@ -20,6 +20,7 @@ struct TQueryAst {
     TMaybe<bool> DeprecatedSQL;
     bool KeepInCache;
     TMaybe<TString> CommandTagName;
+    bool EnableTablePathPrefixMultiScopes = true;
 };
 
 } // namespace NKikimr::NKqp

@@ -91,7 +91,8 @@ namespace NKqp {
     XX(DB_KQP_QUERIES_WITH_RANGE_SCAN, QueriesWithRangeScan) \
     XX(DB_KQP_QUERIES_WITH_FULL_SCAN, QueriesWithFullScan) \
     XX(DB_KQP_YDB_RESPONSE_BYTES, YdbResponseBytes) \
-    XX(DB_KQP_CREATE_SESSION_REQ, CreateSessionRequests)
+    XX(DB_KQP_CREATE_SESSION_REQ, CreateSessionRequests) \
+    XX(DB_KQP_TABLE_PATH_PREFIX_SWITCHED_SCOPE_TO_GLOBAL, TablePathPrefixSwitchedScopeToGlobal)
 
 #define DB_KQP_HISTOGRAM_COUNTERS_MAP(XX) \
     XX(DB_KQP_QUERY_LATENCY_EXECUTE, QueryLatencies[NKikimrKqp::QUERY_ACTION_EXECUTE]) \

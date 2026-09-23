@@ -49,11 +49,10 @@ TAstNode* CreateAlterTable(TContext& parserContext, const TString& tableName, co
     TTableRef tableRef(tableName, parserContext.Scoped->CurrService, parserContext.Scoped->CurrCluster, {});
     {
         TDeferredAtom tableAtom(parserContext.Pos(), tableName);
-        tableRef.Keys = BuildTableKey(parserContext.Pos(), tableRef.Service,
-            parserContext.GetPrefixPath(tableRef.Service, tableRef.Cluster), tableAtom, {});
+        tableRef.Keys = BuildTableKey(parserContext.Pos(), tableRef.Service, tableRef.Cluster, tableAtom, {});
     }
 
-    auto alterTableNode = BuildAlterTable(parserContext, tableRef, params);
+    auto alterTableNode = BuildAlterTable(parserContext.Pos(), tableRef, params, parserContext.Scoped);
     UNIT_ASSERT_C(alterTableNode, parserContext.Issues.ToString());
     UNIT_ASSERT_C(alterTableNode->Init(parserContext, nullptr), parserContext.Issues.ToString());
     TAstNode* alterTableAst = alterTableNode->Translate(parserContext);
@@ -830,15 +829,34 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
         }
     }
 
+    Y_UNIT_TEST(LegacyAlterTableFactoryKeepsDeferredRenameWithOptInContext) {
+        NYql::TIssues issues;
+        auto parserContext = CreateDefaultParserContext(issues);
+        parserContext.Settings.EnableTablePathPrefixMultiScopes = true;
+        UNIT_ASSERT(parserContext.SetPathPrefix("/first"));
+        TTableRef tableRef("Input", parserContext.Scoped->CurrService, parserContext.Scoped->CurrCluster, {});
+        tableRef.Keys = BuildTableKey(parserContext.Pos(), tableRef.Service, tableRef.Cluster,
+            TDeferredAtom(parserContext.Pos(), "Input"), {});
+        TAlterTableParameters params;
+        params.RenameTo = TIdentifier(parserContext.Pos(), "Renamed");
+        auto alterTableNode = BuildAlterTable(parserContext.Pos(), tableRef, params, parserContext.Scoped);
+        UNIT_ASSERT(parserContext.SetPathPrefix("/later"));
+        UNIT_ASSERT_C(alterTableNode->Init(parserContext, nullptr), issues.ToString());
+        const auto* ast = alterTableNode->Translate(parserContext);
+        UNIT_ASSERT_C(ast, issues.ToString());
+        UNIT_ASSERT_STRING_CONTAINS(ast->ToString(), "/later/Renamed");
+    }
+
     Y_UNIT_TEST(AlterTableRenameCapturesPrefixAtConstruction) {
         for (const TString destination : {"Renamed", "/absolute/Renamed"}) {
             NYql::TIssues issues;
             auto parserContext = CreateDefaultParserContext(issues);
+            parserContext.Settings.EnableTablePathPrefixMultiScopes = true;
             UNIT_ASSERT(parserContext.SetPathPrefix("/first"));
 
             TTableRef tableRef("Input", parserContext.Scoped->CurrService, parserContext.Scoped->CurrCluster, {});
             tableRef.Keys = BuildTableKey(parserContext.Pos(), tableRef.Service,
-                parserContext.GetPrefixPath(tableRef.Service, tableRef.Cluster),
+                TTablePathPrefix(parserContext, tableRef.Service, tableRef.Cluster),
                 TDeferredAtom(parserContext.Pos(), "Input"), {});
 
             TAlterTableParameters params;

@@ -144,6 +144,10 @@ public:
         return IsAmbiguityError;
     }
 
+    bool GetEnableTablePathPrefixMultiScopes() const {
+        return EnableTablePathPrefixMultiScopes;
+    }
+
     TKqpTranslationSettingsBuilder& SetYqlSelect(TMaybe<NSQLTranslation::EYqlSelect> yqlSelect) {
         YqlSelect = yqlSelect;
         return *this;
@@ -171,6 +175,8 @@ private:
     bool IsAmbiguityError = false;
     TMaybe<NSQLTranslation::EYqlSelect> YqlSelect = {};
     bool ValidateViewStatement = true;
+    bool EnableTablePathPrefixMultiScopes = true;
+    NSQLTranslation::TIncrementMonCounterFunction IncrementCounter;
 };
 
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);

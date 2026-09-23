@@ -22,6 +22,28 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
+TTablePathPrefix::TTablePathPrefix(const TString& service, const TDeferredAtom& cluster)
+    : Prefix_(TDeferred{service, cluster})
+{
+}
+
+TTablePathPrefix::TTablePathPrefix(TContext& ctx, const TString& service, const TDeferredAtom& cluster) {
+    const TString prefix(ctx.GetResolvedPrefixPath(service, cluster));
+    if (ctx.Settings.EnableTablePathPrefixMultiScopes) {
+        Prefix_ = prefix;
+    } else {
+        Prefix_ = TDeferred{service, cluster};
+    }
+}
+
+TString TTablePathPrefix::Get(TContext& ctx) const {
+    if (const auto* prefix = std::get_if<TString>(&Prefix_)) {
+        return *prefix;
+    }
+    const auto& deferred = std::get<TDeferred>(Prefix_);
+    return ctx.GetResolvedPrefixPath(deferred.Service, deferred.Cluster);
+}
+
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
     if (prefixPath.empty()) {
         return path.Build();
@@ -392,10 +414,16 @@ bool TContext::IsDynamicCluster(const TDeferredAtom& cluster) const {
 }
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
+    const auto setPrefix = [&](TString& prefix) {
+        if (HasTablePathPrefixReferences_ && prefix != value) {
+            IncrementMonCounter("TablePathPrefix", "SwitchedScopeToGlobal");
+        }
+        prefix = value;
+    };
     if (arg.Defined()) {
         if (*arg == YtProviderName || *arg == KikimrProviderName || *arg == RtmrProviderName)
         {
-            ProviderPathPrefixes_[*arg] = value;
+            setPrefix(ProviderPathPrefixes_[*arg]);
             return true;
         }
 
@@ -406,20 +434,25 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
             return false;
         }
 
-        ClusterPathPrefixes_[normalizedClusterName] = value;
+        setPrefix(ClusterPathPrefixes_[normalizedClusterName]);
     } else {
-        PathPrefix_ = value;
+        setPrefix(PathPrefix_);
     }
 
     return true;
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
-    TStringBuf prefixPath = GetPrefixPath(service, cluster);
+    const TString prefixPath = GetResolvedPrefixPath(service, cluster);
     if (prefixPath) {
         return AddTablePathPrefix(*this, prefixPath, path);
     }
     return path.Build();
+}
+
+TString TContext::GetResolvedPrefixPath(const TString& service, const TDeferredAtom& cluster) {
+    HasTablePathPrefixReferences_ = true;
+    return TString(GetPrefixPath(service, cluster));
 }
 
 TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {

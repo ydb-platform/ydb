@@ -175,6 +175,8 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
     SetLangVer(config.GetDefaultLangVer());
     SetBackportMode(config.GetYqlBackportMode());
     SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
+    EnableTablePathPrefixMultiScopes = config.FeatureFlags.GetEnableTablePathPrefixMultiScopes();
+    IncrementCounter = config.IncrementTranslationCounter;
     return *this;
 }
 
@@ -182,6 +184,8 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = LangVer;
     settings.BackportMode = BackportMode;
+    settings.EnableTablePathPrefixMultiScopes = EnableTablePathPrefixMultiScopes;
+    settings.IncrementCounter = IncrementCounter;
 
     settings.SyntaxVersion = 1;
 
@@ -344,14 +348,16 @@ TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>&
         return TQueryAst(std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult(PgSyntaxNotSupportedMessage)), {}, {}, false, {});
     }
 
-    bool deprecatedSQL;
-    bool keepInCache;
+    bool deprecatedSQL = false;
+    bool keepInCache = true;
     TMaybe<TString> commandTagName;
     TMaybe<ui16> sqlVersion;
 
     NYql::TExprContext ctx;
     auto astRes = ParseQuery(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder, keepInCache, commandTagName);
-    return TQueryAst(std::make_shared<NYql::TAstParseResult>(std::move(astRes)), sqlVersion, deprecatedSQL, keepInCache, commandTagName);
+    TQueryAst result(std::make_shared<NYql::TAstParseResult>(std::move(astRes)), sqlVersion, deprecatedSQL, keepInCache, commandTagName);
+    result.EnableTablePathPrefixMultiScopes = settingsBuilder.GetEnableTablePathPrefixMultiScopes();
+    return result;
 }
 
 TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
@@ -399,11 +405,14 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         }
         for (size_t i = 0; i < astStatements.size(); ++i) {
             result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(astStatements[i])), sqlVersion, false, stmtParseInfo[i].KeepInCache, stmtParseInfo[i].CommandTagName});
+            result.back().EnableTablePathPrefixMultiScopes = settingsBuilder.GetEnableTablePathPrefixMultiScopes();
         }
         return result;
     } else {
         sqlVersion = {};
-        return {{std::make_shared<NYql::TAstParseResult>(NYql::ParseAst(queryText)), sqlVersion, true, true, {}}};
+        TQueryAst astResult(std::make_shared<NYql::TAstParseResult>(NYql::ParseAst(queryText)), sqlVersion, true, true, {});
+        astResult.EnableTablePathPrefixMultiScopes = settingsBuilder.GetEnableTablePathPrefixMultiScopes();
+        return {std::move(astResult)};
     }
 }
 

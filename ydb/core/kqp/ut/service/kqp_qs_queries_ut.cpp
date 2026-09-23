@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
@@ -6246,6 +6247,99 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::YQL_NO_STATEMENTS),
                 query << ": " << result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(TablePathPrefixMultiScopesFlagAndDiagnostic) {
+        const TString query = R"sql(
+            PRAGMA TablePathPrefix = '/first';
+            $query = SELECT * FROM Input;
+            PRAGMA TablePathPrefix = '/second';
+            SELECT * FROM $query;
+            SELECT * FROM Other;
+        )sql";
+        for (const bool enabled : {false, true}) {
+            for (const bool perStatement : {false, true}) {
+                size_t switches = 0;
+                NYql::TKikimrConfiguration config;
+                config.FeatureFlags.SetEnableTablePathPrefixMultiScopes(enabled);
+                config.IncrementTranslationCounter = [&](const TString& group, const TString& name) {
+                    if (group == "TablePathPrefix" && name == "SwitchedScopeToGlobal") {
+                        ++switches;
+                    }
+                };
+                TKqpTranslationSettingsBuilder builder(NYql::EKikimrQueryType::Query, "cluster", query,
+                    NSQLTranslation::EBindingsMode::DISABLED, {});
+                builder.SetFromConfig(config);
+                const auto results = ParseStatements(query, {}, true, builder, perStatement);
+                UNIT_ASSERT_VALUES_EQUAL(results.size(), perStatement ? 2 : 1);
+                TString program;
+                for (const auto& result : results) {
+                    UNIT_ASSERT_C(result.Ast->IsOk(), result.Ast->Issues.ToString());
+                    UNIT_ASSERT_VALUES_EQUAL(result.EnableTablePathPrefixMultiScopes, enabled);
+                    program += result.Ast->Root->ToString();
+                }
+                UNIT_ASSERT_STRING_CONTAINS(program, enabled ? "/first/Input" : "/second/Input");
+                UNIT_ASSERT_C(!program.Contains(enabled ? "/second/Input" : "/first/Input"), program);
+                UNIT_ASSERT_STRING_CONTAINS(program, "/second/Other");
+                // A split translation replays the named query once per statement.
+                UNIT_ASSERT_VALUES_EQUAL(switches, perStatement ? 2 : 1);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TablePathPrefixMultiScopesNativeAstSnapshot) {
+        const TString query = "((return world))";
+        for (const bool enabled : {false, true}) {
+            for (const bool perStatement : {false, true}) {
+                NYql::TKikimrConfiguration config;
+                config.FeatureFlags.SetEnableTablePathPrefixMultiScopes(enabled);
+                TKqpTranslationSettingsBuilder builder(NYql::EKikimrQueryType::Query, "cluster", query,
+                    NSQLTranslation::EBindingsMode::DISABLED, {});
+                builder.SetFromConfig(config);
+                const auto results = ParseStatements(query, {}, false, builder, perStatement);
+                UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+                UNIT_ASSERT_C(results.front().Ast->IsOk(), results.front().Ast->Issues.ToString());
+                UNIT_ASSERT(results.front().KeepInCache);
+                UNIT_ASSERT_VALUES_EQUAL(results.front().EnableTablePathPrefixMultiScopes, enabled);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TablePathPrefixScopeDiagnosticIsDatabaseScopedAndSerialized) {
+        auto global = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto database = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto external = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto dbCounters = MakeIntrusive<TKqpDbCounters>(external, database);
+        TKqpCounters counters(global);
+        NYql::TKikimrConfiguration config;
+        config.FeatureFlags.SetEnableTablePathPrefixMultiScopes(false);
+        config.IncrementTranslationCounter = [&](const TString& group, const TString& name) {
+            counters.ReportTranslationCounter(dbCounters, group, name);
+        };
+        const TString query = R"sql(
+            SELECT * FROM Input;
+            PRAGMA TablePathPrefix = '/first';
+            PRAGMA TablePathPrefix = '/first';
+            PRAGMA TablePathPrefix = '/second';
+        )sql";
+        TKqpTranslationSettingsBuilder builder(NYql::EKikimrQueryType::Query, "cluster", query,
+            NSQLTranslation::EBindingsMode::DISABLED, {});
+        builder.SetFromConfig(config);
+        const auto results = ParseStatements(query, {}, true, builder, false);
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        UNIT_ASSERT_C(results.front().Ast->IsOk(), results.front().Ast->Issues.ToString());
+        const TString name = "TablePathPrefix/SwitchedScopeToGlobal";
+        UNIT_ASSERT_VALUES_EQUAL(GetServiceCounters(global, "kqp")->GetCounter(name, true)->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(database->GetCounter(name, true)->Val(), 2);
+
+        NSysView::TDbServiceCounters serialized;
+        dbCounters->ToProto(serialized);
+        auto restoredDatabase = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto restoredExternal = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TKqpDbCounters restored(restoredExternal, restoredDatabase);
+        UNIT_ASSERT_VALUES_EQUAL(restoredDatabase->GetCounter(name, true)->Val(), 0);
+        restored.FromProto(serialized);
+        UNIT_ASSERT_VALUES_EQUAL(restoredDatabase->GetCounter(name, true)->Val(), 2);
     }
 
     Y_UNIT_TEST(ParseStatementsPreservesSyntaxErrors) {

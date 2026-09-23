@@ -6,6 +6,7 @@
 namespace NSQLTranslationV1 {
 using TColumnsSets = NSorted::TSimpleSet<NSorted::TSimpleSet<TString>>;
 
+class TTablePathPrefix;
 class ISource;
 using TSourcePtr = TIntrusivePtr<ISource>;
 
@@ -293,7 +294,8 @@ TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);
 TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom = false, bool inSubquery = false);
 TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node, bool wrapToList = false, bool wrapByTableSource = false);
 TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString& label = TString());
-TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, TStringBuf prefix, const TString& label = TString());
+TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, const TString& label = TString());
+TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, TTablePathPrefix prefix, const TString& label = TString());
 TSourcePtr BuildRefColumnSource(TPosition pos, const TString& partExpression);
 TSourcePtr BuildSelectOp(TPosition pos, TVector<TSourcePtr>&& sources, const TString& op, bool quantifierAll, const TWriteSettings& settings);
 TSourcePtr BuildOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource);
@@ -358,13 +360,17 @@ TNodePtr BuildBatchDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef
 
 // Implemented in query.cpp
 TNodePtr BuildTruncateTable(TPosition pos, const TTableRef& tr, const TTruncateTableParameters& params, TScopedStatePtr scoped);
-// Resolve a relative rename destination using the prefix active when the node is built.
+TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped);
+// Capture the rename destination prefix when source-order semantics are enabled.
 TNodePtr BuildAlterTable(TContext& ctx, const TTableRef& tr, TAlterTableParameters params);
 TNodePtr BuildAlterDatabase(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAlterDatabaseParameters& params, TScopedStatePtr scoped);
-// Preserve the prefix selected at the table reference, before later pragmas update the context.
-TNodePtr BuildTableKey(TPosition pos, const TString& service, TStringBuf prefix, const TDeferredAtom& name, const TViewDescription& view);
-TNodePtr BuildTableKeys(TPosition pos, const TString& service, TStringBuf prefix, const TString& func, const TVector<TTableArg>& args);
-TNodePtr BuildTopicKey(TPosition pos, TStringBuf prefix, const TDeferredAtom& name);
+TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TViewDescription& view);
+TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& func, const TVector<TTableArg>& args);
+TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name);
+// Opt-in overloads accept the prefix policy selected at the table reference.
+TNodePtr BuildTableKey(TPosition pos, const TString& service, TTablePathPrefix prefix, const TDeferredAtom& name, const TViewDescription& view);
+TNodePtr BuildTableKeys(TPosition pos, const TString& service, TTablePathPrefix prefix, const TString& func, const TVector<TTableArg>& args);
+TNodePtr BuildTopicKey(TPosition pos, TTablePathPrefix prefix, const TDeferredAtom& name);
 TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints);
 TNodePtr BuildInputTables(
     TPosition pos, const TTableList& tables, bool inSubquery, TScopedStatePtr scoped,
@@ -378,7 +384,9 @@ TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom
 TNodePtr BuildShowCreate(TPosition pos, const TTableRef& table, const TString& type, TScopedStatePtr scoped);
 TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& id, const TSequenceParameters& params, TScopedStatePtr scoped);
 TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
-                                       TNodePtr node, TStringBuf prefix, const TString& view = {});
+                                       TNodePtr node, const TString& view = {});
+TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
+                                       TNodePtr node, TTablePathPrefix prefix, const TString& view = {});
 void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix = {});
 TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node, const TString& prefix = {});
 TString NormalizeTypeString(const TString& str);

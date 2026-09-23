@@ -405,4 +405,6 @@ message TFeatureFlags {
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
     optional bool EnableIamDelegationSecrets = 336 [default = false]; // YDBFEATURES-144
     optional bool EnableStreamingQueryStateRecompute = 337 [default = false];
+    // Disable to keep resolving earlier table references with the final TablePathPrefix.
+    optional bool EnableTablePathPrefixMultiScopes = 339 [default = true];
 }

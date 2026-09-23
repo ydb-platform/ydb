@@ -53,6 +53,12 @@ TDuration Age(const TInstant now, const TInstant since) {
     return now > since ? now - since : TDuration::Zero();
 }
 
+ui64 PromotionCutoffStep(const TInstant now, const TDuration promotionTime) {
+    const ui64 nowMs = now.MilliSeconds();
+    const ui64 promotionMs = promotionTime.MilliSeconds();
+    return nowMs > promotionMs ? nowMs - promotionMs : 0;
+}
+
 } // namespace
 
 void TLocalSnapshotsStorage::Insert(TLocalSnapshotInfo snapshot) {
@@ -93,11 +99,8 @@ TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::View() const {
 }
 
 TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::View(TInstant now) const {
-    const ui64 promotionMs =
-        TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds();
-    const ui64 nowMs = now.MilliSeconds();
-    const ui64 maxSnapshotStep = nowMs > promotionMs ? nowMs - promotionMs : 0;
-    return View(maxSnapshotStep);
+    const TDuration promotionTime = TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds());
+    return View(PromotionCutoffStep(now, promotionTime));
 }
 
 TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::View(ui64 maxSnapshotStep) const {
@@ -209,7 +212,11 @@ TRowVersion TRemoteSnapshotsStorage::GetBorder() const {
 }
 
 TInstant TRemoteSnapshotsStorage::GetOldestCollectionTime() const {
-    TInstant oldest = AppData()->TimeProvider->Now();
+    return GetOldestCollectionTime(AppData()->TimeProvider->Now());
+}
+
+TInstant TRemoteSnapshotsStorage::GetOldestCollectionTime(TInstant now) const {
+    TInstant oldest = now;
     for (const auto& [nodeId, state] : NodeIdToState) {
         oldest = std::min(oldest, state.CollectionTime);
     }
@@ -238,16 +245,9 @@ TString RenderSnapshotsMonPage(
     const IImmutableSnapshotRegistry* currentRegistry) {
     const TRowVersion border = remoteSnapshots.GetBorder();
     const ui64 nowMs = now.MilliSeconds();
-    const ui64 promotionMs = localPromotionTime.MilliSeconds();
-    // Same cutoff as the maintenance path (TLocalSnapshotsStorage::View(TInstant)).
-    const ui64 localCutoffStep = nowMs > promotionMs ? nowMs - promotionMs : 0;
+    const ui64 localCutoffStep = PromotionCutoffStep(now, localPromotionTime);
     const THashMap<ui32, TInstant> nodeIdToCollectionTime = remoteSnapshots.GetNodeIdToCollectionTime();
-    // Same semantics as TRemoteSnapshotsStorage::GetOldestCollectionTime, without
-    // AppData() access (the local node counts as now).
-    TInstant oldestCollectionTime = now;
-    for (const auto& [nodeId, collectionTime] : nodeIdToCollectionTime) {
-        oldestCollectionTime = std::min(oldestCollectionTime, collectionTime);
-    }
+    const TInstant oldestCollectionTime = remoteSnapshots.GetOldestCollectionTime(now);
 
     TStringStream str;
     HTML(str) {

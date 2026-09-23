@@ -135,6 +135,7 @@ public:
     // Oldest collection time across all contributing nodes, including the local node (counted
     // as now since its snapshots are collected right now). With no remote nodes this is now.
     TInstant GetOldestCollectionTime() const;
+    TInstant GetOldestCollectionTime(TInstant now) const;
 
     // Per-node collection times, used to seed a peer's registry freshness during prefill.
     THashMap<ui32, TInstant> GetNodeIdToCollectionTime() const;

@@ -3688,7 +3688,8 @@ public:
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
             if (isFinal) {
-                txCtx->Invalidate();
+                // Drop snapshot handle early
+                txCtx->SnapshotHandle.Handle = NKqp::TSnapshotHandle();
             }
             if (txCtx->IsInvalidated()) {
                 Transactions.AddToBeAborted(txCtx);

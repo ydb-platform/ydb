@@ -158,7 +158,7 @@ CREATE TABLE `Table` (
 
 `SELECT Value2 FROM Table WHERE SubKey2 = 2` — Index212 should be selected. When using Index21 and Index212, the point prefix length will be 1, but when using Index212, no read from the main table is needed.
 
-This example illustrates a general rule: an index avoids an extra read from the main table only when all columns in the query are part of the index (directly or via `COVER`; see [covering index](../concepts/query_execution/secondary_indexes.md#covering)). If the query selects columns that are not in the index (for example, `SELECT * FROM Table WHERE SubKey2 = 2`), using an index still requires an additional read from the main table for each matching row.
+This example illustrates a general rule: an index avoids an extra read from the main table when it contains all columns required by the query. A global secondary index contains its key columns, columns added via `COVER`, and the main table's primary-key columns, which are stored implicitly (see [{#T}](../concepts/query_execution/secondary_indexes.md)). If the query selects any other columns (for example, `SELECT * FROM Table WHERE SubKey2 = 2`), they must be read additionally from the main table for the matching rows.
 
 `SELECT * FROM Table WHERE SubKey2 > 2` — `Index21` or `Index212` will be used, since the read range is nontrivial only when they are used.
 

@@ -36,6 +36,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/json/json_writer.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/strbuf.h>
 
 //TODO: move this code to vieiwer
@@ -3886,15 +3887,31 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
     const ui64 step = event.GetStep();
     TMaybe<ui64> lastPlannedTxId;
 
+    TVector<ui64> txIds;
+    txIds.reserve(event.TransactionsSize());
+
     for (const auto& tx : event.GetTransactions()) {
         PQ_ENSURE(tx.HasTxId());
-        const ui64 txId = tx.GetTxId();
-        PQ_ENSURE(!lastPlannedTxId.Defined() || (*lastPlannedTxId < txId));
+        txIds.push_back(tx.GetTxId());
+    }
 
+    // медиатор склеивает в один шаг транзакции разных координаторов и может прислать их в любом порядке
+    // и с дублями. планируем по возрастанию TxId, чтобы сохранить порядок TxQueue
+    SortUnique(txIds);
+
+    for (ui64 txId : txIds) {
         if (auto p = Txs.find(txId); p != Txs.end()) {
             TDistributedTransaction& tx = p->second;
 
-            PQ_ENSURE(tx.MaxStep >= step);
+            if (tx.MaxStep < step) {
+                // координатор опоздал: транзакция будет удалена по истечению MaxStep. шаг подтверждаем,
+                // но транзакцию не планируем
+                LOG_W("Transaction planned after MaxStep",
+                    {"txId", txId},
+                    {"step", step},
+                    {"maxStep", tx.MaxStep});
+                continue;
+            }
 
             if (tx.Step == Max<ui64>()) {
                 auto span = tx.CreatePlanStepSpan(TabletID(), step);

@@ -3720,6 +3720,95 @@ Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabl
     Ctx->Runtime->SetObserverFunc(prev);
 }
 
+Y_UNIT_TEST_F(PlanStep_Unsorted_TxIds_With_Duplicates, TPQTabletFixture)
+{
+    // Медиатор склеивает в один шаг транзакции разных координаторов и сортирует их без дедупликации,
+    // поэтому список txId может прийти в любом порядке и с дублями. Таблетка не должна от этого умирать.
+    const ui64 txId_1 = 67890;
+    const ui64 txId_2 = 67891;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {{"consumer-1", true}, {"consumer-2", true}}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId_1,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="consumer-1", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId_1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendProposeTransactionRequest({.TxId=txId_2,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="consumer-2", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId_2,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId_2, txId_1, txId_2}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId_1, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId_1, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId_2, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId_2, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    // Транзакции выполняются по возрастанию TxId, а не в порядке из сообщения
+    WaitProposeTransactionResponse({.TxId=txId_1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitProposeTransactionResponse({.TxId=txId_2,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    // Подтверждение повторяет список из сообщения: координатор дедуплицирует по (txId, tabletId)
+    WaitPlanStepAck({.Step=100, .TxIds={txId_2, txId_1, txId_2}});
+    WaitPlanStepAccepted({.Step=100});
+}
+
+Y_UNIT_TEST_F(PlanStep_After_MaxStep_Is_Acked_Without_Planning, TPQTabletFixture)
+{
+    // Шаг больше MaxStep транзакции планировать нельзя: транзакция истечёт. Но шаг всё равно надо
+    // подтвердить, иначе очередь медиатора встанет.
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+    const ui64 stepAfterMaxStep = Max<ui64>() - 1;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=stepAfterMaxStep, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=stepAfterMaxStep, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=stepAfterMaxStep});
+
+    // Транзакция не запланирована: она выполняется по следующему шагу, попадающему в MaxStep
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
+}
+
 Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)
 {
     NKafka::TProducerInstanceId producerInstanceId = {1, 0};

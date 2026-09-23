@@ -851,6 +851,8 @@ public:
     // Lose the next N updates / discoveries arriving at this session, as if the wire dropped them
     std::atomic<ui64> DropUpdateCount = 0;
     std::atomic<ui64> DropDiscoveryCount = 0;
+    // Skip the periodic cleanup, and with it the idle ping, the stuck queue ping and the idle destroy
+    std::atomic<bool> CleanupPaused = false;
     // Lose the data message with this SeqNo, 0 for none. Applied where the message would be delivered
     // rather than where it arrives, so one already pending can be named and the loss owes nothing to timing
     std::atomic<ui64> DropDataSeqNo = 0;
@@ -1445,7 +1447,9 @@ public:
     }
 
     void HandleCleanup() {
-        NodeState->HandleCleanup();
+        if (!NodeState->CleanupPaused.load()) {
+            NodeState->HandleCleanup();
+        }
     }
 
     void Handle(TEvPrivate::TEvProcessPending::TPtr& ev) {

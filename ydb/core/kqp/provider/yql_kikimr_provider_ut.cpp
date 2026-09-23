@@ -49,10 +49,11 @@ TAstNode* CreateAlterTable(TContext& parserContext, const TString& tableName, co
     TTableRef tableRef(tableName, parserContext.Scoped->CurrService, parserContext.Scoped->CurrCluster, {});
     {
         TDeferredAtom tableAtom(parserContext.Pos(), tableName);
-        tableRef.Keys = BuildTableKey(parserContext.Pos(), tableRef.Service, tableRef.Cluster, tableAtom, {});
+        tableRef.Keys = BuildTableKey(parserContext.Pos(), tableRef.Service,
+            parserContext.GetPrefixPath(tableRef.Service, tableRef.Cluster), tableAtom, {});
     }
 
-    auto alterTableNode = BuildAlterTable(parserContext.Pos(), tableRef, params, parserContext.Scoped);
+    auto alterTableNode = BuildAlterTable(parserContext, tableRef, params);
     UNIT_ASSERT_C(alterTableNode, parserContext.Issues.ToString());
     UNIT_ASSERT_C(alterTableNode->Init(parserContext, nullptr), parserContext.Issues.ToString());
     TAstNode* alterTableAst = alterTableNode->Translate(parserContext);
@@ -826,6 +827,41 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
             auto it = properties.find("awsRegion");
             UNIT_ASSERT(it != properties.end());
             UNIT_ASSERT_VALUES_EQUAL(it->second, "region");
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableRenameCapturesPrefixAtConstruction) {
+        for (const TString destination : {"Renamed", "/absolute/Renamed"}) {
+            NYql::TIssues issues;
+            auto parserContext = CreateDefaultParserContext(issues);
+            UNIT_ASSERT(parserContext.SetPathPrefix("/first"));
+
+            TTableRef tableRef("Input", parserContext.Scoped->CurrService, parserContext.Scoped->CurrCluster, {});
+            tableRef.Keys = BuildTableKey(parserContext.Pos(), tableRef.Service,
+                parserContext.GetPrefixPath(tableRef.Service, tableRef.Cluster),
+                TDeferredAtom(parserContext.Pos(), "Input"), {});
+
+            TAlterTableParameters params;
+            params.RenameTo = TIdentifier(parserContext.Pos(), destination);
+            auto alterTableNode = BuildAlterTable(parserContext, tableRef, params);
+            UNIT_ASSERT_C(alterTableNode, issues.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(params.RenameTo->Name, destination);
+
+            UNIT_ASSERT(parserContext.SetPathPrefix("/later"));
+            UNIT_ASSERT_C(alterTableNode->Init(parserContext, nullptr), issues.ToString());
+            const auto* ast = alterTableNode->Translate(parserContext);
+            UNIT_ASSERT_C(ast, issues.ToString());
+
+            const TString expected = destination.StartsWith('/') ? destination : "/first/" + destination;
+            bool found = false;
+            Find(ast, [&](const TAstNode* node) {
+                if (node->IsAtom() && node->GetContent() == expected) {
+                    found = true;
+                    return true;
+                }
+                return false;
+            });
+            UNIT_ASSERT_C(found, ast->ToString());
         }
     }
 

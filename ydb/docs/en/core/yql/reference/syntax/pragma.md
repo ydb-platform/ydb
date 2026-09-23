@@ -64,7 +64,9 @@ SELECT * FROM test;`
 
 The prefix is not added if the table name is an absolute path (starts with /).
 
-Each `TablePathPrefix` pragma takes effect from its position in the query text. A later `TablePathPrefix` changes the prefix for subsequent table references without changing paths in preceding statements. Named queries retain the prefix that was active when they were defined, even when used after another `TablePathPrefix` pragma.
+Each `TablePathPrefix` pragma takes effect from its position in the query text. A later `TablePathPrefix` changes the prefix for subsequent table references without changing paths in preceding statements.
+
+Named subqueries, such as `$q = SELECT * FROM Input`, retain the prefix that was active when the subquery was defined. A string expression used as a table name, such as `$t = "Input"` followed by `SELECT * FROM $t`, uses the prefix active at each `FROM $t` reference. Assigning the string does not fix a prefix.
 
 ```yql
 PRAGMA TablePathPrefix = "/my/database/folder1";

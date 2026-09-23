@@ -6,6 +6,7 @@
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/utils/yql_paths.h>
 
 #include <library/cpp/charset/ci_string.h>
 
@@ -155,7 +156,6 @@ public:
 private:
     TString Prefix_;
     TDeferredAtom Name_;
-    TString View_;
     TString Full_;
 };
 
@@ -2063,9 +2063,13 @@ private:
     TScopedStatePtr Scoped_;
 };
 
-TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped)
+TNodePtr BuildAlterTable(TContext& ctx, const TTableRef& tr, TAlterTableParameters params)
 {
-    return new TAlterTableNode(pos, tr, params, scoped);
+    if (params.RenameTo) {
+        params.RenameTo->Name = BuildTablePath(
+            ctx.GetPrefixPath(ctx.Scoped->CurrService, ctx.Scoped->CurrCluster), params.RenameTo->Name);
+    }
+    return new TAlterTableNode(ctx.Pos(), tr, std::move(params), ctx.Scoped);
 }
 
 class TDropTableNode final: public TAstListNode {

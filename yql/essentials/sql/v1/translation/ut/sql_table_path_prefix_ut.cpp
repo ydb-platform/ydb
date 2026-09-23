@@ -125,6 +125,39 @@ Y_UNIT_TEST(TopicsAndBackupTables) {
          "/first/Added", "/second/Added", "/first/Removed", "/second/Removed"});
 }
 
+Y_UNIT_TEST(TopicsUseProviderPrefixInSourceOrder) {
+    AssertPaths(SqlToYql(R"sql(
+        USE plato;
+        PRAGMA TablePathPrefix('kikimr', '/provider_first');
+        CREATE TOPIC Created;
+        PRAGMA TablePathPrefix = '/global';
+        DROP TOPIC Dropped;
+        PRAGMA TablePathPrefix('kikimr', '/provider_second');
+        CREATE TOPIC Later;
+        PRAGMA TablePathPrefix = '/unused';
+    )sql", 10, NYql::KikimrProviderName),
+        {"/provider_first/Created", "/provider_first/Dropped", "/provider_second/Later"},
+        {"/global/Dropped", "/unused/Created", "/unused/Dropped", "/unused/Later"});
+}
+
+Y_UNIT_TEST(TopicClusterPrefixOverridesProviderAndGlobal) {
+    AssertPaths(SqlToYql(R"sql(
+        USE plato;
+        PRAGMA TablePathPrefix('kikimr', '/provider');
+        CREATE TOPIC BeforeCluster;
+        PRAGMA TablePathPrefix('plato', '/cluster_first');
+        CREATE TOPIC Created;
+        PRAGMA TablePathPrefix('kikimr', '/provider_later');
+        PRAGMA TablePathPrefix = '/global_later';
+        DROP TOPIC Dropped;
+        PRAGMA TablePathPrefix('plato', '/cluster_second');
+        CREATE TOPIC Later;
+        PRAGMA TablePathPrefix('plato', '/unused');
+    )sql", 10, NYql::KikimrProviderName),
+        {"/provider/BeforeCluster", "/cluster_first/Created", "/cluster_first/Dropped", "/cluster_second/Later"},
+        {"/provider_later/Dropped", "/global_later/Dropped", "/unused/BeforeCluster", "/unused/Created", "/unused/Dropped", "/unused/Later"});
+}
+
 Y_UNIT_TEST(TableFunctions) {
     for (const TString source : {"CONCAT('Input')", "CONCAT_STRICT('Input')", "RANGE('Input')"}) {
         const TString query = TStringBuilder()

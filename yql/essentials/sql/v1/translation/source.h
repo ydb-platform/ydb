@@ -358,7 +358,8 @@ TNodePtr BuildBatchDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef
 
 // Implemented in query.cpp
 TNodePtr BuildTruncateTable(TPosition pos, const TTableRef& tr, const TTruncateTableParameters& params, TScopedStatePtr scoped);
-TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped);
+// Resolve a relative rename destination using the prefix active when the node is built.
+TNodePtr BuildAlterTable(TContext& ctx, const TTableRef& tr, TAlterTableParameters params);
 TNodePtr BuildAlterDatabase(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAlterDatabaseParameters& params, TScopedStatePtr scoped);
 // Preserve the prefix selected at the table reference, before later pragmas update the context.
 TNodePtr BuildTableKey(TPosition pos, const TString& service, TStringBuf prefix, const TDeferredAtom& name, const TViewDescription& view);

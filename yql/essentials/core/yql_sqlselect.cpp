@@ -191,27 +191,16 @@ TExprNode::TPtr ExpandSqlWindowCall(
             YQL_ENSURE(false, "unexpected " << name);
         }
 
-        TExprNode::TPtr options;
-        if (isYql) {
-            options = call->ChildPtr(2);
-        } else {
-            // clang-format off
-            options = ctxExpr.Builder(call->Pos())
-                .List()
-                    .List(0)
-                        .Atom(0, "ansi")
-                    .Seal()
-                .Seal()
-                .Build();
-            // clang-format on
-        }
-
         // clang-format off
         return ctxExpr.Builder(call->Pos())
             .Callable(callable)
                 .Add(0, std::move(listType))
                 .Add(1, keyExtractor)
-                .Add(2, std::move(options))
+                .List(2)
+                    .List(0)
+                        .Atom(0, "ansi")
+                    .Seal()
+                .Seal()
             .Seal()
             .Build();
         // clang-format on

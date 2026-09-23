@@ -1,6 +1,5 @@
 #include "select_yql_window.h"
 
-#include "context.h"
 #include "node.h"
 
 namespace NSQLTranslationV1 {
@@ -33,16 +32,7 @@ public:
             return false;
         }
 
-        TNodePtr settings = Y();
-        if (IsRank()) {
-            if (!ctx.AnsiRankForNullableKeys.Defined()) {
-                settings = L(std::move(settings), Q(Y(Q("warnNoAnsi"))));
-            } else if (*ctx.AnsiRankForNullableKeys) {
-                settings = L(std::move(settings), Q(Y(Q("ansi"))));
-            }
-        }
-
-        Apply_ = Y("YqlWin", Q(Name), Q(GetWindowName()), Q(std::move(settings)), Y("Void"));
+        Apply_ = Y("YqlWin", Q(Name), Q(GetWindowName()), Q(Y()), Y("Void"));
         for (const auto& arg : Args) {
             Apply_ = L(std::move(Apply_), arg);
         }
@@ -59,10 +49,6 @@ public:
     }
 
 private:
-    bool IsRank() const {
-        return IsIn({"rank", "denserank", "percentrank"}, Name);
-    }
-
     TNodePtr Apply_;
 };
 

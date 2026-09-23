@@ -19,6 +19,9 @@ NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestActorRuntime& runtime
 ui64 GetSimpleCounter(TTestActorRuntime& runtime, ui64 tabletId,
     NHive::ESimpleCounters counter);
 
+ui64 GetCumulativeCounter(TTestActorRuntime& runtime, ui64 tabletId,
+    NHive::ECumulativeCounters counter);
+
 namespace NHive {
 
 class TTestHive : public THive {

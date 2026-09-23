@@ -90,6 +90,7 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
         EnableColumnStatistics = featureFlags.GetEnableColumnStatistics();
         if (!enableColumnStatisticsOld && EnableColumnStatistics) {
             InitializeStatisticsTable();
+            StartTraversalScheduler();
         }
     }
 

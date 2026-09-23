@@ -359,7 +359,6 @@ private:
     bool IsQuotingEnabled() const;
     bool WaitingForPreviousBlobQuota() const;
     bool WaitingForSubDomainQuota(const ui64 withSize = 0) const;
-    size_t GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request);
     std::pair<TInstant, TInstant> GetTime(const TUserInfo& userInfo, ui64 offset) const;
     ui32 NextChannel(bool isHead, ui32 blobSize);
     ui64 GetSizeLag(i64 offset);
@@ -1137,7 +1136,9 @@ private:
     // NKikimr::NPQ::TMultiCounter KeyCompactionReadCyclesTotal;
     // NKikimr::NPQ::TMultiCounter KeyCompactionWriteCyclesTotal;
 
-    // Writing blob with topic quota variables
+    // Writing blob with topic quota variables.
+    // BlobQuotaSize / MessagesQuotaSize belong to TopicQuotaRequestCookie, not to the KV write
+    // cycle. The next quota request may already be in flight when HandleWriteResponse runs.
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
     ui64 BlobQuotaSize = 0;

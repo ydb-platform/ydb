@@ -999,7 +999,6 @@ private:
         OnEmptyResult();
 
         StartStreamingQueriesActors();
-        StartCheckpointCoordinator();
         ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::DataExecuterRunTasks,
             ExecuterSpan.GetTraceId(), {
                 .Name = "Run tasks",

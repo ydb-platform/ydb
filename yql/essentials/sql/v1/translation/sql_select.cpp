@@ -574,7 +574,8 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
             if (!source) {
                 return nullptr;
             }
-            return BuildInnerSource(pos, BuildSourceNode(pos, std::move(source)), Ctx_.Scoped->CurrService, Ctx_.Scoped->CurrCluster);
+            return BuildInnerSource(pos, BuildSourceNode(pos, std::move(source)), Ctx_.Scoped->CurrService, Ctx_.Scoped->CurrCluster,
+                                    Ctx_.GetPrefixPath(Ctx_.Scoped->CurrService, Ctx_.Scoped->CurrCluster));
         }
         case TRule_single_source::kAltSingleSource3: {
             const auto& alt = node.GetAlt_single_source3();

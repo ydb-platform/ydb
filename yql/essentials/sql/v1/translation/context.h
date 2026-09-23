@@ -99,6 +99,8 @@ enum class EFlattenAndAggrExprsPersistence {
     Force,
 };
 
+TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path);
+
 class TContext {
 public:
     TContext(TLexers lexers,

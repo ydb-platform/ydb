@@ -1118,11 +1118,12 @@ TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString
 
 class TInnerSource: public IProxySource {
 public:
-    TInnerSource(TPosition pos, TNodePtr node, TString service, TDeferredAtom cluster, const TString& label)
+    TInnerSource(TPosition pos, TNodePtr node, TString service, TDeferredAtom cluster, TString prefix, const TString& label)
         : IProxySource(pos, /*src=*/nullptr)
         , Node_(std::move(node))
         , Service_(std::move(service))
         , Cluster_(std::move(cluster))
+        , Prefix_(std::move(prefix))
     {
         SetLabel(label);
     }
@@ -1169,7 +1170,7 @@ public:
         Y_UNUSED(initSrc);
         auto source = Node_->GetSource();
         if (!source) {
-            NewSource_ = TryMakeSourceFromExpression(Pos_, ctx, Service_, Cluster_, Node_);
+            NewSource_ = TryMakeSourceFromExpression(Pos_, ctx, Service_, Cluster_, Node_, Prefix_);
             source = NewSource_.Get();
         }
 
@@ -1232,7 +1233,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TInnerSource(Pos_, SafeClone(Node_), Service_, Cluster_, GetLabel());
+        return new TInnerSource(Pos_, SafeClone(Node_), Service_, Cluster_, Prefix_, GetLabel());
     }
 
 protected:
@@ -1242,6 +1243,7 @@ protected:
     TSourcePtr NewSource_;
 
 private:
+    TString Prefix_;
     TMaybe<TPosition> SamplingPos_;
     ESampleClause SamplingClause_;
     ESampleMode SamplingMode_;
@@ -1256,8 +1258,8 @@ private:
     TTableHints ContextHints_;
 };
 
-TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, const TString& label) {
-    return new TInnerSource(pos, node, service, cluster, label);
+TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, TStringBuf prefix, const TString& label) {
+    return new TInnerSource(pos, node, service, cluster, TString(prefix), label);
 }
 
 namespace {

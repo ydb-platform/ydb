@@ -2942,6 +2942,7 @@ bool TSqlQuery::AlterTableDropStatistics(const TRule_alter_table_drop_statistics
 
 void TSqlQuery::AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params) {
     params.RenameTo = IdEx(node.GetRule_an_id_table3(), *this);
+    params.RenameTo->Name = BuildTablePath(Ctx_.GetPrefixPath(Ctx_.Scoped->CurrService, Ctx_.Scoped->CurrCluster), params.RenameTo->Name);
 }
 
 void TSqlQuery::AlterTableRenameIndexTo(const TRule_alter_table_rename_index_to& node, TAlterTableParameters& params) {

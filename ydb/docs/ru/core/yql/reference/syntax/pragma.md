@@ -65,6 +65,16 @@ SELECT * FROM test;
 
 Префикс не добавляется, если имя таблицы указано как абсолютный путь (начинается с /).
 
+Каждая прагма `TablePathPrefix` начинает действовать с того места, где она указана в тексте запроса. Следующая `TablePathPrefix` изменяет префикс для последующих ссылок на таблицы, не меняя пути в предыдущих выражениях. Именованные запросы сохраняют префикс, действовавший при их определении, даже если используются после другой прагмы `TablePathPrefix`.
+
+```yql
+PRAGMA TablePathPrefix = "/my/database/folder1";
+SELECT * FROM table1; -- /my/database/folder1/table1
+
+PRAGMA TablePathPrefix = "/my/database/folder2";
+SELECT * FROM table1; -- /my/database/folder2/table1
+```
+
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 
 | Тип значения | По умолчанию |

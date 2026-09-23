@@ -64,6 +64,16 @@ SELECT * FROM test;`
 
 The prefix is not added if the table name is an absolute path (starts with /).
 
+Each `TablePathPrefix` pragma takes effect from its position in the query text. A later `TablePathPrefix` changes the prefix for subsequent table references without changing paths in preceding statements. Named queries retain the prefix that was active when they were defined, even when used after another `TablePathPrefix` pragma.
+
+```yql
+PRAGMA TablePathPrefix = "/my/database/folder1";
+SELECT * FROM table1; -- /my/database/folder1/table1
+
+PRAGMA TablePathPrefix = "/my/database/folder2";
+SELECT * FROM table1; -- /my/database/folder2/table1
+```
+
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 
 | Value type | Default |

@@ -13,6 +13,7 @@ SRCS(
     sql_materialize_ut.cpp
     sql_parsing_only_ut.cpp
     sql_select_ut.cpp
+    sql_table_path_prefix_ut.cpp
     sql_ut.cpp
     sql_utility_ut.cpp
     sql_yqlselect_ut.cpp

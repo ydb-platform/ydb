@@ -137,7 +137,7 @@ TNodePtr ToTableExpression(TNodePtr source);
 
 TYqlSelectArgs DestructYqlSelect(TNodePtr node);
 
-TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
+TNodePtr BuildYqlTableRef(TPosition position, TContext& ctx, TYqlTableRefArgs&& args);
 
 TNodePtr BuildYqlSelf(TPosition position);
 

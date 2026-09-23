@@ -78,7 +78,7 @@ public:
             entries->Add(Q(Y(Q(Y(Q("type"), Q("database"))))));
         }
         for (auto& table : Params_.Tables) {
-            auto path = ctx.GetPrefixedPath(ServiceId, Cluster, table);
+            auto path = AddTablePathPrefix(ctx, Prefix_, table);
             entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)))));
         }
         options->Add(Q(Y(Q("entries"), Q(entries))));
@@ -130,11 +130,11 @@ public:
             entries->Add(Q(Y(Q(Y(Q("type"), Q("database"))), Q(Y(Q("action"), Q(Params_.Database == TAlterBackupCollectionParameters::EDatabase::Add ? "add" : "drop"))))));
         }
         for (auto& table : Params_.TablesToAdd) {
-            auto path = ctx.GetPrefixedPath(ServiceId, Cluster, table);
+            auto path = AddTablePathPrefix(ctx, Prefix_, table);
             entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)), Q(Y(Q("action"), Q("add"))))));
         }
         for (auto& table : Params_.TablesToDrop) {
-            auto path = ctx.GetPrefixedPath(ServiceId, Cluster, table);
+            auto path = AddTablePathPrefix(ctx, Prefix_, table);
             entries->Add(Q(Y(Q(Y(Q("type"), Q("table"))), Q(Y(Q("path"), path)), Q(Y(Q("action"), Q("drop"))))));
         }
         options->Add(Q(Y(Q("alterEntries"), Q(entries))));

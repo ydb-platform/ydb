@@ -1226,7 +1226,7 @@ private:
         };
 
         TYqlSource source = {
-            .Node = BuildYqlTableRef(Ctx_.Pos(), std::move(args)),
+            .Node = BuildYqlTableRef(Ctx_.Pos(), Ctx_, std::move(args)),
             .Alias = TYqlSourceAlias{
                 .Position = Ctx_.Pos(),
                 .Name = std::move(key)},
@@ -1318,7 +1318,7 @@ private:
             .IsAnonymous = isAnonymous,
         };
 
-        return TNonNull(BuildYqlTableRef(Ctx_.Pos(), std::move(args)));
+        return TNonNull(BuildYqlTableRef(Ctx_.Pos(), Ctx_, std::move(args)));
     }
 
     TSQLResult<TVector<TNodePtr>> Build(const TRule_values_source_row& rule) {

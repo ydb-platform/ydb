@@ -22,8 +22,6 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-namespace {
-
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
     if (prefixPath.empty()) {
         return path.Build();
@@ -43,6 +41,8 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     MakeTableFromExpression(ctx.Pos(), ctx, buildPathNode, result);
     return result.Build();
 }
+
+namespace {
 
 using TPragmaField = bool TContext::*;
 

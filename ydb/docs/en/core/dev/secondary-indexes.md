@@ -8,7 +8,7 @@ To use similar capabilities for any fields or combinations of fields in a table,
 
 In transactional systems, using indexes helps reduce or eliminate performance degradation and increased query execution costs as the volume of stored data grows.
 
-This article describes the basic operations for working with secondary indexes and provides links to detailed materials for each operation. Information about different types of secondary indexes and their features is in the [Secondary indexes](../concepts/query_execution/secondary_indexes.md) article in the "Concepts" section.
+This article describes the basic operations for working with secondary indexes and provides links to detailed materials for each operation. Information about different types of secondary indexes and their features is available in [{#T}](../concepts/query_execution/secondary_indexes.md) in the "Concepts" section.
 
 ## Creating secondary indexes {#create}
 
@@ -16,7 +16,7 @@ A secondary index is a schema object and can be defined when creating a table us
 
 The [create index `table index add` command](../reference/ydb-cli/commands/secondary_index.md#add) is supported in the {{ ydb-short-name }} CLI.
 
-Without an index, a query on a field that is not part of the primary key performs a full table scan (FullScan) — reading and checking every row. For example, for the table:
+Without a secondary index, a query that filters only on a non-key column typically performs a full table scan (`FullScan`) and reads every row. For example, consider this table:
 
 ```yql
 CREATE TABLE users (

@@ -2456,6 +2456,12 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         ActorSystem->Cleanup();
     }
 
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
+    // Disconnect tasks posted during actor shutdown have run on the NBS
+    // executors. Join those threads before ~TKikimrRunner frees TActorSystem.
+    NYdb::NBS::NBlockStore::StopNbsExecutors();
+#endif
+
     if (YdbDriver) {
         YdbDriver->Stop(true);
     }

@@ -124,6 +124,26 @@ void StopNbsService()
     }
 }
 
+void StopNbsExecutors()
+{
+    if (!NbsService) {
+        return;
+    }
+
+    // Same count the pool was built with, so the rotated vector holds each
+    // executor once. GetExecutors(0) indexes an empty pool.
+    const ui32 executorCount = NbsService->StorageConfig->GetThreadPoolSize();
+    if (executorCount == 0) {
+        return;
+    }
+
+    for (const auto& executor:
+         NbsService->ExecutorPool.GetExecutors(executorCount))
+    {
+        executor->Stop();
+    }
+}
+
 NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
 GetNbsFrontendBlockStore()
 {

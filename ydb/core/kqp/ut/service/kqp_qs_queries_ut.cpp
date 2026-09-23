@@ -6288,9 +6288,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(TablePathPrefixScopeDiagnosticIsDatabaseScopedAndSerialized) {
-        auto global = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        auto database = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        auto external = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto global = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto database = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto external = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto dbCounters = MakeIntrusive<TKqpDbCounters>(external, database);
         TKqpCounters counters(global);
         NYql::TKikimrConfiguration config;
@@ -6316,8 +6316,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         NSysView::TDbServiceCounters serialized;
         dbCounters->ToProto(serialized);
-        auto restoredDatabase = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        auto restoredExternal = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto restoredDatabase = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto restoredExternal = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         TKqpDbCounters restored(restoredExternal, restoredDatabase);
         UNIT_ASSERT_VALUES_EQUAL(restoredDatabase->GetCounter(name, true)->Val(), 0);
         restored.FromProto(serialized);

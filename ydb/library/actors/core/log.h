@@ -701,6 +701,12 @@ namespace NActors {
 #define AFL_VERIFY_DEBUG(condition) if (true); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 #endif
 
+#define ACTORS_FORMATTED_LOG(mPriority, mComponent) \
+    if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
+        else NActors::TFormattedRecordWriter(\
+            static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
+            )("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+
 #define ACTORS_LOG_STREAM(mPriority, mComponent) \
     if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
         else NActors::TRecordWriter(\

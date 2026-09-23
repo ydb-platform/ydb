@@ -146,6 +146,7 @@ struct TMemoryUsageChange {
 
 namespace NTests {
     class TSimpleWriteSessionTestAdapter;
+    class TWriteSessionMemoryTestAdapter;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -157,6 +158,7 @@ private:
     friend class TWriteSession;
     friend class TSimpleBlockingWriteSession;
     friend class NTests::TSimpleWriteSessionTestAdapter;
+    friend class NTests::TWriteSessionMemoryTestAdapter;
 
 private:
     using TClientMessage = Ydb::PersQueue::V1::StreamingWriteClientMessage;
@@ -349,6 +351,7 @@ private:
     void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
     void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration);
     void OnWriteRequestDone(size_t requestMemoryUsage);
+    bool TryIssueContinuationTokenImpl();
     TProcessSrvMessageResult ProcessServerMessageImpl();
     TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
     TBuffer CompressBufferImpl(std::vector<std::string_view>& data, ECodec codec, i32 level);
@@ -408,6 +411,8 @@ private:
     IExecutor::TPtr CompressionExecutor;
     size_t MemoryUsage = 0; //!< Estimated amount of memory used
     bool FirstTokenSent = false;
+    // Queuing a protobuf can exceed the limit while a token is still outstanding.
+    bool ContinuationTokenIssued = false;
 
     TMessageBatch CurrentBatch;
 

@@ -72,6 +72,12 @@ TString TPlanFormatterBase::GetOperationDisplayName(const TExprNode& node) {
     return TString(node.Content());
 }
 
+TString TPlanFormatterBase::GetLinkDisplayName(const TExprNode& source, const TExprNode& dest) {
+    Y_UNUSED(source);
+    Y_UNUSED(dest);
+    return TString();
+}
+
 bool TPlanFormatterBase::WriteSchemaHeader(NYson::TYsonWriter& writer) {
     Y_UNUSED(writer);
     return false;

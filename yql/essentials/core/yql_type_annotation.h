@@ -532,6 +532,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool OrderedColumns = false;
     bool DeriveColumnOrder = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
+
+    bool ShowLinksInPlan = false;
     THashSet<TString> OptimizerFlags;
     THashSet<TString> PeepholeFlags;
     bool StreamLookupJoin = false;

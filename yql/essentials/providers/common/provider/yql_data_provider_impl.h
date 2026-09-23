@@ -23,6 +23,7 @@ public:
     void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) override;
     TString GetOperationDisplayName(const TExprNode& node) override;
+    TString GetLinkDisplayName(const TExprNode& source, const TExprNode& dest) override;
     bool WriteSchemaHeader(NYson::TYsonWriter& writer) override;
     void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) override;
 };

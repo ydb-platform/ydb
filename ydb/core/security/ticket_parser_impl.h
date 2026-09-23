@@ -376,6 +376,7 @@ private:
         return static_cast<TDerived*>(this);
     }
 
+protected:
     static TString GetKey(TEvTicketParser::TEvAuthorizeTicket* request) {
         TStringStream key;
         if (request->Signature.AccessKeyId) {
@@ -408,6 +409,7 @@ private:
         return key.Str();
     }
 
+private:
     TInstant GetAsSignatureExpireTime(TInstant now) const {
         return now + AsSignatureExpireTime;
     }
@@ -1904,6 +1906,8 @@ private:
     }
 
 protected:
+    // When true, Access Service is asked only to authenticate the token.
+    // Request permissions are stored on the record but are not authorized.
     bool UseAccessServiceAuthenticationOnly() const {
         return false;
     }

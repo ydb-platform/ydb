@@ -187,9 +187,8 @@ private:
     }
 };
 
-// Parser with UseAccessServiceAuthenticationOnly() enabled.
-// Used to verify that with this flag the parser asks Access Service for
-// authentication even when the request comes with permissions.
+// Parser with UseAccessServiceAuthenticationOnly() enabled. Used to verify that with this flag
+// the parser asks Access Service for authentication even when the request comes with permissions.
 class TTicketParserAuthenticationOnly : public TTicketParserImpl<TTicketParserAuthenticationOnly> {
     using TBase = TTicketParserImpl<TTicketParserAuthenticationOnly>;
     using TBase::TBase;
@@ -212,6 +211,10 @@ public:
 
     bool UseAccessServiceAuthenticationOnly() const {
         return true;
+    }
+
+    static TString GetCacheKey(TEvTicketParser::TEvAuthorizeTicket* request) {
+        return GetKey(request);
     }
 
 private:
@@ -1293,23 +1296,37 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         const TVector<std::pair<TString, TString>> dbAttrs = {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}};
         const TVector<std::pair<TString, TString>> gizmoAttrs = {{"gizmo_id", "gizmo"}};
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
-            .Ticket = "Bearer " + userToken,
-            .TraceContext = {PEER_NAME, REQUEST_ID},
-            .Entries = {
-                {TEvAuthorizeTicket::ToPermissions({"something.read"}), dbAttrs},
-                {TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get"}), gizmoAttrs},
-            },
-        })), 0);
+        auto request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(
+            TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                .Ticket = "Bearer " + userToken,
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = {
+                    {TEvAuthorizeTicket::ToPermissions({"ydb.databases.connect"}), dbAttrs},
+                    {TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get"}), gizmoAttrs},
+                },
+            }
+        );
+        const TString key = TTicketParserAuthenticationOnly::GetCacheKey(request.Get());
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, request.Release()), 0);
 
-        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        TEvTicketParser::TEvAuthorizeTicketResult* result =
+            runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), userToken + "@as");
-        UNIT_ASSERT_C(!result->Token->IsExist("something.read@as"), result->Token->ShortDebugString());
-        UNIT_ASSERT_C(!result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->Token->IsExist("ydb.databases.connect@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->Token->IsExist("ydb.databases.connect-bbbb4554@as"), result->Token->ShortDebugString());
         UNIT_ASSERT_C(!result->Token->IsExist("ydb.developerApi.get-gizmo@as"), result->Token->ShortDebugString());
+
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvRefreshTicket(key)), 0);
+        NActors::TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return accessServiceMock.AuthenticateCount.load() >= 2;
+        };
+        runtime->DispatchEvents(options, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
     }
 
     Y_UNIT_TEST(CacheHitTraceContextIsUsedForAccessServiceRefresh) {

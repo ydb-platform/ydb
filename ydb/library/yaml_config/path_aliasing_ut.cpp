@@ -9,7 +9,7 @@
 namespace NKikimr::NYaml {
 
     Y_UNIT_TEST_SUITE(PathAliasingYamlConfig) {
-        Y_UNIT_TEST(ParsesOrderedPrefixesAndIgnoresOneTrailingSlash) {
+        Y_UNIT_TEST(ParsesOrderedPrefixesAndPreservesTrailingSlashes) {
             const auto config = Parse(R"(
 path_rewrite_config:
   rules:
@@ -28,10 +28,11 @@ path_rewrite_config:
 
             const NPathAliasing::TPathNormalizer normalizer(aliases);
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/table"), "/failover/kfront/table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/"), "/failover/kfront");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/tables/table/"), "/failover/kfront/tables/table");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront"), "/kfront");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/"), "/failover/kfront/");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/tables/table/"), "/failover/kfront/tables/table/");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfrontend/table/"), "/kfrontend/table/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront//table///"), "/failover/kfront//table//");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront//table///"), "/failover/kfront//table///");
         }
 
         Y_UNIT_TEST(OmittedAndEmptyConfigurationDisableAliasing) {
@@ -63,7 +64,7 @@ path_rewrite_config:
 )", false);
             const NPathAliasing::TPathNormalizer normalizer(config.GetPathRewriteConfig());
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix"), "/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix/table"), "/table");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix/table"), "//table");
         }
 
         Y_UNIT_TEST(RejectsMissingEmptyAndRelativePrefixes) {

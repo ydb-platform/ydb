@@ -39,7 +39,7 @@ namespace NKikimr::NGRpcService {
             if (!enablePathAliasing) {
                 return config;
             }
-            AddRule(config, "/alias/", "/Root/kfront/");
+            AddRule(config, "/alias", "/Root/kfront");
             AddRule(config, "/discovery-alias", "/Root/kfront");
             AddRule(config, "/discovery-boundary", "/Root/k");
             AddRule(config, "/volume-alias", "/Root/kfront/Volume");

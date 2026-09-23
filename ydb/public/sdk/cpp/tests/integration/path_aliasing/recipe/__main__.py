@@ -39,7 +39,7 @@ def start(args):
     # Add to the generated configuration; --config-path would replace it.
     configuration.yaml_config["path_rewrite_config"] = {
         "rules": [
-            {"src": "/kfront/", "dst": "/failover/kfront/"},
+            {"src": "/kfront", "dst": "/failover/kfront"},
             {"src": "/boundary", "dst": "/failover/k"},
             {
                 "src": "/short-table",

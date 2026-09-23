@@ -46,17 +46,17 @@ namespace NKikimr::NPathAliasing {
             }
         }
 
-        Y_UNIT_TEST(OneTrailingSlashInPrefixesAndMatchedPathsIsIgnored) {
+        Y_UNIT_TEST(TrailingSlashesInPrefixesAndMatchedPathsAreLiteral) {
             NKikimrConfig::TPathRewriteConfig config;
             AddRule(config, "/ru/", "/backup/ru/");
             const TPathNormalizer normalizer(config);
 
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru"), "/backup/ru");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/"), "/backup/ru");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//"), "/backup/ru/");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru"), "/ru");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/"), "/backup/ru/");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//"), "/backup/ru//");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb"), "/backup/ru/mydb");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb/"), "/backup/ru/mydb");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//mydb///"), "/backup/ru//mydb//");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb/"), "/backup/ru/mydb/");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//mydb///"), "/backup/ru//mydb///");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("//ru/mydb"), "//ru/mydb");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/russian///"), "/russian///");
         }
@@ -67,6 +67,8 @@ namespace NKikimr::NPathAliasing {
             const TPathNormalizer normalizer(config);
 
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru"), "/backup/ru");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/"), "/backup/ru/");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//"), "/backup/ru//");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb"), "/backup/ru/mydb");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb/Table"), "/backup/ru/mydb/Table");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/russian/mydb"), "/russian/mydb");
@@ -75,15 +77,27 @@ namespace NKikimr::NPathAliasing {
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("other/ru/mydb"), "other/ru/mydb");
         }
 
-        Y_UNIT_TEST(OnlyOneTrailingSlashIsRemovedFromConfiguredPrefixes) {
+        Y_UNIT_TEST(RepeatedTrailingSlashesInConfiguredPrefixesAreLiteral) {
             NKikimrConfig::TPathRewriteConfig config;
             AddRule(config, "/ru//", "/backup//");
             const TPathNormalizer normalizer(config);
 
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//"), "/backup/");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//"), "/backup//");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//db"), "/backup//db");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru///db/"), "/backup///db/");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/"), "/ru/");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/db"), "/ru/db");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru"), "/ru");
+        }
+
+        Y_UNIT_TEST(PrefixReplacementDoesNotRepairTheJoin) {
+            NKikimrConfig::TPathRewriteConfig config;
+            AddRule(config, "/with-slash/", "/backup");
+            AddRule(config, "/without-slash", "/backup/");
+            const TPathNormalizer normalizer(config);
+
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/with-slash/table"), "/backuptable");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/without-slash/table"), "/backup//table");
         }
 
         Y_UNIT_TEST(RegexMetacharactersAreLiteralInBothPrefixes) {
@@ -128,23 +142,23 @@ namespace NKikimr::NPathAliasing {
             AddRule(config, "/", "/backup/");
             const TPathNormalizer normalizer(config);
 
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/"), "/backup");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/"), "/backup/");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/mydb"), "/backup/mydb");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/mydb/Table"), "/backup/mydb/Table");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("mydb/Table"), "mydb/Table");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath(""), "");
         }
 
-        Y_UNIT_TEST(RootDestinationDoesNotIntroduceADoubleSlash) {
+        Y_UNIT_TEST(RootDestinationIsConcatenatedWithTheLiteralSuffix) {
             NKikimrConfig::TPathRewriteConfig config;
             AddRule(config, "/ru", "/");
             const TPathNormalizer normalizer(config);
 
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru"), "/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/"), "/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb"), "/mydb");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb/Table"), "/mydb/Table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//mydb"), "//mydb");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/"), "//");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb"), "//mydb");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb/Table"), "//mydb/Table");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//mydb"), "///mydb");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/russian"), "/russian");
         }
 
@@ -156,7 +170,7 @@ namespace NKikimr::NPathAliasing {
 
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/"), "/");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb"), "/ru/mydb");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("//ru//mydb///"), "//ru//mydb//");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("//ru//mydb///"), "//ru//mydb///");
         }
 
         Y_UNIT_TEST(InteriorSlashesAndDotComponentsAreNotResolved) {

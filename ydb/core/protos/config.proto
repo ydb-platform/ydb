@@ -3541,7 +3541,7 @@ message TUdfStoreConfig {
 message TPathRewriteConfig {
     message TRule {
         // Nonempty absolute prefixes, matched literally at a path-component boundary.
-        // Exactly one trailing slash is ignored in each prefix and matched input.
+        // Replace Src with Dst verbatim; no slash trimming or normalization.
         optional string Src = 1;
         optional string Dst = 2;
     }

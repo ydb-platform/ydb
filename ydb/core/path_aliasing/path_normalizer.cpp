@@ -30,14 +30,11 @@ namespace NKikimr::NPathAliasing {
         size_t index = 0;
         for (const auto& rule : config.GetRules()) {
             ++index;
-            TStringBuf src(rule.GetSrc());
-            TStringBuf dst(rule.GetDst());
+            const TStringBuf src(rule.GetSrc());
+            const TStringBuf dst(rule.GetDst());
             Y_ENSURE(src.StartsWith("/"), "path_rewrite_config rule " << index << ": src must be a nonempty absolute path");
             Y_ENSURE(dst.StartsWith("/"), "path_rewrite_config rule " << index << ": dst must be a nonempty absolute path");
 
-            // Ignore one trailing slash. Root becomes empty so joins need no extra separator.
-            src.ChopSuffix("/");
-            dst.ChopSuffix("/");
             impl->Rules.push_back({TString(src), TString(dst)});
         }
 
@@ -49,14 +46,12 @@ namespace NKikimr::NPathAliasing {
             return TString(path);
         }
 
-        auto candidate = path;
-        candidate.ChopSuffix("/");
         for (const auto& rule : Impl->Rules) {
-            if (candidate.StartsWith(rule.Src)
-                && (candidate.size() == rule.Src.size() || candidate[rule.Src.size()] == '/')) {
+            if (path.StartsWith(rule.Src)
+                && (rule.Src.EndsWith("/") || path.size() == rule.Src.size() || path[rule.Src.size()] == '/')) {
                 TString result(rule.Dst);
-                result.append(candidate.data() + rule.Src.size(), candidate.size() - rule.Src.size());
-                return result.empty() ? TString("/") : result;
+                result.append(path.data() + rule.Src.size(), path.size() - rule.Src.size());
+                return result;
             }
         }
 

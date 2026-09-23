@@ -145,7 +145,7 @@ public:
     }
 
     TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode) override {
-        const auto path = ctx.GetPrefixedPath(Service_, Cluster_, Name_);
+        const auto path = ctx.GetPrefixedPath(ctx.Settings.EnableTablePathPrefixRelativePaths ? Service_ : TString{}, Cluster_, Name_);
         if (!path) {
             return nullptr;
         }
@@ -160,6 +160,10 @@ private:
     TString View_;
     TString Full_;
 };
+
+TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name) {
+    return BuildTopicKey(pos, TString{}, cluster, name);
+}
 
 TNodePtr BuildTopicKey(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name) {
     return new TTopicKey(pos, service, cluster, name);
@@ -741,7 +745,7 @@ public:
                 each = L(each, key);
             }
             if (ctx.PragmaUseTablePrefixForEach) {
-                const auto prefixPath = ctx.GetPrefixPath(Service_, Cluster_);
+                const auto prefixPath = ctx.GetResolvedPrefixPath(Service_, Cluster_);
                 if (prefixPath) {
                     each = L(each, BuildQuotedAtom(Pos_, TString(prefixPath)));
                 }
@@ -959,7 +963,7 @@ public:
 
             auto partitionList = Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
             if (ctx.PragmaUseTablePrefixForEach) {
-                const auto prefixPath = ctx.GetPrefixPath(Service_, Cluster_);
+                const auto prefixPath = ctx.GetResolvedPrefixPath(Service_, Cluster_);
                 if (prefixPath) {
                     partitionList = L(partitionList, BuildQuotedAtom(Pos_, TString(prefixPath)));
                 }

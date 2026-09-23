@@ -11,9 +11,10 @@ using namespace NSQLTranslationV1;
 
 Y_UNIT_TEST_SUITE(RelativeTablePathPrefix) {
 
-NYql::TAstParseResult Translate(const TString& query, const TString& provider = "kikimr") {
+NYql::TAstParseResult Translate(const TString& query, const TString& provider = "kikimr", bool enableRelativePaths = true) {
     NSQLTranslation::TTranslationSettings settings;
     settings.PathPrefix = "/Root/database";
+    settings.EnableTablePathPrefixRelativePaths = enableRelativePaths;
     return SqlToYqlWithMode("USE plato; " + query, NSQLTranslation::ESqlMode::QUERY,
         10, provider, EDebugOutput::None, false, settings);
 }
@@ -47,6 +48,38 @@ void AssertPath(const NYql::TAstParseResult& result, const TString& path) {
     AssertQuotedAtom(GetKeyPath(result), path);
 }
 
+Y_UNIT_TEST(GenericDefaultsPreserveLegacyPaths) {
+    NSQLTranslation::TTranslationSettings settings;
+    UNIT_ASSERT(!settings.EnableTablePathPrefixRelativePaths);
+    settings.PathPrefix = "/Root/database";
+    AssertPath(SqlToYqlWithMode("USE plato; PRAGMA TablePathPrefix = './folder'; SELECT * FROM users;",
+        NSQLTranslation::ESqlMode::QUERY, 10, "kikimr", EDebugOutput::None, false, settings), "folder/users");
+}
+
+Y_UNIT_TEST(LegacyAccessorAndTopicFactoryRemainAvailable) {
+    using TLegacyPrefixAccessor = TStringBuf (TContext::*)(const TString&, const TDeferredAtom&) const;
+    const TLegacyPrefixAccessor getPrefix = &TContext::GetPrefixPath;
+    using TLegacyTopicFactory = TNodePtr (*)(TPosition, const TDeferredAtom&, const TDeferredAtom&);
+    const TLegacyTopicFactory buildTopic = &BuildTopicKey;
+
+    for (bool enabled : {false, true}) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.PathPrefix = "/Root/database";
+        settings.EnableTablePathPrefixRelativePaths = enabled;
+        settings.ClusterMapping["plato"] = "kikimr";
+        NYql::TIssues issues;
+        TContext ctx({}, {}, settings, {}, issues);
+        const TDeferredAtom cluster(TPosition{}, "plato");
+        UNIT_ASSERT(ctx.SetPathPrefix("./folder"));
+        const TContext& legacy = ctx;
+        const TStringBuf prefix = (legacy.*getPrefix)("kikimr", cluster);
+        UNIT_ASSERT_VALUES_EQUAL(prefix, "./folder");
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetResolvedPrefixPath("kikimr", cluster),
+            enabled ? "/Root/database/folder" : "./folder");
+        UNIT_ASSERT(buildTopic(TPosition{}, cluster, TDeferredAtom(TPosition{}, "users")));
+    }
+}
+
 Y_UNIT_TEST(ResolveFromDatabase) {
     const struct {
         TString Prefix;
@@ -72,6 +105,27 @@ Y_UNIT_TEST(ResolveFromDatabase) {
         AssertPath(Translate(query), test.Expected);
     }
     AssertPath(Translate("SELECT * FROM users;"), "/Root/database/users");
+}
+
+Y_UNIT_TEST(DisabledPreservesLegacyResolution) {
+    const struct {
+        TString Pragma;
+        TString TablePath;
+    } cases[] = {
+        {"PRAGMA TablePathPrefix = 'folder';", "folder/users"},
+        {"PRAGMA TablePathPrefix = './folder';", "folder/users"},
+        {"PRAGMA TablePathPrefix = '';", "users"},
+        {"PRAGMA TablePathPrefix = '/Other';", "/Other/users"},
+        {"PRAGMA TablePathPrefix('kikimr', './folder');", "folder/users"},
+        {"PRAGMA TablePathPrefix('plato', './folder');", "folder/users"},
+    };
+    for (const auto& test : cases) {
+        AssertPath(Translate(test.Pragma + "SELECT * FROM users;", "kikimr", false), test.TablePath);
+    }
+    AssertPath(Translate("PRAGMA TablePathPrefix = 'folder'; SELECT * FROM `/Other/users`;", "kikimr", false), "/Other/users");
+    AssertPath(Translate("PRAGMA TablePathPrefix = './folder'; CREATE TOPIC users;", "kikimr", false), "folder/users");
+    // Topics historically ignored provider prefixes because their service was empty.
+    AssertPath(Translate("PRAGMA TablePathPrefix('kikimr', './folder'); CREATE TOPIC users;", "kikimr", false), "/Root/database/users");
 }
 
 Y_UNIT_TEST(RepeatedPrefixesUseDatabaseRoot) {
@@ -106,6 +160,7 @@ Y_UNIT_TEST(OtherProvidersKeepRelativePrefixes) {
 Y_UNIT_TEST(DynamicClustersKeepUnprefixedPaths) {
     NSQLTranslation::TTranslationSettings settings;
     settings.PathPrefix = "/Root/database";
+    settings.EnableTablePathPrefixRelativePaths = true;
     settings.DynamicClusterProvider = NYql::KikimrProviderName;
     const auto result = SqlToYqlWithMode(R"(
         PRAGMA TablePathPrefix = './folder';

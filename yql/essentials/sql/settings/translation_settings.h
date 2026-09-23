@@ -89,10 +89,11 @@ struct TTranslationSettings {
     NYql::TLangVersion LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::None;
     THashMap<TString, TString> ClusterMapping;
-    // Default table-path prefix. For kikimr, an absolute value also supplies the
-    // immutable database root for relative TablePathPrefix values. KQP sets it
-    // from the connection database; pragmas do not change this base.
+    // Default table-path prefix. When EnableTablePathPrefixRelativePaths is set,
+    // an absolute value also supplies the immutable kikimr database root for
+    // relative TablePathPrefix values; pragmas do not change this base.
     TString PathPrefix;
+    bool EnableTablePathPrefixRelativePaths = false;
     // keys (cluster name) should be normalized
     THashMap<TString, TString> ClusterPathPrefixes;
     THashMap<TString, TString> ModuleMapping;

@@ -5,7 +5,9 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -105,7 +107,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false).SetPQConfig(pqConfig));
         auto queryClient = kikimr.GetQueryClient();
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-        auto topicClient = NTopic::TTopicClient(kikimr.GetDriver(), NTopic::TTopicClientSettings().Database("/Root"));
+        auto topicClient = NYdb::NTopic::TTopicClient(kikimr.GetDriver(), NYdb::NTopic::TTopicClientSettings().Database("/Root"));
         auto schemeClient = kikimr.GetSchemeClient();
         const auto mkdirResult = schemeClient.MakeDirectory("/Root/folder").ExtractValueSync();
         UNIT_ASSERT_C(mkdirResult.IsSuccess(), mkdirResult.GetIssues().ToString());
@@ -141,6 +143,93 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT_C(directory.IsSuccess(), pragma << ": " << directory.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(directory.GetChildren().size(), 0);
         }
+    }
+
+    Y_UNIT_TEST(TablePathPrefixRelativePathsConfigAndDiagnostics) {
+        UNIT_ASSERT(NKikimrConfig::TFeatureFlags().GetEnableTablePathPrefixRelativePaths());
+        for (bool enabled : {false, true}) {
+            for (bool split : {false, true}) {
+                auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+                auto databaseGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+                auto databaseCounters = MakeIntrusive<TKqpDbCounters>(
+                    MakeIntrusive<NMonitoring::TDynamicCounters>(), databaseGroup);
+                NYql::TKikimrConfiguration config;
+                config.FeatureFlags.SetEnableTablePathPrefixRelativePaths(enabled);
+                config.IncrementTranslationCounter = [counters, databaseCounters](const TString& group, const TString& name) {
+                    counters->ReportTranslationCounter(databaseCounters, group, name);
+                };
+                const TString query = R"(
+                    PRAGMA TablePathPrefix = 'folder1';
+                    SELECT * FROM users;
+                    PRAGMA TablePathPrefix = './folder2';
+                    SELECT * FROM users;
+                )";
+                TKqpTranslationSettingsBuilder builder(NYql::EKikimrQueryType::Query, "cluster", query,
+                    config.GetYqlBindingsMode(), nullptr);
+                builder.SetFromConfig(config).SetKqpTablePathPrefix("/Root/database");
+                const auto statements = ParseStatements(query, {}, true, builder, split);
+                UNIT_ASSERT_VALUES_EQUAL(statements.size(), split ? 2 : 1);
+                for (const auto& statement : statements) {
+                    UNIT_ASSERT_C(statement.Ast->IsOk(), statement.Ast->Issues.ToString());
+                    UNIT_ASSERT_VALUES_EQUAL(statement.EnableTablePathPrefixRelativePaths, enabled);
+                }
+                // Replayed pragmas during statement splitting count once per SQL parse.
+                const auto counter = databaseGroup->GetCounter("TablePathPrefix/NonAbsolutePath", true);
+                UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+
+                const TString absoluteQuery = R"(
+                    PRAGMA TablePathPrefix = '/Root/folder';
+                    SELECT * FROM users;
+                )";
+                const auto absolute = ParseStatements(absoluteQuery, {}, true, builder, split);
+                UNIT_ASSERT_VALUES_EQUAL(absolute.size(), 1);
+                UNIT_ASSERT_C(absolute.front().Ast->IsOk(), absolute.front().Ast->Issues.ToString());
+                UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+
+                // Native YQL also carries the snapshot used by cache validation.
+                const auto native = ParseStatements("((return world))", {}, false, builder, split);
+                UNIT_ASSERT_VALUES_EQUAL(native.size(), 1);
+                UNIT_ASSERT_C(native.front().Ast->IsOk(), native.front().Ast->Issues.ToString());
+                UNIT_ASSERT(native.front().KeepInCache);
+                UNIT_ASSERT_VALUES_EQUAL(native.front().EnableTablePathPrefixRelativePaths, enabled);
+                UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
+
+                // Per-database diagnostics survive the sysview aggregation transport.
+                NSysView::TDbServiceCounters serialized;
+                databaseCounters->ToProto(serialized);
+                auto restoredGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+                TKqpDbCounters restored(MakeIntrusive<NMonitoring::TDynamicCounters>(), restoredGroup);
+                restored.FromProto(serialized);
+                UNIT_ASSERT_VALUES_EQUAL(restoredGroup->GetCounter("TablePathPrefix/NonAbsolutePath", true)->Val(), 1);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TablePathPrefixRelativePathsDisabled, QueryService) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableTablePathPrefixRelativePaths(false);
+        TKikimrRunner kikimr(settings);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(
+            "CREATE TABLE `/Root/users` (id Uint64 NOT NULL, PRIMARY KEY (id));").ExtractValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto check = [&](const TString& query, bool success) {
+            const auto result = [&]() -> NYdb::TStatus {
+                if constexpr (QueryService) {
+                    return kikimr.GetQueryClient().ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                } else {
+                    return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                }
+            }();
+            if (success) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            }
+        };
+        check("PRAGMA TablePathPrefix = '.'; SELECT * FROM users;", false);
+        check("PRAGMA TablePathPrefix = '/Root'; SELECT * FROM users;", true);
+        check("PRAGMA TablePathPrefix = 'folder'; SELECT * FROM `/Root/users`;", true);
     }
 
     Y_UNIT_TEST(PreparedQueryInvalidate) {

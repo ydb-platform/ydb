@@ -31,6 +31,14 @@ namespace NKqp {
 using namespace NKikimrConfig;
 using namespace NYql;
 
+namespace {
+
+bool HasCurrentTablePathPrefixSemantics(const TKqpCompileResult& result, const TActorContext& ctx) {
+    return result.EnableTablePathPrefixRelativePaths == AppData(ctx)->FeatureFlags.GetEnableTablePathPrefixRelativePaths();
+}
+
+} // namespace
+
 struct TKqpCompileSettings {
     TKqpCompileSettings(bool keepInCache, bool isQueryActionPrepare, bool perStatementResult,
         const TInstant& deadline, ECompileActorAction action = ECompileActorAction::COMPILE,
@@ -182,23 +190,31 @@ public:
         return {};
     }
 
-    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpQueryId& query) {
+    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpQueryId& query, bool enableTablePathPrefixRelativePaths) {
         auto queryIt = QueryIndex.find(query);
         if (queryIt == QueryIndex.end()) {
             return {};
         }
 
         TVector<TKqpCompileRequest> result;
-        for (auto& requestIt : queryIt->second) {
+        for (auto it = queryIt->second.begin(); it != queryIt->second.end();) {
+            auto requestIt = *it;
             Y_ENSURE(requestIt != Queue.end());
+            if (requestIt->QueryAst && requestIt->QueryAst->EnableTablePathPrefixRelativePaths != enableTablePathPrefixRelativePaths) {
+                ++it;
+                continue;
+            }
             auto request = std::move(*requestIt);
 
+            queryIt->second.erase(it++);
             Queue.erase(requestIt);
 
             result.push_back(std::move(request));
         }
 
-        QueryIndex.erase(queryIt);
+        if (queryIt->second.empty()) {
+            QueryIndex.erase(queryIt);
+        }
         return result;
     }
 
@@ -569,7 +585,8 @@ private:
         Counters->ReportRecompileRequestGet(dbCounters);
 
         TKqpCompileResult::TConstPtr compileResult = QueryCache->FindByUid(request.Uid, false);
-        if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
+        if (HasTempTablesNameClashes(compileResult, request.TempTablesState) ||
+            (compileResult && !HasCurrentTablePathPrefixSemantics(*compileResult, ctx))) {
             compileResult = nullptr;
         }
 
@@ -668,13 +685,14 @@ private:
         }
 
         bool keepInCache = compileRequest.CompileSettings.KeepInCache && compileResult->AllowCache;
+        const bool hasCurrentTablePathPrefixSemantics = HasCurrentTablePathPrefixSemantics(*compileResult, ctx);
         bool isPerStatementExecution = TableServiceConfig.GetEnableAstCache() && compileRequest.QueryAst;
 
         bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
-                if (!hasTempTablesNameClashes) {
+                if (!hasTempTablesNameClashes && hasCurrentTablePathPrefixSemantics) {
                     UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
                 }
 
@@ -683,7 +701,11 @@ private:
                     QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
                 }
 
-                auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
+                // A compilation may finish after a flag update. Its original request
+                // can complete, but requests translated with other semantics must wait.
+                auto requests = hasCurrentTablePathPrefixSemantics
+                    ? RequestsQueue.ExtractByQuery(*compileResult->Query, compileResult->EnableTablePathPrefixRelativePaths)
+                    : TVector<TKqpCompileRequest>{};
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     Reply(request.Sender, compileResult, compileStats, ctx,
@@ -781,16 +803,17 @@ private:
             {"queryId", compileRequest.Query.SerializeToString()},
             {"ast", queryAst.Ast->Root->ToString()});
 
-        auto compileResult = QueryCache->FindByAst(
-            compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
-            compileRequest.CompileSettings.IsWarmupCompilation
-                ? EWarmupAttributionMode::Warmup
-                : EWarmupAttributionMode::Client,
-            Counters,
-            compileRequest.TempTablesState);
-
-        if (!compileRequest.FindInCache) {
-            compileResult = nullptr;
+        TKqpCompileResult::TConstPtr compileResult;
+        const bool enableTablePathPrefixRelativePaths = AppData(ctx)->FeatureFlags.GetEnableTablePathPrefixRelativePaths();
+        if (compileRequest.FindInCache && queryAst.EnableTablePathPrefixRelativePaths == enableTablePathPrefixRelativePaths) {
+            compileResult = QueryCache->FindByAst(
+                compileRequest.Query, *queryAst.Ast, enableTablePathPrefixRelativePaths,
+                compileRequest.CompileSettings.KeepInCache,
+                compileRequest.CompileSettings.IsWarmupCompilation
+                    ? EWarmupAttributionMode::Warmup
+                    : EWarmupAttributionMode::Client,
+                Counters,
+                compileRequest.TempTablesState);
         }
 
         if (compileResult) {
@@ -877,7 +900,7 @@ private:
             return false;
         }
         if (compileResult->GetAst() && QueryCache->FindByAst(
-                query, *compileResult->GetAst(), keepInCache,
+                query, *compileResult->GetAst(), compileResult->EnableTablePathPrefixRelativePaths, keepInCache,
                 EWarmupAttributionMode::None, /*counters=*/nullptr)) {
             return false;
         }
@@ -885,6 +908,7 @@ private:
             false, {}, compileResult->ReplayMessageUserView);
         newCompileResult->AllowCache = compileResult->AllowCache;
         newCompileResult->UsedNewRbo = compileResult->UsedNewRbo;
+        newCompileResult->EnableTablePathPrefixRelativePaths = compileResult->EnableTablePathPrefixRelativePaths;
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
         YDB_LOG_DEBUG_CTX(ctx, "Insert preparing query with params",
             {"queryId", compileResult->Query->SerializeToString()});
@@ -1326,6 +1350,10 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
 
         auto compileResult = FindByUidImpl(*uid, promote);
         const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
+        if (compileResult && !HasCurrentTablePathPrefixSemantics(*compileResult, ctx)) {
+            EraseByUidImpl(compileResult->Uid);
+            compileResult = nullptr;
+        }
 
         if (compileResult) {
             Y_ENSURE(compileResult->Query);
@@ -1366,6 +1394,10 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
         {"queryId", query->SerializeToString()});
     auto compileResult = FindByQueryImpl(*query, promote);
     const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
+    if (compileResult && !HasCurrentTablePathPrefixSemantics(*compileResult, ctx)) {
+        EraseByUidImpl(compileResult->Uid);
+        compileResult = nullptr;
+    }
 
     if (compileResult) {
         counters->ReportQueryCacheHit(dbCounters, true);
@@ -1390,6 +1422,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
 TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
     const TKqpQueryId& query,
     const NYql::TAstParseResult& ast,
+    bool enableTablePathPrefixRelativePaths,
     bool promote,
     EWarmupAttributionMode warmupAttribution,
     TIntrusivePtr<TKqpCounters> counters,
@@ -1404,6 +1437,10 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
 
     auto compileResult = FindByUidImpl(*uid, promote);
     RejectOnTempTableClash(compileResult, tempTablesState);
+    if (compileResult && compileResult->EnableTablePathPrefixRelativePaths != enableTablePathPrefixRelativePaths) {
+        EraseByUidImpl(compileResult->Uid);
+        compileResult = nullptr;
+    }
 
     if (compileResult) {
         AccountWarmupHitImpl(compileResult, warmupAttribution, counters);

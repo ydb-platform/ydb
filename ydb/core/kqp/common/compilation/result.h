@@ -58,6 +58,8 @@ struct TKqpCompileResult {
     ETableReadType MaxReadType;
     bool AllowCache = true;
     bool UsedNewRbo = false;
+    // Retain the translation mode across configuration changes and cache hits.
+    bool EnableTablePathPrefixRelativePaths = true;
     TMaybe<TQueryAst> QueryAst;
     bool NeedToSplit = false;
     TMaybe<TString> CommandTagName = {};

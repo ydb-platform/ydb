@@ -15,6 +15,8 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
+#include <utility>
+
 namespace NKikimr::NKqp {
 
 TKqpAutoParamBuilder::TKqpAutoParamBuilder()
@@ -175,6 +177,8 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
     SetLangVer(config.GetDefaultLangVer());
     SetBackportMode(config.GetYqlBackportMode());
     SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
+    EnableTablePathPrefixRelativePaths = config.FeatureFlags.GetEnableTablePathPrefixRelativePaths();
+    IncrementCounter = config.IncrementTranslationCounter;
     return *this;
 }
 
@@ -184,6 +188,8 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     settings.BackportMode = BackportMode;
 
     settings.SyntaxVersion = 1;
+    settings.EnableTablePathPrefixRelativePaths = EnableTablePathPrefixRelativePaths;
+    settings.IncrementCounter = IncrementCounter;
 
     if (IsEnableExternalDataSources) {
         settings.DynamicClusterProvider = NYql::KikimrProviderName;
@@ -307,6 +313,18 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         }
 
         auto settings = settingsBuilder.Build(ctx);
+        bool reportedNonAbsolutePath = false;
+        const auto incrementCounter = settings.IncrementCounter;
+        settings.IncrementCounter = [&](const TString& group, const TString& name) {
+            if (group == "TablePathPrefix" && name == "NonAbsolutePath") {
+                if (std::exchange(reportedNonAbsolutePath, true)) {
+                    return;
+                }
+            }
+            if (incrementCounter) {
+                incrementCounter(group, name);
+            }
+        };
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         NYql::TStmtParseInfo stmtParseInfo;
@@ -325,6 +343,10 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         );
 
         auto ast = NSQLTranslation::SqlToYql(translators, queryText, settings, nullptr, &stmtParseInfo, effectiveSettings);
+        if (effectiveSettings) {
+            // The deduplication callback only lives for this parse operation.
+            effectiveSettings->IncrementCounter = incrementCounter;
+        }
         deprecatedSQL = false;
         sqlVersion = 1;
         keepInCache = stmtParseInfo.KeepInCache;
@@ -344,14 +366,16 @@ TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>&
         return TQueryAst(std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult(PgSyntaxNotSupportedMessage)), {}, {}, false, {});
     }
 
-    bool deprecatedSQL;
-    bool keepInCache;
+    bool deprecatedSQL = false;
+    bool keepInCache = true;
     TMaybe<TString> commandTagName;
     TMaybe<ui16> sqlVersion;
 
     NYql::TExprContext ctx;
     auto astRes = ParseQuery(queryText, isSql, sqlVersion, deprecatedSQL, ctx, settingsBuilder, keepInCache, commandTagName);
-    return TQueryAst(std::make_shared<NYql::TAstParseResult>(std::move(astRes)), sqlVersion, deprecatedSQL, keepInCache, commandTagName);
+    TQueryAst result(std::make_shared<NYql::TAstParseResult>(std::move(astRes)), sqlVersion, deprecatedSQL, keepInCache, commandTagName);
+    result.EnableTablePathPrefixRelativePaths = settingsBuilder.GetEnableTablePathPrefixRelativePaths();
+    return result;
 }
 
 TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
@@ -376,6 +400,18 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         }
 
         auto settings = settingsBuilder.Build(ctx);
+        bool reportedNonAbsolutePath = false;
+        const auto incrementCounter = settings.IncrementCounter;
+        settings.IncrementCounter = [&](const TString& group, const TString& name) {
+            if (group == "TablePathPrefix" && name == "NonAbsolutePath") {
+                if (std::exchange(reportedNonAbsolutePath, true)) {
+                    return;
+                }
+            }
+            if (incrementCounter) {
+                incrementCounter(group, name);
+            }
+        };
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         auto parsedSettings = settings;
@@ -399,11 +435,14 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         }
         for (size_t i = 0; i < astStatements.size(); ++i) {
             result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(astStatements[i])), sqlVersion, false, stmtParseInfo[i].KeepInCache, stmtParseInfo[i].CommandTagName});
+            result.back().EnableTablePathPrefixRelativePaths = settingsBuilder.GetEnableTablePathPrefixRelativePaths();
         }
         return result;
     } else {
         sqlVersion = {};
-        return {{std::make_shared<NYql::TAstParseResult>(NYql::ParseAst(queryText)), sqlVersion, true, true, {}}};
+        result.push_back({std::make_shared<NYql::TAstParseResult>(NYql::ParseAst(queryText)), sqlVersion, true, true, {}});
+        result.back().EnableTablePathPrefixRelativePaths = settingsBuilder.GetEnableTablePathPrefixRelativePaths();
+        return result;
     }
 }
 

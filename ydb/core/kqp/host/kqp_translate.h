@@ -144,6 +144,10 @@ public:
         return IsAmbiguityError;
     }
 
+    bool GetEnableTablePathPrefixRelativePaths() const {
+        return EnableTablePathPrefixRelativePaths;
+    }
+
     TKqpTranslationSettingsBuilder& SetYqlSelect(TMaybe<NSQLTranslation::EYqlSelect> yqlSelect) {
         YqlSelect = yqlSelect;
         return *this;
@@ -161,6 +165,8 @@ private:
     const NSQLTranslation::EBindingsMode BindingsMode;
 
     TString KqpTablePathPrefix = {};
+    bool EnableTablePathPrefixRelativePaths = true;
+    NSQLTranslation::TIncrementMonCounterFunction IncrementCounter;
     bool IsEnableExternalDataSources = false;
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;

@@ -270,6 +270,35 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
         UNIT_ASSERT_C(!sumStage.empty(), ast);
         UNIT_ASSERT_C(sumStage.Contains("\"Data\""), sumStage);
         UNIT_ASSERT_C(!sumStage.Contains("unused_fat_col"), sumStage);
+
+        auto exec = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(exec.GetStatus(), EStatus::SUCCESS, exec.GetIssues().ToString());
+        CompareYsonUnordered(R"([
+            [[101u];["Value1"];[1];"101Value11";[15]];
+            [[201u];["Value1"];[2];"201Value12";[15]];
+            [[301u];["Value1"];[3];"301Value13";[15]];
+            [[401u];["Value1"];[1];"401Value11";[15]];
+            [[501u];["Value1"];[2];"501Value12";[15]];
+            [[601u];["Value1"];[3];"601Value13";[15]];
+            [[701u];["Value1"];[1];"701Value11";[15]];
+            [[801u];["Value1"];[2];"801Value12";[15]];
+            [[102u];["Value2"];[3];"102Value23";[16]];
+            [[202u];["Value2"];[1];"202Value21";[16]];
+            [[302u];["Value2"];[2];"302Value22";[16]];
+            [[402u];["Value2"];[3];"402Value23";[16]];
+            [[502u];["Value2"];[1];"502Value21";[16]];
+            [[602u];["Value2"];[2];"602Value22";[16]];
+            [[702u];["Value2"];[3];"702Value23";[16]];
+            [[802u];["Value2"];[1];"802Value21";[16]];
+            [[103u];["Value3"];[2];"103Value32";[17]];
+            [[203u];["Value3"];[3];"203Value33";[17]];
+            [[303u];["Value3"];[1];"303Value31";[17]];
+            [[403u];["Value3"];[2];"403Value32";[17]];
+            [[503u];["Value3"];[3];"503Value33";[17]];
+            [[603u];["Value3"];[1];"603Value31";[17]];
+            [[703u];["Value3"];[2];"703Value32";[17]];
+            [[803u];["Value3"];[3];"803Value33";[17]]
+        ])", FormatResultSetYson(exec.GetResultSet(0)));
     }
 }
 

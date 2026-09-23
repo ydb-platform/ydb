@@ -481,8 +481,9 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
                 std::vector<ISystemAttributeProvider::TAttributeDescriptor> builtinDescriptors;
                 builtinAttributeProvider->ListBuiltinAttributes(&builtinDescriptors);
                 for (const auto& descriptor : builtinDescriptors) {
-                    if (!descriptor.Present)
+                    if (!descriptor.Present) {
                         continue;
+                    }
 
                     auto key = descriptor.InternedKey.Unintern();
                     TAttributeValueConsumer attributeValueConsumer(&writer, key);

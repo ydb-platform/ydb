@@ -84,7 +84,7 @@ public:
         , UserTraceId((ev->Get()->GetUserCtx() != nullptr && ev->Get()->GetUserCtx()->GetUserTraceId()) ? ev->Get()->GetUserCtx()->GetUserTraceId().Clone() : NWilson::TTraceId())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
-        , LastCurrentQueryStatsPublishAt(startedAt)
+        , CurrentQueryStatsWindow(startedAt)
         , CurrentQueryStatsInterval(ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
         , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
@@ -186,8 +186,8 @@ public:
     TKqpQueryStats QueryStats;
     TCurrentQueryStats CurrentQueryStats;
     TCurrentQueryStats::TSourceState CurrentExecutionStats;
+    TCurrentQueryStatsWindow CurrentQueryStatsWindow;
     ui64 CurrentQueryStatsSequenceNo = 0;
-    ui64 LastPublishedReadIngressBytes = 0;
     bool CurrentQueryStatsPublishScheduled = false;
     TString QueryAst;
     bool KeepSession = false;
@@ -195,7 +195,6 @@ public:
     NWilson::TTraceId UserTraceId;
     TString ClientAddress;
     NActors::TMonotonic StartedAt;
-    NActors::TMonotonic LastCurrentQueryStatsPublishAt;
     TDuration CurrentQueryStatsInterval;
     bool CompilationRunning = false;
 

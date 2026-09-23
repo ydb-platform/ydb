@@ -33,7 +33,7 @@ public:
         ui64 ComputeMemoryBytes = 0;
         ui64 TableReadBytes = 0;
         ui64 ReadIngressBytes = 0;
-        ui64 ReadIngressBytesRate = 0;
+        std::optional<ui64> ReadIngressBytesRate;
         ui64 ObservedPeakComputeMemoryBytes = 0;
     };
 
@@ -96,6 +96,45 @@ private:
 
     TSnapshot Total;
     bool HasReports = false;
+};
+
+class TCurrentQueryStatsWindow {
+public:
+    struct TPublishResult {
+        TCurrentQueryStats::TSnapshot Snapshot;
+        bool ScheduleStaleCheck = false;
+    };
+
+    explicit TCurrentQueryStatsWindow(TMonotonic publishedAt)
+        : LastPublishedAt(publishedAt)
+    {}
+
+    void MarkUpdated() {
+        UpdatedSincePublish = true;
+    }
+
+    TPublishResult Publish(TCurrentQueryStats::TSnapshot snapshot, TMonotonic now) {
+        const bool hasNewStats = UpdatedSincePublish;
+        if (hasNewStats) {
+            const auto elapsed = now - LastPublishedAt;
+            if (elapsed != TDuration::Zero()) {
+                snapshot.ReadIngressBytesRate = (snapshot.ReadIngressBytes - LastPublishedReadIngressBytes)
+                    * TDuration::Seconds(1).MicroSeconds() / elapsed.MicroSeconds();
+            }
+        } else {
+            snapshot.ReadIngressBytesRate.reset();
+        }
+
+        LastPublishedReadIngressBytes = snapshot.ReadIngressBytes;
+        LastPublishedAt = now;
+        UpdatedSincePublish = false;
+        return {std::move(snapshot), hasNewStats};
+    }
+
+private:
+    ui64 LastPublishedReadIngressBytes = 0;
+    TMonotonic LastPublishedAt;
+    bool UpdatedSincePublish = false;
 };
 
 } // namespace NKikimr::NKqp

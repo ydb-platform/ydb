@@ -228,7 +228,12 @@ public:
     }
 
     void PublishCurrentStats() {
+        const auto now = TInstant::Now();
+        if (LastCurrentStatsPublish + UserRequestContext->CurrentQueryStatsInterval > now) {
+            return;
+        }
         if (const auto current = CurrentQueryStats.Get()) {
+            LastCurrentStatsPublish = now;
             Send(SessionActorId, new TEvKqpExecuter::TEvCurrentExecutionStats({TCurrentQueryStats::ToExecutionStats(*current), ++CurrentStatsSequenceNo}));
         }
     }
@@ -1033,6 +1038,7 @@ private:
     TCurrentQueryStats CurrentQueryStats;
     THashMap<TActorId, TCurrentQueryStats::TSourceState> ChildCurrentStats;
     ui64 CurrentStatsSequenceNo = 0;
+    TInstant LastCurrentStatsPublish;
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     NYql::TIssues ReturnIssues;
 

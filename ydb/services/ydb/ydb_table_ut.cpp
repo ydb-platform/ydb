@@ -1,5 +1,7 @@
 #include "ydb_common_ut.h"
 
+#include <ydb/library/testlib/helpers.h>
+
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -133,6 +135,19 @@ static void MultiTenantSDK(bool asyncDiscovery) {
 }
 
 namespace {
+
+template <class TStub, class TRequest, class TResponse>
+Ydb::Operations::Operation SyncCall(TStub& stub,
+    grpc::Status (TStub::*method)(grpc::ClientContext*, const TRequest&, TResponse*), TRequest request)
+{
+    grpc::ClientContext context;
+    context.AddMetadata("x-ydb-database", "/Root");
+    request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
+    TResponse response;
+    const auto status = (stub.*method)(&context, request, &response);
+    UNIT_ASSERT_C(status.ok(), status.error_message());
+    return response.operation();
+}
 
 NYdb::NRetry::TRetryOperationSettings FastNestedRetryTestSettings(ui32 maxRetries) {
     return NYdb::NRetry::TRetryOperationSettings()
@@ -4840,6 +4855,156 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             result.GetIssues().ToString(),
             "Warning: Table profile and ReadReplicasSettings are set. They are mutually exclusive. Use either one of them.",
             "Unexpected error message");
+    }
+
+    Y_UNIT_TEST(CreateTableWithMetricsSettings) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableDataShardDetailedMetrics(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(driver);
+        auto getSessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
+        auto session = getSessionResult.GetSession();
+
+        const std::tuple<const char*, TMetricsSettings::EMetricsLevel, TMetricsSettings::EMetricsLevel> cases[] = {
+            {"/Root/MetricsDatabase", TMetricsSettings::EMetricsLevel::Database, TMetricsSettings::EMetricsLevel::Database},
+            {"/Root/MetricsUnspecified", TMetricsSettings::EMetricsLevel::Unspecified, TMetricsSettings::EMetricsLevel::Database},
+            {"/Root/MetricsTable", TMetricsSettings::EMetricsLevel::Table, TMetricsSettings::EMetricsLevel::Table},
+        };
+
+        for (const auto& [path, setLevel, expectedLevel] : cases) {
+            auto builder = TTableBuilder()
+                .AddNullableColumn("key", EPrimitiveType::Uint64)
+                .AddNullableColumn("value", EPrimitiveType::Utf8)
+                .SetPrimaryKeyColumn("key")
+                .SetMetricsSettings(setLevel);
+
+            auto desc = builder.Build();
+
+            auto result = session.CreateTable(path, std::move(desc)).GetValueSync();
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = session.DescribeTable(path).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT(describeResult.GetTableDescription().GetMetricsSettings().has_value());
+            UNIT_ASSERT_EQUAL(describeResult.GetTableDescription().GetMetricsSettings()->GetMetricsLevel(), expectedLevel);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TableMetricsSettingsApi, EnableDataShardDetailedMetrics) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableDataShardDetailedMetrics(EnableDataShardDetailedMetrics);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GetPort()), grpc::InsecureChannelCredentials());
+        auto tableService = Ydb::Table::V1::TableService::NewStub(channel);
+        using TLevel = Ydb::Table::MetricsSettings::MetricsLevel;
+        constexpr auto databaseLevel = Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE;
+        constexpr auto tableLevel = Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE;
+        constexpr auto partitionLevel = Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION;
+
+        struct TCase {
+            const char* Name;
+            bool HasSettings;
+            std::optional<int> RawLevel;
+            std::optional<TLevel> ExpectedLevel;
+
+            void Apply(Ydb::Table::MetricsSettings& s) const {
+                if (RawLevel) {
+                    s.set_metrics_level(static_cast<TLevel>(*RawLevel));
+                }
+            }
+        };
+        const TVector<TCase> cases = {
+            {"Absent", false, std::nullopt, std::nullopt},
+            {"Empty", true, std::nullopt, databaseLevel},
+            {"Unspecified", true, 0, databaseLevel},
+            {"Database", true, 2, databaseLevel},
+            {"Table", true, 3, tableLevel},
+            {"Partition", true, 4, partitionLevel},
+            {"Disabled", true, 1, std::nullopt},
+            {"UnknownPositive", true, 99, std::nullopt},
+            {"UnknownNegative", true, -1, std::nullopt},
+        };
+
+        auto checkOperation = [](const auto& operation, Ydb::StatusIds::StatusCode expected, const TString& label) {
+            UNIT_ASSERT_C(operation.ready(), label << ": " << operation.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), expected, label << ": " << operation.DebugString());
+        };
+
+        auto createTable = [&](const TString& path, const TCase& testCase) {
+            Ydb::Table::CreateTableRequest request;
+            request.set_path(path);
+            auto* key = request.add_columns();
+            key->set_name("key");
+            key->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+            request.add_primary_key("key");
+            if (testCase.HasSettings) {
+                testCase.Apply(*request.mutable_metrics_settings());
+            }
+            return SyncCall(*tableService, &Ydb::Table::V1::TableService::Stub::CreateTable, request);
+        };
+
+        auto alterTable = [&](Ydb::Table::AlterTableRequest request) {
+            request.set_path("/Root/MetricsAlter");
+            return SyncCall(*tableService, &Ydb::Table::V1::TableService::Stub::AlterTable, request);
+        };
+
+        auto checkDescription = [&](const TString& path, std::optional<TLevel> expectedLevel) {
+            Ydb::Table::DescribeTableRequest request;
+            request.set_path(path);
+            auto operation = SyncCall(*tableService, &Ydb::Table::V1::TableService::Stub::DescribeTable, request);
+            checkOperation(operation, Ydb::StatusIds::SUCCESS, path);
+
+            Ydb::Table::DescribeTableResult description;
+            UNIT_ASSERT(operation.result().UnpackTo(&description));
+            UNIT_ASSERT_VALUES_EQUAL_C(description.has_metrics_settings(), expectedLevel.has_value(),
+                path << ": " << description.DebugString());
+            if (expectedLevel) {
+                UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(description.metrics_settings().metrics_level()), static_cast<int>(*expectedLevel),
+                    path << ": " << description.DebugString());
+            }
+        };
+
+        checkOperation(createTable("/Root/MetricsAlter", cases.front()), Ydb::StatusIds::SUCCESS, "Create ALTER target");
+        for (const auto& testCase : cases) {
+            const auto expectedStatus = !testCase.HasSettings || (EnableDataShardDetailedMetrics && testCase.ExpectedLevel)
+                ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST;
+            const TString path = TStringBuilder() << "/Root/Metrics" << testCase.Name;
+            checkOperation(createTable(path, testCase), expectedStatus, TStringBuilder() << "CREATE " << testCase.Name);
+            if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+                checkDescription(path, testCase.ExpectedLevel);
+            }
+
+            std::optional<TLevel> expectedAfterAlter;
+            if (EnableDataShardDetailedMetrics) {
+                Ydb::Table::AlterTableRequest seed;
+                seed.mutable_set_metrics_settings()->set_metrics_level(tableLevel);
+                checkOperation(alterTable(seed), Ydb::StatusIds::SUCCESS, "Seed TABLE override");
+                expectedAfterAlter = tableLevel;
+            }
+
+            Ydb::Table::AlterTableRequest request;
+            if (testCase.HasSettings) {
+                testCase.Apply(*request.mutable_set_metrics_settings());
+                if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+                    expectedAfterAlter = testCase.ExpectedLevel;
+                }
+            } else {
+                request.set_set_key_bloom_filter(Ydb::FeatureFlag::ENABLED);
+            }
+            checkOperation(alterTable(request), expectedStatus, TStringBuilder() << "ALTER " << testCase.Name);
+            checkDescription("/Root/MetricsAlter", expectedAfterAlter);
+        }
+
+        Ydb::Table::AlterTableRequest reset;
+        reset.mutable_drop_metrics_settings();
+        checkOperation(alterTable(reset),
+            EnableDataShardDetailedMetrics ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST, "RESET metrics");
+        checkDescription("/Root/MetricsAlter", std::nullopt);
     }
 
     Y_UNIT_TEST(TableKeyRangesSinglePartition) {

@@ -253,6 +253,10 @@ struct TTableAndSomeData {
 };
 
 namespace NJoinPackedTuples {
+constexpr bool PreservedBuildKind(EJoinKind kind) {
+    return kind == EJoinKind::Left || kind == EJoinKind::LeftSemi || kind == EJoinKind::LeftOnly;
+}
+
 template <typename Source> class TInMemoryHashJoin {
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
@@ -388,7 +392,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         BuildingInMemoryTable(Self& self, TBucketsSpiller<Settings> spiller)
             : Spiller(std::move(spiller))
         {
-            bool trackUsed = (Kind == EJoinKind::Left) && self.Settings_.LeftIsBuild();
+            bool trackUsed = PreservedBuildKind(Kind) && self.Settings_.LeftIsBuild();
             for(int index = 0; index < std::ssize(Spiller.GetBuckets()); ++index) {
                 ProbeState.Buckets.push_back(TTable{self.Layouts_.Build, trackUsed});
             }
@@ -531,20 +535,26 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     }
                 }
             } else {
+                // Left semi/only with the SQL left side hashed keep those rows in the build table.
+                // Probe matches only mark them; the rows themselves are emitted after the probe.
+                const bool preservedInBuild = Settings_.LeftIsBuild() && PreservedBuildKind(Kind)
+                    && Kind != EJoinKind::Left;
                 table.Lookup(tuple, [&](TSingleTuple tableMatch) {
                     found = true;
                     if constexpr (Kind == EJoinKind::Inner) {
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
                     }
                 });
-                if constexpr (Kind == EJoinKind::LeftOnly) {
-                    if (!found) {
-                        consume(tuple);
+                if (!preservedInBuild) {
+                    if constexpr (Kind == EJoinKind::LeftOnly) {
+                        if (!found) {
+                            consume(tuple);
+                        }
                     }
-                }
-                if constexpr(Kind == EJoinKind::LeftSemi) {
-                    if (found) {
-                        consume(tuple);
+                    if constexpr(Kind == EJoinKind::LeftSemi) {
+                        if (found) {
+                            consume(tuple);
+                        }
                     }
                 }
             }
@@ -637,10 +647,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     state.FetchedPack = std::move(GetPayload(var));
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
-                    if constexpr (Kind == EJoinKind::Left) {
-                        if (Settings_.LeftIsBuild()) {
-                            EmitUnmatchedFromInMemoryBuckets(state.Spiller, consume);
-                        }
+                    if (Settings_.LeftIsBuild() && PreservedBuildKind(Kind)) {
+                        EmitPreservedBuildRowsFromInMemoryBuckets(state.Spiller, consume);
                     }
                     std::unordered_map<int, TSpilledBucket> alreadyDumped;
                     TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>> futures;
@@ -752,7 +760,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         for (auto& future : tdata->Futures) {
                             vec.push_back(GetPage(std::move(future), ESide::Build));
                         }
-                        bool trackUsed = (Kind == EJoinKind::Left) && Settings_.LeftIsBuild();
+                        bool trackUsed = PreservedBuildKind(Kind) && Settings_.LeftIsBuild();
                         NJoinTable::TNeumannJoinTable table{Layouts_.Build, trackUsed};
                         table.BuildWith(Flatten(std::move(vec)));
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
@@ -782,10 +790,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         table->ProbeResumeIndex = 0;
                     } else if (table->Futures.empty()) {
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
-                        if constexpr (Kind == EJoinKind::Left) {
-                            if (Settings_.LeftIsBuild()) {
-                                table->Table.ForEachUnused(consume);
-                            }
+                        if (Settings_.LeftIsBuild() && PreservedBuildKind(Kind)) {
+                            EmitPreservedBuildRows(table->Table, consume);
                         }
                         state.SelectedPair = std::nullopt;
                     } else {
@@ -807,15 +813,24 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         return EFetchResult::One;
     }
 
+    template <typename F>
+    void EmitPreservedBuildRows(TTable& table, F&& consume) {
+        if constexpr (Kind == EJoinKind::LeftSemi) {
+            table.ForEachUsed(std::forward<F>(consume));
+        } else {
+            table.ForEachUnused(std::forward<F>(consume));
+        }
+    }
+
     template <typename TSpiller, typename F>
-    void EmitUnmatchedFromInMemoryBuckets(TSpiller& spiller, F&& consume) {
+    void EmitPreservedBuildRowsFromInMemoryBuckets(TSpiller& spiller, F&& consume) {
         for (int index = 0; index < std::ssize(spiller.GetState().Buckets); ++index) {
             if (spiller.IsBucketSpilled(index)) {
                 continue;
             }
             TTable* table = std::get_if<TTable>(&spiller.GetState().Buckets[index]);
             if (table && !table->Empty()) {
-                table->ForEachUnused(std::forward<F>(consume));
+                EmitPreservedBuildRows(*table, std::forward<F>(consume));
             }
         }
     }

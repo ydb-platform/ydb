@@ -679,6 +679,12 @@ TJoinTestData EmptyRightInnerTestData() {
     return td;
 }
 
+[[maybe_unused]] TJoinTestData LeftSemiTestDataLeftIsBuild() {
+    auto td = LeftSemiTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
 [[maybe_unused]] TJoinTestData RightSemiTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -717,6 +723,18 @@ TJoinTestData EmptyRightInnerTestData() {
     td.Kind = EJoinKind::LeftOnly;
     td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft} };
 
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftOnlyTestDataLeftIsBuild() {
+    auto td = LeftOnlyTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftOnlyTestDataLeftIsBuild() {
+    auto td = LeftOnlyTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
     return td;
 }
 
@@ -1190,12 +1208,20 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(LeftSemiTestData(),true);
     }
 
+    Y_UNIT_TEST(TestLeftSemiKindLeftIsBuild) {
+        Test(LeftSemiTestDataLeftIsBuild(), true);
+    }
+
     // Y_UNIT_TEST_TWIN(TestRightSemiKind, BlockJoin) {
     //     Test(RightSemiTestData(), BlockJoin);
     // }
 
     Y_UNIT_TEST(TestLeftOnlyKind) {
         Test(LeftOnlyTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftOnlyKindLeftIsBuild) {
+        Test(LeftOnlyTestDataLeftIsBuild(), true);
     }
 
     // Y_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {

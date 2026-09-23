@@ -2575,7 +2575,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         double expectedNormalizedOccupancy,
         double expectedVDiskSlotUsage,
         double expectedPDiskUsage,
-        ui32 expectedNumVDisks,
+        ui32 expectedNumOwners,
         ui32 expectedNumActiveSlots,
         NKikimrBlobStorage::TPDiskSpaceColor::E expectedColor
     ) {
@@ -2591,7 +2591,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             << " VDiskSlotUsage# " << expectedVDiskSlotUsage
             << " VDiskRawUsage# " << expectedVDiskRawUsage
             << " PDiskUsage# " << expectedPDiskUsage
-            << " NumVDisks# " << expectedNumVDisks
+            << " NumOwners# " << expectedNumOwners
             << " NumActiveSlots# " << expectedNumActiveSlots
             << " Color# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(expectedColor)
             << Endl);
@@ -2607,7 +2607,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->FreeChunks, expectedFreeChunks);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedTotalChunks);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->UsedChunks, expectedUsedChunks);
-        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->NumVDisks, expectedNumVDisks);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->NumOwners, expectedNumOwners);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->NumActiveSlots, expectedNumActiveSlots);
         UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(evCheckSpaceResult->StatusFlags), expectedColor);
 

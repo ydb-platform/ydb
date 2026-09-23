@@ -1607,7 +1607,7 @@ namespace NKikimr::NBsController {
         }
 
         auto& pdisk = State->PDisks[it->second];
-        if (vslot.CountedInNumSlots) {
+        if (vslot.CountedInNumActiveSlots) {
             const auto groupKey = std::make_pair(vslot.GroupId.value_or(0), vslot.GroupGeneration);
             const auto groupIt = State->GroupSizes.find(groupKey);
             const ui32 groupSizeInUnits = groupIt != State->GroupSizes.end() ? groupIt->second : 1;

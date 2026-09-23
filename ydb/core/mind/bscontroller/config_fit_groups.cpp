@@ -723,7 +723,7 @@ namespace NKikimr {
                             .GroupId = vslotInfo.GroupId.GetRawId(),
                             .GroupGeneration = vslotInfo.GroupGeneration,
                             .VDiskId = vslotInfo.GetShortVDiskId(),
-                            .CountedInNumSlots = false,
+                            .CountedInNumActiveSlots = false,
                             .OccupiedByGroup = !vslotInfo.IsBeingDeleted(),
                             .Ready = vslotInfo.GetStatus() == NKikimrBlobStorage::EVDiskStatus::READY,
                             .Replicating = !vslotInfo.IsBeingDeleted()

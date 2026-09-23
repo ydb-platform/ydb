@@ -940,7 +940,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                 .PDiskId = TPDiskId(1, 1),
                 .GroupId = 1,
                 .GroupGeneration = 1,
-                .CountedInNumSlots = false,
+                .CountedInNumActiveSlots = false,
                 .AllocatedSize = 500,
             });
 
@@ -993,7 +993,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                 .GroupId = 1,
                 .GroupGeneration = 1,
                 .VDiskId = TVDiskIdShort(0, 0, 0),
-                .CountedInNumSlots = false,
+                .CountedInNumActiveSlots = false,
                 .AllocatedSize = 500,
             },
             {
@@ -1002,7 +1002,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                 .GroupId = 1,
                 .GroupGeneration = 1,
                 .VDiskId = TVDiskIdShort(0, 1, 0),
-                .CountedInNumSlots = false,
+                .CountedInNumActiveSlots = false,
                 .AllocatedSize = 100,
             },
         };

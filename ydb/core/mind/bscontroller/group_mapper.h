@@ -164,7 +164,7 @@ namespace NKikimr {
                 std::optional<ui32> GroupId;
                 ui32 GroupGeneration = 0;
                 TVDiskIdShort VDiskId;
-                bool CountedInNumSlots = true;
+                bool CountedInNumActiveSlots = true;
                 bool OccupiedByGroup = true;
                 bool Ready = false;
                 bool Replicating = false;

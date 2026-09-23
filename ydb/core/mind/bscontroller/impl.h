@@ -905,7 +905,7 @@ public:
 
         bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
             TBlobStorageController *self) const;
-        bool FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb, bool countMaxSlots) const;
+        bool FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb, bool useExpectedSlotCount) const;
         bool FillInVDiskResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *pb) const;
 
         void UpdateSeenOperational() {
@@ -2362,8 +2362,8 @@ public:
         ui32 numVDisksTooSmall = 0;
         ui32 numVDisksTooLarge = 0;
         for (const auto& [id, pdisk] : PDisks) {
-            ui32 effectiveSlotCount, effectiveSlotSizeInUnits;
-            pdisk->ExtractInferredPDiskSettings(effectiveSlotCount, effectiveSlotSizeInUnits);
+            ui32 effectiveExpectedSlotCount, effectiveSlotSizeInUnits;
+            pdisk->ExtractInferredPDiskSettings(effectiveExpectedSlotCount, effectiveSlotSizeInUnits);
             // Check if we should infer PDisk slot count based on global settings
             bool settingsShouldBeInferred = !pdisk->HasExpectedSlotCount &&
                 !pdisk->HasExpectedSlotSize &&
@@ -2373,12 +2373,12 @@ public:
                     StorageConfig->GetBlobStorageConfig().GetInferPDiskSlotCountSettings().HasRot() :
                     StorageConfig->GetBlobStorageConfig().GetInferPDiskSlotCountSettings().HasSsd());
 
-            numWithoutExpectedSlotCount += !effectiveSlotCount;
+            numWithoutExpectedSlotCount += !effectiveExpectedSlotCount;
             numWithoutSerial += !pdisk->ExpectedSerial;
             numWithoutInferredSettings += !settingsShouldBeInferred;
-            numWithInferredSettingsUnknown += settingsShouldBeInferred && !effectiveSlotCount;
+            numWithInferredSettingsUnknown += settingsShouldBeInferred && !effectiveExpectedSlotCount;
 
-            if (!effectiveSlotCount) {
+            if (!effectiveExpectedSlotCount) {
                 continue;
             }
             if (pdisk->GetEffectiveExpectedSlotSize()) {
@@ -2649,21 +2649,21 @@ public:
             }
         }
 
-        void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
+        void ExtractInferredPDiskSettings(ui32& expectedSlotCount, ui32& slotSizeInUnits) const {
             if (PDiskMetrics && PDiskMetrics->HasExpectedSlotCount()) {
-                slotCount = PDiskMetrics->GetExpectedSlotCount();
+                expectedSlotCount = PDiskMetrics->GetExpectedSlotCount();
                 slotSizeInUnits = PDiskMetrics->GetSlotSizeInUnits();
             } else {
-                slotCount = ExpectedSlotCount;
+                expectedSlotCount = ExpectedSlotCount;
                 slotSizeInUnits = SlotSizeInUnits;
             }
         }
 
         ui32 GetEffectiveExpectedSlotCount() const {
-            ui32 slotCount = 0;
+            ui32 expectedSlotCount = 0;
             ui32 slotSizeInUnits = 0;
-            ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
-            return slotCount;
+            ExtractInferredPDiskSettings(expectedSlotCount, slotSizeInUnits);
+            return expectedSlotCount;
         }
 
         ui64 GetEffectiveExpectedSlotSize() const {

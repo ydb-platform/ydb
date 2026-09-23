@@ -160,7 +160,7 @@ bool TBlobStorageController::TGroupInfo::FillInGroupParameters(NKikimrBlobStorag
 }
 
 bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb,
-        bool countMaxSlots) const {
+        bool useExpectedSlotCount) const {
     // count minimum params for each of slots assuming they are shared fairly between all the slots (expected or currently created)
     std::optional<ui64> size;
     std::optional<double> iops;
@@ -175,21 +175,21 @@ bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGr
         const TPDiskInfo *pdisk = vslot->PDisk;
         const auto& metrics = pdisk->Metrics;
 
-        const ui32 maxSlots = pdisk->GetEffectiveExpectedSlotCount();
+        const ui32 expectedSlotCount = pdisk->GetEffectiveExpectedSlotCount();
 
         ui64 vdiskSlotSize = 0;
         const ui32 weight = pdisk->GetOwnerWeight(GroupSizeInUnits);
         if (metrics.HasEnforcedDynamicSlotSize()) {
             vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
         } else if (metrics.GetTotalSize()) {
-            const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->NumActiveDynamicSlots;
+            const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount) ? expectedSlotCount : pdisk->NumActiveDynamicSlots;
             vdiskSlotSize = metrics.GetTotalSize() / shareFactor * weight;
         }
         if (vdiskSlotSize) {
             size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
         }
 
-        const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->VSlotsOnPDisk.size();
+        const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount) ? expectedSlotCount : pdisk->VSlotsOnPDisk.size();
         if (metrics.HasMaxIOPS()) {
             iops = Min(iops.value_or(Max<double>()), metrics.GetMaxIOPS() * 100 / shareFactor * 0.01);
         }

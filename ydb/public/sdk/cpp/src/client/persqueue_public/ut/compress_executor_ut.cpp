@@ -139,10 +139,14 @@ Y_UNIT_TEST_SUITE(CompressExecutor) {
         UNIT_ASSERT(!waitEventFuture.HasValue());
         queue->Enqueue(1);
         event = *writer->GetEvent(true);
+        auto ackEvent = *writer->GetEvent(true);
+        // The ACK can arrive before the transport completion releases memory.
+        if (std::holds_alternative<TWriteSessionEvent::TAcksEvent>(event)) {
+            std::swap(event, ackEvent);
+        }
         UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
         continueToken = std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken);
-        event = *writer->GetEvent(true);
-        UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TAcksEvent>(event));
+        UNIT_ASSERT(std::holds_alternative<TWriteSessionEvent::TAcksEvent>(ackEvent));
 
         Cerr << "===Will now kick tablets\n";
         setup->KickTablets();

@@ -430,7 +430,80 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         env.Execute([&](const TActorContext& ctx) {
             env.Logic->RetryGcRequests(THistoryCutEnv::Channel, ctx);
         });
+        // The confirmed cut must resume even if the tablet stays idle.
+        env.CheckHardBarrier(1);
+        env.Reply(1);
+        env.CheckCut();
+    }
+
+    Y_UNIT_TEST(ExhaustedRetriesWaitForSoftGcBeforeCut) {
+        THistoryCutEnv env;
+        env.RestoreBarrier();
+        env.Step = 1;
         env.Snapshot();
+        env.CheckHardBarrier(0);
+        auto retry = env.Reply(0, NKikimrProto::ERROR);
+        UNIT_ASSERT(retry);
+
+        // New executor data makes the retries send a soft GC batch after the
+        // failed hard barrier. Keep failing until automatic retries stop.
+        TGCBlobDelta delta;
+        delta.Created.emplace_back(THistoryCutEnv::TabletId,
+            THistoryCutEnv::Generation, 1, THistoryCutEnv::Channel,
+            HistoryCutterUtBlobSize, 0);
+        TGCLogEntry entry(TGCTime(THistoryCutEnv::Generation, 1), delta);
+        env.Logic->ApplyLogEntry(entry);
+        for (ui32 attempts = 0; retry; ++attempts) {
+            UNIT_ASSERT_C(attempts < 100, "GC retries must eventually stop");
+            const auto index = env.Collects.size();
+            env.Execute([&](const TActorContext& ctx) {
+                env.Logic->RetryGcRequests(THistoryCutEnv::Channel, ctx);
+            });
+            UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), index + 1);
+            UNIT_ASSERT(!env.Collects[index].Hard);
+            retry = env.Reply(index, NKikimrProto::ERROR);
+        }
+
+        const auto index = env.Collects.size();
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Collects.size(), index + 1,
+            "a new soft GC batch must complete before sending a hard barrier");
+        UNIT_ASSERT(!env.Collects[index].Hard);
+        UNIT_ASSERT(env.Cuts.empty());
+        env.Reply(index);
+        UNIT_ASSERT(env.Cuts.empty());
+        // No further snapshot is required to resume the confirmed cut.
+        env.CheckHardBarrier(index + 1);
+        env.Reply(index + 1);
+        env.CheckCut();
+    }
+
+    Y_UNIT_TEST(SoftGcCompletionDoesNotConfirmSnapshotNomination) {
+        THistoryCutEnv env;
+        env.RestoreBarrier();
+        env.Step = 1;
+        TGCBlobDelta delta;
+        delta.Created.emplace_back(THistoryCutEnv::TabletId,
+            THistoryCutEnv::Generation, 1, THistoryCutEnv::Channel,
+            HistoryCutterUtBlobSize, 0);
+        TGCLogEntry entry(TGCTime(THistoryCutEnv::Generation, 1), delta);
+        env.Logic->ApplyLogEntry(entry);
+
+        NKikimrExecutorFlat::TLogSnapshot snap;
+        env.Logic->SnapToLog(snap, ++env.Step);
+        env.Execute([&](const TActorContext& ctx) {
+            env.Logic->OnCommitLog(env.Step, env.Step, ctx);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 1);
+        UNIT_ASSERT(!env.Collects[0].Hard);
+        env.Reply(0);
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Collects.size(), 1,
+            "GC completion must not authorize an unconfirmed history cut");
+        UNIT_ASSERT(env.Cuts.empty());
+
+        env.Execute([&](const TActorContext& ctx) {
+            env.Logic->Confirm(ctx);
+        });
         env.CheckHardBarrier(1);
         env.Reply(1);
         env.CheckCut();

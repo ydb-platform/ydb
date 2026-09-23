@@ -99,6 +99,7 @@ protected:
     struct TChannelInfo {
         enum class ECutHistoryStatus {
             None,
+            PendingBarrier, // snapshot confirmed; waiting for GC to become idle
             SentBarrier,
             Cut,
         };
@@ -140,6 +141,7 @@ protected:
 
     THashSet<ui32> ChannelsToCutHistory;
 
+    void TrySendHistoryBarriers(ui32 channelId, const TActorContext& ctx);
     void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
     static inline void MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source);
     static inline void MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source);

@@ -25,7 +25,7 @@ using TEvDescribeTableRequest = TGrpcRequestOperationCall<Ydb::Table::DescribeTa
 class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest> {
     using TBase = TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest>;
 
-    const TString TablePath;
+    TString TablePath;
     TString OverrideName;
     NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr PendingDescribeResult;
     TActorId ShardsResolverId;
@@ -49,11 +49,11 @@ class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDe
 public:
     TDescribeTableRPC(IRequestOpCtx* msg)
         : TBase(msg)
-        , TablePath(Request_->GetDatabaseRelativePath(GetProtoRequest()->path()))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
+        TablePath = Request_->GetDatabaseRelativePath(GetProtoRequest()->path());
 
         const auto request = GetProtoRequest();
         const auto paths = NKikimr::SplitPath(TablePath);

@@ -144,7 +144,7 @@ Y_UNIT_TEST_TWIN(FlagControlsPathsButNotMonitoring, enableRelativePaths) {
             ? Ydb::StatusIds::SCHEME_ERROR : Ydb::StatusIds::SUCCESS;
         UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), expected, response.DebugString());
     }
-    auto methodCounters = GetServiceCounters(server.GetServer().GetRuntime()->GetAppData().Counters, "ydb")
+    auto methodCounters = GetServiceCounters(server.GetServer().GetGRpcServerRootCounters(), "ydb")
         ->GetSubgroup("api_service", "scheme")->GetSubgroup("method", "DescribePath");
     UNIT_ASSERT_VALUES_EQUAL(methodCounters
         ->GetNamedCounter("name", "api.grpc.request.relative_resource_count", true)->Val(), 1);
@@ -185,7 +185,7 @@ Y_UNIT_TEST_TWIN(RateLimiterCoordinationPathsRespectFlag, enableRelativePaths) {
         AssertSuccess(rateLimiterClient.DropResource(path, "quota").GetValueSync());
     }
 
-    auto methodCounters = GetServiceCounters(server.GetServer().GetRuntime()->GetAppData().Counters, "ydb")
+    auto methodCounters = GetServiceCounters(server.GetServer().GetGRpcServerRootCounters(), "ydb")
         ->GetSubgroup("api_service", "rate_limiter")->GetSubgroup("method", "CreateResource");
     // The relative request is counted even when the feature is off and it is rejected.
     UNIT_ASSERT_VALUES_EQUAL(methodCounters

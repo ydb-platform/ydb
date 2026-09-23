@@ -309,7 +309,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TopSort(TExprBase node,
         if (!path.Ranges().Maybe<TCoVoid>()) {
             if (TMaybe<ui64> usedRows = TYtRangesInfo(path.Ranges()).GetUsedRows(tableRows)) {
                 // Make it proportional to used rows
-                tableSize = tableSize * usedRows.GetRef() / tableRows;
+                tableSize = tableRows ? (tableSize * usedRows.GetRef() / tableRows) : 0ull;
                 tableRows = usedRows.GetRef();
             } else {
                 // non-row ranges are present

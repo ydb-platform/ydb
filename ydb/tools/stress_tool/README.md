@@ -72,6 +72,11 @@ DDisk and Persistent Buffer checksums are enabled by default. Pass
 actors and checksum handling in DDisk. For client/server DDisk tests, pass the
 option to both processes so the client and server use the same mode.
 
+Pass `--ddisk-checksums-cache-size N` to set the checksum array cache size per
+DDisk in MiB (1 MiB = 1024 * 1024 bytes; default: 64). Set it to `0` to disable
+caching while keeping checksums enabled; necessary in-flight state is retained.
+For client/server DDisk tests, pass this option to the server process.
+
 #### Parameters for `DDiskLoad`
 - `Tag` - a unique numeric identifier for the load source.
 - `DDiskId` - the DDisk address `{ NodeId, PDiskId, DDiskSlotId }`.

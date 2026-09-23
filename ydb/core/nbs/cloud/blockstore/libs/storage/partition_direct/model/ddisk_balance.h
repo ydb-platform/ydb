@@ -10,6 +10,15 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Selects which VChunks participate in DDisk balancing.
+enum class EDDiskBalanceStrategy
+{
+    Touched,      // Balance DDisks of touched VChunks only.
+    Configured,   // Balance DDisks of all configured VChunks.
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 // Minimum DDisk moves needed for an even host distribution and their share.
 struct TDDiskImbalance
 {

@@ -155,6 +155,8 @@ struct TLocalDbContents
 struct TMonPageData
 {
     EMonPage Page = EMonPage::Overview;
+    EDDiskBalanceStrategy SelectedDDiskBalanceStrategy =
+        EDDiskBalanceStrategy::Touched;
     TTabletInfo TabletInfo;
     // When set, the page shows only the header/menu plus this message.
     std::optional<TString> RuntimeError;

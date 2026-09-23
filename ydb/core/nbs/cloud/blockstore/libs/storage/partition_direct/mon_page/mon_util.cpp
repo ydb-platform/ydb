@@ -98,6 +98,23 @@ const char* PageTitle(EMonPage page)
     return "";
 }
 
+const char* DDiskBalanceStrategyParam(EDDiskBalanceStrategy strategy)
+{
+    switch (strategy) {
+        case EDDiskBalanceStrategy::Touched:
+            return "touched";
+        case EDDiskBalanceStrategy::Configured:
+            return "configured";
+    }
+    return "touched";
+}
+
+EDDiskBalanceStrategy ParseDDiskBalanceStrategy(TStringBuf value)
+{
+    return value == "configured" ? EDDiskBalanceStrategy::Configured
+                                 : EDDiskBalanceStrategy::Touched;
+}
+
 TString MakeDDiskMonPageUrl(const NKikimr::NBsController::TDDiskId& ddiskId)
 {
     return TStringBuilder()

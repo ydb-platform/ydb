@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_util.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/mon.h>
@@ -289,6 +290,8 @@ bool TPartitionActor::OnRenderAppHtmlPage(
 
     TMonPageData data{
         .Page = page,
+        .SelectedDDiskBalanceStrategy =
+            ParseDDiskBalanceStrategy(cgi.Get("strategy")),
         .TabletInfo = MakeMonTabletInfo(),
         .SelectedDbg = ParseSelectedDbg(cgi),
         .SelectedVChunk = ParseSelectedVChunk(cgi),
@@ -320,11 +323,16 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         {
             for (ui32 i = from; i < to; ++i) {
                 if (auto dbg = FastPathService->GetDirectBlockGroup(i)) {
-                    dbg->BalanceDDisks(EDDiskBalanceStrategy::Touched);
+                    dbg->BalanceDDisks(data.SelectedDDiskBalanceStrategy);
                     requested = true;
                 }
             }
         }
+
+        const TString querySuffix =
+            TStringBuilder()
+            << "&strategy="
+            << DDiskBalanceStrategyParam(data.SelectedDDiskBalanceStrategy);
 
         ctx.Send(
             ev->Sender,
@@ -332,7 +340,8 @@ bool TPartitionActor::OnRenderAppHtmlPage(
                 TabletID(),
                 "overview",
                 requested ? "DDisk balancing requested."
-                          : "Invalid DDisk balancing request.")));
+                          : "Invalid DDisk balancing request.",
+                querySuffix)));
         return true;
     }
 

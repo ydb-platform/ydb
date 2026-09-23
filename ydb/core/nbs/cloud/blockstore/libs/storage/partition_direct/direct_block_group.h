@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ddisk_balance.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
@@ -24,16 +25,6 @@
 #include <functional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-////////////////////////////////////////////////////////////////////////////////
-
-enum class EDDiskBalanceStrategy
-{
-    Touched,      // Balance DDisks of touched VChunks only.
-    Configured,   // Balance DDisks of all configured VChunks.
-};
-
-////////////////////////////////////////////////////////////////////////////////
 
 struct TDBGReadBlocksResponse
 {

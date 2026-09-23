@@ -3187,6 +3187,9 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             query("from=0&to=32"),
             "DDisk balancing requested.");
         UNIT_ASSERT_STRING_CONTAINS(
+            query("from=0&to=1&strategy=configured"),
+            "&page=overview&strategy=configured");
+        UNIT_ASSERT_STRING_CONTAINS(
             query("from=0&to=9999"),
             "Invalid DDisk balancing request.");
         UNIT_ASSERT_STRING_CONTAINS(

@@ -3906,8 +3906,9 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 {
     const NKikimrTx::TEvMediatorPlanStep& event = ev->Record;
     const ui64 step = event.GetStep();
-    // последняя транзакция шага, про которую мы знаем. шаг, в котором нет ни одной известной нам
-    // транзакции, PlanStep не двигает: обещать в MinStep шаг, которого нет на диске, нельзя
+    // последняя транзакция шага, которая есть в Txs. шаг без таких транзакций PlanStep не двигает:
+    // MinStep новых пропоузов равен max(PlanStep + 1, часы timecast), и шаг из будущего навсегда
+    // поднял бы этот пол
     TMaybe<ui64> lastKnownTxId;
 
     TVector<ui64> txIds;

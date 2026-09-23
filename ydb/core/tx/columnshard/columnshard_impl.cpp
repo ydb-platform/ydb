@@ -1948,6 +1948,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvStartCompaction, Handle);
         HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
         HFunc(TEvPrivate::TEvContinueCutHistory, Handle);
+        HFunc(TEvPrivate::TEvCutHistoryPortionsReady, Handle);
         HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
 
         HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);

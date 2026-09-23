@@ -525,6 +525,7 @@ private:
     TString RenderCompactionPage();
     TString RenderMainPage();
     TString RenderPortionsPage();
+    TString RenderCutHistoryPage();
 };
 
 inline TString TEscapeHtml(const TString& in) {
@@ -662,30 +663,28 @@ TString RenderScanTracesPage(ui64 tabletId, ui32 nodeId) {
 
 bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
     CutHistoryRequests.clear();
-    if (!Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"])) {
+    const auto page = HttpInfoEvent->Get()->Cgi().Get("page");
+    if (page != "cuthistory") {
+        return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
+    }
+    using T = Schema::CutHistoryRequests;
+    NIceDb::TNiceDb db(txc.DB);
+    auto row = db.Table<T>().Range().Select();
+    if (!row.IsReady()) {
         return false;
     }
-    const auto page = HttpInfoEvent->Get()->Cgi().Get("page");
-    if (!EqualToOneOf(page, "compaction", "portions")) {
-        using T = Schema::CutHistoryRequests;
-        NIceDb::TNiceDb db(txc.DB);
-        auto row = db.Table<T>().Range().Select();
-        if (!row.IsReady()) {
+    while (!row.EndOfSet()) {
+        auto& request = CutHistoryRequests.emplace_back();
+        request.TabletID = row.GetValue<T::TabletID>();
+        request.Channel = row.GetValue<T::Channel>();
+        request.FromGeneration = row.GetValue<T::FromGeneration>();
+        request.GroupID = row.GetValue<T::GroupID>();
+        request.Timestamp = TInstant::MicroSeconds(row.GetValue<T::TimestampUs>());
+        request.Recipient = row.GetValue<T::Recipient>();
+        request.ToGeneration = row.GetValue<T::ToGeneration>();
+        request.SendingGeneration = row.GetValue<T::SendingGeneration>();
+        if (!row.Next()) {
             return false;
-        }
-        while (!row.EndOfSet()) {
-            auto& request = CutHistoryRequests.emplace_back();
-            request.TabletID = row.GetValue<T::TabletID>();
-            request.Channel = row.GetValue<T::Channel>();
-            request.FromGeneration = row.GetValue<T::FromGeneration>();
-            request.GroupID = row.GetValue<T::GroupID>();
-            request.Timestamp = TInstant::MicroSeconds(row.GetValue<T::TimestampUs>());
-            request.Recipient = row.GetValue<T::Recipient>();
-            request.ToGeneration = row.GetValue<T::ToGeneration>();
-            request.SendingGeneration = row.GetValue<T::SendingGeneration>();
-            if (!row.Next()) {
-                return false;
-            }
         }
     }
     return true;
@@ -801,6 +800,7 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<h3><a href=\"app?page=compaction&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
     html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
     html << "<h3><a href=\"app?page=portions&TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> Portions </a></h3>";
+    html << "<h3><a href=\"app?page=cuthistory&amp;TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> CutHistory </a></h3>";
     html << RenderLwTraceStartScript();
     html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), Self->SelfId().NodeId(),
                           "Traces for all scans on shard")
@@ -820,6 +820,20 @@ TString TTxMonitoring::RenderMainPage() {
         html << "<h3>" << RenderLwTraceStartLink(createUrl, traceId, logUrl, "Traces for all portions on shard") << "</h3>";
     }
 
+    html << "<h3>Tiering Errors</h3>";
+    auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();
+    auto writeErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllWriteErrors();
+
+    TPrintErrorTable(html, readErrors, "read");
+    TPrintErrorTable(html, writeErrors, "write");
+
+    return html.Str();
+}
+
+TString TTxMonitoring::RenderCutHistoryPage() {
+    TStringStream html;
+    const auto& cgi = HttpInfoEvent->Get()->Cgi();
+    html << "<a href=\"app?TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\">ColumnShard</a>";
     HTML(html) {
         H3_CLASS("") {
             html << "Persisted CutHistory send attempts (latest " << TColumnShard::CutHistoryRequestLimit
@@ -835,13 +849,6 @@ TString TTxMonitoring::RenderMainPage() {
             }
         }
     }
-
-    html << "<h3>Tiering Errors</h3>";
-    auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();
-    auto writeErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllWriteErrors();
-
-    TPrintErrorTable(html, readErrors, "read");
-    TPrintErrorTable(html, writeErrors, "write");
 
     return html.Str();
 }
@@ -1379,6 +1386,8 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
         htmlResult = RenderCompactionPage();
     } else if (cgi.Has("page") && cgi.Get("page") == "portions") {
         htmlResult = RenderPortionsPage();
+    } else if (cgi.Has("page") && cgi.Get("page") == "cuthistory") {
+        htmlResult = RenderCutHistoryPage();
     } else {
         htmlResult = RenderMainPage();
     }

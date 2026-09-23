@@ -611,6 +611,11 @@ private:
         std::vector<std::pair<TInternalPathId, ui64>> Portions;
         size_t Position = 0;
         size_t Pending = 0;
+        TActorId PreparationActor;
+        ui64 BootLastPortion = 0;
+        std::pair<ui64, ui64> PreparationCursor{ 0, 0 };
+        std::optional<std::pair<ui64, ui64>> PreparationMaxKey;
+        bool PreparationPending = false;
         TInstant Started;
         std::optional<TInstant> Finished;
     };
@@ -628,12 +633,15 @@ private:
         ui32 ToGeneration = 0;
         ui32 SendingGeneration = 0;
     };
+    class TTxPrepareCutHistory;
     class TTxSaveCutHistoryRequests;
     class TCutHistoryResultProcessor;
     void StartCutHistoryScan(const TActorContext& ctx);
-    void FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& result);
+    void AbortCutHistoryScan();
+    void FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& result, const NOlap::TVersionedIndex& versionedIndex);
     void TryCutHistory(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvContinueCutHistory::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCutHistoryPortionsReady::TPtr& ev, const TActorContext& ctx);
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
     bool SetupTtl();

@@ -129,6 +129,26 @@ public:
         ReadStep = SetupSchema(Runtime, Sender, tx.SerializeAsString(), 1000);
     }
 
+    TTestSchema::TStorageTier EvictToWarm() {
+        TTestSchema::TTableSpecials specials;
+        TTestSchema::TStorageTier warm("warm");
+        warm.EvictAfter = TDuration::Zero();
+        specials.Tiers.push_back(warm);
+        Controller->OverrideTierConfigs(Runtime, Sender, TTestSchema::BuildSnapshot(specials));
+        Controller->EnableBackground(EBackground::TTL);
+        ForwardToTablet(Runtime, TabletId, Sender, new TEvPrivate::TEvPeriodicWakeup());
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+        while ((!Controller->GetTTLStartedCounter().Val() ||
+                   Controller->GetTTLFinishedCounter().Val() < Controller->GetTTLStartedCounter().Val()) &&
+               TInstant::Now() < deadline) {
+            Runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(Controller->GetTTLFinishedCounter().Val());
+        UNIT_ASSERT_VALUES_EQUAL(Controller->GetTTLFinishedCounter().Val(), Controller->GetTTLStartedCounter().Val());
+        Drive();
+        return warm;
+    }
+
     void Write(ui64 txId, ui64 from, ui64 to, ui64 tableId = TableId) {
         std::vector<ui64> ids;
         UNIT_ASSERT(WriteData(Runtime, Sender, TabletId, txId, tableId, MakeTestBlob({ from, to }, Table.Schema), Table.Schema, &ids));
@@ -218,6 +238,11 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(f.Counters()->GetCounter("Deriviative/CutHistory/RequestsSent/Count", true)->Val(), 2u);
         f.Runtime.SendToPipe(
             TabletId, f.Sender, new NMon::TEvRemoteHttpInfo("/app?TabletID=" + ToString(TabletId)), 0, GetPipeConfigWithRetries());
+        const auto mainPage = f.Runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>(f.Sender);
+        UNIT_ASSERT_STRING_CONTAINS(mainPage->Get()->Html, "page=cuthistory&amp;TabletID=");
+        UNIT_ASSERT(!mainPage->Get()->Html.Contains("Persisted CutHistory send attempts"));
+        f.Runtime.SendToPipe(TabletId, f.Sender, new NMon::TEvRemoteHttpInfo("/app?page=cuthistory&TabletID=" + ToString(TabletId)), 0,
+            GetPipeConfigWithRetries());
         const auto page = f.Runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>(f.Sender);
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "Persisted CutHistory send attempts");
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "toGeneration=");
@@ -232,8 +257,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Restart();
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(cuts, 2u);
-        f.Runtime.SendToPipe(
-            TabletId, f.Sender, new NMon::TEvRemoteHttpInfo("/app?TabletID=" + ToString(TabletId)), 0, GetPipeConfigWithRetries());
+        f.Runtime.SendToPipe(TabletId, f.Sender, new NMon::TEvRemoteHttpInfo("/app?page=cuthistory&TabletID=" + ToString(TabletId)), 0,
+            GetPipeConfigWithRetries());
         const auto rebootedPage = f.Runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>(f.Sender);
         UNIT_ASSERT_STRING_CONTAINS(rebootedPage->Get()->Html, "GroupID: " + ToString(OldGroup));
         UNIT_ASSERT_STRING_CONTAINS(rebootedPage->Get()->Html, journal);
@@ -337,11 +362,15 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Controller->DisableBackground(EBackground::Compaction);
         f.Controller->DisableBackground(EBackground::Cleanup);
         f.Restart(NewGroup);
-        for (ui32 i = 0; i < 40; ++i) {
-            f.Write(i + 1, i * 100, (i + 1) * 100, TableId + i % 2);
+        for (ui32 i = 0; i < 1025; ++i) {
+            f.Write(i + 1, i, i + 1, TableId + i % 2);
         }
         TAutoPtr<IEventHandle> continuation;
+        TAutoPtr<IEventHandle> prepared;
+        bool preparing = false;
+        ui32 preparationChunks = 0;
         IEventHandle* replaying = nullptr;
+        IEventHandle* replayingPrepared = nullptr;
         ui32 batches = 0;
         ui32 misses = 0;
         std::vector<ui64> scanPortions;
@@ -357,9 +386,23 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             if (dynamic_cast<NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished*>(ev->GetBase())) {
                 linksApplied = true;
                 ev.Reset();
+            } else if (const auto* chunk = dynamic_cast<TEvPrivate::TEvCutHistoryPortionsBatch*>(ev->GetBase())) {
+                ++preparationChunks;
+                UNIT_ASSERT(chunk->Portions.size() <= 1024);
+            } else if (dynamic_cast<TEvPrivate::TEvCutHistoryPortionsReady*>(ev->GetBase())) {
+                if (ev.Get() == replayingPrepared) {
+                    replayingPrepared = nullptr;
+                    return;
+                }
+                UNIT_ASSERT(!prepared);
+                preparing = false;
+                prepared = ev.Release();
             } else if (dynamic_cast<TEvPrivate::TEvContinueCutHistory*>(ev->GetBase())) {
                 if (ev.Get() == replaying) {
                     replaying = nullptr;
+                    return;
+                }
+                if (preparing) {
                     return;
                 }
                 ++batches;
@@ -395,6 +438,19 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             f.Runtime.Send(continuation.Release(), 0, true);
             f.Runtime.SimulateSleep(TDuration::Seconds(1));
         };
+        const auto prepare = [&] {
+            preparing = true;
+            preparationChunks = 0;
+            resume();
+            UNIT_ASSERT(prepared);
+            UNIT_ASSERT(preparationChunks >= 2);
+            UNIT_ASSERT(!continuation);
+        };
+        const auto resumePrepared = [&] {
+            replayingPrepared = prepared.Get();
+            f.Runtime.Send(prepared.Release(), 0, true);
+            f.Runtime.SimulateSleep(TDuration::Seconds(1));
+        };
         f.Restart();
         UNIT_ASSERT(continuation);
         UNIT_ASSERT_VALUES_EQUAL(misses, 0u);
@@ -409,6 +465,16 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             }
         }
         Sort(expectedPortions);
+        UNIT_ASSERT_VALUES_EQUAL(expectedPortions.size(), 1025u);
+        f.Write(5000, 1025, 1026);
+        prepare();
+        const auto& preparedPortions = prepared->Get<TEvPrivate::TEvCutHistoryPortionsReady>()->Portions;
+        UNIT_ASSERT_VALUES_EQUAL(preparedPortions.size(), expectedPortions.size());
+        for (size_t i = 0; i < expectedPortions.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(preparedPortions[i].second, expectedPortions[i]);
+        }
+        resumePrepared();
+        UNIT_ASSERT(continuation);
         resume();
         UNIT_ASSERT(continuation);
         UNIT_ASSERT_C(misses > 0 && misses <= 32, "first cold metadata batch must load at most 32 portions");
@@ -417,10 +483,10 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         expectedPortions.resize(scanPortions.size());
         Sort(scanPortions);
         UNIT_ASSERT_VALUES_EQUAL_C(scanPortions, expectedPortions, "first batch must contain the lowest PortionIds across all tables");
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), 3900u);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), 1025u);
         misses = 0;
-        f.Write(50, 5000, 5001);
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), 4000u);
+        f.Write(5001, 2048, 2049);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), 1026u);
         while (continuation) {
             resume();
         }
@@ -431,6 +497,9 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
 
         f.Restart();
+        UNIT_ASSERT(continuation);
+        prepare();
+        resumePrepared();
         UNIT_ASSERT(continuation);
         failMetadata = true;
         misses = 0;
@@ -450,17 +519,91 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
 
         f.Restart();
         UNIT_ASSERT(continuation);
+        prepare();
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), 1026u);
+        f.Write(5002, 4096, 4097);
         NOlap::NDataSharing::TTaskForTablet task((NOlap::TTabletId)TabletId);
         f.Runtime.SendToPipe(TabletId, f.Sender, new NOlap::NDataSharing::NEvents::TEvApplyLinksModification((NOlap::TTabletId)TabletId,
                                                      "late-sharing", 0, task), 0, GetPipeConfigWithRetries());
         f.Drive();
         UNIT_ASSERT(linksApplied);
-        resume();
+        resumePrepared();
         UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 2u);
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 2u);
         UNIT_ASSERT(!continuation);
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 1u, "an actual sharing admission must invalidate the unsent boot proof");
+    }
+
+    Y_UNIT_TEST(DelayedBatchKeepsRemovedSchema) {
+        TFixture f;
+        f.Runtime.GetAppData().FeatureFlags.SetEnableCSSchemasCollapsing(true);
+        f.Controller->SetSkipSpecialCheckForEvict(true);
+        f.Controller->SetOverrideMaxReadStaleness(TDuration::Zero());
+        f.Schema(true);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.EvictToWarm();
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Controller->DisableBackground(EBackground::Compaction);
+        TAutoPtr<IEventHandle> held;
+        bool holdResult = true;
+        ui32 cuts = 0;
+        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
+            if (!ev->HasEvent()) {
+                return;
+            }
+            if (holdResult && dynamic_cast<TEvPrivate::TEvMetadataAccessorsInfo*>(ev->GetBase())) {
+                UNIT_ASSERT(!held);
+                held = ev.Release();
+                holdResult = false;
+            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
+                       cut && cut->Record.GetChannel() == FirstDataChannel) {
+                ++cuts;
+                ev.Reset();
+            }
+        });
+        f.Restart(NewGroup);
+        f.Drive();
+        UNIT_ASSERT(held);
+        auto* info = held->Get<TEvPrivate::TEvMetadataAccessorsInfo>();
+        auto result = info->ExtractResult();
+        const auto& data = result.GetValue();
+        UNIT_ASSERT(!data.HasErrors());
+        UNIT_ASSERT(!data.HasRemovedData());
+        UNIT_ASSERT(!data.GetPortions().empty());
+        const auto& index = f.Controller->GetTheOnlyShard()->GetIndexAs<NOlap::TColumnEngineForLogs>();
+        const auto oldSchema = data.GetPortions().begin()->second->GetPortionInfo().GetSchema(index.GetVersionedIndex());
+        const ui64 oldVersion = oldSchema->GetVersion();
+        UNIT_ASSERT(oldSchema->GetIndexInfo().GetIndexes().contains(3000));
+        bool hasIndexBlob = false;
+        for (const auto& [_, accessor] : data.GetPortions()) {
+            hasIndexBlob |= !accessor->GetIndexesVerified().empty();
+        }
+        UNIT_ASSERT(hasIndexBlob);
+        f.Controller->DisableBackground(EBackground::GC);
+        NKikimrTxColumnShard::TSchemaTxBody alter;
+        UNIT_ASSERT(alter.ParseFromString(TTestSchema::AlterTableTxBody(TableId, true, oldVersion + 1, f.Table.Schema, f.Table.Pk, {})));
+        alter.MutableAlterTable()->MutableSchema()->SetVersion(oldVersion + 1);
+        f.ReadStep = SetupSchema(f.Runtime, f.Sender, alter.SerializeAsString(), 1001);
+        const auto dropStep = SetupSchema(f.Runtime, f.Sender, TTestSchema::DropTableTxBody(TableId, oldVersion + 2), 1002);
+        for (ui32 i = 0; i < 60 && index.GetVersionedIndex().GetSchemaByVersion().contains(oldVersion); ++i) {
+            PlanCommit(f.Runtime, f.Sender, TPlanStep{ dropStep.Val() + i + 1 }, TSet<ui64>{});
+            f.Drive(1);
+        }
+        UNIT_ASSERT(!index.GetVersionedIndex().GetSchemaByVersion().contains(oldVersion));
+        UNIT_ASSERT(!index.GetVersionedIndex().GetSchemaVerified(oldVersion)->GetIndexInfo().GetIndexes().contains(3000));
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
+        const ui64 scans = f.Samples("Scan");
+        const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
+        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
+        auto* replay = new TEvPrivate::TEvMetadataAccessorsInfo(info->GetProcessor(), info->GetGeneration(), std::move(result));
+        f.Runtime.Send(new IEventHandle(held->Recipient, held->Sender, replay, held->Flags, held->Cookie), 0, true);
+        held.Reset();
+        f.Drive();
+        UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), scans + 1);
+        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
     }
 
     Y_UNIT_TEST(UncommittedPinsOnlyItsInterval) {
@@ -498,22 +641,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Schema(true);
         f.Write(1, 0, 1000);
         f.Controller->WaitCompactions(TDuration::Seconds(10));
-        TTestSchema::TTableSpecials specials;
-        TTestSchema::TStorageTier warm("warm");
-        warm.EvictAfter = TDuration::Zero();
-        specials.Tiers.push_back(warm);
-        f.Controller->OverrideTierConfigs(f.Runtime, f.Sender, TTestSchema::BuildSnapshot(specials));
-        f.Controller->EnableBackground(EBackground::TTL);
-        ForwardToTablet(f.Runtime, TabletId, f.Sender, new TEvPrivate::TEvPeriodicWakeup());
-        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
-        while ((!f.Controller->GetTTLStartedCounter().Val() ||
-                   f.Controller->GetTTLFinishedCounter().Val() < f.Controller->GetTTLStartedCounter().Val()) &&
-               TInstant::Now() < deadline) {
-            f.Runtime.SimulateSleep(TDuration::Seconds(1));
-        }
-        UNIT_ASSERT(f.Controller->GetTTLFinishedCounter().Val());
-        UNIT_ASSERT_VALUES_EQUAL(f.Controller->GetTTLFinishedCounter().Val(), f.Controller->GetTTLStartedCounter().Val());
-        f.Drive();
+        const auto warm = f.EvictToWarm();
         const auto& index = f.Controller->GetTheOnlyShard()->GetIndexAs<NOlap::TColumnEngineForLogs>();
         ui32 livePortions = 0;
         for (const auto& [_, granule] : index.GetTables()) {

@@ -64,6 +64,20 @@ SELECT * FROM test;`
 
 The prefix is not added if the table name is an absolute path (starts with /).
 
+When the `EnableTablePathPrefixMultiScopes` flag is enabled in `TableServiceConfig`, each `TablePathPrefix` pragma takes effect from its position in the query text. A later `TablePathPrefix` changes the prefix for subsequent table references without changing paths in preceding statements.
+
+The flag is enabled by default. If it is disabled, the legacy behavior is preserved: a later pragma can also change table paths in preceding statements.
+
+With the flag enabled, named subqueries, such as `$q = SELECT * FROM Input`, retain the prefix that was active when the subquery was defined. A string expression used as a table name, such as `$t = "Input"` followed by `SELECT * FROM $t`, uses the prefix active at each `FROM $t` reference. Assigning the string does not fix a prefix.
+
+```yql
+PRAGMA TablePathPrefix = "/my/database/folder1";
+SELECT * FROM table1; -- /my/database/folder1/table1
+
+PRAGMA TablePathPrefix = "/my/database/folder2";
+SELECT * FROM table1; -- /my/database/folder2/table1
+```
+
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 
 | Value type | Default |

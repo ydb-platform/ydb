@@ -936,7 +936,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         UNIT_ASSERT_VALUES_EQUAL(4, AccessConfig(*vchunk).GetDDisks().Count());
         UNIT_ASSERT(DirectBlockGroup->PendingDDiskAllocations.empty());
 
-        // With no data to copy, the target is already healthy and H0 can be
+        // With no data to copy, the target is already healthy and H2 can be
         // demoted immediately.
         UNIT_ASSERT_VALUES_EQUAL(
             1,

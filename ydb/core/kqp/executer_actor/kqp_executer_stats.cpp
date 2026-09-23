@@ -472,6 +472,7 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     MemoryUsage.Resize(taskCount);
     MaxMemoryUsage.Resize(taskCount);
     Finished.resize(taskCount);
+    TaskNodeId.resize(taskCount);
 }
 
 void TStageExecutionStats::SetHistorySampleCount(ui32 historySampleCount) {
@@ -539,7 +540,19 @@ ui64 TStageExecutionStats::UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncSt
     return baseTimeMs;
 }
 
-ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs) {
+void TStageExecutionStats::SetTaskNode(ui32 index, ui32 nodeId) {
+    AFL_ENSURE(index < TaskNodeId.size());
+    if (nodeId && !TaskNodeId[index]) {
+        TaskNodeId[index] = nodeId;
+        auto& node = Nodes[nodeId];
+        node.Tasks++;
+        if (Finished[index]) {
+            node.Finished++;
+        }
+    }
+}
+
+ui64 TStageExecutionStats::UpdateStats(ui32 nodeId, const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs) {
     auto taskId = taskStats.GetTaskId();
     auto it = Task2Index.find(taskId);
     ui64 baseTimeMs = 0;
@@ -558,10 +571,15 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
         index = it->second;
     }
 
+    SetTaskNode(index, nodeId);
+
     if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
         if (!Finished[index]) {
             Finished[index] = true;
             FinishedCount++;
+            if (auto taskNodeId = TaskNodeId[index]) {
+                Nodes[taskNodeId].Finished++;
+            }
         }
     }
 
@@ -924,7 +942,7 @@ NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDq::TStageId& stageI
     const TKqpTasksGraph& tasksGraph, NDqProto::TDqExecutionStats& execStats)
 {
     auto& stageInfo = tasksGraph.GetStageInfo(stageId);
-    auto& stageProto = stageInfo.Meta.Tx.Body->GetStages(stageId.StageId);
+    auto& stageProto = stageInfo.Meta.GetStage(stageId);
 
     for (auto& stage : *execStats.MutableStages()) {
         if (stage.GetStageGuid() == stageProto.GetStageGuid()) {
@@ -1014,7 +1032,7 @@ void TQueryExecutionStats::Prepare() {
                 auto& info = TasksGraph->GetStageInfo(stageStats.StageId);
                 auto& stage = info.Meta.GetStage(info.Id);
                 for (const auto& input : stage.GetInputs()) {
-                    auto& peerStageStats = StageStats[NYql::NDq::TStageId(stageStats.StageId.TxId, input.GetStageIndex())];
+                    auto& peerStageStats = StageStats[TasksGraph->MakeStageId(stageStats.StageId.TxId, input.GetStageIndex())];
                     stageStats.InputStages.push_back(&peerStageStats);
                     stageStats.Input.emplace(peerStageStats.StageId.StageId, 0);
                     peerStageStats.OutputStages.push_back(&stageStats);
@@ -1279,7 +1297,7 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     stageStats.TaskCount = 4;
                     stageStats.Resize(4);
                 }
-                BaseTimeMs = NonZeroMin(BaseTimeMs, stageStats.UpdateStats(taskStats, state, stats.GetMemoryUsage(), stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
+                BaseTimeMs = NonZeroMin(BaseTimeMs, stageStats.UpdateStats(nodeId, taskStats, state, stats.GetMemoryUsage(), stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
 
                 if (DeadlockTimeoutUs) {
                     if (stageStats.CurrentWaitOutputTimeUs.MinValue > DeadlockTimeoutUs) {
@@ -1571,15 +1589,30 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             THashMap<ui32, NDqProto::TDqStageStats*> protoStages;
 
             for (auto& [stageId, stagetype] : TasksGraph->GetStagesInfo()) {
-                if (stageId.TxId == 0) {
-                    protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
-                }
+                protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
             }
 
             for (auto& [stageId, stageStat] : StageStats) {
-                auto& stageStats = *protoStages[stageStat.StageId.StageId];
+                auto it = protoStages.find(stageStat.StageId.StageId);
+                YQL_ENSURE(it != protoStages.end());
+                auto& stageStats = *it->second;
                 stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
                 stageStats.SetFinishedTasksCount(stageStat.FinishedCount);
+
+                // Tasks that have not sent stats yet are attributed to the node their compute actor was started on
+                for (auto& [taskId, index] : stageStat.Task2Index) {
+                    if (taskId && !stageStat.TaskNodeId[index]) {
+                        if (const auto& computeActorId = TasksGraph->GetTask(taskId).ComputeActorId) {
+                            stageStat.SetTaskNode(index, computeActorId.NodeId());
+                        }
+                    }
+                }
+                for (auto& [nodeId, node] : stageStat.Nodes) {
+                    auto& nodeStats = *stageStats.AddNodes();
+                    nodeStats.SetNodeId(nodeId);
+                    nodeStats.SetTasks(node.Tasks);
+                    nodeStats.SetFinished(node.Finished);
+                }
 
                 stageStats.SetBaseTimeMs(BaseTimeMs);
                 stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());

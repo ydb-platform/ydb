@@ -1,4 +1,5 @@
 import functools
+import shlex
 import re
 import os
 from enum import auto, StrEnum
@@ -12,7 +13,6 @@ import ytest
 from _common import (
     rootrel_arc_src,
     sort_uniq,
-    to_yesno,
 )
 from _dart_fields import create_dart_record
 
@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from lib.nots.erm_json_lite import ErmJsonLite
     from lib.nots.package_manager import PackageManager
     from lib.nots.semver import Version
-    from lib.nots.typescript import TsConfig
 
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.5 is 120 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
@@ -226,10 +225,6 @@ class PluginLogger(object):
 logger = PluginLogger()
 
 
-def _wrap_file_path(s: str) -> str:
-    return f"'{s}'" if " " in s else s
-
-
 def _escape_space(s: str) -> str:
     return s.replace(' ', '\\ ')
 
@@ -416,8 +411,8 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
     for tool in resources:
         dir_name = erm_json.canonize_name(tool)
         if erm_json.use_resource_directly(tool):
-            # raises the configuration error when the version is unsupported
-            _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool), dep_is_required=True)
+            # These tools are installed with the project dependencies, not as build resources.
+            continue
         elif tool == "nodejs":
             dirs.append(os.path.join("build", "platform", dir_name, str(nodejs_version)))
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
@@ -427,7 +422,7 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
                 unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
 
         elif erm_json.is_resource_multiplatform(tool):
-            v = _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool))
+            v = erm_json.select_version_of(tool)
             sb_resources = [
                 sbr for sbr in erm_json.get_sb_resources(tool, v) if sbr.get("nodejs") == nodejs_version.major
             ]
@@ -438,73 +433,12 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
             else:
                 unit.message(["WARN", "Missing {}@{} for {}".format(tool, str(v), nodejs_dir)])
         else:
-            v = _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool))
+            v = erm_json.select_version_of(tool)
             dirs.append(os.path.join("build", "external_resources", dir_name, str(v)))
             _set_resource_vars(unit, erm_json, tool, v, nodejs_version.major)
 
     if dirs:
         unit.onpeerdir(dirs)
-
-
-@ymake.macro
-@_with_report_configure_error
-def _TS_CONFIGURE(unit: ymake.Unit) -> None:
-    from lib.nots.package_manager import PackageJson
-    from lib.nots.package_manager.utils import build_pj_path
-    from lib.nots.typescript import TsConfig
-
-    tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
-    # for use in CMD as inputs
-    __set_append(
-        unit, "TS_CONFIG_FILES", _build_cmd_input_paths(tsconfig_paths, hide=True, disable_include_processor=True)
-    )
-
-    mod_dir = unit.get("MODDIR")
-    cur_dir = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else mod_dir
-    pj_path = build_pj_path(_arc_path(unit, cur_dir))
-    dep_paths = PackageJson.load(pj_path).get_dep_paths_by_names()
-
-    # reversed for using the first tsconfig as the config for include processor (legacy)
-    for tsconfig_path in reversed(tsconfig_paths):
-        abs_tsconfig_path = _arc_path(unit, tsconfig_path)
-        if not abs_tsconfig_path:
-            raise Exception("tsconfig not found: {}".format(tsconfig_path))
-
-        source_dir = _arc_path(unit, _get_source_path(unit))
-        tsconfig = TsConfig.load(abs_tsconfig_path, source_dir)
-        config_files = tsconfig.inline_extend(dep_paths)
-        config_files = [rootrel_arc_src(path, unit) for path in config_files]
-
-        use_tsconfig_outdir = unit.get("TS_CONFIG_USE_OUTDIR") == "yes"
-        tsconfig.validate(use_tsconfig_outdir)
-
-        # add tsconfig files from which root tsconfig files were extended
-        __set_append(
-            unit, "TS_CONFIG_FILES", _build_cmd_input_paths(config_files, hide=True, disable_include_processor=True)
-        )
-
-        # region include processor
-        unit.set(["TS_CONFIG_ROOT_DIR", tsconfig.compiler_option("rootDir")])  # also for hermione
-        if use_tsconfig_outdir:
-            unit.set(["TS_CONFIG_OUT_DIR", tsconfig.compiler_option("outDir")])  # also for hermione
-
-        unit.set(["TS_CONFIG_SOURCE_MAP", to_yesno(tsconfig.compiler_option("sourceMap"))])
-        unit.set(["TS_CONFIG_DECLARATION", to_yesno(tsconfig.compiler_option("declaration"))])
-        unit.set(["TS_CONFIG_DECLARATION_MAP", to_yesno(tsconfig.compiler_option("declarationMap"))])
-        unit.set(["TS_CONFIG_PRESERVE_JSX", to_yesno(tsconfig.compiler_option("jsx") == "preserve")])
-        # endregion
-
-        _filter_inputs_by_rules_from_tsconfig(unit, tsconfig)
-
-    # Code navigation
-    if unit.get("TS_YNDEXING") == "yes":
-        unit.on_do_ts_yndexing()
-
-    # Style tests
-    _setup_eslint(unit)
-    _setup_tsc_typecheck(unit)
-    _setup_stylelint(unit)
-    _setup_biome(unit)
 
 
 def _should_setup_build_env(unit: ymake.Unit) -> bool:
@@ -565,22 +499,6 @@ def __strip_prefix(prefix: str, line: str) -> str:
         return line[prefix_len:]
 
     return line
-
-
-def _filter_inputs_by_rules_from_tsconfig(unit: ymake.Unit, tsconfig: 'TsConfig') -> None:
-    """
-    Reduce file list from the TS_GLOB_FILES variable following tsconfig.json rules
-    """
-    mod_dir = unit.get("MODDIR")
-    target_path = os.path.join("${ARCADIA_ROOT}", mod_dir, "")  # To have "/" in the end
-
-    for from_var, to_var in [("TS_GLOB_FILES", "TS_INPUT_FILES"), ("TS_GLOB_TEST_FILES", "TS_INPUT_TEST_FILES")]:
-        # TS_GLOB_* variables contain space-separated paths.
-        # Spaces in paths cause issues, so we split by target_path instead of space.
-        # https://st.yandex-team.ru/DEVTOOLSSUPPORT-69193
-        all_files = __strip_prefix(target_path, unit.get(from_var)).split(f" {target_path}")
-        filtered_files = tsconfig.filter_files(all_files)
-        __set_append(unit, to_var, [_wrap_file_path(f) for f in filtered_files])
 
 
 @ymake.macro
@@ -668,7 +586,7 @@ def _setup_tsc_typecheck(unit: ymake.Unit) -> None:
     if unit.get("_TS_TYPECHECK_VALUE") == "none":
         return
 
-    test_files = df.TestFiles.tsc_typecheck_input_files(unit, (), {})
+    test_files = df.TestFiles.ts_check_srcs(unit, (), {})
     if not test_files:
         return
 
@@ -834,15 +752,7 @@ def _set_resource_vars(
     unit.set(["{}-ROOT-VAR-NAME".format(resource_name), yamake_resource_var])
 
 
-def _select_matching_version(
-    erm_json: 'ErmJsonLite', resource_name: str, range_str: str, dep_is_required=False
-) -> 'Version':
-    if dep_is_required and range_str is None:
-        raise Exception(
-            "Please install the '{tool}' package to the project. Run the command:\n"
-            "   ya tool nots add -D {tool}".format(tool=resource_name)
-        )
-
+def _select_matching_version(erm_json: 'ErmJsonLite', resource_name: str, range_str: str) -> 'Version':
     try:
         version = erm_json.select_version_of(resource_name, range_str)
         if version:
@@ -957,6 +867,9 @@ def _TS_PROTO_AUTO_CONFIGURE(unit: ymake.Unit) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
+    if unit.get("TS_PROTO_PREPARE_DEPS") == "yes" and unit.get("_TS_PROTO_NON_RECURSIVE") == "yes":
+        unit.onpeerdir(sorted(set((unit.get_subst("_TS_PROTO_PEERS") or "").split())))
+
     if _is_ts_proto_auto(unit):
         unit.on_ts_proto_auto_prepare_deps_configure()
         return
@@ -968,10 +881,16 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
+    from lib.nots.package_manager.common_config import load_common_config
+    from lib.nots.package_manager.utils import s_rooted
+
+    common_config_path, _ = load_common_config(pj, pm.sources_root, pm.inject_peers)
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
+    if common_config_path:
+        ins.append(s_rooted(common_config_path))
     outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
     if use_hermetic_node_modules:
         from lib.nots.package_manager import constants
@@ -1026,12 +945,17 @@ def _TS_PROTO_AUTO_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
 
     package_name = unit.get("_TS_PROTO_AUTO_PACKAGE_NAME")
+    proto_peers = (
+        sorted(set((unit.get("_TS_PROTO_PEERS") or "").split())) if unit.get("_TS_PROTO_NON_RECURSIVE") == "yes" else []
+    )
+    proto_peers_flag = f" --ts-proto-workspace-peers {' '.join(proto_peers)}" if proto_peers else ""
     unit.set(
         [
             "_PREPARE_DEPS_TS_PROTO_AUTO_FLAG",
-            f"--ts-proto-auto-deps-path {deps_path} --ts-proto-auto-package-name {package_name}",
+            f"--ts-proto-auto-deps-path {deps_path} --ts-proto-auto-package-name {package_name}{proto_peers_flag}",
         ]
     )
+    __set_append(unit, "_PREPARE_DEPS_INOUTS", "${hide:PEERS} ${hide:PEERS_LATE_OUTS}")
 
 
 def _node_modules_bundle_needed(unit: ymake.Unit, arc_path: str) -> bool:
@@ -1204,6 +1128,10 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
+    prod_bundle = unit.get("_WITH_NODE_MODULES_PROD") == "yes"
+    if prod_bundle and unit.get("_INJECT_PEERS") != "yes":
+        ymake.report_configure_error("WITH_NODE_MODULES(PROD) requires injected workspace dependencies")
+        return
     if _use_hermetic_node_modules(unit):
         _configure_hermetic_node_modules(unit)
 
@@ -1211,7 +1139,10 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
         nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
         if nm_bundle_needed:
-            unit.set(["_NODE_MODULES_BUNDLE_ARG", "--nm-bundle yes"])
+            bundle_args = "--nm-bundle yes"
+            if prod_bundle:
+                bundle_args += " --nm-bundle-prod yes"
+            unit.set(["_NODE_MODULES_BUNDLE_ARG", bundle_args])
 
         ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
 
@@ -1224,8 +1155,8 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         }
         ins = [path for path in ins if path not in source_manifests]
 
-        if not _use_hermetic_node_modules(unit):
-            # Legacy builders materialize node_modules in the build action and
+        if not _use_hermetic_node_modules(unit) or prod_bundle:
+            # Legacy and production-bundle builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
             # explicitly so they are available in a distbuild sandbox.
             ins.extend(
@@ -1500,3 +1431,12 @@ def _TS_CONF_ERROR(unit: ymake.Unit, *messages: str) -> None:
 def _TS_CHECK_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     test_mod = unit.get("TS_TEST_FOR_PATH")
     unit.onpeerdir([test_mod])
+
+
+@ymake.macro
+@_with_report_configure_error
+def _TS_OUTPUT_PREFIX(unit: ymake.Unit, *args: str) -> None:
+    if len(args) > 1:
+        raise ValueError("TS_OUTPUT_PREFIX accepts at most one path")
+    prefix = args[0] if args else unit.get("MODDIR")
+    unit.set(["_TS_OUTPUT_PREFIX_ARG", shlex.quote("--output-prefix=" + prefix)])

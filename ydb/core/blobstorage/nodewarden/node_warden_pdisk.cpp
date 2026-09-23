@@ -206,6 +206,26 @@ namespace NKikimr::NStorage {
             pdiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(!pdiskConfig->SectorMap);
         }
 
+        const bool hasChunkSize = (pdisk.HasPDiskConfig() && pdisk.GetPDiskConfig().HasChunkSize())
+            || Cfg->PDiskConfigOverlay.HasChunkSize();
+        if (hasChunkSize && pdiskConfig->PhysicalChunkSize) {
+            const TString warning = TStringBuilder()
+                << "PDiskConfig has both ChunkSize and PhysicalChunkSize; "
+                << "ignoring PhysicalChunkSize, the physical size is derived from ChunkSize"
+                << " ChunkSize# " << pdiskConfig->ChunkSize
+                << " PhysicalChunkSize# " << pdiskConfig->PhysicalChunkSize;
+            YDB_LOG_WARN("PDiskConfig has both ChunkSize and PhysicalChunkSize",
+                {"marker", "NW119"},
+                {"PDiskId", pdiskID},
+                {"path", path},
+                {"chunkSize", pdiskConfig->ChunkSize},
+                {"physicalChunkSize", pdiskConfig->PhysicalChunkSize});
+            if (configWarning && configWarning->empty()) {
+                *configWarning = warning;
+            }
+            pdiskConfig->PhysicalChunkSize = 0;
+        }
+
         const bool hasExpectedSlotCount = pdiskConfig->ExpectedSlotCount != 0;
         const bool hasSlotSizeInUnits = pdiskConfig->SlotSizeInUnits != 0;
         const bool hasExpectedSlotSize = pdiskConfig->ExpectedSlotSize != 0;
@@ -484,7 +504,9 @@ namespace NKikimr::NStorage {
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
         Cfg->PDiskKey.Initialize();
-        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey,
+        auto* subsystem = ActorContext().ActorSystem()->GetSubSystem<IPDiskSubsystem>();
+        Y_ABORT_UNLESS(subsystem, "IPDiskSubsystem is not registered");
+        subsystem->Start(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey,
             blobStorageExecutorPoolId, LocalNodeId);
         if (!temporary) {
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));
@@ -615,7 +637,10 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        bool requiresAnotherRestart = it->second;
+        if (it->second.Phase != TPDiskRestart::EPhase::RestartSent) {
+            return;
+        }
+        bool requiresAnotherRestart = it->second.RequiresAnotherRestart;
 
         PDiskRestartInFlight.erase(it);
 
@@ -675,19 +700,23 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::DoRestartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk) {
         ui32 pdiskId = pdisk.GetPDiskID();
+        if (auto it = LocalPDisks.find(TPDiskKey(LocalNodeId, pdiskId)); it != LocalPDisks.end()) {
+            it->second.Record = pdisk;
+        }
 
         YDB_LOG_NOTICE("DoRestartLocalPDisk",
             {"marker", "NW75"},
             {"PDiskId", pdiskId});
 
-        const auto [restartIt, inserted] = PDiskRestartInFlight.try_emplace(pdiskId, false);
+        const auto [restartIt, inserted] = PDiskRestartInFlight.try_emplace(pdiskId);
 
         if (!inserted) {
             YDB_LOG_NOTICE("Restart already in progress",
                 {"marker", "NW76"},
                 {"PDiskId", pdiskId});
             // Restart is already in progress, but we will need to make a new restart, as the configuration changed.
-            restartIt->second = true;
+            restartIt->second.RequiresAnotherRestart =
+                restartIt->second.Phase == TPDiskRestart::EPhase::RestartSent;
             return;
         }
 
@@ -706,6 +735,56 @@ namespace NKikimr::NStorage {
             return;
         }
 
+        auto& restart = restartIt->second;
+        restart.Generation = ++NextPDiskRestartGeneration;
+        for (const auto& [actorId, slot] : DDiskActors) {
+            if (slot.PDiskId == pdiskId) {
+                restart.WaitingFor.insert(actorId);
+            }
+        }
+        for (const auto& actorId : restart.WaitingFor) {
+            const auto slot = DDiskActors.at(actorId);
+            auto jt = LocalVDisks.find(slot);
+            if (jt != LocalVDisks.end() && jt->second.RuntimeData
+                    && jt->second.RuntimeData->ActorId == actorId) {
+                // Live occupant: poison and clear slot RuntimeData / ShutdownPending.
+                PoisonLocalVDisk(jt->second);
+            } else {
+                // Deleted or already-stopping incarnation: still must die to drain WaitingFor.
+                Send(actorId, new TEvents::TEvPoison());
+            }
+        }
+        if (!restart.WaitingFor.empty()) {
+            Schedule(TDuration::Seconds(30), new TEvPrivate::TEvRestartDrainReminder(pdiskId, restart.Generation));
+        }
+        TrySendPDiskRestart(pdiskId);
+    }
+
+    void TNodeWarden::Handle(TEvPrivate::TEvRestartDrainReminder::TPtr ev) {
+        const auto& msg = *ev->Get();
+        const auto it = PDiskRestartInFlight.find(msg.PDiskId);
+        if (it == PDiskRestartInFlight.end() || it->second.Generation != msg.Generation
+                || it->second.Phase != TPDiskRestart::EPhase::WaitingForDDisks) {
+            return;
+        }
+        YDB_LOG_ERROR("PDisk restart waiting for DDisk shutdown", {"PDiskId", msg.PDiskId},
+            {"waitingFor", it->second.WaitingFor});
+        Schedule(TDuration::Seconds(30), new TEvPrivate::TEvRestartDrainReminder(msg.PDiskId, msg.Generation));
+    }
+
+    void TNodeWarden::TrySendPDiskRestart(ui32 pdiskId) {
+        auto restartIt = PDiskRestartInFlight.find(pdiskId);
+        if (restartIt == PDiskRestartInFlight.end()
+                || restartIt->second.Phase != TPDiskRestart::EPhase::WaitingForDDisks
+                || !restartIt->second.WaitingFor.empty()) {
+            return;
+        }
+        auto it = LocalPDisks.find(TPDiskKey(LocalNodeId, pdiskId));
+        if (it == LocalPDisks.end()) {
+            PDiskRestartInFlight.erase(restartIt);
+            return;
+        }
+        restartIt->second.Phase = TPDiskRestart::EPhase::RestartSent;
         const TActorId actorId = MakeBlobStoragePDiskID(LocalNodeId, pdiskId);
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = CreatePDiskConfig(

@@ -71,7 +71,9 @@ class TMultiDeltaReader: public IDeltaReader {
     };
     struct TItem {
         ui64 DocId = 0;
-        i32 Freq = 0;
+        // A segment frequency is ui32. Keep the signed merge accumulator wider so a valid
+        // frequency above INT32_MAX is not reinterpreted as a deletion.
+        i64 Freq = 0;
         ui32 RdrId = 0;
     };
     TVector<std::unique_ptr<TDeltaReader>> OwnedReaders;

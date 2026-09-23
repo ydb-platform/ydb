@@ -186,6 +186,7 @@ def test_build_package_json_adds_missing_pack_metadata(tmp_path):
 def test_build_workspace_without_lockfile(tmp_path):
     package_manager = object.__new__(package_manager_module.PackageManager)
     package_manager.sources_path = str(tmp_path / "source")
+    package_manager.sources_root = str(tmp_path)
     package_manager.build_path = str(tmp_path / "build")
     package_manager.module_path = "project/module"
     package_manager.inject_peers = False
@@ -199,6 +200,48 @@ def test_build_workspace_without_lockfile(tmp_path):
 
     lockfile = package_manager.load_lockfile(os.path.join(package_manager.build_path, "pnpm-lock.yaml"))
     assert lockfile.data["lockfileVersion"] == "9.0"
+
+
+def test_build_workspace_writes_pnpm_settings_to_workspace_config(tmp_path):
+    source_path = tmp_path / "source"
+    build_path = tmp_path / "build"
+    source_path.mkdir()
+    (source_path / "package.json").write_text(
+        '{"pnpm":{'
+        '"overrides":{"foo":"1.0.0"},'
+        '"packageExtensions":{"bar":{"peerDependencies":{"baz":"2.0.0"}}},'
+        '"neverBuiltDependencies":["esbuild"],'
+        '"allowNonAppliedPatches":true'
+        '}}\n'
+    )
+    (source_path / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
+
+    package_manager = object.__new__(package_manager_module.PackageManager)
+    package_manager.sources_path = str(source_path)
+    package_manager.sources_root = str(tmp_path)
+    package_manager.build_path = str(build_path)
+    package_manager.module_path = "project/module"
+    package_manager.inject_peers = False
+    package_manager.load_package_json = lambda path: _load_package_json(path)
+
+    package_manager.build_workspace(tarballs_store="__tarballs__", local_cli=True)
+
+    workspace = package_manager_module.PnpmWorkspace.load(str(build_path / "pnpm-workspace.yaml"))
+    assert workspace.packages == {"."}
+    assert workspace.settings == {
+        "overrides": {"foo": "1.0.0"},
+        "packageExtensions": {"bar": {"peerDependencies": {"baz": "2.0.0"}}},
+        "allowBuilds": {"esbuild": False},
+        "allowUnusedPatches": True,
+    }
+    assert _load_package_json(str(build_path / "package.json")).data["pnpm"] == {
+        "overrides": {"foo": "1.0.0"},
+        "packageExtensions": {"bar": {"peerDependencies": {"baz": "2.0.0"}}},
+        "allowNonAppliedPatches": True,
+    }
+    assert _load_package_json(str(source_path / "package.json")).data["pnpm"]["neverBuiltDependencies"] == [
+        "esbuild"
+    ]
 
 
 def test_build_workspace_merges_transitive_workspace_lockfiles(tmp_path):
@@ -250,6 +293,7 @@ def test_build_workspace_merges_transitive_workspace_lockfiles(tmp_path):
     package_manager.sources_path = str(source_path)
     package_manager.build_path = str(build_path)
     package_manager.module_path = "consumer"
+    package_manager.sources_root = str(tmp_path / "source")
     package_manager.inject_peers = False
 
     package_manager.build_workspace(tarballs_store="__tarballs__", local_cli=True)
@@ -284,3 +328,50 @@ def _load_package_json(path):
     package_json = package_manager_module.PackageJson(path)
     package_json.read()
     return package_json
+
+
+def test_production_install_reuses_install_flags(monkeypatch, tmp_path):
+    package_manager, commands = _package_manager(monkeypatch)
+    store = str(tmp_path / "store")
+    os.makedirs(store)
+    cwd = str(tmp_path)
+    node_modules = str(tmp_path / "node_modules")
+    for prod in [False, True]:
+        package_manager._run_pnpm_install(
+            store, cwd, False, node_modules + "/.pnpm", True, node_modules, prod=prod
+        )
+    ordinary, production = [cmd for cmd, cwd in commands]
+    assert "--prod" in production
+    assert [arg for arg in production if arg != "--prod"] == ordinary
+
+
+def test_production_reinstall_removes_restored_node_modules(monkeypatch, tmp_path):
+    package_manager = object.__new__(package_manager_module.PackageManager)
+    package_manager.build_path = str(tmp_path / "build")
+    package_manager.inject_peers = True
+    os.makedirs(package_manager.build_path)
+    restored = tmp_path / "ram" / "node_modules"
+    restored.mkdir(parents=True)
+    (restored / ".pnpm").mkdir()
+    (restored / ".pnpm" / "dev-package").write_text("stale")
+    node_modules = tmp_path / "build" / "node_modules"
+    node_modules.symlink_to(restored)
+    calls = []
+
+    def create_node_modules(**kwargs):
+        assert not restored.exists()
+        assert not os.path.lexists(node_modules)
+        calls.append(kwargs)
+
+    package_manager.create_node_modules = create_node_modules
+    package_manager.prune_node_modules(yatool_prebuilder_path="/prebuilder", local_cli=False)
+    assert calls == [{"yatool_prebuilder_path": "/prebuilder", "local_cli": False, "prod": True}]
+
+
+def test_production_reinstall_rejects_linked_peers(tmp_path):
+    import pytest
+
+    package_manager = object.__new__(package_manager_module.PackageManager)
+    package_manager.inject_peers = False
+    with pytest.raises(package_manager_module.PackageManagerError, match="requires injected"):
+        package_manager.prune_node_modules()

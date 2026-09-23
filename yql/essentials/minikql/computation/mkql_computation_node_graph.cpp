@@ -488,21 +488,15 @@ private:
             PatternNodes_->ElementsCache_,
             std::bind(&TComputationGraphBuildingVisitor::PushBackNode, this, std::placeholders::_1),
             RuntimeSettings_);
-        const auto computationNode = Factory_(node, ctx);
+        const IComputationNode::TPtr computationNode = Factory_(node, ctx);
         const auto& name = node.GetType()->GetName();
-        if (name == "KqpWideReadTable" ||
-            name == "KqpWideReadTableRanges" ||
-            name == "KqpBlockReadTableRanges" ||
-            name == "KqpLookupTable" ||
-            name == "KqpReadTable" ||
-            name == "MultiHoppingCore" ||
-            name == "DqWatermarkGenerator") {
-            PatternNodes_->SuitableForCache_ = false;
-        }
-
         if (!computationNode) {
             THROW yexception()
                 << "Computation graph builder, unsupported function: " << name << " type: " << TypeName(Factory_.target_type());
+        }
+
+        if (!computationNode->IsSuitableForCache()) {
+            PatternNodes_->SuitableForCache_ = false;
         }
 
         AddNode(node, computationNode);
@@ -852,23 +846,7 @@ private:
 
 class TComputationPatternImpl final: public IComputationPattern {
 public:
-    TComputationPatternImpl(THolder<TComputationGraphBuildingVisitor>&& builder, const TComputationPatternOpts& opts)
-#if defined(MKQL_DISABLE_CODEGEN)
-        : Codegen_()
-#elif defined(MKQL_FORCE_USE_CODEGEN)
-        : Codegen_(NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native))
-#else
-        : Codegen_((NYql::NCodegen::ICodegen::IsCodegenAvailable() && opts.OptLLVM != "OFF") ||
-                           GetEnv(TString("MKQL_FORCE_USE_LLVM"))
-                       ? NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native)
-                       : NYql::NCodegen::ICodegen::TPtr())
-#endif
-    {
-        /// TODO: Enable JIT for AARCH64/Win/Darwin (YDBREQUESTS-7823)
-#if defined(__aarch64__) || defined(_win_) || defined(_darwin_)
-        Codegen_ = {};
-#endif
-
+    TComputationPatternImpl(THolder<TComputationGraphBuildingVisitor>&& builder, const TComputationPatternOpts& opts) {
         const auto& nodes = builder->GetNodes();
         for (const auto& node : nodes) {
             node->PrepareStageOne();
@@ -880,7 +858,7 @@ public:
         MKQL_ADD_STAT(opts.Stats, Mkql_TotalNodes, nodes.size());
         PatternNodes_ = builder->GetPatternNodes();
 
-        if (Codegen_) {
+        if (IsCodegenEnabled(opts.OptLLVM)) {
             Compile(opts.OptLLVM, opts.Stats);
         }
     }
@@ -895,14 +873,16 @@ public:
     void Compile(TString optLLVM, IStatsRegistry* stats) override {
         TGuard<TMutex> lock(CompileMutex_);
 
-        if (IsPatternCompiled_) {
+        if (GetCompileStatus() != ECompileStatus::NoCompilationStarted) {
             return;
         }
 
 #ifndef MKQL_DISABLE_CODEGEN
-        if (!Codegen_) {
-            Codegen_ = NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native);
-        }
+        // Everything is built in a local codegen and published at the very end,
+        // so that concurrent readers either see the previous state or the fully
+        // compiled one, and never an intermediate one.
+        auto codegen = NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native);
+        NYql::NCodegen::TCompileStats compileStats;
 
         const auto& nodes = PatternNodes_->GetNodes();
 
@@ -912,8 +892,8 @@ public:
             TStatTimer timerGen(CodeGen_GenerateTime);
             timerGen.Acquire();
             for (const auto& node : Reversed(nodes)) {
-                if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
-                    codegen->GenerateFunctions(*Codegen_);
+                if (const auto codegenNode = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
+                    codegenNode->GenerateFunctions(*codegen);
                 }
             }
             timerGen.Release();
@@ -922,7 +902,7 @@ public:
 
         if (optLLVM.Contains("--dump-generated")) {
             Cerr << "############### Begin generated module ###############" << Endl;
-            Codegen_->GetModule().print(llvm::errs(), /*AAW=*/nullptr);
+            codegen->GetModule().print(llvm::errs(), /*AAW=*/nullptr);
             Cerr << "################ End generated module ################" << Endl;
         }
 
@@ -930,7 +910,7 @@ public:
         timerComp.Acquire();
 
         NYql::NCodegen::TCodegenStats codegenStats;
-        Codegen_->GetStats(codegenStats);
+        codegen->GetStats(codegenStats);
         MKQL_ADD_STAT(stats, CodeGen_TotalFunctions, codegenStats.TotalFunctions);
         MKQL_ADD_STAT(stats, CodeGen_TotalInstructions, codegenStats.TotalInstructions);
         MKQL_SET_MAX_STAT(stats, CodeGen_MaxFunctionInstructions, codegenStats.MaxFunctionInstructions);
@@ -941,42 +921,42 @@ public:
         }
 
         if (optLLVM.Contains("--dump-perf-map")) {
-            Codegen_->TogglePerfJITEventListener();
+            codegen->TogglePerfJITEventListener();
         }
 
         if (codegenStats.TotalFunctions >= TotalFunctionsLimit ||
             codegenStats.TotalInstructions >= TotalInstructionsLimit ||
             codegenStats.MaxFunctionInstructions >= MaxFunctionInstructionsLimit) {
-            Codegen_.reset();
+            codegen.reset();
         } else {
-            Codegen_->Verify();
-            Codegen_->Compile(GetCompileOptions(optLLVM), &CompileStats_);
+            codegen->Verify();
+            codegen->Compile(GetCompileOptions(optLLVM), &compileStats);
 
-            MKQL_ADD_STAT(stats, CodeGen_FunctionPassTime, CompileStats_.FunctionPassTime);
-            MKQL_ADD_STAT(stats, CodeGen_ModulePassTime, CompileStats_.ModulePassTime);
-            MKQL_ADD_STAT(stats, CodeGen_FinalizeTime, CompileStats_.FinalizeTime);
+            MKQL_ADD_STAT(stats, CodeGen_FunctionPassTime, compileStats.FunctionPassTime);
+            MKQL_ADD_STAT(stats, CodeGen_ModulePassTime, compileStats.ModulePassTime);
+            MKQL_ADD_STAT(stats, CodeGen_FinalizeTime, compileStats.FinalizeTime);
         }
 
         timerComp.Release();
         timerComp.Report(stats);
 
-        if (Codegen_) {
+        if (codegen) {
             if (optLLVM.Contains("--dump-compiled")) {
                 Cerr << "############### Begin compiled module ###############" << Endl;
-                Codegen_->GetModule().print(llvm::errs(), /*AAW=*/nullptr);
+                codegen->GetModule().print(llvm::errs(), /*AAW=*/nullptr);
                 Cerr << "################ End compiled module ################" << Endl;
             }
 
             if (optLLVM.Contains("--asm-compiled")) {
                 Cerr << "############### Begin compiled asm ###############" << Endl;
-                Codegen_->ShowGeneratedFunctions(&Cerr);
+                codegen->ShowGeneratedFunctions(&Cerr);
                 Cerr << "################ End compiled asm ################" << Endl;
             }
 
             ui64 count = 0U;
             for (const auto& node : nodes) {
-                if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
-                    codegen->FinalizeFunctions(*Codegen_);
+                if (const auto codegenNode = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
+                    codegenNode->FinalizeFunctions(*codegen);
                     ++count;
                 }
             }
@@ -988,35 +968,63 @@ public:
 
         timerFull.Release();
         timerFull.Report(stats);
+
+        const ECompileStatus status = codegen ? ECompileStatus::Compiled : ECompileStatus::RejectedBySize;
+        const size_t codeSize = compileStats.TotalObjectSize;
 #else
         Y_UNUSED(optLLVM);
         Y_UNUSED(stats);
-#endif
 
-        IsPatternCompiled_ = true;
+        const ECompileStatus status = ECompileStatus::RejectedBySize;
+        const size_t codeSize = 0;
+        NYql::NCodegen::ICodegen::TSharedPtr codegen;
+#endif
+        {
+            TGuard<TAdaptiveLock> stateLock(CompiledStateLock_);
+            CompileStatus_ = status;
+            CompiledCodeSize_ = codeSize;
+            Codegen_.swap(codegen);
+        }
+
+        codegen.reset();
     }
 
-    bool IsCompiled() const override {
-        TGuard<TMutex> lock(CompileMutex_);
-        return IsPatternCompiled_;
+    ECompileStatus GetCompileStatus() const override {
+        TGuard<TAdaptiveLock> stateLock(CompiledStateLock_);
+        return CompileStatus_;
     }
 
     size_t CompiledCodeSize() const override {
-        TGuard<TMutex> lock(CompileMutex_);
-        return CompileStats_.TotalObjectSize;
+        TGuard<TAdaptiveLock> stateLock(CompiledStateLock_);
+        return CompiledCodeSize_;
     }
 
     void RemoveCompiledCode() override {
-        TGuard<TMutex> lock(CompileMutex_);
+        NYql::NCodegen::ICodegen::TSharedPtr codegen;
+        {
+            TGuard<TAdaptiveLock> stateLock(CompiledStateLock_);
+            if (CompileStatus_ != ECompileStatus::Compiled) {
+                return;
+            }
 
-        IsPatternCompiled_ = false;
-        CompileStats_ = {};
-        Codegen_.reset();
+            CompileStatus_ = ECompileStatus::NoCompilationStarted;
+            CompiledCodeSize_ = 0;
+            codegen.swap(Codegen_);
+        }
+
+        codegen.reset(); // make sure the release is outside of the state lock
     }
 
     THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) override {
-        TGuard<TMutex> lock(CompileMutex_);
-        return MakeHolder<TComputationGraph>(PatternNodes_, compOpts, IsPatternCompiled_ ? Codegen_ : nullptr);
+        NYql::NCodegen::ICodegen::TSharedPtr codegen;
+        {
+            TGuard<TAdaptiveLock> stateLock(CompiledStateLock_);
+            if (CompileStatus_ == ECompileStatus::Compiled) {
+                codegen = Codegen_;
+            }
+        }
+
+        return MakeHolder<TComputationGraph>(PatternNodes_, compOpts, std::move(codegen));
     }
 
     bool GetSuitableForCache() const override {
@@ -1024,6 +1032,20 @@ public:
     }
 
 private:
+    static bool IsCodegenEnabled(const TString& optLLVM) {
+        /// TODO: Enable JIT for AARCH64/Win/Darwin (YDBREQUESTS-7823)
+#if defined(MKQL_DISABLE_CODEGEN) || defined(__aarch64__) || defined(_win_) || defined(_darwin_)
+        Y_UNUSED(optLLVM);
+        return false;
+#elif defined(MKQL_FORCE_USE_CODEGEN)
+        Y_UNUSED(optLLVM);
+        return true;
+#else
+        return (NYql::NCodegen::ICodegen::IsCodegenAvailable() && optLLVM != "OFF") ||
+               GetEnv(TString("MKQL_FORCE_USE_LLVM"));
+#endif
+    }
+
     TStringBuf GetCompileOptions(const TString& s) {
         const TString flag = "--compile-options";
         auto lpos = s.rfind(flag);
@@ -1042,10 +1064,13 @@ private:
     TTypeEnvironment* TypeEnv_ = nullptr;
     TPatternNodes::TPtr PatternNodes_;
 
-    TMutex CompileMutex_;
-    NYql::NCodegen::ICodegen::TSharedPtr Codegen_; // protected by CompileMutex_
-    bool IsPatternCompiled_ = false;               // protected by CompileMutex_
-    NYql::NCodegen::TCompileStats CompileStats_;   // protected by CompileMutex_
+    TMutex CompileMutex_; // held for the whole compilation, taken by Compile() only
+
+    mutable TAdaptiveLock CompiledStateLock_;
+    ECompileStatus CompileStatus_ = ECompileStatus::NoCompilationStarted; // protected by CompiledStateLock_
+    size_t CompiledCodeSize_ = 0;                                         // protected by CompiledStateLock_
+    NYql::NCodegen::ICodegen::TSharedPtr Codegen_;                        // protected by CompiledStateLock_
+
     NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
 };
 

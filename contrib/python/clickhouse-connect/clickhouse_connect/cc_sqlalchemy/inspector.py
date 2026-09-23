@@ -1,7 +1,7 @@
 import ast
 import re
 from collections.abc import Collection
-from typing import Any
+from typing import Any, cast
 
 import sqlalchemy.schema as sa_schema
 from sqlalchemy import String, bindparam, text
@@ -169,36 +169,41 @@ class ChInspector(Inspector):
     def reflect_table(
         self,
         table,
-        *_args,
         include_columns: Collection[str] | None = None,
         exclude_columns: Collection[str] = (),
+        resolve_fks: bool = True,
+        *_args,
         **_kwargs,
     ):
         schema = table.schema
-        table_metadata = get_table_metadata(self.bind, table.name, schema)
-        if table_metadata.engine == "Dictionary":
-            reflected_columns = get_dictionary_columns(self.bind, table.name, schema)
-        else:
-            reflected_columns = self.get_columns(table.name, schema)
+        with self._inspection_context() as inspector:
+            connection = inspector.bind
+            table_metadata = get_table_metadata(connection, table.name, schema)
+            reflected_columns: list[dict[str, Any]]
+            if table_metadata.engine == "Dictionary":
+                reflected_columns = get_dictionary_columns(connection, table.name, schema)
+            else:
+                reflected_columns = cast(list[dict[str, Any]], inspector.get_columns(table.name, schema))
 
-        for col in reflected_columns:
-            name = col.pop("name")
-            if (include_columns and name not in include_columns) or (exclude_columns and name in exclude_columns):
-                continue
-            col_type = col.pop("type")
-            col_args = {key: value for key, value in col.items() if value is not None}
-            table.append_column(sa_schema.Column(name, col_type, **col_args))
-        if table_metadata.engine == "Dictionary":
-            dictionary_metadata = get_dictionary_metadata(self.bind, table.name, schema)
-            table.comment = dictionary_metadata.pop("comment", None)
-            for key, value in dictionary_metadata.items():
-                table.kwargs[key] = value
-            return
+            for col in reflected_columns:
+                name = col.pop("name")
+                if (include_columns and name not in include_columns) or (exclude_columns and name in exclude_columns):
+                    continue
+                col_type = col.pop("type")
+                col_args = {key: value for key, value in col.items() if value is not None}
+                table.append_column(sa_schema.Column(name, col_type, **col_args))
+            if table_metadata.engine == "Dictionary":
+                dictionary_metadata = get_dictionary_metadata(connection, table.name, schema)
+                table.comment = dictionary_metadata.pop("comment", None)
+                for key, value in dictionary_metadata.items():
+                    table.kwargs[key] = value
+                return
 
-        table.engine = build_engine(table_metadata.engine_full)
-        table.comment = table_metadata.comment or None
-        if table.engine is not None:
-            table.kwargs["clickhouse_engine"] = table.engine
+            table.engine = build_engine(table_metadata.engine_full)
+            table.comment = table_metadata.comment or None
+            if table.engine is not None:
+                table.kwargs["clickhouse_engine"] = table.engine
 
     def get_columns(self, table_name, schema=None, **_kwargs):
-        return get_columns(self.bind, table_name, schema)
+        with self._operation_context() as connection:
+            return get_columns(connection, table_name, schema)

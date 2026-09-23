@@ -1247,8 +1247,10 @@ struct TTtlSettings {
     struct TTierSettings {
         TNodePtr EvictionDelay;
         std::optional<TIdentifier> StorageName;
+        std::optional<TIdentifier> ObjectKeyPrefix;
 
-        explicit TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
+        explicit TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt,
+                               const std::optional<TIdentifier>& objectKeyPrefix = std::nullopt);
     };
 
     TIdentifier ColumnName;
@@ -1407,6 +1409,7 @@ struct TTableRef;
 struct TAnalyzeParams {
     std::shared_ptr<TTableRef> Table;
     TVector<TString> Columns;
+    TNodePtr SampleRate;
 };
 
 struct TCompactEntry {

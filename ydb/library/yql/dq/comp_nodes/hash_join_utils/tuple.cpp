@@ -1,6 +1,7 @@
 #include "tuple.h"
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 #include <queue>
 
@@ -95,6 +96,7 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
 } // namespace
 
 
+template <bool EqualNulls>
 bool TupleKeysEqual(const TTupleLayout *layout,
                            const ui8 *lhsRow, const ui8 *lhsOverflow,
                            const ui8 *rhsRow, const ui8 *rhsOverflow) {
@@ -108,14 +110,29 @@ bool TupleKeysEqual(const TTupleLayout *layout,
     for (i32 i = layout->KeyColumnsNum, byteN = 0; i > 0; i -= 8, byteN++) {
         const ui8 lhsBits = ReadUnaligned<ui8>(lhsRow + layout->BitmaskOffset + byteN);
         const ui8 rhsBits = ReadUnaligned<ui8>(rhsRow + layout->BitmaskOffset + byteN);
-        const ui8 midx = (i >= 8);
-        if (((lhsBits & masks[midx]) != masks[midx]) || (rhsBits & masks[midx]) != masks[midx]) { // if there is at least one null in key cols
+        const ui8 mask = masks[i >= 8];
+        if constexpr (EqualNulls) {
+            const ui8 eqMask = layout->GetEqualNullsMaskByte(byteN) & mask;
+            const ui8 reqMask = mask & ~eqMask;
+            if ((lhsBits & rhsBits & reqMask) != reqMask || (lhsBits & eqMask) != (rhsBits & eqMask)) {
+                return false;
+            }
+        } else if (((lhsBits & mask) != mask) || ((rhsBits & mask) != mask)) {
             return false;
         }
     }
 
     for (auto colInd = layout->KeyColumnsFixedNum; colInd != layout->KeyColumnsNum; ++colInd) {
         const auto &col = layout->Columns[colInd];
+        if constexpr (EqualNulls) {
+            if (layout->EqualNullsKeyMask.Get(colInd)) {
+                const ui8 bit =
+                    (ReadUnaligned<ui8>(lhsRow + layout->BitmaskOffset + colInd / 8) >> (colInd % 8)) & 1u;
+                if (bit == 0) {
+                    continue; // both sides are NULL; payload of a null variable key is not meaningful
+                }
+            }
+        }
 
         const auto lhsPrefSize = ReadUnaligned<ui8>(lhsRow + col.Offset);
         const auto rhsPrefSize = ReadUnaligned<ui8>(rhsRow + col.Offset);
@@ -153,6 +170,13 @@ bool TupleKeysEqual(const TTupleLayout *layout,
 
     return true;
 }
+
+template bool TupleKeysEqual<false>(const TTupleLayout *layout,
+    const ui8 *lhsRow, const ui8 *lhsOverflow,
+    const ui8 *rhsRow, const ui8 *rhsOverflow);
+template bool TupleKeysEqual<true>(const TTupleLayout *layout,
+    const ui8 *lhsRow, const ui8 *lhsOverflow,
+    const ui8 *rhsRow, const ui8 *rhsOverflow);
 
 /// used just for having AN order on tuples
 /// cant rely on that comparison in any other way
@@ -215,6 +239,45 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
     }
 
     return false;
+}
+
+void TTupleLayout::NormalizeEqualNullsFixedKeys(ui8* res) const {
+    if (Y_LIKELY(!HasEqualNullsKeys)) {
+        return;
+    }
+
+    const ui32 fixedMaskBytes = (KeyColumnsFixedNum + 7) / 8;
+    for (ui32 byteN = 0; byteN < fixedMaskBytes; ++byteN) {
+        ui8 nullEqualNulls = GetEqualNullsMaskByte(byteN) & ~res[BitmaskOffset + byteN];
+        while (nullEqualNulls) {
+            const ui32 j = byteN * 8 + CountTrailingZeroBits(static_cast<ui32>(nullEqualNulls));
+            if (j >= KeyColumnsFixedNum) {
+                break;
+            }
+            const auto& col = KeyColumns[j];
+            std::memset(res + col.Offset, 0, col.DataSize);
+            nullEqualNulls &= nullEqualNulls - 1;
+        }
+    }
+}
+
+bool TTupleLayout::HashVariableKey(const ui8* res, ui32 keyColIdx) const {
+    if (Y_LIKELY(!HasEqualNullsKeys) || !EqualNullsKeyMask.Get(keyColIdx)) {
+        return true;
+    }
+    return (res[BitmaskOffset + keyColIdx / 8] >> (keyColIdx % 8)) & 1u;
+}
+
+void TTupleLayout::ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColumns) {
+    EqualNullsKeyMask.Clear();
+    HasEqualNullsKeys = false;
+    for (ui32 j = 0; j < KeyColumnsNum; ++j) {
+        if (std::find(equalNullsInputColumns.begin(), equalNullsInputColumns.end(),
+                      KeyColumns[j].OriginalColumnIndex) != equalNullsInputColumns.end()) {
+            EqualNullsKeyMask.Set(j);
+            HasEqualNullsKeys = true;
+        }
+    }
 }
 
 THolder<TTupleLayout>
@@ -650,10 +713,15 @@ void TTupleLayoutFallback::Pack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
+        NormalizeEqualNullsFixedKeys(res);
+
         ui32 hash = CalculateCRC32<TTraits>(
             res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
         for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+            if (!HashVariableKey(res, i)) {
+                continue;
+            }
             auto &col = KeyColumns[i];
             auto dataOffset = ReadUnaligned<ui32>(
                 columns[col.OriginalIndex] + sizeof(ui32) * start);
@@ -928,10 +996,15 @@ void TTupleLayoutFallback::BucketPack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
+        NormalizeEqualNullsFixedKeys(res);
+
         ui32 hash = CalculateCRC32<TTraits>(
             res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
         for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+            if (!HashVariableKey(res, i)) {
+                continue;
+            }
             auto &col = KeyColumns[i];
             auto dataOffset = ReadUnaligned<ui32>(
                 columns[col.OriginalIndex] + sizeof(ui32) * start);
@@ -1122,10 +1195,15 @@ void TTupleLayoutSIMD<TTraits>::Pack(
             const auto new_res = res + block_row_ind * TotalRowSize;
             const auto res = new_res;
 
+            NormalizeEqualNullsFixedKeys(res);
+
             ui32 hash = CalculateCRC32<TTraits>(
                 res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
             for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+                if (!HashVariableKey(res, i)) {
+                    continue;
+                }
                 auto &col = KeyColumns[i];
                 auto dataOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * start);
@@ -1502,10 +1580,15 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
             const auto new_res = res + block_row_ind * TotalRowSize;
             const auto res = new_res;
 
+            NormalizeEqualNullsFixedKeys(res);
+
             ui32 hash = CalculateCRC32<TTraits>(
                 res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
             for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+                if (!HashVariableKey(res, i)) {
+                    continue;
+                }
                 auto &col = KeyColumns[i];
                 auto dataOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * start);

@@ -3,6 +3,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
@@ -48,6 +49,11 @@ NProto::TError AddConnection(
     for (const auto& conn:
          connections.GetDirectBlockGroupConnections(dbgId).GetConnections())
     {
+        // A dead slot's ids are freed in BSC and may be granted to the
+        // new host.
+        if (conn.GetRemovedFromBSC()) {
+            continue;
+        }
         if (conn.GetDDiskId().SerializeAsString() == newDDiskIdBytes ||
             conn.GetPersistentBufferDDiskId().SerializeAsString() ==
                 newPBufferIdBytes)
@@ -95,7 +101,7 @@ void TPartitionActor::ExecuteStartAddHost(
 
     TTxPartition::TAddHostInProgress proto;
     proto.SetDirectBlockGroupId(args.DirectBlockGroupId);
-    proto.SetNewHostIndex(args.NewHostIndex);
+    proto.SetLiveHostCount(args.LiveHostCount);
     proto.SetDBGConnectionsConfigGeneration(
         args.DBGConnectionsConfigGeneration);
     db.StoreAddHostInProgress(proto);
@@ -105,10 +111,7 @@ void TPartitionActor::CompleteStartAddHost(
     const TActorContext& ctx,
     TTxPartition::TStartAddHost& args)
 {
-    SendAllocateDDiskForAddHost(
-        ctx,
-        args.DirectBlockGroupId,
-        args.NewHostIndex);
+    SendAllocateDDiskForAddHost(ctx, args.DirectBlockGroupId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -211,9 +214,20 @@ void TPartitionActor::HandleAddHostAllocationResult(
         return;
     }
 
-    const ui32 expectedCurrent = AddHostInFlight->NewHostIndex;
-    const auto newHostIndex = AddHostInFlight->NewHostIndex;
-    NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
+    const auto& dbgConnections =
+        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
+    // BSC lists live hosts only, dead slots have no resources there.
+    const ui32 expectedCurrent =
+        static_cast<ui32>(LiveHostCount(dbgConnections));
+    Y_ABORT_UNLESS(
+        expectedCurrent == AddHostInFlight->LiveHostCount,
+        "AddHost plan was decided on %u live hosts, the group has %u",
+        AddHostInFlight->LiveHostCount,
+        expectedCurrent);
+    // Host indices are positions in Connections, dead entries included, so
+    // the new host takes the position after the last entry.
+    const auto newHostIndex =
+        static_cast<THostIndex>(dbgConnections.ConnectionsSize());
 
     TDirectBlockGroupsConnections updated;
     if (auto error = AddConnection(
@@ -281,10 +295,8 @@ void TPartitionActor::HandleAddHostToDBG(
         return;
     }
 
-    const auto newHostIndex = static_cast<THostIndex>(
-        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)
-            .GetConnections()
-            .size());
+    const auto liveHostCount = static_cast<ui32>(LiveHostCount(
+        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)));
 
     // Persist the intent before the BSController request (sent from the tx's
     // completion). A crash after the DDisk is allocated but before the
@@ -292,7 +304,7 @@ void TPartitionActor::HandleAddHostToDBG(
     // restart.
     AddHostInFlight = TAddHostInFlight{
         .DirectBlockGroupId = dbgId,
-        .NewHostIndex = newHostIndex,
+        .LiveHostCount = liveHostCount,
         .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration,
     };
 
@@ -300,7 +312,7 @@ void TPartitionActor::HandleAddHostToDBG(
         ctx,
         CreateTx<TStartAddHost>(
             dbgId,
-            newHostIndex,
+            liveHostCount,
             dbgConnectionsConfigGeneration));
 }
 
@@ -313,7 +325,10 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         RejectAddHost(ctx, dbgId, "Another AddHost is already in progress");
         return false;
     }
-
+    if (RemoveHostInFlight.has_value()) {
+        RejectAddHost(ctx, dbgId, "A RemoveHost is already in progress");
+        return false;
+    }
     // Authoritative AddHost gate: reads the persisted connection count under
     // the single-in-flight guard above, so it cannot overshoot MaxHostCount or
     // race a concurrent add. The DBG's own DDiskConnections lags, so it cannot
@@ -326,7 +341,9 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         RejectAddHost(
             ctx,
             dbgId,
-            TStringBuilder() << "MaxHostCount=" << MaxHostCount << " reached");
+            TStringBuilder()
+                << "slot budget exhausted (" << MaxHostCount
+                << "), restart the tablet to compact the dead slots");
         return false;
     }
     if (currentSize == 0) {
@@ -365,8 +382,6 @@ void TPartitionActor::RejectAddHost(
         dbgId,
         FormatError(error).Quote().c_str());
 
-    // Notify the DBG that asked for the host. dbgId is always a valid request
-    // index (see ValidateAddHostToDBGRequest), so the DBG exists.
     auto dbgPtr = FastPathService->GetDirectBlockGroup(dbgId);
     Y_ABORT_UNLESS(dbgPtr);
     auto executor = dbgPtr->GetExecutor();
@@ -376,33 +391,45 @@ void TPartitionActor::RejectAddHost(
 
 void TPartitionActor::SendAllocateDDiskForAddHost(
     const TActorContext& ctx,
-    size_t dbgId,
-    THostIndex newHostIndex)
+    size_t dbgId)
 {
+    if (CurrentStateFunc() == &TThis::StateDelete) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip AddHost BSC send during delete dbgId=%lu",
+            LogTitle.GetWithTime().c_str(),
+            dbgId);
+        return;
+    }
+
     Y_ABORT_UNLESS(AddHostInFlight.has_value());
 
-    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-    const ui64 regionCount =
-        CalcRegionCount(blockCount, VolumeConfig.GetBlockSize());
+    const ui64 regionCount = GetRegionCount(
+        VolumeConfig.GetPartitions(0).GetBlockCount(),
+        VolumeConfig.GetBlockSize(),
+        StorageConfig->GetVChunkSize());
+    const ui32 vChunkPerDbgCount = GetVChunkCountPerDirectBlockGroup(
+        regionCount,
+        DefaultVolumeDirectBlockGroupCount);
 
-    const auto pipe = ctx.Register(
-        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
-    AddHostInFlight->BSPipeClient = pipe;
-
-    // Idempotent: NumDDisks=N+1 is the desired final state, not "add one"; a
-    // re-sent request returns the same DDisk from BSController's persisted
-    // allocation, so a retry (e.g. after a restart) is safe.
-    const ui32 numDDisks = newHostIndex + 1;
+    // NumDDisks is the desired final state in live hosts (dead slots have no
+    // resources in BSC), so a re-sent request is idempotent.
+    const ui32 numDDisks = static_cast<ui32>(
+        LiveHostCount(
+            DirectBlockGroupsConnections.GetDirectBlockGroupConnections(
+                dbgId)) +
+        1);
     auto request = MakeAllocateDDiskBlockGroupRequest();
 
     auto* op = request->Record.AddDirectBlockGroupOperations();
     op->SetDirectBlockGroupId(dbgId);
     auto* define = op->MutableDefineDirectBlockGroup();
     define->SetNumDDisks(numDDisks);
-    define->SetNumChunksPerDDisk(regionCount);
+    define->SetNumChunksPerDDisk(vChunkPerDbgCount);
     define->SetNumPersistentBuffers(numDDisks);
 
-    NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
+    SendToBsc(ctx, THolder<IEventBase>(request.release()), dbgId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

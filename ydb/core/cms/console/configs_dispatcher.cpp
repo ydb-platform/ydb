@@ -46,6 +46,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
     (ui32)NKikimrConsole::TConfigItem::HiveConfigItem,
     (ui32)NKikimrConsole::TConfigItem::ImmediateControlsConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::InterconnectConfigItem,
     (ui32)NKikimrConsole::TConfigItem::LogConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MonitoringConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,
@@ -61,7 +62,6 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem,
     (ui32)NKikimrConsole::TConfigItem::BackgroundCleaningConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TracingConfigItem,
-    (ui32)NKikimrConsole::TConfigItem::UserFacingTracingConfigItem,
     (ui32)NKikimrConsole::TConfigItem::BlobStorageConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MetadataCacheConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MemoryControllerConfigItem,
@@ -72,6 +72,8 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::TliConfigItem,
     (ui32)NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem,
     (ui32)NKikimrConsole::TConfigItem::ColumnShardConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::UdfStoreConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -160,6 +162,9 @@ public:
     TSubscription::TPtr FindSubscription(const TDynBitMap &kinds);
 
     TSubscriber::TPtr FindSubscriber(TActorId aid);
+
+    // Publish the current YAML config versions, using zero for disabled or unknown versions.
+    void UpdateYamlConfigVersionMetrics();
 
     void UpdateYamlVersion(const TSubscription::TPtr &kinds) const;
 
@@ -320,6 +325,10 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr StartupConfigChanged;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV1;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV2;
+    // Main YAML version, or zero when YAML is disabled or the version is unknown; initialized during bootstrap.
+    ::NMonitoring::TDynamicCounters::TCounterPtr MainYamlConfigVersion;
+    // Database YAML version, or zero when YAML is disabled or the version is unknown; initialized during bootstrap.
+    ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseYamlConfigVersion;
     const std::optional<TDebugInfo> DebugInfo;
     std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
     std::vector<TString> Args;
@@ -389,6 +398,10 @@ void TConfigsDispatcher::Bootstrap()
     StartupConfigChanged = counters->GetCounter("StartupConfigChanged", true);
     ConfigurationV1 = counters->GetCounter("ConfigurationV1", false);
     ConfigurationV2 = counters->GetCounter("ConfigurationV2", false);
+    MainYamlConfigVersion = counters->GetCounter("MainYamlConfigVersion", false);
+    DatabaseYamlConfigVersion = counters->GetCounter("DatabaseYamlConfigVersion", false);
+    *MainYamlConfigVersion = 0;
+    *DatabaseYamlConfigVersion = 0;
 
     Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
@@ -1108,6 +1121,9 @@ try {
             break;
     }
 
+    // Trace only this replay. Reusing the tracer accumulates update history
+    // (including source file names) for the lifetime of the dispatcher.
+    RecordedInitialConfiguratorDeps->ConfigUpdateTracer = MakeDefaultConfigUpdateTracer();
     auto deps = RecordedInitialConfiguratorDeps->GetDeps();
     NConfig::TInitialConfigurator initCfg(deps);
 
@@ -1401,12 +1417,47 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         }
     }
 
+    if (isYamlChanged) {
+        UpdateYamlConfigVersionMetrics();
+    }
+
     if (CurrentStateFunc() == &TThis::StateInit) {
         YDB_LOG_DEBUG("Handle TEvConfigSubscriptionNotification: transitioning to StateWork");
         Become(&TThis::StateWork);
         ProcessEnqueuedEvents();
     }
     YDB_LOG_DEBUG("Handle TEvConfigSubscriptionNotification: exit");
+}
+
+// Publish versions from the current documents independently of subscriber acknowledgements.
+// Keep unavailable versions at zero and isolate metadata errors from config delivery.
+void TConfigsDispatcher::UpdateYamlConfigVersionMetrics()
+{
+    // Read each source independently so one unreadable version does not hide the other.
+    ui64 mainVersion = 0;
+    ui64 databaseVersion = 0;
+    if (YamlConfigEnabled) {
+        try {
+            mainVersion = NYamlConfig::GetMainMetadata(MainYamlConfig).Version.value_or(0);
+        } catch (const yexception& ex) {
+            YDB_LOG_WARN("Failed to read main YAML config version",
+                {"error", ex.what()},
+            );
+        }
+        if (DatabaseYamlConfig) {
+            try {
+                databaseVersion = NYamlConfig::GetDatabaseMetadata(*DatabaseYamlConfig).Version.value_or(0);
+            } catch (const yexception& ex) {
+                YDB_LOG_WARN("Failed to read database YAML config version",
+                    {"error", ex.what()},
+                );
+            }
+        }
+    }
+
+    // Assign the completed values without a transient zero during successful updates.
+    *MainYamlConfigVersion = mainVersion;
+    *DatabaseYamlConfigVersion = databaseVersion;
 }
 
 void TConfigsDispatcher::UpdateYamlVersion(const TSubscription::TPtr &subscription) const

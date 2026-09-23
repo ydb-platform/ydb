@@ -30,12 +30,14 @@ static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50);
 TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableOptions schedulableOptions, const TActorId& executerId, ui64 txId,
     NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
-    TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode)
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database)
     : TBase(std::move(schedulableOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings,
         memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /* taskCounters = */ nullptr, std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
     , BlockTrackingMode(mode)
 {
+    ComputeCtx.SetQueryContext(database, std::move(userToken));
     InitializeTask();
     YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
     YQL_ENSURE(!Meta.GetReads().empty());
@@ -272,7 +274,9 @@ void TKqpScanComputeActor::DoBootstrap() {
     const auto& taskParams = GetTask().GetTaskParams();
     if (const auto it = taskParams.find(TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)); it != taskParams.end()) {
         try {
-            WasmQueryCompartment_.emplace(NUdfStore::NWasm::ParseWasmUdfModulesTaskParam(it->second));
+            WasmQueryCompartment_.emplace(
+                NUdfStore::NWasm::ParseWasmUdfModulesTaskParam(it->second),
+                GetAllocatorPtr());
         } catch (const std::exception& e) {
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, NYql::TIssuesIds::DEFAULT_ERROR,
                 TStringBuilder() << "Failed to acquire WASM query compartment: " << e.what());
@@ -332,6 +336,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     auto wakeupCallback = [actorSystem, selfId]() {
         actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     };
+    ComputeCtx.SetWakeupCallback(wakeupCallback);
     auto errorCallback = [actorSystem, selfId](const TString& error) {
         actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
     };

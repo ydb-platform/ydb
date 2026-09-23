@@ -642,8 +642,9 @@ TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const 
     , FilterExpr(filterExpr) {
 }
 
-TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr)
+TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr, bool partiallyPushedDown)
     : IUnaryOperator(EOperator::Filter, pos, props, input)
+    , PartiallyPushedDown(partiallyPushedDown)
     , FilterExpr(filterExpr) {
 }
 
@@ -700,14 +701,14 @@ NJson::TJsonValue TOpFilter::ToJson(ui32 explainFlags) {
  */
 
 TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, TString joinKind,
-                 const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys)
+                 const TVector<TJoinKey>& joinKeys)
     : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys) {
     // Join-local references are renamed by IU name, without a side tag. Rules
     // that rename join-local references assume each renamed name identifies one side.
 }
 
 TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, TString joinKind,
-                 const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters)
+                 const TVector<TJoinKey>& joinKeys, const TVector<TExpression>& joinFilters)
     : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys), JoinFilters(joinFilters) {
     // Join-local references are renamed by IU name, without a side tag. Rules
     // that rename join-local references assume each renamed name identifies one side.
@@ -716,7 +717,8 @@ TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> ri
 TVector<TInfoUnit> TOpJoin::GetLHSKeys() const {
     TVector<TInfoUnit> lhsKeys;
     lhsKeys.reserve(JoinKeys.size());
-    for (const auto& [lhsKey, _] : JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& lhsKey = joinKey.Left;
         lhsKeys.push_back(lhsKey);
     }
     return lhsKeys;
@@ -725,7 +727,8 @@ TVector<TInfoUnit> TOpJoin::GetLHSKeys() const {
 TVector<TInfoUnit> TOpJoin::GetRHSKeys() const {
     TVector<TInfoUnit> rhsKeys;
     rhsKeys.reserve(JoinKeys.size());
-    for (const auto& [_, rhsKey] : JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& rhsKey = joinKey.Right;
         rhsKeys.push_back(rhsKey);
     }
     return rhsKeys;
@@ -753,7 +756,9 @@ void TOpJoin::ComputeOutputIUs() {
 TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
     TVector<TInfoUnit> result;
-    for (const auto& [leftKey, rightKey]: JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         result.push_back(leftKey);
         result.push_back(rightKey);
     }
@@ -821,8 +826,9 @@ TString TOpJoin::ToString(TExprContext& ctx) {
     }
     res << " [";
     for (size_t i = 0; i < JoinKeys.size(); i++) {
-        auto [x,y] = JoinKeys[i];
-        res << x.GetFullName() + "=" + y.GetFullName();
+        const auto& x = JoinKeys[i].Left;
+        const auto& y = JoinKeys[i].Right;
+        res << x.GetFullName() << (JoinKeys[i].EqualNulls ? " IS NOT DISTINCT FROM " : "=") << y.GetFullName();
         if (i != JoinKeys.size() - 1) {
             res << ", ";
         }
@@ -838,15 +844,16 @@ TString TOpJoin::ToString(TExprContext& ctx) {
     return res;
 }
 
-static TString FormatJoinKeys(const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys) {
+static TString FormatJoinKeys(const TVector<TJoinKey>& joinKeys) {
     TStringBuilder result;
     for (size_t i = 0; i < joinKeys.size(); ++i) {
         if (i != 0) {
             result << ", ";
         }
 
-        const auto& [leftKey, rightKey] = joinKeys[i];
-        result << leftKey.GetFullName() << " = " << rightKey.GetFullName();
+        const auto& leftKey = joinKeys[i].Left;
+        const auto& rightKey = joinKeys[i].Right;
+        result << leftKey.GetFullName() << (joinKeys[i].EqualNulls ? " IS NOT DISTINCT FROM " : " = ") << rightKey.GetFullName();
     }
     return result;
 }
@@ -1113,7 +1120,7 @@ TOpTableLookup::TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle p
                                const TVector<TInfoUnit>& lookupKeys, const TVector<TString>& lookupKeyColumns,
                                const TString& joinKind, const std::optional<TExpression>& fetchedRowFilter,
                                const std::optional<TLookupKeyPrefix>& prefix,
-                               const TVector<std::pair<TInfoUnit, TInfoUnit>>& residualJoinKeys)
+                               const TVector<TJoinKey>& residualJoinKeys)
     : IUnaryOperator(EOperator::TableLookup, pos, input)
     , Table(table)
     , FetchColumns(fetchColumns)
@@ -1199,7 +1206,9 @@ TString TOpTableLookup::ToString(TExprContext& ctx) {
     if (FetchedRowFilter) {
         res << ", filter: " << FetchedRowFilter->ToString();
     }
-    for (const auto& [leftKey, rightKey] : ResidualJoinKeys) {
+    for (const auto& joinKey : ResidualJoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         res << ", residual: " << leftKey.GetFullName() << " = " << rightKey.GetFullName();
     }
     return res;
@@ -1223,7 +1232,9 @@ NJson::TJsonValue TOpTableLookup::ToJson(ui32 explainFlags) {
             }
             res["LookupKeyPrefix"] = JoinSeq(", ", Prefix->Columns);
         }
-        for (const auto& [leftKey, rightKey] : ResidualJoinKeys) {
+        for (const auto& joinKey : ResidualJoinKeys) {
+            const auto& leftKey = joinKey.Left;
+            const auto& rightKey = joinKey.Right;
             if (!condition.empty()) {
                 condition << ", ";
             }
@@ -1242,7 +1253,7 @@ NJson::TJsonValue TOpTableLookup::ToJson(ui32 explainFlags) {
  */
 
 TOpIndexLookupJoin::TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind,
-                                       const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys)
+                                       const TVector<TJoinKey>& joinKeys)
     : IUnaryOperator(EOperator::IndexLookupJoin, pos, input)
     , JoinKind(joinKind)
     , JoinKeys(joinKeys) {
@@ -1422,14 +1433,21 @@ NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags) {
 /**
  * OpGroupingSets operator. Logical representation of grouping sets.
  */
-TOpGroupingSets::TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos)
+TOpGroupingSets::TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets,
+                                 TGroupingIndicators groupingIndicators, TPositionHandle pos)
     : IUnaryOperator(EOperator::GroupingSets, pos, input)
-    , GroupingSets(std::move(groupingSets)) {
+    , GroupingSets(std::move(groupingSets))
+    , GroupingIndicators(std::move(groupingIndicators)) {
     Y_ENSURE(!GroupingSets.empty(), "Grouping sets list must not be empty");
 }
 
 void TOpGroupingSets::ComputeOutputIUs() {
-    Props.OutputIUs = GetInput()->GetOutputIUs();
+    TVector<TInfoUnit> outputIUs = GetInput()->GetOutputIUs();
+    for (const auto& [key, indicator] : GroupingIndicators) {
+        Y_UNUSED(key);
+        outputIUs.push_back(indicator);
+    }
+    Props.OutputIUs = std::move(outputIUs);
 }
 
 TString TOpGroupingSets::ToString(TExprContext& ctx) {
@@ -1443,7 +1461,184 @@ TString TOpGroupingSets::ToString(TExprContext& ctx) {
         }
         result << "(" << FormatInfoUnits(GroupingSets[setIndex]) << ")";
     }
-    return result << "]";
+    result << "]";
+
+    if (!GroupingIndicators.empty()) {
+        result << ", grouping indicators [";
+        for (size_t indicatorIndex = 0; indicatorIndex < GroupingIndicators.size(); ++indicatorIndex) {
+            if (indicatorIndex != 0) {
+                result << ", ";
+            }
+            const auto& [key, indicator] = GroupingIndicators[indicatorIndex];
+            result << key.GetFullName() << " -> " << indicator.GetFullName();
+        }
+        result << "]";
+    }
+
+    return result;
+}
+
+/***
+ * OpWindow operator methods
+ */
+TString ToStringWindowFuncKind(EWindowFuncKind kind) {
+    return kind == EWindowFuncKind::Aggregate ? "Aggregate" : "Native";
+}
+
+EWindowFuncKind WindowFuncKindFromString(const TString& kind) {
+    if (kind == "Aggregate") {
+        return EWindowFuncKind::Aggregate;
+    }
+    Y_ENSURE(kind == "Native", "Unknown window function kind: " << kind);
+    return EWindowFuncKind::Native;
+}
+
+TString ToStringWindowFrameType(EWindowFrameType type) {
+    switch (type) {
+        case EWindowFrameType::Rows:
+            return "Rows";
+        case EWindowFrameType::Range:
+            return "Range";
+        case EWindowFrameType::Groups:
+            return "Groups";
+    }
+    Y_ENSURE(false, "Unknown window frame type");
+}
+
+EWindowFrameType WindowFrameTypeFromString(const TString& type) {
+    if (type == "Rows") {
+        return EWindowFrameType::Rows;
+    } else if (type == "Range") {
+        return EWindowFrameType::Range;
+    }
+    Y_ENSURE(type == "Groups", "Unknown window frame type: " << type);
+    return EWindowFrameType::Groups;
+}
+
+TString ToStringWindowFrameBound(EWindowFrameBound bound) {
+    switch (bound) {
+        case EWindowFrameBound::UnboundedPreceding:
+            return "UnboundedPreceding";
+        case EWindowFrameBound::Preceding:
+            return "Preceding";
+        case EWindowFrameBound::CurrentRow:
+            return "CurrentRow";
+        case EWindowFrameBound::Following:
+            return "Following";
+        case EWindowFrameBound::UnboundedFollowing:
+            return "UnboundedFollowing";
+    }
+    Y_ENSURE(false, "Unknown window frame bound");
+}
+
+EWindowFrameBound WindowFrameBoundFromString(const TString& bound) {
+    if (bound == "UnboundedPreceding") {
+        return EWindowFrameBound::UnboundedPreceding;
+    } else if (bound == "Preceding") {
+        return EWindowFrameBound::Preceding;
+    } else if (bound == "CurrentRow") {
+        return EWindowFrameBound::CurrentRow;
+    } else if (bound == "Following") {
+        return EWindowFrameBound::Following;
+    }
+    Y_ENSURE(bound == "UnboundedFollowing", "Unknown window frame bound: " << bound);
+    return EWindowFrameBound::UnboundedFollowing;
+}
+
+TOpWindow::TOpWindow(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TOpWindowFunc>& windowFuncs,
+                     const TVector<TInfoUnit>& partitionKeys, const TVector<TSortElement>& sortElements, const TOpWindowFrame& frame)
+    : IUnaryOperator(EOperator::Window, pos, input)
+    , WindowFuncs(windowFuncs)
+    , PartitionKeys(partitionKeys)
+    , SortElements(sortElements)
+    , Frame(frame) {
+}
+
+void TOpWindow::ComputeOutputIUs() {
+    TVector<TInfoUnit> outputIUs = GetInput()->GetOutputIUs();
+    for (const auto& func : WindowFuncs) {
+        outputIUs.push_back(func.ResultColName);
+    }
+    Props.OutputIUs = std::move(outputIUs);
+}
+
+TVector<TInfoUnit> TOpWindow::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    TVector<TInfoUnit> result = PartitionKeys;
+    for (const auto& element : SortElements) {
+        result.push_back(element.SortColumn);
+    }
+    for (const auto& func : WindowFuncs) {
+        result.insert(result.end(), func.Arguments.begin(), func.Arguments.end());
+    }
+    return result;
+}
+
+TString TOpWindow::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder res;
+    res << "Window [";
+    for (size_t i = 0; i < WindowFuncs.size(); ++i) {
+        if (i != 0) {
+            res << ", ";
+        }
+        res << WindowFuncs[i].ResultColName.GetFullName() << ": " << WindowFuncs[i].Function << "("
+            << FormatInfoUnits(WindowFuncs[i].Arguments) << ")";
+    }
+    res << "]";
+    if (!PartitionKeys.empty()) {
+        res << " PartitionBy: [" << FormatInfoUnits(PartitionKeys) << "]";
+    }
+    if (!SortElements.empty()) {
+        res << " OrderBy: [";
+        for (size_t i = 0; i < SortElements.size(); ++i) {
+            if (i != 0) {
+                res << ", ";
+            }
+            res << SortElements[i].SortColumn.GetFullName() << (SortElements[i].Ascending ? " asc" : " desc");
+        }
+        res << "]";
+    }
+    res << " Frame: " << ToStringWindowFrameType(Frame.Type) << "[" << ToStringWindowFrameBound(Frame.BeginKind);
+    if (Frame.BeginKind == EWindowFrameBound::Preceding || Frame.BeginKind == EWindowFrameBound::Following) {
+        res << " " << Frame.BeginValue;
+    }
+    res << ", " << ToStringWindowFrameBound(Frame.EndKind);
+    if (Frame.EndKind == EWindowFrameBound::Preceding || Frame.EndKind == EWindowFrameBound::Following) {
+        res << " " << Frame.EndValue;
+    }
+    res << "]";
+    return res;
+}
+
+NJson::TJsonValue TOpWindow::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+
+    TStringBuilder functions;
+    functions << "{";
+    for (size_t i = 0; i < WindowFuncs.size(); ++i) {
+        if (i != 0) {
+            functions << ", ";
+        }
+        functions << WindowFuncs[i].ResultColName.GetFullName() << ": " << WindowFuncs[i].Function << "("
+                  << FormatInfoUnits(WindowFuncs[i].Arguments) << ")";
+    }
+    functions << "}";
+    res["WindowFunctions"] = functions;
+
+    if (!PartitionKeys.empty()) {
+        res["PartitionBy"] = FormatInfoUnits(PartitionKeys);
+    }
+    if (!SortElements.empty()) {
+        TVector<TInfoUnit> sortColumns;
+        for (const auto& element : SortElements) {
+            sortColumns.push_back(element.SortColumn);
+        }
+        res["OrderBy"] = FormatInfoUnits(sortColumns);
+    }
+    res["Frame"] = ToStringWindowFrameType(Frame.Type);
+
+    return res;
 }
 
 /***
@@ -1508,12 +1703,115 @@ TString TOpCBOTree::ToString(TExprContext& ctx) {
 }
 
 /**
+* Table Effect operator methods: these are inserts/updates/deletes
+*/
+TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options)
+    : IUnaryOperator(EOperator::TableEffect, pos, input)
+    , Table(table)
+    , EffectType(type)
+    , Options(options) {
+
+    if (options.ReturningColumns.has_value()) {
+        for (const auto & c : options.ReturningColumns.value()) {
+            OutputIUs.push_back(TInfoUnit(c));
+        }
+    }
+
+    UsedIUs = GetInput()->GetOutputIUs();
+}
+
+TVector<TInfoUnit> TOpTableEffect::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    return UsedIUs;
+}
+
+void TOpTableEffect::ComputeOutputIUs() {
+    Props.OutputIUs = OutputIUs;
+}
+
+TString TOpTableEffect::GetExplainName() const {
+    switch (EffectType) {
+        case EEffectType::InsertRows:
+        case EEffectType::InsertRowsIndex:
+            return "InsertRows";
+        case EEffectType::UpdateRows:
+        case EEffectType::UpdateRowsIndex:
+            return "UpdateRows";
+        case EEffectType::DeleteRows:
+        case EEffectType::DeleteRowsIndex:
+            return "DeleteRows";
+        default:
+            Y_ENSURE(false, "Uknown table effect type");
+    }
+}
+
+TString TOpTableEffect::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    return GetExplainName();
+}
+
+TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
+    if (Options.ReturningColumns.has_value() && Options.ReturningColumns->size()) {
+        Y_ENSURE(false, "Returning columns not supported in new optimizer");
+    }
+
+    TString mode;
+    
+    if (EffectType == EEffectType::InsertRows) {
+        mode = "insert";
+    } else if (EffectType == EEffectType::UpdateRows) {
+        mode = "update";
+    } else if (EffectType == EEffectType::UpsertRows) {
+        mode = "upsert";
+    } else if (EffectType == EEffectType::DeleteRows) {
+        mode = "delete";
+    } else {
+        Y_ENSURE(false, "Unsupported DML in new optimizer");
+    }
+
+    TString isBatch = "false";
+    if (Options.IsBatch.has_value() && Options.IsBatch.value()){
+        isBatch = "true";
+    }
+
+    TVector<TExprNode::TPtr> defaultColumns;
+    if (Options.DefaultColumns.has_value()) {
+        for (auto c : Options.DefaultColumns.value()) {
+            defaultColumns.push_back(ctx.NewAtom(Pos, c));
+        }
+    }
+
+    TVector<TExprNode::TPtr> settings;
+    if (Options.Settings.has_value()) {
+        settings = Options.Settings.value();
+    }
+
+    return Build<TKqpTableSinkSettings>(ctx, Pos)
+            .Table(Table)
+            .InconsistentWrite().Build("false")
+            .Mode().Build(mode)
+            .Priority().Build("0")
+            .StreamWrite().Build("false")
+            .IsBatch().Build(isBatch)
+            .IsIndexImplTable().Build("false")
+            .DefaultColumns()
+                .Add(defaultColumns)
+            .Build()
+            .ReturningColumns().Build()
+            .Settings()
+                .Add(settings)
+            .Build()
+            .Done().Ptr();
+}
+
+/**
  * OpRoot operator methods
  */
 
-TOpRoot::TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder)
+TOpRoot::TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder, const TVector<TString>& queryColumns)
     : IUnaryOperator(EOperator::Root, pos, input)
-    , ColumnOrder(columnOrder) {
+    , ColumnOrder(columnOrder)
+    , QueryColumns(queryColumns) {
 }
 
 // Recompute output ius for now

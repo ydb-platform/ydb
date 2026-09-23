@@ -1,8 +1,11 @@
 #include "hive_impl.h"
+#include "hive_log.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr::NHive {
 
@@ -22,6 +25,8 @@ public:
     TString PoolName;
     std::vector<TPipeClient> PipeClients;
     i64 MoveDataInFlight = 0;
+    // Sends, not iterator position: NextTablet is advanced before SendMoveData in one caller and after in the other.
+    size_t SentCount = 0;
     THive* Hive;
 
     TMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName, ui64 maxInFlight, THive* hive)
@@ -35,6 +40,7 @@ public:
     }
 
     void PassAway() override {
+        Hive->OnShrinkMoveDataFinished();
         Hive->RemoveSubActor(this);
         return IActor::PassAway();
     }
@@ -51,6 +57,10 @@ public:
         return TStringBuilder() << "MoveData(" << PoolName << ")";
     }
 
+    size_t Queued() const {
+        return std::distance(NextTablet, Tablets.cend());
+    }
+
     void SendMoveData(size_t index, TTabletId tablet) {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 13};
@@ -58,6 +68,15 @@ public:
         PipeClients[index] = {Register(NTabletPipe::CreateClient(SelfId(), tablet, pipeConfig)), tablet};
         NTabletPipe::SendData(SelfId(), PipeClients[index].Client, new TEvTablet::TEvMoveData(Groups));
         ++MoveDataInFlight;
+        ++SentCount;
+        Hive->OnShrinkMoveDataSent(MoveDataInFlight, Queued());
+        YDB_LOG_NOTICE("ShrinkPool: MoveData sent",
+            {"pool", PoolName},
+            {"tablet", tablet},
+            {"sent", SentCount},
+            {"total", Tablets.size()},
+            {"queued", Queued()},
+            {"inFlight", MoveDataInFlight});
     }
 
     void CheckCompletion() {
@@ -81,6 +100,13 @@ public:
             if (PipeClients[i].Tablet == tablet) {
                 NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
                 --MoveDataInFlight;
+                Hive->OnShrinkMoveDataAnswered(MoveDataInFlight, Queued());
+                YDB_LOG_NOTICE("ShrinkPool: MoveData answered",
+                    {"pool", PoolName},
+                    {"tablet", tablet},
+                    {"status", (ui32)ev->Get()->Record.GetStatus()},
+                    {"queued", Queued()},
+                    {"inFlight", MoveDataInFlight});
                 Hive->Execute(Hive->CreateRestartTablet(ToFullTabletId(tablet)));
                 if (NextTablet != Tablets.end()) {
                     SendMoveData(i, *(NextTablet++));
@@ -111,6 +137,10 @@ public:
             if (PipeClients[i].Tablet == tablet) {
                 NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
                 --MoveDataInFlight;
+                Hive->OnShrinkMoveDataRetried();
+                YDB_LOG_NOTICE("ShrinkPool: MoveData retried",
+                    {"pool", PoolName},
+                    {"tablet", tablet});
                 SendMoveData(i, tablet);
                 break;
             }

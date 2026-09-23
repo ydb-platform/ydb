@@ -122,19 +122,6 @@ BELONGS ya.make
         src/powerpc/ffi_powerpc.h [11:28]
         src/powerpc/ffi_sysv.c [11:28]
 
-KEEP     CC-PDDC              80e1d00052cae3c51be03957922bff6c
-BELONGS ya.make
-    License text:
-          Doug Lea and released to the public domain, as explained at
-          http://creativecommons.org/licenses/publicdomain.  Send questions,
-    Scancode info:
-        Original SPDX id: CC-PDDC
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://creativecommons.org/licenses/publicdomain/, https://creativecommons.org/licenses/publicdomain/, https://spdx.org/licenses/CC-PDDC
-    Files with this license:
-        src/dlmalloc.c [3:4]
-
 KEEP     GPL-3.0-or-later     87fc8712bb68fe0e4f0e8067a1ff14e7
 BELONGS testsuite/libffi.bhaible/test-callback/ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -207,6 +194,19 @@ BELONGS ya.make
         src/x86/sysv.S [8:26]
         src/x86/sysv_intel.S [8:26]
         src/x86/unix64.S [8:26]
+
+KEEP     CC0-1.0              b5f764fc4eb42084bd48338af5d0b73e
+BELONGS ya.make
+    License text:
+          Doug Lea and released to the public domain, as explained at
+          http://creativecommons.org/publicdomain/zero/1.0/ Send questions,
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        src/dlmalloc.c [3:4]
 
 KEEP     MIT                  c256125971fdb3bd73b9d2f700e3ce71
 BELONGS ya.make

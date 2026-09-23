@@ -22,12 +22,32 @@ from .utils import (
     s_rooted,
 )
 from .pnpm_workspace import PnpmWorkspace
+from .common_config import load_common_config
 from .timeit import timeit
 from .package_json import PackageJson
 
 
 def _same_filesystem(source: str, destination: str) -> bool:
     return os.stat(source).st_dev == os.stat(os.path.dirname(destination)).st_dev
+
+
+def _remove_migrated_build_dependencies(package_json):
+    pnpm_settings = package_json.data.get("pnpm")
+    if not isinstance(pnpm_settings, dict):
+        return
+
+    changed = False
+    for key in ("onlyBuiltDependencies", "neverBuiltDependencies", "ignoredBuiltDependencies"):
+        if key in pnpm_settings:
+            del pnpm_settings[key]
+            changed = True
+
+    if not changed:
+        return
+
+    if not pnpm_settings:
+        del package_json.data["pnpm"]
+    package_json.write()
 
 
 class PackageManagerError(RuntimeError):
@@ -272,6 +292,7 @@ class PackageManager(object):
             raise PackageManagerError("Unable to execute command: nodejs_bin_path is not configured")
 
         cmd_env = env.copy()
+        cmd_env["PNPM_MAX_WORKERS"] = os.environ.get("PNPM_MAX_WORKERS", "4")
 
         if self.ld_library_path:
             cmd_env["LD_LIBRARY_PATH"] = self.ld_library_path
@@ -353,6 +374,7 @@ class PackageManager(object):
         local_cli=False,
         node_modules_path=None,
         store_dir=None,
+        prod=False,
     ):
         """
         Creates node_modules directory according to the lockfile.
@@ -381,11 +403,32 @@ class PackageManager(object):
             virtual_store_dir,
             self.inject_peers,
             node_modules_path,
+            prod=prod,
         )
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir or global_virtual_store_dir)
 
         return ws
+
+    @timeit
+    def prune_node_modules(self, yatool_prebuilder_path=None, local_cli=False):
+        """Reinstall only production dependencies before bundling injected node_modules."""
+        if not self.inject_peers:
+            raise PackageManagerError("Production-only bundling requires injected workspace dependencies")
+
+        node_modules_path = build_nm_path(self.build_path)
+        # A restored layer can live on a RAM disk behind this symlink.
+        real_node_modules_path = os.path.realpath(node_modules_path)
+        if os.path.isdir(real_node_modules_path):
+            shutil.rmtree(real_node_modules_path)
+        if os.path.islink(node_modules_path):
+            os.unlink(node_modules_path)
+
+        self.create_node_modules(
+            yatool_prebuilder_path=yatool_prebuilder_path,
+            local_cli=local_cli,
+            prod=True,
+        )
 
     """
     Runs pnpm install command with specified parameters in an exclusive and hashed manner.
@@ -412,6 +455,7 @@ class PackageManager(object):
         virtual_store_dir: str | None,
         inject_peers: bool,
         node_modules_path: str,
+        prod: bool = False,
     ):
         # Use fcntl to lock a temp file
 
@@ -437,6 +481,9 @@ class PackageManager(object):
                 store_dir,
                 "--strict-peer-dependencies",
             ]
+
+            if prod:
+                install_cmd.append("--prod")
 
             if custom_node_modules_path:
                 install_cmd.extend(["--modules-dir", os.path.relpath(node_modules_path, cwd)])
@@ -554,6 +601,11 @@ class PackageManager(object):
 
         ws = PnpmWorkspace(build_ws_config_path(self.build_path))
         ws.set_from_package_json(pj)
+        _remove_migrated_build_dependencies(pj)
+        source_pj = self.load_package_json_from_dir(self.sources_path)
+        config_path, ws.catalogs = load_common_config(source_pj, self.sources_root, self.inject_peers)
+        if config_path:
+            ws.common_config_sources[config_path] = sorted(ws.catalogs)
 
         dep_paths = ws.get_paths(ignore_self=True)
         self._build_merged_workspace_config(ws, dep_paths)
@@ -636,7 +688,11 @@ class PackageManager(object):
         for dep_path in dep_paths:
             ws_config_path = build_ws_config_path(dep_path)
             if os.path.isfile(ws_config_path):
-                ws.merge(PnpmWorkspace.load(ws_config_path))
+                peer_ws = PnpmWorkspace.load(ws_config_path)
+                if not self.inject_peers:
+                    peer_ws.catalogs = {}
+                    peer_ws.common_config_sources = {}
+                ws.merge(peer_ws)
 
         ws.write()
 

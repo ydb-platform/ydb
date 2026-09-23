@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <array>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -1099,6 +1100,114 @@ Y_UNIT_TEST(PackIsValidFuzz) {
     CTEST  << "Data size =  " << totalSize / (1024 * 1024) << "[MB]" << Endl;
     CTEST  << "Calculating speed = " << totalSize / ((totalNanoseconds + 999)/1000) << "MB/sec" << Endl;
     CTEST  << Endl;
+}
+
+Y_UNIT_TEST(EqualNullsIgnoresNullKeyLeftover) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc key;
+    key.Role = EColumnRole::Key;
+    key.DataSize = 8;
+
+    auto tl = TTupleLayout::Create({key});
+
+    ui64 leftovers[2] = {0x1111111111111111ull, 0x2222222222222222ull};
+    ui8 valid = 0;
+    const ui8* cols[] = {reinterpret_cast<const ui8*>(leftovers)};
+    const ui8* validBits[] = {&valid};
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> packed(tl->TotalRowSize * 2, 0);
+
+    auto row = [&](ui32 i) { return packed.data() + i * tl->TotalRowSize; };
+
+    tl->Pack(cols, validBits, packed.data(), overflow, 0, 2);
+    UNIT_ASSERT(!tl->KeysEqual(row(0), overflow.data(), row(1), overflow.data()));
+
+    tl->ApplyEqualNulls({0});
+    overflow.clear();
+    packed.assign(tl->TotalRowSize * 2, 0);
+    tl->Pack(cols, validBits, packed.data(), overflow, 0, 2);
+    UNIT_ASSERT(tl->KeysEqual(row(0), overflow.data(), row(1), overflow.data()));
+    UNIT_ASSERT_VALUES_EQUAL(Hash(row(0)), Hash(row(1)));
+}
+
+Y_UNIT_TEST(EqualNullsSupportsMoreThan64KeyColumns) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    constexpr ui32 keyColumns = 65;
+    std::vector<TColumnDesc> columns(keyColumns);
+    std::vector<std::array<ui64, 2>> values(keyColumns);
+    std::vector<ui8> validity(keyColumns, 0b11);
+    std::vector<const ui8*> columnPtrs(keyColumns);
+    std::vector<const ui8*> validityPtrs(keyColumns);
+
+    for (ui32 i = 0; i < keyColumns; ++i) {
+        columns[i].Role = EColumnRole::Key;
+        columns[i].DataSize = sizeof(ui64);
+        values[i] = {i, i};
+        columnPtrs[i] = reinterpret_cast<const ui8*>(values[i].data());
+        validityPtrs[i] = &validity[i];
+    }
+
+    values.back() = {0x1111111111111111ull, 0x2222222222222222ull};
+    validity.back() = 0;
+
+    auto tl = TTupleLayout::Create(columns);
+    tl->ApplyEqualNulls({keyColumns - 1});
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> packed(tl->TotalRowSize * 2, 0);
+    tl->Pack(columnPtrs.data(), validityPtrs.data(), packed.data(), overflow, 0, 2);
+
+    const ui8* lhs = packed.data();
+    const ui8* rhs = lhs + tl->TotalRowSize;
+    UNIT_ASSERT(tl->KeysEqual(lhs, overflow.data(), rhs, overflow.data()));
+    UNIT_ASSERT_VALUES_EQUAL(Hash(lhs), Hash(rhs));
+}
+
+Y_UNIT_TEST(EqualNullsSupportsVariableKeyAfter64FixedKeys) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    constexpr ui32 fixedKeyColumns = 64;
+    constexpr ui32 variableKeyColumn = fixedKeyColumns;
+    std::vector<TColumnDesc> columns(fixedKeyColumns + 1);
+    std::vector<std::array<ui64, 2>> fixedValues(fixedKeyColumns);
+    std::vector<const ui8*> columnPtrs(fixedKeyColumns + 2);
+    std::vector<const ui8*> validityPtrs(fixedKeyColumns + 2);
+
+    for (ui32 i = 0; i < fixedKeyColumns; ++i) {
+        columns[i].Role = EColumnRole::Key;
+        columns[i].DataSize = sizeof(ui64);
+        fixedValues[i] = {i, i};
+        columnPtrs[i] = reinterpret_cast<const ui8*>(fixedValues[i].data());
+    }
+
+    columns[variableKeyColumn].Role = EColumnRole::Key;
+    columns[variableKeyColumn].DataSize = 16;
+    columns[variableKeyColumn].SizeType = EColumnSizeType::Variable;
+
+    const std::array<ui32, 3> offsets = {0, 4, 13};
+    const TString variableData = "leftdifferent";
+    ui8 variableValidity = 0;
+    columnPtrs[variableKeyColumn] = reinterpret_cast<const ui8*>(offsets.data());
+    columnPtrs[variableKeyColumn + 1] = reinterpret_cast<const ui8*>(variableData.data());
+    validityPtrs[variableKeyColumn] = &variableValidity;
+
+    auto tl = TTupleLayout::Create(columns);
+    UNIT_ASSERT_VALUES_EQUAL(tl->KeyColumnsFixedNum, fixedKeyColumns);
+    tl->ApplyEqualNulls({variableKeyColumn});
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> packed(tl->TotalRowSize * 2, 0);
+    tl->Pack(columnPtrs.data(), validityPtrs.data(), packed.data(), overflow, 0, 2);
+
+    const ui8* lhs = packed.data();
+    const ui8* rhs = lhs + tl->TotalRowSize;
+    const auto& variableKey = tl->KeyColumns.back();
+    UNIT_ASSERT_VALUES_UNEQUAL(lhs[variableKey.Offset], rhs[variableKey.Offset]);
+    UNIT_ASSERT(tl->KeysEqual(lhs, overflow.data(), rhs, overflow.data()));
+    UNIT_ASSERT_VALUES_EQUAL(Hash(lhs), Hash(rhs));
 }
 
 }

@@ -382,6 +382,37 @@ void TestAutoConfiguredAdjacentPoolActivationAfterIdle(
     } while (false) \
 // ASSERT_POOLS
 
+Y_UNIT_TEST(WakerAutoConfig) {
+    for (const ui32 cpuCount : {1, 3, 8}) {
+        for (const bool dynamicNode : {false, true}) {
+            for (const bool sharedThreads : {false, true}) {
+                for (const bool unitedPool : {false, true}) {
+                    if (unitedPool && !sharedThreads) {
+                        continue;
+                    }
+                    for (const int wakerSetting : {-1, 0, 1}) {
+                        NKikimrConfig::TActorSystemConfig config;
+                        config.SetCpuCount(cpuCount);
+                        config.SetUseSharedThreads(sharedThreads);
+                        config.SetUseUnitedPool(unitedPool);
+                        if (wakerSetting >= 0) {
+                            config.SetUseWaker(wakerSetting);
+                        }
+                        ApplyAutoConfig(&config, dynamicNode, false);
+                        for (const auto& executor : config.GetExecutor()) {
+                            if (executor.GetType() == NKikimrConfig::TActorSystemConfig::TExecutor::BASIC) {
+                                UNIT_ASSERT_VALUES_EQUAL(executor.GetEnableWaker(), wakerSetting == 1);
+                            } else {
+                                UNIT_ASSERT(!executor.HasEnableWaker());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 Y_UNIT_TEST(GetASPoolsith1CPU) {
     TASPools pools = GetASPools(1);
     ASSERT_POOLS(pools, 0, 0, 0, 1, 0);
@@ -509,6 +540,45 @@ Y_UNIT_TEST(SharedAndUnitedAutoConfigMatrix) {
             }
         }
     }
+}
+
+Y_UNIT_TEST(UnitedPoolPreservesAutoConfiguredUserSlotLimit) {
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetCpuCount(8);
+    config.SetUseSharedThreads(true);
+    config.SetUseUnitedPool(true);
+
+    ApplyAutoConfig(&config, true, false);
+
+    const ui32 userPoolId = config.GetSysExecutor();
+    auto setup = CreateActorSystemSetup(config);
+    const auto& userPool = FindBasicPool(setup->CpuManager, userPoolId);
+    UNIT_ASSERT_VALUES_EQUAL(userPool.PoolName, "User");
+    UNIT_ASSERT_VALUES_EQUAL(userPool.DefaultThreadCount, 4);
+    UNIT_ASSERT_VALUES_EQUAL(userPool.MaxThreadCount, 8);
+    UNIT_ASSERT(userPool.AllThreadsAreShared);
+
+    NActors::TActorSystem actorSystem(setup);
+    actorSystem.Start();
+
+    NActors::TExecutorPoolState state;
+    bool sharedQuotaObserved = false;
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+    while (TInstant::Now() < deadline) {
+        NActors::GetActorSystemStats(actorSystem).GetExecutorPoolState(userPoolId, state);
+        if (state.SharedCpuQuota > 1.0) {
+            sharedQuotaObserved = true;
+            break;
+        }
+        Sleep(TDuration::MilliSeconds(10));
+    }
+
+    actorSystem.Stop();
+    UNIT_ASSERT_C(sharedQuotaObserved,
+        "User pool did not report its owned shared slots");
+    UNIT_ASSERT_VALUES_EQUAL(state.MaxLimit, 8);
+    UNIT_ASSERT_LE(state.CurrentLimit, state.MaxLimit);
+    UNIT_ASSERT_LE(state.PossibleMaxLimit, state.MaxLimit);
 }
 
 Y_UNIT_TEST(GetManualPoolsUseExecutorIndicesDirectly) {

@@ -4,9 +4,11 @@
 
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/protos/kqp_lookup_source.pb.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
@@ -15,8 +17,10 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 
 #include <util/generic/is_in.h>
@@ -459,6 +463,7 @@ public:
                 ) {
                     const auto& viewMetadata = *res.Metadata;
                     auto* viewInfo = preparingQuery->MutablePhysicalQuery()->MutableViewInfos()->Add();
+                    viewInfo->SetTableName(viewMetadata.Name);
                     auto* pathId = viewInfo->MutableTableId();
                     pathId->SetOwnerId(viewMetadata.PathId.OwnerId());
                     pathId->SetTableId(viewMetadata.PathId.TableId());
@@ -524,6 +529,13 @@ protected:
             return false;
         }
 
+        // Pragma names arrive here normalized (lowercase, no underscores).
+        if (name == "kqpdisablepessimisticlocks" && !SessionCtx->Query().IsolateEffects) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED, TStringBuilder()
+                << "Pragma kikimr.KqpDisablePessimisticLocks is only supported for ReadCommittedRW isolation level"));
+            return false;
+        }
+
         if (GetDispatcher()->IsRuntime(name)) {
             bool pragmaAllowed = false;
 
@@ -567,6 +579,34 @@ private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
 
+class TKikimrDqIntegration : public NYql::TDqIntegrationBase {
+public:
+    explicit TKikimrDqIntegration(TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+    : SessionCtx(std::move(sessionCtx))
+    {
+    }
+
+private:
+
+    void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
+        YQL_ENSURE(SessionCtx->Config().FeatureFlags.GetEnableDqSourceStreamLookupJoinLocalLookups(), "streamlookup() JOIN local table lookups are disabled. Please contact your system administrator to enable it");
+        const TDqLookupSourceWrap wrap(&node);
+        const auto settings = wrap.Settings().Cast<TCoAtomList>();
+        const auto& path = settings.Item(0).StringValue();
+
+        NKqpProto::TDqSourceKikimrLookupSource source;
+        source.SetPath(path);
+        source.SetToken(SessionCtx->GetUserToken() ? SessionCtx->GetUserToken()->SerializeAsString() : "");
+        source.SetDatabase(SessionCtx->GetDatabase());
+
+        // preserve source description for read actor
+        protoSettings.PackFrom(source);
+        sourceType = KikimrProviderName;
+    }
+
+    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+};
+
 class TKikimrDataSource : public TDataProviderBase {
 public:
     TKikimrDataSource(
@@ -604,6 +644,8 @@ public:
     }
 
     bool Initialize(TExprContext& ctx) override {
+        KikimrDqIntegration = MakeHolder<TKikimrDqIntegration>(SessionCtx);
+
         TString defaultToken;
         if (auto credential = Types.Credentials->FindCredential(TString("default_") + KikimrProviderName)) {
             if (credential->Category != KikimrProviderName) {
@@ -1005,6 +1047,10 @@ public:
         return TString(KikimrProviderName);
     }
 
+    NYql::IDqIntegration *GetDqIntegration() override {
+        return KikimrDqIntegration.Get();
+    }
+
 private:
     const NKikimr::NMiniKQL::IFunctionRegistry& FunctionRegistry;
     TTypeAnnotationContext& Types;
@@ -1019,6 +1065,7 @@ private:
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
     const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
+    THolder<IDqIntegration> KikimrDqIntegration;
 };
 
 } // anonymous namespace

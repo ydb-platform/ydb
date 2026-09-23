@@ -5,6 +5,7 @@
 #include <library/cpp/yt/logging/tag.h>
 #include <library/cpp/yt/logging/tagged_payload.h>
 
+#include <library/cpp/yt/string/format.h>
 #include <library/cpp/yt/string/raw_formatter.h>
 #include <library/cpp/yt/string/string_builder.h>
 
@@ -259,6 +260,25 @@ TEST(TTaggedPayloadTest, AppendTagWithReset)
     EXPECT_EQ(ReadTags(tags), (TTags{{"Rewritten", "final"}, {"Emptied", ""}}));
 }
 
+TEST(TTaggedPayloadTest, WriterRestoresPayloadOnThrow)
+{
+    TTaggedPayloadWriter writer;
+    WriteMessage(&writer, "Message");
+    WriteTag(&writer, "Kept", "yes");
+
+    EXPECT_THROW(
+        writer.AppendTag("Doomed", [] (TStringBuilderBase* builder) {
+            builder->AppendString(std::string(4096, 'x'));
+            throw std::runtime_error("boom");
+        }),
+        std::runtime_error);
+
+    WriteTag(&writer, "After", "still valid");
+    auto decoded = Decode(writer.Finish());
+    EXPECT_EQ(decoded.Message, "Message");
+    EXPECT_EQ(decoded.Tags, (TTags{{"Kept", "yes"}, {"After", "still valid"}}));
+}
+
 TEST(TLoggingTagListTest, Add)
 {
     TLoggingTagList tags;
@@ -266,6 +286,128 @@ TEST(TLoggingTagListTest, Add)
     tags.AddFormat("Range", "%v-%v", 1, 9);
 
     EXPECT_EQ(ReadTags(tags.GetPayload()), (TTags{{"Count", "42"}, {"Range", "1-9"}}));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TLoggingTagListBuilderGuardTest, AppendsToTarget)
+{
+    TLoggingTagList tags;
+    TLoggingTagListBuilderGuard(&tags).With("Key", 1);
+    EXPECT_EQ(ToString(tags), "Key: 1");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, ChainKeepsOrder)
+{
+    TLoggingTagList tags;
+    TLoggingTagListBuilderGuard(&tags)
+        .With("First", 1)
+        .WithFormat("Second", "%.2f", 1.5)
+        .With("Third", "value");
+    EXPECT_EQ(ToString(tags), "First: 1, Second: 1.50, Third: value");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, SkipsTagOnFalseCondition)
+{
+    TLoggingTagList tags;
+    TLoggingTagListBuilderGuard(&tags)
+        .WithIf(false, "Skipped", 1)
+        .WithIf(true, "Kept", 2)
+        .WithFormatIf(false, "SkippedFormat", "%x", 255)
+        .WithFormatIf(true, "KeptFormat", "%x", 255);
+    EXPECT_EQ(ToString(tags), "Kept: 2, KeptFormat: ff");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, EvaluatesLazyTagOnlyWhenKept)
+{
+    TLoggingTagList tags;
+    int calls = 0;
+    TLoggingTagListBuilderGuard(&tags)
+        .WithIf(false, "Skipped", YT_LAZY((++calls, 1)))
+        .WithIf(true, "Kept", YT_LAZY((++calls, 2)))
+        .WithFormatIf(false, "SkippedFormat", "%x", YT_LAZY((++calls, 255)))
+        .WithFormatIf(true, "KeptFormat", "%x", YT_LAZY((++calls, 255)));
+    EXPECT_EQ(calls, 2);
+    EXPECT_EQ(ToString(tags), "Kept: 2, KeptFormat: ff");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, SplicesList)
+{
+    auto spliced = TLoggingTagList()
+        .With("Inner", 1)
+        .With("Other", 2);
+
+    TLoggingTagList tags;
+    TLoggingTagListBuilderGuard(&tags)
+        .With("Outer", 0)
+        .With(spliced);
+    EXPECT_EQ(ToString(tags), "Outer: 0, Inner: 1, Other: 2");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, AccumulatesAcrossBuilders)
+{
+    TLoggingTagList tags;
+    TLoggingTagListBuilderGuard(&tags).With("First", 1);
+    TLoggingTagListBuilderGuard(&tags).With("Second", 2);
+    EXPECT_EQ(ToString(tags), "First: 1, Second: 2");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, DiscardsChainWithoutTarget)
+{
+    int calls = 0;
+    TLoggingTagListBuilderGuard(nullptr)
+        .With("Key", 1)
+        .WithFormat("Format", "%x", 255)
+        .WithIf(true, "Lazy", YT_LAZY((++calls, 1)))
+        .WithFormatIf(true, "LazyFormat", "%x", YT_LAZY((++calls, 255)));
+    EXPECT_EQ(calls, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TLoggingTagListBuilderGuardTest, InvokesFunctorOnceChainIsOver)
+{
+    TLoggingTagList tags;
+    std::string observed;
+    {
+        TLoggingTagListBuilderGuard guard(&tags, [&] { observed = ToString(tags); });
+        guard
+            .With("First", 1)
+            .With("Second", 2);
+        EXPECT_TRUE(observed.empty());
+    }
+    EXPECT_EQ(observed, "First: 1, Second: 2");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, SkipsFunctorWhileUnwinding)
+{
+    TLoggingTagList tags;
+    int calls = 0;
+    EXPECT_THROW({
+        TLoggingTagListBuilderGuard guard(&tags, [&] { ++calls; });
+        guard.With("Key", 1);
+        throw std::runtime_error("Oops");
+    }, std::runtime_error);
+
+    EXPECT_EQ(calls, 0);
+    EXPECT_EQ(ToString(tags), "Key: 1");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, FunctorIsOptional)
+{
+    TLoggingTagList tags;
+    TLoggingTagListBuilderGuard(&tags).With("Key", 1);
+    EXPECT_EQ(ToString(tags), "Key: 1");
+}
+
+TEST(TLoggingTagListBuilderGuardTest, InvokesFunctorWithoutTarget)
+{
+    int calls = 0;
+    {
+        TLoggingTagListBuilderGuard guard(nullptr, [&] { ++calls; });
+        guard.With("Key", 1);
+    }
+    EXPECT_EQ(calls, 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

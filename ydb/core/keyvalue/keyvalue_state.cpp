@@ -1303,6 +1303,14 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
     Y_ABORT_UNLESS(oldIter != Index.end());
     TIndexRecord& source = oldIter->second;
 
+    // a rename onto itself changes nothing; the generic path would trash the value and erase the record
+    if (request.OldKey == request.NewKey) {
+        if (legacyResponse) {
+            legacyResponse->SetStatus(NKikimrProto::OK);
+        }
+        return;
+    }
+
     TIndexRecord& dest = Index[request.NewKey];
     Dereference(dest, db);
     dest.Chain = std::move(source.Chain);
@@ -1907,7 +1915,7 @@ void TKeyValueState::UpdateKeyValue(const TString& key, const TIndexRecord& reco
     THelpers::DbUpdateUserKeyValue(key, value, db);
 
     if (MoveDataBlobMovingIsInProgress) {
-        if (MoveDataKey == key) {
+        if (MoveDataKey && *MoveDataKey == key) {
             MoveDataRecordTouched = true;
         }
         for (const auto& item : record.Chain) {
@@ -1925,7 +1933,7 @@ void TKeyValueState::EraseKey(const TString& key, ISimpleDb& db) {
     THelpers::DbEraseUserKey(key, db);
 
     if (MoveDataBlobMovingIsInProgress) {
-        if (MoveDataKey == key) {
+        if (MoveDataKey && *MoveDataKey == key) {
             MoveDataRecordTouched = true;
         }
     }
@@ -3939,6 +3947,9 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
             LI() {
                 out << "<a href=\"#channelstat\" data-toggle=\"tab\">Channel Stat</a>";
             }
+            LI() {
+                out << "<a href=\"#movedata\" data-toggle=\"tab\">Move Data</a>";
+            }
         }
         DIV_CLASS("tab-content") {
             DIV_CLASS_ID("tab-pane fade in active", "database") {
@@ -4090,7 +4101,80 @@ void TKeyValueState::RenderHTMLPage(IOutputStream &out) const {
                     }
                 }
             }
-
+            DIV_CLASS_ID("tab-pane fade", "movedata") {
+                TABLE_SORTABLE_CLASS("table") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {out << "State";}
+                            TABLEH() {out << "Value";}
+                        }
+                    }
+                    TABLEBODY() {
+                        TABLER() {
+                            TABLED() { out << "IsInProgress"; }
+                            TABLED() { out << MoveDataIsInProgress; }
+                        }
+                        TABLER() {
+                            TABLED() { out << "Groups"; }
+                            TABLED() {
+                                for (auto group : MoveDataGroups) {
+                                    out << group << ", ";
+                                }
+                            }
+                        }
+                        TABLER() {
+                            TABLED() { out << "BlobMovingIsInProgress"; }
+                            TABLED() { out << MoveDataBlobMovingIsInProgress; }
+                        }
+                        TABLER() {
+                            TABLED() { out << "BlobMovingNeedsAnotherPass"; }
+                            TABLED() { out << MoveDataBlobMovingNeedsAnotherPass; }
+                        }
+                        TABLER() {
+                            TABLED() { out << "Key"; }
+                            TABLED() { out << (MoveDataKey ? EscapeC(*MoveDataKey) : "null"); }
+                        }
+                        TABLER() {
+                            TABLED() { out << "ChainIndex"; }
+                            TABLED() { out << MoveDataChainIndex; }
+                        }
+                        TABLER() {
+                            TABLED() { out << "RecordTouched"; }
+                            TABLED() { out << MoveDataRecordTouched; }
+                        }
+                        TABLER() {
+                            TABLED() { out << "BlobId"; }
+                            TABLED() { out << MoveDataBlobId.ToString(); }
+                        }
+                        TABLER() {
+                            TABLED() { out << "BlobIdToNewBlobId size"; }
+                            TABLED() { out << MoveDataBlobIdToNewBlobId.size(); }
+                        }
+                        TABLER() {
+                            TABLED() { out << "BlobsMoved"; }
+                            TABLED() { out << MoveDataBlobsMoved; }
+                        }
+                        TABLER() {
+                            TABLED() { out << "TrashCheckingVacuumGeneration"; }
+                            TABLED() {
+                                if (MoveDataTrashCheckingVacuumGeneration) {
+                                    out << *MoveDataTrashCheckingVacuumGeneration;
+                                } else {
+                                    out << "null";
+                                }
+                            }
+                        }
+                        TABLER() {
+                            TABLED() { out << "TrashCheckingBlobId"; }
+                            TABLED() { out << MoveDataTrashCheckingBlobId.ToString(); }
+                        }
+                        TABLER() {
+                            TABLED() { out << "TrashCheckingWaitingForGC"; }
+                            TABLED() { out << MoveDataTrashCheckingWaitingForGC; }
+                        }
+                    }
+                }
+            }
         }
     }
 }

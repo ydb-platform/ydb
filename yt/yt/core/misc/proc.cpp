@@ -34,6 +34,7 @@
     #include <stdio.h>
     #include <dirent.h>
     #include <errno.h>
+    #include <grp.h>
     #include <pwd.h>
     #include <sys/ioctl.h>
     #include <sys/types.h>
@@ -47,7 +48,6 @@
     #include <fcntl.h>
     #include <pty.h>
     #include <pwd.h>
-    #include <grp.h>
     #include <utmp.h>
     #include <sys/prctl.h>
     #include <sys/sysmacros.h>
@@ -57,6 +57,9 @@
 #ifdef _darwin_
     #include <util.h>
     #include <pthread.h>
+#endif
+#ifdef _win_
+    #include <util/system/winint.h>
 #endif
 
 #ifdef _linux_
@@ -352,7 +355,7 @@ std::vector<size_t> GetCurrentProcessThreadIds()
 
 bool IsUserspaceThread(size_t tid)
 {
-#if defined(__linux__)
+#if defined(_linux_)
     TFileInput file(Format("/proc/%v/stat", tid));
     auto line = file.ReadLine();
     // The format of /proc/PID/stat is: "pid (comm) state ...".
@@ -380,7 +383,7 @@ bool IsUserspaceThread(size_t tid)
 
 std::string GetCurrentProcessName()
 {
-#if defined(__linux__)
+#if defined(_linux_)
     return std::string(Trim(TUnbufferedFileInput("/proc/self/comm").ReadAll(), "\n"));
 #elif defined(_win_)
     char path[MAX_PATH];
@@ -398,7 +401,7 @@ std::string GetCurrentProcessName()
 
 std::string GetCurrentProcessCommandLine()
 {
-#if defined(__linux__)
+#if defined(_linux_)
     auto cmdline = TUnbufferedFileInput("/proc/self/cmdline").ReadAll();
     auto delimiterPos = cmdline.find('\0');
     return delimiterPos == std::string::npos ? cmdline : cmdline.substr(0, delimiterPos);
@@ -845,6 +848,11 @@ void SetUid(int uid)
             .With(TError::FromSystem());
     }
 
+    if (setgroups(0, nullptr) != 0) {
+        THROW_ERROR_EXCEPTION("Unable to clear supplementary groups")
+            .With(TError::FromSystem());
+    }
+
     errno = 0;
 #ifdef _linux_
     const auto* passwd = getpwuid(uid);
@@ -1239,6 +1247,26 @@ int GetFileDescriptorCount()
     return descriptorCount;
 }
 
+std::optional<i64> GetFileDescriptorLimit()
+{
+#ifdef _unix_
+    struct rlimit limit;
+    if (getrlimit(RLIMIT_NOFILE, &limit) != 0) {
+        YT_TLOG_ERROR("Error getting RLIMIT_NOFILE")
+            .With(TError::FromSystem());
+        return std::nullopt;
+    }
+
+    if (limit.rlim_cur == RLIM_INFINITY) {
+        return std::nullopt;
+    }
+
+    return static_cast<i64>(limit.rlim_cur);
+#else
+    return std::nullopt;
+#endif
+}
+
 void SafeCreateStderrFile(std::string fileName)
 {
 #ifdef _unix_
@@ -1609,7 +1637,7 @@ static bool TryParseField(const std::vector<TStringBuf>& fields, int index, TDur
 
 TBlockDeviceStat ParseBlockDeviceStat(const std::string& statLine)
 {
-    std::vector<TStringBuf> buffer = StringSplitter(statLine).Split(' ');
+    std::vector<TStringBuf> buffer = StringSplitter(statLine).Split(' ').SkipEmpty();
     TBlockDeviceStat result;
     TryParseField(buffer, 0, result.ReadsCompleted);
     TryParseField(buffer, 1, result.ReadsMerged);

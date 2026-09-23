@@ -132,6 +132,7 @@ PEERDIR(
     ydb/library/login
     ydb/library/pdisk_io
     ydb/library/pretty_types_print/protobuf
+    ydb/library/vector_distance
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql
@@ -139,11 +140,9 @@ PEERDIR(
     library/cpp/json
 )
 
-IF (OPENSOURCE)
 PEERDIR(
     ydb/library/superlemmer_stub
 )
-ENDIF()
 
 YQL_LAST_ABI_VERSION()
 
@@ -154,7 +153,7 @@ PEERDIR(
 ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(boot_type.h)
-GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(memory_controller_iface.h)
 GENERATE_ENUM_SERIALIZATION(auth.h)
 GENERATE_ENUM_SERIALIZATION_WITH_HEADER(database_kind.h)
 

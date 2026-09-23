@@ -1742,10 +1742,9 @@ const TNode::TMapType& TClient::GetDynamicConfiguration(const TString& configPro
         TNode clusterConfigNode;
 
         TYPath clusterConfigPath = Context_.Config->ConfigRemotePatchPath + "/" + configProfile;
-        YT_LOG_DEBUG(
-            "Fetching cluster config (ConfigPath: %v, ConfigProfile: %v)",
-            Context_.Config->ConfigRemotePatchPath,
-            configProfile);
+        YT_TLOG_DEBUG("Fetching cluster config")
+            .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+            .With("ConfigProfile", configProfile);
 
         try {
             TExpectedErrorGuard guard(IsResolveError);
@@ -1756,25 +1755,22 @@ const TNode::TMapType& TClient::GetDynamicConfiguration(const TString& configPro
             }
 
             ClusterConfig_.emplace();
-            YT_LOG_WARNING(
-                "Could not resolve, saved empty cluster config (ConfigPath: %v, ConfigProfile: %v)",
-                Context_.Config->ConfigRemotePatchPath,
-                configProfile);
+            YT_TLOG_WARNING("Could not resolve; saved empty cluster config")
+                .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+                .With("ConfigProfile", configProfile);
         }
 
         if (clusterConfigNode.IsMap()) {
             ClusterConfig_ = clusterConfigNode.UncheckedAsMap();
-            YT_LOG_DEBUG(
-                "Saved cluster config (ConfigPath: %v, ConfigProfile: %v)",
-                Context_.Config->ConfigRemotePatchPath,
-                configProfile);
+            YT_TLOG_DEBUG("Saved cluster config")
+                .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+                .With("ConfigProfile", configProfile);
         } else if (!ClusterConfig_.has_value()) {
             ClusterConfig_.emplace();
-            YT_LOG_WARNING(
-                "Config node has incorrect type, saved empty cluster config (NodeType: %v, ConfigPath: %v, ConfigProfile: %v)",
-                clusterConfigNode.GetType(),
-                Context_.Config->ConfigRemotePatchPath,
-                configProfile);
+            YT_TLOG_WARNING("Config node has incorrect type; saved empty cluster config")
+                .With("NodeType", clusterConfigNode.GetType())
+                .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+                .With("ConfigProfile", configProfile);
         }
     }
 
@@ -1800,7 +1796,8 @@ void SetupClusterContext(
     static constexpr char httpsUrlSchema[] = "https://";
 
     if (!context.UseTLS) {
-        context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema);
+        context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema) ||
+                         (context.Config->PreferHttps && !context.ServerName.StartsWith(httpUrlSchema));
     }
 
     if (context.ServerName.StartsWith(httpUrlSchema)) {
@@ -1838,6 +1835,8 @@ TClientContext CreateClientContext(
 
     if (options.UseTLS_) {
         context.UseTLS = *options.UseTLS_;
+    } else {
+        context.UseTLS = context.Config->UseTLS;
     }
 
     SetupClusterContext(context, serverName);

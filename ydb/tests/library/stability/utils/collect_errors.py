@@ -21,8 +21,8 @@ _COREDUMP_SEARCH_TIMEOUT = 300    # find + cat JSON files
 _LOG_COLLECT_TIMEOUT = 900        # unified_agent select for full logs
 _TAR_TIMEOUT = 1200                # tar -czf archive
 
-_WARDEN_POLL_INTERVAL_S = 30
-_WARDEN_POLL_TIMEOUT_S = 1200
+_WARDEN_POLL_INTERVAL_S = 15
+_WARDEN_POLL_TIMEOUT_S = 420
 
 # Default orchestrator port (must match deploy.py _NEMESIS_ORCHESTRATOR_PORT)
 _NEMESIS_ORCHESTRATOR_PORT = 31434
@@ -206,11 +206,17 @@ class AgentErrorsCollector:
     # Warden checks via orchestrator
     # ------------------------------------------------------------------
 
-    def _request_warden_checks(self) -> WardenResults:
+    def _request_warden_checks(
+        self, start_time: float | None = None, end_time: float | None = None
+    ) -> WardenResults:
         """Trigger warden checks on the orchestrator and poll for results.
 
         Sends POST to /api/hosts/warden/start to trigger checks,
         then polls GET /api/hosts/warden/results until all checks complete.
+
+        Args:
+            start_time: Unix timestamp of the workload start (log search lower bound)
+            end_time: Unix timestamp of diagnostics collection (log search upper bound)
 
         Returns:
             WardenResults with parsed check results.
@@ -218,10 +224,21 @@ class AgentErrorsCollector:
         results = WardenResults()
         endpoint = self._get_orchestrator_endpoint()
         start_url = f"{endpoint}/api/hosts/warden/start"
+        payload: dict = {}
+        if start_time is not None:
+            payload["start_time"] = start_time
+        if end_time is not None:
+            payload["end_time"] = end_time
 
         try:
-            logging.info(f"Triggering warden checks: POST {start_url}")
-            req = urllib.request.Request(start_url, method="POST")
+            logging.info(f"Triggering warden checks: POST {start_url} payload={payload}")
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                start_url,
+                data=data,
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
             with urllib.request.urlopen(req, timeout=30) as resp:
                 body = json.loads(resp.read().decode())
                 logging.info(f"Warden start response: {body}")
@@ -451,7 +468,7 @@ class AgentErrorsCollector:
         # Step 1: Collect warden check results from orchestrator (independent)
         warden_results = WardenResults()
         try:
-            warden_results = self._request_warden_checks()
+            warden_results = self._request_warden_checks(start_time, end_time)
         except Exception as exc:
             error_msg = f"Failed to collect warden checks: {exc}"
             logging.error(error_msg)

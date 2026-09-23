@@ -173,11 +173,11 @@ void TOpJoin::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THas
     Y_UNUSED(ctx);
 
     for (auto& k : JoinKeys) {
-        if (renameMap.contains(k.first)) {
-            k.first = renameMap.at(k.first);
+        if (renameMap.contains(k.Left)) {
+            k.Left = renameMap.at(k.Left);
         }
-        if (renameMap.contains(k.second)) {
-            k.second = renameMap.at(k.second);
+        if (renameMap.contains(k.Right)) {
+            k.Right = renameMap.at(k.Right);
         }
     }
 
@@ -240,6 +240,31 @@ void TOpAggregate::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit:
         if (renameMap.contains(trait.OriginalColName)) {
             trait.OriginalColName = renameMap.at(trait.OriginalColName);
         }
+    }
+}
+
+void TOpWindow::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    for (auto& func : WindowFuncs) {
+        if (renameMap.contains(func.ResultColName)) {
+            func.ResultColName = renameMap.at(func.ResultColName);
+        }
+    }
+}
+
+void TOpWindow::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    RenameInfoUnits(PartitionKeys, renameMap);
+    for (auto& element : SortElements) {
+        const auto it = renameMap.find(element.SortColumn);
+        if (it != renameMap.end()) {
+            element.SortColumn = it->second;
+        }
+    }
+    for (auto& func : WindowFuncs) {
+        RenameInfoUnits(func.Arguments, renameMap);
     }
 }
 

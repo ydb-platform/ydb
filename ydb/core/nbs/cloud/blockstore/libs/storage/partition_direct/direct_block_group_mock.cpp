@@ -1,5 +1,8 @@
 #include "direct_block_group_mock.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator_pool.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 using namespace NThreading;
@@ -52,6 +55,11 @@ void TOracleMock::OnDDiskConnected(THostIndex hostIndex, TInstant now)
 }
 
 void TOracleMock::OnDDiskBroken(THostIndex hostIndex)
+{
+    Y_UNUSED(hostIndex);
+}
+
+void TOracleMock::OnHostRemoved(THostIndex hostIndex)
 {
     Y_UNUSED(hostIndex);
 }
@@ -138,6 +146,7 @@ TString TOracleMock::Dump() const
 
 TDirectBlockGroupMock::TDirectBlockGroupMock()
 {
+    ArenaAllocatorPool = CreateArenaAllocatorPool();
     Executor = TExecutor::Create("NBS_TEST");
     Executor->Start();
 
@@ -203,15 +212,42 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
     {
         Y_ABORT_UNLESS(false, "Should set OnAddHostFailedHandler");
     };
+    OnRemoveHostSucceededHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnRemoveHostSucceededHandler");
+    };
+    OnRemoveHostFailedHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnRemoveHostFailedHandler");
+    };
     TakeCopyRangeBudgetHandler = [](ui64)
     {
         return TDuration::Zero();
     };
 }
 
+TArenaAllocatorPoolPtr TDirectBlockGroupMock::GetArenaAllocatorPool()
+{
+    return ArenaAllocatorPool;
+}
+
 void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
 {
     VChunks.push_back(std::move(vChunk));
+}
+
+THostIndex TDirectBlockGroupMock::AllocateDDiskForPromote(
+    const TVChunkConfig& config)
+{
+    const auto candidates = THostMask::MakeAll(config.GetHostCount())
+                                .Exclude(config.GetDisabledHosts())
+                                .Exclude(config.GetDDisks());
+    return candidates.First().value_or(InvalidHostIndex);
+}
+
+void TDirectBlockGroupMock::CommitDDiskPromotion(const TVChunkConfig& config)
+{
+    Y_UNUSED(config);
 }
 
 TExecutorPtr TDirectBlockGroupMock::GetExecutor()
@@ -259,7 +295,7 @@ NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroupMock::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -276,7 +312,7 @@ TDirectBlockGroupMock::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -293,7 +329,7 @@ NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroupMock::WriteBlocksToDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -310,7 +346,7 @@ TDirectBlockGroupMock::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -328,7 +364,7 @@ void TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     THostIndex coordinatorHostIndex,
     THostMask hostIndexes,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId,
@@ -370,17 +406,6 @@ TDirectBlockGroupMock::BatchEraseFromPBuffer(
     return BatchEraseFromPBufferHandler(hostIndex, segments, traceId);
 }
 
-void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
-{
-    Y_UNUSED(lsn);
-}
-
-NThreading::TFuture<std::optional<TPBufferKey>>
-TDirectBlockGroupMock::GatherSafeBarrierForErase()
-{
-    return NThreading::MakeFuture<std::optional<TPBufferKey>>(std::nullopt);
-}
-
 NThreading::TFuture<TDBGRestoreResponse>
 TDirectBlockGroupMock::RestoreDBGPBuffers(ui32 vChunkIndex)
 {
@@ -409,6 +434,20 @@ void TDirectBlockGroupMock::OnAddHostSucceeded(
 void TDirectBlockGroupMock::OnAddHostFailed(const NProto::TError& error)
 {
     OnAddHostFailedHandler(error);
+}
+
+void TDirectBlockGroupMock::OnRemoveHostSucceeded(
+    THostIndex removeIndex,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    OnRemoveHostSucceededHandler(removeIndex, dbgConnectionsConfigGeneration);
+}
+
+void TDirectBlockGroupMock::OnRemoveHostFailed(
+    THostIndex removeIndex,
+    const NProto::TError& error)
+{
+    OnRemoveHostFailedHandler(removeIndex, error);
 }
 
 TDuration TDirectBlockGroupMock::TakeCopyRangeBudget(ui64 byteCount)

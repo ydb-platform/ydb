@@ -92,6 +92,7 @@ void TGetVersionCommand::DoExecute(ICommandContextPtr context)
 constexpr auto StaticFeatures = std::to_array<std::pair<TStringBuf, bool>>({
     {"structured_web_json", true},
     {"user_tokens_metadata", true},
+    {"cumulative_spec_patch", true},
 });
 
 #ifdef OPENSOURCE

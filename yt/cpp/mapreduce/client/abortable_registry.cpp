@@ -75,10 +75,10 @@ void TAbortableRegistry::AbortAllAndBlockForever()
         try {
             abortable->Abort();
         } catch (std::exception& ex) {
-            YT_LOG_ERROR("Exception while aborting %v %v: %v",
-                abortable->GetType(),
-                id,
-                ex.what());
+            YT_TLOG_ERROR("Exception while aborting")
+                .With("Type", abortable->GetType())
+                .With("Id", id)
+                .With("Error", ex.what());
         }
     }
 

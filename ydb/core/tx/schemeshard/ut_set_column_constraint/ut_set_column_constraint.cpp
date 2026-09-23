@@ -1,5 +1,6 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/testlib/helpers.h>
@@ -1832,6 +1833,130 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         DoGetRequest(operationId, runtime, root, Ydb::StatusIds::NOT_FOUND);
 
         TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+    }
+
+    enum class ERecordKind {
+        PersistedDomain,
+        LegacyWithoutDomain,
+        LegacyBackfilledBeforeDrop,
+    };
+
+    void RebootAfterTableDroppedScenario(ERecordKind recordKind, bool notFinished = false) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        const TString root = "/MyRoot";
+        const TString database = root + "/USER_0";
+        const TString tablePath = database + "/Table";
+
+        TestCreateSubDomain(runtime, ++txId, root, R"(
+              Name: "USER_0"
+              PlanResolution: 50
+              Coordinators: 1
+              Mediators: 1
+              TimeCastBucketsPerMediator: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, database, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 setConstraintTxId = ++txId;
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            database,
+            tablePath,
+            {"value"});
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        TString updates;
+        if (recordKind != ERecordKind::PersistedDomain) {
+            updates += "'('DomainOwnerId (Null)) '('DomainLocalId (Null)) ";
+        }
+        if (notFinished) {
+            updates += Sprintf("'('OperationState (Uint32 '%u)) ",
+                ui32(TSetColumnConstraintOperationInfo::EOperationState::Validating));
+        }
+        if (updates) {
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key '( '('OperationId (Uint64 '%lu)) ) )
+                    (let value '( %s) )
+                    (return (AsList (UpdateRow 'SetColumnConstraint key value) ))
+                )
+            )", setConstraintTxId, updates.c_str());
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        }
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        if (recordKind == ERecordKind::LegacyBackfilledBeforeDrop) {
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        }
+
+        const auto tableShards = GetTableShards(runtime, TTestTxConfig::SchemeShard, tablePath);
+        TestDropTable(runtime, ++txId, database, "Table");
+        env.TestWaitNotification(runtime, txId);
+        env.TestWaitTabletDeletion(runtime, tableShards);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // The domain of a legacy record whose table is gone can't be recovered, it falls back to the root
+        const TString visibleIn = recordKind == ERecordKind::LegacyWithoutDomain ? root : database;
+        const TString hiddenIn = recordKind == ERecordKind::LegacyWithoutDomain ? database : root;
+
+        {
+            auto operation = DoGetRequest(setConstraintTxId, runtime, visibleIn);
+            if (!notFinished) {
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(operation.GetState()), static_cast<int>(Ydb::Table::SetNotNullState::STATE_DONE));
+            }
+            UNIT_ASSERT_STRING_CONTAINS(operation.DebugString(), "Table path id not found");
+        }
+        DoGetRequest(setConstraintTxId, runtime, hiddenIn, Ydb::StatusIds::NOT_FOUND);
+
+        {
+            auto listResponse = TestListSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, visibleIn);
+            UNIT_ASSERT_VALUES_EQUAL(listResponse.EntriesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(listResponse.GetEntries(0).GetId(), setConstraintTxId);
+            UNIT_ASSERT_STRING_CONTAINS(listResponse.GetEntries(0).DebugString(), "Table path id not found");
+        }
+        {
+            auto listResponse = TestListSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, hiddenIn);
+            UNIT_ASSERT_VALUES_EQUAL(listResponse.EntriesSize(), 0);
+        }
+
+        TestForgetSetColumnConstraint(runtime, ++txId, visibleIn, setConstraintTxId, Ydb::StatusIds::SUCCESS);
+        DoGetRequest(setConstraintTxId, runtime, visibleIn, Ydb::StatusIds::NOT_FOUND);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        DoGetRequest(setConstraintTxId, runtime, visibleIn, Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(RebootAfterTableDropped) {
+        RebootAfterTableDroppedScenario(ERecordKind::PersistedDomain);
+    }
+
+    Y_UNIT_TEST(RebootAfterTableDroppedLegacyRecord) {
+        RebootAfterTableDroppedScenario(ERecordKind::LegacyWithoutDomain);
+    }
+
+    Y_UNIT_TEST(RebootAfterTableDroppedLegacyRecordBackfilled) {
+        RebootAfterTableDroppedScenario(ERecordKind::LegacyBackfilledBeforeDrop);
+    }
+
+    Y_UNIT_TEST(RebootAfterTableDroppedNotFinished) {
+        RebootAfterTableDroppedScenario(ERecordKind::PersistedDomain, true);
     }
 
     Y_UNIT_TEST(ForgetOperationTwice) {

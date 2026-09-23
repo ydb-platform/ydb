@@ -5,6 +5,7 @@ SIZE(SMALL)
 PEERDIR(
     ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow/accessor/sub_columns
+    ydb/core/formats/arrow/filter
     ydb/core/formats/arrow/program
     ydb/core/formats/arrow/serializer
     yql/essentials/public/udf/service/stub
@@ -13,6 +14,7 @@ PEERDIR(
 
 SRCS(
     ut_kernel_logic.cpp
+    ut_collection.cpp
 )
 
 YQL_LAST_ABI_VERSION()

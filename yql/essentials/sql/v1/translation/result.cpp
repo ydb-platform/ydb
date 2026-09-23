@@ -19,10 +19,22 @@ std::unexpected<ESQLError> UnsupportedYqlSelect(TContext& ctx, TStringBuf messag
     return std::unexpected(ESQLError::UnsupportedYqlSelect);
 }
 
+TSQLStatus operator|(TSQLStatus lhs, TSQLStatus rhs) {
+    if (!lhs && lhs.error() == ESQLError::Basic) {
+        return lhs;
+    }
+
+    if (!rhs && rhs.error() == ESQLError::Basic) {
+        return rhs;
+    }
+
+    return lhs ? rhs : lhs;
+}
+
 } // namespace NSQLTranslationV1
 
-template <>
-void Out<NSQLTranslationV1::ESQLError>(IOutputStream& out, NSQLTranslationV1::ESQLError value) {
+// TODO(YQL-21521): use GENERATE_ENUM_SERIALIZATION
+Y_DECLARE_OUT_SPEC(, NSQLTranslationV1::ESQLError, out, value) {
     switch (value) {
         case NSQLTranslationV1::ESQLError::Basic:
             out << "Basic";

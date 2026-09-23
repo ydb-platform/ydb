@@ -21,6 +21,8 @@
 
 #include <library/cpp/yt/mpl/type_traits.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
+
 #include <library/cpp/yt/assert/assert.h>
 
 #include <optional>
@@ -925,6 +927,25 @@ struct TAtomicSerializer
     }
 };
 
+//! NB: Makes a copy of the value during serialization.
+template <class TUnderlyingSerializer = TDefaultSerializer>
+struct TAtomicObjectSerializer
+{
+    template <class T, class C>
+    static void Save(C& context, const NThreading::TAtomicObject<T>& object)
+    {
+        TUnderlyingSerializer::Save(context, object.Load());
+    }
+
+    template <class T, class C>
+    static void Load(C& context, NThreading::TAtomicObject<T>& object)
+    {
+        T value;
+        TUnderlyingSerializer::Load(context, value);
+        object.Store(std::move(value));
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // Sorters
 
@@ -1156,7 +1177,7 @@ struct TSorterSelector<TCompactFlatMap<K, V, N>, C, TSortedTag>
 template <class C, class... T>
 struct TSorterSelector<std::unordered_multimap<T...>, C, TSortedTag>
 {
-    using TSorter = TCollectionSorter<std::unordered_map<T...>, TKeyValueSorterComparer<C>>;
+    using TSorter = TCollectionSorter<std::unordered_multimap<T...>, TKeyValueSorterComparer<C>>;
 };
 
 template <class C, class... T>
@@ -2084,20 +2105,13 @@ struct TSerializerTraits<TMaybeInf<T>, C, void>
 template <class T, class C>
 struct TSerializerTraits<NThreading::TAtomicObject<T>, C, void>
 {
+    // NB: Neither default is safe: in-place serialization holds the spinlock across IO that
+    // may wait for a future (Cf. checkpointable_stream.cpp), and copying an arbitrary T may
+    // be too expensive. The caller chooses; see TAtomicObjectSerializer.
     struct TSerializer
     {
-        static void Save(C& context, const NThreading::TAtomicObject<T>& object)
-        {
-            object.Read([&] (const T& value) {
-                TDefaultSerializer::Save(context, value);
-            });
-        }
-        static void Load(C& context, NThreading::TAtomicObject<T>& object)
-        {
-            object.Transform([&] (T& value) {
-                TDefaultSerializer::Load(context, value);
-            });
-        }
+        static void Save(C& context, const NThreading::TAtomicObject<T>& object) = delete;
+        static void Load(C& context, NThreading::TAtomicObject<T>& object) = delete;
     };
 };
 

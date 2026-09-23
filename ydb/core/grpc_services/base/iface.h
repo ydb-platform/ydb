@@ -28,7 +28,6 @@ class IRequestCtxBaseMtSafe {
 public:
     virtual TMaybe<TString> GetTraceId() const = 0;
     virtual NWilson::TTraceId GetWilsonTraceId() const = 0;
-    virtual NWilson::TTraceId GetUserFacingWilsonTraceId() const { return {}; }
     // Returns client provided database name
     virtual const TMaybe<TString> GetDatabaseName() const = 0;
     // Returns "internal" token (result of ticket parser authentication)
@@ -44,6 +43,10 @@ public:
     virtual const TMaybe<TString> GetPeerMetaValues(const TString&) const = 0;
     // Return address of the peer
     virtual TString GetPeerName() const = 0;
+    // HTTP/2 :authority of the incoming request. Empty when not available.
+    virtual TString GetAuthority() const {
+        return {};
+    }
     virtual const TString& GetRequestName() const = 0;
     // Returns path and resource for rate limiter
     virtual TMaybe<NRpcService::TRlPath> GetRlPath() const = 0;

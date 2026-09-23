@@ -33,7 +33,7 @@ struct TPartitionDescribeInfo {
 };
 
 struct TEvDescribeOperationResponse
-    : public NActors::TEventLocal<TEvDescribeOperationResponse, EEv::EvDescribeOperationResponse>
+    : public NActors::TEventLocal<TEvDescribeOperationResponse, static_cast<ui32>(EEv::EvDescribeOperationResponse)>
 {
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
     TString ErrorMessage;

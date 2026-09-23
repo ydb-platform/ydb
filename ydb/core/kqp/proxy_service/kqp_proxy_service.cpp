@@ -28,10 +28,12 @@
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
 #include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -392,8 +394,19 @@ public:
                     ? httpGatewayConfig.GetMaxInFlightCount() : 1024;
                 const auto PoolCapsPushPeriod = TDuration::MilliSeconds(500);
                 const double MinDefaultPoolShare = 0.1;
+
+                auto poolSharesProvider = [scheduler]() {
+                    THashMap<NYql::NDq::TWorkScope, double> result;
+                    for (const auto& [fullPoolId, share] : scheduler->GetLeafPoolFairShares()) {
+                        result[NYql::NDq::TWorkScope{
+                            .Namespace = fullPoolId.DatabaseId,
+                            .Name = fullPoolId.PoolId,
+                        }] = share;
+                    }
+                    return result;
+                };
                 auto* pusher = NYql::CreateHttpPoolCapPusher(
-                    [scheduler]() { return scheduler->GetLeafPoolFairShares(); },
+                    std::move(poolSharesProvider),
                     gateway,
                     PoolCapsPushPeriod,
                     maxHandlers,
@@ -489,7 +502,7 @@ public:
     void SendSessionClose(const TKqpSessionInfo* sessionInfo) {
         auto closeSessionEv = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
         closeSessionEv->Record.MutableRequest()->SetSessionId(sessionInfo->SessionId);
-        Send(sessionInfo->WorkerId, closeSessionEv.release());
+        Send(sessionInfo->WorkerId, closeSessionEv.release(), IEventHandle::FlagTrackDelivery);
     }
 
     void AskSelfNodeInfo() {
@@ -618,6 +631,13 @@ public:
                     {"requestId", ev->Cookie});
 
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, "Session not found.", ev->Cookie);
+                RemoveSession("", ev->Sender);
+                break;
+            }
+
+            case TKqpEvents::EvCloseSessionRequest: {
+                YDB_LOG_WARN("Session close request was undelivered",
+                    {"targetId", ev->Sender});
                 RemoveSession("", ev->Sender);
                 break;
             }
@@ -1687,30 +1707,29 @@ private:
         return MakeKqpProxyID(*nodeId);
     }
 
-    void RemoveSession(const TString& sessionId, const TActorId& workerId) {
-        if (!sessionId.empty()) {
-            auto [nodeId, rpcActor] = LocalSessions->Erase(sessionId);
-            KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
-            if (ShutdownRequested) {
-                ShutdownState->Update(LocalSessions->size());
+    void RemoveSession(TString sessionId, const TActorId& workerId) {
+        if (sessionId.empty()) {
+            const auto* sessionInfo = LocalSessions->FindPtr(workerId);
+            if (!sessionInfo) {
+                return;
             }
-
-            // No more session with kqp proxy on this node
-            if (nodeId) {
-                Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
-            }
-
-            if (rpcActor) {
-                Send(rpcActor, CreateEvCloseSessionResponse(sessionId));
-            }
-
-            return;
+            // Keep the id alive after Erase removes the registry entry.
+            sessionId = sessionInfo->SessionId;
         }
 
-        LocalSessions->Erase(workerId);
+        auto [nodeId, rpcActor] = LocalSessions->Erase(sessionId);
         KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
         if (ShutdownRequested) {
             ShutdownState->Update(LocalSessions->size());
+        }
+
+        // No remaining sessions are attached to an RPC actor on this node.
+        if (nodeId) {
+            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
+        }
+
+        if (rpcActor) {
+            Send(rpcActor, CreateEvCloseSessionResponse(sessionId));
         }
     }
 
@@ -2047,11 +2066,17 @@ private:
         auto counters = Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher");
 
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
+        NFq::TRowDispatcherSettings settings(
+            streamingQueries.GetExternalStorage(),
+            FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
+        );
+
+        if (FeatureFlags.GetEnableRowDispatcherMemoryLimiting()) {
+            settings.SetMemoryQuotaManager(NRm::CreateMemoryQuotaManager(ResourceManager_));
+        }
+
         auto rowDispatcher = NFq::NewRowDispatcherService(
-            NFq::TRowDispatcherSettings(
-                streamingQueries.GetExternalStorage(),
-                FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
-            ),
+            settings,
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,

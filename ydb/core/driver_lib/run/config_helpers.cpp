@@ -228,7 +228,7 @@ TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemCon
     // Protobuf-delivered configs bypass the yaml static validator, so a contradictory or
     // broken list must fail loudly here instead of being silently ignored or aborting
     // deep inside TActorSystem::Register with no hint at the config field.
-    Y_ABORT_UNLESS(!systemConfig.GetUseSharedThreads(),
+    Y_ABORT_UNLESS(!systemConfig.HasUseSharedThreads() || !systemConfig.GetUseSharedThreads(),
         "ActorSystemConfig.BlobStorageExecutor cannot be combined with UseSharedThreads");
 
     THashSet<ui32> seen;

@@ -3,6 +3,8 @@ LIBRARY()
 SRCS(
     db_counters.h
     db_counters.cpp
+    db_counters_codec.h
+    db_counters_codec.cpp
     ext_counters.h
     ext_counters.cpp
     query_history.h
@@ -18,6 +20,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/graph/api
     ydb/core/graph/service
+    ydb/core/scheme
     ydb/library/aclib/protos
 )
 

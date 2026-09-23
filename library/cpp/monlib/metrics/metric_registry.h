@@ -315,6 +315,7 @@ namespace NMonitoring {
         THashMap<ILabelsPtr, TMetricValue> Metrics_;
 
         TLabels CommonLabels_;
+        ui32 StartTimeSeconds_ = static_cast<ui32>(TInstant::Now().Seconds());
     };
 
     void WriteLabels(IMetricConsumer* consumer, const ILabels& labels);

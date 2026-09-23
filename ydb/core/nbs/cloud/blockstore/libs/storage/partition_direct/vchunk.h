@@ -8,6 +8,7 @@
 #include "write_request_bundle.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
@@ -29,6 +30,20 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Owns I/O, synchronization, configuration, and DirtyMap state for one VChunk.
+//
+// Persistence invariants:
+// - At most one config or DirtyMap persist is in flight; queued configs take
+//   priority over DirtyMap-only persists.
+// - A config is persisted atomically with its predicted DirtyMap state and is
+//   applied in memory only after a successful persist. The initial Behind of a
+//   newly promoted DDisk is included in that prediction.
+// - DirtyMap-only persists leave the config unchanged. Behind changes not
+//   covered by a config snapshot advance StateGeneration and are persisted by
+//   a later request.
+// - PersistedStateGeneration advances and PersistedFreshDDisks changes only
+//   after a successful persist.
+// - The touched marker is persisted independently.
 class TVChunk
     : public IWriteClient
     , public IRangeSyncClient
@@ -41,6 +56,7 @@ public:
         IPartitionDirectService* partitionDirectService,
         const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
+        bool touched,
         const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
@@ -70,11 +86,9 @@ public:
     void UpdateHostCount(size_t newHostCount);
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
+    [[nodiscard]] THostMask GetHealthyDDisks() const;
     [[nodiscard]] TExecutorPtr GetExecutor() const;
     [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
-    [[nodiscard]] TCountAndSize GetAheadBlocks(THostIndex hostIndex) const;
-    [[nodiscard]] TCountAndSize GetBehindBlocks(THostIndex hostIndex) const;
-
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest record id still held in PBuffers, or nullopt when nothing is
     // inflight. Until the dirty map is restored it returns the zero record id
@@ -84,6 +98,9 @@ public:
     [[nodiscard]] std::optional<TPBufferKey> GetSafeBarrierForErase() const;
 
     [[nodiscard]] TString DebugPrintDirtyMap();
+    [[nodiscard]] TDirtyMapStats GetDirtyMapStats() const;
+    [[nodiscard]] TDirtyMapHostStats GetDirtyMapHostStats(
+        THostIndex hostIndex) const;
 
     // Snapshot for the mon page. Must run on the executor thread.
     [[nodiscard]] TVChunkSnapshot BuildMonSnapshot();
@@ -100,25 +117,34 @@ public:
         THostMask completedWrites) override;
 
     // IRangeSyncClient implementation
-    [[nodiscard]] std::optional<TBlockRange64> GetFreshRange(
+    [[nodiscard]] std::optional<TBlockRange16> GetFreshRange(
         THostIndex host) const override;
-    [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range) override;
+    [[nodiscard]] TReadHint MakeReadHint(TBlockRange16 range) override;
     [[nodiscard]] TRangeLock MakeDDiskRangeLock(
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostMask mask) override;
-    TSyncHint BeginRangeSync(THostIndex host, TBlockRange64 range) override;
+    TSyncHint BeginRangeSync(THostIndex host, TBlockRange16 range) override;
     void EndRangeSync(ui64 syncId, bool success) override;
     void OnCopyProgress(ui64 totalBytes) override;
 
 private:
     friend struct TBaseFixture;
 
+    enum class ETouchedState
+    {
+        // No writes to the VChunk's DDisks have been observed.
+        NotTouched,
+        // A write was observed and the touched marker is being persisted.
+        Persisting,
+        // The touched marker was successfully persisted.
+        Persisted
+    };
+
     using TPrepareConfigFunc = std::function<TVChunkConfig()>;
 
     struct TPendingVChunkConfig
     {
         TPrepareConfigFunc PrepareConfig;
-        TVChunkConfig Config;
         TString Message;
     };
 
@@ -130,7 +156,7 @@ private:
 
     void DoReadBlocksLocal(
         TTracedPromise<TReadBlocksLocalResponse> promise,
-        TBlockRange64 vchunkRange,
+        TBlockRange16 vchunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         std::shared_ptr<NWilson::TSpan> span);
@@ -145,8 +171,15 @@ private:
     void OnEraseBelatedResponse(
         const TEraseRequestExecutor::TResponse& response);
 
+    void StartPersist();
     void DoPersistDirtyMap();
-    void OnDirtyMapPersisted(ui32 stateGeneration);
+    void OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks);
+
+    // VDisk touch state.
+    void Touch();
+    [[nodiscard]] bool IsTouched() const;
+    void DoPersistTouched();
+    void OnTouchedPersisted();
 
     void ScheduleCleaningUp();
     void CleaningUp();
@@ -157,8 +190,12 @@ private:
     // unchanged; the new value applies after config persisted.
     void UpdateConfig(TPrepareConfigFunc prepareConfig, TString message);
     void PersistNextPendingConfig();
-    void OnConfigPersisted();
-    void ApplyConfig(TVChunkConfig newConfig, const TString& message);
+    void OnConfigPersisted(
+        const TVChunkConfig& config,
+        const TString& message,
+        ui32 stateGeneration,
+        THostMask freshDDisks);
+    void ApplyConfig(const TVChunkConfig& newConfig, const TString& message);
 
     TVChunkConfig PrepareNewConfig(
         THostIndex hostIndex,
@@ -185,14 +222,15 @@ private:
     const TThreadChecker ExecutorThreadChecker{Executor};
     const IDirectBlockGroupPtr DirectBlockGroup;
     const ui32 BlockSize;
-    const ui64 BlocksCount;
+    const ui16 BlocksCount;
     const ui32 SyncRequestsBatchSize;
 
     TLogTitle LogTitle;
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
-    bool DirtyMapStatePersisting = false;
+    ETouchedState TouchedState = ETouchedState::NotTouched;
     TBlocksDirtyMapPtr BlocksDirtyMap;
+    THostMask PersistedFreshDDisks;
     // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
     NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;
@@ -201,6 +239,7 @@ private:
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
     bool Stopped = false;
+    bool Persisting = false;
 
     TVector<IRequestExecutorWeakPtr> Inflight;
 

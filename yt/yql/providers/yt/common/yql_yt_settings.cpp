@@ -515,6 +515,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, UseQLFilter);
     REGISTER_SETTING(*this, PruneQLFilterLambda).Deprecated();
     REGISTER_SETTING(*this, _EnableQLFilter);
+    REGISTER_SETTING(*this, QLFilterDepthLimit);
     REGISTER_SETTING(*this, MergeAdjacentPointRanges);
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
     REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
@@ -540,6 +541,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, EnforceJobUtc);
     REGISTER_SETTING(*this, _EnforceRegexpProbabilityFail);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
+    REGISTER_SETTING(*this, PassOptLLVMToDqCodecs);
     REGISTER_SETTING(*this, DQRPCReaderInflight).Lower(1);
     REGISTER_SETTING(*this, DQRPCReaderTimeout);
     REGISTER_SETTING(*this, BlockReaderSupportedTypes);

@@ -2,7 +2,9 @@
 
 #include "public.h"
 
+#include "disk_state_provider.h"
 #include "host.h"
+#include "host_health_policy.h"
 #include "host_mask.h"
 #include "host_stat.h"
 #include "host_state.h"
@@ -47,6 +49,8 @@ public:
     virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnDDiskBroken(THostIndex hostIndex) = 0;
 
+    virtual void OnHostRemoved(THostIndex hostIndex) = 0;
+
     virtual TDuration GetHostReconnectDelay(THostIndex hostIndex) = 0;
 
     // Picks the best host (by lowest inflight count) out of the provided set
@@ -60,6 +64,9 @@ public:
         EDataLocation dataLocation) const = 0;
     [[nodiscard]] virtual TDuration GetReadRequestTimeout() const = 0;
 
+    // Chooses DirectWrite or IndirectWrite for this request.
+    // Low load favours DirectWrite for latency. The disk-wide in-flight
+    // write count is read from the disk-state provider.
     [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
     [[nodiscard]] virtual TDuration GetWriteHedgingDelay(
         THostMask hosts,
@@ -85,7 +92,8 @@ class TOracle: public IOracle
 public:
     TOracle(
         TStorageConfigPtr storageConfig,
-        IHostStateController* hostStateController);
+        IHostStateController* hostStateController,
+        const TVector<EHostHealth>& hostHealths);
     ~TOracle() override;
 
     void Think(TInstant now);
@@ -116,6 +124,8 @@ public:
     // Device is permanently broken, so force the host offline.
     void OnDDiskBroken(THostIndex hostIndex) override;
 
+    void OnHostRemoved(THostIndex hostIndex) override;
+
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const override;
@@ -141,6 +151,10 @@ public:
     [[nodiscard]] const THostStat& GetHostStatistics(
         THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
+
+    // The FastPath service that owns the disk-wide in-flight write count.
+    // Wired from TDirectBlockGroup::Run after FastPath exists.
+    void SetDiskStateProvider(IDiskStateProvider* diskStateProvider);
 
     // If necessary, adds hosts to make the hostIndex valid.
     void AddHostIfNeeded(THostIndex hostIndex);
@@ -169,12 +183,15 @@ private:
     const TDuration DefaultFlushRequestTimeout;
     const TDuration DefaultEraseRequestTimeout;
     const EWriteMode DefaultWriteMode;
+    const size_t MaxInflightWritesForDirectWrite;
 
+    IDiskStateProvider* DiskStateProvider = nullptr;
     TVector<THostStat> HostStatistics;
     TVector<THostState> HostStates;
     TVector<EHostHealth> HostsHealths;
     TVector<TBackoffDelayProvider> HostsReconnectDelays;
     TVector<TTimePredictor> TimePredictors;
+    std::unique_ptr<IHostHealthPolicy> HealthPolicy;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

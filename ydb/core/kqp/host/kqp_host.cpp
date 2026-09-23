@@ -2045,6 +2045,7 @@ private:
         state->EnableWatermarksAdvanced = Config->GetEnableWatermarksAdvanced();
         state->EnableStreamingPartitionBalancing = Config->GetEnableStreamingPartitionBalancing();
         state->EnableExactlyOnceDeliveryGuaranty = Config->FeatureFlags.GetEnableExactlyOnceTopicsWriting();
+        state->EnableConsumerRewindForDisposition = Config->FeatureFlags.GetEnableStreamingQueryReadFrom();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -2172,6 +2173,7 @@ private:
                 || settingName == "Warning"
                 || settingName == "UseBlocks"
                 || settingName == "BlockEngine"
+                || settingName == "DecimalCommonTypeConversionMode"
                 || settingName == "FilterPushdownOverJoinOptionalSide"
                 || settingName == "DisableFilterPushdownOverJoinOptionalSide"
                 || settingName == "RotateJoinTree"

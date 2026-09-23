@@ -1013,6 +1013,9 @@ ui64 TIntegrityManager::BeginChecksumRead(TDataChunkKey key, ui32 offsetInBytes,
             GetPairRuntime(extent, pairIdx).LoadWaiters.push_back(operationId);
             ++operation.PendingLoads;
             QueuePairRead(key, extent, pairIdx);
+        } else {
+            // Read hits keep hot metadata in the LRU. Fresh empty pairs have no cached state.
+            FindBlockState(extent, pairIdx);
         }
     }
     if (!operation.PendingLoads) {
@@ -1171,6 +1174,16 @@ const TIntegrityManager::TExtentRef* TIntegrityManager::FindExtentRef(TDataChunk
 ui64 TIntegrityManager::GetIntegrityChunkGeneration(TChunkIdx chunkIdx) const {
     const auto it = IntegrityChunks.find(chunkIdx);
     return it != IntegrityChunks.end() ? it->second.Generation : 0;
+}
+
+std::vector<TChunkIdx> TIntegrityManager::GetIntegrityChunkIdxs() const {
+    std::vector<TChunkIdx> chunks;
+    chunks.reserve(IntegrityChunks.size());
+    for (const auto& [chunkIdx, info] : IntegrityChunks) {
+        Y_UNUSED(info);
+        chunks.push_back(chunkIdx);
+    }
+    return chunks;
 }
 
 bool TIntegrityManager::IsIntegrityChunkFormatted(TChunkIdx chunkIdx) const {

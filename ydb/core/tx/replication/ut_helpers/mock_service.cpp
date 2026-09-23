@@ -31,6 +31,7 @@ public:
             hFunc(TEvService::TEvHandshake, Forward);
             hFunc(TEvService::TEvRunWorker, Forward);
             hFunc(TEvService::TEvStopWorker, Forward);
+            hFunc(TEvService::TEvSchemaChangeResult, Forward);
             hFunc(TEvService::TEvTxIdResult, Forward);
             sFunc(TEvents::TEvPoison, PassAway);
         }

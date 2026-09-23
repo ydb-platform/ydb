@@ -736,6 +736,8 @@ void ToProto(
     protoStatistics->set_incomplete_input(statistics.IncompleteInput);
     protoStatistics->set_incomplete_output(statistics.IncompleteOutput);
     protoStatistics->set_query_count(statistics.QueryCount);
+    protoStatistics->set_scan_order(
+        static_cast<NProto::TQueryStatistics::EReportedScanOrder>(statistics.ScanOrder));
 
     ToProto(protoStatistics->mutable_inner_statistics(), statistics.InnerStatistics);
 }
@@ -775,6 +777,7 @@ void FromProto(
     statistics->IncompleteInput = protoStatistics.incomplete_input();
     statistics->IncompleteOutput = protoStatistics.incomplete_output();
     statistics->QueryCount = protoStatistics.query_count();
+    statistics->ScanOrder = FromProto<NQueryClient::EReportedScanOrder>(protoStatistics.scan_order());
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
@@ -2475,6 +2478,8 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
         error.FindMatching(NTabletClient::EErrorCode::HunkTabletStoreToggleConflict) ||
         error.FindMatching(NTabletClient::EErrorCode::HunkStoreAllocationFailed) ||
+        error.FindMatching(NTabletClient::EErrorCode::TabletServantIsNotActive) ||
+        error.FindMatching(NTabletClient::EErrorCode::ReadOnlySmoothMovementStage) ||
         IsChaosRetriableError(error);
 }
 

@@ -444,6 +444,9 @@
     "name": "yt.PartitionByConstantKeysViaMap"
   },
   {
+    "name": "yt.PassOptLLVMToDqCodecs"
+  },
+  {
     "name": "yt.Pool"
   },
   {
@@ -475,6 +478,9 @@
   },
   {
     "name": "yt.PythonCpu"
+  },
+  {
+    "name": "yt.QLFilterDepthLimit"
   },
   {
     "name": "yt.QueryCacheChunkLimit"
@@ -1053,6 +1059,9 @@
     "name": "DisableRegexUseRe2"
   },
   {
+    "name": "DisableRespectWarnPolicyForUnusedSqlHints"
+  },
+  {
     "name": "DisableRotateJoinTree"
   },
   {
@@ -1213,6 +1222,9 @@
   },
   {
     "name": "RegexUseRe2"
+  },
+  {
+    "name": "RespectWarnPolicyForUnusedSqlHints"
   },
   {
     "name": "ResultRowsLimit"

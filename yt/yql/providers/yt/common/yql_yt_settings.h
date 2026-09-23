@@ -134,6 +134,7 @@ public:
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableRLSTablesSupport;
     NCommon::TConfSetting<TString, StaticPerCluster> _SecureTmpRoot;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableQLFilter;
+    NCommon::TConfSetting<ui32, StaticPerCluster> QLFilterDepthLimit;
     NCommon::TConfSetting<ui64, StaticPerCluster> NativeYtTypeCompatibility;
     NCommon::TConfSetting<bool, StaticPerCluster> ApplyMaxJobCountToAll;
 
@@ -287,6 +288,7 @@ public:
     NCommon::TConfSetting<bool, Dynamic> EnforceJobUtc;
     NCommon::TConfSetting<ui64, Static> _EnforceRegexpProbabilityFail;
     NCommon::TConfSetting<bool, Dynamic> UseRPCReaderInDQ;
+    NCommon::TConfSetting<bool, Dynamic> PassOptLLVMToDqCodecs;
     NCommon::TConfSetting<size_t, Dynamic> DQRPCReaderInflight;
     NCommon::TConfSetting<TDuration, Dynamic> DQRPCReaderTimeout;
     NCommon::TConfSetting<TSet<TString>, Dynamic> BlockReaderSupportedTypes;

@@ -7,6 +7,7 @@
 #include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
@@ -698,6 +699,260 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT_EQUAL(err.size(), 1);
         UNIT_ASSERT_EQUAL(err[0], "Domains is not defined in DomainsConfig");
         UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+}
+
+Y_UNIT_TEST_SUITE(ConfigV2GrpcValidation) {
+    void CheckValidation(const NKikimrConfig::TAppConfig& config, bool valid) {
+        std::vector<TString> errors;
+        UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), valid ? EValidationResult::Ok : EValidationResult::Error);
+        if (valid) {
+            UNIT_ASSERT(errors.empty());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+            UNIT_ASSERT_STRING_CONTAINS(errors.front(), "FeatureFlags.SwitchToConfigV2");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ServiceLists, ssl) {
+        struct TTestCase {
+            TVector<TString> Services;
+            TVector<TString> Enabled;
+            TVector<TString> Disabled;
+            bool Valid;
+        };
+        const TTestCase cases[] = {
+            {{}, {}, {}, true},
+            {{"cms"}, {}, {}, false},
+            {{"cms", "config"}, {}, {}, true},
+            {{"cms"}, {"config"}, {}, true},
+            {{}, {}, {"config"}, false},
+            {{"cms", "config"}, {}, {"config"}, false},
+            {{"cms"}, {"config"}, {"config"}, false},
+            {{}, {"cms"}, {"cms"}, true},
+        };
+        for (const auto& testCase : cases) {
+            NKikimrConfig::TAppConfig config;
+            config.MutableFeatureFlags()->SetSwitchToConfigV2(true);
+            auto& grpcConfig = *config.MutableGRpcConfig();
+            if (ssl) {
+                grpcConfig.SetSslPort(2135);
+            } else {
+                grpcConfig.SetPort(2135);
+            }
+            for (const auto& service : testCase.Services) {
+                grpcConfig.AddServices(service);
+            }
+            for (const auto& service : testCase.Enabled) {
+                grpcConfig.AddServicesEnabled(service);
+            }
+            for (const auto& service : testCase.Disabled) {
+                grpcConfig.AddServicesDisabled(service);
+            }
+            CheckValidation(config, testCase.Valid);
+            config.MutableFeatureFlags()->SetSwitchToConfigV2(false);
+            CheckValidation(config, true);
+        }
+    }
+
+    Y_UNIT_TEST(WithoutGrpc) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetSwitchToConfigV2(true);
+        CheckValidation(config, true);
+
+        auto& grpcConfig = *config.MutableGRpcConfig();
+        grpcConfig.AddServices("cms");
+        CheckValidation(config, true);
+
+        grpcConfig.SetPort(2135);
+        grpcConfig.SetStartGRpcProxy(false);
+        CheckValidation(config, true);
+    }
+
+    Y_UNIT_TEST_TWIN(ExtEndpoints, ssl) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetSwitchToConfigV2(true);
+        auto& grpcConfig = *config.MutableGRpcConfig();
+        grpcConfig.SetPort(2135);
+        grpcConfig.AddServicesDisabled("config");
+        auto& endpoint = *grpcConfig.AddExtEndpoints();
+        CheckValidation(config, false);
+
+        if (ssl) {
+            endpoint.SetSslPort(2136);
+        } else {
+            endpoint.SetPort(2136);
+        }
+        CheckValidation(config, true);
+
+        endpoint.AddServices("cms");
+        CheckValidation(config, false);
+        endpoint.AddServicesEnabled("config");
+        CheckValidation(config, true);
+        endpoint.AddServicesDisabled("config");
+        CheckValidation(config, false);
+
+        grpcConfig.ClearServicesDisabled();
+        CheckValidation(config, true);
+        grpcConfig.ClearPort();
+        CheckValidation(config, false);
+        endpoint.ClearServicesDisabled();
+        CheckValidation(config, true);
+    }
+}
+
+Y_UNIT_TEST_SUITE(NbsConsoleLogConfigValidation) {
+    Y_UNIT_TEST(ShouldDefaultToInfo) {
+        NKikimrConfig::TAppConfig config;
+        UNIT_ASSERT_VALUES_EQUAL(config.GetNbsConfig().GetConsoleLogLevel(), 5);
+        std::vector<TString> errors;
+        UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Ok);
+        UNIT_ASSERT(errors.empty());
+    }
+
+    Y_UNIT_TEST(ShouldAcceptSupportedLevels) {
+        for (ui32 level = 0; level <= 8; ++level) {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()->SetConsoleLogLevel(level);
+            std::vector<TString> errors;
+            UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Ok);
+            UNIT_ASSERT(errors.empty());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldRejectUnsupportedLevels) {
+        for (ui32 level: {9u, 256u, Max<ui32>()}) {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()->SetConsoleLogLevel(level);
+            std::vector<TString> errors;
+            UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                errors.front(),
+                TStringBuilder() << "NbsConfig.ConsoleLogLevel: expected 0..8, got " << level);
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(NbsFrontendConfigValidation) {
+    Y_UNIT_TEST(ShouldAcceptDisabledFrontend) {
+        {
+            NKikimrConfig::TAppConfig config;
+            std::vector<TString> errors;
+
+            UNIT_ASSERT_EQUAL(
+                ValidateConfig(config, errors),
+                EValidationResult::Ok);
+            UNIT_ASSERT(errors.empty());
+        }
+
+        {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()->MutableNbsFrontendConfig();
+            std::vector<TString> errors;
+
+            UNIT_ASSERT_EQUAL(
+                ValidateConfig(config, errors),
+                EValidationResult::Ok);
+            UNIT_ASSERT(errors.empty());
+        }
+
+        {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()
+                ->MutableNbsFrontendConfig()
+                ->SetEnabled(false);
+            std::vector<TString> errors;
+
+            UNIT_ASSERT_EQUAL(
+                ValidateConfig(config, errors),
+                EValidationResult::Ok);
+            UNIT_ASSERT(errors.empty());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldAcceptEnabledFrontend) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableNbsConfig()->SetEnabled(true);
+        config.MutableNbsConfig()
+            ->MutableNbsFrontendConfig()
+            ->SetEnabled(true);
+        config.MutableGRpcConfig()->SetStartGRpcProxy(true);
+        config.MutableGRpcConfig()->SetPort(2135);
+        std::vector<TString> errors;
+
+        UNIT_ASSERT_EQUAL(
+            ValidateConfig(config, errors),
+            EValidationResult::Ok);
+        UNIT_ASSERT(errors.empty());
+    }
+
+    Y_UNIT_TEST(ShouldRejectInvalidEnabledFrontend) {
+        struct TTestCase
+        {
+            bool NbsEnabled;
+            bool HasGrpcConfig;
+            bool StartGrpcProxy;
+            ui32 Port;
+            TString ExpectedError;
+        };
+
+        const TVector<TTestCase> testCases = {
+            {
+                .NbsEnabled = false,
+                .HasGrpcConfig = true,
+                .StartGrpcProxy = true,
+                .Port = 2135,
+                .ExpectedError =
+                    "NbsConfig.Enabled: expected true when "
+                    "NbsConfig.NbsFrontendConfig.Enabled=true, got false",
+            },
+            {
+                .NbsEnabled = true,
+                .HasGrpcConfig = false,
+                .ExpectedError =
+                    "GRpcConfig: required when "
+                    "NbsConfig.NbsFrontendConfig.Enabled=true, got missing",
+            },
+            {
+                .NbsEnabled = true,
+                .HasGrpcConfig = true,
+                .StartGrpcProxy = false,
+                .Port = 2135,
+                .ExpectedError =
+                    "GRpcConfig.StartGRpcProxy: expected true when "
+                    "NbsConfig.NbsFrontendConfig.Enabled=true, got false",
+            },
+            {
+                .NbsEnabled = true,
+                .HasGrpcConfig = true,
+                .StartGrpcProxy = true,
+                .Port = 65536,
+                .ExpectedError =
+                    "GRpcConfig.Port: expected 1..65535 when "
+                    "NbsConfig.NbsFrontendConfig.Enabled=true, got 65536",
+            },
+        };
+
+        for (const auto& testCase: testCases) {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()->SetEnabled(testCase.NbsEnabled);
+            config.MutableNbsConfig()
+                ->MutableNbsFrontendConfig()
+                ->SetEnabled(true);
+            if (testCase.HasGrpcConfig) {
+                config.MutableGRpcConfig()->SetStartGRpcProxy(
+                    testCase.StartGrpcProxy);
+                config.MutableGRpcConfig()->SetPort(testCase.Port);
+            }
+            std::vector<TString> errors;
+
+            UNIT_ASSERT_EQUAL(
+                ValidateConfig(config, errors),
+                EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(errors.front(), testCase.ExpectedError);
+        }
     }
 }
 

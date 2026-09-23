@@ -259,6 +259,10 @@ public:
         return RequestEv->GetQuery();
     }
 
+    bool UsedNewRbo() const {
+        return CompileResult && CompileResult->UsedNewRbo;
+    }
+
     const TString& GetPreparedQuery() const {
         return RequestEv->GetPreparedQuery();
     }
@@ -419,7 +423,7 @@ public:
         }
     }
 
-    void FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views);
+    void FiilTablesAndViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos);
 
     bool NeedCheckTableVersions() const {
         return CompileStats.FromCache;

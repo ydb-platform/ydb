@@ -33,7 +33,18 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             {"replyToActorId", ReplyToActorId},
             {"record", Record()});
 
+        for (const auto& table : Record().GetTables()) {
+            const double rate = table.GetSampleRate();
+            if (!(rate > 0 && rate <= 1)) {
+                TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR;
+                TerminalReplayIssues.AddIssue(NYql::TIssue("ANALYZE SAMPLE rate must be a finite number in (0, 1]"));
+                return true;
+            }
+        }
+
         if (!Self->EnableColumnStatistics) {
+            TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR;
+            TerminalReplayIssues.AddIssue(NYql::TIssue("Column statistics are disabled"));
             return true;
         }
 
@@ -135,6 +146,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 .PathId = pathId,
                 .ColumnTags = std::move(columnTags),
                 .Path = path,
+                .SampleRate = table.GetSampleRate(),
                 .Status = status
             };
             operation.Tables.emplace_back(operationTable);
@@ -145,7 +157,8 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 NIceDb::TUpdate<Schema::ForceTraversalTables::LocalPathId>(pathId.LocalPathId),
                 NIceDb::TUpdate<Schema::ForceTraversalTables::ColumnTags>(columnTagsStr),
                 NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)status),
-                NIceDb::TUpdate<Schema::ForceTraversalTables::Path>(path)
+                NIceDb::TUpdate<Schema::ForceTraversalTables::Path>(path),
+                NIceDb::TUpdate<Schema::ForceTraversalTables::SampleRate>(operationTable.SampleRate)
             );
         }
 
@@ -178,7 +191,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             return;
         }
 
-        ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleTraversal());
+        ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleForceTraversal());
     }
 };
 

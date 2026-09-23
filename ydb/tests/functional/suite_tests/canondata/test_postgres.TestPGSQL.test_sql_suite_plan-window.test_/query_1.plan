@@ -48,7 +48,7 @@
                                                     }
                                                 ],
                                                 "Name": "Sort",
-                                                "SortBy": "row.nsum"
+                                                "SortBy": "[item.depname,item.nsum]"
                                             }
                                         ],
                                         "PlanNodeId": 6,
@@ -72,7 +72,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Sort",
-                                                                "SortBy": "row.salary"
+                                                                "SortBy": "[item.depname,item.salary]"
                                                             }
                                                         ],
                                                         "PlanNodeId": 4,

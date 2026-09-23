@@ -8,8 +8,7 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_TASKS_RUNNER
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 bool TKqpComputeActor::IsDebugLogEnabled(const TActorSystem* actorSystem) {
     auto* settings = actorSystem->LoggerSettings();
@@ -34,6 +33,7 @@ TKqpComputeActor::TKqpComputeActor(
     , UserToken(std::move(userToken))
     , Database(database)
 {
+    ComputeCtx.SetQueryContext(Database, UserToken);
     InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
         Meta.ConstructInPlace();
@@ -50,7 +50,9 @@ void TKqpComputeActor::DoBootstrap() {
     const auto& taskParams = GetTask().GetTaskParams();
     if (const auto it = taskParams.find(TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)); it != taskParams.end()) {
         try {
-            WasmQueryCompartment_.emplace(NUdfStore::NWasm::ParseWasmUdfModulesTaskParam(it->second));
+            WasmQueryCompartment_.emplace(
+                NUdfStore::NWasm::ParseWasmUdfModulesTaskParam(it->second),
+                GetAllocatorPtr());
         } catch (const std::exception& e) {
             ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                 << "Failed to acquire WASM query compartment: " << e.what());
@@ -114,6 +116,7 @@ void TKqpComputeActor::DoBootstrap() {
     auto wakeupCallback = [actorSystem, selfId]() {
         actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     };
+    ComputeCtx.SetWakeupCallback(wakeupCallback);
     auto errorCallback = [actorSystem, selfId](const TString& error) {
         actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
     };
@@ -382,5 +385,4 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
         settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup, GUCSettings, std::move(schedulableOptions), mode, std::move(userToken), database);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

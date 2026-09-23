@@ -281,9 +281,20 @@ THostIndex TDirectBlockGroup::AllocateDDiskForPromote(
     }
 
     if (selected != InvalidHostIndex) {
-        PendingDDiskAllocations.emplace(config.GetVChunkIndex(), selected);
+        AllocateDDiskPromotion(config.GetVChunkIndex(), selected);
     }
     return selected;
+}
+
+void TDirectBlockGroup::AllocateDDiskPromotion(
+    ui32 vChunkId,
+    THostIndex hostIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(hostIndex < GetHostCount());
+    Y_ABORT_UNLESS(!PendingDDiskAllocations.contains(vChunkId));
+
+    PendingDDiskAllocations.emplace(vChunkId, hostIndex);
 }
 
 void TDirectBlockGroup::CommitDDiskPromotion(const TVChunkConfig& config)

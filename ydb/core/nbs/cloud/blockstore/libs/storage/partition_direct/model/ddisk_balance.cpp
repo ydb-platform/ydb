@@ -1,5 +1,7 @@
 #include "ddisk_balance.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 
@@ -82,11 +84,19 @@ std::array<TVector<const TVChunkConfig*>, MaxHostCount> CollectVChunksByHost(
     // Keep registration order within each priority group.
     for (size_t priority = 0; priority < 2; ++priority) {
         for (const auto* config: vChunks) {
-            if ((config->GetEnabledDDisks().Count() >= 4) != (priority == 1)) {
+            const auto enabledDDisks = config->GetEnabledDDisks();
+            const size_t enabledDDiskCount = enabledDDisks.Count();
+            if (enabledDDiskCount < QuorumDirectBlockGroupHostCount) {
                 continue;
             }
 
-            for (THostIndex host: config->GetEnabledDDisks()) {
+            const bool hasExcessReplica =
+                enabledDDiskCount >= QuorumDirectBlockGroupHostCount + 1;
+            if (hasExcessReplica != (priority == 1)) {
+                continue;
+            }
+
+            for (THostIndex host: enabledDDisks) {
                 if (toMove[host] != 0) {
                     vchunksByHost[host].push_back(config);
                 }

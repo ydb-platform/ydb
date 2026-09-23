@@ -304,14 +304,21 @@ void TVChunk::BalanceDDisks(THostIndex sourceHost, THostIndex targetHost)
         LogTitle.GetWithTime().c_str(),
         message.c_str());
 
-    auto prepare = [weakSelf = weak_from_this(), targetHost]() -> TVChunkConfig
+    auto prepare =
+        [weakSelf = weak_from_this(), sourceHost, targetHost]() -> TVChunkConfig
     {
         if (auto self = weakSelf.lock()) {
-            TVChunkConfig cfg = self->VChunkConfig;
-            if (!cfg.GetDisabledHosts().Get(targetHost)) {
-                cfg.PromoteHost(targetHost);
+            TVChunkConfig newConfig = self->VChunkConfig;
+            if (!newConfig.GetDisabledHosts().Get(targetHost) &&
+                !newConfig.GetDDisks().Get(targetHost))
+            {
+                newConfig.PromoteHost(targetHost);
+                self->BalanceSourceHost = sourceHost;
+                self->DirectBlockGroup->AllocateDDiskPromotion(
+                    newConfig.GetVChunkIndex(),
+                    targetHost);
             }
-            return cfg;
+            return newConfig;
         }
         return TVChunkConfig{};
     };
@@ -1301,6 +1308,11 @@ void TVChunk::ApplyConfig(
         newConfig.DebugPrint().c_str());
 
     VChunkConfig = newConfig;
+    if (BalanceSourceHost != InvalidHostIndex &&
+        !VChunkConfig.GetDDisks().Get(BalanceSourceHost))
+    {
+        BalanceSourceHost = InvalidHostIndex;
+    }
     BlocksDirtyMap->UpdateConfig(VChunkConfig, IsTouched());
 
     for (THostIndex hostIndex = 0; hostIndex < VChunkConfig.GetHostCount();
@@ -1527,6 +1539,12 @@ THostMask TVChunk::GetUnnecessaryDDisksForDemote() const
     auto healthyDDisks = GetHealthyDDisks();
     if (healthyDDisks.Count() < QuorumDirectBlockGroupHostCount + 1) {
         return THostMask::MakeEmpty();
+    }
+
+    if (BalanceSourceHost != InvalidHostIndex &&
+        healthyDDisks.Get(BalanceSourceHost))
+    {
+        return THostMask::MakeOne(BalanceSourceHost);
     }
 
     return DirectBlockGroup->SelectDDiskForDemote(healthyDDisks);

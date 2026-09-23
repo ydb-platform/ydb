@@ -236,6 +236,7 @@ private:
     TLogTitle LogTitle;
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
+    THostIndex BalanceSourceHost = InvalidHostIndex;
     ETouchedState TouchedState = ETouchedState::NotTouched;
     TBlocksDirtyMapPtr BlocksDirtyMap;
     THostMask PersistedFreshDDisks;

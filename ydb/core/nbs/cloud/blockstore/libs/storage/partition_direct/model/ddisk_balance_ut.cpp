@@ -101,6 +101,22 @@ Y_UNIT_TEST_SUITE(TDDiskBalanceTest)
         UNIT_ASSERT_VALUES_EQUAL(4u, withDisabledDDisk[0].TargetHost);
     }
 
+    Y_UNIT_TEST(ShouldSkipVChunksBelowQuorum)
+    {
+        auto first = TVChunkConfig::MakeDefault(0, 5, 3);
+        first.DisableHost(2);
+        auto second = TVChunkConfig::MakeDefault(5, 5, 3);
+        second.DisableHost(2);
+        const TVector<const TVChunkConfig*> vChunks = {&first, &second};
+        const std::array<size_t, MaxHostCount> ddiskCountByHost =
+            {2, 2, 0, 0, 0};
+
+        const auto requests =
+            PlanDDiskBalance(vChunks, THostMask::MakeAll(5), ddiskCountByHost);
+
+        UNIT_ASSERT(requests.empty());
+    }
+
     Y_UNIT_TEST(ShouldAccountForDDisksOfExcludedVChunk)
     {
         const auto first = TVChunkConfig::MakeDefault(0, 5, 3);

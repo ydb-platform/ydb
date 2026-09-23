@@ -908,7 +908,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirectBlockGroup->GetExecutor(),
             [&]
             {
-                vchunk->BalanceDDisks(0, 3);
+                vchunk->BalanceDDisks(2, 3);
                 return true;
             })
             .GetValue(TDuration::Seconds(10));
@@ -916,6 +916,11 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         UNIT_ASSERT_VALUES_EQUAL(
             1,
             PartitionDirectService->UpdateConfigRequests.size());
+        const auto* pendingHost =
+            DirectBlockGroup->PendingDDiskAllocations.FindPtr(
+                VChunkConfig.GetVChunkIndex());
+        UNIT_ASSERT(pendingHost);
+        UNIT_ASSERT_VALUES_EQUAL(THostIndex(3), *pendingHost);
         const auto& requestedConfig =
             PartitionDirectService->UpdateConfigRequests.front().Config;
         UNIT_ASSERT_VALUES_EQUAL(
@@ -929,6 +934,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             EHostRole::Primary,
             AccessConfig(*vchunk).GetDDiskRole(3));
         UNIT_ASSERT_VALUES_EQUAL(4, AccessConfig(*vchunk).GetDDisks().Count());
+        UNIT_ASSERT(DirectBlockGroup->PendingDDiskAllocations.empty());
 
         // With no data to copy, the target is already healthy and H0 can be
         // demoted immediately.
@@ -937,7 +943,10 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService->UpdateConfigRequests.size());
         const auto& demoteConfig =
             PartitionDirectService->UpdateConfigRequests.front().Config;
-        UNIT_ASSERT_VALUES_EQUAL(EHostRole::None, demoteConfig.GetDDiskRole(0));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostRole::Primary,
+            demoteConfig.GetDDiskRole(0));
+        UNIT_ASSERT_VALUES_EQUAL(EHostRole::None, demoteConfig.GetDDiskRole(2));
         UNIT_ASSERT_VALUES_EQUAL(
             EHostRole::Primary,
             demoteConfig.GetDDiskRole(3));

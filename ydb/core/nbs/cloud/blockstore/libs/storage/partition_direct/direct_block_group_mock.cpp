@@ -242,12 +242,24 @@ THostIndex TDirectBlockGroupMock::AllocateDDiskForPromote(
     const auto candidates = THostMask::MakeAll(config.GetHostCount())
                                 .Exclude(config.GetDisabledHosts())
                                 .Exclude(config.GetDDisks());
-    return candidates.First().value_or(InvalidHostIndex);
+    const THostIndex selected = candidates.First().value_or(InvalidHostIndex);
+    if (selected != InvalidHostIndex) {
+        AllocateDDiskPromotion(config.GetVChunkIndex(), selected);
+    }
+    return selected;
+}
+
+void TDirectBlockGroupMock::AllocateDDiskPromotion(
+    ui32 vChunkId,
+    THostIndex hostIndex)
+{
+    Y_ABORT_UNLESS(!PendingDDiskAllocations.contains(vChunkId));
+    PendingDDiskAllocations.emplace(vChunkId, hostIndex);
 }
 
 void TDirectBlockGroupMock::CommitDDiskPromotion(const TVChunkConfig& config)
 {
-    Y_UNUSED(config);
+    PendingDDiskAllocations.erase(config.GetVChunkIndex());
 }
 
 THostMask TDirectBlockGroupMock::SelectDDiskForDemote(

@@ -215,13 +215,17 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             snapshot.TouchedDDiskImbalance.TotalDDiskCount);
         UNIT_ASSERT_VALUES_EQUAL(0, snapshot.TouchedDDiskImbalance.Percent);
 
-        const auto pendingHost =
-            RunOnExecutor(
-                executor,
-                [&]
-                { return dbg->AllocateDDiskForPromote(touched->GetConfig()); })
-                .GetValue(WaitTimeout);
-        UNIT_ASSERT_VALUES_EQUAL(THostIndex(3), pendingHost);
+        constexpr THostIndex pendingHost = 3;
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->AllocateDDiskPromotion(
+                    touched->GetConfig().GetVChunkIndex(),
+                    pendingHost);
+                return true;
+            })
+            .GetValue(WaitTimeout);
 
         touchedCounts = CountDDisksByHostDebugOnly(
             executor,

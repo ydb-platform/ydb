@@ -128,6 +128,11 @@ public:
     // Returns InvalidHostIndex when no host is available.
     virtual THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) = 0;
 
+    // Reserves the selected host for a VChunk DDisk promotion.
+    virtual void AllocateDDiskPromotion(
+        ui32 vChunkId,
+        THostIndex hostIndex) = 0;
+
     // Releases the reservation after config persistence succeeds or is
     // canceled.
     virtual void CommitDDiskPromotion(const TVChunkConfig& config) = 0;

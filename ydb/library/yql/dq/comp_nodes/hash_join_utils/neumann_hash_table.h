@@ -448,6 +448,17 @@ class TNeumannHashTable {
 
     void Apply(const ui8 *const row, const ui8 *const overflow,
                std::invocable<const ui8*> auto onMatch) const {
+        size_t slot = 0;
+        Apply(row, overflow, slot, [&](const ui8* matched) {
+            onMatch(matched);
+            return true;
+        });
+    }
+
+    // slot is the next directory slot of this key. onMatch returns false to stop the scan,
+    // leaving slot at the slot to continue from. Returns false when the scan stopped early.
+    bool Apply(const ui8 *const row, const ui8 *const overflow, size_t& slot,
+               std::predicate<const ui8*> auto onMatch) const {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");
         MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
 
@@ -459,7 +470,8 @@ class TNeumannHashTable {
         const TBloom dirBloomFilter = dir.BloomFilter;
 
         if (hashBloomTag & dirBloomFilter) {
-            return;
+            slot = 0;
+            return true;
         }
 
         const ui8 *const begin =
@@ -471,12 +483,16 @@ class TNeumannHashTable {
         const ui8 *matchedRow;
 
         if constexpr (!ConsecutiveDuplicates) {
-            for (auto it = begin; it != end; it += BufferSlotSize_) {
-                if (GetRowMatch(it, row, overflow, &matchedRow)) {
-                    onMatch(matchedRow);
+            const ui8* it = begin + slot * BufferSlotSize_;
+            MKQL_ENSURE(it <= end, "Apply resume past the end of the directory");
+            for (; it != end; it += BufferSlotSize_) {
+                if (GetRowMatch(it, row, overflow, &matchedRow) && !onMatch(matchedRow)) {
+                    slot = (it - begin) / BufferSlotSize_ + 1;
+                    return false;
                 }
             }
         } else {
+            MKQL_ENSURE(slot == 0, "Apply cannot resume over consecutive duplicates");
             ui32 size = 0;
             for (auto it = begin; it != end; it += size * BufferSlotSize_) {
                 size = ReadUnaligned<ui32>(it + RowIndexSize_);
@@ -485,11 +501,15 @@ class TNeumannHashTable {
                 }
 
                 for (; size; --size, it += BufferSlotSize_) {
-                    onMatch(it);
+                    if (!onMatch(it)) {
+                        return false;
+                    }
                 }
                 break;
             }
         }
+        slot = 0;
+        return true;
     }
 
     size_t IndexOfPackedRow(const ui8* packedRow) const {

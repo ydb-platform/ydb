@@ -146,7 +146,6 @@ struct TMemoryUsageChange {
 
 namespace NTests {
     class TSimpleWriteSessionTestAdapter;
-    class TWriteSessionMemoryTestAdapter;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -158,7 +157,6 @@ private:
     friend class TWriteSession;
     friend class TSimpleBlockingWriteSession;
     friend class NTests::TSimpleWriteSessionTestAdapter;
-    friend class NTests::TWriteSessionMemoryTestAdapter;
 
 private:
     using TClientMessage = Ydb::PersQueue::V1::StreamingWriteClientMessage;

@@ -1658,8 +1658,7 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
 
     TMemoryUsageChange memoryUsage{MemoryUsage <= Settings.MaxMemoryUsage_, MemoryUsage <= Settings.MaxMemoryUsage_};
     if (block.Compressed) {
-        memoryUsage = OnMemoryUsageChangedImpl(
-            static_cast<i64>(block.Data.size()) - static_cast<i64>(block.OriginalMemoryUsage));
+        memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size()) - static_cast<i64>(block.OriginalMemoryUsage));
         (*Counters->BytesInflightUncompressed) -= block.OriginalSize;
         (*Counters->BytesInflightCompressed) += block.Data.size();
     }

@@ -6,6 +6,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
+#include <util/generic/bitmap.h>
+
 namespace NKikimr::NMiniKQL {
 
 
@@ -53,15 +55,58 @@ inline ESpillResult Wait() {
 
 NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& page);
 
+class TProbeMatchRegistry {
+  public:
+    using TId = ui64;
+    static constexpr TId NoId = 0;
+
+    TId AddPending(TDynBitMap&& bitmap) {
+        const TId id = NextId_++;
+        MKQL_ENSURE(id != NoId, "probe match state id overflow");
+        auto [it, inserted] = Pending_.try_emplace(id);
+        MKQL_ENSURE(inserted, "duplicate probe match state id");
+        it->second.Swap(bitmap);
+        return id;
+    }
+
+    void BindToSpillerKey(TId id, ISpiller::TKey key) {
+        if (id == NoId) {
+            return;
+        }
+        auto it = Pending_.find(id);
+        MKQL_ENSURE(it != Pending_.end(), "missing pending probe match state");
+        auto [bound, inserted] = BySpillerKey_.try_emplace(key);
+        MKQL_ENSURE(inserted, "duplicate spilled probe match state");
+        bound->second.Swap(it->second);
+        Pending_.erase(it);
+    }
+
+    TDynBitMap* Find(ISpiller::TKey key) {
+        auto it = BySpillerKey_.find(key);
+        return it == BySpillerKey_.end() ? nullptr : &it->second;
+    }
+
+    size_t Erase(ISpiller::TKey key) {
+        return BySpillerKey_.erase(key);
+    }
+
+    bool Empty() const {
+        return Pending_.empty() && BySpillerKey_.empty();
+    }
+
+  private:
+    TId NextId_ = 1;
+    TMKQLHashMap<TId, TDynBitMap> Pending_;
+    TMKQLHashMap<ISpiller::TKey, TDynBitMap> BySpillerKey_;
+};
+
 struct TSpillingPage {
     TPackResult Page;
     NThreading::TFuture<ISpiller::TKey> Write;
-    TMKQLVector<ui8> MatchFlags;
+    TProbeMatchRegistry::TId ProbeMatchStateId = TProbeMatchRegistry::NoId;
     ESide Side;
     int BucketIndex;
 };
-
-using TProbeMatchFlags = TMKQLHashMap<ISpiller::TKey, TMKQLVector<ui8>>;
 
 template <TSpillerSettings Settings> class TBucketsSpiller {
     static_assert(Settings.Buckets > 0 && (Settings.Buckets & (Settings.Buckets - 1)) == 0);
@@ -193,7 +238,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
     struct State {
         TMKQLVector<Bucket> Buckets;
         TMKQLVector<TSpillingPage> InMemoryPages;
-        TProbeMatchFlags ProbeMatchFlags;
+        TProbeMatchRegistry ProbeMatches;
     };
 
     TProbeSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout, State state)
@@ -201,7 +246,8 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         , Layout_(layout)
         , Spiller_(spiller)
     {
-        BuildingMatchFlags_.resize(State_.Buckets.size());
+        BuildingMatchBits_.resize(State_.Buckets.size());
+        BuildingMatchRows_.resize(State_.Buckets.size());
         FlushBuildingPages();
     }
 
@@ -219,10 +265,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                     MKQL_ENSURE(thisBucket, "spilling page from in memory bucket?");
                     const ISpiller::TKey key = page.Write.ExtractValueSync();
                     thisBucket->SelectSide(page.Side).SpilledPages->push_back(key);
-                    if (!page.MatchFlags.empty()) {
-                        MKQL_ENSURE(page.Side == ESide::Probe, "build page has probe match state");
-                        State_.ProbeMatchFlags.emplace(key, std::move(page.MatchFlags));
-                    }
+                    State_.ProbeMatches.BindToSpillerKey(page.ProbeMatchStateId, key);
                 }
                 SpillingPages_ = std::nullopt;
             } else {
@@ -246,9 +289,11 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         MKQL_ENSURE(thisBucket, "spilling row that should be looked up?");
         thisBucket->Probe.BuildingPage.AppendTuple(tuple.Val, Layout_);
         if (matched.has_value()) {
-            BuildingMatchFlags_[tuple.BucketIndex].push_back(*matched);
+            const size_t row = BuildingMatchRows_[tuple.BucketIndex]++;
+            BuildingMatchBits_[tuple.BucketIndex].Reserve(row + 1);
+            BuildingMatchBits_[tuple.BucketIndex][row] = *matched;
         } else {
-            MKQL_ENSURE(BuildingMatchFlags_[tuple.BucketIndex].empty(),
+            MKQL_ENSURE(BuildingMatchRows_[tuple.BucketIndex] == 0,
                         "all rows in a page must use the same match-state format");
         }
         if (thisBucket->Probe.template DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>()) {
@@ -293,11 +338,12 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         auto pages = bucket.DetatchPages();
         for (TPackResult& page : pages) {
             TSpillingPage result{.Page = std::move(page), .Side = side, .BucketIndex = index};
-            if (side == ESide::Probe && !BuildingMatchFlags_[index].empty()) {
+            if (side == ESide::Probe && BuildingMatchRows_[index] != 0) {
                 MKQL_ENSURE(pages.size() == 1, "match flags belong to exactly one building page");
-                MKQL_ENSURE(std::ssize(BuildingMatchFlags_[index]) == result.Page.NTuples,
+                MKQL_ENSURE(BuildingMatchRows_[index] == static_cast<size_t>(result.Page.NTuples),
                             "match flags must contain one flag per tuple");
-                result.MatchFlags = std::move(BuildingMatchFlags_[index]);
+                result.ProbeMatchStateId = State_.ProbeMatches.AddPending(std::move(BuildingMatchBits_[index]));
+                BuildingMatchRows_[index] = 0;
             }
             State_.InMemoryPages.push_back(std::move(result));
         }
@@ -306,7 +352,8 @@ template <TSpillerSettings Settings> class TProbeSpiller {
     State State_;
     const NPackedTuple::TTupleLayout* Layout_;
 
-    TMKQLVector<TMKQLVector<ui8>> BuildingMatchFlags_;
+    TMKQLVector<TDynBitMap> BuildingMatchBits_;
+    TMKQLVector<size_t> BuildingMatchRows_;
     std::optional<TMKQLVector<TSpillingPage>> SpillingPages_;
     ISpiller::TPtr Spiller_;
 

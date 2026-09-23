@@ -24,6 +24,9 @@ constexpr TDuration CallTimeout = TDuration::Seconds(10);
 constexpr TDuration RetryDelay = TDuration::MilliSeconds(50);
 const TString BuiltinToken = "root@builtin";
 const TString InvalidToken = "invalid-token";
+const TString ChooseProxyMethod = "NKikimrClient.TGRpcServer/ChooseProxy";
+const TString SchemeDescribeMethod = "NKikimrClient.TGRpcServer/SchemeDescribe";
+const TString SchemeOperationMethod = "NKikimrClient.TGRpcServer/SchemeOperation";
 
 struct TCallAuth {
     TString ProtoToken;
@@ -65,6 +68,17 @@ TLegacyCallResult CallChooseProxy(ui16 grpcPort, const TCallAuth& auth = {}) {
     return result;
 }
 
+TLegacyCallResult CallSchemeOperation(ui16 grpcPort, const TCallAuth& auth = {}) {
+    auto stub = MakeStub(grpcPort);
+    NKikimrClient::TSchemeOperation request;
+
+    TLegacyCallResult result;
+    grpc::ClientContext context;
+    ApplyAuth(context, request, auth);
+    result.Status = stub->SchemeOperation(&context, request, &result.Response);
+    return result;
+}
+
 TLegacyCallResult CallSchemeDescribe(ui16 grpcPort, const TCallAuth& auth = {}) {
     auto stub = MakeStub(grpcPort);
     NKikimrClient::TSchemeDescribe request;
@@ -94,6 +108,19 @@ TLegacyCallResult WaitChooseProxy(ui16 grpcPort, const TCallAuth& auth = {}) {
     do {
         result = CallChooseProxy(grpcPort, auth);
         if (!IsTemporarilyUnavailable(result)) {
+            return result;
+        }
+        Sleep(RetryDelay);
+    } while (TInstant::Now() < deadline);
+    return result;
+}
+
+TLegacyCallResult WaitSchemeOperation(ui16 grpcPort, const TCallAuth& auth = {}) {
+    TLegacyCallResult result;
+    const TInstant deadline = TInstant::Now() + CallTimeout;
+    do {
+        result = CallSchemeOperation(grpcPort, auth);
+        if (result.Status.error_code() != grpc::StatusCode::UNAVAILABLE) {
             return result;
         }
         Sleep(RetryDelay);
@@ -137,9 +164,9 @@ struct TChooseProxyServer {
     TServerSettings Settings;
     TServer Server;
 
-    explicit TChooseProxyServer(bool enforceUserToken)
+    explicit TChooseProxyServer(bool enforceUserToken, std::initializer_list<TString> unauthenticatedMethods = {})
         : GrpcPort(PortManager.GetPort(2135))
-        , Settings(MakeSettings(enforceUserToken))
+        , Settings(MakeSettings(enforceUserToken, unauthenticatedMethods))
         , Server(Settings)
     {
         Server.EnableGRpc(NYdbGrpc::TServerOptions()
@@ -158,13 +185,17 @@ struct TChooseProxyServer {
     }
 
 private:
-    TServerSettings MakeSettings(bool enforceUserToken) {
+    TServerSettings MakeSettings(bool enforceUserToken, std::initializer_list<TString> unauthenticatedMethods) {
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBuiltinDomain(true);
 
         TServerSettings settings(PortManager.GetPort(2134), authConfig);
         settings.SetDomainName("Root");
-        settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(enforceUserToken);
+        auto* securityConfig = settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig->SetEnforceUserTokenRequirement(enforceUserToken);
+        for (const auto& method : unauthenticatedMethods) {
+            securityConfig->AddUnauthenticatedGrpcMethods(method);
+        }
         return settings;
     }
 };
@@ -174,7 +205,28 @@ private:
 Y_UNIT_TEST_SUITE(TChooseProxyGrpc) {
     Y_UNIT_TEST(WithoutTokenWhenTokenRequired) {
         TChooseProxyServer env(/*enforceUserToken=*/true);
+        AssertUnauthenticated(WaitChooseProxy(env.GrpcPort));
+    }
+
+    Y_UNIT_TEST(WithoutTokenWhenMethodListed) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, {ChooseProxyMethod});
         AssertChooseProxyOk(WaitChooseProxy(env.GrpcPort));
+    }
+
+    Y_UNIT_TEST(WithInvalidProtoTokenWhenMethodListed) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, {ChooseProxyMethod});
+        AssertUnauthenticated(WaitChooseProxy(env.GrpcPort, {.ProtoToken = InvalidToken}));
+    }
+
+    Y_UNIT_TEST(SchemeDescribeWithoutTokenWhenListed) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, {SchemeDescribeMethod});
+        const auto result = WaitSchemeDescribe(env.GrpcPort);
+        UNIT_ASSERT_C(result.Status.ok(), result.Status.error_message());
+    }
+
+    Y_UNIT_TEST(SchemeOperationWithoutTokenWhenListed) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, {SchemeOperationMethod});
+        AssertUnauthenticated(WaitSchemeOperation(env.GrpcPort));
     }
 
     Y_UNIT_TEST(WithProtoTokenWhenTokenRequired) {

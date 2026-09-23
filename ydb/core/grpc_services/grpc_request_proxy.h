@@ -25,6 +25,12 @@ namespace NGRpcService {
 IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig);
 IActor* CreateGRpcRequestProxySimple(const NKikimrConfig::TAppConfig& appConfig);
 
+class IRequestProxyCtx;
+
+// True when SecurityConfig.UnauthenticatedGrpcMethods lists this non-modifying method.
+// Caller still checks a presented token or client certificate.
+bool IsAnonymousGrpcMethodAllowed(const IRequestProxyCtx& ctx);
+
 class TGRpcRequestProxy : public TGRpcRequestProxyHandleMethods, public IFacilityProvider {
 public:
     enum EEv {

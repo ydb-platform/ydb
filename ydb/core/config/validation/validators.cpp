@@ -15,6 +15,7 @@
 #include <library/cpp/protobuf/json/util.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/xrange.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
@@ -266,6 +267,47 @@ EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config
     return EValidationResult::Ok;
 }
 
+bool IsGrpcMethodName(TStringBuf method) {
+    const size_t slash = method.find('/');
+    if (slash == TStringBuf::npos || method.rfind('/') != slash || slash == 0 || slash + 1 == method.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < method.size(); ++i) {
+        if (i == slash) {
+            continue;
+        }
+        const char c = method[i];
+        const bool ok = (c >= 'A' && c <= 'Z')
+            || (c >= 'a' && c <= 'z')
+            || (c >= '0' && c <= '9')
+            || c == '.'
+            || c == '_';
+        if (!ok) {
+            return false;
+        }
+    }
+    return true;
+}
+
+EValidationResult ValidateUnauthenticatedGrpcMethods(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
+    if (!config.GetDomainsConfig().HasSecurityConfig()) {
+        return EValidationResult::Ok;
+    }
+
+    THashSet<TString> seen;
+    for (const auto& method : config.GetDomainsConfig().GetSecurityConfig().GetUnauthenticatedGrpcMethods()) {
+        if (!IsGrpcMethodName(method)) {
+            msg.push_back(TStringBuilder() << "SecurityConfig.UnauthenticatedGrpcMethods: expected Service/Method, got '" << method << "'");
+            return EValidationResult::Error;
+        }
+        if (!seen.insert(method).second) {
+            msg.push_back(TStringBuilder() << "SecurityConfig.UnauthenticatedGrpcMethods: duplicate method '" << method << "'");
+            return EValidationResult::Error;
+        }
+    }
+    return EValidationResult::Ok;
+}
+
 EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
     try {
         NPathAliasing::TPathNormalizer{config.GetResourcePathPrefixMapping()};
@@ -324,6 +366,12 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
     }
     if (config.HasAuthConfig()) {
         NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateAuthConfig(config.GetAuthConfig(), msg);
+        if (result == NKikimr::NConfig::EValidationResult::Error) {
+            return EValidationResult::Error;
+        }
+    }
+    {
+        NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateUnauthenticatedGrpcMethods(config, msg);
         if (result == NKikimr::NConfig::EValidationResult::Error) {
             return EValidationResult::Error;
         }

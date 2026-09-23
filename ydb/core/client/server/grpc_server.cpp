@@ -107,9 +107,6 @@ void TGRpcService::RegisterRequestActor(NActors::IActor* req) {
 template <typename TReq, typename TResp, NKikimr::NGRpcService::NRuntimeEvents::EType RuntimeEventType = NKikimr::NGRpcService::NRuntimeEvents::EType::COMMON>
 using TGrpcRequestLegacyCall = NKikimr::NGRpcService::TGrpcRequestNoOperationCall<TReq, TResp, RuntimeEventType, NKikimr::NGRpcService::NLegacyGrpcService::TLegacyGrpcMethodAccessorTraits<TReq, TResp>>;
 
-template <typename TReq, typename TResp, NKikimr::NGRpcService::NRuntimeEvents::EType RuntimeEventType = NKikimr::NGRpcService::NRuntimeEvents::EType::COMMON>
-using TGrpcRequestLegacyCallNoAuth = NKikimr::NGRpcService::TGrpcRequestNoOperationCallNoAuth<TReq, TResp, RuntimeEventType, NKikimr::NGRpcService::NLegacyGrpcService::TLegacyGrpcMethodAccessorTraits<TReq, TResp>>;
-
 void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace ::NKikimr::NGRpcService;
     using namespace ::NKikimr::NGRpcService::NLegacyGrpcService;
@@ -140,7 +137,7 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_SERVER_METHOD(SchemeOperation, TSchemeOperation, TResponse, DoSchemeOperation(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), TGrpcRequestLegacyCall);
     SETUP_SERVER_METHOD(SchemeOperationStatus, TSchemeOperationStatus, TResponse, DoSchemeOperationStatus, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestLegacyCall);
     SETUP_SERVER_METHOD(SchemeDescribe, TSchemeDescribe, TResponse, DoSchemeDescribe(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestLegacyCall);
-    SETUP_SERVER_METHOD(ChooseProxy, TChooseProxyRequest, TResponse, DoChooseProxy, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestLegacyCallNoAuth);
+    SETUP_SERVER_METHOD(ChooseProxy, TChooseProxyRequest, TResponse, DoChooseProxy, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestLegacyCall);
     SETUP_SERVER_METHOD(PersQueueRequest, TPersQueueRequest, TResponse, DoPersQueueRequest(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), TGrpcRequestLegacyCall);
     SETUP_SERVER_METHOD(SchemeInitRoot, TSchemeInitRoot, TResponse, DoSchemeInitRoot(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), TGrpcRequestLegacyCall);
     SETUP_SERVER_METHOD(ResolveNode, TResolveNodeRequest, TResponse, DoResolveNode, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestLegacyCall);

@@ -986,6 +986,47 @@ Y_UNIT_TEST_SUITE(NbsFrontendConfigValidation) {
     }
 }
 
+Y_UNIT_TEST_SUITE(UnauthenticatedGrpcMethodsValidation) {
+    Y_UNIT_TEST(AcceptsServiceMethodNames) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableSelfManagementConfig()->SetEnabled(true);
+        auto* securityConfig = config.MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig->AddUnauthenticatedGrpcMethods("NKikimrClient.TGRpcServer/ChooseProxy");
+        securityConfig->AddUnauthenticatedGrpcMethods("Ydb.Discovery.V1.DiscoveryService/ListEndpoints");
+        std::vector<TString> errors;
+        UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Ok);
+        UNIT_ASSERT(errors.empty());
+    }
+
+    Y_UNIT_TEST(RejectsMalformedAndDuplicateNames) {
+        {
+            NKikimrConfig::TAppConfig config;
+            config.MutableDomainsConfig()->MutableSecurityConfig()->AddUnauthenticatedGrpcMethods("ChooseProxy");
+            std::vector<TString> errors;
+            UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+            UNIT_ASSERT_C(errors[0].find("expected Service/Method") != TString::npos, errors[0]);
+        }
+        {
+            NKikimrConfig::TAppConfig config;
+            config.MutableDomainsConfig()->MutableSecurityConfig()->AddUnauthenticatedGrpcMethods("NKikimrClient.TGRpcServer/*");
+            std::vector<TString> errors;
+            UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+        }
+        {
+            NKikimrConfig::TAppConfig config;
+            auto* securityConfig = config.MutableDomainsConfig()->MutableSecurityConfig();
+            securityConfig->AddUnauthenticatedGrpcMethods("NKikimrClient.TGRpcServer/ChooseProxy");
+            securityConfig->AddUnauthenticatedGrpcMethods("NKikimrClient.TGRpcServer/ChooseProxy");
+            std::vector<TString> errors;
+            UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+            UNIT_ASSERT_C(errors[0].find("duplicate") != TString::npos, errors[0]);
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(MonitoringConfigValidation) {
     Y_UNIT_TEST(RequireCountersAuthentication) {
         { // Without security config

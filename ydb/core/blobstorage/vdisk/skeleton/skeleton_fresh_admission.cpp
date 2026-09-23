@@ -22,6 +22,9 @@ namespace NKikimr {
         if (InFlight || Hull->IsFreshRotationPending(admission)) {
             return EDecision::Wait;
         }
+        if (!Hull->PrepareFreshForAdmission(admission, ctx)) {
+            return EDecision::Wait; // Cur is full and rotates out as soon as the records in flight land
+        }
         const TFreshShortfall shortfall = Hull->GetFreshReservationShortfall(admission);
         if (!shortfall.Total()) {
             Hull->AdmitToFresh(admission);

@@ -24,6 +24,11 @@ namespace NKikimr {
     // declines. Writes also wait while a Fresh segment is due to rotate, so that
     // rotation happens with nothing in flight (see TFreshData).
     //
+    // A write that would push a Fresh segment past one SST rotates that segment out
+    // first, if it can -- that is, unless the previous one is still compacting --
+    // so every segment compacts into exactly one SST instead of leaving a second,
+    // nearly empty one behind.
+    //
     // Waiting writes queue in arrival order, and everything arriving behind them
     // queues too. One reservation is in flight at a time.
     ////////////////////////////////////////////////////////////////////////////

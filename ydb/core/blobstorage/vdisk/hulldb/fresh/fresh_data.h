@@ -44,6 +44,8 @@ namespace NKikimr {
         // records back until it happens. The compaction flag is recomputed by every NeedsCompaction().
         mutable bool CompactionRotationPending = false;
         bool DregRotationPending = false;
+        // Admission asked for Cur to rotate out as it is, rather than grow past one SST; see RequestSizeRotation().
+        bool SizeRotationRequested = false;
         // Reserved chunks no segment needs any more, for the level index actor to hand back to PDisk.
         TVector<TChunkIdx> ReleasedChunks;
 
@@ -89,6 +91,14 @@ namespace NKikimr {
         // segment nothing was reserved for.
         void LandInFlight(const TFreshOutputEstimate& record);
         const TFreshOutputEstimate& GetInFlight() const { return InFlight; }
+
+        // Cur would need more than one SST to compact once `record` and everything in flight have landed in it.
+        bool WouldOutgrowSst(const TFreshOutputEstimate& record) const;
+        // Cur can be rotated out now: into Dreg, or by starting a compaction.
+        bool CanRotateCur() const { return (UseDreg && !Dreg) || !CompactionInProgress(); }
+        // Rotate Cur out as it is, so that it compacts into a single SST instead of growing past it. Into Dreg this
+        // happens right here; otherwise NeedsCompaction() asks for it. Records in flight hold it back, as always.
+        void RequestSizeRotation();
         TVector<TChunkIdx> TakeReleasedChunks() { return std::exchange(ReleasedChunks, {}); }
 
         // Appendix Compact/ApplyCompactionResult
@@ -160,7 +170,8 @@ namespace NKikimr {
         if (!wanted) {
             const bool compactDregByYard = UseDreg && Dreg && Dreg->NeedsCompactionByYard(yardFreeUpToLsn);
             const bool compactCurByYard = Cur && Cur->NeedsCompactionByYard(yardFreeUpToLsn);
-            const bool compactCurBySize = Cur && Cur->NeedsCompactionBySize() && (!UseDreg || Dreg);
+            const bool compactCurBySize = Cur && (Cur->NeedsCompactionBySize() || SizeRotationRequested)
+                && (!UseDreg || Dreg);
             wanted = compactDregByYard || compactCurByYard || compactCurBySize;
         }
         if (wanted && !InFlight.Empty()) {
@@ -195,6 +206,26 @@ namespace NKikimr {
     }
 
     template <class TKey, class TMemRec>
+    bool TFreshData<TKey, TMemRec>::WouldOutgrowSst(const TFreshOutputEstimate& record) const {
+        TFreshOutputEstimate total = Cur->GetOutputEstimate();
+        total.Merge(InFlight);
+        if (total.Empty()) {
+            return false; // a record that does not fit an empty segment cannot be helped by rotating it
+        }
+        total.Merge(record);
+        const TFreshOutputGeometry& geometry = Cur->GetOutputGeometry();
+        return total.GetChunks(geometry) > Max<ui32>(geometry.ChunksPerSst, 1);
+    }
+
+    template <class TKey, class TMemRec>
+    void TFreshData<TKey, TMemRec>::RequestSizeRotation() {
+        SizeRotationRequested = true;
+        if (UseDreg && !Dreg) {
+            SwapWithDregIfRequired();
+        }
+    }
+
+    template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::LandInFlight(const TFreshOutputEstimate& record) {
         InFlight.Subtract(record);
         if (InFlight.Empty() && DregRotationPending) {
@@ -213,6 +244,7 @@ namespace NKikimr {
             << "Fresh segment rotates with records in flight");
         Cur = MakeIntrusive<TFreshSegment>(HullCtx, CompThreshold, TimeProvider->Now(), Arena);
         Cur->AddReservedChunks(previous.TakeSurplusReservedChunks());
+        SizeRotationRequested = false;
     }
 
     template <class TKey, class TMemRec>
@@ -357,7 +389,7 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::SwapWithDregIfRequired() {
-        const bool renewCur = UseDreg && !Dreg && Cur->NeedsCompactionBySize();
+        const bool renewCur = UseDreg && !Dreg && (Cur->NeedsCompactionBySize() || SizeRotationRequested);
         // Rotating Cur out, like starting a compaction, waits for the records in flight to land.
         DregRotationPending = renewCur && !InFlight.Empty();
         if (renewCur && !DregRotationPending) {

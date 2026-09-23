@@ -333,6 +333,15 @@ namespace NKikimr {
         TVector<TChunkIdx> TakeFreshReleasedChunks() {
             return Fresh.TakeReleasedChunks();
         }
+        bool FreshWouldOutgrowSst(const TFreshOutputEstimate& record) const {
+            return Fresh.WouldOutgrowSst(record);
+        }
+        bool CanRotateFreshCur() const {
+            return Fresh.CanRotateCur();
+        }
+        void RequestFreshSizeRotation() {
+            Fresh.RequestSizeRotation();
+        }
 
         // Fresh Appendix Compaction
         typename TFreshData::TCompactionJob CompactFreshAppendix() {

@@ -763,6 +763,27 @@ namespace NKikimr {
             || (!admission.Barriers.Empty() && HullDs->Barriers->IsFreshRotationPending());
     }
 
+    bool THull::PrepareFreshForAdmission(const TFreshAdmission& admission, const TActorContext& ctx) {
+        auto prepare = [&](auto& levelIndex, const TFreshOutputEstimate& record, auto&& compactIfRequired) {
+            if (!record.Empty() && levelIndex->FreshWouldOutgrowSst(record) && levelIndex->CanRotateFreshCur()) {
+                levelIndex->RequestFreshSizeRotation();
+                compactIfRequired(); // starts the compaction that rotates Cur out, unless records are in flight
+            }
+        };
+        prepare(HullDs->LogoBlobs, admission.LogoBlobs, [&] {
+            CompactFreshLogoBlobsIfRequired(ctx);
+        });
+        prepare(HullDs->Blocks, admission.Blocks, [&] {
+            CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0, Fields->BlocksRunTimeCtx, ctx,
+                false, Fields->AllowGarbageCollection);
+        });
+        prepare(HullDs->Barriers, admission.Barriers, [&] {
+            CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0, Fields->BarriersRunTimeCtx,
+                ctx, false, Fields->AllowGarbageCollection);
+        });
+        return !IsFreshRotationPending(admission);
+    }
+
     TFreshShortfall THull::GetFreshReservationShortfall(const TFreshAdmission& admission) const {
         TFreshShortfall shortfall;
         if (!admission.LogoBlobs.Empty()) {

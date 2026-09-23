@@ -193,6 +193,67 @@ namespace NKikimr {
             // empty Cur holds nothing it could want.
             UNIT_ASSERT(env.Fresh.NeedsCompaction(Max<ui64>(), false));
         }
+
+        // Fills Cur with admitted, landed records up to the one that would push it past one SST, and returns it.
+        static TEnv::TRecord FillUpToOneSst(TEnv& env) {
+            TEnv::TRecord next = env.MakeRecord();
+            for (ui32 guard = 0; !env.Fresh.WouldOutgrowSst(next.Charge); ++guard) {
+                UNIT_ASSERT_C(guard < 10000, "Cur never filled up");
+                env.Admit(next);
+                env.Replay(next);
+                next = env.MakeRecord();
+            }
+            return next;
+        }
+
+        // Rather than grow past one SST, Cur rotates out, and compacts into exactly one chunk.
+        Y_UNIT_TEST(SizeRotationKeepsSegmentToOneSst) {
+            TEnv env;
+            const auto next = FillUpToOneSst(env);
+            UNIT_ASSERT(env.Fresh.CanRotateCur());
+            env.Fresh.RequestSizeRotation();
+            UNIT_ASSERT(env.Fresh.NeedsCompaction(0, false));
+            auto old = env.Fresh.FindSegmentForCompaction();
+            UNIT_ASSERT_VALUES_EQUAL(old->GetOutputChunks(), 1);
+            // The record that did not fit goes into the new Cur...
+            UNIT_ASSERT(!env.Fresh.WouldOutgrowSst(next.Charge));
+            // ...which cannot rotate again while Old is compacting, and grows instead.
+            UNIT_ASSERT(!env.Fresh.CanRotateCur());
+        }
+
+        // Like every rotation, the one at one SST waits for records in flight.
+        Y_UNIT_TEST(SizeRotationWaitsForInFlight) {
+            TEnv env;
+            TEnv::TRecord last = env.MakeRecord();
+            env.Admit(last);
+            TEnv::TRecord next = env.MakeRecord();
+            for (ui32 guard = 0; !env.Fresh.WouldOutgrowSst(next.Charge); ++guard) {
+                UNIT_ASSERT_C(guard < 10000, "Cur never filled up");
+                env.Replay(last); // the previous record lands...
+                last = next;
+                env.Admit(last); // ...while this one stays in flight
+                next = env.MakeRecord();
+            }
+            env.Fresh.RequestSizeRotation();
+            UNIT_ASSERT(!env.Fresh.NeedsCompaction(0, false));
+            UNIT_ASSERT(env.Fresh.IsRotationPending());
+
+            env.Replay(last);
+            UNIT_ASSERT(env.Fresh.NeedsCompaction(0, false));
+            auto old = env.Fresh.FindSegmentForCompaction();
+            UNIT_ASSERT_VALUES_EQUAL(old->GetOutputChunks(), 1);
+        }
+
+        // With Dreg free, Cur rotates into it on the spot.
+        Y_UNIT_TEST(SizeRotationIntoDregIsImmediate) {
+            TEnv env(true);
+            const auto next = FillUpToOneSst(env);
+            UNIT_ASSERT(env.Fresh.CanRotateCur());
+            env.Fresh.RequestSizeRotation();
+            UNIT_ASSERT(!env.Fresh.IsRotationPending());
+            UNIT_ASSERT(!env.Fresh.WouldOutgrowSst(next.Charge)); // Cur is new and empty
+            UNIT_ASSERT(env.Fresh.NeedsCompaction(Max<ui64>(), false)); // and the full one is now Dreg
+        }
     }
 
 } // NKikimr

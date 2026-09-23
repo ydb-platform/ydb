@@ -234,6 +234,10 @@ namespace NKikimr {
         // A record is admitted only once the Fresh segment it lands in holds enough reserved chunks to
         // compact it along with everything already there and in flight; see TFreshData.
         bool IsFreshRotationPending(const TFreshAdmission& admission) const;
+        // A Fresh segment that the admission would push past one SST is rotated out first when it can be, so that
+        // it compacts into exactly one; otherwise it grows. Returns false while a rotation waits for records in
+        // flight, and the admission has to wait with it.
+        bool PrepareFreshForAdmission(const TFreshAdmission& admission, const TActorContext& ctx);
         TFreshShortfall GetFreshReservationShortfall(const TFreshAdmission& admission) const;
         // Hands out `chunks`, one run per hull, sized as `split` says.
         void AddFreshReservedChunks(const TFreshShortfall& split, const TVector<TChunkIdx>& chunks);

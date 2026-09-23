@@ -877,6 +877,7 @@ namespace {
 
         ui32 admissionReserves = 0;
         ui32 housekeepingReserves = 0;
+        std::vector<size_t> freshCompactionChunks;
         env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvCutLog:
@@ -885,11 +886,19 @@ namespace {
                 case TEvBlobStorage::EvChunkReserve:
                     ++(ev->Get<NPDisk::TEvChunkReserve>()->ForHousekeeping ? housekeepingReserves : admissionReserves);
                     break;
+                case TEvBlobStorage::EvHullChange: {
+                    const auto* msg = ev->Get<THullChange<TKeyLogoBlob, TMemRecLogoBlob>>();
+                    if (msg->FreshCompaction && !msg->Aborted) {
+                        freshCompactionChunks.push_back(msg->CommitChunks.size());
+                    }
+                    break;
+                }
             }
             return true;
         };
 
-        // Forty MiB of in-place data takes two chunks to compact.
+        // Forty MiB of in-place data is more than one chunk: the Fresh segment rotates out as it reaches one SST,
+        // and the rest goes into the next segment.
         const TString data = FastGenDataForLZ4(1_MB, 1);
         for (ui32 step = 1; step <= 40; ++step) {
             env.PutBlob(groups.front(), TLogoBlobID(1000, 1, step, 0, data.size(), 0), data);
@@ -905,6 +914,11 @@ namespace {
         UNIT_ASSERT_C(result, "fresh compaction did not finish");
         UNIT_ASSERT_VALUES_EQUAL_C(housekeepingReserves, 0,
             "fresh compaction asked PDisk for chunks instead of using the ones reserved for it");
+        // Every segment compacted into exactly one SST: none left a second, nearly empty chunk behind.
+        UNIT_ASSERT_C(freshCompactionChunks.size() >= 2, "fresh compactions# " << freshCompactionChunks.size());
+        for (const size_t chunks : freshCompactionChunks) {
+            UNIT_ASSERT_VALUES_EQUAL(chunks, 1);
+        }
 
         // What was written into the reserved chunks has to survive recovery.
         env.Runtime->FilterFunction = [](ui32, std::unique_ptr<IEventHandle>& ev) {

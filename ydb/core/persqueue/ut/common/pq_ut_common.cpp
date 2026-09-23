@@ -146,6 +146,9 @@ NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
         auto* consumer = tabletConfig.AddConsumers();
         consumer->SetName(u.Name);
         consumer->SetImportant(u.Important);
+        if (u.AvailabilityPeriodMs.has_value()) {
+            consumer->SetAvailabilityPeriodMs(*u.AvailabilityPeriodMs);
+        }
         if (u.MonitoringProjectId.has_value()) {
             consumer->SetMonitoringProjectId(*u.MonitoringProjectId);
         }
@@ -1357,6 +1360,12 @@ void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)
     read->SetBytes(settings.Size);
     read->SetReadToBlobEnd(settings.ReadToBlobEnd);
     read->SetCanReadBatches(settings.CanReadBatches);
+    if (settings.PartNo > 0) {
+        read->SetPartNo(settings.PartNo);
+    }
+    if (settings.RequestId) {
+        request->Record.SetRequestId(settings.RequestId);
+    }
     if (settings.MaxTimeLagMs > 0) {
         read->SetMaxTimeLagMs(settings.MaxTimeLagMs);
     }

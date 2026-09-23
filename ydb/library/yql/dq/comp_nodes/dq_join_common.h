@@ -250,7 +250,9 @@ TPackResult GetPage(TFuturePage&& future);
 
 using ProbeSpillingPage = std::optional<TPackResult>;
 
-struct TSpilledBucket : public TSides<TMKQLVector<ISpiller::TKey>> {};
+struct TSpilledBucket : public TSides<TMKQLVector<ISpiller::TKey>> {
+    TMKQLVector<size_t> ProbeMatchOffsets;
+};
 
 using PairOfSpilledBuckets = TSides<TBucket>;
 
@@ -266,10 +268,9 @@ struct TFutureTableData {
 struct TTableAndSomeData {
     NJoinTable::TNeumannJoinTable Table;
     TMKQLDeque<TFuturePage> Futures;
-    TMKQLDeque<ISpiller::TKey> FutureMatchKeys;
+    TMKQLDeque<size_t> FutureMatchOffsets;
     std::optional<TPackResult> CurrentProbePack;
-    TDynBitMap* CurrentMatchBits = nullptr;
-    std::optional<ISpiller::TKey> CurrentMatchKey;
+    std::optional<size_t> CurrentMatchOffset;
     ui32 ProbeResumeIndex = 0;
     size_t BuildCursor = 0;
     size_t PreservedResumeIndex = 0;
@@ -492,7 +493,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
 
     struct DumpRestOfPages {
         DumpRestOfPages(Self& self, std::unordered_map<int, TSpilledBucket>&& base,
-                        TMKQLVector<TSpillingPage>&& pages, TProbeMatchRegistry&& probeMatches)
+                        TMKQLVector<TSpillingPage>&& pages, TProbeMatchState&& probeMatches)
             : AlreadyDumped(std::move(base))
             , Pages(std::move(pages))
             , ProbeMatches(std::move(probeMatches))
@@ -507,7 +508,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
 
         DumpedBuckets AlreadyDumped;
         TMKQLVector<TSpillingPage> Pages;
-        TProbeMatchRegistry ProbeMatches;
+        TProbeMatchState ProbeMatches;
         NThreading::TFuture<void> All;
     };
 
@@ -521,7 +522,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
 
     struct JoinPairsOfPartitions {
         JoinPairsOfPartitions(Self& self, std::unordered_map<int, TSpilledBucket>&& pairs,
-                              TProbeMatchRegistry&& probeMatches)
+                              TProbeMatchState&& probeMatches)
             : Pairs(std::move(pairs))
             , ProbeMatches(std::move(probeMatches))
         {
@@ -531,6 +532,15 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 for (auto& [_, bucket] : Pairs) {
                     GridProbeKeys.insert(GridProbeKeys.end(), bucket.Probe.begin(), bucket.Probe.end());
                     bucket.Probe.clear();
+                    if constexpr (TracksProbeMatches()) {
+                        GridProbeMatchOffsets.insert(GridProbeMatchOffsets.end(), bucket.ProbeMatchOffsets.begin(),
+                                                     bucket.ProbeMatchOffsets.end());
+                        bucket.ProbeMatchOffsets.clear();
+                    }
+                }
+                if constexpr (TracksProbeMatches()) {
+                    MKQL_ENSURE(GridProbeKeys.size() == GridProbeMatchOffsets.size(),
+                                "probe pages and match offsets are out of sync");
                 }
             }
             self.Logger_.LogDebug(Sprintf("JoinPairsOfPartitions stage started, partitions count: %i",
@@ -540,7 +550,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         std::unordered_map<int, TSpilledBucket> Pairs;
         std::optional<PairAndMetadata> SelectedPair;
         TMKQLVector<ISpiller::TKey> GridProbeKeys;
-        TProbeMatchRegistry ProbeMatches;
+        TMKQLVector<size_t> GridProbeMatchOffsets;
+        TProbeMatchState ProbeMatches;
     };
 
     class Sources {
@@ -790,13 +801,15 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                 alreadyDumped[index].SelectSide(side) = std::move(*bucket.SpilledPages);
                                 bucket.SpilledPages = std::nullopt;
                             }
+                            alreadyDumped[index].ProbeMatchOffsets =
+                                std::move(state.Spiller.GetState().ProbeMatchOffsets[index]);
                         }
                     }
                     for (auto& page : state.Spiller.GetState().InMemoryPages) {
                         page.Write = SpillPage(*Spiller_, std::move(page.Page));
                         pages.push_back(std::move(page));
                     }
-                    TProbeMatchRegistry probeMatches = std::move(state.Spiller.GetState().ProbeMatches);
+                    TProbeMatchState probeMatches = std::move(state.Spiller.GetState().ProbeMatches);
                     state.Spiller.GetState().InMemoryPages.clear();
                     state.Spiller.GetState().InMemoryPages.shrink_to_fit();
                     if (pages.empty()) {
@@ -874,7 +887,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     MKQL_ENSURE(it != state.AlreadyDumped.end(), "bucket with this index is processed already");
                     const ISpiller::TKey key = ExtractReadyFuture(std::move(page.Write));
                     it->second.SelectSide(page.Side).push_back(key);
-                    state.ProbeMatches.BindToSpillerKey(page.ProbeMatchStateId, key);
+                    if (page.ProbeMatchBitsOffset != TProbeMatchState::NoOffset) {
+                        MKQL_ENSURE(page.Side == ESide::Probe, "build page has probe match state");
+                        it->second.ProbeMatchOffsets.push_back(page.ProbeMatchBitsOffset);
+                    }
                 }
                 State_ = JoinPairsOfPartitions{*this, std::move(state.AlreadyDumped),
                                                std::move(state.ProbeMatches)};
@@ -893,6 +909,9 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                         .IsLastPair = state.Pairs.empty()};
                     if constexpr (IsGrid) {
                         state.SelectedPair->Buckets.Probe = state.GridProbeKeys;
+                        if constexpr (TracksProbeMatches()) {
+                            state.SelectedPair->Buckets.ProbeMatchOffsets = state.GridProbeMatchOffsets;
+                        }
                     }
                     TFutureTableData data;
                     for (ISpiller::TKey key : state.SelectedPair->Buckets.Build) {
@@ -902,12 +921,17 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     state.SelectedPair->Table = std::move(data);
                 } else {
                     if constexpr (TracksProbeMatches()) {
-                        MKQL_ENSURE(state.ProbeMatches.Empty(), "unreleased probe page match state");
+                        MKQL_ENSURE(state.ProbeMatches.AllPagesReleased(), "unreleased probe page match state");
                     }
                     State_ = Finish{};
                 }
             } else {
                 TMKQLVector<ISpiller::TKey>& currentProbe = state.SelectedPair->Buckets.Probe;
+                TMKQLVector<size_t>& currentMatchOffsets = state.SelectedPair->Buckets.ProbeMatchOffsets;
+                if constexpr (TracksProbeMatches()) {
+                    MKQL_ENSURE(currentProbe.size() == currentMatchOffsets.size(),
+                                "probe pages and match offsets are out of sync");
+                }
                 if (auto* tdata = std::get_if<TFutureTableData>(&state.SelectedPair->Table)) {
                     if (tdata->All.IsReady()) {
                         TMKQLVector<TPackResult> vec;
@@ -930,7 +954,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         const ISpiller::TKey key = *GetBackOrNull(currentProbe);
                         table->Futures.push_back(keepProbeBlobs ? Spiller_->Get(key) : Spiller_->Extract(key));
                         if constexpr (TracksProbeMatches()) {
-                            table->FutureMatchKeys.push_back(key);
+                            table->FutureMatchOffsets.push_back(*GetBackOrNull(currentMatchOffsets));
                         }
                     }
                     if (table->CurrentProbePack.has_value()) {
@@ -941,15 +965,12 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             }
                             bool matched = false;
                             if constexpr (TracksProbeMatches()) {
-                                MKQL_ENSURE(table->CurrentMatchBits, "missing probe page match state");
-                                MKQL_ENSURE(table->CurrentMatchBits->Size() >=
-                                                static_cast<size_t>(table->CurrentProbePack->NTuples),
-                                            "missing match state for preserved probe rows");
-                                matched = table->CurrentMatchBits->Get(idx - 1);
+                                MKQL_ENSURE(table->CurrentMatchOffset, "missing probe page match state");
+                                matched = state.ProbeMatches.Get(*table->CurrentMatchOffset, idx - 1);
                             }
                             if (!lookupToTable(table->Table, probeTuple, table->BuildCursor, matched)) {
                                 if constexpr (TracksProbeMatches()) {
-                                    (*table->CurrentMatchBits)[idx - 1] = matched;
+                                    state.ProbeMatches.Set(*table->CurrentMatchOffset, idx - 1, matched);
                                 }
                                 table->ProbeResumeIndex = idx - 1;
                                 return EFetchResult::One;
@@ -958,7 +979,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                 finishProbeRow(probeTuple, matched);
                             }
                             if constexpr (TracksProbeMatches()) {
-                                (*table->CurrentMatchBits)[idx - 1] = matched;
+                                state.ProbeMatches.Set(*table->CurrentMatchOffset, idx - 1, matched);
                             }
                             if (isFull()) {
                                 table->ProbeResumeIndex = idx;
@@ -967,17 +988,18 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         }
                         table->CurrentProbePack = std::nullopt;
                         if constexpr (TracksProbeMatches()) {
-                            MKQL_ENSURE(table->CurrentMatchKey, "missing current probe page match key");
+                            MKQL_ENSURE(table->CurrentMatchOffset, "missing current probe page match state");
                             if (lastProbePass) {
-                                MKQL_ENSURE(state.ProbeMatches.Erase(*table->CurrentMatchKey) == 1,
-                                            "missing completed probe page match state");
+                                state.ProbeMatches.ReleasePage();
                             }
-                            table->CurrentMatchKey = std::nullopt;
+                            table->CurrentMatchOffset = std::nullopt;
                         }
-                        table->CurrentMatchBits = nullptr;
                         table->ProbeResumeIndex = 0;
                     } else if (table->Futures.empty()) {
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
+                        if constexpr (TracksProbeMatches()) {
+                            MKQL_ENSURE(currentMatchOffsets.empty(), "unconsumed probe match offsets");
+                        }
                         if constexpr (PreservedRowsInBuildTable()) {
                             if (!EmitPreservedBuildRows(table->Table, table->PreservedResumeIndex, consume, isFull)) {
                                 return EFetchResult::One;
@@ -988,12 +1010,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         if (table->Futures.front().IsReady()) {
                             table->CurrentProbePack = GetPage(*GetFrontOrNull(table->Futures), ESide::Probe);
                             if constexpr (TracksProbeMatches()) {
-                                MKQL_ENSURE(!table->FutureMatchKeys.empty(),
+                                MKQL_ENSURE(!table->FutureMatchOffsets.empty(),
                                             "missing queued probe page match state");
-                                table->CurrentMatchKey = table->FutureMatchKeys.front();
-                                table->FutureMatchKeys.pop_front();
-                                table->CurrentMatchBits = state.ProbeMatches.Find(*table->CurrentMatchKey);
-                                MKQL_ENSURE(table->CurrentMatchBits, "missing current probe page match state");
+                                table->CurrentMatchOffset = table->FutureMatchOffsets.front();
+                                table->FutureMatchOffsets.pop_front();
                             }
                             table->ProbeResumeIndex = 0;
                         } else {

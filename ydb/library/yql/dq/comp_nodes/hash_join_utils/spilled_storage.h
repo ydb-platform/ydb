@@ -55,55 +55,75 @@ inline ESpillResult Wait() {
 
 NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& page);
 
-class TProbeMatchRegistry {
+class TProbeMatchState {
   public:
-    using TId = ui64;
-    static constexpr TId NoId = 0;
+    static constexpr size_t NoOffset = std::numeric_limits<size_t>::max();
 
-    TId AddPending(TDynBitMap&& bitmap) {
-        const TId id = NextId_++;
-        MKQL_ENSURE(id != NoId, "probe match state id overflow");
-        auto [it, inserted] = Pending_.try_emplace(id);
-        MKQL_ENSURE(inserted, "duplicate probe match state id");
-        it->second.Swap(bitmap);
-        return id;
+    TProbeMatchState() = default;
+    TProbeMatchState(const TProbeMatchState&) = delete;
+    TProbeMatchState& operator=(const TProbeMatchState&) = delete;
+
+    TProbeMatchState(TProbeMatchState&& other) noexcept
+        : Size_(std::exchange(other.Size_, 0))
+        , ActivePages_(std::exchange(other.ActivePages_, 0))
+    {
+        Bits_.Swap(other.Bits_);
     }
 
-    void BindToSpillerKey(TId id, ISpiller::TKey key) {
-        if (id == NoId) {
-            return;
+    TProbeMatchState& operator=(TProbeMatchState&& other) noexcept {
+        if (this != &other) {
+            Bits_.Swap(other.Bits_);
+            Size_ = std::exchange(other.Size_, 0);
+            ActivePages_ = std::exchange(other.ActivePages_, 0);
         }
-        auto it = Pending_.find(id);
-        MKQL_ENSURE(it != Pending_.end(), "missing pending probe match state");
-        auto [bound, inserted] = BySpillerKey_.try_emplace(key);
-        MKQL_ENSURE(inserted, "duplicate spilled probe match state");
-        bound->second.Swap(it->second);
-        Pending_.erase(it);
+        return *this;
     }
 
-    TDynBitMap* Find(ISpiller::TKey key) {
-        auto it = BySpillerKey_.find(key);
-        return it == BySpillerKey_.end() ? nullptr : &it->second;
+    size_t AddPage(TDynBitMap& pageBits, size_t rows) {
+        MKQL_ENSURE(rows > 0, "registering empty probe page match state");
+        const size_t offset = Size_;
+        MKQL_ENSURE(rows <= NoOffset - Size_, "probe match bitmap size overflow");
+        Size_ += rows;
+        Bits_.Reserve(Size_);
+        for (size_t row = 0; row < rows; ++row) {
+            if (pageBits.Get(row)) {
+                Bits_.Set(offset + row);
+            }
+        }
+        pageBits.Clear();
+        ++ActivePages_;
+        return offset;
     }
 
-    size_t Erase(ISpiller::TKey key) {
-        return BySpillerKey_.erase(key);
+    bool Get(size_t offset, size_t row) const {
+        MKQL_ENSURE(offset < Size_ && row < Size_ - offset, "probe match bit index out of bounds");
+        return Bits_.Get(offset + row);
     }
 
-    bool Empty() const {
-        return Pending_.empty() && BySpillerKey_.empty();
+    void Set(size_t offset, size_t row, bool value) {
+        MKQL_ENSURE(offset < Size_ && row < Size_ - offset, "probe match bit index out of bounds");
+        Bits_[offset + row] = value;
+    }
+
+    void ReleasePage() {
+        MKQL_ENSURE(ActivePages_ > 0, "releasing unknown probe page match state");
+        --ActivePages_;
+    }
+
+    bool AllPagesReleased() const {
+        return ActivePages_ == 0;
     }
 
   private:
-    TId NextId_ = 1;
-    TMKQLHashMap<TId, TDynBitMap> Pending_;
-    TMKQLHashMap<ISpiller::TKey, TDynBitMap> BySpillerKey_;
+    TDynBitMap Bits_;
+    size_t Size_ = 0;
+    size_t ActivePages_ = 0;
 };
 
 struct TSpillingPage {
     TPackResult Page;
     NThreading::TFuture<ISpiller::TKey> Write;
-    TProbeMatchRegistry::TId ProbeMatchStateId = TProbeMatchRegistry::NoId;
+    size_t ProbeMatchBitsOffset = TProbeMatchState::NoOffset;
     ESide Side;
     int BucketIndex;
 };
@@ -238,7 +258,8 @@ template <TSpillerSettings Settings> class TProbeSpiller {
     struct State {
         TMKQLVector<Bucket> Buckets;
         TMKQLVector<TSpillingPage> InMemoryPages;
-        TProbeMatchRegistry ProbeMatches;
+        TProbeMatchState ProbeMatches;
+        TMKQLVector<TMKQLVector<size_t>> ProbeMatchOffsets;
     };
 
     TProbeSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout, State state)
@@ -248,6 +269,7 @@ template <TSpillerSettings Settings> class TProbeSpiller {
     {
         BuildingMatchBits_.resize(State_.Buckets.size());
         BuildingMatchRows_.resize(State_.Buckets.size());
+        State_.ProbeMatchOffsets.resize(State_.Buckets.size());
         FlushBuildingPages();
     }
 
@@ -265,7 +287,10 @@ template <TSpillerSettings Settings> class TProbeSpiller {
                     MKQL_ENSURE(thisBucket, "spilling page from in memory bucket?");
                     const ISpiller::TKey key = page.Write.ExtractValueSync();
                     thisBucket->SelectSide(page.Side).SpilledPages->push_back(key);
-                    State_.ProbeMatches.BindToSpillerKey(page.ProbeMatchStateId, key);
+                    if (page.ProbeMatchBitsOffset != TProbeMatchState::NoOffset) {
+                        MKQL_ENSURE(page.Side == ESide::Probe, "build page has probe match state");
+                        State_.ProbeMatchOffsets[page.BucketIndex].push_back(page.ProbeMatchBitsOffset);
+                    }
                 }
                 SpillingPages_ = std::nullopt;
             } else {
@@ -339,10 +364,11 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         for (TPackResult& page : pages) {
             TSpillingPage result{.Page = std::move(page), .Side = side, .BucketIndex = index};
             if (side == ESide::Probe && BuildingMatchRows_[index] != 0) {
-                MKQL_ENSURE(pages.size() == 1, "match flags belong to exactly one building page");
+                MKQL_ENSURE(pages.size() == 1, "match bits belong to exactly one building page");
                 MKQL_ENSURE(BuildingMatchRows_[index] == static_cast<size_t>(result.Page.NTuples),
-                            "match flags must contain one flag per tuple");
-                result.ProbeMatchStateId = State_.ProbeMatches.AddPending(std::move(BuildingMatchBits_[index]));
+                            "match bitmap must contain one bit per tuple");
+                result.ProbeMatchBitsOffset =
+                    State_.ProbeMatches.AddPage(BuildingMatchBits_[index], BuildingMatchRows_[index]);
                 BuildingMatchRows_[index] = 0;
             }
             State_.InMemoryPages.push_back(std::move(result));

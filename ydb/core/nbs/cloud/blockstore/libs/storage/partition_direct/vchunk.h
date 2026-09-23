@@ -79,7 +79,19 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
+<<<<<<< HEAD
     void OnHostAppended(size_t newHostCount);
+=======
+    // Receives the source and target hosts for a DDisk move.
+    void BalanceDDisks(THostIndex sourceHost, THostIndex targetHost);
+
+    // Reports whether this vchunk has been touched.
+    [[nodiscard]] bool IsTouched() const;
+
+    // If the current count of hosts in the config is less than the desired
+    // host count, update the config and persist it in the tablet.
+    void UpdateHostCount(size_t newHostCount);
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
 <<<<<<< HEAD
@@ -195,7 +207,6 @@ private:
 
     // VDisk touch state.
     void Touch();
-    [[nodiscard]] bool IsTouched() const;
     void DoPersistTouched();
     void OnTouchedPersisted();
 
@@ -231,6 +242,14 @@ private:
         THostIndex hostIndex,
         TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+<<<<<<< HEAD
+=======
+    void DemoteIfNeeded();
+    void DemoteUnavailableHostsIfNeeded();
+    void DemoteUnnecessaryHostsIfNeeded();
+    [[nodiscard]] THostMask GetDDisksFromUnavailableHostsForDemote() const;
+    [[nodiscard]] THostMask GetUnnecessaryDDisksForDemote() const;
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 
     // Checks DirtyMap's initial readiness and waits it if need.
     void WaitForDirtyMapReady();
@@ -251,6 +270,7 @@ private:
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     TBlocksDirtyMap BlocksDirtyMap;
 =======
     bool DirtyMapStatePersisting = false;
@@ -258,6 +278,9 @@ private:
     TBlocksDirtyMapPtr BlocksDirtyMap;
 >>>>>>> e33198cc8e8 ([NBS-7709] Persist VChunk touching (#53346))
 =======
+=======
+    THostIndex BalanceSourceHost = InvalidHostIndex;
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
     ETouchedState TouchedState = ETouchedState::NotTouched;
     TBlocksDirtyMapPtr BlocksDirtyMap;
     THostMask PersistedFreshDDisks;

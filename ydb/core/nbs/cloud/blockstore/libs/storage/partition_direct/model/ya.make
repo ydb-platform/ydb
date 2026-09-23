@@ -1,5 +1,11 @@
 LIBRARY()
 
+<<<<<<< HEAD
+=======
+GENERATE_ENUM_SERIALIZATION(ddisk_balance.h)
+GENERATE_ENUM_SERIALIZATION(host_roles.h)
+GENERATE_ENUM_SERIALIZATION(host_stat.h)
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 GENERATE_ENUM_SERIALIZATION(host.h)
 GENERATE_ENUM_SERIALIZATION(host_stat.h)
 GENERATE_ENUM_SERIALIZATION(host_roles.h)
@@ -14,6 +20,7 @@ SRCS(
 <<<<<<< HEAD
 =======
     count_size.cpp
+    ddisk_balance.cpp
     host_health_policy.cpp
 >>>>>>> de632e86bb4 (NBS-7513: Add return-to-online delay in TOracle (#52538))
     host_mask.cpp

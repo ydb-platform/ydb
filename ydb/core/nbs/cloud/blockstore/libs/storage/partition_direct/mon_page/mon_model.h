@@ -9,7 +9,11 @@
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
 =======
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/mon_model.h>
+<<<<<<< HEAD
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ddisk_balance.h>
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
@@ -125,6 +129,8 @@ struct TDbgSnapshot
 <<<<<<< HEAD
 =======
     TVector<TConnectionSnapshot> Connections;
+    TDDiskImbalance ConfiguredDDiskImbalance;
+    TDDiskImbalance TouchedDDiskImbalance;
     // Current Fresh DDisks for vchunks that have any.
     THashMap<ui32, THostMask> FreshDDisks;
     TArenaPoolStats MemoryStats;
@@ -184,6 +190,8 @@ struct TLocalDbContents
 struct TMonPageData
 {
     EMonPage Page = EMonPage::Overview;
+    EDDiskBalanceStrategy SelectedDDiskBalanceStrategy =
+        EDDiskBalanceStrategy::Touched;
     TTabletInfo TabletInfo;
     // When set, the page shows only the header/menu plus this message.
     std::optional<TString> RuntimeError;

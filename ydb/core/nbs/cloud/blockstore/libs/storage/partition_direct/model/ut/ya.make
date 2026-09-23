@@ -4,6 +4,7 @@ SRCS(
 <<<<<<< HEAD
 =======
     count_size_ut.cpp
+    ddisk_balance_ut.cpp
     host_health_policy_ut.cpp
 >>>>>>> de632e86bb4 (NBS-7513: Add return-to-online delay in TOracle (#52538))
     host_mask_ut.cpp

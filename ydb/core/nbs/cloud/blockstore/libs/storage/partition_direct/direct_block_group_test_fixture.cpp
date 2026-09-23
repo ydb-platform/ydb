@@ -71,6 +71,98 @@ void TDBGFixture::DrainRuntime() const
     }
 }
 
+<<<<<<< HEAD
+=======
+TBlockedDetectedState TDBGFixture::GetBlockedDetected(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    THostIndex hostIndex,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [dbg, hostIndex]
+               {
+                   return TBlockedDetectedState{
+                       .DDiskSessionBroken =
+                           dbg->Connections.GetDDisk(hostIndex).SessionState ==
+                           EDDiskSessionState::Broken,
+                       .BlockedGenerationDetected =
+                           dbg->BlockedGenerationDetected};
+               })
+        .GetValue(waitTimeout);
+}
+
+std::array<size_t, MaxHostCount> TDBGFixture::CountDDisksByHostDebugOnly(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    EDDiskBalanceStrategy strategy,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [dbg, strategy]
+               {
+                   const auto allowedForBalancing =
+                       dbg->GetBalancingAllowedHosts();
+                   return dbg->CountDDisksByHost(strategy, allowedForBalancing);
+               })
+        .GetValue(waitTimeout);
+}
+
+TVector<ui64> TDBGFixture::ReadAllDDiskSeqNos(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [&]
+               {
+                   TVector<ui64> result;
+                   for (size_t i = 0; i < DirectBlockGroupHostCount; ++i) {
+                       result.push_back(
+                           dbg->Connections.GetDDisk(i).ConfirmedSessionSeqNo);
+                   }
+                   return result;
+               })
+        .GetValue(waitTimeout);
+}
+
+ui64 TDBGFixture::GetDDiskSessionSeqNo(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    size_t index,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [&] {
+                   return dbg->Connections.GetDDisk(index)
+                       .ConfirmedSessionSeqNo;
+               })
+        .GetValue(waitTimeout);
+}
+
+std::optional<NKikimr::NDDisk::TConnectionToken>
+TDBGFixture::GetConnectionToken(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    NTransport::THostConnection::EConnectionType connectionType,
+    size_t index,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [dbg, connectionType, index]
+               {
+                   return dbg->Connections.Get(connectionType, index)
+                       .HostConnection.Credentials.ConnectionToken;
+               })
+        .GetValue(waitTimeout);
+}
+
+>>>>>>> 018e8d56df9 ([NBS-7705] Balance ddisks manualy (#53787))
 TExecutorPtr TDBGFixture::MakeExecutor()
 {
     auto executor = TExecutor::Create("DBG_TEST");

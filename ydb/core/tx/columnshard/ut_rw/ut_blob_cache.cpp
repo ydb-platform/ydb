@@ -166,6 +166,24 @@ Y_UNIT_TEST_SUITE(TBlobCache) {
         UNIT_ASSERT_VALUES_EQUAL(stickyHit->Get()->Data, MakeData(60, 's'));
     }
 
+    Y_UNIT_TEST(EvictOldestStickyDespiteLaterRead) {
+        TBlobCacheFixture fixture(100);
+        auto oldest = MakeRange(1, 60);
+        auto middle = MakeRange(2, 40);
+        auto newest = MakeRange(3, 60);
+        fixture.CacheRange(oldest, MakeData(60, 'a'), true);
+        fixture.CacheRange(middle, MakeData(40, 'b'), true);
+        fixture.ExpectHit(oldest, MakeData(60, 'a'));
+        fixture.CacheRange(newest, MakeData(60, 'c'), true);
+
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("StickyEvictions", true), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("StickyBlobs"), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("SizeBytes"), 100);
+        fixture.ExpectHit(middle, MakeData(40, 'b'));
+        fixture.ExpectHit(newest, MakeData(60, 'c'));
+        fixture.ExpectMiss(oldest);
+    }
+
     Y_UNIT_TEST(EvictStickyWhenUnprotectedEmpty) {
         TBlobCacheFixture fixture(100);
         auto first = MakeRange(1, 60);

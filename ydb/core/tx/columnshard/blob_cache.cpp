@@ -677,9 +677,9 @@ private:
         const TDuration protectFor = TDuration::MilliSeconds(WriteProtectDurationMs);
         const TInstant stickyUntil = (sticky && protectFor) ? (now + protectFor) : TInstant::Zero();
 
-        // A sticky (re)insert is a fresh write: refresh its protection window AND move it to MRU in the main LRU,
-        // so it is the last candidate for the emergency (sticky) eviction path. An unprotected insert over an
-        // existing entry is a no-op and must not touch the LRU order.
+        // A sticky (re)insert refreshes StickyUntil and therefore moves the blob to the newest end of
+        // StickyExpiry. Emergency eviction drops the earliest StickyUntil, so a later read does not
+        // keep an older write. An unprotected insert over an existing entry is a no-op.
         auto existing = stickyUntil ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
         if (existing != Cache.End()) {
             if (stickyUntil) {
@@ -783,13 +783,13 @@ private:
             if (eit != Evictable.End()) {
                 victim = eit.Key();
                 Evictable.Erase(eit);
+            } else if (!StickyExpiry.empty()) {
+                // Only sticky blobs are left. Drop the earliest insert (StickyUntil), not the least
+                // recently read one: a promoting read must not save an older write.
+                victim = StickyExpiry.begin()->second;
+                stickyVictim = true;
             } else {
-                auto it = Cache.FindOldest();
-                if (it == Cache.End()) {
-                    break;
-                }
-                victim = it.Key();
-                stickyVictim = bool(it.Value().StickyUntil);
+                break;
             }
 
             LOG_S_DEBUG("Evict: " << victim << " CacheDataSize: " << CacheDataSize << " InFlightDataSize: " << (i64)InFlightDataSize

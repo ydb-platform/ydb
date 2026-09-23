@@ -50,6 +50,7 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_stop_after_restart[kikimr0-False]
 ydb/tests/fq/streaming/logbroker py3test.sole chunk
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
+ydb/tests/functional/config test_pdisk_metadata_cli.py.TestPDiskMetadata.test_apply_committed_config
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
 ydb/tests/functional/federation_test unittest.sole chunk
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_stress

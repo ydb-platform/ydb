@@ -224,15 +224,34 @@ A particularly problematic corner case arises when a vector index is created on 
 To prevent degradation:
 
 * Avoid creating a vector index on an empty table.
-* If a large volume of new data has been added, [build a new index](../yql/reference/syntax/alter_table/indexes.md) and [atomically replace](../reference/ydb-cli/commands/secondary_index.md#rename) the old index with the updated one.
+* If a large volume of new data has been added, [rebuild the index](#rebuild) to recalculate its clusters.
 
-### Update inconsistency during index build
+### Update inconsistency during index build {#build-consistency}
 
 Vector indexes do not support consistent updates during build. That is, a vector index is not updated when data in the main table is modified until the index build is finished.
 
 This means that if you want a vector index to remain 100% consistent, you have to pause table updates while it is being built.
 
 Updates are not blocked automatically because vector index search is approximate by nature, and in many cases temporary inconsistency during the build is acceptable.
+
+## Rebuilding a vector index {#rebuild}
+
+Rebuilding creates a new cluster tree and redistributes the table's vectors across it. Use [`ALTER TABLE ... REBUILD INDEX`](../yql/reference/syntax/alter_table/indexes.md#rebuild-index) when changes in the data distribution reduce search recall or performance:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_index`;
+```
+
+The command preserves the index name, indexed and covered columns, and vector index settings. To adjust the tree for a changed dataset size, explicitly set `clusters` and `levels`, which control the number of clusters and tree levels:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_index`
+WITH (clusters = 128, levels = 2);
+```
+
+The existing index continues to serve queries and receive table updates during the build. Once the replacement is ready, {{ ydb-short-name }} atomically replaces the old index. Applications continue to use the same index name. The operation temporarily requires storage for both index versions and resources to build the replacement. You can limit build parallelism with the `parallel` parameter described in the [SQL reference](../yql/reference/syntax/alter_table/indexes.md#rebuild-index).
+
+The replacement is built from a snapshot, so the [consistency limitation during index building](#build-consistency) also applies to rebuilding. Pause writes until rebuilding completes if you need a fully consistent index. Queries remain available, but may require a [retry](../recipes/ydb-sdk/retry.md) when the index is replaced.
 
 ## Recipes for Working with Vector Indexes {#vector-index-recipes}
 

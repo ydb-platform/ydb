@@ -156,6 +156,8 @@ protected:
     std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto;
     const TString RequestId;
     THashSet<TString> TopicsToRequest; // Topics that we need to request. If this set id empty, we are interested in all existing topics.
+    // Child actors are named by the clientside topic. Partition filters are keyed by the request name.
+    THashMap<TString, TString> RequestNameByClientside;
 
     const TActorId PqMetaCache;
     THashMap<TActorId, THolder<TPerTopicInfo>> Children;

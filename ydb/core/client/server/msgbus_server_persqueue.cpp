@@ -353,6 +353,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
             for (const auto& alias : aliases) {
                 if (!alias.empty() && IsIn(TopicsToRequest, alias)) {
                     requested = true;
+                    RequestNameByClientside[name] = alias;
                     break;
                 }
             }

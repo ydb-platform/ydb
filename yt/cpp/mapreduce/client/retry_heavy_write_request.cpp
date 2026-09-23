@@ -67,9 +67,9 @@ void THeavyRequestRetrier::Retry(const std::function<void()> &function)
             function();
             return;
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("RSP %v - %v failed",
-                Attempt_->RequestId,
-                RequestRetryPolicy_->GetAttemptDescription());
+            YT_TLOG_ERROR("Request attempt failed")
+                .With("RequestId", Attempt_->RequestId)
+                .With("Attempt", RequestRetryPolicy_->GetAttemptDescription());
             Attempt_.reset();
 
             TMaybe<TDuration> backoffDuration;

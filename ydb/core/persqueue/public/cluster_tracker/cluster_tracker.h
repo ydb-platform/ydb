@@ -4,12 +4,14 @@
 
 #include <ydb/core/base/events.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
-
-#include <vector>
+#include <util/generic/strbuf.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr::NPQ::NClusterTracker {
 
@@ -26,6 +28,7 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
         TString Balancer;
         bool IsEnabled = false;
         bool IsLocal = false;
+        bool IsFnx = false;
         ui64 Weight = 1000;
 
         TString DebugString() const;
@@ -36,10 +39,23 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     bool operator==(const TClustersList& other) const;
     TString DebugString() const;
 
-    std::vector<TCluster> Clusters;
+    const TVector<TCluster>& GetClusters(TStringBuf authority) const;
+    void MarkFnxFromBalancers();
+    void BuildVisibleClusters();
+
+    TVector<TCluster> Clusters;
     const TCluster* LocalCluster = nullptr;
 
+    // Balancer.name -> FNX cluster names from Balancer.clusters (CM table).
+    absl::flat_hash_map<TString, TVector<TString>> Balancers;
+    // Non-FNX clusters: empty or unknown :authority.
+    TVector<TCluster> DefaultVisibleClusters;
+    // Balancer.name -> clusters visible for that host. Filled by BuildVisibleClusters().
+    absl::flat_hash_map<TString, TVector<TCluster>> ClustersByBalancer;
+
     i64 Version = 0;
+    i64 ClusterVersion = 0;
+    i64 BalancerVersion = 0;
 };
 
 struct TEvClusterTracker {

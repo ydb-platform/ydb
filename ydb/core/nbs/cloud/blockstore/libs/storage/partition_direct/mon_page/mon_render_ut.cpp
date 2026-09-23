@@ -50,6 +50,15 @@ size_t CountOccurrences(TStringBuf text, TStringBuf needle)
     return result;
 }
 
+// Counts rows only in the Direct Block Group configuration table header.
+size_t CountDbgHeaderRows(TStringBuf html)
+{
+    const size_t table = html.find("Direct Block Group config");
+    const size_t start = html.find("<thead>", table);
+    const size_t end = html.find("</thead>", start);
+    return CountOccurrences(html.SubStr(start, end - start), "<tr>");
+}
+
 const TVChunkConfigs EmptyVChunkConfigs;
 const TTestTouchedProvider EmptyTouchedProvider;
 
@@ -155,6 +164,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             html,
             "Volume DirectBlockGroup Count</td><td>32</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
+        UNIT_ASSERT(!html.Contains("Inflight writes"));
         UNIT_ASSERT_STRING_CONTAINS(html, "vol-1");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
@@ -252,10 +262,14 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         const TString html =
             RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
         UNIT_ASSERT_STRING_CONTAINS(html, "Direct Block Group config");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<th rowspan=\"2\">Node</th>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<th rowspan=\"2\">Total</th>");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
-            "dbg=0'>DBG #0</a><br><a href='?TabletID=42&page=dbg&dbg=32'>"
-            "DBG #32");
+            "title=\"Config:  need move 0 of 0 DDisks (0%)&#10;"
+            "Touched:  need move 0 of 0 DDisks (0%)\">"
+            "<a href='?TabletID=42&page=dbg&dbg=32'>DBG #32</a> Imb: 0%");
+        UNIT_ASSERT_VALUES_EQUAL(2, CountDbgHeaderRows(html));
 
         const size_t node10 = html.find("Node 10");
         const size_t node20 = html.find("Node 20");
@@ -265,7 +279,50 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT(node30 != TString::npos);
         UNIT_ASSERT(node10 < node20);
         UNIT_ASSERT(node20 < node30);
-        UNIT_ASSERT_VALUES_EQUAL(35, CountOccurrences(html, "<th>"));
+    }
+
+    Y_UNIT_TEST(OverviewRendersDDiskImbalance)
+    {
+        TMonPageData data = MakeData();
+        data.TabletInfo.BlockCount = 5 * 8192;
+        data.Dbgs = MakeOverviewDbgs();
+
+        TTestTouchedProvider touchedProvider;
+        TVChunkConfigs configs;
+        for (ui32 region = 0; region < 5; ++region) {
+            const ui32 vChunkIndex = region * VChunkPerRegionCount;
+            if (region < 3) {
+                touchedProvider.Touched.insert(vChunkIndex);
+            }
+            configs.emplace(
+                vChunkIndex,
+                TVChunkConfig::Make(
+                    vChunkIndex,
+                    THostRoles::MakeRotating(5, 0, 3, EHostRole::HandOff),
+                    THostRoles::MakeRotating(5, 0, 3, EHostRole::None),
+                    THostMask::MakeAll(5)));
+        }
+
+        const TString html = RenderMonPage(data, configs, touchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(html, "<th rowspan=\"1\">Node</th>");
+        UNIT_ASSERT_VALUES_EQUAL(1, CountDbgHeaderRows(html));
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "title=\"Config:  need move 6 of 15 DDisks (40%)&#10;"
+            "Touched:  need move 3 of 9 DDisks (33%)\">"
+            "<a href='?TabletID=42&page=dbg&dbg=0'>DBG #0</a> Imb: 33%</th>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "dbg=1'>DBG #1</a> Imb: 0%</th>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "dbg=31'>DBG #31</a> Imb: 0%</th>");
+
+        configs[4 * VChunkPerRegionCount].DemoteHost(2);
+        configs[4 * VChunkPerRegionCount].PromoteHost(3);
+        const TString roundedHtml =
+            RenderMonPage(data, configs, touchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(
+            roundedHtml,
+            "title=\"Config:  need move 5 of 15 DDisks (33%)&#10;"
+            "Touched:  need move 3 of 9 DDisks (33%)\">"
+            "<a href='?TabletID=42&page=dbg&dbg=0'>DBG #0</a> Imb: 33%</th>");
     }
 
     Y_UNIT_TEST(OverviewReadsTouchedVChunksByRegion)
@@ -298,9 +355,10 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             0,
             DirectBlockGroupHostCount,
             DefaultPrimaryCount);
-        config.PromoteHost(3, true);
+        config.PromoteHost(3);
         config.DisableHost(0);
         const TVChunkConfigs configs{{0, std::move(config)}};
+        data.Dbgs[0].FreshDDisks[0].Set(3);
 
         TTestTouchedProvider touchedProvider;
         touchedProvider.Touched = {0};
@@ -571,35 +629,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT(!html.Contains("action=addhost"));
     }
 
-    Y_UNIT_TEST(DbgListShowsFreshDDisksByVChunk)
-    {
-        constexpr ui32 BlockSize = 4096;
-        auto dbg = MakeDbg(17);
-        auto config = TVChunkConfig::MakeDefault(
-            /*vChunkIndex*/ 17,
-            /*hostCount*/ 5,
-            /*primaryCount*/ 3);
-        config.PromoteHost(3, true);
-        config.SetWatermark(3, 42 * BlockSize);
-        const TVChunkConfigs configs{
-            {config.GetVChunkIndex(), std::move(config)},
-        };
-
-        const TMonPageData data{
-            .Page = EMonPage::Dbg,
-            .TabletInfo =
-                {.TabletId = 42,
-                 .BlockSize = BlockSize,
-                 .VolumeDirectBlockGroupCount = 1},
-            .Dbgs = {std::move(dbg)},
-        };
-        const TTestTouchedProvider touched;
-
-        const TString html = RenderMonPage(data, configs, touched);
-        UNIT_ASSERT_STRING_CONTAINS(html, "Fresh");
-        UNIT_ASSERT_STRING_CONTAINS(html, "17[H3:42]");
-    }
-
     Y_UNIT_TEST(DbgDetailShowsHostsTable)
     {
         const TMonPageData data{
@@ -687,7 +716,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             /*hostCount*/ 3,
             /*primaryCount*/ 1);
         config.SetDBGIndex(1);
-        config.SetWatermark(0, 7);
         const TMonPageData data{
             .Page = EMonPage::VChunk,
             .TabletInfo = {.TabletId = 42},
@@ -708,8 +736,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "<td>H0</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Primary");
         UNIT_ASSERT_STRING_CONTAINS(html, "HandOff");
-        // Host 0's watermark set above renders in its row.
-        UNIT_ASSERT_STRING_CONTAINS(html, "<td>7</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "DDiskStates: dump-text");
     }
 
@@ -775,6 +801,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         const TMonPageData data{
             .Page = EMonPage::Latency,
             .TabletInfo = {.TabletId = 42},
+            .FastPathServiceInfo =
+                TFastPathServiceInfo{.InflightWriteCount = 7},
             .Dbgs =
                 {// Same node, two pdisks — exercises pdisk grouping.
                  MakeLatencyDbg(
@@ -796,7 +824,11 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
         const TString html =
             RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
-        // No top-level "Latency" section heading — only the three subsections.
+        UNIT_ASSERT_STRING_CONTAINS(html, "<h3>Overview</h3>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Inflight writes");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<td>Inflight writes</td><td>7</td>");
+        // No top-level "Latency" section heading — Overview plus the three
+        // latency subsections.
         UNIT_ASSERT(!html.Contains("<h3>Latency</h3>"));
         UNIT_ASSERT_STRING_CONTAINS(html, "Latency by node");
         UNIT_ASSERT_STRING_CONTAINS(html, "Latency by slot");
@@ -946,11 +978,15 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         const TMonPageData data{
             .Page = EMonPage::Latency,
             .TabletInfo = {.TabletId = 42},
+            .FastPathServiceInfo =
+                TFastPathServiceInfo{.InflightWriteCount = 3},
             .Dbgs = {dbg},
         };
 
         const TString html =
             RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(html, "<h3>Overview</h3>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<td>Inflight writes</td><td>3</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "TimePredictionHistorySize");
         UNIT_ASSERT(!html.Contains("Latency by node"));
         UNIT_ASSERT(!html.Contains("Latency by slot"));

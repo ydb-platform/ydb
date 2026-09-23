@@ -168,17 +168,16 @@ public:
 
 private:
     void EmitLog(const TString& breakerQueryText) {
-        TString breakerQueryTexts;
+        TVector<NDataIntegrity::TTliLogParams::TQueryInfo> breakerQueries;
         if (!breakerQueryText.empty()) {
-            breakerQueryTexts = TStringBuilder() << "[QuerySpanId=" << BreakerQuerySpanId
-                << " QueryText=" << breakerQueryText << "]";
+            breakerQueries.push_back(NDataIntegrity::TTliLogParams::TQueryInfo{BreakerQuerySpanId, breakerQueryText});
         }
 
         NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
             .Component = "SessionActor",
             .Message = IsCommitAction ? "Commit had broken other locks (deferred)" : "Query had broken other locks (deferred)",
             .QueryText = breakerQueryText,
-            .QueryTexts = breakerQueryTexts,
+            .AllQueries = breakerQueries,
             .TraceId = TraceId,
             .BreakerQuerySpanId = BreakerQuerySpanId,
             .IsCommitAction = IsCommitAction,
@@ -2544,7 +2543,7 @@ public:
                 executionStats.Swap(&stats);
                 stats = QueryState->QueryStats.ToProto();
                 stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
-                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, Config->GetEnableNewRBO(), QueryState->UserRequestContext->PoolId));
+                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UsedNewRbo(), QueryState->UserRequestContext->PoolId));
                 stats.SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
 
                 if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
@@ -2646,7 +2645,8 @@ public:
                                    QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
 
         if (!ev->BreakerQuerySpanIds.empty()) {
-            TString combinedQueryTexts = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TString();
+            TVector<NDataIntegrity::TTliLogParams::TQueryInfo> combinedQueries;
+            combinedQueries = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TVector<NKikimr::NDataIntegrity::TTliLogParams::TQueryInfo>();
             for (ui64 breakerQuerySpanId : ev->BreakerQuerySpanIds) {
                 TString breakerQueryText;
                 if (QueryState->TxCtx) {
@@ -2660,7 +2660,7 @@ public:
                     .Component = "SessionActor",
                     .Message = isCommitAction ? "Commit had broken other locks" : "Query had broken other locks",
                     .QueryText = breakerQueryText,
-                    .QueryTexts = combinedQueryTexts,
+                    .AllQueries = combinedQueries,
                     .TraceId = TraceId(),
                     .BreakerQuerySpanId = breakerQuerySpanId,
                     .IsCommitAction = isCommitAction,
@@ -2672,7 +2672,7 @@ public:
                 .Component = "SessionActor",
                 .Message = isCommitAction ? "Commit had broken other locks" : "Query had broken other locks",
                 .QueryText = QueryState->ExtractQueryText(),
-                .QueryTexts = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TString(),
+                .AllQueries = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TVector<NKikimr::NDataIntegrity::TTliLogParams::TQueryInfo>(),
                 .TraceId = TraceId(),
                 .BreakerQuerySpanId = QueryState->GetQuerySpanId(),
                 .IsCommitAction = isCommitAction,
@@ -2694,17 +2694,16 @@ public:
             TString breakerQueryText = NDataIntegrity::TNodeQueryTextCache::Instance().Get(breaker.QuerySpanId);
 
             if (!breakerQueryText.empty() || breaker.NodeId == 0 || breaker.NodeId == localNodeId) {
-                TString breakerQueryTexts;
+                TVector<NDataIntegrity::TTliLogParams::TQueryInfo> breakerQueries;
                 if (!breakerQueryText.empty()) {
-                    breakerQueryTexts = TStringBuilder() << "[QuerySpanId=" << breaker.QuerySpanId
-                        << " QueryText=" << breakerQueryText << "]";
+                    breakerQueries.push_back(NDataIntegrity::TTliLogParams::TQueryInfo{breaker.QuerySpanId, breakerQueryText});
                 }
 
                 NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
                     .Component = "SessionActor",
                     .Message = isCommitAction ? "Commit had broken other locks (deferred)" : "Query had broken other locks (deferred)",
                     .QueryText = breakerQueryText,
-                    .QueryTexts = breakerQueryTexts,
+                    .AllQueries = breakerQueries,
                     .TraceId = TraceId(),
                     .BreakerQuerySpanId = breaker.QuerySpanId,
                     .IsCommitAction = isCommitAction,
@@ -2772,14 +2771,24 @@ public:
             const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
                                        QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
 
+            auto allQueries = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
+            if (isCommitAction) {
+                const auto currentQuerySpanId = QueryState->GetQuerySpanId();
+                auto it = std::find_if(begin(allQueries), end(allQueries),
+                    [currentQuerySpanId](const auto& item) {
+                        return item.Id == currentQuerySpanId;
+                    });
+                if (it == end(allQueries)) {
+                    allQueries.push_back({currentQuerySpanId, "COMMIT"});
+                }
+            }
             NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
                 .Component = "SessionActor",
                 .Message = isCommitAction ? "Commit was a victim of broken locks" : "Query was a victim of broken locks",
                 .QueryText = QueryState->ExtractQueryText(),
-                .QueryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts(),
+                .AllQueries = allQueries,
                 .TraceId = TraceId(),
                 .VictimQuerySpanId = victimQuerySpanId,
-                .CurrentQuerySpanId = QueryState->GetQuerySpanId(),
                 .VictimQueryText = victimQueryText,
                 .IsCommitAction = isCommitAction,
             }, TlsActivationContext->AsActorContext());
@@ -3108,7 +3117,7 @@ public:
         if (QueryState->ReportStats()) {
             auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-                response->SetQueryPlan(SerializeAnalyzePlan(stats, Config->GetEnableNewRBO(), QueryState->UserRequestContext->PoolId));
+                response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UsedNewRbo(), QueryState->UserRequestContext->PoolId));
                 if (const auto compileResult = QueryState->CompileResult) {
                     if (const auto preparedQuery = compileResult->PreparedQuery) {
                         if (const auto& queryAst = preparedQuery->GetPhysicalQuery().GetQueryAst()) {
@@ -3743,7 +3752,7 @@ public:
             }
         }
 
-        YDB_LOG_INFO("Cleanup start",
+        YDB_LOG(QueryState && QueryState->IsWarmupCompilation_ ? PRI_DEBUG : PRI_INFO, "Cleanup start",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
             {"isFinal", isFinal},
@@ -3753,6 +3762,7 @@ public:
             {"workloadServiceCleanup", CleanupCtx ? CleanupCtx->IsWaitingForWorkloadServiceCleanup : false},
             {"traceId", TraceId()});
         if (CleanupCtx) {
+            CleanupCtx->Final = isFinal;
             Become(&TKqpSessionActor::CleanupState);
         } else {
             EndCleanup(isFinal);
@@ -4119,6 +4129,8 @@ private:
             return "ExecuteState";
         } else if (func == &TThis::CleanupState) {
             return "CleanupState";
+        } else if (func == &TThis::FinalCleanupState) {
+            return "FinalCleanupState";
         } else {
             return "unknown state";
         }

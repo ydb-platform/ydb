@@ -192,8 +192,8 @@ public:
         }
     }
 
-    void Send(IEventBase* ev) {
-        auto evh = new IEventHandle(*PDiskActor, Sender, ev);
+    void Send(IEventBase* ev, ui64 cookie = 0) {
+        auto evh = new IEventHandle(*PDiskActor, Sender, ev, 0, cookie);
         // trace all events to check there is no VERIFY could happen
         evh->TraceId = NWilson::TTraceId::NewTraceId(NWilson::TTraceId::MAX_VERBOSITY, 4095);
         Runtime->Send(evh);

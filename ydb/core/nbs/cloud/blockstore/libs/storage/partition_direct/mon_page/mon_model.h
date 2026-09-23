@@ -12,6 +12,7 @@
 
 #include <ydb/core/mind/bscontroller/types.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
@@ -77,6 +78,8 @@ struct TArenaMemoryUsage
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
+    // Number of writes currently in flight across the whole disk.
+    size_t InflightWriteCount = 0;
     TArenaMemoryUsage ArenaMemoryUsage;
 };
 
@@ -96,6 +99,8 @@ struct TDbgSnapshot
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
+    // Current Fresh DDisks for vchunks that have any.
+    THashMap<ui32, THostMask> FreshDDisks;
     TArenaPoolStats MemoryStats;
     TArenaAllocatorStats DetailedMemoryStats;
     TDirtyMapStats DirtyMapStats;

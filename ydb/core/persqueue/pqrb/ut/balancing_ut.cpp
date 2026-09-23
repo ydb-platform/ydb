@@ -342,6 +342,44 @@ Y_UNIT_TEST(MergeFreeFamilyIntoReleasingKeepsPartitionMapping) {
     UNIT_ASSERT_C(!env.SessionOf(2).empty(), "merge child must be assigned");
 }
 
+Y_UNIT_TEST(FinishAfterPreferredDisconnectDoesNotUseFreedFamily) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-common");
+    env.RegisterSession("session-pref", {2});
+    env.Merge(0, 1);
+    env.AssertLocked(0, "session-common");
+    env.AssertLocked(1, "session-pref");
+
+    env.Finish("session-common", 0);
+
+    // Keep the common family Releasing: do not ack its release.
+    env.RegisterSession("session-steal", {1}, /*pump=*/false);
+    env.Finish("session-pref", 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    // Merge the preferred family into the still-releasing common family.
+    // The child is mapped onto that family but is not in its Partitions list.
+    env.AckRelease(env.Pipes.at("session-pref"), 1, "session-pref");
+    DispatchFor(env.tc, TDuration::MilliSeconds(50));
+
+    // Reset(Destroy) skips AfterRelease, so the mapped child used to keep
+    // pointing at the freed family. The next finish reads it in HasSpecialSession.
+    auto pipe = env.Pipes.at("session-common");
+    env.tc.Runtime->ClosePipe(pipe, env.tc.Edge, 0);
+    env.Pipes.erase("session-common");
+    DispatchFor(env.tc, TDuration::MilliSeconds(100));
+
+    env.Finish("session-pref", 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+    env.Finish("session-steal", 0, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+    DispatchFor(env.tc, TDuration::MilliSeconds(100));
+    env.SessionsInfo();
+    env.Pump();
+    // Partition 1 was mapped onto the releasing family and was not in its
+    // Partitions list. Without clearing that mapping, FindFamily keeps the
+    // freed family and 1 is never assigned again.
+    UNIT_ASSERT_C(!env.SessionOf(1).empty(), "partition 1 must be reassigned after its family is destroyed");
+}
+
 Y_UNIT_TEST(DisconnectPreferredDuringMergeDoesNotLeaveDanglingFamily) {
     TScaleEnv env;
     env.CreateParents(2);

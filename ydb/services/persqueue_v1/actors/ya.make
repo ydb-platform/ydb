@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/dataplane
+    ydb/core/persqueue/public/reset_offset
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
@@ -38,6 +39,8 @@ SRCS(
     codecs.cpp
     commit_offset_actor.h
     commit_offset_actor.cpp
+    reset_offset_actor.h
+    reset_offset_actor.cpp
     distributed_commit_helper.h
     distributed_commit_helper.cpp
     events.h

@@ -43,20 +43,23 @@ SRCS(
     scheduler/kqp_schedulable_task.cpp
     scheduler/tree/dynamic.cpp
     scheduler/tree/snapshot.cpp
+
+    streaming/kqp_streaming_aggregation.cpp
 )
 
 PEERDIR(
     contrib/libs/apache/arrow
+    contrib/libs/fmt
     library/cpp/regex/pire
     library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/library/json_index
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
+    ydb/core/kqp/common/result_set_format
     ydb/core/mon
     ydb/core/persqueue/events
     ydb/core/persqueue/public
@@ -65,15 +68,20 @@ PEERDIR(
     ydb/core/tx/scheme_board
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/actors/helpers
+    ydb/library/json_index
+    ydb/library/query_actor
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
     ydb/library/yql/dq/runtime
-    yql/essentials/minikql/computation/llvm16
+    ydb/library/yverify_stream
+    ydb/public/sdk/cpp/src/client/params
     yql/essentials/minikql/comp_nodes
+    yql/essentials/minikql/computation/llvm16
     yql/essentials/utils
-    ydb/core/kqp/common/result_set_format
 )
 
 YQL_LAST_ABI_VERSION()

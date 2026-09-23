@@ -3347,9 +3347,14 @@ TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
     if (options.Config) {
         req->set_config(ToProto(*options.Config));
     }
+    if (options.Codec != NCompression::ECodec::None) {
+        req->set_codec(ToProto(options.Codec));
+    }
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
-        return ConvertTo<TSignedShuffleHandlePtr>(TYsonStringBuf(rsp->signed_shuffle_handle()));
+    return req->Invoke().Apply(BIND([codec = options.Codec] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
+        auto signedHandle = ConvertTo<TSignedShuffleHandlePtr>(TYsonStringBuf(rsp->signed_shuffle_handle()));
+        ValidateShuffleHandleCodec(signedHandle, codec);
+        return signedHandle;
     }));
 }
 

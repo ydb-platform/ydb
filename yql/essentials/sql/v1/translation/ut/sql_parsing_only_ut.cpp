@@ -3759,6 +3759,32 @@ Y_UNIT_TEST(TtlTieringParseCorrect) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+void TestTtlTieringObjectKeyPrefix(const TString& ddl) {
+    const auto res = SqlToYql(TString("USE ydb; ") + ddl + R"(
+        Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/eds`.`archive//2026:09/`,
+        Interval("P2D") TO EXTERNAL DATA SOURCE `/Root/eds`.`cold`,
+        Interval("P30D") DELETE ON CreatedAt);)");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    TWordCountHive stats = {"Write"};
+    VerifyProgram(res, stats, [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "objectKeyPrefix");
+            UNIT_ASSERT_STRING_CONTAINS(line, "archive//2026:09/");
+            UNIT_ASSERT_STRING_CONTAINS(line, "cold");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/Root/eds");
+        }
+    });
+    UNIT_ASSERT_VALUES_EQUAL(stats["Write"], 1);
+}
+
+Y_UNIT_TEST(TtlTieringObjectKeyPrefixCreateTable) {
+    TestTtlTieringObjectKeyPrefix("CREATE TABLE tableName (CreatedAt Timestamp, PRIMARY KEY (CreatedAt)) WITH (TTL = ");
+}
+
+Y_UNIT_TEST(TtlTieringObjectKeyPrefixAlterTable) {
+    TestTtlTieringObjectKeyPrefix("ALTER TABLE tableName SET (TTL = ");
+}
+
 Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
         R"( USE ydb;
@@ -3773,7 +3799,6 @@ Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
                         ALTER FAMILY default SET DATA "ssd"
                     ;)");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("addColumnFamilies"));

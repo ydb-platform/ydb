@@ -1,3 +1,4 @@
+#include "mkql_builtins_impl.h"    // Y_IGNORE
 #include "mkql_builtins_decimal.h" // Y_IGNORE
 
 #include <yql/essentials/public/udf/udf_value_builder.h>
@@ -9,6 +10,8 @@
 #include <yql/essentials/types/binary_json/read.h>
 
 #include <array>
+
+#include <arrow/scalar.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -927,6 +930,33 @@ constexpr auto convert = "Convert";
 constexpr auto integral = "ToIntegral";
 constexpr auto decimal = "ToDecimal";
 
+arrow::Status ExecToStringUtf8(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    MKQL_ENSURE(batch.values.size() == 1, "Expected 1 argument");
+
+    const auto& input = batch.values.front();
+    if (input.is_scalar()) {
+        const auto scalar = std::static_pointer_cast<arrow::BaseBinaryScalar>(input.scalar());
+        *res = scalar->is_valid
+                   ? arrow::Datum(std::make_shared<arrow::BinaryScalar>(scalar->value))
+                   : arrow::Datum(arrow::MakeNullScalar(arrow::binary()));
+    } else {
+        const auto& array = *input.array();
+        *res = arrow::ArrayData::Make(arrow::binary(), array.length, array.buffers, array.null_count, array.offset);
+    }
+    return arrow::Status::OK();
+}
+
+void RegisterToStringUtf8(TKernelFamilyBase& kernelFamily) {
+    const std::vector<NUdf::TDataTypeId> argTypes = {NUdf::TDataType<NUdf::TUtf8>::Id};
+    const auto returnType = NUdf::TDataType<char*>::Id;
+    auto kernel = std::make_unique<arrow::compute::ScalarKernel>(
+        std::vector<arrow::compute::InputType>{arrow::utf8()}, arrow::binary(), &ExecToStringUtf8);
+    kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+    kernel->mem_allocation = arrow::compute::MemAllocation::NO_PREALLOCATE;
+    kernelFamily.Adopt(argTypes, returnType,
+                       std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, std::move(kernel), TKernel::ENullMode::Default));
+}
+
 template <typename TInput, typename TOutput>
 void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionUnOpt<TInput, TOutput, TConvert, TUnaryArgsOpt>(registry, convert);
@@ -1607,6 +1637,12 @@ void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterDecimalConvert(registry);
 
     RegisterJsonDocumentConvert(registry);
+}
+
+void RegisterToString(TKernelFamilyMap& kernelFamilyMap) {
+    auto family = std::make_unique<TKernelFamilyBase>();
+    RegisterToStringUtf8(*family);
+    kernelFamilyMap["ToString"] = std::move(family);
 }
 
 } // namespace NKikimr::NMiniKQL

@@ -1306,6 +1306,11 @@ private:
             return Unsupported("bind parameter referencing a legacy source");
         }
 
+        if (cluster.Empty()) {
+            Ctx_.Error() << "No cluster name given and no default cluster is selected";
+            return std::unexpected(ESQLError::Basic);
+        }
+
         TYqlTableRefArgs args = {
             .Service = std::move(service),
             .Cluster = std::move(cluster),

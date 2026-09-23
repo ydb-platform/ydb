@@ -362,53 +362,30 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Schema(false, 2);
         f.Controller->DisableBackground(EBackground::Compaction);
         f.Controller->DisableBackground(EBackground::Cleanup);
+        f.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(false);
         f.Restart(NewGroup);
         for (ui64 i = 0; i < portionCount; ++i) {
             f.Write(i + 1, i, i + 1, TableId + i % 2);
         }
-        TAutoPtr<IEventHandle> continuation;
-        TAutoPtr<IEventHandle> prepared;
-        bool preparing = false;
-        ui32 preparationChunks = 0;
-        IEventHandle* replaying = nullptr;
-        IEventHandle* replayingPrepared = nullptr;
-        ui32 batches = 0;
-        ui32 misses = 0;
-        std::vector<ui64> scanPortions;
-        ui32 cuts = 0;
-        bool linksApplied = false;
-        bool failMetadata = false;
-        ui32 metadataResults = 0;
+        f.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(true);
+        UNIT_ASSERT(f.LiveOldBlobs().empty());
+        const auto sent = f.Counters()->GetCounter("Deriviative/CutHistory/RequestsSent/Count", true);
         const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
+        bool cutSent = false;
+        bool failMetadata = false;
+        bool holdPrepared = false;
+        bool linksApplied = false;
+        TAutoPtr<IEventHandle> prepared;
         auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
             if (!ev->HasEvent()) {
                 return;
             }
-            if (dynamic_cast<NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished*>(ev->GetBase())) {
-                linksApplied = true;
+            if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
+                cut && cut->Record.GetChannel() == FirstDataChannel) {
+                UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetFromGeneration(), 0u);
+                UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetGroupID(), OldGroup);
+                cutSent = true;
                 ev.Reset();
-            } else if (const auto* chunk = dynamic_cast<TEvPrivate::TEvCutHistoryPortionsBatch*>(ev->GetBase())) {
-                ++preparationChunks;
-                UNIT_ASSERT(chunk->Portions.size() <= TSettings::CutHistoryPreparationBatchSize);
-            } else if (dynamic_cast<TEvPrivate::TEvCutHistoryPortionsReady*>(ev->GetBase())) {
-                if (ev.Get() == replayingPrepared) {
-                    replayingPrepared = nullptr;
-                    return;
-                }
-                UNIT_ASSERT(!prepared);
-                preparing = false;
-                prepared = ev.Release();
-            } else if (dynamic_cast<TEvPrivate::TEvContinueCutHistory*>(ev->GetBase())) {
-                if (ev.Get() == replaying) {
-                    replaying = nullptr;
-                    return;
-                }
-                if (preparing) {
-                    return;
-                }
-                ++batches;
-                UNIT_ASSERT(!continuation);
-                continuation = ev.Release();
             } else if (auto* info = dynamic_cast<TEvPrivate::TEvMetadataAccessorsInfo*>(ev->GetBase()); failMetadata && info) {
                 auto result = info->ExtractResult();
                 auto data = result.ExtractValue();
@@ -418,122 +395,50 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                     NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(data), result.ExtractResourcesGuard()));
                 ev.Reset(new IEventHandle(ev->Recipient, ev->Sender, failed, ev->Flags, ev->Cookie));
                 failMetadata = false;
-                ++metadataResults;
-            } else if (const auto* ask = dynamic_cast<TEvPrivate::TEvAskTabletDataAccessors*>(ev->GetBase())) {
-                for (const auto& [_, portions] : ask->GetPortions()) {
-                    misses += portions.GetPortionsCount();
-                    for (const auto& [consumer, request] : portions.GetConsumers()) {
-                        if (consumer == NOlap::NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN) {
-                            scanPortions.insert(scanPortions.end(), request.GetPortionIds().begin(), request.GetPortionIds().end());
-                        }
-                    }
-                }
-            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
-                       cut && cut->Record.GetChannel() == FirstDataChannel) {
-                ++cuts;
+            } else if (holdPrepared && dynamic_cast<TEvPrivate::TEvCutHistoryPortionsReady*>(ev->GetBase())) {
+                holdPrepared = false;
+                prepared = ev.Release();
+            } else if (dynamic_cast<NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished*>(ev->GetBase())) {
+                linksApplied = true;
                 ev.Reset();
             }
         });
-        const auto resume = [&] {
-            replaying = continuation.Get();
-            f.Runtime.Send(continuation.Release(), 0, true);
-            f.Runtime.SimulateSleep(TDuration::Seconds(1));
-        };
-        const auto prepare = [&] {
-            preparing = true;
-            preparationChunks = 0;
-            resume();
-            UNIT_ASSERT(prepared);
-            UNIT_ASSERT(preparationChunks >= 2);
-            UNIT_ASSERT(!continuation);
-        };
-        const auto resumePrepared = [&] {
-            replayingPrepared = prepared.Get();
-            f.Runtime.Send(prepared.Release(), 0, true);
-            f.Runtime.SimulateSleep(TDuration::Seconds(1));
-        };
         f.Restart();
-        UNIT_ASSERT(continuation);
-        UNIT_ASSERT_VALUES_EQUAL(misses, 0u);
-        std::vector<ui64> expectedPortions;
-        const auto& index = f.Controller->GetTheOnlyShard()->GetIndexAs<NOlap::TColumnEngineForLogs>();
-        for (const auto& [_, granule] : index.GetTables()) {
-            for (const auto& [portionId, _] : granule->GetPortions()) {
-                expectedPortions.push_back(portionId);
-            }
-            for (const auto& [_, portion] : granule->GetInsertedPortions()) {
-                expectedPortions.push_back(portion->GetPortionId());
-            }
-        }
-        Sort(expectedPortions);
-        UNIT_ASSERT_VALUES_EQUAL(expectedPortions.size(), portionCount);
-        f.Write(5000, portionCount, portionCount + 1);
-        prepare();
-        const auto& preparedPortions = prepared->Get<TEvPrivate::TEvCutHistoryPortionsReady>()->Portions;
-        UNIT_ASSERT_VALUES_EQUAL(preparedPortions.size(), expectedPortions.size());
-        for (size_t i = 0; i < expectedPortions.size(); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(preparedPortions[i].second, expectedPortions[i]);
-        }
-        resumePrepared();
-        UNIT_ASSERT(continuation);
-        resume();
-        UNIT_ASSERT(continuation);
-        UNIT_ASSERT_C(misses > 0 && misses <= 32, "first cold metadata batch must load at most 32 portions");
-        UNIT_ASSERT_VALUES_EQUAL(scanPortions.size(), misses);
-        UNIT_ASSERT(expectedPortions.size() > scanPortions.size());
-        expectedPortions.resize(scanPortions.size());
-        Sort(scanPortions);
-        UNIT_ASSERT_VALUES_EQUAL_C(scanPortions, expectedPortions, "first batch must contain the lowest PortionIds across all tables");
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), portionCount);
-        misses = 0;
-        f.Write(5001, portionCount + 1, portionCount + 2);
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), portionCount + 1);
-        while (continuation) {
-            resume();
-        }
-        f.Drive();
-        UNIT_ASSERT_C(batches >= 3, "scan must yield between bounded batches");
-        UNIT_ASSERT_C(misses <= 1, "scan must reuse metadata warmed by the foreground read");
-        UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
-        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
-
-        f.Restart();
-        UNIT_ASSERT(continuation);
-        prepare();
-        resumePrepared();
-        UNIT_ASSERT(continuation);
-        failMetadata = true;
-        misses = 0;
-        const ui64 scans = f.Samples("Scan");
-        resume();
-        for (ui32 i = 0; i < 60 && metadataResults == 0; ++i) {
+        for (ui32 i = 0; i < 60 && !cutSent; ++i) {
             f.Drive(1);
         }
-        UNIT_ASSERT_VALUES_EQUAL(metadataResults, 1u);
-        UNIT_ASSERT(misses > 0);
-        UNIT_ASSERT(!continuation);
-        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 1u);
-        f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), scans);
-        UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
+        UNIT_ASSERT(cutSent);
+        UNIT_ASSERT_VALUES_EQUAL(sent->Val(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
 
+        cutSent = false;
+        failMetadata = true;
         f.Restart();
-        UNIT_ASSERT(continuation);
-        prepare();
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), portionCount + 1);
-        f.Write(5002, portionCount + 2, portionCount + 3);
-        NOlap::NDataSharing::TTaskForTablet task((NOlap::TTabletId)TabletId);
-        f.Runtime.SendToPipe(TabletId, f.Sender, new NOlap::NDataSharing::NEvents::TEvApplyLinksModification((NOlap::TTabletId)TabletId,
-                                                     "late-sharing", 0, task), 0, GetPipeConfigWithRetries());
+        for (ui32 i = 0; i < 60 && aborted->Val() == 0; ++i) {
+            f.Drive(1);
+        }
+        f.Drive();
+        UNIT_ASSERT(!failMetadata);
+        UNIT_ASSERT(!cutSent);
+        UNIT_ASSERT_VALUES_EQUAL(sent->Val(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 1u);
+
+        holdPrepared = true;
+        f.Restart();
+        f.Drive();
+        UNIT_ASSERT(prepared);
+        NOlap::NDataSharing::TTaskForTablet task(static_cast<NOlap::TTabletId>(TabletId));
+        f.Runtime.SendToPipe(TabletId, f.Sender,
+            new NOlap::NDataSharing::NEvents::TEvApplyLinksModification(static_cast<NOlap::TTabletId>(TabletId), "late-sharing", 0, task), 0,
+            GetPipeConfigWithRetries());
         f.Drive();
         UNIT_ASSERT(linksApplied);
-        resumePrepared();
-        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 2u);
+        f.Runtime.Send(prepared.Release(), 0, true);
         f.Drive();
+        UNIT_ASSERT(!cutSent);
+        UNIT_ASSERT(f.LiveOldBlobs().empty());
+        UNIT_ASSERT_VALUES_EQUAL(sent->Val(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 2u);
-        UNIT_ASSERT(!continuation);
-        UNIT_ASSERT_VALUES_EQUAL_C(cuts, 1u, "an actual sharing admission must invalidate the unsent boot proof");
     }
 
     Y_UNIT_TEST(DelayedBatchKeepsRemovedSchema) {

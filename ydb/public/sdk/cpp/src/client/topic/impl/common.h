@@ -119,7 +119,7 @@ public:
     }
 
     bool CanAdd(size_t deltaSize) const {
-        return ProtoMessageFieldSize(EnvelopeFieldNumber, BodySize + deltaSize) <= MaxSize;
+        return Empty() || ProtoMessageFieldSize(EnvelopeFieldNumber, BodySize + deltaSize) <= MaxSize;
     }
 
     void Add(size_t deltaSize) {

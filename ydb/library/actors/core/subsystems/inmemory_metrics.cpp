@@ -96,9 +96,9 @@ namespace NActors {
         return true;
     }
 
-    std::shared_ptr<TLineWriterState> TInMemoryMetricsRegistry::CreateLineWithMeta(TStringBuf name, std::span<const TLabel> labels, const TLineMeta& meta) {
+    std::shared_ptr<IMetricLine> TInMemoryMetricsRegistry::CreateLineWithMeta(TStringBuf name, std::span<const TLabel> labels, const TLineMeta& meta) {
         auto request = std::make_shared<TRequest>(TRequest::EType::Register);
-        auto state = std::make_shared<TLineWriterState>();
+        auto state = std::make_shared<TLineWriterState>(&Backend);
         request->State = state;
         request->Key = MakeLineKey(name, labels);
         request->Meta = meta;

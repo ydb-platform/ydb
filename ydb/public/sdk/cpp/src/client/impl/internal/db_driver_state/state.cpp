@@ -63,25 +63,11 @@ void TDbDriverState::InitCredentials(
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
 ) {
     Credentials.Provider = credentialsProviderFactory->CreateProvider(weak_from_this());
-#ifndef YDB_GRPC_UNSECURE_AUTH
-    Credentials.CallCredentials = grpc::MetadataCredentialsFromPlugin(
-        std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(Credentials.Provider)));
-#endif
-}
-
-NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {
-    return Credentials.Provider->GetAuthInfoAsync().IgnoreResult();
 }
 
 std::shared_ptr<ICredentialsProvider> TDbDriverState::GetCredentialsProvider() const {
     return Credentials.Provider;
 }
-
-#ifndef YDB_GRPC_UNSECURE_AUTH
-std::shared_ptr<grpc::CallCredentials> TDbDriverState::GetCallCredentials() const {
-    return Credentials.CallCredentials;
-}
-#endif
 
 bool TDbDriverState::AreClientTlsCredentialsValid() const {
     std::call_once(ClientTlsValidationOnceFlag_, [this]() {

@@ -50,7 +50,7 @@ class ICredentialsProvider;
 // Deferred callbacks
 using TDeferredResultCb = std::function<void(google::protobuf::Any*, TPlainStatus status)>;
 
-std::string GetAuthInfo(TDbDriverStatePtr p);
+std::string GetAuthInfo(NThreading::TFuture<std::string> authInfo);
 std::string CreateSDKBuildInfo();
 
 class TGRpcConnectionsImpl
@@ -110,7 +110,8 @@ public:
     NThreading::TFuture<void> CredentialsReadyToWaitFor(
         const TDbDriverStatePtr& dbState,
         const TRpcRequestSettings& requestSettings,
-        const IQueueClientContextPtr& context) const;
+        const IQueueClientContextPtr& context,
+        NThreading::TFuture<std::string>& authInfo) const;
 
     void DeferUntilCredentialsReady(
         const TRpcRequestSettings& requestSettings,
@@ -278,16 +279,17 @@ public:
         TSimpleRpc<TService, TRequest, TResponse> rpc,
         TDbDriverStatePtr dbState,
         const TRpcRequestSettings& requestSettings,
-        std::shared_ptr<IQueueClientContext> context = nullptr)
+        std::shared_ptr<IQueueClientContext> context = nullptr,
+        NThreading::TFuture<std::string> authInfo = {})
     {
         using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
 
-        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
+        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context, authInfo); ready.Initialized()) {
             DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
                 [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb),
-                 rpc, dbState, requestSettings, context]
+                 rpc, dbState, requestSettings, context, authInfo]
                 (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
                     if (status) {
                         userResponseCb(nullptr, std::move(*status));
@@ -299,7 +301,8 @@ public:
                         rpc,
                         std::move(dbState),
                         requestSettings,
-                        std::move(context));
+                        std::move(context),
+                        std::move(authInfo));
                 });
             return;
         }
@@ -331,7 +334,7 @@ public:
 
         WithServiceConnection<TService>(
             [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb), rpc, 
-             requestSettings, context = std::move(context), dbState]
+             requestSettings, context = std::move(context), dbState, authInfo = std::move(authInfo)]
                 (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
                     if (!status.Ok()) {
                         context.reset();
@@ -344,7 +347,7 @@ public:
                     TCallMeta meta;
 
                     try {
-                        meta = MakeCallMeta(requestSettings, dbState);
+                        meta = MakeCallMeta(requestSettings, dbState, authInfo);
                     } catch (const TYdbException& e) {
                         context.reset();
                         RunResponseCallback<TResponse>(
@@ -536,15 +539,16 @@ public:
         TStreamRpc<TService, TRequest, TResponse, NYdbGrpc::TStreamRequestReadProcessor> rpc,
         TDbDriverStatePtr dbState,
         const TRpcRequestSettings& requestSettings,
-        std::shared_ptr<IQueueClientContext> context = nullptr)
+        std::shared_ptr<IQueueClientContext> context = nullptr,
+        NThreading::TFuture<std::string> authInfo = {})
     {
         using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
-        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
+        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context, authInfo); ready.Initialized()) {
             DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
-                [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context]
+                [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context, authInfo]
                 (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
                     if (status) {
                         responseCb(std::move(*status), nullptr);
@@ -556,7 +560,8 @@ public:
                         rpc,
                         std::move(dbState),
                         requestSettings,
-                        std::move(context));
+                        std::move(context),
+                        std::move(authInfo));
                 });
             return;
         }
@@ -572,7 +577,7 @@ public:
         }
 
         WithServiceConnection<TService>(
-            [this, request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState](TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
+            [this, request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState, authInfo = std::move(authInfo)](TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
                 if (!status.Ok()) {
                     context.reset();
                     RunStreamCallback(responseCb, std::move(status), nullptr, DriverScope_);
@@ -583,7 +588,7 @@ public:
 
                 TCallMeta meta;
                 try {
-                    meta = MakeCallMeta(requestSettings, dbState);
+                    meta = MakeCallMeta(requestSettings, dbState, authInfo);
                 } catch (const TYdbException& e) {
                     context.reset();
                     RunStreamCallback(
@@ -643,15 +648,16 @@ public:
         TStreamRpc<TService, TRequest, TResponse, NYdbGrpc::TStreamRequestReadWriteProcessor> rpc,
         TDbDriverStatePtr dbState,
         const TRpcRequestSettings& requestSettings,
-        std::shared_ptr<IQueueClientContext> context = nullptr)
+        std::shared_ptr<IQueueClientContext> context = nullptr,
+        NThreading::TFuture<std::string> authInfo = {})
     {
         using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
 
-        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
+        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context, authInfo); ready.Initialized()) {
             DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
-                [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context]
+                [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context, authInfo]
                 (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
                     if (status) {
                         connectedCallback(std::move(*status), nullptr);
@@ -662,7 +668,8 @@ public:
                         rpc,
                         std::move(dbState),
                         requestSettings,
-                        std::move(context));
+                        std::move(context),
+                        std::move(authInfo));
                 });
             return;
         }
@@ -678,7 +685,7 @@ public:
         }
 
         WithServiceConnection<TService>(
-            [this, connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState]
+            [this, connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState, authInfo = std::move(authInfo)]
                 (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
                     if (!status.Ok()) {
                         context.reset();
@@ -690,7 +697,7 @@ public:
 
                     TCallMeta meta;
                     try {
-                        meta = MakeCallMeta(requestSettings, dbState);
+                        meta = MakeCallMeta(requestSettings, dbState, authInfo);
                     } catch (const TYdbException& e) {
                         context.reset();
                         RunStreamCallback(
@@ -887,7 +894,8 @@ private:
     void StopResponseQueue();
 
 private:
-    TCallMeta MakeCallMeta(const TRpcRequestSettings& requestSettings, const TDbDriverStatePtr& dbState) const;
+    TCallMeta MakeCallMeta(const TRpcRequestSettings& requestSettings, const TDbDriverStatePtr& dbState,
+        NThreading::TFuture<std::string> authInfo) const;
 
     std::mutex ExtensionsLock_;
     ::NMonitoring::TMetricRegistry* MetricRegistryPtr_ = nullptr;

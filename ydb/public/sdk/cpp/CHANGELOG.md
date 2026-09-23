@@ -1,3 +1,5 @@
+* Fixed async credentials acquisition for unary and streaming RPCs and Topic/PersQueue write sessions; the SDK now uses the token returned by `GetAuthInfoAsync()` without a second synchronous lookup.
+
 * Added `Float16` and `BFloat16` vector index types.
 
 ## v3.23.0

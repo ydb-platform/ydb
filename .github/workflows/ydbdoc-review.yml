@@ -44,9 +44,6 @@ jobs:
           import os
           import re
           from collections import Counter
-          from datetime import UTC, datetime
-
-          from ydbdoc_review_ng.persistence import YdbPersistence
           from ydbdoc_review_ng.runtime_ydb import DEFAULT_YDB_DATABASE, DEFAULT_YDB_ENDPOINT, SDKExecutor
 
           target_path = "ydb/docs/en/core/changelog-enterprise.md"
@@ -64,11 +61,21 @@ jobs:
               os.environ["YDB_SA_KEY"],
           )
           try:
-              checkpoint = YdbPersistence(executor).load_checkpoint(50858, now=datetime.now(UTC))
+              jobs = executor.execute(
+                  "SELECT job_id, started_at FROM `ydbdoc_review/jobs` "
+                  "WHERE pr_number = $pr_number AND source_sha = $source_sha "
+                  "ORDER BY started_at DESC LIMIT 1;",
+                  {
+                      "pr_number": 50858,
+                      "source_sha": "b3cd5e6f975a489a3e4edcf6f2939b5f2068a692",
+                  },
+              )
+              if len(jobs) != 1:
+                  raise RuntimeError(f"expected one latest job, got {len(jobs)}")
               rows = executor.execute(
                   "SELECT response, started_at FROM `ydbdoc_review/attempts` "
                   "WHERE job_id = $job_id AND target_path = $target_path;",
-                  {"job_id": checkpoint.job_id, "target_path": target_path},
+                  {"job_id": jobs[0]["job_id"], "target_path": target_path},
               )
               rows = sorted(rows, key=lambda row: row["started_at"])[-2:]
               for number, row in enumerate(rows, 1):

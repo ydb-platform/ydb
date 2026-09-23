@@ -28,6 +28,21 @@ namespace NKikimr::NDataShard {
 
 using namespace NTabletFlatExecutor;
 
+namespace {
+
+bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state) {
+    if (!shard.IsFollower()) {
+        return state.IsHeadRead;
+    }
+    // A stale HEAD read is normally pinned to the follower's repeatable edge.
+    // It may use a graph of that version, but an explicitly older snapshot may not.
+    const auto [edge, repeatable] = shard.GetSnapshotManager().GetFollowerReadEdge();
+    return state.RequestedHeadRead && repeatable && state.ReadVersion == edge;
+}
+
+} // namespace
+
+
 struct TReadIteratorVectorTopItem {
     TOwnedCellVec Row;
     double Distance = 0;
@@ -54,6 +69,7 @@ struct TReadIteratorVectorTop {
     // Set when a ready in-memory HNSW index is available for this table/column;
     // if set, TReader::IterateRange uses it instead of the brute-force scan below.
     std::shared_ptr<NDataShard::THnswIndex> HnswIndex;
+    std::optional<std::pair<NTable::TDatabase::TChangeCounter, TRowVersion>> FollowerHnswSnapshot;
 
     std::unordered_set<TString> UniqueKeys;
     std::vector<TReadIteratorVectorTopItem> Rows;
@@ -257,6 +273,8 @@ struct TShortTableInfo {
         KeyColumnCount = tableInfo->KeyColumnIds.size();
         KeyColumnIds.assign(tableInfo->KeyColumnIds.begin(), tableInfo->KeyColumnIds.end());
         ShardRange = tableInfo->Range;
+        HnswSettings = tableInfo->HnswSettings;
+        HnswVectorColumnTag = tableInfo->HnswVectorColumnTag;
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
@@ -331,7 +349,12 @@ struct TShortTableInfo {
     TVector<NTable::TTag> KeyColumnIds;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
     std::optional<TSerializedTableRange> ShardRange;
+    std::optional<Ydb::Table::VectorIndexSettings> HnswSettings;
+    ui32 HnswVectorColumnTag = 0;
 };
+
+std::vector<TRawTypeValue> ToRawTypeValue(
+    TArrayRef<const TCell> keyCells, const TShortTableInfo& tableInfo, bool addNulls);
 
 // Scans the full local table partition for (primary key, vector column) pairs.
 // Keep reservation and page-fault handling in sync with
@@ -347,7 +370,8 @@ std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
     TDataShard& dataShard,
     std::shared_ptr<void>& memoryReservation,
     ui64& reservedBytes,
-    bool& hasPageFault)
+    bool& hasPageFault,
+    const TRowVersion& readVersion)
 {
     hasPageFault = false;
     reservedBytes = 0;
@@ -358,8 +382,26 @@ std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
         }
     }
 
-    auto precharge = txc.DB.Precharge(tableInfo.LocalTid, {}, {}, columns, 0, 0, 0,
-        NTable::EDirection::Forward, TRowVersion::Max());
+    // Split destinations may borrow whole parts from the source tablet.
+    // Only index keys belonging to this shard, even before borrowed compaction.
+    std::vector<TRawTypeValue> minKey;
+    std::vector<TRawTypeValue> maxKey;
+    NTable::TKeyRange range;
+    if (tableInfo.ShardRange) {
+        const auto bounds = tableInfo.ShardRange->ToTableRange();
+        if (bounds.From) {
+            minKey = ToRawTypeValue(bounds.From, tableInfo, bounds.InclusiveFrom);
+        }
+        if (bounds.To) {
+            maxKey = ToRawTypeValue(bounds.To, tableInfo, !bounds.InclusiveTo);
+        }
+        range.MinKey = minKey;
+        range.MaxKey = maxKey;
+        range.MinInclusive = bounds.InclusiveFrom;
+        range.MaxInclusive = bounds.InclusiveTo;
+    }
+    auto precharge = txc.DB.Precharge(tableInfo.LocalTid, minKey, maxKey, columns, 0, 0, 0,
+        NTable::EDirection::Forward, readVersion);
     if (!precharge.Ready) {
         hasPageFault = true;
         return {};
@@ -376,7 +418,7 @@ std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
 
     std::vector<std::pair<TString, TString>> result;
     result.reserve(precharge.ItemsPrecharged);
-    auto iter = txc.DB.IterateRange(tableInfo.LocalTid, {}, columns, TRowVersion::Max(), nullptr, nullptr);
+    auto iter = txc.DB.IterateRange(tableInfo.LocalTid, range, columns, readVersion, nullptr, nullptr);
     while (true) {
         const auto ready = iter->Next(NTable::ENext::All);
         if (ready == NTable::EReady::Page) {
@@ -621,6 +663,12 @@ public:
                 extended.resize(TableInfo.KeyColumnTypes.size());
                 Self->GetKeyAccessSampler()->AddSample(TableId, extended);
             }
+        }
+
+        // The follower graph is an immutable copy of this exact table
+        // snapshot. Covered results need no table iterator or page fetches.
+        if (TryReadHnswCoveredRange(tableRange, txc)) {
+            return EReadStatus::Done;
         }
 
         EReadStatus result;
@@ -1300,6 +1348,61 @@ private:
         }
     }
 
+    bool TryReadHnswCoveredRange(const TTableRange& range, TTransactionContext& txc) {
+        if (!Self->IsFollower() || !CanUseHnsw(*Self, State)
+                || !State.VectorTopK || !State.VectorTopK->HnswIndex
+                || !TableInfo.CoversFullShard(range)) {
+            return false;
+        }
+        auto& topK = *State.VectorTopK;
+        if (!topK.FollowerHnswSnapshot
+                || topK.FollowerHnswSnapshot->first != txc.DB.Head(TableInfo.LocalTid)
+                || topK.FollowerHnswSnapshot->second != State.ReadVersion
+                || topK.HnswIndex->HasChanges()) {
+            return false;
+        }
+
+        TVector<size_t> positions;
+        positions.reserve(State.Columns.size());
+        const ui32 vectorTag = State.Columns[topK.Column];
+        for (const auto tag : State.Columns) {
+            if (tag == vectorTag) {
+                positions.push_back(Max<size_t>());
+            } else {
+                const auto key = Find(TableInfo.KeyColumnIds.begin(), TableInfo.KeyColumnIds.end(), tag);
+                if (key == TableInfo.KeyColumnIds.end()) {
+                    return false; // Other covered-index payload still comes from the table.
+                }
+                positions.push_back(key - TableInfo.KeyColumnIds.begin());
+            }
+        }
+
+        const auto candidates = SearchHnswDistinct(range);
+        TVector<TOwnedCellVec> rows;
+        rows.reserve(candidates.Results.size());
+        for (const auto& [serializedKey, _] : candidates.Results) {
+            const TSerializedCellVec key(serializedKey);
+            TString vector;
+            if (key.GetCells().size() != TableInfo.KeyColumnCount
+                    || !topK.HnswIndex->GetVector(serializedKey, vector)) {
+                return false;
+            }
+            TVector<TCell> cells;
+            cells.reserve(positions.size());
+            for (const auto position : positions) {
+                cells.push_back(position == Max<size_t>()
+                    ? TCell(vector.data(), vector.size()) : key.GetCells()[position]);
+            }
+            rows.emplace_back(TConstArrayRef<TCell>(cells));
+        }
+        // Commit to the top-K accumulator only after all cached values exist.
+        for (const auto& row : rows) {
+            ++RowsProcessed;
+            topK.AddRow(row);
+        }
+        return true;
+    }
+
     EReadStatus MaterializeHnswResults(
         const THnswSearchResult& results,
         TTransactionContext& txc)
@@ -1369,7 +1472,7 @@ private:
         // index size, so post-filtering candidates cannot correctly serve a
         // restricted prefix/range. A range covering the entire local shard is
         // safe: a distributed full scan is clipped to each shard's key bounds.
-        if (State.IsHeadRead && State.VectorTopK && State.VectorTopK->HnswIndex
+        if (CanUseHnsw(*Self, State) && State.VectorTopK && State.VectorTopK->HnswIndex
                 && TableInfo.CoversFullShard(tableRange)) {
             auto results = SearchHnswDistinct(tableRange);
             return MaterializeHnswResults(results, txc);
@@ -2682,10 +2785,21 @@ public:
             if (NKMeans::NeedsVectorSettingsAutoSelect(hnswSettings)) {
                 NKMeans::AutoSelectVectorSettings(hnswSettings, topK.GetTargetVector());
             }
+            if (useCachedHnswParameters && TableInfo.HnswSettings
+                    && TableInfo.HnswVectorColumnTag == vectorColumnTag
+                    && TableInfo.HnswSettings->metric() == hnswSettings.metric()
+                    && TableInfo.HnswSettings->vector_type() == hnswSettings.vector_type()
+                    && TableInfo.HnswSettings->vector_dimension() == hnswSettings.vector_dimension()) {
+                hnswSettings = *TableInfo.HnswSettings;
+            }
+            const bool canUseHnsw = CanUseHnsw(*Self, state);
+            if (canUseHnsw && Self->IsFollower()) {
+                Self->PrepareFollowerHnswIndex(localTid, txc.DB, state.ReadVersion);
+            }
             // A head-built graph cannot provide candidates that existed only
             // at an older MVCC version. Snapshot reads therefore stay on the
             // exact table iterator path.
-            if (state.IsHeadRead) {
+            if (canUseHnsw) {
                 if (auto cached = Self->GetHnswIndex(localTid, vectorColumnTag,
                         hnswSettings, useCachedHnswParameters)) {
                     Self->RegisterHnswCacheLookup(localTid, true);
@@ -2693,12 +2807,15 @@ public:
                         Self->TabletID() << " HNSW: cache hit for localTid=" << localTid
                         << " size=" << cached->Size());
                     topState->HnswIndex = std::move(cached);
+                    if (Self->IsFollower()) {
+                        topState->FollowerHnswSnapshot.emplace(txc.DB.Head(localTid), state.ReadVersion);
+                    }
                 } else {
                     Self->RegisterHnswCacheLookup(localTid, false);
                 }
             }
             if (!topState->HnswIndex
-                    && state.IsHeadRead
+                    && canUseHnsw
                     && Self->GetHnswCacheMemoryLimit() != 0
                     && hnswSettings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
                     && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag,
@@ -2711,11 +2828,14 @@ public:
                 std::shared_ptr<void> memoryReservation;
                 auto vectors = ScanVectorColumnForHnsw(
                     txc, TableInfo, vectorColumnTag, hnswSettings,
-                    *Self, memoryReservation, reservedBytes, pageFault);
+                    *Self, memoryReservation, reservedBytes, pageFault,
+                    Self->IsFollower() ? state.ReadVersion : TRowVersion::Max());
                 if (pageFault) {
-                    Self->RegisterHnswScanPageFault(localTid);
+                    Self->DeferHnswIndexBuild(localTid, TDuration::MilliSeconds(500));
                 } else if (!memoryReservation) {
-                    Self->DisableHnswIndexBuild(localTid);
+                    // Splits and replica builds can temporarily retain other
+                    // graphs. Retry after their reservations are released.
+                    Self->DeferHnswIndexBuild(localTid, TDuration::Seconds(5));
                 } else if (vectors.empty()
                         || vectors.size() < GetHnswMinRows(hnswSettings)) {
                     Self->DisableHnswIndexBuild(localTid);

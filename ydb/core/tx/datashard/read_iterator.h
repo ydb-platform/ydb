@@ -132,6 +132,7 @@ public:
         , PathId(pathId)
         , ReadVersion(readVersion)
         , IsHeadRead(isHeadRead)
+        , RequestedHeadRead(isHeadRead)
         , SchedulableRead(std::move(schedulableRead))
         , SessionId(sessionId)
         , StartTs(ts)
@@ -172,6 +173,7 @@ public:
     std::vector<NTable::TTag> Columns;
     TRowVersion ReadVersion;
     bool IsHeadRead;
+    const bool RequestedHeadRead;
     ui64 LockId = 0;
     ui32 LockNodeId = 0;
     ui64 QuerySpanId = 0;

@@ -57,21 +57,14 @@ Automatically run [COMMIT](commit.md) after every statement.
 | --- | --- |
 | String | — |
 
-Add the specified prefix to table paths. A relative prefix, such as `folder` or `./folder`, is resolved from the root of the database specified in the connection. An absolute prefix (starting with `/`) is resolved from the cluster root.
+Add the specified prefix to the cluster table paths. It uses standard file system path concatenation, supporting parent folder `..` referencing and requiring no trailing slash. For example,
 
-Paths are combined using file system rules: `.` and `..` are supported, and a trailing slash is optional. For example, when connected to the `/local` database:
+`PRAGMA TablePathPrefix = "home/yql";
+SELECT * FROM test;`
 
-```yql
-PRAGMA TablePathPrefix = "./folder";
-SELECT * FROM users; -- /local/folder/users
-SELECT * FROM `../users`; -- /local/users
-```
+Relative prefixes, such as `folder` or `./folder`, are resolved from the query base path — the path used to resolve table names by default. A prefix starting with `/` is considered absolute.
 
-Each relative prefix is resolved from the database root, even if another prefix was set earlier. An empty global prefix refers to the database root.
-
-`..` can resolve a path above the database root. For the database `/Root/database`, the prefix `../sibling` resolves to `/Root/sibling`. The resulting path is subject to the same access checks and operation-specific database restrictions as an explicitly absolute path.
-
-The prefix is not added if the table name is an absolute path (starts with /).
+The prefix is not added if the table name in the query is an absolute path (starts with /).
 
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 

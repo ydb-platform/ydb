@@ -750,7 +750,7 @@ public:
                 each = L(each, key);
             }
             if (ctx.PragmaUseTablePrefixForEach) {
-                const auto prefixPath = ctx.GetResolvedPrefixPath(Service_, Cluster_);
+                TStringBuf prefixPath = ctx.GetPrefixPath(Service_, Cluster_);
                 if (prefixPath) {
                     each = L(each, BuildQuotedAtom(Pos_, TString(prefixPath)));
                 }
@@ -968,7 +968,7 @@ public:
 
             auto partitionList = Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
             if (ctx.PragmaUseTablePrefixForEach) {
-                const auto prefixPath = ctx.GetResolvedPrefixPath(Service_, Cluster_);
+                TStringBuf prefixPath = ctx.GetPrefixPath(Service_, Cluster_);
                 if (prefixPath) {
                     partitionList = L(partitionList, BuildQuotedAtom(Pos_, TString(prefixPath)));
                 }

@@ -366,8 +366,8 @@ TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>&
         return TQueryAst(std::make_shared<NYql::TAstParseResult>(MakeRejectedSyntaxResult(PgSyntaxNotSupportedMessage)), {}, {}, false, {});
     }
 
-    bool deprecatedSQL = false;
-    bool keepInCache = true;
+    bool deprecatedSQL;
+    bool keepInCache;
     TMaybe<TString> commandTagName;
     TMaybe<ui16> sqlVersion;
 

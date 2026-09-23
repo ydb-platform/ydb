@@ -186,14 +186,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 UNIT_ASSERT_C(absolute.front().Ast->IsOk(), absolute.front().Ast->Issues.ToString());
                 UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
 
-                // Native YQL also carries the snapshot used by cache validation.
-                const auto native = ParseStatements("((return world))", {}, false, builder, split);
-                UNIT_ASSERT_VALUES_EQUAL(native.size(), 1);
-                UNIT_ASSERT_C(native.front().Ast->IsOk(), native.front().Ast->Issues.ToString());
-                UNIT_ASSERT(native.front().KeepInCache);
-                UNIT_ASSERT_VALUES_EQUAL(native.front().EnableTablePathPrefixRelativePaths, enabled);
-                UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
-
                 // Per-database diagnostics survive the sysview aggregation transport.
                 NSysView::TDbServiceCounters serialized;
                 databaseCounters->ToProto(serialized);

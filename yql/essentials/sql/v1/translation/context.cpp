@@ -121,6 +121,16 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
+    if (Settings.EnableTablePathPrefixRelativePaths && Settings.PathPrefix.StartsWith('/')) {
+        KikimrPathPrefix_ = Settings.PathPrefix;
+        for (auto& [cluster, prefix] : ClusterPathPrefixes_) {
+            const auto service = GetClusterProvider(cluster);
+            if (!prefix.empty() && service && *service == KikimrProviderName) {
+                prefix = BuildTablePath(Settings.PathPrefix, prefix);
+            }
+        }
+    }
+
     if (IsAvailable(NYql::NFeature::GroupByExprAfterWhere)) {
         GroupByExprAfterWhere = true;
     }
@@ -395,30 +405,39 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (!value.StartsWith('/')) {
         IncrementMonCounter("TablePathPrefix", "NonAbsolutePath");
     }
+    const auto resolvePrefix = [&](const TString& service) {
+        return service == KikimrProviderName && !value.empty() &&
+            Settings.EnableTablePathPrefixRelativePaths && Settings.PathPrefix.StartsWith('/')
+            ? BuildTablePath(Settings.PathPrefix, value) : value;
+    };
     if (arg.Defined()) {
         if (*arg == YtProviderName || *arg == KikimrProviderName || *arg == RtmrProviderName)
         {
-            ProviderPathPrefixes_[*arg] = value;
+            ProviderPathPrefixes_[*arg] = resolvePrefix(*arg);
             return true;
         }
 
         TString normalizedClusterName;
-        if (!GetClusterProvider(*arg, normalizedClusterName)) {
+        const auto service = GetClusterProvider(*arg, normalizedClusterName);
+        if (!service) {
             Error() << "Unknown cluster or provider: " << *arg;
             IncrementMonCounter("sql_errors", "BadPragmaValue");
             return false;
         }
 
-        ClusterPathPrefixes_[normalizedClusterName] = value;
+        ClusterPathPrefixes_[normalizedClusterName] = resolvePrefix(*service);
     } else {
         PathPrefix_ = value;
+        if (Settings.EnableTablePathPrefixRelativePaths && Settings.PathPrefix.StartsWith('/')) {
+            KikimrPathPrefix_ = BuildTablePath(Settings.PathPrefix, value);
+        }
     }
 
     return true;
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
-    const auto prefixPath = GetResolvedPrefixPath(service, cluster);
+    TStringBuf prefixPath = GetPrefixPath(service, cluster);
     if (prefixPath) {
         return AddTablePathPrefix(*this, prefixPath, path);
     }
@@ -438,22 +457,13 @@ TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& 
         auto* providerPrefix = ProviderPathPrefixes_.FindPtr(service);
         if (providerPrefix && !providerPrefix->empty()) {
             return *providerPrefix;
+        } else if (service == KikimrProviderName && !KikimrPathPrefix_.empty()) {
+            return KikimrPathPrefix_;
         } else if (!PathPrefix_.empty()) {
             return PathPrefix_;
         }
         return {};
     }
-}
-
-TString TContext::GetResolvedPrefixPath(const TString& service, const TDeferredAtom& cluster) {
-    const TStringBuf prefixPath = GetPrefixPath(service, cluster);
-    if (Settings.EnableTablePathPrefixRelativePaths && service == KikimrProviderName &&
-        Settings.PathPrefix.StartsWith('/') && !IsDynamicCluster(cluster)) {
-        // KQP supplies the database root in the immutable translation settings.
-        // Later pragmas replace the prefix, but do not change its base directory.
-        return BuildTablePath(Settings.PathPrefix, prefixPath);
-    }
-    return TString(prefixPath);
 }
 
 TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {

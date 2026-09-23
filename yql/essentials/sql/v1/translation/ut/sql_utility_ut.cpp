@@ -73,10 +73,39 @@ Y_UNIT_TEST(LegacyAccessorAndTopicFactoryRemainAvailable) {
         UNIT_ASSERT(ctx.SetPathPrefix("./folder"));
         const TContext& legacy = ctx;
         const TStringBuf prefix = (legacy.*getPrefix)("kikimr", cluster);
-        UNIT_ASSERT_VALUES_EQUAL(prefix, "./folder");
-        UNIT_ASSERT_VALUES_EQUAL(ctx.GetResolvedPrefixPath("kikimr", cluster),
-            enabled ? "/Root/database/folder" : "./folder");
+        UNIT_ASSERT_VALUES_EQUAL(prefix, enabled ? "/Root/database/folder" : "./folder");
         UNIT_ASSERT(buildTopic(TPosition{}, cluster, TDeferredAtom(TPosition{}, "users")));
+    }
+}
+
+Y_UNIT_TEST(PrefixStoragePreservesProviderAndEmptyFallbacks) {
+    for (bool enabled : {false, true}) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.EnableTablePathPrefixRelativePaths = enabled;
+        settings.PathPrefix = "/Root/database";
+        settings.ClusterMapping["plato"] = "kikimr";
+        settings.ClusterMapping["yt_cluster"] = "yt";
+        settings.ClusterPathPrefixes["plato"] = "initial";
+        settings.ClusterPathPrefixes["yt_cluster"] = "./remote";
+        NYql::TIssues issues;
+        TContext ctx({}, {}, settings, {}, issues);
+        const TDeferredAtom cluster(TPosition{}, "plato");
+        const TDeferredAtom remote(TPosition{}, "yt_cluster");
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("kikimr", cluster), enabled ? "/Root/database/initial" : "initial");
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("yt", remote), "./remote");
+
+        UNIT_ASSERT(ctx.SetPathPrefix("folder"));
+        UNIT_ASSERT(ctx.SetPathPrefix("", TString("plato")));
+        UNIT_ASSERT(ctx.SetPathPrefix("provider", TString("kikimr")));
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("kikimr", cluster), enabled ? "/Root/database/provider" : "provider");
+        UNIT_ASSERT(ctx.SetPathPrefix("", TString("kikimr")));
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("kikimr", cluster), enabled ? "/Root/database/folder" : "folder");
+        UNIT_ASSERT(ctx.SetPathPrefix("", TString("yt_cluster")));
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("yt", remote), "folder");
+
+        UNIT_ASSERT(ctx.SetPathPrefix(""));
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("kikimr", cluster), enabled ? "/Root/database" : "");
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("yt", remote), "");
     }
 }
 

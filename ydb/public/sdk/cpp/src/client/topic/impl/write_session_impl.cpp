@@ -1097,7 +1097,7 @@ void TWriteSessionImpl::InitImpl() {
 
 // Called under lock. Invokes Processor->Write, which is assumed to be deadlock-safe
 void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&& req,
-                                             size_t memoryUsageToRelease) {
+                                             size_t requestMemoryUsage) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     Y_ASSERT(Processor);
@@ -1106,9 +1106,13 @@ void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&&
     }
     auto callback = [cbContext = SelfContext,
                      connectionGeneration = ConnectionGeneration,
-                     memoryUsageToRelease](NYdbGrpc::TGrpcStatus&& grpcStatus) {
+                     requestMemoryUsage](NYdbGrpc::TGrpcStatus&& grpcStatus) {
         if (auto self = cbContext->LockShared()) {
-            self->OnWriteDone(std::move(grpcStatus), connectionGeneration, memoryUsageToRelease);
+            if (requestMemoryUsage) {
+                self->OnWriteRequestDone(requestMemoryUsage);
+            } else {
+                self->OnWriteDone(std::move(grpcStatus), connectionGeneration);
+            }
         }
     };
 
@@ -1140,25 +1144,32 @@ void TWriteSessionImpl::ReadFromProcessor() {
     prc->Read(ServerMessage.get(), std::move(callback));
 }
 
-void TWriteSessionImpl::OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration,
-                                    size_t memoryUsageToRelease) {
+void TWriteSessionImpl::OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration) {
     THandleResult handleResult;
-    bool readyToAccept = false;
     {
         std::lock_guard guard(Lock);
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: OnWriteDone " << status.ToDebugString());
-        const bool wasOk = MemoryUsage <= Settings.MaxMemoryUsage_;
-        if (memoryUsageToRelease) {
-            OnMemoryUsageChangedImpl(-static_cast<i64>(memoryUsageToRelease));
+        if (connectionGeneration != ConnectionGeneration) {
+            return; // Message from previous connection. Ignore.
         }
-
-        if (connectionGeneration == ConnectionGeneration && !Aborting && !status.Ok()) {
+        if (Aborting) {
+            return;
+        }
+        if(!status.Ok()) {
             handleResult = OnErrorImpl(status);
         }
-        readyToAccept = memoryUsageToRelease && !Aborting && !wasOk
-            && MemoryUsage <= Settings.MaxMemoryUsage_;
     }
     ProcessHandleResult(handleResult);
+}
+
+void TWriteSessionImpl::OnWriteRequestDone(size_t requestMemoryUsage) {
+    bool readyToAccept = false;
+    {
+        std::lock_guard guard(Lock);
+        const bool wasOk = MemoryUsage <= Settings.MaxMemoryUsage_;
+        OnMemoryUsageChangedImpl(-static_cast<i64>(requestMemoryUsage));
+        readyToAccept = !Aborting && !wasOk && MemoryUsage <= Settings.MaxMemoryUsage_;
+    }
     if (readyToAccept) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
@@ -1621,11 +1632,8 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
 
     TMemoryUsageChange memoryUsage{MemoryUsage <= Settings.MaxMemoryUsage_, MemoryUsage <= Settings.MaxMemoryUsage_};
     if (block.Compressed) {
-        if (block.Data.size() < block.OriginalMemoryUsage) {
-            block.MemoryUsageToReleaseOnWrite = block.OriginalMemoryUsage - block.Data.size();
-        } else {
-            memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size() - block.OriginalMemoryUsage));
-        }
+        memoryUsage = OnMemoryUsageChangedImpl(
+            static_cast<i64>(block.Data.size()) - static_cast<i64>(block.OriginalMemoryUsage));
         (*Counters->BytesInflightUncompressed) -= block.OriginalSize;
         (*Counters->BytesInflightCompressed) += block.Data.size();
     }
@@ -2007,7 +2015,6 @@ void TWriteSessionImpl::SendImpl() {
     while (IsReadyToSendNextImpl()) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
-        size_t memoryUsageToRelease = 0;
 
         ui32 prevCodec = 0;
 
@@ -2045,9 +2052,6 @@ void TWriteSessionImpl::SendImpl() {
 
             TBlock moveBlock;
             moveBlock.Move(block);
-            Y_ABORT_UNLESS(std::numeric_limits<size_t>::max() - memoryUsageToRelease >= moveBlock.MemoryUsageToReleaseOnWrite);
-            memoryUsageToRelease += moveBlock.MemoryUsageToReleaseOnWrite;
-            moveBlock.MemoryUsageToReleaseOnWrite = 0;
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
             sizeLimiter.Add(blockSize);
@@ -2060,10 +2064,8 @@ void TWriteSessionImpl::SendImpl() {
                 << writeRequest->messages(0).seq_no()
         );
         const size_t requestMemoryUsage = clientMessage.SpaceUsedLong();
-        Y_ABORT_UNLESS(std::numeric_limits<size_t>::max() - memoryUsageToRelease >= requestMemoryUsage);
-        memoryUsageToRelease += requestMemoryUsage;
         OnMemoryUsageChangedImpl(static_cast<i64>(requestMemoryUsage));
-        WriteToProcessorImpl(std::move(clientMessage), memoryUsageToRelease);
+        WriteToProcessorImpl(std::move(clientMessage), requestMemoryUsage);
     }
 }
 

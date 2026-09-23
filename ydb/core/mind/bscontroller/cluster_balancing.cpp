@@ -249,10 +249,10 @@ namespace NKikimr::NBsController {
                 const auto& metrics = pdisk.GetPDiskMetrics();
                 const ui32 expectedSlotCount = metrics.HasExpectedSlotCount()
                     ? metrics.GetExpectedSlotCount()
-                    : pdisk.GetExpectedSlotCount();
+                    : std::max<ui32>(pdisk.GetExpectedSlotCount(), 1);
                 storageInfo.PDiskUsageMap[pdiskId] = {
                     .NumVDisks = pdisk.GetNumStaticSlots(), // initialize with static groups
-                    .ExpectedSlotCount = std::max<ui32>(expectedSlotCount, 1),
+                    .ExpectedSlotCount = expectedSlotCount,
                 };
             }
 

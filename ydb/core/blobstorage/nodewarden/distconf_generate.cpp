@@ -271,6 +271,8 @@ namespace NKikimr::NStorage {
         NBsController::TGroupMapper::TPlacementSnapshot placementSnapshot;
 
         auto applyPDiskConfig = [](TPDiskMapperSettings& settings, const NKikimrBlobStorage::TPDiskConfig& pdiskConfig) {
+            // Treat a zero config count as unspecified, preserving the MaxSlots/default fallback.
+            // A present metrics count below overrides it, including an explicit zero.
             if (pdiskConfig.GetExpectedSlotCount()) {
                 settings.ExpectedSlotCount = pdiskConfig.GetExpectedSlotCount();
             }

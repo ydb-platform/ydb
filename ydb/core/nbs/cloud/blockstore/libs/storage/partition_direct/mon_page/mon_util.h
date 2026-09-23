@@ -15,6 +15,8 @@ void AddStyle(IOutputStream& str, TStringBuf resourceName);
 TString HtmlEscape(TStringBuf in);
 const char* PageParam(EMonPage page);
 const char* PageTitle(EMonPage page);
+const char* DDiskBalanceStrategyParam(EDDiskBalanceStrategy strategy);
+EDDiskBalanceStrategy ParseDDiskBalanceStrategy(TStringBuf value);
 TString MakeDDiskMonPageUrl(const NKikimr::NBsController::TDDiskId& ddiskId);
 void RenderDDiskLink(
     IOutputStream& str,

@@ -73,6 +73,12 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
         const std::shared_ptr<TDirectBlockGroup>& dbg,
         THostIndex hostIndex,
         TDuration waitTimeout);
+    [[nodiscard]] static std::array<size_t, MaxHostCount>
+    CountDDisksByHostDebugOnly(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        EDDiskBalanceStrategy strategy,
+        TDuration waitTimeout);
     [[nodiscard]] static TVector<ui64> ReadAllDDiskSeqNos(
         const TExecutorPtr& executor,
         const std::shared_ptr<TDirectBlockGroup>& dbg,

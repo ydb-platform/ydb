@@ -263,7 +263,16 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
         UNIT_ASSERT_STRING_CONTAINS(html, "Direct Block Group config");
         UNIT_ASSERT_STRING_CONTAINS(html, "<th rowspan=\"2\">Node</th>");
-        UNIT_ASSERT_STRING_CONTAINS(html, "<th rowspan=\"2\">Total</th>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<th>Total <form method='post' "
+            "action='?TabletID=42&page=overview&action=balance&from=0&to=32&"
+            "strategy=touched'");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<th>Total <form method='post' "
+            "action='?TabletID=42&page=overview&action=balance&from=32&to=33&"
+            "strategy=touched'");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "title=\"Config:  need move 0 of 0 DDisks (0%)&#10;"
@@ -286,43 +295,69 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         TMonPageData data = MakeData();
         data.TabletInfo.BlockCount = 5 * 8192;
         data.Dbgs = MakeOverviewDbgs();
+        data.Dbgs[0].ConfiguredDDiskImbalance = {
+            .Moves = 6,
+            .TotalDDiskCount = 15,
+            .Percent = 40};
+        data.Dbgs[0].TouchedDDiskImbalance = {
+            .Moves = 3,
+            .TotalDDiskCount = 9,
+            .Percent = 33};
 
-        TTestTouchedProvider touchedProvider;
-        TVChunkConfigs configs;
-        for (ui32 region = 0; region < 5; ++region) {
-            const ui32 vChunkIndex = region * VChunkPerRegionCount;
-            if (region < 3) {
-                touchedProvider.Touched.insert(vChunkIndex);
-            }
-            configs.emplace(
-                vChunkIndex,
-                TVChunkConfig::Make(
-                    vChunkIndex,
-                    THostRoles::MakeRotating(5, 0, 3, EHostRole::HandOff),
-                    THostRoles::MakeRotating(5, 0, 3, EHostRole::None),
-                    THostMask::MakeAll(5)));
-        }
-
-        const TString html = RenderMonPage(data, configs, touchedProvider);
+        const TString html =
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<label><select name='strategy' aria-label='DDisk balance "
+            "strategy' "
+            "onchange='this.form.submit()'><option value='touched' selected>"
+            "Touched</option><option value='configured'>Configured</option>");
         UNIT_ASSERT_STRING_CONTAINS(html, "<th rowspan=\"1\">Node</th>");
         UNIT_ASSERT_VALUES_EQUAL(1, CountDbgHeaderRows(html));
         UNIT_ASSERT_STRING_CONTAINS(
             html,
             "title=\"Config:  need move 6 of 15 DDisks (40%)&#10;"
             "Touched:  need move 3 of 9 DDisks (33%)\">"
-            "<a href='?TabletID=42&page=dbg&dbg=0'>DBG #0</a> Imb: 33%</th>");
+            "<a href='?TabletID=42&page=dbg&dbg=0'>DBG #0</a> Imb: 33% "
+            "<form method='post' "
+            "action='?TabletID=42&page=overview&action=balance&from=0&to=1&"
+            "strategy=touched'");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<th>Total <form method='post' "
+            "action='?TabletID=42&page=overview&action=balance&from=0&to=32&"
+            "strategy=touched'");
+        UNIT_ASSERT_C(!html.Contains("action=balance&from=1&to=2'"), html);
         UNIT_ASSERT_STRING_CONTAINS(html, "dbg=1'>DBG #1</a> Imb: 0%</th>");
         UNIT_ASSERT_STRING_CONTAINS(html, "dbg=31'>DBG #31</a> Imb: 0%</th>");
 
-        configs[4 * VChunkPerRegionCount].DemoteHost(2);
-        configs[4 * VChunkPerRegionCount].PromoteHost(3);
+        data.SelectedDDiskBalanceStrategy = EDDiskBalanceStrategy::Configured;
+        const TString configuredHtml =
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(
+            configuredHtml,
+            "<option value='touched'>Touched</option>"
+            "<option value='configured' selected>Configured</option>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            configuredHtml,
+            "dbg=0'>DBG #0</a> Imb: 40% <form method='post' "
+            "action='?TabletID=42&page=overview&action=balance&from=0&to=1&"
+            "strategy=configured'");
+
+        data.Dbgs[0].ConfiguredDDiskImbalance = {
+            .Moves = 5,
+            .TotalDDiskCount = 15,
+            .Percent = 33};
         const TString roundedHtml =
-            RenderMonPage(data, configs, touchedProvider);
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
         UNIT_ASSERT_STRING_CONTAINS(
             roundedHtml,
             "title=\"Config:  need move 5 of 15 DDisks (33%)&#10;"
             "Touched:  need move 3 of 9 DDisks (33%)\">"
-            "<a href='?TabletID=42&page=dbg&dbg=0'>DBG #0</a> Imb: 33%</th>");
+            "<a href='?TabletID=42&page=dbg&dbg=0'>DBG #0</a> Imb: 33% "
+            "<form method='post' "
+            "action='?TabletID=42&page=overview&action=balance&from=0&to=1&"
+            "strategy=configured'");
     }
 
     Y_UNIT_TEST(OverviewReadsTouchedVChunksByRegion)
@@ -344,6 +379,32 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_VALUES_EQUAL(
             2,
             CountOccurrences(html, "DDisk:&#10;Primary:12&#10;PBuffer: 20"));
+    }
+
+    Y_UNIT_TEST(OverviewRendersConfiguredVChunksAndRealConfigs)
+    {
+        TMonPageData data = MakeData();
+        data.SelectedDDiskBalanceStrategy = EDDiskBalanceStrategy::Configured;
+        data.Dbgs = MakeOverviewDbgs();
+
+        auto config = TVChunkConfig::MakeDefault(
+            0,
+            DirectBlockGroupHostCount,
+            DefaultPrimaryCount);
+        config.PromoteHost(3);
+        config.DisableHost(0);
+        const TVChunkConfigs configs{{0, std::move(config)}};
+        data.Dbgs[0].FreshDDisks[0].Set(3);
+
+        TTestTouchedProvider touchedProvider;
+        const TString html = RenderMonPage(data, configs, touchedProvider);
+
+        UNIT_ASSERT_VALUES_EQUAL(0, touchedProvider.GetCallCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, touchedProvider.GetRegionCallCount);
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "DDisk:&#10;Primary:191&#10;Fresh:1&#10;Rotten:1&#10;PBuffer: "
+            "319");
     }
 
     Y_UNIT_TEST(OverviewAppliesRealVChunkConfig)

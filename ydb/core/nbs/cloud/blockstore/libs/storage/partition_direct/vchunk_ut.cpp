@@ -886,6 +886,78 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 
+    Y_UNIT_TEST_F(ShouldPromoteTargetDDiskForBalance, TBaseFixture)
+    {
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            false,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            3,
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]
+            {
+                vchunk->BalanceDDisks(2, 3);
+                return true;
+            })
+            .GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        const auto* pendingHost =
+            DirectBlockGroup->PendingDDiskAllocations.FindPtr(
+                VChunkConfig.GetVChunkIndex());
+        UNIT_ASSERT(pendingHost);
+        UNIT_ASSERT_VALUES_EQUAL(THostIndex(3), *pendingHost);
+        const auto& requestedConfig =
+            PartitionDirectService->UpdateConfigRequests.front().Config;
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostRole::Primary,
+            requestedConfig.GetDDiskRole(3));
+        UNIT_ASSERT_VALUES_EQUAL(4, requestedConfig.GetDDisks().Count());
+
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostRole::Primary,
+            AccessConfig(*vchunk).GetDDiskRole(3));
+        UNIT_ASSERT_VALUES_EQUAL(4, AccessConfig(*vchunk).GetDDisks().Count());
+        UNIT_ASSERT(DirectBlockGroup->PendingDDiskAllocations.empty());
+
+        // With no data to copy, the target is already healthy and H2 can be
+        // demoted immediately.
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        const auto& demoteConfig =
+            PartitionDirectService->UpdateConfigRequests.front().Config;
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostRole::Primary,
+            demoteConfig.GetDDiskRole(0));
+        UNIT_ASSERT_VALUES_EQUAL(EHostRole::None, demoteConfig.GetDDiskRole(2));
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostRole::Primary,
+            demoteConfig.GetDDiskRole(3));
+
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        UNIT_ASSERT_VALUES_EQUAL(3, AccessConfig(*vchunk).GetDDisks().Count());
+
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+    }
+
     Y_UNIT_TEST_F(ShouldNotPersistConfigWhenCopyFails, TBaseFixture)
     {
         Init();
@@ -1194,6 +1266,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             "H4+{Disabled,0};",
             AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
         UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", getHealthyDDisks());
+        UNIT_ASSERT(PartitionDirectService->UpdateConfigRequests.empty());
 
         // Execute copier reads and writes.
         for (size_t i = 0; i < VChunkBlockCount / BlocksPerCopy; ++i) {
@@ -1236,6 +1309,22 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
             AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
+
+        // Once copying finishes, the fourth healthy DDisk is unnecessary.
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        const auto& demoteConfig =
+            PartitionDirectService->UpdateConfigRequests.front().Config;
+        UNIT_ASSERT_VALUES_EQUAL(EHostRole::None, demoteConfig.GetDDiskRole(0));
+        UNIT_ASSERT_VALUES_EQUAL(3, demoteConfig.GetDDisks().Count());
+
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostRole::None,
+            AccessConfig(*vchunk).GetDDiskRole(0));
+        UNIT_ASSERT_VALUES_EQUAL(3, AccessConfig(*vchunk).GetDDisks().Count());
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));

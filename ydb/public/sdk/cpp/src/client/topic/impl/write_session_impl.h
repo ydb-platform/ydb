@@ -236,7 +236,6 @@ private:
         size_t PartNumber = 0;
         size_t OriginalSize = 0;
         size_t OriginalMemoryUsage = 0;
-        mutable size_t MemoryUsageToReleaseOnWrite = 0;
         ui32 CodecID = static_cast<ui32>(ECodec::RAW);
         mutable std::vector<std::string_view> OriginalDataRefs;
         mutable std::vector<TInstant> CreatedAt;
@@ -256,7 +255,6 @@ private:
             PartNumber = rhs.PartNumber;
             OriginalSize = rhs.OriginalSize;
             OriginalMemoryUsage = rhs.OriginalMemoryUsage;
-            MemoryUsageToReleaseOnWrite = rhs.MemoryUsageToReleaseOnWrite;
             CodecID = rhs.CodecID;
             OriginalDataRefs.swap(rhs.OriginalDataRefs);
             CreatedAt.swap(rhs.CreatedAt);
@@ -268,7 +266,6 @@ private:
             rhs.OriginalDataRefs.clear();
             rhs.CreatedAt.clear();
             rhs.MessageKeys.clear();
-            rhs.MemoryUsageToReleaseOnWrite = 0;
         }
     };
 
@@ -446,9 +443,10 @@ private:
     void Connect(const TDuration& delay);
     void InitImpl();
     void ReadFromProcessor(); // Assumes that we're under lock.
-    void WriteToProcessorImpl(TClientMessage&& req, size_t memoryUsageToRelease = 0); // Assumes that we're under lock.
+    void WriteToProcessorImpl(TClientMessage&& req, size_t requestMemoryUsage = 0); // Assumes that we're under lock.
     void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
-    void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration, size_t memoryUsageToRelease);
+    void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration);
+    void OnWriteRequestDone(size_t requestMemoryUsage);
     TProcessSrvMessageResult ProcessServerMessageImpl();
     TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
     TBuffer CompressBufferImpl(std::vector<std::string_view>& data, ECodec codec, i32 level);

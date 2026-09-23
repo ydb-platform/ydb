@@ -405,4 +405,7 @@ message TFeatureFlags {
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
     optional bool EnableIamDelegationSecrets = 336 [default = false]; // YDBFEATURES-144
     optional bool EnableStreamingQueryStateRecompute = 337 [default = false];
+    // When false, a topic read does not return data older than retention.
+    // Set to true to restore reading data that is still stored past the retention period.
+    optional bool EnableTopicReadPriorRetention = 338 [default = false];
 }

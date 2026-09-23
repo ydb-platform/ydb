@@ -16,23 +16,34 @@ permissions:
   checks: read
 
 jobs:
-  diagnose-pr-50858-continuation:
+  diagnose-live-ydb-persistence:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - name: Continue PR 50858 from its active checkpoint
-        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.0.1
+      - name: Check out YDB persistence diagnostic
+        uses: actions/checkout@v4
         with:
-          mode: continue
-          pr: 50858
+          repository: ydb-platform/ydbdoc-review-ng
+          ref: diag-pr50858-ydb-test
+          path: ydbdoc-review-ng
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: ydbdoc-review-ng/pyproject.toml
+
+      - name: Install diagnostic dependencies
+        run: python -m pip install -e './ydbdoc-review-ng[runtime,dev]'
+
+      - name: Exercise production YDB checkpoint persistence
+        working-directory: ydbdoc-review-ng
+        run: >-
+          python -m pytest -q
+          -o 'addopts=--strict-markers --timeout=120'
+          -m live
+          tests/live/test_ydb_continuation.py
         env:
-          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
-          YANDEX_API_KEY: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
-          YDB_GH_TOKEN: ${{ secrets.YDBDOC_PUSH_PAT }}
-          GITHUB_ACTOR: sintjuri
-          YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
-          YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE: ${{ vars.YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE }}
-          YDBDOC_MAX_SOURCE_CHARACTERS: ${{ vars.YDBDOC_MAX_SOURCE_CHARACTERS }}
           YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
 
   ydbdoc-review:

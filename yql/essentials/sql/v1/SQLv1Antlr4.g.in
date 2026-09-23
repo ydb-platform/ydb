@@ -967,8 +967,9 @@ table_setting_value:
 ;
 
 ttl_tier_list: expr (ttl_tier_action (COMMA expr ttl_tier_action)*)?;
+// The optional suffix is an object key prefix, not a cluster-qualified object_ref.
 ttl_tier_action:
-      TO EXTERNAL DATA SOURCE an_id
+      TO EXTERNAL DATA SOURCE an_id (DOT an_id)?
     | DELETE
 ;
 

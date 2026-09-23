@@ -455,6 +455,9 @@ namespace {
 
         for (auto& [key, allocation] : DataChunkAllocationsInFlight) {
             Y_UNUSED(key);
+            if (!allocation.LogIssued) {
+                PendingChunkRelease.insert(allocation.ChunkIdx);
+            }
             for (auto& parked : allocation.ParkedWriteResults) {
                 parked.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
                 parked.ErrorMessage = GetBrokenReason();
@@ -509,6 +512,16 @@ namespace {
                 && ev->Cookie == PBShutdownCookie && ev->Sender == PersistentBufferActorId) {
             PersistentBufferGone = true;
             TryCompleteStop();
+            return;
+        }
+        if (sourceType == NPDisk::TEvChunkReserve::EventType && ReserveInFlight) {
+            ReserveInFlight = false;
+            BeginStopping("PDisk reserve request was not delivered");
+            TryCompleteStop();
+            return;
+        }
+        if (sourceType == NPDisk::TEvChunkForget::EventType && ev->Cookie == StartupForgetCookie) {
+            BeginStopping("PDisk startup forget request was not delivered");
             return;
         }
         if (sourceType == TEv::EvRead || sourceType == TEv::EvReadPersistentBuffer) {
@@ -577,6 +590,7 @@ namespace {
 
             hFunc(NPDisk::TEvYardInitResult, Handle)
             hFunc(NPDisk::TEvReadLogResult, Handle)
+            hFunc(NPDisk::TEvChunkForgetResult, Handle)
             cFunc(TEvPrivate::EvHandleSingleQuery, HandleSingleQuery)
             hFunc(NPDisk::TEvChunkReserveResult, Handle)
             hFunc(NPDisk::TEvLogResult, Handle)
@@ -867,6 +881,7 @@ namespace {
             cFunc(TEvPrivate::EvFinishStopping, FinishStopping)
             cFunc(TEvPrivate::EvCompleteStop, CompleteStop)
             cFunc(TEvPrivate::EvStopIoTimeout, HandleStopIoTimeout)
+            hFunc(NPDisk::TEvChunkReserveResult, HandleStopping)
             hFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvGetPersistentBufferInfo, Handle)
             default:
@@ -917,7 +932,7 @@ namespace {
             // Includes fallback: cancellation results must precede destruction.
             Send(SelfId(), new TEvPrivate::TEvFinishStopping);
         }
-        if (previous || !PersistentBufferGone) {
+        if (previous || !PersistentBufferGone || ReserveInFlight) {
             Schedule(StopIoTimeout, new TEvPrivate::TEvStopIoTimeout);
         }
     }
@@ -930,7 +945,7 @@ namespace {
     }
 
     void TDDiskActor::TryCompleteStop() {
-        if (!PoisonReceived || !OwnDrainComplete || !PersistentBufferGone) {
+        if (!PoisonReceived || !OwnDrainComplete || !PersistentBufferGone || ReserveInFlight) {
             return;
         }
 #if defined(__linux__)
@@ -974,6 +989,9 @@ namespace {
             YDB_LOG_ERROR("TDDiskActor I/O stalled during shutdown",
                 {"DDiskId", DDiskId}, {"persistentBuffer", IsPersistentBufferActor});
         }
+        if (ReserveInFlight) {
+            YDB_LOG_ERROR("DDisk waiting for outstanding reservation", {"DDiskId", DDiskId});
+        }
         if (!PersistentBufferGone) {
             YDB_LOG_ERROR("DDisk waiting for PersistentBuffer shutdown", {"DDiskId", DDiskId},
                 {"child", PersistentBufferActorId});
@@ -1012,6 +1030,7 @@ namespace {
             FlushParkedAllocationReplies(allocation);
         }
         ClearIoStalled();
+        ReleaseUncommittedChunks();
         // A queued retry can have posted a cancellation result ahead of this
         // barrier. Do not let child Gone bypass that final result turn.
         Send(SelfId(), new TEvPrivate::TEvCompleteStop);

@@ -28,7 +28,7 @@ class TVChunkConfig;
 class TBlocksDirtyMap
     : public ILockableRanges
     , public IReadyQueue
-    , public IBehindAheadMonitor
+    , public IBehindMonitor
     , public TDisableCopyMove
     , public std::enable_shared_from_this<TBlocksDirtyMap>
 {
@@ -48,7 +48,8 @@ public:
         ui16 blockCount);
     ~TBlocksDirtyMap() override;
 
-    // Note. Fresh watermarks are not applying for exists DDisks.
+    // Existing DDisks retain their Behind state; newly added DDisks start
+    // with full Behind only when the VChunk is touched.
     void UpdateConfig(const TVChunkConfig& vChunkConfig, bool isTouched);
 
     void RestorePBuffer(
@@ -85,13 +86,14 @@ public:
         THostMask completedWrites,
         TPBufferKey pBufferKey);
 
-    // Sets the mark up to which the disk can be read.
-    void UpdateWatermarkDebugOnly(THostIndex host, ui64 bytesOffset);
+    // Sets the readable prefix of one DDisk for tests.
+    void SetReadablePrefixDebugOnly(THostIndex host, ui64 bytesOffset);
     // Returns the first "fresh" range to be synced with data from another
     // replicas. Nullopt means that the disk is completely full of data. And you
     // can read it from anywhere.
     [[nodiscard]] std::optional<TBlockRange16> GetFreshRange(
         THostIndex host) const;
+    [[nodiscard]] THostMask GetOutdatedDDisks() const;
     // See TSyncHint for details.
     // The BeginRangeSync and EndRangeSync calls must be paired.
     TSyncHint BeginRangeSync(THostIndex host, TBlockRange16 range);
@@ -138,15 +140,21 @@ public:
         THostIndex host,
         EPBufferCounter counter) override;
 
-    // IBehindAheadMonitor implementation
-    void OnBehindAheadChanged() override;
+    // IBehindMonitor implementation
+    void OnBehindChanged() override;
 
     [[nodiscard]] bool NeedFlush() const;
     [[nodiscard]] bool NeedErase() const;
 
     // Persist
     [[nodiscard]] bool NeedPersist() const;
+    // Returns an empty proto when no DDisk needs repair.
     [[nodiscard]] TDirtyMapStateProto GetStateForPersist() const;
+    // Predicts the future state after applying vChunkConfig without changing
+    // the current in-memory state.
+    [[nodiscard]] TDirtyMapStateProto MakeFutureState(
+        const TVChunkConfig& vChunkConfig,
+        bool isTouched) const;
     void StatePersisted(ui32 persistGeneration);
     [[nodiscard]] ui32 GetCurrentGeneration() const;
 
@@ -168,9 +176,8 @@ public:
     [[nodiscard]] TString DebugPrintReadyToClone() const;
     [[nodiscard]] TString DebugPrintReadyToFlush() const;
     [[nodiscard]] TString DebugPrintReadyToErase() const;
-    [[nodiscard]] TString DebugPrintAhead() const;
     [[nodiscard]] TString DebugPrintBehind() const;
-    [[nodiscard]] TString DebugPrintAheadBehindBrief() const;
+    [[nodiscard]] TString DebugPrintBehindBrief() const;
     [[nodiscard]] TString DebugPrintInflightSync() const;
 
 private:
@@ -215,7 +222,7 @@ private:
         TBlockRange16 range,
         ui16 offsetBlocks);
 
-    void AddToAheadAndBehindOnFlushCompleted(
+    void UpdateBehindOnFlushCompleted(
         const TInflightInfo& inflight,
         THostMask ddisks);
 
@@ -272,7 +279,7 @@ private:
 
     // DDisks freshness state.
     TVector<TDDiskState> DDiskStates;
-    // Changes when behind/ahead map changes.
+    // Changes when the behind map changes.
     ui32 StateGeneration = 0;
     // Last persisted DDisks states generation.
     ui32 PersistedStateGeneration = 0;

@@ -195,15 +195,25 @@ public:
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath mainTablePath = TPath::Resolve(mainTableStr, context.SS);
+
+        // When the source index is given as a full path (moving a parent table,
+        // e.g. move-with-replace), the main table is the destination path, which
+        // may be a non-column-table being dropped. In that case the column-table
+        // check must be applied to the source index's parent table instead.
+        const bool srcIsFullPath = srcName.StartsWith('/');
+
         {
             TPath::TChecker checks = mainTablePath.Check();
             checks
                 .NotEmpty()
                 .IsResolved()
                 .NotDeleted()
-                .IsColumnTable()
                 .IsUnderOperation()
                 .IsUnderTheSameOperation(OperationId.GetTxId());
+
+            if (!srcIsFullPath) {
+                checks.IsColumnTable();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -215,7 +225,7 @@ public:
         TPath srcPath(context.SS);
         bool srcIndexInMainTable = false;
 
-        if (srcName.StartsWith('/')) {
+        if (srcIsFullPath) {
             // Full path (for moving parent table case)
             srcPath = TPath::Resolve(srcName, context.SS);
         } else {

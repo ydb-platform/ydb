@@ -1,5 +1,5 @@
 # doc_verify на translation PR (ветка в upstream или в fork).
-# QA = тот же пайплайн, что после doc_translate (@v0.1.0).
+# QA = тот же пайплайн, что после doc_translate (@v1.0.1).
 
 name: ydbdoc-review (doc_verify label)
 
@@ -12,6 +12,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  checks: read
 
 jobs:
   ydbdoc-verify:
@@ -21,35 +22,34 @@ jobs:
       group: ydbdoc-verify-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     steps:
-      - name: Checkout translation source
-        uses: actions/checkout@v5
+      - name: Read authoritative source provenance
+        id: source
+        uses: actions/github-script@v8
         with:
-          ref: ${{ github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha }}
-          fetch-depth: 0
-          allow-unsafe-pr-checkout: true
-
-      - name: Fetch merge base ref
-        run: |
-          git fetch origin ${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const match = body.match(/<!-- ydbdoc-source-sha:([0-9a-f]{40}) -->/);
+            if (!match) {
+              core.setFailed('Translation PR has no valid ydbdoc source SHA provenance marker.');
+              return;
+            }
+            core.setOutput('sha', match[1]);
 
       - name: Verify translation PR
-        uses: ydb-platform/ydbdoc-review@v0.1.0
+        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.0.1
         with:
           mode: verify
-          repo: ${{ github.repository }}
           pr: ${{ github.event.pull_request.number }}
-          merge_base_with: origin/${{ github.event.pull_request.base.ref }}
+          source-sha: ${{ steps.source.outputs.sha }}
+          target-sha: ${{ github.event.pull_request.head.sha }}
         env:
-          YANDEX_CLOUD_FOLDER_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
-          YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
-          YDBDOC_REPO_PATH: ${{ github.workspace }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
+          YANDEX_API_KEY: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
+          YDB_GH_TOKEN: ${{ secrets.YDBDOC_PUSH_PAT }}
           GITHUB_ACTOR: ${{ github.event.sender.login }}
           YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
           YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE: ${{ vars.YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE }}
           YDBDOC_MAX_SOURCE_CHARACTERS: ${{ vars.YDBDOC_MAX_SOURCE_CHARACTERS }}
-          YDBDOC_DAILY_BUDGET_RUB: ${{ vars.YDBDOC_DAILY_BUDGET_RUB }}
-          YDBDOC_TRANSCRIPT_BACKEND: ydb
           YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
 
   trigger-verify-ci:

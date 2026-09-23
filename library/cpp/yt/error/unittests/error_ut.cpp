@@ -247,7 +247,7 @@ TEST(TErrorTest, WithIfLazyInnerError)
         return TError("Inner error");
     };
 
-    // NB: A named error exercises the |const &| overload; the temporaries above cover |&&|.
+    // NB: A named error exercises the |const&| overload.
     const auto error = TError("Error");
 
     auto attached = error.WithIf(true, YT_LAZY(makeInnerError()));

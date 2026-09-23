@@ -12,6 +12,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  checks: read
 
 jobs:
   ydbdoc-review:
@@ -21,41 +22,38 @@ jobs:
       group: ydbdoc-review-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     steps:
-      - name: Checkout translation source
-        uses: actions/checkout@v5
+      - name: Resolve immutable authoritative source
+        id: source
+        uses: actions/github-script@v8
         with:
-          # Merged PR (в т.ч. из форка): коммит уже в upstream (main).
-          # Open PR: head как раньше.
-          ref: ${{ github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha }}
-          fetch-depth: 0
-          allow-unsafe-pr-checkout: true
-
-      - name: Fetch merge base ref
-        run: |
-          git fetch origin ${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr.merged) {
+              core.setOutput('sha', pr.head.sha);
+              return;
+            }
+            const { data: ref } = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `heads/${pr.base.ref}`,
+            });
+            core.setOutput('sha', ref.object.sha);
 
       - name: Documentation translation review
-        uses: ydb-platform/ydbdoc-review@v0.1.0
+        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.0.1
         with:
-          repo: ${{ github.repository }}
+          mode: translate
           pr: ${{ github.event.pull_request.number }}
-          merge_base_with: origin/${{ github.event.pull_request.base.ref }}
-          # dry_run: "true"   # раскомментируйте для прогона без записи/commit/push
-          # no_commit: "true" # или только запись файлов без коммита (см. README)
+          source-sha: ${{ steps.source.outputs.sha }}
+          budget-rub: ${{ vars.YDBDOC_DAILY_BUDGET_RUB }}
         env:
-          YANDEX_CLOUD_FOLDER_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
-          YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
-          YDBDOC_REVIEW_ENABLED: ${{ vars.YDBDOC_REVIEW_ENABLED }}
-          YDBDOC_MODEL_CHECK: ${{ vars.YDBDOC_MODEL_CHECK }}
-          YDBDOC_MODEL_TRANSLATE: ${{ vars.YDBDOC_MODEL_TRANSLATE }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          YDBDOC_REPO_PATH: ${{ github.workspace }}
+          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
+          YANDEX_API_KEY: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
+          YDB_GH_TOKEN: ${{ secrets.YDBDOC_PUSH_PAT }}
           GITHUB_ACTOR: ${{ github.event.sender.login }}
           YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
           YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE: ${{ vars.YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE }}
           YDBDOC_MAX_SOURCE_CHARACTERS: ${{ vars.YDBDOC_MAX_SOURCE_CHARACTERS }}
-          YDBDOC_DAILY_BUDGET_RUB: ${{ vars.YDBDOC_DAILY_BUDGET_RUB }}
-          YDBDOC_TRANSCRIPT_BACKEND: ydb
           YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
 
   trigger-translation-ci:
@@ -66,14 +64,14 @@ jobs:
       - name: Trigger PR-check (ok-to-test) on translation PR
         uses: actions/github-script@v8
         with:
-          # PAT only here (no checkout): cascades into PR-check/docs rebuild without
+          # This separate automation PAT cascades into PR-check/docs rebuild without
           # exposing YDBOT_TOKEN next to untrusted fork PR code.
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const sourcePr = context.payload.pull_request.number;
-            const head = `${owner}:ydbdoc-review/pr-${sourcePr}`;
+            const head = `${owner}:translation/pr-${sourcePr}`;
             let translationPr = null;
 
             for (let attempt = 1; attempt <= 6; attempt++) {

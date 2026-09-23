@@ -1051,6 +1051,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         void Handle(TEvHugeSpaceStat::TPtr &ev, const TActorContext &ctx) {
             auto res = std::make_unique<TEvHugeSpaceStatResult>();
             res->Stat = State.Pers->Heap->GetSpaceStat();
+            if (State.Pers->StripeHeap) {
+                res->Stat.StripeHeap = State.Pers->StripeHeap->GetSpaceStat();
+            }
             ctx.Send(ev->Sender, res.release(), 0, ev->Cookie);
         }
 

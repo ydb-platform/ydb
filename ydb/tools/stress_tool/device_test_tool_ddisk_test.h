@@ -78,10 +78,12 @@ struct TDDiskDeviceInfo {
 
 inline NDDisk::TDDiskConfig MakeDDiskConfig(
         bool enableChecksums,
-        bool forcePDiskFallback) {
+        bool forcePDiskFallback,
+        ui64 checksumsCacheBytes) {
     NDDisk::TDDiskConfig config;
     config.EnableChecksums = enableChecksums;
     config.ForcePDiskFallback = forcePDiskFallback;
+    config.IntegrityChecksumCacheBytes = checksumsCacheBytes;
     return config;
 }
 
@@ -328,7 +330,7 @@ struct TDDiskTest : public TPDiskTest<ChunkSize> {
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
             const NDDisk::TDDiskConfig ddiskConfig =
                 MakeDDiskConfig(!TBase::Cfg.DisableDDiskChecksums,
-                    TBase::Cfg.ForcePDiskFallback);
+                    TBase::Cfg.ForcePDiskFallback, TBase::Cfg.DDiskChecksumsCacheBytes);
             TBase::Printer->AddGlobalParam("DDiskChecksums", ddiskConfig.EnableChecksums ? "on" : "off");
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {

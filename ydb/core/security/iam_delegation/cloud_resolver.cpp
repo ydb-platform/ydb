@@ -15,23 +15,23 @@ using namespace NActors;
 namespace {
 
 // A client actor registered for one call: poisoned when the call ends, including when the caller's
-// timeout cancels the call (the coroutine frame is destroyed on the caller's thread, in its context).
-// Not on actor system shutdown: there is no context then, and the client dies with the system.
+// timeout cancels the call or the caller dies with the call in flight. The poison goes through the actor
+// system pointer taken at construction: the frame may be destroyed without an activation context.
 class TCallClient {
 public:
     explicit TCallClient(IActor* client)
-        : Id(TActivationContext::AsActorContext().RegisterWithSameMailbox(client))
+        : ActorSystem(TActivationContext::ActorSystem())
+        , Id(TActivationContext::AsActorContext().RegisterWithSameMailbox(client))
     {}
 
     TCallClient(const TCallClient&) = delete;
     TCallClient& operator=(const TCallClient&) = delete;
 
     ~TCallClient() {
-        if (TlsActivationContext) {
-            TActivationContext::Send(new IEventHandle(Id, TActorId(), new TEvents::TEvPoison()));
-        }
+        ActorSystem->Send(new IEventHandle(Id, TActorId(), new TEvents::TEvPoison()));
     }
 
+    TActorSystem* const ActorSystem;
     const TActorId Id;
 };
 

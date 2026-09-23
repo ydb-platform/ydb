@@ -8,6 +8,7 @@
 #include <ydb/core/security/iam_delegation/system_token_service.h>
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/protos/config.pb.h>
@@ -1612,6 +1613,7 @@ Y_UNIT_TEST_SUITE(IamSystemTokenService) {
 // The KQP proxy starts the two services at its bootstrap according to the feature flag and the configuration:
 // no flag - nothing; incomplete identity - nothing (with a warning); token service only when the control plane
 // endpoint is missing; both when everything is there, including when the identity comes from the replication section.
+// The flag is followed at runtime in one direction: a config notification turning it on starts the services.
 Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
     struct TCase {
         bool Flag = true;
@@ -1672,6 +1674,52 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
 
     Y_UNIT_TEST(BothWithFullConfig) {
         Check({.Iam = FullIamConfig(), .TokenService = true, .DelegationService = true}, "full IamConfig");
+    }
+
+    // Turning the feature flag on at runtime starts the services: a config notification with the flag delivers
+    // them, a second one changes nothing (each registered once). Turning the flag off is not followed.
+    Y_UNIT_TEST(ConfigNotificationWithTheFlagStartsTheServices) {
+        TPortManager portManager;
+        NKikimrConfig::TAppConfig appConfig;
+        *appConfig.MutableIamConfig() = FullIamConfig();
+        NKikimrConfig::TFeatureFlags featureFlags; // the flag is off at bootstrap
+        auto settings = TServerSettings(portManager.GetPort(2134));
+        settings.SetDomainName("Root").SetAppConfig(appConfig).SetFeatureFlags(featureFlags);
+        TServer server(settings);
+        auto* runtime = server.GetRuntime();
+        const auto proxy = NKqp::MakeKqpProxyID(runtime->GetNodeId(0));
+        const auto sender = runtime->AllocateEdgeActor();
+
+        runtime->Send(new IEventHandle(proxy, sender, new NKqp::TEvKqp::TEvCreateSessionRequest()));
+        UNIT_ASSERT(runtime->GrabEdgeEvent<NKqp::TEvKqp::TEvCreateSessionResponse>(sender, TDuration::Seconds(120)));
+        UNIT_ASSERT(!runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0));
+        UNIT_ASSERT(!runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0));
+
+        // The proxy acknowledges a notification before it re-initializes the services, in the same handler;
+        // a request it has answered afterwards proves the re-initialization ran (FIFO).
+        const auto notify = [&](const NKikimrConfig::TFeatureFlags& flags) {
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            *request->Record.MutableConfig()->MutableFeatureFlags() = flags;
+            runtime->Send(new IEventHandle(proxy, sender, request.Release()));
+            UNIT_ASSERT(runtime->GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender, TDuration::Seconds(120)));
+            runtime->Send(new IEventHandle(proxy, sender, new NKqp::TEvKqp::TEvCreateSessionRequest()));
+            UNIT_ASSERT(runtime->GrabEdgeEvent<NKqp::TEvKqp::TEvCreateSessionResponse>(sender, TDuration::Seconds(120)));
+        };
+
+        featureFlags.SetEnableIamDelegationSecrets(true);
+        notify(featureFlags);
+        const auto tokenService = runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0);
+        const auto delegationService = runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0);
+        UNIT_ASSERT(tokenService && delegationService && runtime->GetLocalServiceId(MakeIamSystemTokenServiceId(), 0));
+
+        notify(featureFlags);
+        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0), tokenService);
+        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0), delegationService);
+
+        featureFlags.SetEnableIamDelegationSecrets(false);
+        notify(featureFlags);
+        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegatedTokenServiceId(), 0), tokenService);
+        UNIT_ASSERT_VALUES_EQUAL(runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0), delegationService);
     }
 
     Y_UNIT_TEST(BothWithIdentityFromTheReplicationSection) {

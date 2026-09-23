@@ -29,6 +29,7 @@ PEERDIR(
     ydb/core/mind
     ydb/core/mon
     ydb/core/protos
+    ydb/core/security/iam_delegation
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
@@ -36,7 +37,6 @@ PEERDIR(
     ydb/library/actors/http
     ydb/library/query_actor
     ydb/library/security
-    ydb/core/security/iam_delegation
     ydb/library/table_creator
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/providers/common/http_gateway

@@ -7,11 +7,11 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/http/misc
     library/cpp/http/server
+    library/cpp/testing/unittest
     ydb/core/kqp/common
     ydb/core/testlib/default
-    ydb/library/ycloud/impl
     ydb/library/testlib/service_mocks
-    library/cpp/testing/unittest
+    ydb/library/ycloud/impl
 )
 
 # The IamDelegationLive probes run against a real IAM installation and are compiled only on request:

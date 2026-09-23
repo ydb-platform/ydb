@@ -104,13 +104,13 @@ private:
 
     TEntry* FindEntry(const TTokenKey& key) {
         auto it = Entries.find(key);
-        return it == Entries.end() ? nullptr : it->second.get();
+        return it == Entries.end() ? nullptr : &it->second;
     }
 
     TEntry& EnsureEntry(const TTokenKey& key) {
-        auto& entry = Entries[key];
+        TEntry* entry = FindEntry(key);
         if (!entry) {
-            entry = std::make_unique<TEntry>();
+            entry = &Entries[key]; // constructed in place: TEntry is not movable
             *CachedKeys = Entries.size();
         }
         entry->LastUse = TActivationContext::Now();
@@ -295,7 +295,10 @@ private:
 
 private:
     TActorId IamTokenClient;
-    THashMap<TTokenKey, std::unique_ptr<TEntry>> Entries;
+    // The entries are address-stable for their whole life (THashMap keeps every value in its own node and
+    // only relinks the nodes on rehash): the requests parked on TEntry::Updated and the refresh loops hold
+    // pointers into them across suspensions.
+    THashMap<TTokenKey, TEntry> Entries;
     ::NMonitoring::TDynamicCounters::TCounterPtr Mints;
     ::NMonitoring::TDynamicCounters::TCounterPtr MintErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr CachedKeys;

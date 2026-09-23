@@ -6,6 +6,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
+#include <util/generic/ylimits.h>
 
 namespace NKikimr::NKqp {
 
@@ -411,6 +412,123 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
             UNIT_ASSERT(result.QueryStats);
             const auto& ast = result.QueryStats->Getquery_ast();
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, ast);
+        }
+    }
+
+    // CAST of a constant is folded to a Uint64 literal before the early filter is built.
+    // Uint32 and Int64 suffixes must still match the portion.
+    Y_UNIT_TEST(SystemColumnPushdownCastLiteralType) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        {
+            const auto result = session
+                                    .ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                )
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )")
+                                    .GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                    INSERT INTO `/Root/ColumnTable` (Key, Value) VALUES (1u, "one"), (2u, "two");
+                )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                    INSERT INTO `/Root/ColumnTable` (Key, Value) VALUES (3u, "three"), (4u, "four");
+                )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        THashMap<ui64, ui64> portionRows;
+        ui64 totalRows = 0;
+        {
+            auto rows = ExecuteScanQuery(tableClient, R"(
+                SELECT PortionId, Rows
+                FROM `/Root/ColumnTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+            )");
+            UNIT_ASSERT_C(rows.size() >= 1, rows.size());
+            for (const auto& row : rows) {
+                const ui64 rowsInPortion = GetUint64(row.at("Rows"));
+                portionRows[GetUint64(row.at("PortionId"))] = rowsInPortion;
+                totalRows += rowsInPortion;
+            }
+        }
+
+        const ui64 portionId = portionRows.begin()->first;
+        const ui64 portionRowCount = portionRows.begin()->second;
+        UNIT_ASSERT(portionId <= static_cast<ui64>(Max<ui32>()));
+
+        const auto scanKeys = [&](const TString& predicate) {
+            return ExecuteScanQuery(tableClient, TStringBuilder() << R"(
+                PRAGMA kikimr.EnableSystemColumns = "true";
+                SELECT Key
+                FROM `/Root/ColumnTable`
+                WHERE )" << predicate << R"(
+                ORDER BY Key
+            )");
+        };
+
+        {
+            auto rows = scanKeys(TStringBuilder() << "_yql_portion_id = CAST(" << portionId << "ul AS Uint64)");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), portionRowCount);
+        }
+        {
+            auto rows = scanKeys(TStringBuilder() << "_yql_portion_id = CAST(" << portionId << "u AS Uint64)");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), portionRowCount);
+        }
+        {
+            auto rows = scanKeys(TStringBuilder() << "_yql_portion_id = CAST(" << portionId << "l AS Uint64)");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), portionRowCount);
+        }
+        {
+            ui64 minPortionId = portionId;
+            for (const auto& [id, _] : portionRows) {
+                minPortionId = Min(minPortionId, id);
+            }
+            auto rows = scanKeys(TStringBuilder() << "_yql_portion_id >= CAST(" << minPortionId << "u AS Uint64)");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), totalRows);
+        }
+
+        {
+            NYdb::NTable::TStreamExecScanQuerySettings scanSettings;
+            scanSettings.Explain(true);
+            auto it = tableClient
+                          .StreamExecuteScanQuery(TStringBuilder() << R"(
+                PRAGMA kikimr.EnableSystemColumns = "true";
+                SELECT Key
+                FROM `/Root/ColumnTable`
+                WHERE _yql_portion_id = CAST()" << portionId << R"(u AS Uint64))",
+                              scanSettings)
+                          .GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto result = CollectStreamResult(it);
+            UNIT_ASSERT(result.QueryStats);
+            const auto& ast = result.QueryStats->Getquery_ast();
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, ast);
+            UNIT_ASSERT_C(ast.find("(Uint64 '" + std::to_string(portionId) + ")") != std::string::npos, ast);
         }
     }
 }

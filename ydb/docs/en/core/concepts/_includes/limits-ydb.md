@@ -30,7 +30,7 @@ The _Error type_ column shows the status with which the query will complete in c
 | Parameter | Value | Error type |
 | :--- | :--- | :---: |
 | Maximum total size of all columns in the primary key | 1 MB | GENERIC_ERROR |
-| Maximum size of a string column value | 16 MB | GENERIC_ERROR |
+| Maximum size of a string column value | 16 MiB | GENERIC_ERROR |
 
 ## Analytical table limits
 

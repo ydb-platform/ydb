@@ -41,6 +41,7 @@ class TestViewer(object):
     @classmethod
     def cluster_fixture(cls):
         config = KikimrConfigGenerator(extra_feature_flags={
+            'enable_udf_modules_system_view': True,
             'enable_alter_database_create_hive_first': True,
             'enable_topic_transfer': True,
             'enable_script_execution_operations': True,

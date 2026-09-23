@@ -51,7 +51,7 @@ CLUSTER_CONFIG = dict(
         'TX_PROXY': LogLevels.CRIT,
     },
     enable_audit_log=True,
-    extra_feature_flags=['enable_column_statistics'],
+    extra_feature_flags=['enable_column_statistics', 'enable_udf_modules_system_view'],
     extra_grpc_services=['distributed_storage'],
     audit_log_config={
         'file_backend': {

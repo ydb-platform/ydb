@@ -2,6 +2,7 @@
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/table_index.h>
@@ -3507,7 +3508,10 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a9e525da2604494bdbaa6f42b2762effd03b3658a538feb6f319d24e56c1de38 metadata.json");
+        const auto* metadata = S3Mock().GetData().FindPtr("/metadata.json");
+        UNIT_ASSERT(metadata);
+        // Snapshot identifiers depend on the system views created during startup.
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, NKikimr::NBackup::ComputeChecksum(*metadata) + " metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -3574,7 +3578,10 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a9e525da2604494bdbaa6f42b2762effd03b3658a538feb6f319d24e56c1de38 metadata.json");
+        const auto* metadata = S3Mock().GetData().FindPtr("/metadata.json");
+        UNIT_ASSERT(metadata);
+        // Snapshot identifiers depend on the system views created during startup.
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, NKikimr::NBackup::ComputeChecksum(*metadata) + " metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);

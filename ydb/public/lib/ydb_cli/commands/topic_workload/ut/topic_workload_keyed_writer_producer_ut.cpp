@@ -115,6 +115,24 @@ Y_UNIT_TEST_SUITE(TTopicWorkloadKeyedWriterProducerTests) {
         UNIT_ASSERT_VALUES_EQUAL(0, producer->InflightMessagesCnt());
     }
 
+    Y_UNIT_TEST_F(SessionClosed_StopsWriterWhenWriteWasQueued, TFixture) {
+        auto mock = std::make_shared<MockProducer>();
+        EXPECT_CALL(*mock, Write(testing::_)).WillOnce(testing::Return(TWriteResult{
+            .Status = EWriteStatus::Queued,
+        }));
+
+        auto producer = CreateProducer(mock);
+        producer->Send(TInstant::Now(), nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(1, producer->InflightMessagesCnt());
+        UNIT_ASSERT(!*ErrorFlag);
+
+        TSessionClosedEvent event(EStatus::SESSION_EXPIRED, NYdb::NIssue::TIssues());
+        producer->HandleSessionClosed(event);
+
+        UNIT_ASSERT(*ErrorFlag);
+        UNIT_ASSERT_VALUES_EQUAL(1, producer->InflightMessagesCnt());
+    }
+
     Y_UNIT_TEST_F(TryCommitTx_WaitsUntilInflightDrains, TFixture) {
         auto params = CreateParams();
         std::optional<TTransactionSupport> txSupport;

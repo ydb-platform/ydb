@@ -124,9 +124,15 @@ void TTopicWorkloadKeyedWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessi
 
 void TTopicWorkloadKeyedWriterProducer::HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event)
 {
-    WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
+    WRITE_LOG(Params_.Log, event.IsSuccess() ? ELogPriority::TLOG_DEBUG : ELogPriority::TLOG_ERR, TStringBuilder()
         << "Keyed producer " << ProducerId_
         << ": got close event: " << event.DebugString());
+
+    // A failed close never delivers acks for queued writes. The commit gate waits
+    // for inflight to drain, so stop the writer loop instead of blocking until endTime.
+    if (!event.IsSuccess()) {
+        *Params_.ErrorFlag = 1;
+    }
 }
 
 ui64 TTopicWorkloadKeyedWriterProducer::GetCurrentMessageId() const

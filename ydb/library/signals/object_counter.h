@@ -48,8 +48,7 @@ public:
         }
         Counter.Inc();
         if (UseLogs) {
-            YDB_LOG_TRACE_COMP(NKikimrServices::OBJECTS_MONITORING, ""
-                {"event", "create"},
+            YDB_LOG_TRACE_COMP(NKikimrServices::OBJECTS_MONITORING, "Create object",
                 {"object_type", TypeName<TObject>()},
                 {"count", Counter.Val()});
         }
@@ -68,8 +67,7 @@ public:
         }
         Counter.Dec();
         if (UseLogs) {
-            YDB_LOG_TRACE_COMP(NKikimrServices::OBJECTS_MONITORING, ""
-                {"event", "destroy"},
+            YDB_LOG_TRACE_COMP(NKikimrServices::OBJECTS_MONITORING, "Destroy object",
                 {"object_type", TypeName<TObject>()},
                 {"count", Counter.Val()});
         }

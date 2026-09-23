@@ -3687,13 +3687,14 @@ public:
 
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
+            if (isFinal) {
+                txCtx->Invalidate();
+            }
             if (txCtx->IsInvalidated()) {
                 Transactions.AddToBeAborted(txCtx);
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
-            txCtx->SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
-            txCtx->SnapshotHandle.Handle = NKqp::TSnapshotHandle();
         }
 
         if (isFinal)

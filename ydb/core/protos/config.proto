@@ -3674,7 +3674,7 @@ message TAppConfig {
 
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
     optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
-    optional TPathRewriteConfig PathRewriteConfig = 124;
+    optional TPathRewriteConfig ResourcePathPrefixMapping = 124;
 }
 
 message TYdbVersion {

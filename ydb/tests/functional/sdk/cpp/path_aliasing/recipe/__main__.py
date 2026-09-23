@@ -37,7 +37,7 @@ def start(args):
         extra_feature_flags=["enable_fs_backups", "enable_export_filtering"],
     )
     # Add to the generated configuration; --config-path would replace it.
-    configuration.yaml_config["path_rewrite_config"] = {
+    configuration.yaml_config["resource_path_prefix_mapping"] = {
         "rules": [
             {"src": "/kfront", "dst": "/failover/kfront"},
             {"src": "/boundary", "dst": "/failover/k"},

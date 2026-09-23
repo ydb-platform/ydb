@@ -35,6 +35,13 @@ namespace NKikimr::NGRpcService {
             return;
         }
 
+        const TString method = GetRpcMethodName();
+        if (method.StartsWith("Ydb.PersQueue.V1.") ||
+            method.StartsWith("Ydb.Cms.V1.CmsService/")) {
+            DisablePathNormalization();
+            return;
+        }
+
         auto database = GetDatabaseNameFromRequest();
         SetPathNormalizer(std::move(normalizer));
         if (database) {

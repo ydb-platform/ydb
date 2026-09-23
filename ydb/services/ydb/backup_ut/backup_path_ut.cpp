@@ -21,10 +21,10 @@ class TPathAliasExplicitExportFixture : public TFsBackupTestFixture {
 public:
     TPathAliasExplicitExportFixture() {
         AppConfig().MutableFeatureFlags()->SetEnableFsBackups(true);
-        auto* alias = AppConfig().MutablePathRewriteConfig()->AddRules();
+        auto* alias = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
         alias->SetSrc("/export-alias");
         alias->SetDst("/Root/RecursiveFolderProcessing/Table0");
-        auto* decoy = AppConfig().MutablePathRewriteConfig()->AddRules();
+        auto* decoy = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
         decoy->SetSrc("/Root/RecursiveFolderProcessing/Table0");
         decoy->SetDst("/Root/DoesNotExist");
     }

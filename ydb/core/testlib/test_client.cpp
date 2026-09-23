@@ -550,7 +550,7 @@ namespace Tests {
             Y_UNUSED(nodeIdx);
 
             appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(
-                Settings->AppConfig->GetPathRewriteConfig());
+                Settings->AppConfig->GetResourcePathPrefixMapping());
 
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
 #define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())

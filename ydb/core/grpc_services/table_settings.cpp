@@ -1,6 +1,6 @@
 #include "table_settings.h"
 
-#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/base/iface.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -30,7 +30,7 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     return NKikimr::FillCreateTableSettingsDesc(out, in, code, error, warnings, tableProfileSet);
 }
 
-void NormalizeTtlStoragePaths(Ydb::Table::TtlSettings& settings, const IAuditCtx& request) {
+void NormalizeTtlStoragePaths(Ydb::Table::TtlSettings& settings, const IRequestCtxBaseMtSafe& request) {
     if (!settings.has_tiered_ttl()) {
         return;
     }

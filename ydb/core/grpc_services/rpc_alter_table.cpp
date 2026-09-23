@@ -491,9 +491,22 @@ private:
     void AlterTable(const TActorContext &ctx, const TMaybe<TString>& overridePath = {}) {
         const auto* req = GetProtoRequest();
         Ydb::Table::AlterTableRequest requestWithNormalizedPaths;
-        if (req->has_set_ttl_settings() && req->set_ttl_settings().has_tiered_ttl()) {
+        if ((req->has_set_ttl_settings() && req->set_ttl_settings().has_tiered_ttl())
+            || req->add_columns_size() || req->alter_columns_size()) {
             requestWithNormalizedPaths.CopyFrom(*req);
-            NormalizeTtlStoragePaths(*requestWithNormalizedPaths.mutable_set_ttl_settings(), *Request_);
+            if (req->has_set_ttl_settings() && req->set_ttl_settings().has_tiered_ttl()) {
+                NormalizeTtlStoragePaths(*requestWithNormalizedPaths.mutable_set_ttl_settings(), *Request_);
+            }
+            const auto normalizeSequences = [this](auto& columns) {
+                for (auto& column : columns) {
+                    if (column.has_from_sequence()) {
+                        auto* sequence = column.mutable_from_sequence();
+                        sequence->set_name(Request_->NormalizePath(sequence->name()));
+                    }
+                }
+            };
+            normalizeSequences(*requestWithNormalizedPaths.mutable_add_columns());
+            normalizeSequences(*requestWithNormalizedPaths.mutable_alter_columns());
             req = &requestWithNormalizedPaths;
         }
 

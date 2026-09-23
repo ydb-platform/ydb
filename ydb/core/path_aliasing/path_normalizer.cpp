@@ -32,8 +32,8 @@ namespace NKikimr::NPathAliasing {
             ++index;
             const TStringBuf src(rule.GetSrc());
             const TStringBuf dst(rule.GetDst());
-            Y_ENSURE(src.StartsWith("/"), "path_rewrite_config rule " << index << ": src must be a nonempty absolute path");
-            Y_ENSURE(dst.StartsWith("/"), "path_rewrite_config rule " << index << ": dst must be a nonempty absolute path");
+            Y_ENSURE(src.StartsWith("/"), "resource_path_prefix_mapping rule " << index << ": src must be a nonempty absolute path");
+            Y_ENSURE(dst.StartsWith("/"), "resource_path_prefix_mapping rule " << index << ": dst must be a nonempty absolute path");
 
             impl->Rules.push_back({TString(src), TString(dst)});
         }

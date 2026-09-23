@@ -11,15 +11,15 @@ namespace NKikimr::NYaml {
     Y_UNIT_TEST_SUITE(PathAliasingYamlConfig) {
         Y_UNIT_TEST(ParsesOrderedPrefixesAndPreservesTrailingSlashes) {
             const auto config = Parse(R"(
-path_rewrite_config:
+resource_path_prefix_mapping:
   rules:
     - src: '/kfront/'
       dst: '/failover/kfront/'
     - src: '/kfront/tables'
       dst: '/archive'
 )", false);
-            UNIT_ASSERT(config.HasPathRewriteConfig());
-            const auto& aliases = config.GetPathRewriteConfig();
+            UNIT_ASSERT(config.HasResourcePathPrefixMapping());
+            const auto& aliases = config.GetResourcePathPrefixMapping();
             UNIT_ASSERT_VALUES_EQUAL(aliases.RulesSize(), 2);
             UNIT_ASSERT_VALUES_EQUAL(aliases.GetRules(0).GetSrc(), "/kfront/");
             UNIT_ASSERT_VALUES_EQUAL(aliases.GetRules(0).GetDst(), "/failover/kfront/");
@@ -36,48 +36,48 @@ path_rewrite_config:
         }
 
         Y_UNIT_TEST(OmittedAndEmptyConfigurationDisableAliasing) {
-            for (const TString& yaml : {TString("grpc_config: {port: 2135}"), TString("path_rewrite_config: {}"), TString("path_rewrite_config: {rules: []}")}) {
+            for (const TString& yaml : {TString("grpc_config: {port: 2135}"), TString("resource_path_prefix_mapping: {}"), TString("resource_path_prefix_mapping: {rules: []}")}) {
                 const auto config = Parse(yaml, false);
-                const NPathAliasing::TPathNormalizer normalizer(config.GetPathRewriteConfig());
+                const NPathAliasing::TPathNormalizer normalizer(config.GetResourcePathPrefixMapping());
                 UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/table"), "/kfront/table");
             }
         }
 
         Y_UNIT_TEST(PrefixesTreatMetacharactersLiterally) {
             const auto config = Parse(R"(
-path_rewrite_config:
+resource_path_prefix_mapping:
   rules:
     - src: '/literal.[a-z]+'
       dst: '/archive/\1'
 )", false);
-            const NPathAliasing::TPathNormalizer normalizer(config.GetPathRewriteConfig());
+            const NPathAliasing::TPathNormalizer normalizer(config.GetResourcePathPrefixMapping());
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/literal.[a-z]+/table"), R"(/archive/\1/table)");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/literal.x/table"), "/literal.x/table");
         }
 
         Y_UNIT_TEST(RootDestinationReplacesThePrefix) {
             const auto config = Parse(R"(
-path_rewrite_config:
+resource_path_prefix_mapping:
   rules:
     - src: '/prefix'
       dst: '/'
 )", false);
-            const NPathAliasing::TPathNormalizer normalizer(config.GetPathRewriteConfig());
+            const NPathAliasing::TPathNormalizer normalizer(config.GetResourcePathPrefixMapping());
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix"), "/");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix/table"), "//table");
         }
 
         Y_UNIT_TEST(RejectsMissingEmptyAndRelativePrefixes) {
             for (const TString& yaml : {
-                     TString("path_rewrite_config: {rules: [{dst: '/target'}]}"),
-                     TString("path_rewrite_config: {rules: [{src: '/source'}]}"),
-                     TString("path_rewrite_config: {rules: [{src: '', dst: '/target'}]}"),
-                     TString("path_rewrite_config: {rules: [{src: '/source', dst: ''}]}"),
-                     TString("path_rewrite_config: {rules: [{src: 'source', dst: '/target'}]}"),
-                     TString("path_rewrite_config: {rules: [{src: '/source', dst: 'target'}]}"),
+                     TString("resource_path_prefix_mapping: {rules: [{dst: '/target'}]}"),
+                     TString("resource_path_prefix_mapping: {rules: [{src: '/source'}]}"),
+                     TString("resource_path_prefix_mapping: {rules: [{src: '', dst: '/target'}]}"),
+                     TString("resource_path_prefix_mapping: {rules: [{src: '/source', dst: ''}]}"),
+                     TString("resource_path_prefix_mapping: {rules: [{src: 'source', dst: '/target'}]}"),
+                     TString("resource_path_prefix_mapping: {rules: [{src: '/source', dst: 'target'}]}"),
                  }) {
                 const auto config = Parse(yaml, false);
-                UNIT_ASSERT_EXCEPTION(NPathAliasing::TPathNormalizer(config.GetPathRewriteConfig()), yexception);
+                UNIT_ASSERT_EXCEPTION(NPathAliasing::TPathNormalizer(config.GetResourcePathPrefixMapping()), yexception);
             }
         }
 

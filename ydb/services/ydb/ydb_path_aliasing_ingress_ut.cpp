@@ -5,6 +5,7 @@
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_keyvalue_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 
 #include <grpcpp/client_context.h>
@@ -26,9 +27,10 @@ namespace NKikimr::NGRpcService {
         using TDiscovery = Ydb::Discovery::V1::DiscoveryService::Stub;
         using TKeyValue = Ydb::KeyValue::V1::KeyValueService::Stub;
         using TTable = Ydb::Table::V1::TableService::Stub;
+        using TTopic = Ydb::Topic::V1::TopicService::Stub;
 
         void AddRule(NKikimrConfig::TAppConfig& config, const char* src, const char* dst) {
-            auto* rule = config.MutablePathRewriteConfig()->AddRules();
+            auto* rule = config.MutableResourcePathPrefixMapping()->AddRules();
             rule->SetSrc(src);
             rule->SetDst(dst);
         }
@@ -270,6 +272,111 @@ namespace NKikimr::NGRpcService {
                     Call(*stub, &TKeyValue::DescribeVolume, describe, "/alias"))
                     .partition_count(),
                 1);
+        }
+
+        Y_UNIT_TEST(AlterTableRewritesAbsoluteSequenceDefaults) {
+            TFixture fixture;
+            auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
+            const TString table = "/alias/sequence_table";
+            const TString sequence = table + "/seq";
+
+            Ydb::Table::CreateTableRequest create;
+            create.set_path(table);
+            auto* key = create.add_columns();
+            key->set_name("key");
+            key->mutable_type()->set_type_id(Ydb::Type::INT64);
+            key->mutable_from_sequence()->set_name("seq");
+            create.add_primary_key("key");
+            auto* existing = create.add_columns();
+            existing->set_name("existing");
+            existing->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT64);
+            Success(Call(*stub, &TTable::CreateTable, create, "/alias"));
+
+            Ydb::Table::AlterTableRequest absolute;
+            absolute.set_path(table);
+            auto* added = absolute.add_add_columns();
+            added->set_name("added_absolute");
+            added->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT64);
+            added->mutable_from_sequence()->set_name(sequence);
+            auto* altered = absolute.add_alter_columns();
+            altered->set_name("existing");
+            altered->mutable_from_sequence()->set_name(sequence);
+            Success(Call(*stub, &TTable::AlterTable, absolute, "/alias"));
+
+            Ydb::Table::AlterTableRequest relative;
+            relative.set_path(table);
+            auto* relativeColumn = relative.add_add_columns();
+            relativeColumn->set_name("added_relative");
+            relativeColumn->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT64);
+            relativeColumn->mutable_from_sequence()->set_name("sequence_table/seq");
+            auto* relativeAlter = relative.add_alter_columns();
+            relativeAlter->set_name("existing");
+            relativeAlter->mutable_from_sequence()->set_name("sequence_table/seq");
+            Success(Call(*stub, &TTable::AlterTable, relative, "/alias"));
+        }
+
+        Y_UNIT_TEST(TopicRewritesNestedDlqPathsOnly) {
+            TFixture fixture;
+            auto stub = Ydb::Topic::V1::TopicService::NewStub(fixture.Channel);
+
+            auto createTopic = [&](const TString& path) {
+                Ydb::Topic::CreateTopicRequest request;
+                request.set_path(path);
+                request.mutable_partitioning_settings()->set_min_active_partitions(1);
+                Success(Call(*stub, &TTopic::CreateTopic, request, "/alias"));
+            };
+            createTopic("/alias/dlq");
+
+            Ydb::Topic::CreateTopicRequest create;
+            create.set_path("/alias/source");
+            create.mutable_partitioning_settings()->set_min_active_partitions(1);
+            auto* aliasConsumer = create.add_consumers();
+            aliasConsumer->set_name("alias_consumer");
+            auto* aliasPolicy = aliasConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
+            aliasPolicy->set_enabled(true);
+            aliasPolicy->mutable_move_action()->set_dead_letter_queue("/alias/dlq");
+            Success(Call(*stub, &TTopic::CreateTopic, create, "/alias"));
+
+            Ydb::Topic::AlterTopicRequest alter;
+            alter.set_path("/alias/source");
+            auto* added = alter.add_add_consumers();
+            added->set_name("sqs_consumer");
+            auto* addedPolicy = added->mutable_shared_consumer_type()->mutable_dead_letter_policy();
+            addedPolicy->set_enabled(true);
+            addedPolicy->mutable_move_action()->set_dead_letter_queue("sqs://account/queue");
+            auto* changed = alter.add_alter_consumers();
+            changed->set_name("alias_consumer");
+            changed->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                ->mutable_alter_move_action()->set_set_dead_letter_queue("/alias/dlq");
+            Success(Call(*stub, &TTopic::AlterTopic, alter, "/alias"));
+
+            Ydb::Topic::AlterTopicRequest setMove;
+            setMove.set_path("/alias/source");
+            auto* changedMove = setMove.add_alter_consumers();
+            changedMove->set_name("alias_consumer");
+            changedMove->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                ->mutable_set_move_action()->set_dead_letter_queue("/alias/dlq");
+            Success(Call(*stub, &TTopic::AlterTopic, setMove, "/alias"));
+
+            Ydb::Topic::DescribeTopicRequest describe;
+            describe.set_path("/alias/source");
+            const auto result = Result<Ydb::Topic::DescribeTopicResult>(
+                Call(*stub, &TTopic::DescribeTopic, describe, "/alias"));
+            const std::array<std::pair<std::string, std::string>, 2> expected{{
+                {"alias_consumer", "/Root/kfront/dlq"},
+                {"sqs_consumer", "sqs://account/queue"},
+            }};
+            for (const auto& [name, dlq] : expected) {
+                bool found = false;
+                for (const auto& consumer : result.consumers()) {
+                    if (consumer.name() == name) {
+                        UNIT_ASSERT_VALUES_EQUAL(consumer.shared_consumer_type()
+                            .dead_letter_policy().move_action().dead_letter_queue(), dlq);
+                        found = true;
+                    }
+                }
+                UNIT_ASSERT_C(found, name);
+            }
         }
     } // Y_UNIT_TEST_SUITE(YdbPathAliasingIngress)
 

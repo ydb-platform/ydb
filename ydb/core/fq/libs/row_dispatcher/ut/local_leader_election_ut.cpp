@@ -27,7 +27,7 @@ public:
         NKikimrProto::TAuthConfig authConfig;
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->NodeCount = 1;
-        auto* rule = ServerSettings->AppConfig->MutablePathRewriteConfig()->AddRules();
+        auto* rule = ServerSettings->AppConfig->MutableResourcePathPrefixMapping()->AddRules();
         rule->SetSrc(TStringBuilder() << "/" << ServerSettings->DomainName
             << "/.metadata/streaming/coordination_node");
         rule->SetDst("/Root/missing-coordination-node");

@@ -4,6 +4,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <utility>
+
 namespace NKikimr::NGRpcService {
     namespace {
 
@@ -19,6 +21,22 @@ namespace NKikimr::NGRpcService {
             return std::make_unique<TEvRequestAuthAndCheck>(
                 "/raw", TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer", "request-id");
         }
+
+        class TNamedRequest final : public TEvRequestAuthAndCheck {
+        public:
+            explicit TNamedRequest(TString method)
+                : TEvRequestAuthAndCheck(
+                    "/raw", TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer", "request-id")
+                , Method_(std::move(method))
+            {}
+
+            TString GetRpcMethodName() const override {
+                return Method_;
+            }
+
+        private:
+            TString Method_;
+        };
 
     } // namespace
 
@@ -43,14 +61,32 @@ namespace NKikimr::NGRpcService {
         }
 
         Y_UNIT_TEST(EnabledRequestCachesRewrittenDatabase) {
-            auto request = MakeRequest();
-            request->EnablePathNormalization();
-            request->InitializePathNormalization(MakeNormalizer());
-            UNIT_ASSERT_VALUES_EQUAL(request->NormalizePath("/raw"), "/rewritten");
+            TNamedRequest request("Ydb.Topic.V1.TopicService/CreateTopic");
+            request.EnablePathNormalization();
+            request.InitializePathNormalization(MakeNormalizer());
+            UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw"), "/rewritten");
 
-            request->UseDatabase("/resolved");
-            request->InitializePathNormalization(MakeNormalizer());
-            UNIT_ASSERT_VALUES_EQUAL(request->GetDatabaseName().GetOrElse(""), "/rewritten");
+            request.UseDatabase("/resolved");
+            request.InitializePathNormalization(MakeNormalizer());
+            UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/rewritten");
+        }
+
+        Y_UNIT_TEST(LegacyServicesKeepRawDatabaseAndIdentityPaths) {
+            const TString methods[] = {
+                "Ydb.PersQueue.V1.PersQueueService/CreateTopic",
+                "Ydb.PersQueue.V1.ClusterDiscoveryService/DiscoverClusters",
+                "Ydb.Cms.V1.CmsService/CreateDatabase",
+            };
+            for (const auto& method : methods) {
+                TNamedRequest request(method);
+                request.EnablePathNormalization();
+                request.InitializePathNormalization(MakeNormalizer());
+                UNIT_ASSERT_VALUES_EQUAL_C(request.NormalizePath("/raw"), "/raw", method);
+                UNIT_ASSERT_VALUES_EQUAL_C(request.GetDatabaseName().GetOrElse(""), "/raw", method);
+
+                request.UseDatabase("/resolved");
+                UNIT_ASSERT_VALUES_EQUAL_C(request.GetDatabaseName().GetOrElse(""), "/resolved", method);
+            }
         }
     }
 

@@ -1524,7 +1524,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
                                FormatFactory.Get(),
                                &KikimrShouldContinue));
 
-    AppData->PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(runConfig.AppConfig.GetPathRewriteConfig());
+    AppData->PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(runConfig.AppConfig.GetResourcePathPrefixMapping());
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
     if (ModuleFactories && !ModuleFactories->PersQueueMirrorReaderFactory && runConfig.AppConfig.GetFeatureFlags().GetEnableInsecureMirrorFactory()) {

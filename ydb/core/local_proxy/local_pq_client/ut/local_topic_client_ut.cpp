@@ -16,7 +16,7 @@ public:
         settings.SetWithSampleTables(false)
             .SetAuthToken(BUILTIN_ACL_ROOT)
             .SetEnableTopicDeferredPublish(true);
-        auto* rule = settings.AppConfig.MutablePathRewriteConfig()->AddRules();
+        auto* rule = settings.AppConfig.MutableResourcePathPrefixMapping()->AddRules();
         rule->SetSrc("/Root/topic");
         rule->SetDst("/Root/missing-topic");
 

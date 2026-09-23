@@ -64,7 +64,7 @@ SELECT * FROM test;`
 
 The prefix is not added if the table name is an absolute path (starts with /).
 
-When the `EnableTablePathPrefixMultiScopes` flag is enabled in `TableServiceConfig`, each `TablePathPrefix` pragma takes effect from its position in the query text. A later `TablePathPrefix` changes the prefix for subsequent table references without changing paths in preceding statements.
+When the `EnableTablePathPrefixMultiScopes` feature flag is enabled, each `TablePathPrefix` pragma takes effect from its position in the query text. A later `TablePathPrefix` changes the prefix for subsequent table references without changing paths in preceding statements.
 
 The flag is enabled by default. If it is disabled, the legacy behavior is preserved: a later pragma can also change table paths in preceding statements.
 

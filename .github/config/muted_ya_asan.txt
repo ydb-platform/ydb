@@ -465,6 +465,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_lea
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pool_estimated_usage
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_vdisk_evict_fallback_to_legacy_api
 ydb/tests/functional/dstool test_static_vdisk_evict.py.test_dstool_evict_static_vdisk
+ydb/tests/functional/federation_test TFederationWriteReadTest.CreateRemoteMirrorRuleWithGapsAutosplitTopic
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
 ydb/tests/functional/federation_test unittest.sole chunk
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx

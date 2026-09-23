@@ -197,7 +197,6 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
         while(sublink){
             TNodeOnNodeOwnedMap replaceMap;
 
-            YQL_CLOG(TRACE, CoreDq) << "Replacing sublink: " << PrintRBOExpression(sublink, Ctx);
             auto sublinkVar = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++), true);
             // clang-format off
             auto member = Build<TCoMember>(Ctx, lambda.Pos())
@@ -229,8 +228,6 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
                 
                 if (lhs->IsCallable("Member")) {
                     auto iu = TInfoUnit(TString(lhs->Child(1)->Content()));
-                    YQL_CLOG(TRACE, CoreDq) << "Processing: " << iu.GetFullName();
-
                     tuple.push_back(iu);
                 } 
 
@@ -443,7 +440,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node
     auto lambda = opFilter.Lambda().Ptr();
     auto newLambda = RemoveSubplans(lambda);
     auto filter = MakeIntrusive<TOpFilter>(input, node->Pos(), TExpression(newLambda, &Ctx));
-    YQL_CLOG(TRACE, CoreDq) << "Processed filter, new lambda " << filter->ToString(Ctx);
     return filter;
 }
 
@@ -607,6 +603,10 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
         result = MakeIntrusive<TOpAggregate>(result, opAggTraitsList, keyColumns, EOpPhase::Undefined, true, node->Pos());
 
     }
+
+    Y_ENSURE(Projections.contains(leftInput.Get()));
+    Projections.insert({result.Get(), Projections.at(leftInput.Get())});
+
     return result;
 }
 

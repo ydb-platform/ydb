@@ -9,7 +9,6 @@ SRCS(
     test_server.cpp
     ut_utils.h
     ut_utils.cpp
-    write_session_memory_test.h
 )
 
 PEERDIR(

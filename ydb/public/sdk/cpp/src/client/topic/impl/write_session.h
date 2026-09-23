@@ -13,10 +13,6 @@
 
 namespace NYdb::inline Dev::NTopic {
 
-namespace NTests {
-    class TWriteSessionMemoryTestAdapter;
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSession
 
@@ -25,7 +21,6 @@ class TWriteSession : public IWriteSession,
 private:
     friend class TSimpleBlockingWriteSession;
     friend class TTopicClient;
-    friend class NTests::TWriteSessionMemoryTestAdapter;
 
 public:
     TWriteSession(const TWriteSessionSettings& settings,

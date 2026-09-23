@@ -2064,9 +2064,10 @@ void TPersQueue::HandleReadRequest(
             }
         }
 
+        const ui16 partNo = cmd.HasPartNo() ? cmd.GetPartNo() : 0;
         THolder<TEvPQ::TEvRead> event =
             MakeHolder<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(), cmd.GetLastOffset(),
-                                       cmd.HasPartNo() ? cmd.GetPartNo() : 0,
+                                       partNo,
                                        count,
                                        cmd.HasSessionId() ? cmd.GetSessionId() : "",
                                        cmd.GetClientId(),
@@ -2078,6 +2079,7 @@ void TPersQueue::HandleReadRequest(
                                        clientDC,
                                        cmd.GetExternalOperation(),
                                        pipeClient);
+        event->LimitReadToRetention = partNo == 0 && !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention();
 
         ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }

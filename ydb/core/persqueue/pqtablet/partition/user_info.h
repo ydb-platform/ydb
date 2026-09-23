@@ -310,5 +310,13 @@ inline bool ImporantOrExtendedAvailabilityPeriod(const TUserInfoBase& userInfo) 
     return userInfo.Important || userInfo.AvailabilityPeriod > TDuration::Zero();
 }
 
+// Important consumers keep data indefinitely, so their availability period is unbounded.
+inline TDuration GetAvailabilityPeriod(const TUserInfoBase& userInfo) {
+    if (userInfo.Important) {
+        return TDuration::Max();
+    }
+    return userInfo.AvailabilityPeriod;
+}
+
 } //NPQ
 } //NKikimr

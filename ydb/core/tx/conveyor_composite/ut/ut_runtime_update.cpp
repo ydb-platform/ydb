@@ -867,17 +867,9 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         TRuntimeFixture fixture(initial);
         TAtomicCounter counter;
         std::vector<TAutoPtr<NActors::IEventHandle>> heldTasks;
-        auto previousObserver = fixture.Runtime.SetObserverFunc([&](TAutoPtr<NActors::IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvInternal::TEvNewTask::EventType) {
-                heldTasks.emplace_back(ev.Release());
-                return NActors::TTestActorRuntime::EEventAction::DROP;
-            }
-            return NActors::TTestActorRuntime::EEventAction::PROCESS;
-        });
-        fixture.Submit(counter, ESpecialTaskCategory::Scan);
-        fixture.Submit(counter, ESpecialTaskCategory::Scan);
-        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(heldTasks.size(), 2);
+        // Capture pool-1 before submitting the next task, so pool-2 cannot arrive first.
+        heldTasks.emplace_back(HoldTask(fixture, counter, ESpecialTaskCategory::Scan));
+        heldTasks.emplace_back(HoldTask(fixture, counter, ESpecialTaskCategory::Scan));
 
         const auto& responses = fixture.Responses;
         const auto [firstId, firstCookie] = fixture.SendUpdate(BuildTopologyConfig(
@@ -894,7 +886,6 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         fixture.WaitForAck(id, cookie);
         UNIT_ASSERT_VALUES_EQUAL(counter.Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-2", ESpecialTaskCategory::Scan), 1);
-        fixture.Runtime.SetObserverFunc(previousObserver);
 
         std::set<ui64> oldPools;
         auto resultObserver = fixture.Runtime.AddObserver<TEvInternal::TEvTaskProcessedResult>([&](auto& ev) {

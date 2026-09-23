@@ -7,10 +7,10 @@ REQUIREMENTS(ram:32)
 
 DEPENDS(
     ydb/apps/ydbd
-    ydb/public/sdk/cpp/tests/integration/path_aliasing/recipe
+    ydb/tests/functional/sdk/cpp/path_aliasing/recipe
 )
 
-USE_RECIPE(ydb/public/sdk/cpp/tests/integration/path_aliasing/recipe/path_aliasing_recipe)
+USE_RECIPE(ydb/tests/functional/sdk/cpp/path_aliasing/recipe/path_aliasing_recipe)
 
 PEERDIR(
     ydb/public/api/protos

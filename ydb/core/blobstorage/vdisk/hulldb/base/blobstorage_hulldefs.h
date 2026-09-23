@@ -2,7 +2,6 @@
 
 #include "defs.h"
 #include "blobstorage_hullstorageratio.h"
-#include "fresh_space_tracker.h"
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/disk_part.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
@@ -137,7 +136,9 @@ namespace NKikimr {
         const double HullCompReadBatchEfficiencyThreshold;
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
-        const std::shared_ptr<TFreshSpaceTracker> FreshSpaceTracker;
+        // Reserve chunks for compacting Fresh before accepting the writes that fill it
+        // (EnableVDiskFreshSpaceProjection). See TFreshData and TFreshAdmissionGate.
+        const bool FreshChunkReservation;
 
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
@@ -162,7 +163,7 @@ namespace NKikimr {
                 TDuration hullCompStorageRatioMaxCalcDuration,
                 ui32 hullCompLevel0MaxSstsAtOnce,
                 ui32 hullCompSortedPartsNum,
-                bool enableFreshSpaceProjection = false,
+                bool freshChunkReservation = false,
                 ui32 appendBlockSize = 4096
         );
 

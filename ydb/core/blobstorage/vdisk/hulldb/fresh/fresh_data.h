@@ -71,7 +71,6 @@ namespace NKikimr {
         // Compaction
         bool NeedsCompaction(ui64 yardFreeUpToLsn, bool force) const;
         ui64 GetFreeInPlaceSizeApproximation() const;
-        TFreshSpaceDebt GetSpaceDebt() const;
 
         TIntrusivePtr<TFreshSegment> FindSegmentForCompaction();
         void CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment);
@@ -85,7 +84,9 @@ namespace NKikimr {
         ui64 GetCurReservationShortfall(const TFreshOutputEstimate& record) const;
         void AddCurReservedChunks(const TVector<TChunkIdx>& chunks) { Cur->AddReservedChunks(chunks); }
         void AdmitInFlight(const TFreshOutputEstimate& record) { InFlight.Merge(record); }
-        // Called right before an admitted record is put into Fresh, or instead of that if it never will be.
+        // Called once an admitted record has been put into Fresh, or instead of that if it never will be. Not
+        // before the Put(): landing may let a pending rotation happen, and that must not move the record into a
+        // segment nothing was reserved for.
         void LandInFlight(const TFreshOutputEstimate& record);
         const TFreshOutputEstimate& GetInFlight() const { return InFlight; }
         TVector<TChunkIdx> TakeReleasedChunks() { return std::exchange(ReleasedChunks, {}); }
@@ -183,18 +184,6 @@ namespace NKikimr {
         return threshold;
     }
 
-    // Bytes every segment still owes to a compaction: the one being compacted right
-    // now included, since its space has not been released yet. They are reported one
-    // by one because each of them is compacted into an sst of its own.
-    template <class TKey, class TMemRec>
-    TFreshSpaceDebt TFreshData<TKey, TMemRec>::GetSpaceDebt() const {
-        return {
-            .OldBytes = Old ? Old->InPlaceSizeApproximation() : 0,
-            .DregBytes = Dreg ? Dreg->InPlaceSizeApproximation() : 0,
-            .CurBytes = Cur ? Cur->InPlaceSizeApproximation() : 0,
-        };
-    }
-
     template <class TKey, class TMemRec>
     ui64 TFreshData<TKey, TMemRec>::GetCurReservationShortfall(const TFreshOutputEstimate& record) const {
         TFreshOutputEstimate total = Cur->GetOutputEstimate();
@@ -209,8 +198,8 @@ namespace NKikimr {
     void TFreshData<TKey, TMemRec>::LandInFlight(const TFreshOutputEstimate& record) {
         InFlight.Subtract(record);
         if (InFlight.Empty() && DregRotationPending) {
-            // The swap was waiting for exactly this. Do it now: a record that never lands would
-            // otherwise leave it waiting for a Put() that admission is holding back.
+            // The swap was waiting for exactly this: every admitted record is in Cur now, so Cur can rotate out.
+            // It happens here rather than in the next Put(), which admission is holding back meanwhile.
             SwapWithDregIfRequired();
         }
     }

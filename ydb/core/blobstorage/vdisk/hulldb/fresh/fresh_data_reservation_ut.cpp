@@ -62,10 +62,11 @@ namespace NKikimr {
                 Fresh.AdmitInFlight(r.Charge);
             }
 
-            // The log write completed: land the record, then put it, in that order.
+            // The log write completed: put the record, then land it, in that order. Landing may let a pending
+            // rotation happen, which must not move the record into a segment nothing was reserved for.
             void Replay(const TRecord& r) {
-                Fresh.LandInFlight(r.Charge);
                 Put(r);
+                Fresh.LandInFlight(r.Charge);
             }
         };
 

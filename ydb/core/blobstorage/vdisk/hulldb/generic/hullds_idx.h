@@ -296,10 +296,6 @@ namespace NKikimr {
             return Fresh.GetFreeInPlaceSizeApproximation();
         }
 
-        TFreshSpaceDebt GetFreshSpaceDebt() const {
-            return Fresh.GetSpaceDebt();
-        }
-
         TIntrusivePtr<TFreshSegment> FindFreshSegmentForCompaction() {
             return Fresh.FindSegmentForCompaction();
         }

@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_output_estimate.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 
 #include <optional>
@@ -229,7 +230,17 @@ namespace NKikimr {
         ui64 GetBlockSyncDataSizeInFlight() const { return BlockSyncDataSizeInFlight; }
         ui64 GetBarrierSyncDataSizeInFlight() const { return BarrierSyncDataSizeInFlight; }
 
-        TFreshSpaceDebt GetFreshSpaceDebt() const;
+        ///////////////// FRESH CHUNK RESERVATION /////////////////////////////////
+        // A record is admitted only once the Fresh segment it lands in holds enough reserved chunks to
+        // compact it along with everything already there and in flight; see TFreshData.
+        bool IsFreshRotationPending(const TFreshAdmission& admission) const;
+        TFreshShortfall GetFreshReservationShortfall(const TFreshAdmission& admission) const;
+        // Hands out `chunks`, one run per hull, sized as `split` says.
+        void AddFreshReservedChunks(const TFreshShortfall& split, const TVector<TChunkIdx>& chunks);
+        void AdmitToFresh(const TFreshAdmission& admission);
+        // Called once admitted records are in Fresh, or instead if they never will be. A rotation that was
+        // waiting for them to land happens here.
+        void LandInFresh(const TFreshAdmission& admission, const TActorContext& ctx);
 
         ///////////////// STATUS REQUEST ////////////////////////////////////////////
         void StatusRequest(const TActorContext &ctx, TEvLocalStatusResult *result);

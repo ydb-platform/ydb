@@ -155,4 +155,27 @@ namespace NKikimr {
         ui32 MaxInlineBytes = 0;
     };
 
+    // What one operation adds to each of the three Fresh segments. A garbage collection command, for
+    // one, writes a barrier and keep flags for blobs alike.
+    struct TFreshAdmission {
+        TFreshOutputEstimate LogoBlobs;
+        TFreshOutputEstimate Blocks;
+        TFreshOutputEstimate Barriers;
+
+        bool Empty() const {
+            return LogoBlobs.Empty() && Blocks.Empty() && Barriers.Empty();
+        }
+    };
+
+    // Chunks each Fresh segment lacks to take an admission.
+    struct TFreshShortfall {
+        ui64 LogoBlobs = 0;
+        ui64 Blocks = 0;
+        ui64 Barriers = 0;
+
+        ui64 Total() const {
+            return LogoBlobs + Blocks + Barriers;
+        }
+    };
+
 } // NKikimr

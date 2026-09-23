@@ -99,10 +99,6 @@ namespace NKikimr {
 
     THull::~THull() = default;
 
-    TFreshSpaceDebt THull::GetFreshSpaceDebt() const {
-        return HullDs->LogoBlobs->GetFreshSpaceDebt();
-    }
-
     ////////////////////////////////////////////////////////////////////////////
     // Private
     ////////////////////////////////////////////////////////////////////////////
@@ -759,6 +755,83 @@ namespace NKikimr {
     void THull::ApplyHugeBlobSize(ui32 minHugeBlobInBytes, const TActorContext& ctx) {
         Fields->MinHugeBlobInBytes = minHugeBlobInBytes;
         ctx.Send(HullDs->LogoBlobs->LIActor, new TEvMinHugeBlobSizeUpdate(minHugeBlobInBytes));
+    }
+
+    bool THull::IsFreshRotationPending(const TFreshAdmission& admission) const {
+        return (!admission.LogoBlobs.Empty() && HullDs->LogoBlobs->IsFreshRotationPending())
+            || (!admission.Blocks.Empty() && HullDs->Blocks->IsFreshRotationPending())
+            || (!admission.Barriers.Empty() && HullDs->Barriers->IsFreshRotationPending());
+    }
+
+    TFreshShortfall THull::GetFreshReservationShortfall(const TFreshAdmission& admission) const {
+        TFreshShortfall shortfall;
+        if (!admission.LogoBlobs.Empty()) {
+            shortfall.LogoBlobs = HullDs->LogoBlobs->GetFreshReservationShortfall(admission.LogoBlobs);
+        }
+        if (!admission.Blocks.Empty()) {
+            shortfall.Blocks = HullDs->Blocks->GetFreshReservationShortfall(admission.Blocks);
+        }
+        if (!admission.Barriers.Empty()) {
+            shortfall.Barriers = HullDs->Barriers->GetFreshReservationShortfall(admission.Barriers);
+        }
+        return shortfall;
+    }
+
+    void THull::AddFreshReservedChunks(const TFreshShortfall& split, const TVector<TChunkIdx>& chunks) {
+        Y_VERIFY_S(chunks.size() == split.Total(), HullDs->HullCtx->VCtx->VDiskLogPrefix
+            << "reserved# " << chunks.size() << " requested# " << split.Total());
+        auto it = chunks.begin();
+        auto give = [&](auto& levelIndex, ui64 count) {
+            if (count) {
+                levelIndex->AddFreshReservedChunks(TVector<TChunkIdx>(it, it + count));
+                it += count;
+            }
+        };
+        give(HullDs->LogoBlobs, split.LogoBlobs);
+        give(HullDs->Blocks, split.Blocks);
+        give(HullDs->Barriers, split.Barriers);
+    }
+
+    void THull::AdmitToFresh(const TFreshAdmission& admission) {
+        if (!admission.LogoBlobs.Empty()) {
+            HullDs->LogoBlobs->AdmitToFresh(admission.LogoBlobs);
+        }
+        if (!admission.Blocks.Empty()) {
+            HullDs->Blocks->AdmitToFresh(admission.Blocks);
+        }
+        if (!admission.Barriers.Empty()) {
+            HullDs->Barriers->AdmitToFresh(admission.Barriers);
+        }
+    }
+
+    void THull::LandInFresh(const TFreshAdmission& admission, const TActorContext& ctx) {
+        // A compaction that was due and only held off for records in flight is started as soon as they have
+        // landed, rather than at the next scheduled check, since admission waits for it meanwhile. Nothing
+        // else is started here: whether and when a compaction is due stays exactly as without admission (a small
+        // blob, for one, never triggers one on insert).
+        if (!admission.LogoBlobs.Empty()) {
+            const bool pending = HullDs->LogoBlobs->IsFreshRotationPending();
+            HullDs->LogoBlobs->LandInFresh(admission.LogoBlobs);
+            if (pending) {
+                CompactFreshLogoBlobsIfRequired(ctx);
+            }
+        }
+        if (!admission.Blocks.Empty()) {
+            const bool pending = HullDs->Blocks->IsFreshRotationPending();
+            HullDs->Blocks->LandInFresh(admission.Blocks);
+            if (pending) {
+                CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0, Fields->BlocksRunTimeCtx,
+                    ctx, false, Fields->AllowGarbageCollection);
+            }
+        }
+        if (!admission.Barriers.Empty()) {
+            const bool pending = HullDs->Barriers->IsFreshRotationPending();
+            HullDs->Barriers->LandInFresh(admission.Barriers);
+            if (pending) {
+                CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0,
+                    Fields->BarriersRunTimeCtx, ctx, false, Fields->AllowGarbageCollection);
+            }
+        }
     }
 
     void THull::CompactFreshLogoBlobsIfRequired(const TActorContext& ctx) {

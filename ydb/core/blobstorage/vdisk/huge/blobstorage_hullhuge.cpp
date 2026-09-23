@@ -248,7 +248,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ctx.Send(HugeKeeperCtx->SkeletonId, new TEvHullLogHugeBlob(WriteId, Item->LogoBlobId, Item->Ingress,
                 DiskAddr, Item->IgnoreBlock, Item->IssueKeepFlag, Item->SenderId, Item->Cookie, Item->HandleClass,
                 std::move(Item->Result), &Item->ExtraBlockChecks, Item->WriteSource, Item->RewriteBlob, IsStripe,
-                Item->FreshSpaceAdmission), 0, 0,
+                Item->FreshRefuseAtColor), 0, 0,
                 Span.GetTraceId());
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: finish: id# %s diskAddr# %s",
@@ -727,9 +727,6 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 return true;
             } else if (reason == EProcessWriteReason::OUT_OF_SPACE) {
-                if (msg.SpaceTracker) {
-                    msg.SpaceTracker->CommitAdmission(msg.FreshSpaceAdmission);
-                }
                 msg.Result->UpdateStatus(NKikimrProto::ERROR, "out of space");
                 SendVDiskResponse(ctx, msg.SenderId, msg.Result.release(), msg.Cookie, HugeKeeperCtx->VCtx, msg.HandleClass);
                 return true;

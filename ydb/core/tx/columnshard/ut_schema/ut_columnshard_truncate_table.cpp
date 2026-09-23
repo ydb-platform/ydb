@@ -89,7 +89,7 @@ const TColumnShard* WaitForShard(TDefaultTestsController& controller, TTestBasic
         runtime.SimulateSleep(TDuration::MilliSeconds(50));
     }
     UNIT_ASSERT_VALUES_EQUAL(controller.GetShardActualsCount(), 1);
-    return controller.GetTheOnlyShard();
+    return controller.GetShard();
 }
 
 bool IsInPathsToDrop(const TColumnShard& shard, const TInternalPathId& pathId) {
@@ -129,7 +129,7 @@ bool WaitForPathsToDropEmpty(TDefaultTestsController& controller, TTestBasicRunt
         }
         runtime.SimulateSleep(TDuration::Seconds(1));
         Y_UNUSED(controller.WaitCleaning(TDuration::Seconds(1), &runtime));
-        if (const auto* shard = controller.GetShard()) {
+        if (const auto* shard = controller.GetAnyShard()) {
             if (shard->GetTablesManager().GetPathsToDrop().empty()) {
                 return true;
             }
@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         PlanSchemaTx(runtime, sender, { planStep, txId });
 
         auto& csController = *csControllerGuard.operator->();
-        const auto* shard = csController.GetTheOnlyShard();
+        const auto* shard = csController.GetShard();
 
         {
             const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 2), ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
-        shard = csController.GetTheOnlyShard();
+        shard = csController.GetShard();
 
         {
             const auto newInternalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
@@ -512,7 +512,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         const auto truncateSnapshot = NOlap::TSnapshot(planStep, txId);
 
         auto& csController = *csControllerGuard.operator->();
-        const auto* shard = csController.GetTheOnlyShard();
+        const auto* shard = csController.GetShard();
         const auto newInternalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
         UNIT_ASSERT(newInternalPathId);
         UNIT_ASSERT(!shard->GetTablesManager().GetTableTtl(*newInternalPathId).has_value());
@@ -524,7 +524,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         planStep = ProposeSchemaTx(runtime, sender, alterBody, ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
 
-        shard = csController.GetTheOnlyShard();
+        shard = csController.GetShard();
         {
             const auto resolved = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
             UNIT_ASSERT(resolved);
@@ -983,7 +983,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         UNIT_ASSERT(WaitForPathsToDropEmpty(csController, runtime, sender, advancePlanStep));
 
         {
-            const auto* finalizedShard = csController.GetShard();
+            const auto* finalizedShard = csController.GetAnyShard();
             UNIT_ASSERT(finalizedShard);
             UNIT_ASSERT(!finalizedShard->GetTablesManager().HasTable(*oldInternalPathId));
         }
@@ -1514,7 +1514,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         UNIT_ASSERT(WaitForPathsToDropEmpty(csController, runtime, sender, advancePlanStep));
 
         {
-            const auto* finalizedShard = csController.GetShard();
+            const auto* finalizedShard = csController.GetAnyShard();
             UNIT_ASSERT(finalizedShard);
             const auto& tables = finalizedShard->GetTablesManager().GetTables();
             UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);

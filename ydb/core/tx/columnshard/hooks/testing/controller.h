@@ -355,7 +355,7 @@ public:
         return ShardActuals.size();
     }
 
-    const ::NKikimr::NColumnShard::TColumnShard* GetShard() const {
+    const ::NKikimr::NColumnShard::TColumnShard* GetAnyShard() const {
         TGuard<TMutex> g(Mutex);
         if (ShardActuals.size() != 1) {
             return nullptr;
@@ -363,8 +363,8 @@ public:
         return ShardActuals.begin()->second;
     }
 
-    const ::NKikimr::NColumnShard::TColumnShard* GetTheOnlyShard() const {
-        const auto* shard = GetShard();
+    const ::NKikimr::NColumnShard::TColumnShard* GetShard() const {
+        const auto* shard = GetAnyShard();
         AFL_VERIFY(shard);
         return shard;
     }

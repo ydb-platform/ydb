@@ -48,6 +48,7 @@ ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_pq_source_actor_count[max_tasks_50]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_stop_after_restart[kikimr0-False]
+ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_dynamic_udf
 ydb/tests/fq/streaming/logbroker py3test.sole chunk
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/config test_pdisk_metadata_cli.py.TestPDiskMetadata.test_apply_committed_config

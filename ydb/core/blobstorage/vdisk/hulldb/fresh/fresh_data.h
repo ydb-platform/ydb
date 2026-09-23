@@ -243,7 +243,8 @@ namespace NKikimr {
     void TFreshData<TKey, TMemRec>::CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) {
         // FIXME ref count = 2?
         Y_VERIFY_S(Old && Old.Get() == freshSegment.Get(), HullCtx->VCtx->VDiskLogPrefix);
-        // The compaction reserved its own output chunks, so what was held for it is no longer needed.
+        // Old's chunks went to its compaction, which commits the ones it wrote and forgets the rest; anything
+        // still held here is surplus.
         TVector<TChunkIdx> released = Old->TakeReservedChunks();
         ReleasedChunks.insert(ReleasedChunks.end(), released.begin(), released.end());
         freshSegment.Drop();

@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/cache
     library/cpp/protobuf/interop
     library/cpp/protobuf/json
     library/cpp/string_utils/quote
@@ -20,7 +21,7 @@ PEERDIR(
     ydb/core/kqp/common/events
     ydb/core/kqp/compile_service
     ydb/core/kqp/counters
-    ydb/services/workload_manager/metadata_subscription/resource_pool_classifier
+    ydb/services/workload_manager/gateway
     ydb/core/kqp/gateway/behaviour/streaming_query
     ydb/core/kqp/proxy_service/proto
     ydb/core/kqp/proxy_service/script_executions_utils

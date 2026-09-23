@@ -17,6 +17,7 @@ constexpr TDuration IDLE_DURATION = TDuration::Seconds(60);
 
 struct TDatabaseState {
     TActorId SelfId;
+    TActorId CacheActor;
     bool& EnabledResourcePoolsOnServerless;
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
 
@@ -82,6 +83,9 @@ struct TDatabaseState {
 
         if (Serverless != ev->Get()->Serverless) {
             TActivationContext::Send(NKqp::MakeKqpProxyID(SelfId.NodeId()), std::make_unique<NKqp::TEvKqp::TEvUpdateDatabaseInfo>(ev->Get()->Database, ev->Get()->DatabaseId, ev->Get()->Serverless));
+            if (CacheActor) {
+                TActivationContext::Send(CacheActor, std::make_unique<NKqp::TEvKqp::TEvUpdateDatabaseInfo>(ev->Get()->Database, ev->Get()->DatabaseId, ev->Get()->Serverless));
+            }
         }
 
         LastUpdateTime = TInstant::Now();

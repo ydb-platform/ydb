@@ -33,6 +33,7 @@ END()
 RECURSE(
     actors
     common
+    gateway
     metadata_subscription
     tables
     service

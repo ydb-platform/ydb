@@ -712,7 +712,7 @@ private:
         request->SetQuery(query);
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->SetDatabase(settings.Database_ ? settings.Database_ : Settings_.DomainName_);
+        request->SetDatabase(settings.Database_ ? settings.Database_ : CanonizePath(Settings_.DomainName_));
         request->SetPoolId(*settings.PoolId_);
         if (!settings.ApplicationName_.empty()) {
             request->SetApplicationName(settings.ApplicationName_);
@@ -894,7 +894,7 @@ void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex) {
     UNIT_ASSERT_C(response, "Timed out waiting for resource pool classifier snapshot refresh");
 
     runtime.Send(
-        NKqp::MakeKqpProxyID(nodeId),
+        MakeServiceId(nodeId),
         edgeActor,
         new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()),
         nodeIndex);

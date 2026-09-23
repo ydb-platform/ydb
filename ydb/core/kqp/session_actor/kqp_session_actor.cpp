@@ -2567,7 +2567,11 @@ public:
         QueryState->CurrentQueryStatsPublishScheduled = false;
         if (auto current = QueryState->CurrentQueryStats.Get()) {
             const auto now = TMonotonic::Now();
-            current->ReadIngressBytesPerInterval = current->ReadIngressBytes - QueryState->LastPublishedReadIngressBytes;
+            const auto elapsed = now - QueryState->LastCurrentQueryStatsPublishAt;
+            if (elapsed != TDuration::Zero()) {
+                current->ReadIngressBytesRate = (current->ReadIngressBytes - QueryState->LastPublishedReadIngressBytes)
+                    * TDuration::Seconds(1).MicroSeconds() / elapsed.MicroSeconds();
+            }
             QueryState->LastPublishedReadIngressBytes = current->ReadIngressBytes;
             QueryState->LastCurrentQueryStatsPublishAt = now;
             Send(QueryState->Sender, new TEvKqp::TEvCurrentQueryStats(SessionId, QueryState->ProxyRequestId,

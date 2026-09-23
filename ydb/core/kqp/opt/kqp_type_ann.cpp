@@ -2923,12 +2923,17 @@ TStatus AnnotateOpRead(const TExprNode::TPtr& node, TExprContext& ctx, const TSt
 }
 
 TStatus AnnotateOpEmptySource(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (input->ChildrenSize()) {
+        const auto sourceType = input->ChildPtr(0)->GetTypeAnn();
+        Y_ENSURE(sourceType && sourceType->GetKind() == ETypeAnnotationKind::List, "Invalid type for EmptySource input, expected List");
+        Y_ENSURE(sourceType->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct, "Invalid type Empty source input, expected Struct");
+        input->SetTypeAnn(sourceType);
+        return TStatus::Ok;
+    }
 
     TVector<const TItemExprType*> resultItems;
     auto resultType = ctx.MakeType<TStructExprType>(resultItems);
-
     input->SetTypeAnn(ctx.MakeType<TListExprType>(resultType));
-
     return TStatus::Ok;
 }
 

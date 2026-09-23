@@ -117,12 +117,27 @@ void IOperator::ComputeOutputIUsSubtree() {
 void TOpEmptySource::ComputeOutputIUs() {
     if (!Props.OutputIUs.has_value()) {
         Props.OutputIUs = TVector<TInfoUnit>{};
+        if (Input) {
+            // Actual column names a placed inside declare with type specification.
+            const auto* structType = Input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            for (const auto* item : structType->GetItems()) {
+                Props.OutputIUs->emplace_back(TString(item->GetName()));
+            }
+        }
     }
 }
 
 TString TOpEmptySource::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx); 
     return "EmptySource"; 
+}
+
+NJson::TJsonValue TOpEmptySource::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    if (Input && TCoParameter::Match(Input.Get())) {
+        res["Parameter"] = TCoParameter(Input).Name().StringValue();
+    }
+    return res;
 }
 
 /**

@@ -461,7 +461,7 @@ TVector<ui64> FindCoveringShards(
         const auto& prevRange = *oldPartitions[deletedIndex - 1].Range;
         const auto cells = makeBoundaryCells(prevRange);
         from.assign(cells.begin(), cells.end());
-        inclusiveFrom = !prevRange.IsInclusive && !prevRange.IsPoint;
+        inclusiveFrom = !prevRange.IsInclusive;
     }
 
     const auto& deadRange = *oldPartitions[deletedIndex].Range;
@@ -1878,6 +1878,7 @@ public:
                     }
                 }
                 ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards));
+                UpdateShards();
                 bool locksConsistent = true;
                 for (const auto& [shardId, targets] : transferTargets) {
                     // Every covering shard must join the commit: it holds the
@@ -4965,6 +4966,13 @@ public:
     // Read Committed only: survive a quiet split/merge that happened after all writes
     // were acknowledged but before the commit (no in-flight traffic would trigger the
     // regular retry/reroute path).
+    //
+    // TODO: read-only participants are out of scope here. Shards registered via
+    // AddAction(READ) from read sets/lookups (no write-actor batches) participate in
+    // the commit (ParticipatesInCommit) but are never re-resolved: their tables have
+    // no write actor, so a quiet split/merge removing such a shard still fails the
+    // prepare with UNAVAILABLE. Transferring them needs a buffer-actor-driven
+    // re-resolve of the read tables' partitioning at commit time.
     bool NeedResolveBeforeCommit() const {
         if (TxManager->GetIsolationLevel() != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
             return false;
@@ -5005,6 +5013,11 @@ public:
     void OnResolveCompleted() override {
         // ONLY READ COMMITTED
         AFL_ENSURE(TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        if (CurrentStateFunc() == &TThis::StateError || CurrentStateFunc() == &TThis::StateRollback) {
+            YDB_LOG_WARN("Ignoring late OnResolveCompleted: the transaction has already failed.",
+                {"logPrefix", this->LogPrefix});
+            return;
+        }
         AFL_ENSURE(CurrentStateFunc() == &TThis::StateResolveRound);
         AFL_ENSURE(PendingResolveRoundActors > 0);
         if (--PendingResolveRoundActors == 0) {

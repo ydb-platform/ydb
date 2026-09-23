@@ -53,6 +53,7 @@ ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_dynamic_udf
 ydb/tests/fq/streaming/logbroker py3test.sole chunk
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/config test_pdisk_metadata_cli.py.TestPDiskMetadata.test_apply_committed_config
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
 ydb/tests/functional/federation_test unittest.sole chunk
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_stress

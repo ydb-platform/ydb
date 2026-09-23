@@ -10,6 +10,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -389,8 +390,9 @@ private:
                 state.Counters->ToProto(state.Current);
             }
             if constexpr (!isLabeled) {
-                dbCounters.DetailedCurrent.Clear();
+                dbCounters.DetailedCurrent = {};
                 if (!dbCounters.DetailedStates.empty()) {
+                    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::PayloadMemoryTag());
                     auto packStart = Now();
                     for (auto& [service, state] : dbCounters.DetailedStates) {
                         auto* entry = dbCounters.DetailedCurrent.Add();
@@ -426,6 +428,7 @@ private:
         size_t detailedTableCount = 0;
         if constexpr (!isLabeled) {
             if (!dbCounters.DetailedStates.empty()) {
+                NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::PayloadMemoryTag());
                 record.MutableDetailedCounters()->CopyFrom(dbCounters.DetailedCurrent);
             }
             detailedRoleCount = record.DetailedCountersSize();
@@ -724,6 +727,7 @@ private:
     }
 
     void Handle(TEvSysView::TEvRegisterDbDetailedCounters::TPtr& ev) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
         const auto& database = ev->Get()->Database;
         const auto service = ev->Get()->Service;
 
@@ -747,6 +751,7 @@ private:
     }
 
     void Handle(TEvSysView::TEvUnregisterDbDetailedCounters::TPtr& ev) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
         const auto& database = ev->Get()->Database;
         const auto service = ev->Get()->Service;
 

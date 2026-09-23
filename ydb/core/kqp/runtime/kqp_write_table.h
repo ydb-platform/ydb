@@ -230,6 +230,8 @@ public:
     };
     virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;
 
+    virtual TMessageMetadata PrepareMessageMetadata(ui64 shardId) = 0;
+
     virtual ui64 AllocateMessageCookie(ui64 shardId) = 0;
 
     struct TSerializationResult {
@@ -275,10 +277,10 @@ struct TShardedWriteControllerSettings {
 // only by a delivery failure or an error result, never while a valid answer is merely
 // in flight, and every resent message is guaranteed its own answer with the resent
 // message's cookie: a deduped replay (write seq num dedup) re-sends the result with
-// the new message's cookie, and an overload-rejected write is re-sent
-// after the TEvOverloadReady wakeup. A result with cookie 0 is not tied to any
-// specific message (version 26-3 datashard gate rejections, distributed/volatile commit
-// completions) and always passes.
+// the new message's cookie, and an overload-rejected write is re-sent after the
+// TEvOverloadReady wakeup. A result with cookie 0 is not tied to any specific message
+// (replies of shards that do not echo cookies, e.g. 26-3 datashards during a rolling
+// upgrade; distributed/volatile commit completions) and always passes.
 bool IsSupersededWriteResult(ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata);
 
 IShardedWriteControllerPtr CreateShardedWriteController(

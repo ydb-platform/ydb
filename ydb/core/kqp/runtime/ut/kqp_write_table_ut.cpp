@@ -97,8 +97,9 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
         UNIT_ASSERT(IsSupersededWriteResult(6, MetadataWithCookie(7)));
         // A result for a shard unknown to the controller is dropped.
         UNIT_ASSERT(IsSupersededWriteResult(7, std::nullopt));
-        // Zero-cookie results (gate rejections, distributed/volatile commit
-        // completions) are not tied to a specific message and always pass.
+        // Zero-cookie results (replies of shards that do not echo cookies, e.g.
+        // 26-3 datashards; distributed/volatile commit completions) are not tied
+        // to a specific message and always pass.
         UNIT_ASSERT(!IsSupersededWriteResult(0, std::nullopt));
         UNIT_ASSERT(!IsSupersededWriteResult(0, MetadataWithCookie(7)));
     }
@@ -108,9 +109,9 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
 
         // Before the first send the shard holds a not-yet-used marker cookie; every
         // outbound message, the first attempt or a resend, mints its own fresh cookie.
-        auto metadata = Controller->GetMessageMetadata(TestShardId);
-        UNIT_ASSERT(metadata);
-        UNIT_ASSERT_VALUES_EQUAL(metadata->OperationsCount, 1);
+        // The send-path lookup builds the pending batches into flight.
+        const auto firstMetadata = Controller->PrepareMessageMetadata(TestShardId);
+        UNIT_ASSERT_VALUES_EQUAL(firstMetadata.OperationsCount, 1);
 
         const ui64 firstCookie = Controller->AllocateMessageCookie(TestShardId);
         Controller->OnMessageSent(TestShardId, firstCookie);
@@ -121,8 +122,8 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
         Controller->OnMessageSent(TestShardId, resendCookie);
 
         // Only the result echoing the last minted cookie acknowledges the round:
-        // a zero-cookie result (e.g. a gate rejection) never does, and the answer of
-        // the superseded first attempt does not either.
+        // a zero-cookie result (e.g. a reply of a pre-26-4 shard) never does, and
+        // the answer of the superseded first attempt does not either.
         UNIT_ASSERT(!Controller->OnMessageAcknowledged(TestShardId, 0));
         UNIT_ASSERT(!Controller->OnMessageAcknowledged(TestShardId, firstCookie));
 
@@ -134,20 +135,19 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
         // A second round mints a fresh cookie again; belated duplicates of the first
         // round's messages are both filtered out and ignored by OnMessageAcknowledged.
         WriteRound(2, 22, 1);
-        metadata = Controller->GetMessageMetadata(TestShardId);
-        UNIT_ASSERT(metadata);
+        const auto secondMetadata = Controller->PrepareMessageMetadata(TestShardId);
         const ui64 secondCookie = Controller->AllocateMessageCookie(TestShardId);
         UNIT_ASSERT(secondCookie != firstCookie && secondCookie != resendCookie);
         Controller->OnMessageSent(TestShardId, secondCookie);
 
-        UNIT_ASSERT(IsSupersededWriteResult(firstCookie, metadata));
+        UNIT_ASSERT(IsSupersededWriteResult(firstCookie, secondMetadata));
         UNIT_ASSERT(IsSupersededWriteResult(resendCookie, Controller->GetMessageMetadata(TestShardId)));
         UNIT_ASSERT(!Controller->OnMessageAcknowledged(TestShardId, firstCookie));
         UNIT_ASSERT(!Controller->OnMessageAcknowledged(TestShardId, resendCookie));
 
-        metadata = Controller->GetMessageMetadata(TestShardId);
-        UNIT_ASSERT(metadata);
-        UNIT_ASSERT_VALUES_EQUAL(metadata->Cookie, secondCookie);
+        const auto currentMetadata = Controller->GetMessageMetadata(TestShardId);
+        UNIT_ASSERT(currentMetadata);
+        UNIT_ASSERT_VALUES_EQUAL(currentMetadata->Cookie, secondCookie);
 
         // The result of the second round is acknowledged.
         const auto secondAck = Controller->OnMessageAcknowledged(TestShardId, secondCookie);

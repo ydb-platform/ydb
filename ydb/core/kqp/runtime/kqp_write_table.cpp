@@ -2101,16 +2101,14 @@ public:
         if (!shardInfo || shardInfo->IsEmpty()) {
             return {};
         }
+        return MakeMetadata(*shardInfo);
+    }
+
+    TMessageMetadata PrepareMessageMetadata(ui64 shardId) override {
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo && !shardInfo->IsEmpty());
         BuildBatchesForShard(*shardInfo);
-
-        TMessageMetadata meta;
-        meta.Cookie = shardInfo->GetCookie();
-        meta.OperationsCount = shardInfo->GetBatchesInFlight();
-        meta.IsFinal = shardInfo->IsClosed() && shardInfo->Size() == shardInfo->GetBatchesInFlight();
-        meta.SendAttempts = shardInfo->GetSendAttempts();
-        meta.NextOverloadSeqNo = shardInfo->GetOverloadSeqNo();
-
-        return meta;
+        return MakeMetadata(*shardInfo);
     }
 
     ui64 AllocateMessageCookie(ui64 shardId) override {
@@ -2120,13 +2118,13 @@ public:
     TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) override {
         TSerializationResult result;
 
-        const auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty()) {
-            return result;
-        }
+        // A send-path lookup: the shard is always known and non-empty, since
+        // SerializeMessageToPayload follows a successful metadata lookup.
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo && !shardInfo->IsEmpty());
 
-        for (size_t index = 0; index < shardInfo.GetBatchesInFlight(); ++index) {
-            const auto& inFlightBatch = shardInfo.GetBatch(index);
+        for (size_t index = 0; index < shardInfo->GetBatchesInFlight(); ++index) {
+            const auto& inFlightBatch = shardInfo->GetBatch(index);
             if (inFlightBatch.Data) {
                 AFL_ENSURE(!inFlightBatch.Data->IsEmpty());
                 result.TotalDataSize += inFlightBatch.Data->GetMemory();
@@ -2149,7 +2147,7 @@ public:
                     writeSeqNum->SetWriteSeqNum(inFlightBatch.WriteSeqNum);
                 }
             } else {
-                AFL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());
+                AFL_ENSURE(index + 1 == shardInfo->GetBatchesInFlight());
             }
         }
 
@@ -2295,6 +2293,16 @@ private:
                 AFL_ENSURE(shard.GetBatchesInFlight() == shard.Size());
             }
         }
+    }
+
+    static TMessageMetadata MakeMetadata(const TShardsInfo::TShardInfo& shard) {
+        TMessageMetadata meta;
+        meta.Cookie = shard.GetCookie();
+        meta.OperationsCount = shard.GetBatchesInFlight();
+        meta.IsFinal = shard.IsClosed() && shard.Size() == shard.GetBatchesInFlight();
+        meta.SendAttempts = shard.GetSendAttempts();
+        meta.NextOverloadSeqNo = shard.GetOverloadSeqNo();
+        return meta;
     }
 
     // Shards present in ShardsInfo but absent from the current Partitioning. Their

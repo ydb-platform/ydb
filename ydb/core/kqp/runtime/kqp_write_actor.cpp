@@ -924,23 +924,24 @@ public:
 
         // Each outbound message carries its own cookie (see SendDataToShard), so only the
         // answer echoing the cookie of the shard's last sent message is meaningful:
-        // results of superseded messages are ignored. Dropping is safe because a resend
-        // is triggered only by a delivery failure or an error result, never while a
-        // valid answer is merely in flight, and every resent message is guaranteed its
-        // own answer with the resent message's cookie (a deduped replay re-sends the
-        // result with the new message's cookie). Two kinds of results must pass the
-        // filter:
+        // results of superseded messages are ignored (see IsSupersededWriteResult for
+        // the safety rationale). Two kinds of results must pass the filter:
         //  - COMMIT-mode completions: they are not replies to a per-message EvWrite
         //    (distributed and volatile commit completions carry cookie 0), and every
         //    participant shard (including lock-only ones without a controller record)
         //    sends exactly one completion that must be processed, so the whole rule
         //    does not apply in COMMIT mode.
-        //  - (TODO: Fix this) Datashard gate rejections (e.g. STATUS_WRONG_SHARD_STATE for a shard
-        //    split/offlined behind the pipe) are not replies to a specific message:
-        //    they carry cookie 0 and must be processed to drive the re-resolve logic.
+        //  - Cookie-0 results: not tied to a specific message. Current-version shards
+        //    echo the request cookie on all per-message replies, including gate
+        //    rejections (e.g. STATUS_WRONG_SHARD_STATE for a shard split/offlined
+        //    behind the pipe), which pass via the cookie match; cookie 0 is only
+        //    produced by shards that do not echo cookies (e.g. 26-3 datashards during
+        //    a rolling upgrade), and their rejections must pass to drive the
+        //    re-resolve logic.
 
         const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
 
+        // Note: ABORTED EvWriteResult can have Cookie=0 if it was lost at datashard.
         if (Mode != EMode::COMMIT && IsSupersededWriteResult(ev->Cookie, metadata)) {
             YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",
                 {"logPrefix", this->LogPrefix},
@@ -1380,12 +1381,13 @@ public:
     bool SendDataToShard(const ui64 shardId) {
         YQL_ENSURE(Mode != EMode::COMMIT);
 
-        const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
-        YQL_ENSURE(metadata);
+        // The send-path lookup: builds the shard's pending batches into flight so
+        // IsFinal/OperationsCount reflect the message about to be sent.
+        const auto metadata = ShardedWriteController->PrepareMessageMetadata(shardId);
         // A resend is safe when the shard deduplicates by uncommitted write seq num
         // (AttachWriteSeqNum) or when the write is inconsistent.
-        YQL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
-        if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
+        YQL_ENSURE(metadata.SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
+        if (metadata.SendAttempts >= MessageSettings.MaxWriteAttempts) {
             // The resend budget for this shard is exhausted: re-resolve through RetryShard
             // so the number of consecutive re-resolves per shard stays bounded before
             // failing with UNAVAILABLE (the per-shard counter is cleared on a successful ack).
@@ -1400,8 +1402,8 @@ public:
 
         // BreakerQuerySpanId is set in AddAction during write phase, not here
 
-        const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
-        const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
+        const bool isPrepare = metadata.IsFinal && Mode == EMode::PREPARE;
+        const bool isImmediateCommit = metadata.IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
 
         // In-flight data batches carry the snapshot of the operation that produced
         // them, and all batches of one message must share it (enforced by
@@ -1447,19 +1449,19 @@ public:
 
         evWrite->Record.SetCollectAffectedRows(CollectAffectedRows);
 
-        evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
+        evWrite->Record.SetOverloadSubscribe(metadata.NextOverloadSeqNo);
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite, isPrepare || isImmediateCommit);
         YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
 
-        if (metadata->SendAttempts == 0) {
+        if (metadata.SendAttempts == 0) {
             if (!isPrepare) {
                 Counters->WriteActorImmediateWrites->Inc();
             } else {
                 Counters->WriteActorPrepareWrites->Inc();
             }
             Counters->WriteActorWritesSizeHistogram->Collect(serializationResult.TotalDataSize);
-            Counters->WriteActorWritesOperationsHistogram->Collect(metadata->OperationsCount);
+            Counters->WriteActorWritesOperationsHistogram->Collect(metadata.OperationsCount);
 
             for (const auto& operation : evWrite->Record.GetOperations()) {
                 if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
@@ -1498,11 +1500,7 @@ public:
 
         // Each outbound message, a first attempt or a resend, gets its own fresh cookie:
         // only the result echoing the cookie of the shard's last sent message is
-        // processed (see IsSupersededWriteResult). Dropping older answers is safe
-        // because resends are triggered only by a delivery failure or an error result,
-        // never while a valid answer is merely in flight, and every resent message is
-        // guaranteed its own answer with the resent message's cookie (a deduped replay
-        // re-sends the result with the new message's cookie).
+        // processed (see IsSupersededWriteResult).
         const ui64 cookie = ShardedWriteController->AllocateMessageCookie(shardId);
 
         TStringBuilder locks;
@@ -1521,12 +1519,12 @@ public:
             {"size", serializationResult.TotalDataSize},
             {"cookie", cookie},
             {"operationsCount", evWrite->Record.OperationsSize()},
-            {"isFinal", metadata->IsFinal},
-            {"attempts", metadata->SendAttempts},
+            {"isFinal", metadata.IsFinal},
+            {"attempts", metadata.SendAttempts},
             {"mode", static_cast<int>(Mode)},
             {"bufferMemory", GetMemory()});
 
-        AFL_ENSURE(Mode == EMode::WRITE || metadata->IsFinal);
+        AFL_ENSURE(Mode == EMode::WRITE || metadata.IsFinal);
 
         LinkedPipeCache = true;
         Send(

@@ -276,6 +276,15 @@ public:
         Execute();
     }
 
+    // Fails the message as a shard would: the result echoes the message cookie
+    // (txId 0, as in the fixture's immediate-mode writes).
+    void Fail(const TWrite& write) {
+        Runtime.Send(new IEventHandle(write->Sender, PipeCache,
+            NEvents::TDataEvents::TEvWriteResult::BuildError(write->Get()->TabletId, 0,
+                NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED, "belated failure").release(), 0, write->Cookie));
+        Execute();
+    }
+
     void Retry(const TWrite& write, TPartitions partitions = {}) {
         if (!partitions.empty()) {
             UNIT_ASSERT(Kind == ETableKind::Row);
@@ -553,6 +562,26 @@ Y_UNIT_TEST_SUITE(KqpDirectWriteActor) {
         UNIT_ASSERT(!fixture.Callbacks.Finished);
         fixture.Acknowledge(replacement);
         UNIT_ASSERT(fixture.Callbacks.Finished);
+    }
+
+    // A late error result of a superseded message (the resend carries a fresh
+    // cookie) must be dropped by the cookie filter instead of failing the query;
+    // the query then completes on the resend's own result.
+    Y_UNIT_TEST(LateSupersededResultIsDropped) {
+        TSinkFixture fixture;
+        fixture.Write(1, Nothing(), true);
+        const auto original = fixture.GrabWrite();
+
+        fixture.Retry(original);
+        const auto retried = fixture.GrabWrite();
+
+        fixture.Fail(original);
+        UNIT_ASSERT(fixture.Callbacks.Errors.Empty());
+        UNIT_ASSERT(!fixture.Callbacks.Finished);
+
+        fixture.Acknowledge(retried);
+        UNIT_ASSERT(fixture.Callbacks.Finished);
+        UNIT_ASSERT(fixture.Callbacks.Errors.Empty());
     }
 
     Y_UNIT_TEST(ResumesAfterDataShardReplacementFreesSpace) {

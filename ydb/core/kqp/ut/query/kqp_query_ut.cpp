@@ -149,10 +149,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT(NKikimrConfig::TFeatureFlags().GetEnableTablePathPrefixRelativePaths());
         for (bool enabled : {false, true}) {
             for (bool split : {false, true}) {
-                auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
-                auto databaseGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+                auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>());
+                auto databaseGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
                 auto databaseCounters = MakeIntrusive<TKqpDbCounters>(
-                    MakeIntrusive<NMonitoring::TDynamicCounters>(), databaseGroup);
+                    MakeIntrusive<::NMonitoring::TDynamicCounters>(), databaseGroup);
                 NYql::TKikimrConfiguration config;
                 config.FeatureFlags.SetEnableTablePathPrefixRelativePaths(enabled);
                 config.IncrementTranslationCounter = [counters, databaseCounters](const TString& group, const TString& name) {
@@ -189,8 +189,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 // Per-database diagnostics survive the sysview aggregation transport.
                 NSysView::TDbServiceCounters serialized;
                 databaseCounters->ToProto(serialized);
-                auto restoredGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
-                TKqpDbCounters restored(MakeIntrusive<NMonitoring::TDynamicCounters>(), restoredGroup);
+                auto restoredGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+                TKqpDbCounters restored(MakeIntrusive<::NMonitoring::TDynamicCounters>(), restoredGroup);
                 restored.FromProto(serialized);
                 UNIT_ASSERT_VALUES_EQUAL(restoredGroup->GetCounter("TablePathPrefix/NonAbsolutePath", true)->Val(), 1);
             }

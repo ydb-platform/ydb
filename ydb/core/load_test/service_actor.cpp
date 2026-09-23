@@ -1097,12 +1097,12 @@ public:
             const ui64 tag         = FromStringWithDefault<ui64>(params.Get("tag"), 0);
             const ui32 duration    = FromStringWithDefault<ui32>(params.Get("duration_seconds"), 0);
             const ui32 delayBefore = FromStringWithDefault<ui32>(params.Get("delay_before_seconds"), 15);
-            const ui32 maxInFlight = FromStringWithDefault<ui32>(params.Get("max_in_flight"), 32);
+            const ui32 maxInFlight = FromStringWithDefault<ui32>(params.Get("max_in_flight"), 2048);
             const ui32 readRatio          = FromStringWithDefault<ui32>(params.Get("read_ratio_pct"), 0);
             const ui32 sizeKib            = FromStringWithDefault<ui32>(params.Get("read_write_size_kib"), 4);
             const bool sequential         = params.Get("sequential") == "1";
             const ui32 numDbg             = FromStringWithDefault<ui32>(params.Get("num_dbg_to_use"), 0);
-            const ui32 maxInflightLsns    = FromStringWithDefault<ui32>(params.Get("max_inflight_lsns"), 4096);
+            const ui32 maxInflightLsns    = FromStringWithDefault<ui32>(params.Get("max_inflight_lsns"), 65536);
             const bool disableReplication = params.Get("disable_replication") == "1";
             const bool enableChecksums = !params.Has("enable_checksums")
                 || params.Get("enable_checksums") == "1";

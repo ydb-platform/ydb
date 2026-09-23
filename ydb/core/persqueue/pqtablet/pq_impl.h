@@ -184,8 +184,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat, public TLogPrefix {
     void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status);
 
     void SendPlanStepAcks(const TActorContext& ctx,
-                          const TDistributedTransaction& tx);
-    void SendPlanStepAcks(const TActorContext& ctx,
                           const TActorId& receiver,
                           const TEvTxProcessing::TEvPlanStep& ev);
     void SendPlanStepAck(const TActorContext& ctx,
@@ -310,8 +308,27 @@ private:
     TDeque<std::pair<ui64, ui64>> TxQueue; // упорядоченный список пар (step, txid)
     ui64 PlanStep = 0;
     ui64 PlanTxId = 0;
+    // граница, до которой транзакции выполнены или брошены: последняя пара, снятая с TxQueue.
+    // всё строго ниже границы записано на диск нами или партициями
     ui64 ExecStep = 0;
     ui64 ExecTxId = 0;
+    bool PlanStepChanged = false; // значения выше изменились и их надо записать в _txinfo
+
+    // Очередь пришедших TEvPlanStep. Медиатор ждёт подтверждений в возрастающем порядке шагов,
+    // поэтому отправлять их можно только префиксом с головы очереди. Одна запись на одно сообщение:
+    // два поколения queue-актора, приславшие один шаг, получат по своему подтверждению
+    struct TPlanStepEntry {
+        TActorId Sender;                                   // queue-актор, доставивший шаг
+        std::unique_ptr<TEvTxProcessing::TEvPlanStep> Ev;  // из него берутся Step, txIds и AckTo
+        ui64 MaxPendingTxId = Max<ui64>();                 // Max<ui64>() - за шагом нет наших транзакций
+        ui64 CreatedAtWriteTxsCycle = 0;
+    };
+    TDeque<TPlanStepEntry> PlanSteps; // в порядке поступления
+
+    bool CanReleasePlanStep(const TPlanStepEntry& entry) const;
+    bool HasPlanStepWaitingForWriteTxsCycle() const;
+    void SendAcksForCompletedPlanSteps(const TActorContext& ctx);
+    void PopTxFromQueue();
 
     TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
@@ -336,6 +353,10 @@ private:
     bool CanExecute(const TDistributedTransaction& tx);
 
     bool WriteTxsInProgress = false;
+    // Номер цикла записи WRITE_TX_COOKIE. Успешно завершённый цикл - доказательство того, что таблетка
+    // является лидером. Циклы последовательны, в полёте не больше одного
+    ui64 WriteTxsCycle = 0;
+    ui64 CompletedWriteTxsCycle = 0;
 
     struct TReplyToActor;
 

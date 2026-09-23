@@ -40,7 +40,19 @@ chown -R "$RUNNER_USERNAME":"$RUNNER_USERNAME" "$H"/actions_runner
 
 instance_id=$(get_instance_id)
 
-sudo -u "$RUNNER_USERNAME" ./config.sh --unattended --disableupdate --url "${REPO_URL}" --token "${GITHUB_TOKEN}" --name "${RUNNER_NAME}" --labels "${RUNNER_LABELS},instance:${instance_id}"
+CONFIG_ARGS=(
+  --unattended
+  --url "${REPO_URL}"
+  --token "${GITHUB_TOKEN}"
+  --name "${RUNNER_NAME}"
+  --labels "${RUNNER_LABELS},instance:${instance_id}"
+)
+
+if [[ "${DISABLE_UPDATE}" == "true" ]]; then
+    CONFIG_ARGS+=(--disableupdate)
+fi
+
+sudo -u "$RUNNER_USERNAME" ./config.sh "${CONFIG_ARGS[@]}"
 
 ./svc.sh install "${RUNNER_USERNAME}" || fail "failed to install service"
 

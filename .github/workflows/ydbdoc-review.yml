@@ -3,6 +3,7 @@
 name: ydbdoc-review (doc_translate label)
 
 on:
+  workflow_dispatch:
   pull_request_target:
     types: [labeled]
     paths:
@@ -15,6 +16,25 @@ permissions:
   checks: read
 
 jobs:
+  diagnose-pr-50858-continuation:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Continue PR 50858 from its active checkpoint
+        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.0.1
+        with:
+          mode: continue
+          pr: 50858
+        env:
+          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
+          YANDEX_API_KEY: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
+          YDB_GH_TOKEN: ${{ secrets.YDBDOC_PUSH_PAT }}
+          GITHUB_ACTOR: sintjuri
+          YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
+          YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE: ${{ vars.YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE }}
+          YDBDOC_MAX_SOURCE_CHARACTERS: ${{ vars.YDBDOC_MAX_SOURCE_CHARACTERS }}
+          YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
+
   ydbdoc-review:
     if: github.event.label.name == 'doc_translate'
     runs-on: ubuntu-latest

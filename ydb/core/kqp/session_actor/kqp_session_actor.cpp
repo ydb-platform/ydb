@@ -1571,6 +1571,45 @@ public:
             AFL_ENSURE(checkSchemeTx());
         }
 
+        // Only modes that promise repeatable reads are aborted: the rest are documented to
+        // observe newer data between statements.
+        if (QueryState->TxCtx->EffectiveIsolationLevel
+                && GuaranteesRepeatableReads(*QueryState->TxCtx->EffectiveIsolationLevel)) {
+            const NKqpProto::TKqpTableInfo* changed = nullptr;
+
+            auto rememberOrCompare = [&](const auto& infos) {
+                for (const auto& info : infos) {
+                    if (!info.GetSchemaVersion()) {
+                        continue;
+                    }
+
+                    const TKqpTransactionContext::TSchemaIdentity identity{
+                        .PathId = NYql::TKikimrPathId(
+                            info.GetTableId().GetOwnerId(), info.GetTableId().GetTableId()),
+                        .SchemaVersion = info.GetSchemaVersion(),
+                    };
+
+                    const auto [it, inserted] =
+                        QueryState->TxCtx->SchemaObjects.emplace(info.GetTableName(), identity);
+                    if (!inserted && it->second != identity) {
+                        changed = &info;
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            // Views carry their own version and their own path, so a view redefined over an
+            // untouched table has to be caught here as well.
+            if (!rememberOrCompare(phyQuery.GetTableInfos()) || !rememberOrCompare(phyQuery.GetViewInfos())) {
+                std::vector<TIssue> issues{YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                    TStringBuilder() << "Scheme changed for '" << changed->GetTableName()
+                        << "' during transaction execution.")};
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "", MessageFromIssues(issues));
+                return false;
+            }
+        }
+
         const bool hasOlapWrite = ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
         const bool hasOltpWrite = ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
         const bool hasOlapRead = ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery);
@@ -1702,6 +1741,8 @@ public:
                 ui64 resultSetsCount = queryState->PreparedQuery->GetPhysicalQuery().ResultBindingsSize();
                 request.AllowTrailingResults = (resultSetsCount == 1 && queryState->Statements.size() <= 1);
                 request.AllowTrailingResults &= (QueryState->RequestEv->GetSupportsStreamTrailingResult());
+                request.DisablePessimisticLocks =
+                    queryState->PreparedQuery->GetPhysicalQuery().GetDisablePessimisticLocks();
             }
         }
 
@@ -2502,7 +2543,7 @@ public:
                 executionStats.Swap(&stats);
                 stats = QueryState->QueryStats.ToProto();
                 stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
-                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, Config->GetEnableNewRBO(), QueryState->UserRequestContext->PoolId));
+                ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UsedNewRbo(), QueryState->UserRequestContext->PoolId));
                 stats.SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
 
                 if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
@@ -2732,12 +2773,13 @@ public:
 
             auto allQueries = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
             if (isCommitAction) {
+                const auto currentQuerySpanId = QueryState->GetQuerySpanId();
                 auto it = std::find_if(begin(allQueries), end(allQueries),
-                    [victimQuerySpanId](const auto& item) {
-                        return item.Id == victimQuerySpanId;
+                    [currentQuerySpanId](const auto& item) {
+                        return item.Id == currentQuerySpanId;
                     });
                 if (it == end(allQueries)) {
-                    allQueries.push_back({QueryState->GetQuerySpanId(), "COMMIT"});
+                    allQueries.push_back({currentQuerySpanId, "COMMIT"});
                 }
             }
             NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
@@ -3075,7 +3117,7 @@ public:
         if (QueryState->ReportStats()) {
             auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-                response->SetQueryPlan(SerializeAnalyzePlan(stats, Config->GetEnableNewRBO(), QueryState->UserRequestContext->PoolId));
+                response->SetQueryPlan(SerializeAnalyzePlan(stats, QueryState->UsedNewRbo(), QueryState->UserRequestContext->PoolId));
                 if (const auto compileResult = QueryState->CompileResult) {
                     if (const auto preparedQuery = compileResult->PreparedQuery) {
                         if (const auto& queryAst = preparedQuery->GetPhysicalQuery().GetQueryAst()) {
@@ -3710,7 +3752,7 @@ public:
             }
         }
 
-        YDB_LOG_INFO("Cleanup start",
+        YDB_LOG(QueryState && QueryState->IsWarmupCompilation_ ? PRI_DEBUG : PRI_INFO, "Cleanup start",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
             {"isFinal", isFinal},
@@ -3720,6 +3762,7 @@ public:
             {"workloadServiceCleanup", CleanupCtx ? CleanupCtx->IsWaitingForWorkloadServiceCleanup : false},
             {"traceId", TraceId()});
         if (CleanupCtx) {
+            CleanupCtx->Final = isFinal;
             Become(&TKqpSessionActor::CleanupState);
         } else {
             EndCleanup(isFinal);
@@ -4086,6 +4129,8 @@ private:
             return "ExecuteState";
         } else if (func == &TThis::CleanupState) {
             return "CleanupState";
+        } else if (func == &TThis::FinalCleanupState) {
+            return "FinalCleanupState";
         } else {
             return "unknown state";
         }

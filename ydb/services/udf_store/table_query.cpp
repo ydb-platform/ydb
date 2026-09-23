@@ -93,35 +93,33 @@ bool ReadUint64Column(const Ydb::ResultSet& resultSet, const TString& columnName
     return true;
 }
 
-bool ParseChunksResultSet(const Ydb::ResultSet& resultSet, TVector<TString>& chunks) {
+bool AppendChunksResultSet(const Ydb::ResultSet& resultSet, TVector<TString>& chunks) {
+    if (resultSet.truncated() || static_cast<ui64>(resultSet.rows_size()) > ChunksPerRead) {
+        return false;
+    }
     const i32 chunkIdxCol = FindColumnIndex(resultSet, "chunk_idx");
     const i32 dataCol = FindColumnIndex(resultSet, "data");
     if (chunkIdxCol < 0 || dataCol < 0) {
         return false;
     }
 
-    TMap<ui64, TString> ordered;
+    // Validate the whole page before appending anything. ORDER BY chunk_idx
+    // makes the accumulated count the cursor for the next page.
+    ui64 expectedIdx = chunks.size();
     for (const auto& row : resultSet.rows()) {
         if (chunkIdxCol >= row.items_size() || dataCol >= row.items_size()) {
             return false;
         }
         const auto& idxItem = row.items(chunkIdxCol);
         const auto& dataItem = row.items(dataCol);
-        if (!idxItem.has_uint64_value() || !dataItem.has_bytes_value()) {
+        if (!idxItem.has_uint64_value() || !dataItem.has_bytes_value()
+            || idxItem.uint64_value() != expectedIdx++)
+        {
             return false;
         }
-        ordered[idxItem.uint64_value()] = dataItem.bytes_value();
     }
-
-    chunks.clear();
-    chunks.reserve(ordered.size());
-    ui64 expectedIdx = 0;
-    for (const auto& [idx, data] : ordered) {
-        if (idx != expectedIdx) {
-            return false;
-        }
-        chunks.push_back(data);
-        ++expectedIdx;
+    for (const auto& row : resultSet.rows()) {
+        chunks.push_back(row.items(dataCol).bytes_value());
     }
     return true;
 }
@@ -146,7 +144,7 @@ TString BuildSelectModuleByNameQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $name AS Utf8; "
         << "DECLARE $type AS Utf8; "
-        << "SELECT uid, md5, name, type, version, size, chunk_count, compile_status, compile_error FROM `"
+           << "SELECT uid, md5, name, type, version, size, chunk_count, compile_status, compile_error, manifest FROM `"
         << EscapeTablePath(tablePath)
         << "` WHERE name = $name AND type = $type;";
 }
@@ -183,27 +181,31 @@ bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& respo
         TUdfModule::CompileStatusFromString(compileStatus, row.CompileStatus);
     }
     ReadUtf8Column(resultSet, "compile_error", row.CompileError);
+    ReadUtf8Column(resultSet, "manifest", row.Manifest);
     return true;
 }
 
 TString BuildSelectSourceChunksQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $owner_key AS Utf8; "
+        << "DECLARE $first_chunk AS Uint64; "
         << "SELECT chunk_idx, data FROM `"
         << EscapeTablePath(tablePath)
-        << "` WHERE owner_key = $owner_key ORDER BY chunk_idx;";
+        << "` WHERE owner_key = $owner_key AND chunk_idx >= $first_chunk "
+        << "ORDER BY chunk_idx LIMIT " << ChunksPerRead << ";";
 }
 
-void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey) {
+void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey, ui64 firstChunk) {
     (*request.mutable_parameters())["$owner_key"] = MakeUtf8Param(ownerKey);
+    (*request.mutable_parameters())["$first_chunk"] = MakeUint64Param(firstChunk);
 }
 
-bool ParseSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks) {
+bool AppendSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks) {
     Ydb::Table::ExecuteQueryResult result;
     if (!ExtractQueryResult(response, result)) {
         return false;
     }
-    return ParseChunksResultSet(result.result_sets(0), chunks);
+    return AppendChunksResultSet(result.result_sets(0), chunks);
 }
 
 TString BuildSelectArtifactQuery(const TString& tablePath) {
@@ -301,10 +303,11 @@ TString BuildSelectArtifactChunksQuery(const TString& tablePath) {
         << "DECLARE $kind AS Utf8; "
         << "DECLARE $uid AS Utf8; "
         << "DECLARE $blob_kind AS Utf8; "
+        << "DECLARE $first_chunk AS Uint64; "
         << "SELECT chunk_idx, data FROM `"
         << EscapeTablePath(tablePath)
         << "` WHERE id = $id AND kind = $kind AND uid = $uid AND blob_kind = $blob_kind "
-        << "ORDER BY chunk_idx;";
+        << "AND chunk_idx >= $first_chunk ORDER BY chunk_idx LIMIT " << ChunksPerRead << ";";
 }
 
 void SetSelectArtifactChunksParams(
@@ -312,20 +315,22 @@ void SetSelectArtifactChunksParams(
     const TString& id,
     const TString& kind,
     const TString& uid,
-    const TString& blobKind)
+    const TString& blobKind,
+    ui64 firstChunk)
 {
     (*request.mutable_parameters())["$id"] = MakeUtf8Param(id);
     (*request.mutable_parameters())["$kind"] = MakeUtf8Param(kind);
     (*request.mutable_parameters())["$uid"] = MakeUtf8Param(uid);
     (*request.mutable_parameters())["$blob_kind"] = MakeUtf8Param(blobKind);
+    (*request.mutable_parameters())["$first_chunk"] = MakeUint64Param(firstChunk);
 }
 
-bool ParseArtifactChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks) {
+bool AppendArtifactChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks) {
     Ydb::Table::ExecuteQueryResult result;
     if (!ExtractQueryResult(response, result)) {
         return false;
     }
-    return ParseChunksResultSet(result.result_sets(0), chunks);
+    return AppendChunksResultSet(result.result_sets(0), chunks);
 }
 
 TString BuildUpsertArtifactQuery(const TString& tablePath) {

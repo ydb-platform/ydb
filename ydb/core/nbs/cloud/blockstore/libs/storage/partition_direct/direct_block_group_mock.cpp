@@ -1,5 +1,6 @@
 #include "direct_block_group_mock.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator_pool.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
@@ -235,6 +236,20 @@ void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
     VChunks.push_back(std::move(vChunk));
 }
 
+THostIndex TDirectBlockGroupMock::AllocateDDiskForPromote(
+    const TVChunkConfig& config)
+{
+    const auto candidates = THostMask::MakeAll(config.GetHostCount())
+                                .Exclude(config.GetDisabledHosts())
+                                .Exclude(config.GetDDisks());
+    return candidates.First().value_or(InvalidHostIndex);
+}
+
+void TDirectBlockGroupMock::CommitDDiskPromotion(const TVChunkConfig& config)
+{
+    Y_UNUSED(config);
+}
+
 TExecutorPtr TDirectBlockGroupMock::GetExecutor()
 {
     return Executor;
@@ -389,17 +404,6 @@ TDirectBlockGroupMock::BatchEraseFromPBuffer(
     const NWilson::TTraceId& traceId)
 {
     return BatchEraseFromPBufferHandler(hostIndex, segments, traceId);
-}
-
-void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
-{
-    Y_UNUSED(lsn);
-}
-
-NThreading::TFuture<std::optional<TPBufferKey>>
-TDirectBlockGroupMock::GatherSafeBarrierForErase()
-{
-    return NThreading::MakeFuture<std::optional<TPBufferKey>>(std::nullopt);
 }
 
 NThreading::TFuture<TDBGRestoreResponse>

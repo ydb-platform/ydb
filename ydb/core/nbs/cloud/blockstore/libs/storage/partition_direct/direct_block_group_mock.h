@@ -181,6 +181,8 @@ public:
     TDirectBlockGroupMock();
 
     void Register(TVChunkWeakPtr vChunk) override;
+    THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) override;
+    void CommitDDiskPromotion(const TVChunkConfig& config) override;
 
     TExecutorPtr GetExecutor() override;
     TArenaAllocatorPoolPtr GetArenaAllocatorPool() override;
@@ -251,11 +253,6 @@ public:
         THostIndex hostIndex,
         const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) override;
-
-    void BarrierEraseFromPBuffer(ui64 lsn) override;
-
-    NThreading::TFuture<std::optional<TPBufferKey>>
-    GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;

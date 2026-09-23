@@ -30,6 +30,20 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Owns I/O, synchronization, configuration, and DirtyMap state for one VChunk.
+//
+// Persistence invariants:
+// - At most one config or DirtyMap persist is in flight; queued configs take
+//   priority over DirtyMap-only persists.
+// - A config is persisted atomically with its predicted DirtyMap state and is
+//   applied in memory only after a successful persist. The initial Behind of a
+//   newly promoted DDisk is included in that prediction.
+// - DirtyMap-only persists leave the config unchanged. Behind changes not
+//   covered by a config snapshot advance StateGeneration and are persisted by
+//   a later request.
+// - PersistedStateGeneration advances and PersistedFreshDDisks changes only
+//   after a successful persist.
+// - The touched marker is persisted independently.
 class TVChunk
     : public IWriteClient
     , public IRangeSyncClient
@@ -42,6 +56,7 @@ public:
         IPartitionDirectService* partitionDirectService,
         const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
+        bool touched,
         const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
@@ -71,6 +86,7 @@ public:
     void UpdateHostCount(size_t newHostCount);
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
+    [[nodiscard]] THostMask GetHealthyDDisks() const;
     [[nodiscard]] TExecutorPtr GetExecutor() const;
     [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
@@ -114,12 +130,21 @@ public:
 private:
     friend struct TBaseFixture;
 
+    enum class ETouchedState
+    {
+        // No writes to the VChunk's DDisks have been observed.
+        NotTouched,
+        // A write was observed and the touched marker is being persisted.
+        Persisting,
+        // The touched marker was successfully persisted.
+        Persisted
+    };
+
     using TPrepareConfigFunc = std::function<TVChunkConfig()>;
 
     struct TPendingVChunkConfig
     {
         TPrepareConfigFunc PrepareConfig;
-        TVChunkConfig Config;
         TString Message;
     };
 
@@ -146,8 +171,15 @@ private:
     void OnEraseBelatedResponse(
         const TEraseRequestExecutor::TResponse& response);
 
+    void StartPersist();
     void DoPersistDirtyMap();
-    void OnDirtyMapPersisted(ui32 stateGeneration);
+    void OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks);
+
+    // VDisk touch state.
+    void Touch();
+    [[nodiscard]] bool IsTouched() const;
+    void DoPersistTouched();
+    void OnTouchedPersisted();
 
     void ScheduleCleaningUp();
     void CleaningUp();
@@ -158,8 +190,12 @@ private:
     // unchanged; the new value applies after config persisted.
     void UpdateConfig(TPrepareConfigFunc prepareConfig, TString message);
     void PersistNextPendingConfig();
-    void OnConfigPersisted();
-    void ApplyConfig(TVChunkConfig newConfig, const TString& message);
+    void OnConfigPersisted(
+        const TVChunkConfig& config,
+        const TString& message,
+        ui32 stateGeneration,
+        THostMask freshDDisks);
+    void ApplyConfig(const TVChunkConfig& newConfig, const TString& message);
 
     TVChunkConfig PrepareNewConfig(
         THostIndex hostIndex,
@@ -192,8 +228,9 @@ private:
     TLogTitle LogTitle;
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
-    bool DirtyMapStatePersisting = false;
+    ETouchedState TouchedState = ETouchedState::NotTouched;
     TBlocksDirtyMapPtr BlocksDirtyMap;
+    THostMask PersistedFreshDDisks;
     // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
     NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;
@@ -202,6 +239,7 @@ private:
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
     bool Stopped = false;
+    bool Persisting = false;
 
     TVector<IRequestExecutorWeakPtr> Inflight;
 

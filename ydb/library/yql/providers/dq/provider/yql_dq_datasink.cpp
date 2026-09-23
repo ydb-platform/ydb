@@ -35,7 +35,7 @@ public:
         , PhyOptTransformer([state] () { return CreateDqsPhyOptTransformer(state->TypeCtx, state->Settings); })
         , PhysicalFinalizingTransformer([] () { return CreateDqsFinalizingOptTransformer(); })
         , TypeAnnotationTransformer([state] () { return CreateDqsDataSinkTypeAnnotationTransformer(state->TypeCtx); })
-        , ConstraintsTransformer([] () { return CreateDqDataSinkConstraintTransformer(); })
+        , ConstraintsTransformer([state] () { return CreateDqDataSinkConstraintTransformer(state->Settings->_EnableSortConstraintProcessing.Get().GetOrElse(TDqSettings::TDefault::EnableSortConstraintProcessing)); })
         , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); })
     { }
 

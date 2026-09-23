@@ -43,9 +43,12 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <algorithm>
+#include <array>
 #include <ctime>
+#include <optional>
 #include <regex>
 #include <fstream>
+#include <utility>
 
 namespace {
 
@@ -595,6 +598,78 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST_TWIN(Filter, ColumnStore) {
         TestFilter(ColumnStore);
+    }
+
+    void TestMultipleSelects(bool columnTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+	            name String,
+                b Int64,
+                primary key(id)
+            )
+        )";
+
+        if (columnTables) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 10; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("name").String(std::to_string(i) + "_name")
+                .AddMember("b").Int64(i)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        std::vector<std::string> queries = {
+             R"(
+                SELECT id as id2 FROM `/Root/foo` WHERE name != '3_name' order by id;
+                SELECT id FROM `/Root/foo`;
+            )",
+
+        };
+
+        std::vector<std::string> results = {
+            R"([[0];[1];[2];[4];[5];[6];[7];[8];[9]])",
+        };
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session2 = tableClient.GetSession().GetValueSync().GetSession();
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(MultipleSelects, ColumnStore) {
+        TestMultipleSelects(ColumnStore);
     }
 
     Y_UNIT_TEST(InsertUpdate) {
@@ -1361,11 +1436,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         THashSet<i64> simplifiedOperatorIds;
         CollectOperatorIds(planMap.at("Plan"), executionOperatorIds);
         CollectOperatorIds(simplifiedPlan, simplifiedOperatorIds);
-        UNIT_ASSERT_C(!simplifiedOperatorIds.empty(), plan);
-        for (const auto operatorId : simplifiedOperatorIds) {
-            UNIT_ASSERT_C(executionOperatorIds.contains(operatorId),
-                "OperatorId " << operatorId << " is missing from the execution plan\n" << plan);
-        }
+        UNIT_ASSERT_C(executionOperatorIds.empty(), plan);
+        UNIT_ASSERT_C(simplifiedOperatorIds.empty(), plan);
+    }
+
+    Y_UNIT_TEST(ExplainHidesOperatorIds) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        const auto plan = ExecuteExplain(session, "SELECT a FROM `/Root/t1`;");
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        const auto& planMap = planJson.GetMapSafe();
+        const auto& simplifiedPlan = planMap.at("SimplifiedPlan");
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "TableFullScan"), plan);
+
+        THashSet<i64> operatorIds;
+        CollectOperatorIds(planMap.at("Plan"), operatorIds);
+        CollectOperatorIds(simplifiedPlan, operatorIds);
+        UNIT_ASSERT_C(operatorIds.empty(), plan);
     }
 
     Y_UNIT_TEST(ExplainStageConnections) {
@@ -1601,7 +1690,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 MakeIntrusive<TOpEmptySource>(pos),
                 pos,
                 "Cross",
-                TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+                TVector<TJoinKey>{});
         }
         TOpRoot root(op, pos, TVector<TString>{});
 
@@ -1863,7 +1952,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             shared,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+            TVector<TJoinKey>{});
         TOpRoot root(join, pos, TVector<TString>{});
 
         auto inactiveChild = MakeIntrusive<TOpEmptySource>(pos);
@@ -1872,7 +1961,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             MakeIntrusive<TOpEmptySource>(pos),
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+            TVector<TJoinKey>{});
         const TInfoUnit inactiveIU("inactive_subplan", true);
         root.PlanProps.Subplans.Add(inactiveIU, inactiveSubplan, ESubplanType::EXPR);
 
@@ -1901,7 +1990,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto filter = MakeIntrusive<TOpFilter>(leftRead, pos, MakeColumnAccess(TInfoUnit("b"), pos, &exprCtx, &planProps));
         auto limit = MakeIntrusive<TOpLimit>(filter, pos, MakeConstant("Uint64", "10", pos, &exprCtx), EOpPhase::Undefined);
         auto rightRead = MakeTestRead({TInfoUnit("a")}, pos);
-        auto join = MakeIntrusive<TOpJoin>(limit, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(limit, rightRead, pos, "Inner", TVector<TJoinKey>{});
         TOpRoot root(join, pos, {"b", "a"});
 
         ComputeLogicalTestProps(root);
@@ -1919,7 +2008,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto leftRead = MakeTestRead({TInfoUnit("b")}, pos);
         auto filter = MakeIntrusive<TOpFilter>(leftRead, pos, MakeColumnAccess(TInfoUnit("b"), pos, &exprCtx, &planProps));
         auto rightRead = MakeTestRead({TInfoUnit("a")}, pos);
-        auto join = MakeIntrusive<TOpJoin>(filter, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(filter, rightRead, pos, "Inner", TVector<TJoinKey>{});
         TOpRoot root(join, pos, {"b", "a"});
 
         ComputeLogicalTestProps(root);
@@ -1936,7 +2025,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto leftRead = MakeTestRead({TInfoUnit("a")}, pos);
         auto leftMap = MakeIntrusive<TOpMap>(leftRead, pos, TVector<TMapElement>{MakeTestRename("b", "a", pos, exprCtx, planProps)});
         auto rightRead = MakeTestRead({TInfoUnit("a")}, pos);
-        auto join = MakeIntrusive<TOpJoin>(leftMap, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(leftMap, rightRead, pos, "Inner", TVector<TJoinKey>{});
         TOpRoot root(join, pos, {"a"});
 
         ComputeLogicalTestProps(root);
@@ -1958,7 +2047,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto limit = MakeIntrusive<TOpLimit>(hiddenMap, pos, MakeConstant("Uint64", "10", pos, &exprCtx), EOpPhase::Undefined);
         auto leftMap = MakeIntrusive<TOpMap>(limit, pos, TVector<TMapElement>{MakeTestRename("left_id", ignore.GetFullName(), pos, exprCtx, planProps)});
         auto rightMap = MakeIntrusive<TOpMap>(limit, pos, TVector<TMapElement>{MakeTestRename("right_id", ignore.GetFullName(), pos, exprCtx, planProps)});
-        auto join = MakeIntrusive<TOpJoin>(leftMap, rightMap, pos, "Cross", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(leftMap, rightMap, pos, "Cross", TVector<TJoinKey>{});
         TOpRoot root(join, pos, {"left_id", "right_id"});
 
         ComputeLogicalTestProps(root);
@@ -1983,7 +2072,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto rightMap = MakeIntrusive<TOpMap>(rightRead, pos, TVector<TMapElement>{
             MakeTestRename("right_id", hidden.GetFullName(), pos, exprCtx, planProps),
         });
-        auto join = MakeIntrusive<TOpJoin>(leftMap, rightMap, pos, "Cross", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(leftMap, rightMap, pos, "Cross", TVector<TJoinKey>{});
         TOpRoot root(join, pos, {"left_id", "right_id"});
 
         ComputeLogicalTestProps(root);
@@ -2017,9 +2106,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         auto leftRead = MakeTestRead({TInfoUnit("l")}, pos);
         auto rightRead = MakeTestRead({TInfoUnit("r")}, pos);
-        auto join = MakeIntrusive<TOpJoin>(leftRead, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto join = MakeIntrusive<TOpJoin>(leftRead, rightRead, pos, "Inner", TVector<TJoinKey>{});
         auto parentRightRead = MakeTestRead({TInfoUnit("z")}, pos);
-        auto parentJoin = MakeIntrusive<TOpJoin>(join, parentRightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto parentJoin = MakeIntrusive<TOpJoin>(join, parentRightRead, pos, "Inner", TVector<TJoinKey>{});
         TOpRoot root(parentJoin, pos, {"l", "r", "z"});
 
         ComputeLogicalTestProps(root);
@@ -2166,8 +2255,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(replacement != TInfoUnit("a"));
         UNIT_ASSERT(!IsGeneratedIgnoreIU(replacement));
         UNIT_ASSERT_VALUES_EQUAL(converted->JoinKeys.size(), 1);
-        UNIT_ASSERT(converted->JoinKeys.front().first == TInfoUnit("a"));
-        UNIT_ASSERT(converted->JoinKeys.front().second == replacement);
+        UNIT_ASSERT(converted->JoinKeys.front().Left == TInfoUnit("a"));
+        UNIT_ASSERT(converted->JoinKeys.front().Right == replacement);
 
         const auto output = converted->GetOutputIUs();
         UNIT_ASSERT_VALUES_EQUAL(MakeInfoUnitSet(output).size(), output.size());
@@ -2215,6 +2304,68 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             .ExtractValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(QualifiedStarSubqueryFallsBackToYqlOptimizer) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `doc` (
+                `id` String,
+                `flag` Bool,
+                PRIMARY KEY (`id`)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").String("disabled")
+            .AddMember("flag").Bool(false)
+            .EndStruct();
+        rows.AddListItem().BeginStruct()
+            .AddMember("id").String("enabled")
+            .AddMember("flag").Bool(true)
+            .EndStruct();
+        rows.EndList();
+
+        auto upsertResult = tableClient.BulkUpsert("/Root/doc", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        const auto compileCountersBefore = GetNewRBOCompileCounters(kikimr);
+        auto result = querySession.ExecuteQuery(R"(
+            SELECT `d`.`id` FROM (SELECT `d_src`.* FROM `doc` AS `d_src` WHERE `d_src`.`flag`) AS `d`;
+        )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[["enabled"]]])");
+        UNIT_ASSERT_C(result.GetStats().has_value(), "Missing full query statistics");
+        UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing query plan in full statistics");
+
+        const auto plan = TString{*result.GetStats()->GetPlan()};
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        UNIT_ASSERT_C(planJson.GetMapSafe().contains("SimplifiedPlan"), plan);
+        const auto& planRoot = planJson.GetMapSafe().at("Plan").GetMapSafe();
+        UNIT_ASSERT_VALUES_EQUAL_C(planRoot.at("Node Type").GetStringSafe(), "Query", plan);
+        UNIT_ASSERT_C(planRoot.contains("Stats"), plan);
+
+        const auto compileCountersAfter = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.first, compileCountersBefore.first);
+        UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.second, compileCountersBefore.second + 1);
     }
 
     Y_UNIT_TEST(CorrelatedScalarAggregateReuseDoesNotDuplicateVisibleColumns) {
@@ -2438,6 +2589,270 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST_TWIN(Params, ColumnStore) {
         TestParams(ColumnStore);
+    }
+
+    constexpr std::array<i64, 7> SqlInLookupValues = {-1, 0, 1, 2, 3, 10, 2147483648LL};
+
+    TKikimrSettings SqlInSettings(bool columnStore = false) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableNewRBO(true);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetAllowOlapDataQuery(columnStore);
+        return TKikimrSettings(appConfig).SetWithSampleTables(false);
+    }
+
+    TString SqlInPeepholePragma(bool peephole) {
+        return TStringBuilder()
+            << "PRAGMA ydb.EnableNewRBOPhysicalStagePeephole = \"" << (peephole ? "true" : "false") << "\";\n";
+    }
+
+    TString SqlInFunction(bool ansi) {
+        // YqlSelect does not support the ANSI IN pragma. Set the callable option
+        // explicitly so both modes exercise the new RBO physical lowering.
+        return TStringBuilder()
+            << "$in = ($items, $lookup) -> { RETURN Yql::SqlIn($items, $lookup, "
+            << (ansi ? "AsTuple(AsTuple(AsAtom('ansi')))" : "AsTuple()") << "); };\n";
+    }
+
+    void CreateSqlInTable(TKikimrRunner& kikimr) {
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/sql_in` (
+                id Int64 NOT NULL,
+                value Int64,
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+
+        TValueBuilder rows;
+        rows.BeginList();
+        for (i64 id : SqlInLookupValues) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("id").Int64(id)
+                .AddMember("value").OptionalInt64(id == 10 ? std::nullopt : std::optional<i64>(id))
+                .EndStruct();
+        }
+        rows.EndList();
+        const auto upsert = client.BulkUpsert("/Root/sql_in", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+    }
+
+    std::optional<bool> ExpectedSqlIn(std::optional<double> lookup, const TVector<std::optional<i64>>& items, bool ansi) {
+        if (!lookup) {
+            return ansi && items.empty() ? std::optional<bool>(false) : std::nullopt;
+        }
+        if (std::find(items.begin(), items.end(), lookup) != items.end()) {
+            return true;
+        }
+        if (ansi && std::find(items.begin(), items.end(), std::nullopt) != items.end()) {
+            return std::nullopt;
+        }
+        return false;
+    }
+
+    TValue MakeSqlInListParameter(EPrimitiveType primitive, bool optional, const TVector<std::optional<i64>>& items) {
+        TTypeBuilder type;
+        type.BeginList();
+        if (optional) {
+            type.BeginOptional();
+        }
+        type.Primitive(primitive);
+        if (optional) {
+            type.EndOptional();
+        }
+        type.EndList();
+
+        TValueBuilder value(type.Build());
+        value.BeginList();
+        for (const auto& item : items) {
+            value.AddListItem();
+            if (!item) {
+                value.EmptyOptional();
+                continue;
+            }
+            if (optional) {
+                value.BeginOptional();
+            }
+            switch (primitive) {
+                case EPrimitiveType::Int64: value.Int64(*item); break;
+                case EPrimitiveType::Int32: value.Int32(*item); break;
+                case EPrimitiveType::Uint64: value.Uint64(*item); break;
+                default: UNIT_FAIL("Unexpected test parameter type");
+            }
+            if (optional) {
+                value.EndOptional();
+            }
+        }
+        return value.EndList().Build();
+    }
+
+    Y_UNIT_TEST_TWIN(SqlInScalarListParameters, Ansi) {
+        TKikimrRunner kikimr(SqlInSettings());
+        CreateSqlInTable(kikimr);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        for (const auto& [primitive, optional] : {
+            std::pair{EPrimitiveType::Int64, false},
+            std::pair{EPrimitiveType::Int64, true},
+            std::pair{EPrimitiveType::Int32, false},
+            std::pair{EPrimitiveType::Uint64, true},
+        }) {
+            TVector<TVector<std::optional<i64>>> lists = {{}, {1, 3, 3}, {7}, {0}};
+            if (primitive == EPrimitiveType::Int32) {
+                // 2147483648 must not wrap to a matching Int32 key.
+                lists.push_back({-2147483648LL});
+            }
+            if (optional) {
+                lists.push_back({1, std::nullopt});
+                lists.push_back({std::nullopt});
+            }
+            for (const auto& items : lists) {
+                const auto value = MakeSqlInListParameter(primitive, optional, items);
+                const auto params = TParamsBuilder().AddParam("$items", value).Build();
+                for (bool peephole : {true, false}) {
+                    const TString query = TStringBuilder() << SqlInPeepholePragma(peephole)
+                        << "DECLARE $items AS " << value.GetType().ToString() << ";\n"
+                        << SqlInFunction(Ansi)
+                        << R"(
+                            SELECT id,
+                                $in($items, id) AS found,
+                                NOT $in($items, id) AS missing,
+                                $in($items, value) AS nullable_found,
+                                NOT $in($items, value) AS nullable_missing,
+                                $in($items, CAST(id AS Double) + 0.5) AS fractional_found,
+                                NOT $in($items, CAST(id AS Double) + 0.5) AS fractional_missing
+                            FROM `/Root/sql_in`
+                            ORDER BY id;
+                        )";
+                    const auto result = session.ExecuteDataQuery(
+                        query, TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+                    const auto& resultSet = result.GetResultSet(0);
+                    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), SqlInLookupValues.size());
+
+                    // Check the result types, including the non-nullable ANSI case.
+                    for (size_t column = 1; column < 7; ++column) {
+                        const bool nullable = column == 3 || column == 4 || (Ansi && optional);
+                        UNIT_ASSERT_VALUES_EQUAL_C(resultSet.GetColumnsMeta()[column].Type.ToString(),
+                            nullable ? "Bool?" : "Bool", query);
+                    }
+                    TResultSetParser parser(resultSet);
+                    for (i64 id : SqlInLookupValues) {
+                        UNIT_ASSERT(parser.TryNextRow());
+                        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetInt64(), id);
+                        for (size_t column = 1; column < 7; ++column) {
+                            const bool nullableValue = column == 3 || column == 4;
+                            const auto lookup = nullableValue && id == 10 ? std::nullopt
+                                : std::optional<double>(id + (column >= 5 ? 0.5 : 0.0));
+                            auto expected = ExpectedSqlIn(lookup, items, Ansi);
+                            if (column % 2 == 0 && expected) {
+                                expected = !*expected;
+                            }
+                            const bool nullable = nullableValue || (Ansi && optional);
+                            const auto actual = nullable ? parser.ColumnParser(column).GetOptionalBool()
+                                : std::optional<bool>(parser.ColumnParser(column).GetBool());
+                            UNIT_ASSERT_C(actual == expected,
+                                query << "\nid=" << id << ", column=" << column << ", list size=" << items.size());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(SqlInLiteralCollections, Ansi) {
+        TKikimrRunner kikimr(SqlInSettings());
+        CreateSqlInTable(kikimr);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        TString baseline;
+        for (bool peephole : {true, false}) {
+            const TString query = SqlInPeepholePragma(peephole) + SqlInFunction(Ansi) + R"(
+                SELECT id,
+                    $in((1, 2), value) AS small_tuple,
+                    NOT $in((1, 2, 3, 4, 5, 6), value) AS large_tuple,
+                    $in([1, 2, 3, 4, 5, 6], value) AS large_list,
+                    NOT $in(AsList(), value) AS empty_list,
+                    $in((1, NULL), value) AS nullable_tuple,
+                    $in(AsTuple(), value) AS empty_tuple,
+                    $in([NULL], value) AS null_list,
+                    $in([1, 2, 3, 4, 5, 6], NULL) AS null_lookup
+                FROM `/Root/sql_in` ORDER BY id;
+            )";
+            const auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+            const TString actual = FormatResultSetYson(result.GetResultSet(0));
+            if (peephole) {
+                baseline = actual;
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(actual, baseline);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(SqlInParameterizedFilterAndAggregate, ColumnStore) {
+        TKikimrRunner kikimr(SqlInSettings(ColumnStore));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const TString schema = TStringBuilder() << R"(
+            CREATE TABLE `/Root/inforg8025` (
+                id Int64 NOT NULL,
+                _period Int64,
+                _fld8026rref String,
+                _fld8027rref String,
+                _fld8028rref String,
+                _fld543 String,
+                PRIMARY KEY (id)
+            )
+        )" << (ColumnStore ? "WITH (STORE = COLUMN);" : ";");
+        const auto scheme = session.ExecuteSchemeQuery(schema).GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        TValueBuilder rows;
+        rows.BeginList();
+        for (i64 id : {1, 2, 3, 4}) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("id").Int64(id)
+                .AddMember("_period").Int64(id)
+                .AddMember("_fld8026rref").String("group")
+                .AddMember("_fld8027rref").String("included")
+                .AddMember("_fld8028rref").String(id == 3 ? "excluded" : "allowed")
+                .AddMember("_fld543").String("tenant")
+                .EndStruct();
+        }
+        const auto upsert = client.BulkUpsert("/Root/inforg8025", rows.EndList().Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        const auto params = TParamsBuilder()
+            .AddParam("$const_0").Int64(3).Build()
+            .AddParam("$const_1").BeginList().AddListItem().String("included").EndList().Build()
+            .AddParam("$const_2").BeginList().AddListItem().OptionalString("excluded")
+                .AddListItem().OptionalString(std::nullopt).EndList().Build()
+            .AddParam("$const_3").String("tenant").Build()
+            .AddParam("$const_4").String("group").Build()
+            .Build();
+        for (bool peephole : {true, false}) {
+            const TString query = SqlInPeepholePragma(peephole) + R"(
+                DECLARE $const_0 AS Int64;
+                DECLARE $const_1 AS List<String>;
+                DECLARE $const_2 AS List<String?>;
+                DECLARE $const_3 AS String;
+                DECLARE $const_4 AS String;
+
+                SELECT t1._fld8026rref AS __ydb_aggregate_0, MAX(t1._period) AS __ydb_aggregate_1
+                FROM `/Root/inforg8025` AS t1
+                WHERE t1._period <= $const_0
+                    AND t1._fld8027rref IN $const_1
+                    AND t1._fld8028rref NOT IN $const_2
+                    AND t1._fld543 = $const_3
+                    AND t1._fld8026rref = $const_4
+                GROUP BY t1._fld8026rref;
+            )";
+            const auto result = session.ExecuteDataQuery(
+                query, TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[["group"];[2]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 
     void TestMultiConsumer(bool columnTables) {
@@ -4431,7 +4846,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             if (cases[i].Lookup) {
                 UNIT_ASSERT_C(lookupPlan, "query #" << i << " expected a lookup join, plan:\n" << plan);
             } else {
-                UNIT_ASSERT_C(plan.Contains("InnerJoin (Map)"), "query #" << i << " expected a map join, plan:\n" << plan);
+                UNIT_ASSERT_C(plan.Contains("InnerJoin (BlockHash)"),
+                              "query #" << i << " expected a map join, plan:\n" << plan);
                 UNIT_ASSERT_C(!lookupPlan, "query #" << i << " expected no lookup join, plan:\n" << plan);
             }
 
@@ -4446,7 +4862,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST(IndexLookupJoinChains) {
+    Y_UNIT_TEST_TWIN(IndexLookupJoinChains, PhysicalStagePeephole) {
         const TString schema = R"(
             CREATE TABLE `/Root/t1` (
                 a Int32,
@@ -4759,7 +5175,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto runQueries = [&](bool newRbo) {
             NKikimrConfig::TAppConfig appConfig;
             appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
-            appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
+            if (!PhysicalStagePeephole) {
+                appConfig.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(false);
+            }
             appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
             appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
             appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
@@ -5072,6 +5490,181 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
+    }
+
+    Y_UNIT_TEST(JoinFiltersOnClauseOuterJoins) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto tableSession = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows1;
+        rows1.BeginList();
+        for (size_t i = 0; i < 4; ++i) {
+            rows1.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows1.EndList();
+        auto resultUpsert = db.BulkUpsert("/Root/t1", rows1.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows2;
+        rows2.BeginList();
+        for (size_t i = 0; i < 3; ++i) {
+            rows2.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows2.EndList();
+        resultUpsert = db.BulkUpsert("/Root/t2", rows2.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+        std::vector<std::pair<std::string, std::string>> cases = {
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b, t2.a, t2.b FROM `/Root/t1` AS t1
+                LEFT JOIN `/Root/t2` AS t2 ON t1.a = t2.a AND t1.b > 2 ORDER BY t1.a, t2.a;
+            )", R"([[0;[1];#;#];[1;[2];#;#];[2;[3];[2];[3]];[3;[4];#;#]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b, t2.a, t2.b FROM `/Root/t1` AS t1
+                LEFT JOIN `/Root/t2` AS t2 ON t1.a = t2.a AND t2.b > 2 ORDER BY t1.a, t2.a;
+            )", R"([[0;[1];#;#];[1;[2];#;#];[2;[3];[2];[3]];[3;[4];#;#]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t1.b > 2) ORDER BY t1.a;
+            )", R"([[2;[3]]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t2.b > 2) ORDER BY t1.a;
+            )", R"([[2;[3]]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t1.b > 2) ORDER BY t1.a;
+            )", R"([[0;[1]];[1;[2]];[3;[4]]])"},
+
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t1.b FROM `/Root/t1` AS t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` AS t2 WHERE t2.a = t1.a AND t2.b > 2) ORDER BY t1.a;
+            )", R"([[0;[1]];[1;[2]];[3;[4]]])"},
+        };
+
+        for (ui32 i = 0; i < cases.size(); ++i) {
+            const auto& [query, expected] = cases[i];
+            auto result = session.ExecuteQuery(TString(query), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "case " << i << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, "case " << i);
+        }
+    }
+
+    Y_UNIT_TEST(LeftJoinInequalityOnClause) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoinForCross(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto tableSession = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows1;
+        rows1.BeginList();
+        for (size_t i = 0; i < 4; ++i) {
+            rows1.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows1.EndList();
+        auto resultUpsert = db.BulkUpsert("/Root/t1", rows1.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows2;
+        rows2.BeginList();
+        for (size_t i = 0; i < 3; ++i) {
+            rows2.AddListItem().BeginStruct().AddMember("a").Int64(i).AddMember("b").Int64(i + 1).EndStruct();
+        }
+        rows2.EndList();
+        resultUpsert = db.BulkUpsert("/Root/t2", rows2.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        const TString query = R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT t1.a, t1.b, t2.a, t2.b
+            FROM `/Root/t1` AS t1
+            LEFT JOIN `/Root/t2` AS t2 ON t1.a > t2.b
+            ORDER BY t1.a, t2.a;
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+        auto explain = session.ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+
+        const auto plan = TString{*explain.GetStats()->GetPlan()};
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* crossJoin = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Cross");
+        UNIT_ASSERT_C(crossJoin, plan);
+        const auto filters = crossJoin->GetMapSafe().find("Filters");
+        UNIT_ASSERT_C(filters != crossJoin->GetMapSafe().end() && filters->second.IsArray(), plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(filters->second.GetArraySafe().size(), 1, plan);
+
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResultSetYson(result.GetResultSet(0)),
+            R"([[0;[1];#;#];[1;[2];#;#];[2;[3];[0];[1]];[3;[4];[0];[1]];[3;[4];[1];[2]]])"
+        );
     }
 
     Y_UNIT_TEST(JoinFiltersAdvanced) {
@@ -5898,8 +6491,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // A RANGE frame runs to the last peer row, which a per-row chain cannot express.
         "range frame with ties",
         "named window shared by several functions over aggregates",
-        // Grouping() is not supported yet.
-        "rank with rollup partition expression",
     };
 
     Y_UNIT_TEST_TWIN(WindowFunctions, ColumnStore) {
@@ -5990,6 +6581,188 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                 .ExtractValueSync();
             Y_ENSURE(result.IsSuccess());
         }
+    }
+
+    void TimePerf_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo, const bool useCBO, int nIterations) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        if (!useCBO) {
+            appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
+        }
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        auto kikimrSettings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+
+        kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
+        TKikimrRunner kikimr(kikimrSettings);
+        
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
+
+        {
+            TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+            const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+            const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+            const TString round = R"($round = ($x,$y) -> {return $x;};)";
+
+            q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
+
+            auto queryClient = kikimr.GetQueryClient();
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+            clock_t the_time;
+            double elapsed_time;
+            the_time = clock();
+
+            for (int i=0; i<nIterations; i++) {
+                auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                                .ExtractValueSync();
+                    
+                Y_ENSURE(result.IsSuccess());
+            }
+
+            TString testName;
+            switch(type) {
+                case EBenchType::TPCH:
+                    testName = "tpch";
+                    break;
+                case EBenchType::TPCDS:
+                    testName = "tpcds";
+                    break;
+                case EBenchType::CLICKBENCH:
+                    testName = "clickbench";
+                    break;
+                default:
+                    Y_ENSURE(false, "Unknown benchmark");
+            }
+
+            elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
+            Cout << testName << "," << queryId << "," << newRbo << "," << elapsed_time / nIterations << "\n";
+        }
+    }
+
+    Y_UNIT_TEST(CompilationTimeBench_TPCH) {
+        const auto perfCompilationEnabled = GetTestParam("ENABLE_PERF_COMPILATION");
+        if (perfCompilationEnabled.empty()) {
+            return;
+        }
+
+        int nIterations = 2;
+
+        // TPCH
+        for (int i=1; i<=22; i++) {
+            TimePerf_YqlTest(EBenchType::TPCH, i, true, true, false, nIterations);
+            TimePerf_YqlTest(EBenchType::TPCH, i, true, false, false, nIterations);
+        }
+    }
+
+    Y_UNIT_TEST(CompilationTimeBench_TPCDS) {
+        const auto perfCompilationEnabled = GetTestParam("ENABLE_PERF_COMPILATION");
+        if (perfCompilationEnabled.empty()) {
+            return;
+        }
+
+        int nIterations = 2;
+
+        TVector<int> tpcdsQueries = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, /*17,*/ 18, 19, 20,
+                        21, 22, /*23,*/ 24, 25, 26, /*27,*/ 28, 29, 30, 31, 32, 33, 34, 35, /*36,*/ 37, 38, 39, 40,
+                        41, 42, 43, /*44,*/ 45, 46, /*47,*/ 48, 49, 50, /*51,*/ 52, 53, 54, 55, 56, /*57,*/ 58, 59, 60,
+                        61, 62, 63, 64, 65, 66, 67, 68, 69, /*70,*/ 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+                        81, 82, 83, 84, 85, /*86,*/ 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99};
+
+        for (size_t i=0; i<tpcdsQueries.size(); i++) {
+            TimePerf_YqlTest(EBenchType::TPCDS, tpcdsQueries[i], true, true, false, nIterations);
+            TimePerf_YqlTest(EBenchType::TPCDS, tpcdsQueries[i], true, false, false, nIterations);
+        }
+    }
+
+    Y_UNIT_TEST(CompilationTimeBench_CLICKBENCH) {
+        const auto perfCompilationEnabled = GetTestParam("ENABLE_PERF_COMPILATION");
+        if (perfCompilationEnabled.empty()) {
+            return;
+        }
+
+        int nIterations = 2;
+
+        TVector<int> clickQueries = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21,
+                                           22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 41, 42};
+        for (size_t i=0; i<clickQueries.size(); i++) {
+            TimePerf_YqlTest(EBenchType::CLICKBENCH, clickQueries[i], true, true, false, nIterations);
+            TimePerf_YqlTest(EBenchType::CLICKBENCH, clickQueries[i], true, false, false, nIterations);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DecorrelationEqualNullsJoinKeys, EqualNullsJoinKeys) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetEnableBlockHashJoinEqualNulls(EqualNullsJoinKeys);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (a Int64 NOT NULL, e Int64, primary key(a)) WITH (STORE = column);
+            CREATE TABLE `/Root/t2` (a Int64 NOT NULL, b Int64 NOT NULL, c Int64 NOT NULL, primary key(a)) WITH (STORE = column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder t1Rows;
+        t1Rows.BeginList();
+        for (i64 a = 1; a <= 4; ++a) {
+            t1Rows.AddListItem().BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("e").OptionalInt64(a == 1 ? std::nullopt : std::make_optional(a % 4))
+                .EndStruct();
+        }
+        t1Rows.EndList();
+        auto upsertResult = db.BulkUpsert("/Root/t1", t1Rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder t2Rows;
+        t2Rows.BeginList();
+        for (i64 a = 1; a <= 4; ++a) {
+            t2Rows.AddListItem().BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("b").Int64(a % 3)
+                .AddMember("c").Int64(a * a)
+                .EndStruct();
+        }
+        t2Rows.EndList();
+        upsertResult = db.BulkUpsert("/Root/t2", t2Rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        const TString query = R"(
+            SELECT t1.a FROM `/Root/t1` as t1
+            WHERE (SELECT max(t2.c) FROM `/Root/t2` as t2 WHERE t1.e IS NULL OR t2.b == t1.e) == 16
+            ORDER BY t1.a;
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        auto explainResult = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+        const auto ast = TString{*explainResult.GetStats()->GetAst()};
+
+        if (EqualNullsJoinKeys) {
+            UNIT_ASSERT_C(ast.Contains("EqualNulls"), "expected the join to carry EqualNulls settings, ast:\n" << ast);
+            UNIT_ASSERT_C(!ast.Contains("StablePickle"), "expected no StablePickle encoding, ast:\n" << ast);
+        } else {
+            UNIT_ASSERT_C(ast.Contains("StablePickle"), "expected StablePickle encoded join keys, ast:\n" << ast);
+            UNIT_ASSERT_C(!ast.Contains("EqualNulls"), "expected no EqualNulls settings, ast:\n" << ast);
+        }
+
+        auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[1]])");
     }
 
     NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
@@ -6492,7 +7265,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Inner",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("l_a"), TInfoUnit("a")}}
+            TVector<TJoinKey>{{TInfoUnit("l_a"), TInfoUnit("a")}}
         );
 
         auto bothSidesExpression = MakeBinaryPredicate(
@@ -6708,7 +7481,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             staleRightRead,
             pos,
             "Inner",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
 
         // Cache the join output, then change its input before packaging it.
@@ -6773,7 +7546,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Inner",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"t1.a"});
 
@@ -6805,7 +7578,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Left",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         TOpRoot root(join, pos, {"a", "payload"});
 
@@ -7030,6 +7803,53 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST(DistinctShuffleEliminationPreservesRenamedKeys) {
+        struct TCase {
+            bool Enabled;
+            TVector<TInfoUnit> ShuffledBy;
+            TVector<TInfoUnit> Keys;
+            TVector<TInfoUnit> Expected;
+        };
+        const TInfoUnit id("id"), k("k"), intermediateId("_intermediate_id"), intermediateK("_intermediate_k");
+        const TVector<TCase> cases = {
+            {true, {id}, {id}, {intermediateId}},
+            {true, {id}, {id, k}, {intermediateId}},
+            {true, {k, id}, {id, k}, {intermediateK, intermediateId}},
+            {true, {id, k}, {id}, {}},
+            {true, {}, {id}, {}},
+            {false, {id}, {id}, {}},
+        };
+
+        for (const auto& testCase : cases) {
+            TMapRuleTestContext testContext;
+            testContext.Config->OptShuffleElimination = testCase.Enabled;
+            TPlanProps planProps;
+            const auto pos = NYql::TPositionHandle();
+
+            auto read = MakeTestRead({id, k}, pos);
+            read->Props.Metadata = TRBOMetadata();
+            read->Props.Metadata->ShuffledByColumns = testCase.ShuffledBy;
+
+            TVector<TOpAggregationTraits> traits;
+            TVector<TOpAggregationTraits> finalTraits;
+            TVector<TInfoUnit> finalKeys;
+            for (const auto& key : testCase.Keys) {
+                const auto intermediateKey = key == id ? intermediateId : intermediateK;
+                traits.emplace_back(key, "distinct", intermediateKey);
+                finalTraits.emplace_back(intermediateKey, "distinct", key);
+                finalKeys.push_back(intermediateKey);
+            }
+            auto aggregate = MakeIntrusive<TOpAggregate>(read, traits, testCase.Keys, EOpPhase::Intermediate, true, pos);
+            aggregate->ComputeMetadata(testContext.RboCtx, planProps);
+            UNIT_ASSERT(aggregate->Props.Metadata->ShuffledByColumns == testCase.Expected);
+
+            auto finalAggregate = MakeIntrusive<TOpAggregate>(aggregate, finalTraits, finalKeys, EOpPhase::Final, true, pos);
+            finalAggregate->ComputeMetadata(testContext.RboCtx, planProps);
+            const auto expectedFinal = testCase.Expected.empty() ? TVector<TInfoUnit>{} : testCase.ShuffledBy;
+            UNIT_ASSERT(finalAggregate->Props.Metadata->ShuffledByColumns == expectedFinal);
+        }
+    }
+
     Y_UNIT_TEST(NarrowByLivenessPrunesReadColumnsAfterDeadAggregateTraits) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();
@@ -7065,6 +7885,36 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(readOutput.begin(), readOutput.end(), TInfoUnit("dead_value")) == readOutput.end());
     }
 
+    Y_UNIT_TEST(PhysicalCrossJoinDefersProjectionLowering) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        auto left = MakeTestRead({TInfoUnit("a"), TInfoUnit("unused_left")}, pos);
+        auto right = MakeTestRead({TInfoUnit("b"), TInfoUnit("unused_right")}, pos);
+        SetTestListType(left, left->GetOutputIUs(), testContext.ExprCtx);
+        SetTestListType(right, right->GetOutputIUs(), testContext.ExprCtx);
+
+        auto join = MakeIntrusive<TOpJoin>(
+            left, right, pos, "Cross", TVector<TJoinKey>{});
+        TOpRoot root(join, pos, {"a", "b"});
+        ComputeLogicalTestProps(root);
+
+        auto physical = TPhysicalJoinBuilder(join, testContext.ExprCtx, pos)
+            .BuildPhysicalOp(
+                testContext.ExprCtx.NewArgument(pos, "left_input"),
+                testContext.ExprCtx.NewArgument(pos, "right_input"),
+                false,
+                testContext.TypeCtx);
+
+        // Keep projections available to the full peephole until the selected lowering pass runs.
+        TExprNode::TListType projections;
+        CollectCallableNodes(physical, "ExtractMembers", projections);
+        UNIT_ASSERT_VALUES_EQUAL_C(projections.size(), 2, KqpExprToPrettyString(TExprBase(physical), testContext.ExprCtx));
+        for (const auto& projection : projections) {
+            UNIT_ASSERT_VALUES_EQUAL(projection->Tail().ChildrenSize(), 1);
+        }
+    }
+
     Y_UNIT_TEST(PhysicalSemiJoinUsesPerEdgeLiveIn) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();
@@ -7077,7 +7927,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             read,
             pos,
             "LeftSemi",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("a")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("a")}}
         );
         join->Props.JoinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
         TOpRoot root(join, pos, {"a", "b"});
@@ -7320,7 +8170,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightAliasMap,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"left_sum", "right_sum"});
 
@@ -7371,7 +8221,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightMap,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"left_sum", "right_sum"});
 
@@ -8136,7 +8986,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Inner",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto renameMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
             MakeTestRename("l_a", "a", pos, testContext.ExprCtx, expressionProps),
@@ -8159,8 +9009,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(rewrittenRightRead->OutputIUs.front() == TInfoUnit("b"));
 
         UNIT_ASSERT_VALUES_EQUAL(rewrittenJoin->JoinKeys.size(), 1);
-        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().first == TInfoUnit("l_a"));
-        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().second == TInfoUnit("b"));
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().Left == TInfoUnit("l_a"));
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().Right == TInfoUnit("b"));
 
         const auto joinOutput = rewrittenJoin->GetOutputIUs();
         UNIT_ASSERT(std::find(joinOutput.begin(), joinOutput.end(), TInfoUnit("l_a")) != joinOutput.end());
@@ -8376,7 +9226,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             filterMap,
             pos,
             "LeftSemi",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {alias.GetFullName()});
 
@@ -8415,7 +9265,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightMap,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"left_alias", "right_alias"});
 
@@ -8455,7 +9305,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightMap,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"left_id", "right_id"});
 
@@ -8487,7 +9337,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightMap,
             pos,
             "Cross",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+            TVector<TJoinKey>{}
         );
         TOpRoot root(join, pos, {"left_id", "right_id"});
 
@@ -8523,7 +9373,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Inner",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("r")}},
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("r")}},
             TVector<TExpression>{joinFilter}
         );
         TOpRoot root(join, pos, {"r"});
@@ -8535,8 +9385,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
         UNIT_ASSERT_VALUES_EQUAL(join->JoinKeys.size(), 1);
-        UNIT_ASSERT(join->JoinKeys.front().first == TInfoUnit("b"));
-        UNIT_ASSERT(join->JoinKeys.front().second == TInfoUnit("r"));
+        UNIT_ASSERT(join->JoinKeys.front().Left == TInfoUnit("b"));
+        UNIT_ASSERT(join->JoinKeys.front().Right == TInfoUnit("r"));
 
         UNIT_ASSERT_VALUES_EQUAL(join->JoinFilters.size(), 1);
         const auto joinFilterInputs = join->JoinFilters.front().GetInputIUs(false, true);
@@ -9255,7 +10105,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Full",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto aliasMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
             MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
@@ -9324,7 +10174,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Left",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto appendMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
             MakeTestConstantAppend("one", pos, testContext.ExprCtx),
@@ -9359,7 +10209,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Left",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto map = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
             MakeTestConstantAppend("a", pos, testContext.ExprCtx),
@@ -9386,8 +10236,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(leftMap->GetMapElements()[1].GetRename() == TInfoUnit("a"));
 
         UNIT_ASSERT_VALUES_EQUAL(rewrittenJoin->JoinKeys.size(), 1);
-        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().first == TInfoUnit("x"));
-        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().second == TInfoUnit("b"));
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().Left == TInfoUnit("x"));
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().Right == TInfoUnit("b"));
     }
 
     Y_UNIT_TEST(PushAppendExpressionConstantStaysAboveFullJoin) {
@@ -9401,7 +10251,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             rightRead,
             pos,
             "Full",
-            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+            TVector<TJoinKey>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto appendMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
             MakeTestConstantAppend("one", pos, testContext.ExprCtx),
@@ -9429,14 +10279,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                         /*queriesWithoutCboCheck=*/{13});
     }
 
-    // Compiled 87 from 99.
+    // Compiled 94 from 99.
     Y_UNIT_TEST(TPCDS_YQL) {
         RunPerf_YqlTest(EBenchType::TPCDS, /*columnstore=*/true,
-                        {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, /*14,*/ 15, 16, /*17,*/ 18, 19, 20,
-                        21, 22, /*23,*/ 24, 25, 26, /*27,*/ 28, 29, 30, 31, 32, 33, 34, 35, /*36,*/ 37, 38, /*39,*/ 40,
+                        {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, /*17,*/ 18, 19, 20,
+                        21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
                         41, 42, 43, /*44,*/ 45, 46, /*47,*/ 48, 49, 50, /*51,*/ 52, 53, 54, 55, 56, /*57,*/ 58, 59, 60,
-                        61, 62, 63, 64, 65, 66, 67, 68, 69, /*70,*/ 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
-                        81, 82, 83, 84, 85, /*86,*/ 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99},
+                        61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+                        81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99},
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                         // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
                         // in the query or until the known gaps are fixed.
@@ -9708,13 +10558,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    void TestDecorrelation(bool columnTables) {
+    void TestDecorrelation(bool columnTables, bool equalNullsJoinKeys = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetEnableBlockHashJoinEqualNulls(equalNullsJoinKeys);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -9996,6 +10847,34 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
             {R"(
                 SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 0) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 0) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[3];[7];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b IN (SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 1) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b NOT IN (SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 1) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[3];[7];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
                 WHERE (SELECT max(t2.c) FROM `/Root/t2` as t2 WHERE t2.e == t1.e) IS NULL
                 ORDER BY t1.a;
              )",
@@ -10043,6 +10922,37 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY t1.a;
              )",
              R"([[11];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.c > (SELECT min(t2.c) FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 0))
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 RIGHT JOIN `/Root/t3` as t3 ON t2.a == t3.a
+                              WHERE t3.c == t1.a)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5];[6]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 RIGHT JOIN `/Root/t3` as t3 ON t2.b == t3.b
+                              WHERE t3.a == t1.e)
+                ORDER BY t1.a;
+             )",
+             R"([[2];[3];[5];[6];[7];[9];[10];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` as t2 RIGHT JOIN `/Root/t3` as t3 ON t2.a == t3.a
+                                  WHERE t2.c == t1.a)
+                ORDER BY t1.a;
+             )",
+             R"([[2];[3];[5];[6];[7];[8];[10];[11];[12]])"},
         };
 
         for (ui32 i = 0; i < cases.size(); ++i) {
@@ -10075,8 +10985,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(Decorrelation, ColumnStore) {
-        TestDecorrelation(ColumnStore);
+    Y_UNIT_TEST_QUAD(Decorrelation, ColumnStore, EqualNullsJoinKeys) {
+        TestDecorrelation(ColumnStore, EqualNullsJoinKeys);
     }
 
     Y_UNIT_TEST(OrderBy) {
@@ -10160,6 +11070,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -10221,7 +11132,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             auto ast = *result.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("MapJoinCore") != std::string::npos, TStringBuilder() << "Wrong join algo. Expected: " << "MapJoinCore");
+            UNIT_ASSERT_C(ast.find("BlockHashJoin") != std::string::npos, TStringBuilder() << "Wrong join algo. Expected: " << "BlockHashJoin");
 
             result =
                 session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
@@ -12256,6 +13167,98 @@ PRAGMA ydb.OptimizerHints = '
                              << JoinSeq(", ", hashFuncs) << "\n" << plan);
     }
 
+    Y_UNIT_TEST_TWIN(DistinctShuffleEliminationTPCHQ4, CompositePartitionKey) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableNewRBO(true);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetAllowOlapDataQuery(true);
+        config->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        config->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        config->SetDefaultCostBasedOptimizationLevel(4);
+        config->SetDefaultEnableShuffleElimination(true);
+        config->SetDefaultHashShuffleFuncType(NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({MakeTPCHStatsSetting()});
+        TKikimrRunner kikimr(settings);
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        auto schema = tableSession.ExecuteSchemeQuery(Sprintf(R"(
+            CREATE TABLE `/Root/lineitem` (
+                l_orderkey Int64 NOT NULL,
+                l_linenumber Int32 NOT NULL,
+                l_commitdate Date NOT NULL,
+                l_receiptdate Date NOT NULL,
+                PRIMARY KEY (l_orderkey, l_linenumber)
+            )
+            PARTITION BY HASH(%s)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 8);
+
+            CREATE TABLE `/Root/orders` (
+                o_orderkey Int64 NOT NULL,
+                o_orderpriority Utf8 NOT NULL,
+                o_orderdate Date NOT NULL,
+                PRIMARY KEY (o_orderkey)
+            )
+            PARTITION BY HASH(o_orderkey)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 4);
+        )", CompositePartitionKey ? "l_orderkey, l_linenumber" : "l_orderkey")).GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+
+        const auto july = TInstant::ParseIso8601("1993-07-01T00:00:00Z");
+        const auto october = TInstant::ParseIso8601("1993-10-01T00:00:00Z");
+        NYdb::TValueBuilder orders, lineitems;
+        orders.BeginList();
+        lineitems.BeginList();
+        for (i64 id = 1; id <= 32; ++id) {
+            orders.AddListItem().BeginStruct()
+                .AddMember("o_orderkey").Int64(id)
+                .AddMember("o_orderpriority").Utf8(id % 2 ? "HIGH" : "LOW")
+                .AddMember("o_orderdate").Date(id <= 16 ? july : october)
+                .EndStruct();
+            // Two qualifying line items per matching order must count only once.
+            for (i32 line = 1; line <= 3; ++line) {
+                lineitems.AddListItem().BeginStruct()
+                    .AddMember("l_orderkey").Int64(id)
+                    .AddMember("l_linenumber").Int32(line)
+                    .AddMember("l_commitdate").Date(july)
+                    .AddMember("l_receiptdate").Date(id % 4 && line < 3 ? october : july)
+                    .EndStruct();
+            }
+        }
+        orders.EndList();
+        lineitems.EndList();
+        for (auto& [table, rows] : TVector<std::pair<TString, NYdb::TValue>>{
+                 {"/Root/orders", orders.Build()}, {"/Root/lineitem", lineitems.Build()}}) {
+            const auto upsert = tableClient.BulkUpsert(table, std::move(rows)).GetValueSync();
+            UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        }
+
+        std::string query = NResource::Find("resfs/file/tpch/queries/yql/q4.sql");
+        Replace(query, "{% include 'header.sql.jinja' %}", "PRAGMA YqlSelect = 'force';");
+        Replace(query, "{{orders}}", "`/Root/orders`");
+        Replace(query, "{{lineitem}}", "`/Root/lineitem`");
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        const auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+        const auto plan = TString{*explain.GetStats()->GetPlan()};
+        const auto shuffles = CollectHashShuffleDescriptions(plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(shuffles.size(), CompositePartitionKey ? 3 : 2, plan);
+        // Identify the DISTINCT exchange by its intermediate order-key alias,
+        // separately from the join and priority-aggregation exchanges.
+        const auto distinctShuffles = std::count_if(shuffles.begin(), shuffles.end(), [](const TString& shuffle) {
+            return shuffle.Contains("_intermediate_") && shuffle.Contains("l_orderkey");
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(distinctShuffles, CompositePartitionKey ? 1 : 0, plan);
+
+        const auto execute = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(execute.IsSuccess(), execute.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(execute.GetResultSet(0)), R"([["HIGH";8u];["LOW";4u]])");
+    }
+
     Y_UNIT_TEST(ShuffleEliminationColumnShardHashPreservedInPhysicalAst) {
         const auto [plan, ast] = ExplainHashCompatibilityQueryWithAst({"a", "b"}, R"(
             PRAGMA ydb.CostBasedOptimizationLevel = "4";
@@ -13490,6 +14493,92 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        }
+    }
+
+    Y_UNIT_TEST(RollupGrouping) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                d Int64,
+                e Int64,
+                primary key(a)
+            ) with (Store = Column);
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        InsertIntoSchema1(db, "/Root/t1", 4);
+
+        const std::vector<std::string> queries = {
+            R"(
+                SELECT count(t1.a), t1.b as b, grouping(t1.b) as g FROM `/Root/t1` as t1
+                group by rollup(t1.b)
+                order by b;
+            )",
+            R"(
+                SELECT count(t1.a), t1.b as b, t1.c as c, grouping(t1.b) as gb, grouping(t1.c) as gc,
+                       grouping(t1.b, t1.c) as gbc
+                FROM `/Root/t1` as t1
+                group by rollup(t1.b, t1.c)
+                order by b, c;
+            )",
+            R"(
+                SELECT count(t1.a), t1.b as b, grouping(t1.b) as g FROM `/Root/t1` as t1
+                group by t1.b
+                order by b;
+            )",
+            R"(
+                SELECT sum(t1.a), t1.b as b, t1.c as c, grouping(t1.b) + grouping(t1.c) as loch
+                FROM `/Root/t1` as t1
+                group by rollup(t1.b, t1.c)
+                order by loch desc, b, c;
+            )",
+            R"(
+                SELECT t1.b as b, t1.c as c, grouping(t1.c) as gc,
+                       rank() over (partition by grouping(t1.c) order by sum(t1.a) desc) as rnk
+                FROM `/Root/t1` as t1
+                group by rollup(t1.b, t1.c)
+                order by gc, rnk;
+            )",
+        };
+
+        const std::vector<std::string> results = {
+            R"([[4u;#;1u];[1u;[1];0u];[1u;[2];0u];[1u;[3];0u];[1u;[4];0u]])",
+            R"([[4u;#;#;1u;1u;3u];[1u;[1];#;0u;1u;1u];[1u;[1];[2];0u;0u;0u];[1u;[2];#;0u;1u;1u];[1u;[2];[3];0u;0u;0u];)"
+            R"([1u;[3];#;0u;1u;1u];[1u;[3];[4];0u;0u;0u];[1u;[4];#;0u;1u;1u];[1u;[4];[5];0u;0u;0u]])",
+            R"([[1u;[1];0u];[1u;[2];0u];[1u;[3];0u];[1u;[4];0u]])",
+            R"([[[6];#;#;2u];[[0];[1];#;1u];[[1];[2];#;1u];[[2];[3];#;1u];[[3];[4];#;1u];)"
+            R"([[0];[1];[2];0u];[[1];[2];[3];0u];[[2];[3];[4];0u];[[3];[4];[5];0u]])",
+            R"([[[4];[5];0u;1u];[[3];[4];0u;2u];[[2];[3];0u;3u];[[1];[2];0u;4u];)"
+            R"([#;#;1u;1u];[[4];#;1u;2u];[[3];#;1u;3u];[[2];#;1u;4u];[[1];#;1u;5u]])",
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "Query " << i << ": " << result.GetIssues().ToString());
+
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "Query " << i << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), results[i], "Query " << i);
         }
     }
 

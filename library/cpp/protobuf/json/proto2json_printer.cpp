@@ -14,6 +14,8 @@
 #include <util/string/cast.h>
 #include <util/system/win_undef.h>
 
+#include <memory>
+
 
 namespace NProtobufJson {
     using namespace NProtoBuf;
@@ -232,7 +234,7 @@ namespace NProtobufJson {
             return false;
         }
         DynamicMessageFactory factory;
-        const THolder<Message> valueMessage{factory.GetPrototype(valueDesc)->New()};
+        const std::unique_ptr<Message> valueMessage{factory.GetPrototype(valueDesc)->New()};
         const TProtoStringType serializedValue = reflection->GetString(proto, valueField);
         if (!valueMessage->ParseFromString(serializedValue)) {
             return false;

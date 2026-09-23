@@ -21,12 +21,6 @@ TVChunkConfigProto ToProto(const TVChunkConfig& cfg)
         if (!disabled.Get(i)) {
             proto.AddEnabledHosts(i);
         }
-
-        if (const auto watermark = cfg.GetWatermark(i)) {
-            auto* w = proto.AddWatermarks();
-            w->SetHostIndex(i);
-            w->SetValue(watermark.value());
-        }
     }
 
     return proto;
@@ -37,7 +31,6 @@ TVChunkConfig FromProto(const TVChunkConfigProto& proto)
     THostRoles pbufferHosts(proto.PBufferHostRolesSize());
     THostRoles ddiskHosts(proto.DDiskHostRolesSize());
     THostMask enabledHosts;
-    TVector<std::optional<ui64>> watermarks(proto.DDiskHostRolesSize());
 
     for (THostIndex i = 0; i < proto.PBufferHostRolesSize(); ++i) {
         pbufferHosts.SetRole(
@@ -55,16 +48,11 @@ TVChunkConfig FromProto(const TVChunkConfigProto& proto)
         enabledHosts.Set(static_cast<THostIndex>(proto.GetEnabledHosts(i)));
     }
 
-    for (const auto& w: proto.GetWatermarks()) {
-        watermarks[w.GetHostIndex()] = w.GetValue();
-    }
-
     return TVChunkConfig::Make(
         proto.GetVChunkIndex(),
         pbufferHosts,
         ddiskHosts,
-        enabledHosts,
-        std::move(watermarks));
+        enabledHosts);
 }
 
 }   // namespace
@@ -139,7 +127,9 @@ bool TPartitionDatabase::ReadAllVChunkConfigs(TVChunkConfigs& out)
             const ui32 vChunkIndex = parsedConfig.GetVChunkIndex();
             out[vChunkIndex] = std::move(parsedConfig);
         }
-        it.Next();
+        if (!it.Next()) {
+            return false;   // not ready
+        }
     }
 
     return true;
@@ -197,7 +187,9 @@ bool TPartitionDatabase::ReadAllDirtyMapStates(TDirtyMapStateProtos& out)
             out[it.GetValue<TTable::VChunkIndex>()] =
                 it.GetValue<TTable::State>();
         }
-        it.Next();
+        if (!it.Next()) {
+            return false;   // not ready
+        }
     }
 
     return true;
@@ -212,6 +204,45 @@ void TPartitionDatabase::StoreDirtyMapState(
     Table<TTable>()
         .Key(vChunkIndex)
         .Update(NKikimr::NIceDb::TUpdate<TTable::State>(state));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TPartitionDatabase::ReadAllTouchedVChunks(TTouchedVChunks& out)
+{
+    using TTable = TPartitionSchema::TouchedVChunks;
+
+    auto it = Table<TTable>()
+                  .Range()
+                  .Select<TTable::VChunkStartIndex, TTable::Mask>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    while (it.IsValid()) {
+        if (it.HaveValue<TTable::Mask>()) {
+            out.Load({
+                .VChunkStartIndex = it.GetValue<TTable::VChunkStartIndex>(),
+                .Mask = it.GetValue<TTable::Mask>(),
+            });
+        }
+        if (!it.Next()) {
+            return false;   // not ready
+        }
+    }
+
+    return true;
+}
+
+void TPartitionDatabase::StoreTouchedVChunkMask(
+    const TTouchedVChunks::TChunk& chunk)
+{
+    using TTable = TPartitionSchema::TouchedVChunks;
+
+    Table<TTable>()
+        .Key(chunk.VChunkStartIndex)
+        .Update(NKikimr::NIceDb::TUpdate<TTable::Mask>(chunk.Mask));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -11,7 +11,7 @@ import ydb
 from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, get_sensors, max_json_depth
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.test_meta import link_test_case
-from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
+from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule, create_stream, delete_stream
 
 logger = logging.getLogger(__name__)
 
@@ -1978,6 +1978,89 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(sql.format(query_name=query_name2))
 
     @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_shared_reading_pushdown(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"shared_pushdown{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
+
+        # YQ-5708
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT * FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(
+                        str1 String,
+                        str2 String,
+                        ev String
+                    )
+                )
+                WHERE COALESCE(str1, str2) IS DISTINCT FROM "DONE"
+                  AND (Unwrap(COALESCE(str1, Just(ev), str2)) IS DISTINCT FROM "DONE"
+                    OR ToBytes(COALESCE(CAST(str1 AS Utf8), CAST(ev AS Utf8))) IS NOT DISTINCT FROM "DONE")
+                ;
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
+            END DO;'''
+
+        query_name = f"test_shared_pushdown_{local_topics!s:.1}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"{kikimr.get_database_name()}/{query_name}"
+        self.wait_completed_checkpoints(kikimr, query_name)
+
+        # Check that streaming.query.tasks.count metric exists
+        self.wait_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count", expected_value=1)
+
+        data = [
+            '{"str1":null,"str2":"DONE","ev":"skipped"}',
+            '{"str1":"xop","str2":"DONE","ev":"xep"}',
+            '{"str1":null,"str2":null,"ev":"xap"}',
+            '{"str1":"xep","str2":"xip","ev":"xup"}',
+        ]
+        expected_data = [
+            '{"ev":"xep","str1":"xop","str2":"DONE"}',
+            '{"ev":"xap","str1":null,"str2":null}',
+            '{"ev":"xup","str1":"xep","str2":"xip"}',
+        ]
+
+        self.write_stream(data, endpoint=endpoint)
+        assert sorted(self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint)) == sorted(expected_data)
+
+        def collect_plan_nodes(plan, nodeType):
+            if plan.get("Node Type", None) == nodeType:
+                yield plan
+            for sub_plan in plan.get("Plans", []):
+                yield from collect_plan_nodes(sub_plan, nodeType)
+
+        # verify pushdown in query
+        pushdown_key = "Filter (shared reading)"
+        result_sets = kikimr.ydb_client.query(
+            f"""SELECT Plan FROM `.sys/streaming_queries` WHERE Path = "{path}";"""
+        )
+        assert len(result_sets) == 1
+        assert len(result_sets[0].rows) == 1
+
+        sources = 0
+        for source in collect_plan_nodes(json.loads(result_sets[0].rows[0]["Plan"])["Plan"], "Source"):
+            for operator in source.get("Operators", []):
+                if operator.get("SourceType", None) == "pq":
+                    assert pushdown_key in operator
+                    filter = operator[pushdown_key]
+                    logger.debug(filter)
+                    assert "`str1`" in filter
+                    assert "`str2`" in filter
+                    sources += 1
+        assert sources > 0
+
+        sql = R'''DROP STREAMING QUERY `{query_name}`;'''
+        kikimr.ydb_client.query(sql.format(query_name=query_name))
+
+    @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("kikimr", [{"enable_discovery": False, "lease_duration_sec": "30"}], indirect=["kikimr"])
     def test_streaming_query_stop_after_restart(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         inp, out, endpoint = self.get_io_names(kikimr, f"test_stop_after_restart_{local_topics!s:.1}", local_topics, entity_name)
@@ -2420,6 +2503,73 @@ FROM `{table_name}`"""
         second_ydb_client = YdbClient.from_driver_config(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         check_issues(get_issues(client=second_ydb_client), "Lease expired")
 
+    @pytest.mark.parametrize(
+        "local_topics, shared_reading",
+        [(True, False), (False, False), (False, True)],
+        ids=["local_pq_read_actor", "external_pq_read_actor", "topic_session"],
+    )
+    def test_restart_query_after_input_topic_recreation(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        shared_reading: bool,
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"test_restart_after_topic_recreation_{local_topics!s:.1}_{shared_reading!s:.1}",
+            local_topics,
+            entity_name,
+            shared=shared_reading,
+        )
+
+        query_name = f"test_restart_after_topic_recreation_{local_topics!s:.1}_{shared_reading!s:.1}"
+        kikimr.ydb_client.query(f'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $input = SELECT Data FROM {inp};
+                INSERT INTO {out} SELECT Data FROM $input;
+            END DO;
+        ''')
+        try:
+            self.wait_completed_checkpoints(kikimr, query_name)
+
+            expected_data = ["first", "second"]
+            self.write_stream(expected_data, endpoint=endpoint)
+            assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+            self.wait_completed_checkpoints(kikimr, query_name)
+
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+            time.sleep(0.5)
+            delete_stream(self.input_topic, default_endpoint=endpoint)
+            create_stream(self.input_topic, default_endpoint=endpoint)
+
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
+            query_path = f"{kikimr.get_database_name()}/{query_name}"
+
+            def get_query_issues() -> str:
+                result_sets = kikimr.ydb_client.query(f'''
+                    SELECT Issues
+                    FROM `.sys/streaming_queries`
+                    WHERE Path = "{query_path}"
+                ''')
+                assert len(result_sets) == 1
+                assert len(result_sets[0].rows) == 1
+                return result_sets[0].rows[0].Issues
+
+            def has_missing_offsets_issue() -> bool:
+                issues = get_query_issues().lower()
+                return (
+                    "offset" in issues
+                    and "do not exist in the topic" in issues
+                    and "recreat" in issues
+                    and "streaming query" in issues
+                )
+
+            assert wait_for(has_missing_offsets_issue, timeout_seconds=60, step_seconds=1), get_query_issues()
+        finally:
+            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_restart_query_after_partition_increase(
         self: StreamingTestBase,
@@ -2523,9 +2673,112 @@ FROM `{table_name}`"""
                 or 0
                 for node_id in kikimr.cluster.slots
             )
-
         assert wait_for(lambda: streaming_query_tasks_count() == expected_actor_count, timeout_seconds=60, step_seconds=1), (
             f"Expected {expected_actor_count} streaming query tasks, got {streaming_query_tasks_count()}"
         )
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize(
+        "max_tasks_per_stage, should_restart",
+        [(None, True), (2, False)],
+        ids=["default", "max_tasks_per_stage_2"],
+    )
+    def test_read_tasks_are_rebalanced_to_new_slots(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        max_tasks_per_stage: int | None,
+        should_restart: bool,
+    ) -> None:
+        inp, out, _ = self.get_io_names(
+            kikimr,
+            "test_read_tasks_are_rebalanced_to_new_slots",
+            local_topics,
+            entity_name,
+            partitions_count=100,
+        )
+
+        query_name = (
+            f"test_read_tasks_are_rebalanced_to_new_slots"
+            f"_{local_topics!s:.1}_{max_tasks_per_stage or 'default'}"
+        )
+
+        kikimr.ydb_client.query(f"""
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                {f'PRAGMA ydb.MaxTasksPerStage = "{max_tasks_per_stage}";' if max_tasks_per_stage else ''}
+                $in = SELECT Data FROM {inp};
+                INSERT INTO {out} SELECT Data FROM $in;
+            END DO;
+        """)
+        self.wait_completed_checkpoints(kikimr, query_name)
+
+        path = f"{kikimr.get_database_name()}/{query_name}"
+
+        def streaming_query_tasks_count():
+            return sum(
+                get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
+                    {"path": path, "subsystem": "streaming_queries", "sensor": "streaming.query.tasks.count"}
+                )
+                or 0
+                for node_id in kikimr.cluster.slots
+            )
+
+        assert wait_for(lambda: streaming_query_tasks_count() > 0, timeout_seconds=60, step_seconds=1), (
+            "Streaming query tasks did not appear after creation"
+        )
+        tasks_before_scaling = streaming_query_tasks_count()
+        assert tasks_before_scaling > 0
+
+        def retry_count() -> int:
+            result_sets = kikimr.ydb_client.query(
+                f'SELECT RetryCount FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+            )
+            assert len(result_sets) == 1
+            assert len(result_sets[0].rows) == 1
+            return result_sets[0].rows[0]["RetryCount"]
+
+        retry_count_before_scaling = retry_count()
+
+        added_slots = kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3)
+        try:
+            kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
+            assert len(kikimr.cluster.slots) == 5
+
+            retry_count_increased = wait_for(
+                lambda: retry_count() > retry_count_before_scaling,
+                timeout_seconds=60 if should_restart else 30,
+                step_seconds=1,
+            )
+            if should_restart:
+                assert retry_count_increased, "Streaming query RetryCount did not increase after adding slots"
+            else:
+                assert not retry_count_increased, "Streaming query restarted after adding slots"
+
+            # TODO
+            # assert wait_for(
+            #     lambda: streaming_query_tasks_count() > tasks_before_scaling,
+            #     timeout_seconds=60,
+            #     step_seconds=1
+            # ), "The total number of streaming query tasks did not increase after adding slots"
+
+            # def read_tasks_are_on_every_slot() -> bool:
+            #     for node_id in kikimr.cluster.slots:
+            #         sensor = get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
+            #             {"subsystem": "DqSourceTracker", "source": "PqRead", "sensor": "InFlyAsyncInputData"}
+            #         )
+            #         if sensor is None:
+            #             return False
+            #     return True
+
+            # assert wait_for(read_tasks_are_on_every_slot,
+            #     timeout_seconds=60,
+            #     step_seconds=1
+            # ), "Read tasks were not placed on every tenant slot"
+
+        finally:
+            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+            kikimr.cluster.unregister_and_stop_slots(added_slots)

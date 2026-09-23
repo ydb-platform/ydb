@@ -8,28 +8,29 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/common/buffer/events.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
-#include <ydb/core/kqp/common/kqp_tx.h>
-#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/data_events/common/error_codes.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/persqueue/events/global.h>
 
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
-#include <ydb/library/wilson_ids/wilson.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -336,7 +337,19 @@ public:
             {"txId", TxId},
             {"ctx", *GetUserRequestContext()},
             {"sender", ev->Sender},
+            {"sourceType", ev->Get()->SourceType},
             {"traceId", TraceId()});
+
+        switch (ev->Get()->SourceType) {
+            case TEvKqpBuffer::TEvCommit::EventType:
+            case TEvKqpBuffer::TEvRollback::EventType:
+            case TEvKqpBuffer::TEvFlush::EventType:
+                // No result will arrive from the missing buffer. Cleanup has no
+                // deadline, and write finalization may have ignored CancelAfter.
+                ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                    NYql::TIssue("Cannot deliver finalization request to the transaction buffer actor"));
+                break;
+        }
     }
 
     void MakeResponseAndPassAway() {
@@ -701,8 +714,16 @@ private:
                     return;
                 }
 
-                for (const auto& [taskParam, controlPlaneSettings] : stage.GetStageControlPlaneActors()) {
-                    YQL_ENSURE(stageInfo.Meta.ControlPlaneActors.emplace(taskParam, Register(AsyncIoFactory->CreateDqControlPlane({.Type = controlPlaneSettings.GetType(), .TxId = dqTxId}))).second);
+                if (!stage.GetStageControlPlaneActors().empty()) {
+                    THashMap<TString, TString> secureParams;
+                    TasksGraph.FillExternalSourceSecureParams(secureParams, stage);
+                    for (const auto& [taskParam, controlPlaneSettings] : stage.GetStageControlPlaneActors()) {
+                        YQL_ENSURE(stageInfo.Meta.ControlPlaneActors.emplace(taskParam, Register(AsyncIoFactory->CreateDqControlPlane({
+                            .Type = controlPlaneSettings.GetType(),
+                            .TxId = dqTxId,
+                            .SecureParams = secureParams,
+                        }))).second, "Duplicate control-plane actor task parameter: " << taskParam);
+                    }
                 }
             }
         }
@@ -969,7 +990,7 @@ private:
     void ContinueExecute() {
         OnEmptyResult();
 
-        StartCheckpointCoordinator();
+        StartStreamingQueriesActors();
 
         if (!ExecuteTasks()) {
             return;
@@ -1204,14 +1225,53 @@ private:
             {"traceId", TraceId()});
     }
 
-    void StartCheckpointCoordinator() {
+    void StartStreamingQueriesActors() {
         const auto context = TasksGraph.GetMeta().UserRequestContext;
         bool disableCheckpoints = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetDisableCheckpoints();
 
-        bool enableCheckpointCoordinator = AppData()->FeatureFlags.GetEnableStreamingQueries()
+        const bool enableStreamingQueriesActors = AppData()->FeatureFlags.GetEnableStreamingQueries()
             && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr)
-            && context && context->CheckpointId && !disableCheckpoints;
-        if (!enableCheckpointCoordinator) {
+            && context && context->CheckpointId;
+        if (!enableStreamingQueriesActors) {
+            return;
+        }
+
+        NFq::NProto::TGraphParams graphParams;
+        if (Request.QueryPhysicalGraph) {
+            for (const auto& task : Request.QueryPhysicalGraph->GetTasks()) {
+                *graphParams.AddTasks() = task.GetDqTask();
+            }
+        }
+
+        bool hasPqSources = false;
+        for (const auto& transaction : Request.Transactions) {
+            if (transaction.Body->GetHasPqSources()) {
+                hasPqSources = true;
+                break;
+            }
+        }
+
+        if (hasPqSources) {
+            StreamingQueryNodesManagerId = Register(
+                CreateStreamingQueryNodesManager(
+                    SelfId(),
+                    Database,
+                    context->StreamingQueryPath,
+                    graphParams.GetTasks(),
+                    TDuration::Seconds(300),
+                    TDuration::Seconds(120),
+                    Request.QueryPhysicalGraph
+                        ? Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetMaxTasksPerStage()
+                        : 0));
+            YDB_LOG_DEBUG("Created new StreamingQueryNodesManager",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId},
+                {"traceId", TraceId()});
+        }
+
+        if (disableCheckpoints) {
             return;
         }
 
@@ -1243,13 +1303,6 @@ private:
         const auto stateLoadMode = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetZeroCheckpointSaved()
             ? FederatedQuery::FROM_LAST_CHECKPOINT
             : FederatedQuery::EMPTY;
-
-        NFq::NProto::TGraphParams graphParams;
-        if (Request.QueryPhysicalGraph) {
-            for (const auto& task : Request.QueryPhysicalGraph->GetTasks()) {
-                *graphParams.AddTasks() = task.GetDqTask();
-            }
-        }
 
         auto counters = Counters->Counters->GetKqpCounters();
         if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {

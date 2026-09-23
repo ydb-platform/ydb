@@ -2993,12 +2993,16 @@ private:
     void VisitTtlTierAction(const TRule_ttl_tier_action& msg) {
         switch (msg.GetAltCase()) {
             case TRule_ttl_tier_action::kAltTtlTierAction1:
-                // | TO EXTERNAL DATA SOURCE an_id
+                // | TO EXTERNAL DATA SOURCE an_id (DOT an_id)?
                 VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken1());
                 VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken2());
                 VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken3());
                 VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken4());
                 Visit(msg.GetAlt_ttl_tier_action1().GetRule_an_id5());
+                if (msg.GetAlt_ttl_tier_action1().HasBlock6()) {
+                    Visit(msg.GetAlt_ttl_tier_action1().GetBlock6().GetToken1());
+                    Visit(msg.GetAlt_ttl_tier_action1().GetBlock6().GetRule_an_id2());
+                }
                 break;
             case TRule_ttl_tier_action::kAltTtlTierAction2:
                 // | DELETE

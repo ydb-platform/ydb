@@ -491,10 +491,16 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        if (ev->Get()->Record.GetSchema().SerializeAsString() != PendingSchemaChange->Schema.SerializeAsString()) {
+        if (!matchesPendingSchemaChange) {
             YDB_LOG_WARN("Unexpected schema change result",
                 {"sender", ev->Sender});
             return;
+        }
+
+        if (ev->Get()->Record.GetApplied()) {
+            // The acknowledgement may race with a writer restart. Remember
+            // it until the replacement writer has applied the same barrier.
+            SchemaApplyAcknowledged = true;
         }
 
         if (SchemaAdvanceCommitted) {
@@ -574,6 +580,14 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
+        if (SchemaApplyAcknowledged) {
+            if (!SchemaAdvanceInFlight) {
+                SchemaAdvanceInFlight = true;
+                Send(Reader, new TEvWorker::TEvCommit(PendingSchemaChange->Offset + 1));
+            }
+            return;
+        }
+
         auto report = MakeHolder<TEvService::TEvSchemaChangeReport>();
         report->Record.MutableSchema()->CopyFrom(PendingSchemaChange->Schema);
         report->Record.SetOffset(PendingSchemaChange->Offset);
@@ -590,6 +604,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         SchemaReleaseReceived = false;
         WriterHasSchemaBarrier = false;
         SchemaApplied = false;
+        SchemaApplyAcknowledged = false;
         SchemaAdvanceInFlight = false;
         SchemaAdvanceCommitted = false;
         SchemaCompletionReceived = false;
@@ -882,6 +897,7 @@ private:
     bool SchemaReleaseReceived = false;
     bool WriterHasSchemaBarrier = false;
     bool SchemaApplied = false;
+    bool SchemaApplyAcknowledged = false;
     bool SchemaAdvanceInFlight = false;
     bool SchemaAdvanceCommitted = false;
     bool SchemaCompletionReceived = false;

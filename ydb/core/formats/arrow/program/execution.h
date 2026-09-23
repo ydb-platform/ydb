@@ -294,27 +294,27 @@ private:
         const TProcessorContext& context, const TFetchHeaderContext& fetchContext) = 0;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(const TProcessorContext& context, const TCheckHeaderContext& fetchContext) = 0;
 
-    virtual TConclusion<bool> DoStartFetch(
+    virtual TConclusion<TExecutionResult> DoStartFetch(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchers) = 0;
 
-    virtual TConclusion<bool> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<TExecutionResult> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& /*context*/,
         const THashMap<ui32, IDataSource::TDataAddress>& /*columns*/, const THashMap<ui32, IDataSource::TFetchIndexContext>& /*indexes*/,
         const THashMap<ui32, IDataSource::TFetchHeaderContext>& /*headers*/,
         const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& /*policy*/) {
-        return false;
+        return TExecutionResult::Done();
     }
 
 public:
     virtual ~IDataSource() = default;
 
-    TConclusion<bool> StartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
+    TConclusion<TExecutionResult> StartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
         const THashMap<ui32, IDataSource::TDataAddress>& columns, const THashMap<ui32, IDataSource::TFetchIndexContext>& indexes,
         const THashMap<ui32, IDataSource::TFetchHeaderContext>& headers, const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& policy) {
         AFL_VERIFY(policy);
         return DoStartReserveMemory(context, columns, indexes, headers, policy);
     }
 
-    TConclusion<bool> StartFetch(
+    TConclusion<TExecutionResult> StartFetch(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchers) {
         return DoStartFetch(context, fetchers);
     }
@@ -351,7 +351,7 @@ public:
 class TProcessorContext {
 private:
     std::unique_ptr<NAccessor::TAccessorsCollection> Resources;
-    YDB_READONLY_DEF(std::weak_ptr<IDataSource>, DataSource);
+    IDataSource& DataSource;
     YDB_READONLY_DEF(std::optional<ui32>, Limit);
     YDB_READONLY(bool, Reverse, false);
     bool Extracted = false;
@@ -381,17 +381,21 @@ public:
         return std::move(Resources);
     }
 
-    template <class T>
-    std::shared_ptr<T> GetDataSourceVerifiedAs() const {
-        auto result = std::static_pointer_cast<T>(DataSource.lock());
-        AFL_VERIFY(result);
-        return result;
+    IDataSource& GetDataSource() const {
+        return DataSource;
     }
 
-    TProcessorContext(std::weak_ptr<IDataSource>&& dataSource, std::unique_ptr<NAccessor::TAccessorsCollection>&& resources,
-        const std::optional<ui32> limit, const bool reverse)
+    template <class T>
+    T& GetDataSourceVerifiedAs() const {
+        auto* result = dynamic_cast<T*>(&DataSource);
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    TProcessorContext(IDataSource& dataSource, std::unique_ptr<NAccessor::TAccessorsCollection>&& resources, const std::optional<ui32> limit,
+        const bool reverse)
         : Resources(std::move(resources))
-        , DataSource(std::move(dataSource))
+        , DataSource(dataSource)
         , Limit(limit)
         , Reverse(reverse) {
         AFL_VERIFY(!!Resources);
@@ -400,10 +404,10 @@ public:
 
 class TFailDataSource: public IDataSource {
 private:
-    virtual TConclusion<bool> DoStartFetch(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<TExecutionResult> DoStartFetch(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& /*fetchers*/) override {
         AFL_VERIFY(false);
-        return false;
+        return TExecutionResult::Done();
     }
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
@@ -439,9 +443,9 @@ private:
 
 class TFakeDataSource: public IDataSource {
 private:
-    virtual TConclusion<bool> DoStartFetch(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<TExecutionResult> DoStartFetch(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& /*fetchers*/) override {
-        return false;
+        return TExecutionResult::Done();
     }
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
@@ -527,9 +531,9 @@ private:
         AFL_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
-    virtual TConclusion<bool> DoStartFetch(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<TExecutionResult> DoStartFetch(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& /*fetchers*/) override {
-        return false;
+        return TExecutionResult::Done();
     }
 
 public:

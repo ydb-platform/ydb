@@ -79,4 +79,10 @@ public:
     }
 };
 
+// Dictionary values of a serialized sub-column key column, for either the Arrow IPC (`NDictionary::TConstructor`)
+// or the dense (`TDictionaryDenseConstructor`) dictionary encoding. `externalInfo` must carry the column's
+// `TDictionaryAccessorData`. Returns null when `constructor` is not a dictionary constructor.
+TConclusion<std::shared_ptr<arrow::Array>> BuildDictionaryOnlyValues(
+    const TConstructorContainer& constructor, const TString& dictionaryBlob, const TChunkConstructionData& externalInfo);
+
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

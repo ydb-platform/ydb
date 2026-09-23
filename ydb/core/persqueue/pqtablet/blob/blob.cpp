@@ -1,4 +1,5 @@
 #include "blob.h"
+#include "blob_offset.h"
 #include "header.h"
 
 #include <util/string/builder.h>
@@ -855,6 +856,42 @@ TVector<TBatch> GetUnpackedBatches(const TKey& key, const TString& blob)
         batches.push_back(std::move(batch));
     }
     return batches;
+}
+
+TMaybe<ui64> FindFirstOffsetAtOrAfterTimestamp(
+    TInstant timestamp,
+    ui64 startOffset,
+    const TVector<TClientBlob>& blobs)
+{
+    ui64 offset = startOffset;
+    for (const auto& blob : blobs) {
+        if (blob.GetPartNo() == 0 && blob.WriteTimestamp >= timestamp) {
+            return offset;
+        }
+        if (blob.IsLastPart()) {
+            offset += blob.LogicalMessageCount;
+        }
+    }
+    return Nothing();
+}
+
+TMaybe<ui64> FindFirstOffsetAtOrAfterTimestamp(
+    TInstant timestamp,
+    ui64 blobKeyOffset,
+    const TVector<TBatch>& unpackedBatches)
+{
+    if (unpackedBatches.empty()) {
+        return Nothing();
+    }
+    const ui64 firstHeaderOffset = unpackedBatches.front().GetOffset();
+    for (const auto& batch : unpackedBatches) {
+        const ui64 startOffset = HeaderOffsetToKeySpace(
+            blobKeyOffset, firstHeaderOffset, batch.GetOffset());
+        if (auto found = FindFirstOffsetAtOrAfterTimestamp(timestamp, startOffset, batch.Blobs)) {
+            return found;
+        }
+    }
+    return Nothing();
 }
 
 }// NPQ

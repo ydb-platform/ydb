@@ -116,6 +116,14 @@ public:
 
     virtual void Register(TVChunkWeakPtr vChunk) = 0;
 
+    // Reserves the least loaded enabled host without a DDisk in config.
+    // Returns InvalidHostIndex when no host is available.
+    virtual THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) = 0;
+
+    // Releases the reservation after config persistence succeeds or is
+    // canceled.
+    virtual void CommitDDiskPromotion(const TVChunkConfig& config) = 0;
+
     virtual TExecutorPtr GetExecutor() = 0;
 
     virtual TArenaAllocatorPoolPtr GetArenaAllocatorPool()
@@ -204,16 +212,6 @@ public:
         THostIndex hostIndex,
         const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) = 0;
-
-    // The bound is an lsn within the current tablet generation; the PBuffer
-    // side additionally drops every record of the previous generations.
-    virtual void BarrierEraseFromPBuffer(ui64 lsn) = 0;
-
-    // The lowest record id that must be preserved across all vchunks of this
-    // DirectBlockGroup. Used to compute the tablet-wide cleanup watermark.
-    // Resolves on the executor thread. nullopt means nothing is inflight here.
-    virtual NThreading::TFuture<std::optional<TPBufferKey>>
-    GatherSafeBarrierForErase() = 0;
 
     // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
     virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(

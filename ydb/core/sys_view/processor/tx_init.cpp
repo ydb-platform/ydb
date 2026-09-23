@@ -520,8 +520,10 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         }
 
         if (AppData()->FeatureFlags.GetEnableDbCounters()) {
-            Self->ScheduleApplyCounters();
             Self->ScheduleApplyLabeledCounters();
+        }
+        if (AppData()->FeatureFlags.GetEnableDbCounters() || AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+            Self->ScheduleApplyCounters();
             Self->SendNavigate();
         }
 

@@ -1086,7 +1086,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 4, 1, 1);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 5, 1, 1);
     }
 
     // Test: Multi-table writes with standalone COMMIT_TX (TPCC-like scenario)
@@ -1122,7 +1122,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 4, 1, 1);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 5, 1, 1);
     }
 
     // Test: Victim reads key 1, breaker writes key 1, victim writes key 2
@@ -1165,7 +1165,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimWriteText, 1, 2, 1, 1);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimWriteText, 1, 3, 1, 1);
     }
 
     // Test: Multi-table scenario where victim reads and writes the same table,
@@ -1194,7 +1194,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimSelectTable1, victimUpdateTable1,
-            2, 4, 2, 1);
+            2, 5, 2, 1);
     }
 
     // Test: Victim reads multiple keys, breaker writes them all
@@ -1502,7 +1502,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 4, 1, 1);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 5, 1, 1);
     }
 
     // Test: 2-node version of ManyUpsertsStandaloneCommit
@@ -1536,7 +1536,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 
-        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 4, 1, 1);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2, {}, 3, 5, 1, 1);
     }
 
     // Test: 2-node version of ConcurrentUpsertSelect
@@ -1685,7 +1685,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Without the fix, T's breaker log is missing (count would be 1 instead of 2).
         const TString logs = VerifyTliIssueAndLogs(tIssues, ss, externalBreakerWrite, tSelectTable2,
             /* victimExtraQueryText */ std::nullopt,
-            3, 2, 2, 1);
+            3, 3, 2, 1);
 
         // Additionally verify T's breaker log content (T broke VictimOfT's lock on table1)
         const auto patterns = MakeTliLogPatterns();
@@ -1735,9 +1735,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Table2 and Table3 (NOT ignored): full TLI verification
         // 3 breaker records: Table2 immediate + Table3 immediate + Table3 deferred
         VerifyTliIssueAndLogs(issues, ss, breakerUpdate2, victimQueryText, victimCommitText,
-            7, 2, 3, 1);
+            7, 3, 3, 1);
         VerifyTliIssueAndLogs(issues, ss, breakerUpdate3, victimQueryText, victimCommitText,
-            7, 2, 3, 1);
+            7, 3, 3, 1);
 
         // Table1 (IGNORED): no breaker TLI records
         VerifyNoTliLogsForIgnoredTable(issues, ss, breakerUpdate1);

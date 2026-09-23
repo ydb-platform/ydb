@@ -757,11 +757,14 @@ public:
 
         queryProto.SetForceImmediateEffectsExecution(
             Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+        queryProto.SetDisablePessimisticLocks(
+            Config->KqpDisablePessimisticLocks.Get().GetOrElse(false));
 
         queryProto.SetDefaultTxMode(
             Config->DefaultTxMode.Get().GetOrElse(NKqpProto::ISOLATION_LEVEL_UNDEFINED));
 
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
+        queryProto.SetMaxTasksPerStage(Config->MaxTasksPerStage.Get().GetOrElse(0));
         queryProto.SetEnableWatermarks(Config->GetEnableWatermarks());
 
         bool enableDiscardSelect = Config->GetEnableDiscardSelect();

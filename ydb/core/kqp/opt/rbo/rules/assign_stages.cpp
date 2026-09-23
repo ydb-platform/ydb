@@ -40,7 +40,7 @@ void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
 
     const auto joinAlgo = *props.JoinAlgo;
     props.UseBlockHashJoin = config.GetUseBlockHashJoin()
-        && (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin)
+        && (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin || joinAlgo == EJoinAlgoType::MapJoin)
         && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly");
 }
 
@@ -113,8 +113,8 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
             TVector<TInfoUnit> leftShuffleKeys;
             TVector<TInfoUnit> rightShuffleKeys;
             for (const auto& key : join->JoinKeys) {
-                leftShuffleKeys.push_back(key.first);
-                rightShuffleKeys.push_back(key.second);
+                leftShuffleKeys.push_back(key.Left);
+                rightShuffleKeys.push_back(key.Right);
             }
             const TVector<TInfoUnit>& effectiveLeftShuffleKeys =
                 join->Props.LeftShuffleBy ? *join->Props.LeftShuffleBy : leftShuffleKeys;

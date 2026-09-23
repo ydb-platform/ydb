@@ -617,11 +617,16 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node)
     const auto input = ExprNodeToOperator(opLimit.Input().Ptr());
     TExpression count(opLimit.Count().Ptr(), &Ctx);
     auto maybeOffset = opLimit.Offset();
+    TIntrusivePtr<IOperator> result;
     if (maybeOffset) {
         TExpression offset(maybeOffset.Cast().Ptr(), &Ctx);
-        return MakeIntrusive<TOpLimit>(input, node->Pos(), count, offset, EOpPhase::Undefined);
+        result = MakeIntrusive<TOpLimit>(input, node->Pos(), count, offset, EOpPhase::Undefined);
     }
-    return MakeIntrusive<TOpLimit>(input, node->Pos(), count, EOpPhase::Undefined);
+    result = MakeIntrusive<TOpLimit>(input, node->Pos(), count, EOpPhase::Undefined);
+    if (Projections.contains(input.Get())) {
+        Projections.insert({result.Get(), Projections.at(input.Get())});
+    }
+    return result;
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr node) {

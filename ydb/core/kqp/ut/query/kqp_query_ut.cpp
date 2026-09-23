@@ -122,8 +122,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         for (const TString& pragma : {
             TString("PRAGMA TablePathPrefix = 'folder';"),
             TString("PRAGMA TablePathPrefix = './folder';"),
-            TString("PRAGMA TablePathPrefix('kikimr', 'folder');"),
-            TString("PRAGMA TablePathPrefix('kikimr', './folder');"),
+            TString("PRAGMA TablePathPrefix('db', 'folder');"),
+            TString("PRAGMA TablePathPrefix('db', './folder');"),
         }) {
             const auto createResult = execute(pragma + "CREATE TOPIC events WITH (retention_period = Interval('PT2H'));");
             UNIT_ASSERT_C(createResult.IsSuccess(), pragma << ": " << createResult.GetIssues().ToString());

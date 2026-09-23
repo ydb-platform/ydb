@@ -4302,7 +4302,7 @@ bool TSqlTranslation::TopicRefImpl(const TRule_topic_ref& node, TTopicRef& resul
 
     result = TTopicRef(Context().MakeName("topic"), cluster, nullptr);
     auto topic = Id(node.GetRule_an_id2(), *this);
-    result.Keys = BuildTopicKey(Context().Pos(), service, result.Cluster, TDeferredAtom(Context().Pos(), topic));
+    result.Keys = BuildTopicKey(Context().Pos(), result.Cluster, TDeferredAtom(Context().Pos(), topic));
 
     return true;
 }

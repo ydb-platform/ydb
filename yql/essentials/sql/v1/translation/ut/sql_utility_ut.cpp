@@ -52,8 +52,10 @@ Y_UNIT_TEST(GenericDefaultsPreserveLegacyPaths) {
     NSQLTranslation::TTranslationSettings settings;
     UNIT_ASSERT(!settings.EnableTablePathPrefixRelativePaths);
     settings.PathPrefix = "/Root/database";
-    AssertPath(SqlToYqlWithMode("USE plato; PRAGMA TablePathPrefix = './folder'; SELECT * FROM users;",
-        NSQLTranslation::ESqlMode::QUERY, 10, "kikimr", EDebugOutput::None, false, settings), "folder/users");
+    for (const TString& provider : {TString("kikimr"), TString("yt"), TString("rtmr"), TString("ydb")}) {
+        AssertPath(SqlToYqlWithMode("USE plato; PRAGMA TablePathPrefix = './folder'; SELECT * FROM users;",
+            NSQLTranslation::ESqlMode::QUERY, 10, provider, EDebugOutput::None, false, settings), "folder/users");
+    }
 }
 
 Y_UNIT_TEST(LegacyAccessorAndTopicFactoryRemainAvailable) {
@@ -92,7 +94,7 @@ Y_UNIT_TEST(PrefixStoragePreservesProviderAndEmptyFallbacks) {
         const TDeferredAtom cluster(TPosition{}, "plato");
         const TDeferredAtom remote(TPosition{}, "yt_cluster");
         UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("kikimr", cluster), enabled ? "/Root/database/initial" : "initial");
-        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("yt", remote), "./remote");
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("yt", remote), enabled ? "/Root/database/remote" : "./remote");
 
         UNIT_ASSERT(ctx.SetPathPrefix("folder"));
         UNIT_ASSERT(ctx.SetPathPrefix("", TString("plato")));
@@ -101,11 +103,15 @@ Y_UNIT_TEST(PrefixStoragePreservesProviderAndEmptyFallbacks) {
         UNIT_ASSERT(ctx.SetPathPrefix("", TString("kikimr")));
         UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("kikimr", cluster), enabled ? "/Root/database/folder" : "folder");
         UNIT_ASSERT(ctx.SetPathPrefix("", TString("yt_cluster")));
-        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("yt", remote), "folder");
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("yt", remote), enabled ? "/Root/database/folder" : "folder");
+        UNIT_ASSERT(ctx.SetPathPrefix("remote_provider", TString("yt")));
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("yt", remote), enabled ? "/Root/database/remote_provider" : "remote_provider");
+        UNIT_ASSERT(ctx.SetPathPrefix("", TString("yt")));
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("yt", remote), enabled ? "/Root/database/folder" : "folder");
 
         UNIT_ASSERT(ctx.SetPathPrefix(""));
         UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("kikimr", cluster), enabled ? "/Root/database" : "");
-        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("yt", remote), "");
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("yt", remote), enabled ? "/Root/database" : "");
     }
 }
 
@@ -180,9 +186,40 @@ Y_UNIT_TEST(ProviderAndClusterPrefixes) {
     )"), "/Root/database/cluster/users");
 }
 
-Y_UNIT_TEST(OtherProvidersKeepRelativePrefixes) {
-    for (const TString& provider : {TString("yt"), TString("rtmr"), TString("ydb")}) {
-        AssertPath(Translate("PRAGMA TablePathPrefix = './folder'; SELECT * FROM users;", provider), "folder/users");
+Y_UNIT_TEST(OptInAppliesToEveryProviderInTheContext) {
+    for (const TString& provider : {TString("kikimr"), TString("yt"), TString("rtmr"), TString("ydb")}) {
+        AssertPath(Translate("PRAGMA TablePathPrefix = './folder'; SELECT * FROM users;", provider), "/Root/database/folder/users");
+        AssertPath(Translate("PRAGMA TablePathPrefix('plato', './folder'); SELECT * FROM users;", provider), "/Root/database/folder/users");
+        if (provider != "ydb") {
+            AssertPath(Translate(TStringBuilder() << "PRAGMA TablePathPrefix('" << provider
+                << "', './folder'); SELECT * FROM users;", provider), "/Root/database/folder/users");
+        }
+    }
+}
+
+Y_UNIT_TEST(OptInRequiresAnAbsoluteBase) {
+    for (const TString& base : {TString(), TString("relative/base")}) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.EnableTablePathPrefixRelativePaths = true;
+        settings.PathPrefix = base;
+        settings.ClusterMapping["plato"] = "kikimr";
+        settings.ClusterPathPrefixes["plato"] = "./initial";
+        NYql::TIssues issues;
+        TContext ctx({}, {}, settings, {}, issues);
+        const TDeferredAtom cluster(TPosition{}, "plato");
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("kikimr", cluster), "./initial");
+        UNIT_ASSERT(ctx.SetPathPrefix("./folder"));
+        UNIT_ASSERT(ctx.SetPathPrefix("", TString("plato")));
+        UNIT_ASSERT_VALUES_EQUAL(ctx.GetPrefixPath("kikimr", cluster), "./folder");
+    }
+}
+
+Y_UNIT_TEST(TopicPrefixesKeepLegacyProviderSelection) {
+    for (bool enabled : {false, true}) {
+        AssertPath(Translate("PRAGMA TablePathPrefix('plato', './folder'); CREATE TOPIC users;", "kikimr", enabled),
+            enabled ? "/Root/database/folder/users" : "folder/users");
+        AssertPath(Translate("PRAGMA TablePathPrefix('kikimr', './folder'); CREATE TOPIC users;", "kikimr", enabled),
+            "/Root/database/users");
     }
 }
 

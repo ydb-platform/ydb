@@ -122,10 +122,8 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
     if (Settings.EnableTablePathPrefixRelativePaths && Settings.PathPrefix.StartsWith('/')) {
-        KikimrPathPrefix_ = Settings.PathPrefix;
         for (auto& [cluster, prefix] : ClusterPathPrefixes_) {
-            const auto service = GetClusterProvider(cluster);
-            if (!prefix.empty() && service && *service == KikimrProviderName) {
+            if (!prefix.empty()) {
                 prefix = BuildTablePath(Settings.PathPrefix, prefix);
             }
         }
@@ -405,32 +403,25 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (!value.StartsWith('/')) {
         IncrementMonCounter("TablePathPrefix", "NonAbsolutePath");
     }
-    const auto resolvePrefix = [&](const TString& service) {
-        return service == KikimrProviderName && !value.empty() &&
-            Settings.EnableTablePathPrefixRelativePaths && Settings.PathPrefix.StartsWith('/')
-            ? BuildTablePath(Settings.PathPrefix, value) : value;
-    };
+    const auto prefix = Settings.EnableTablePathPrefixRelativePaths && Settings.PathPrefix.StartsWith('/') &&
+        (!value.empty() || !arg.Defined()) ? BuildTablePath(Settings.PathPrefix, value) : value;
     if (arg.Defined()) {
         if (*arg == YtProviderName || *arg == KikimrProviderName || *arg == RtmrProviderName)
         {
-            ProviderPathPrefixes_[*arg] = resolvePrefix(*arg);
+            ProviderPathPrefixes_[*arg] = prefix;
             return true;
         }
 
         TString normalizedClusterName;
-        const auto service = GetClusterProvider(*arg, normalizedClusterName);
-        if (!service) {
+        if (!GetClusterProvider(*arg, normalizedClusterName)) {
             Error() << "Unknown cluster or provider: " << *arg;
             IncrementMonCounter("sql_errors", "BadPragmaValue");
             return false;
         }
 
-        ClusterPathPrefixes_[normalizedClusterName] = resolvePrefix(*service);
+        ClusterPathPrefixes_[normalizedClusterName] = prefix;
     } else {
-        PathPrefix_ = value;
-        if (Settings.EnableTablePathPrefixRelativePaths && Settings.PathPrefix.StartsWith('/')) {
-            KikimrPathPrefix_ = BuildTablePath(Settings.PathPrefix, value);
-        }
+        PathPrefix_ = prefix;
     }
 
     return true;
@@ -457,8 +448,6 @@ TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& 
         auto* providerPrefix = ProviderPathPrefixes_.FindPtr(service);
         if (providerPrefix && !providerPrefix->empty()) {
             return *providerPrefix;
-        } else if (service == KikimrProviderName && !KikimrPathPrefix_.empty()) {
-            return KikimrPathPrefix_;
         } else if (!PathPrefix_.empty()) {
             return PathPrefix_;
         }

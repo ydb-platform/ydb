@@ -306,8 +306,6 @@ private:
     THolder<TStringOutput> IssueMsgHolder_;
     NSQLTranslation::TClusterMapping ClusterMapping_;
     TString PathPrefix_;
-    // The global pragma also serves other providers, which retain its raw value.
-    TString KikimrPathPrefix_;
     THashMap<TString, TString> ProviderPathPrefixes_;
     THashMap<TString, TString> ClusterPathPrefixes_;
     bool IntoHeading_ = true;

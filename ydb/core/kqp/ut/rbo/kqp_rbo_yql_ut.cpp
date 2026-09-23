@@ -773,6 +773,26 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     }
 
+    Y_UNIT_TEST(SelectAsTableParam) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto client = kikimr.GetQueryClient();
+        auto dbSession = client.GetSession().GetValueSync().GetSession();
+
+        auto selectAsTableRes = dbSession.ExecuteQuery(R"(
+            DECLARE $param AS List<Struct<id:Int32,value:String>>;
+            SELECT id, value FROM AS_TABLE($param);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT(selectAsTableRes.IsSuccess());
+    }
+
+
+
     NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig(bool inlineJoinFiltersAfterCBO = true) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

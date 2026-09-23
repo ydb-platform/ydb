@@ -16,6 +16,7 @@ option java_package = "com.yandex.ydb.topic";
 
 option cc_enable_arenas = true;
 
+// Codec enum and MessagesBatchCodec separate single numbers space and must be in sync
 enum Codec {
     CODEC_UNSPECIFIED = 0;
     CODEC_RAW = 1;
@@ -25,33 +26,33 @@ enum Codec {
     reserved 5 to 9999;
     // User-defined codecs from 10000 to 19999
     CODEC_CUSTOM = 10000;
-    reserved 20000 to max;
+    CODEC_CUSTOM_MAX = 19999;
+
+    // Batched codecs from 20000 to 29999
+    reserved 20000 to 29999;
+    
+    // For future usage
+    reserved 30000 to max;
 }
 
 enum MessagesBatchCodec {
     MESSAGE_BATCH_CODEC_UNSPECIFIED = 0;
 
-    MESSAGE_BATCH_CODEC_RAW = 1;              // Unused in protocol, needed to allow/disallow usual topic batch in settings.
-    MESSAGE_BATCH_CODEC_KAFKA_BATCH = 2;      // Binary kafka message batch. See doc: https://ydb.tech/docs/en/reference/ydb-sdk/kafka-codec/
-    MESSAGE_BATCH_CODEC_TOPIC_COMPRESSED = 3; // Codec value + compressed usual topic batch protobuf. // Example for extend
+    // Single message codecs
+    reserved 1 to 19999;
 
-    reserved 4 to 9999;
+    MESSAGE_BATCH_CODEC_KAFKA_BATCH = 20000;      // Binary kafka message batch. See doc: https://ydb.tech/docs/en/reference/ydb-sdk/kafka-codec/
+    MESSAGE_BATCH_CODEC_TOPIC_COMPRESSED = 20001; // Codec value + compressed usual topic batch protobuf. // Example for extend
 
-    // Custom codec may be added later, if need.
-    reserved 20000 to max;
+    // For future usage
+    reserved 30000 to max;
 }
 
 // Description of supported codecs.
 message SupportedCodecs {
     // List of supported codecs.
-    // See enum Codec above for values.
+    // See enum Codec and MessagesBatchCodec above for values.
     repeated int32 codecs = 1 [(Ydb.value) = "[1; 19999]", (Ydb.size).le = 100];
-}
-
-message SupportedMessageBatchCodecs {
-    // List of supported message batch codecs.
-    // See enum MessageBatchCodec above for values.
-    repeated int32 batch_codecs = 1 [(Ydb.value) = "[1; 19999]", (Ydb.size).le = 100];
 }
 
 // Represents range [start, end).
@@ -390,8 +391,8 @@ message StreamReadMessage {
             google.protobuf.Timestamp read_from = 4;
         }
 
-        // Indicates batch encoding, supported by client.
-        SupportedMessageBatchCodecs supported_message_batch_codecs = 7;
+        // Indicates messages and batch encoding, supported by client.
+        SupportedCodecs supported_codecs = 7;
     }
 
     // Handshake response.

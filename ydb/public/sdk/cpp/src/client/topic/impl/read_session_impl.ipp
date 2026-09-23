@@ -1985,12 +1985,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ClearAllPartitionStrea
     deferredDelete.reserve(streams.size());
     for (auto& stream : streams) {
         std::lock_guard guard(stream->GetLock());
-        if (stream->HasEvents()) {
-            deferredDelete.push_back(stream->ExtractQueue());
-        }
-        // ExtractQueue installs a fresh queue that still owns the session.
-        // Drop it too, or the stream keeps the session (and itself) alive.
-        stream->DropCallbackContext();
+        EventsQueue->ExtractPartitionStreamQueue(stream, deferredDelete);
     }
 
     for (auto& queue : deferredDelete) {

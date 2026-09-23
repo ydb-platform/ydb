@@ -1041,6 +1041,22 @@ public:
 
     void ClearAllEvents();
 
+    // Caller holds stream->GetLock(). Then this takes Mutex: same order as
+    // SignalReadyEvents. PushEvent and GetEvent mutate the stream queue under
+    // Mutex alone, so ExtractQueue/DropCallbackContext must take it too.
+    void ExtractPartitionStreamQueue(
+        const TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>>& stream,
+        std::vector<TRawPartitionStreamEventQueue<UseMigrationProtocol>>& deferredDelete)
+    {
+        std::lock_guard guard(TParent::Mutex);
+        if (stream->HasEvents()) {
+            deferredDelete.push_back(stream->ExtractQueue());
+        }
+        // ExtractQueue installs a fresh queue that still owns the session.
+        // Drop it too, or the stream keeps the session (and itself) alive.
+        stream->DropCallbackContext();
+    }
+
     void SetCallbackContext(TCallbackContextPtr<UseMigrationProtocol>& ctx)  {
         CbContext = ctx;
     }

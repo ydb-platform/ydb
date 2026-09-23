@@ -31,7 +31,7 @@ std::optional<TPBufferKey> GetSafeBarrierOnExecutor(
     return future.GetValue(TDuration::Seconds(10));
 }
 
-// Drives dirtyMap into a state where its Ahead/Behind state needs persistence.
+// Drives dirtyMap into a state where its Behind state needs persistence.
 // Must run on the executor thread.
 void MakeDirtyMapNeedPersist(TBlocksDirtyMap& dirtyMap)
 {
@@ -369,6 +369,207 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         UNIT_ASSERT(!barrierAfterRestore.has_value());
     }
 
+    Y_UNIT_TEST_F(ShouldSerializeQueuedConfigUpdates, TBaseFixture)
+    {
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            false,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            3,
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]
+            {
+                // A no-op update must not block the following requests.
+                vchunk->SetHostState(1, EHostState::Online);
+                vchunk->SetHostState(0, EHostState::TemporaryOffline);
+                vchunk->SetHostState(0, EHostState::Online);
+                return true;
+            })
+            .GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        UNIT_ASSERT(AccessConfig(*vchunk).GetEnabledDDisks().Get(0));
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST_F(ShouldStartQueuedConfigAfterDirtyMapPersist, TBaseFixture)
+    {
+        VChunkConfig.PromoteHost(3);
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            true,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            3,
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]
+            {
+                auto& dirtyMap = AccessBlocksDirtyMap(*vchunk);
+                dirtyMap.SetReadablePrefixDebugOnly(3, BlockSize * 5);
+                MakeDirtyMapNeedPersist(dirtyMap);
+                InvokeStartPersist(*vchunk);
+
+                // The config must wait for the in-flight dirty map persist.
+                vchunk->SetHostState(3, EHostState::TemporaryOffline);
+                return true;
+            })
+            .GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateDirtyMapStateRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            PartitionDirectService->UpdateConfigRequests.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateDirtyMapStateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            PartitionDirectService->UpdateDirtyMapStateRequests.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        UNIT_ASSERT(!AccessConfig(*vchunk).GetEnabledDDisks().Get(3));
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        UNIT_ASSERT_VALUES_EQUAL(false, IsPersisting(*vchunk));
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST_F(ShouldPersistBehindChangedDuringConfigPersist, TBaseFixture)
+    {
+        VChunkConfig.PromoteHost(3);
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            true,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            3,
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]
+            {
+                auto& dirtyMap = AccessBlocksDirtyMap(*vchunk);
+                dirtyMap.SetReadablePrefixDebugOnly(3, BlockSize * 5);
+
+                // The config snapshot contains H3's original Behind range.
+                vchunk->SetHostState(3, EHostState::TemporaryOffline);
+                UNIT_ASSERT_VALUES_EQUAL(0u, dirtyMap.GetCurrentGeneration());
+
+                // A completed range sync changes Behind while that snapshot
+                // is still being persisted.
+                const auto sync =
+                    dirtyMap.BeginRangeSync(3, TBlockRange16::WithLength(5, 5));
+                dirtyMap.EndRangeSync(sync.SyncId, true);
+                UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap.NeedPersist());
+                InvokeStartPersist(*vchunk);
+                return true;
+            })
+            .GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            PartitionDirectService->UpdateDirtyMapStateRequests.size());
+        const TString configState =
+            PartitionDirectService->UpdateConfigRequests.front()
+                .Proto.SerializeAsString();
+
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateDirtyMapStateRequests.size());
+        const TString dirtyMapState =
+            PartitionDirectService->UpdateDirtyMapStateRequests.front()
+                .Proto.SerializeAsString();
+        UNIT_ASSERT(configState != dirtyMapState);
+
+        const TString currentState =
+            RunOnExecutor(
+                DirectBlockGroup->GetExecutor(),
+                [&]
+                {
+                    return AccessBlocksDirtyMap(*vchunk)
+                        .GetStateForPersist()
+                        .SerializeAsString();
+                })
+                .GetValue(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(currentState, dirtyMapState);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateDirtyMapStateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        // Disabling H3 schedules its demotion after the dirty map is saved.
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        UNIT_ASSERT_VALUES_EQUAL(false, IsPersisting(*vchunk));
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+    }
+
     Y_UNIT_TEST_F(ShouldSwitchHostToTemporaryOfflineAndBack, TBaseFixture)
     {
         Init();
@@ -546,8 +747,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     {
         Init();
 
-        VChunkConfig.PromoteHost(3, true);
-        VChunkConfig.SetWatermark(3, std::nullopt);
+        VChunkConfig.PromoteHost(3);
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
@@ -601,11 +801,11 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 
-    Y_UNIT_TEST_F(ShouldKeepWatermarkWhenCopyFails, TBaseFixture)
+    Y_UNIT_TEST_F(ShouldNotPersistConfigWhenCopyFails, TBaseFixture)
     {
         Init();
 
-        VChunkConfig.PromoteHost(3, true);
+        VChunkConfig.PromoteHost(3);
         VChunkConfig.DisableHost(0);
 
         auto vchunk = std::make_shared<TVChunk>(
@@ -638,7 +838,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         UNIT_ASSERT_VALUES_EQUAL(
             0,
             PartitionDirectService->UpdateConfigRequests.size());
-        UNIT_ASSERT_VALUES_EQUAL(0, *AccessConfig(*vchunk).GetWatermark(3));
 
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
@@ -676,7 +875,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         const auto& config =
             PartitionDirectService->UpdateConfigRequests.front().Config;
         UNIT_ASSERT(config.GetDDiskRole(3) == EHostRole::Primary);
-        UNIT_ASSERT(!config.GetWatermark(3).has_value());
 
         UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
         DrainExecutor(DirectBlockGroup->GetExecutor());
@@ -758,6 +956,14 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DefaultVChunkSize);
         vchunk->Start();
 
+        auto getHealthyDDisks = [&]
+        {
+            return RunOnExecutor(
+                       DirectBlockGroup->GetExecutor(),
+                       [&] { return vchunk->GetHealthyDDisks().Print(); })
+                .GetValue(TDuration::Seconds(10));
+        };
+
         // Call SetHostState(Offline)
         {
             TPromise<void> ready = NewPromise();
@@ -790,13 +996,29 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Reply UpdateConfig request.
         {
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                PartitionDirectService->UpdateConfigRequests.size());
+            const auto& request =
+                PartitionDirectService->UpdateConfigRequests.front();
+            auto persistedDirtyMap = std::make_shared<TBlocksDirtyMap>(
+                CreateArenaAllocatorPool(),
+                request.Config,
+                true,
+                request.Proto,
+                DefaultBlockSize,
+                VChunkBlockCount);
+            UNIT_ASSERT_VALUES_EQUAL(
+                "  H3: [0..32767]\n",
+                persistedDirtyMap->DebugPrintBehind());
+
             UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
             DrainExecutor(DirectBlockGroup->GetExecutor());
         }
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[DBG0/V100]{Rotten,Primary,Primary,Fresh,HandOff}",
+            "[DBG0/V100]{Rotten,Primary,Primary,Primary,HandOff}",
             AccessConfig(*vchunk).DebugPrint());
 
         // DirtyMap config should be updated.
@@ -807,6 +1029,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             "H3*{Fresh+,0};"
             "H4+{Disabled,0};",
             AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
+        UNIT_ASSERT_VALUES_EQUAL("[H1,H2]", getHealthyDDisks());
 
         // Call SetHostState(Online)
         {
@@ -832,7 +1055,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[DBG0/V100]{Primary,Primary,Primary,Fresh,HandOff}",
+            "[DBG0/V100]{Primary,Primary,Primary,Primary,HandOff}",
             AccessConfig(*vchunk).DebugPrint());
 
         // DirtyMap config should be updated.
@@ -843,6 +1066,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             "H3*{Fresh+,0};"
             "H4+{Disabled,0};",
             AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
+        UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", getHealthyDDisks());
 
         // Execute copier reads and writes.
         for (size_t i = 0; i < VChunkBlockCount / BlocksPerCopy; ++i) {
@@ -856,24 +1080,20 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         // Waiting for the copying to be completed.
         {
             DrainExecutor(DirectBlockGroup->GetExecutor());
+            UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", getHealthyDDisks());
             UNIT_ASSERT_VALUES_EQUAL(
                 1,
-                PartitionDirectService->UpdateConfigRequests.size());
-            UNIT_ASSERT_VALUES_EQUAL(
-                CopyProgressSaveInterval,
-                *PartitionDirectService->UpdateConfigRequests.front()
-                     .Config.GetWatermark(3));
-            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+                PartitionDirectService->UpdateDirtyMapStateRequests.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateDirtyMapStateRequests());
             DrainExecutor(DirectBlockGroup->GetExecutor());
+            UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", getHealthyDDisks());
 
             UNIT_ASSERT_VALUES_EQUAL(
                 1,
-                PartitionDirectService->UpdateConfigRequests.size());
-            UNIT_ASSERT(!PartitionDirectService->UpdateConfigRequests.front()
-                             .Config.GetWatermark(3)
-                             .has_value());
-            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+                PartitionDirectService->UpdateDirtyMapStateRequests.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateDirtyMapStateRequests());
             DrainExecutor(DirectBlockGroup->GetExecutor());
+            UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2,H3]", getHealthyDDisks());
         }
 
         // Config should be updated.
@@ -1087,8 +1307,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     // generation to the dirty map (NeedPersist() becomes false).
     Y_UNIT_TEST_F(ShouldPersistDirtyMapState, TBaseFixture)
     {
-        VChunkConfig.PromoteHost(3, true);
-        VChunkConfig.SetWatermark(3, BlockSize * 5);
+        VChunkConfig.PromoteHost(3);
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
@@ -1113,10 +1332,11 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             [&]() -> bool
             {
                 auto& dirtyMap = AccessBlocksDirtyMap(*vchunk);
+                dirtyMap.SetReadablePrefixDebugOnly(3, BlockSize * 5);
                 MakeDirtyMapNeedPersist(dirtyMap);
                 UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap.NeedPersist());
 
-                InvokePersistDirtyMap(*vchunk);
+                InvokeStartPersist(*vchunk);
                 return true;
             })
             .GetValue(TDuration::Seconds(10));
@@ -1129,14 +1349,14 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         const auto& request =
             PartitionDirectService->UpdateDirtyMapStateRequests.front();
         UNIT_ASSERT_VALUES_EQUAL(FixtureVChunkIndex, request.VChunkIndex);
-        UNIT_ASSERT_VALUES_EQUAL(true, IsDirtyMapStatePersisting(*vchunk));
+        UNIT_ASSERT_VALUES_EQUAL(true, IsPersisting(*vchunk));
 
         // Complete the persist; OnDirtyMapPersisted runs on the callback.
         UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateDirtyMapStateRequests());
         DrainExecutor(DirectBlockGroup->GetExecutor());
 
         // Flag cleared and the generation acknowledged to the dirty map.
-        UNIT_ASSERT_VALUES_EQUAL(false, IsDirtyMapStatePersisting(*vchunk));
+        UNIT_ASSERT_VALUES_EQUAL(false, IsPersisting(*vchunk));
         RunOnExecutor(
             DirectBlockGroup->GetExecutor(),
             [&]() -> bool
@@ -1152,14 +1372,13 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         onStop.GetValue(TDuration::Seconds(10));
     }
 
-    // A second DoPersistDirtyMap call while a persist is already in flight must
+    // A second StartPersist call while a persist is already in flight must
     // be a no-op: no duplicate UpdateDirtyMapState request is issued.
     Y_UNIT_TEST_F(
         ShouldNotPersistDirtyMapStateWhileAlreadyPersisting,
         TBaseFixture)
     {
-        VChunkConfig.PromoteHost(3, true);
-        VChunkConfig.SetWatermark(3, BlockSize * 5);
+        VChunkConfig.PromoteHost(3);
 
         Init();
 
@@ -1183,12 +1402,13 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             [&]() -> bool
             {
                 auto& dirtyMap = AccessBlocksDirtyMap(*vchunk);
+                dirtyMap.SetReadablePrefixDebugOnly(3, BlockSize * 5);
                 MakeDirtyMapNeedPersist(dirtyMap);
 
                 // First call starts a persist; second call must be ignored
                 // while it is still in flight.
-                InvokePersistDirtyMap(*vchunk);
-                InvokePersistDirtyMap(*vchunk);
+                InvokeStartPersist(*vchunk);
+                InvokeStartPersist(*vchunk);
                 return true;
             })
             .GetValue(TDuration::Seconds(10));
@@ -1199,13 +1419,13 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateDirtyMapStateRequests());
         DrainExecutor(DirectBlockGroup->GetExecutor());
-        UNIT_ASSERT_VALUES_EQUAL(false, IsDirtyMapStatePersisting(*vchunk));
+        UNIT_ASSERT_VALUES_EQUAL(false, IsPersisting(*vchunk));
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));
     }
 
-    // With no dirty map changes NeedPersist() is false, so DoPersistDirtyMap
+    // With no dirty map changes NeedPersist() is false, so StartPersist
     // must not issue any UpdateDirtyMapState request.
     Y_UNIT_TEST_F(ShouldNotPersistDirtyMapStateWhenNothingChanged, TBaseFixture)
     {
@@ -1233,7 +1453,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
                 UNIT_ASSERT_VALUES_EQUAL(
                     false,
                     AccessBlocksDirtyMap(*vchunk).NeedPersist());
-                InvokePersistDirtyMap(*vchunk);
+                InvokeStartPersist(*vchunk);
                 return true;
             })
             .GetValue(TDuration::Seconds(10));
@@ -1241,7 +1461,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         UNIT_ASSERT_VALUES_EQUAL(
             0u,
             PartitionDirectService->UpdateDirtyMapStateRequests.size());
-        UNIT_ASSERT_VALUES_EQUAL(false, IsDirtyMapStatePersisting(*vchunk));
+        UNIT_ASSERT_VALUES_EQUAL(false, IsPersisting(*vchunk));
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));

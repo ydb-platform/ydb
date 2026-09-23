@@ -146,6 +146,24 @@ class DistributedCoordinatorTest(unittest.TestCase):
             self.cluster.start()
         self.assertNotIn(("a", "start-static"), self.calls)
 
+    def test_deployment_readiness_uses_static_host_without_cli(self):
+        self.cluster = DistributedCluster(
+            str(uuid.uuid4()),
+            "run",
+            {"nodes": [{"name": "s", "role": "static", "host_id": "a"}]},
+            None,
+            {},
+            self.directory,
+            self.call,
+            self.cancel,
+            lambda *_args, **_kwargs: None,
+            deploy=True,
+        )
+        self.cluster.start()
+        self.assertIn(("a", "ready"), self.calls)
+        self.assertIsNone(self.cluster.cli_host)
+        self.assertFalse(any(operation == "workload" for _, operation in self.calls))
+
     def test_different_host_configurations_prevent_node_start(self):
         original = self.cluster.call
 

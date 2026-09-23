@@ -217,6 +217,11 @@ struct TOperatorStats {
     }
 };
 
+struct TStageNodeStats {
+    ui32 Tasks = 0;
+    ui32 Finished = 0;
+};
+
 struct TStageExecutionStats {
 
     NYql::NDq::TStageId StageId;
@@ -271,6 +276,8 @@ struct TStageExecutionStats {
     ui32 TaskCount = 0; // up rounded to multiple of 4, actual is Task2Index.size()
     std::vector<bool> Finished;
     ui32 FinishedCount = 0;
+    std::vector<ui32> TaskNodeId; // per task index, 0 until the node is known
+    std::map<ui32, TStageNodeStats> Nodes;
     std::vector<TStageExecutionStats*> InputStages;
     std::vector<TStageExecutionStats*> OutputStages;
     std::unordered_map<ui32, NYql::NDqProto::TDqComputeActorStats> ComputeActors;
@@ -280,15 +287,17 @@ struct TStageExecutionStats {
     }
     void Resize(ui32 taskCount);
     ui32 EstimateMem() {
-        TMetricInfo info(15, 8);
+        TMetricInfo info(16, 8);
         info += TAsyncBufferStats::EstimateMem() * (Ingress.size() + Egress.size() + Input.size() + Output.size());
         info += TTableStats::EstimateMem() * Tables.size();
         info += TOperatorStats::EstimateMem() * (Joins.size() + Filters.size() + Aggregations.size());
         return (info.ScalarCount * TaskCount + info.TimeSeriesCount * HistorySampleCount * 2) * sizeof(ui64);
     }
     void SetHistorySampleCount(ui32 historySampleCount);
+    // First non-zero node wins, later calls for the same task are no-ops.
+    void SetTaskNode(ui32 index, ui32 nodeId);
     ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
-    ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs);
+    ui64 UpdateStats(ui32 nodeId, const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs);
     bool IsDeadlocked(ui64 deadline) const;
     bool IsFinished() const;
 };

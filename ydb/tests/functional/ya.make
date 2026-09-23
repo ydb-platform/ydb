@@ -14,6 +14,7 @@ RECURSE(
     config
     dstool
     encryption
+    federation_test
     hive
     kafka
     kqp

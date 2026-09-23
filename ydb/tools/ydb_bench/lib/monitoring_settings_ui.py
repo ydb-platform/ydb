@@ -42,7 +42,7 @@ async function showGrafanaChooser(opener,runId,selection,from,to,localId){
   document.querySelector('#grafana-dialog')?.close();
   const dialog=document.createElement('dialog');dialog.id='grafana-dialog';dialog.className='import-dialog grafana-dialog';
   dialog.setAttribute('aria-labelledby','grafana-title');
-  dialog.innerHTML='<h2 id=grafana-title>Open in Grafana</h2><p class=muted>The attempt time range is applied when opening a dashboard.</p>'+
+  dialog.innerHTML='<h2 id=grafana-title>Open in Grafana</h2><p class=muted>The selected time range is applied when opening a dashboard.</p>'+
     '<div id=grafana-content>Loading dashboards…</div><p id=grafana-error role=alert></p><div class=toolbar><button id=grafana-retry>Refresh</button><button id=grafana-close>Close</button></div>';
   document.body.append(dialog);dialog.showModal();
   const close=()=>dialog.close();window.addEventListener('hashchange',close);

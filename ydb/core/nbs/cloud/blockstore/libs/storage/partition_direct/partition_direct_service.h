@@ -30,10 +30,11 @@ struct IPartitionDirectService
         TDuration delay,
         TCallback callback) = 0;
 
-    // Asynchronously persists the given vchunk config to the partition's
-    // local DB. Caller must ensure cfg.IsValid().
-    virtual TPersistResultFuture UpdateVChunkConfig(
-        const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
+    // Asynchronously persists the vchunk config and dirty-map state in one
+    // partition Local DB transaction. Caller must ensure cfg.IsValid().
+    virtual TPersistResultFuture UpdateVChunkState(
+        const NStorage::NPartitionDirect::TVChunkConfig& cfg,
+        TDirtyMapStateProto state) = 0;
 
     // Asynchronously persists the given TDirtyMapStateProto to the partition's
     // local DB.

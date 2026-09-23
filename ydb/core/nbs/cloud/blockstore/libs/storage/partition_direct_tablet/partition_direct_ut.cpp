@@ -233,11 +233,13 @@ NKikimrBlockStore::TUpdateVolumeConfigResponse SendUpdateVolumeConfig(
 TPersistResultFuture SendVChunkConfigUpdate(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
-    TVChunkConfig config)
+    TVChunkConfig config,
+    TDirtyMapStateProto dirtyMapState = {})
 {
     auto request =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(
-            std::move(config));
+            std::move(config),
+            std::move(dirtyMapState));
     auto future = request->UpdateCompleted.GetFuture();
 
     const TActorId sender = env.Runtime->AllocateEdgeActor(
@@ -1421,7 +1423,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         StopFastPathService(env, partition, edge);
     }
 
-    Y_UNIT_TEST(ShouldBatchVChunkConfigUpdates)
+    Y_UNIT_TEST(ShouldBatchVChunkStateUpdatesInOneQueue)
     {
         TEnvironmentSetup env{{
             .NodeCount = 8,
@@ -1466,9 +1468,9 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT(!first.HasValue());
 
         TVector<TPersistResultFuture> batched;
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 0));
         batched.push_back(SendVChunkConfigUpdate(env, partition, 1));
-        batched.push_back(SendVChunkConfigUpdate(env, partition, 2));
-        batched.push_back(SendVChunkConfigUpdate(env, partition, 3));
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 1));
         env.Sim(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommits.size());
@@ -1554,7 +1556,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto pendingConfig = SendVChunkConfigUpdate(env, partition, 1);
         auto executingDirtyMap = SendDirtyMapStateUpdate(env, partition, 0);
         env.Sim(TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(2u, blockedCommitResults.size());
+        UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommitResults.size());
 
         auto pendingDirtyMap = SendDirtyMapStateUpdate(env, partition, 1);
         env.Sim(TDuration::Seconds(1));
@@ -1959,6 +1961,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         bool dropNextAllocationResult = false;
         // The replayed add lands at slot 5 of a six-host group; the copy to
         // it is finished once vchunk 0 reports the slot as a full ddisk.
+        bool copyToSlot5Started = false;
         bool copyToSlot5Finished = false;
         runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
         {
@@ -1988,15 +1991,23 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 return false;
             }
             if (type ==
-                TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::EventType)
+                TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::EventType)
             {
-                const auto& config =
-                    ev->Get<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>()
-                        ->VChunkConfig;
-                if (config.GetVChunkIndex() == 0 &&
-                    config.GetHostCount() == 6 && config.GetFullDDisks().Get(5))
-                {
-                    copyToSlot5Finished = true;
+                const auto* msg = ev->Get<
+                    TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>();
+                if (msg->VChunkIndex == 0) {
+                    if (msg->State.DDiskStatesSize() == 6 &&
+                        msg->State.GetDDiskStates(5)
+                                .GetBehind()
+                                .GetEncodingCase() !=
+                            TBlockFieldProto::ENCODING_NOT_SET)
+                    {
+                        copyToSlot5Started = true;
+                    }
+                    if (copyToSlot5Started && msg->State.DDiskStatesSize() == 0)
+                    {
+                        copyToSlot5Finished = true;
+                    }
                 }
             }
             return true;

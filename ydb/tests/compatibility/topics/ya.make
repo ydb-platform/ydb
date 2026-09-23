@@ -13,6 +13,7 @@ TEST_SRCS(
     test_cluster_discovery.py
     test_sqs_topic_boto.py
     test_kafka_topic.py
+    test_source_id_mapping.py
 )
 
 SIZE(LARGE)

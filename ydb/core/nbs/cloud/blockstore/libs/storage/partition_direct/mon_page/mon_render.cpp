@@ -162,9 +162,6 @@ void RenderVChunk(IOutputStream& str, const TMonPageData& data)
                     TABLEH () {
                         str << "Enabled";
                     }
-                    TABLEH () {
-                        str << "Watermark";
-                    }
                 }
             }
             TABLEBODY () {
@@ -183,14 +180,6 @@ void RenderVChunk(IOutputStream& str, const TMonPageData& data)
                         }
                         TABLED () {
                             str << (disabled.Get(host) ? "no" : "yes");
-                        }
-                        TABLED () {
-                            const auto watermark = config.GetWatermark(host);
-                            if (watermark) {
-                                str << *watermark;
-                            } else {
-                                str << "-";
-                            }
                         }
                     }
                 }
@@ -1078,7 +1067,7 @@ TString RenderMonPage(
             RenderOverview(str, data, vChunkConfigs, touchedProvider);
             break;
         case EMonPage::Dbg:
-            RenderDbg(str, data, vChunkConfigs);
+            RenderDbg(str, data);
             break;
         case EMonPage::Chaos:
             RenderChaos(str, data);

@@ -137,7 +137,8 @@ message TFeatureFlags {
     reserved 111; // UseVDisksBalancing
     optional bool EnableViews = 112 [default = true];
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
-    optional bool EnableAccessServiceBulkAuthorization = 114 [default = true];
+    reserved 114; // EnableAccessServiceBulkAuthorization
+    reserved "EnableAccessServiceBulkAuthorization";
     optional bool EnableAddColumsWithDefaults = 115 [default = true];
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = true];
     optional bool EnableCMSRequestPriorities = 117 [default = true];
@@ -355,7 +356,7 @@ message TFeatureFlags {
     optional bool DisableFileStoreSSDSystemSpaceAccounting = 302 [default = false, (RequireRestart) = true];
     optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = true];
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = true];
-    optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
+    optional bool EnableMoveWithColumnTableReplace = 305 [default = true];
     optional bool DisableOldSecrets = 306 [default = false];
     optional bool EnableKafkaServerlessTransactions = 307 [default = false];
     optional bool EnableGeneratedStored = 308 [default = false];
@@ -402,6 +403,7 @@ message TFeatureFlags {
     optional bool EnableTightPDiskSpaceColors = 333 [default = false, (RequireRestart) = true];
     optional bool CollectHourMetric = 334 [default = false];
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
-    // Gates both ColumnShard decommission legs; EnableCutHistory governs channels 0/1 instead.
-    optional bool EnableColumnshardGroupDecommission = 336 [default = false];
+    optional bool EnableIamDelegationSecrets = 336 [default = false]; // YDBFEATURES-144
+    // Gates the ColumnShard MoveData handler only; EnableCutHistory gates every cutter.
+    optional bool EnableColumnshardGroupDecommission = 337 [default = false];
 }

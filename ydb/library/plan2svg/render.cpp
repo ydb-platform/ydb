@@ -337,14 +337,68 @@ void TPlan::PrintDataFlowTimeline(TStringBuilder& builder, const TString& title,
     }
 }
 
-void TPlan::PrintUnfinishedTasks(TStringBuilder& builder, ui32 tasks, ui32 finishedTasks) {
-    if (finishedTasks && finishedTasks <= tasks) {
-        auto unfinishedPercent = 100 * (tasks - finishedTasks) / tasks;
-        auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+// PrintSeries turned on its side: the nodes run down the Y axis, each owning
+// an equal band of the height, and the value of a node is the X extent at the
+// centre of its band, given here in pixels. The area is curved between the
+// bands and closed against the left edge. Both control points of a curve sit
+// at the mid height, so the area steps from one band to the next rather than
+// ramping between them.
+static void PrintNodeTasksArea(TStringBuilder& builder, const std::vector<i32>& extents, ui32 height, TStringBuf color) {
+    ui32 count = extents.size();
+    i32 px0 = extents.front();
+    i32 py0 = height / (2 * count);
+    builder << "<path d='M0,0L" << px0 << ",0L" << px0 << ',' << py0;
+    for (ui32 i = 1; i < count; i++) {
+        i32 pxi = extents[i];
+        i32 pyi = (2 * i + 1) * height / (2 * count);
+        i32 dym = (py0 + pyi) / 2 - py0;
         builder
-        << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
-        << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+            << 'c' << 0 << ',' << dym << ',' << pxi - px0 << ',' << dym << ',' << pxi - px0 << ',' << pyi - py0;
+        px0 = pxi;
+        py0 = pyi;
     }
+    builder << 'L' << px0 << ',' << height << "L0," << height << "z' stroke='none' fill='" << color << "' opacity='0.5'/>" << Endl;
+}
+
+void TPlan::PrintNodeTasks(TStringBuilder& builder, const std::vector<TStageNodeTasks>& nodes, ui32 height) {
+    ui64 total = 0;
+    for (const auto& node : nodes) {
+        total += node.Tasks;
+    }
+    if (total == 0) {
+        return;
+    }
+    // A node with the average task count takes a third of the column, busier
+    // ones grow past it up to the column width; the count text sits at the
+    // right. Anything non-zero keeps at least a pixel.
+    ui64 count = nodes.size();
+    ui64 unit = Config.TaskWidth / 3;
+    auto extent = [&](ui32 value) -> i32 {
+        return value ? std::clamp<ui64>(value * unit * count / total, 1, Config.TaskWidth) : 0;
+    };
+    std::vector<i32> all;
+    std::vector<i32> running;
+    bool anyRunning = false;
+    for (const auto& node : nodes) {
+        all.push_back(extent(node.Tasks));
+        running.push_back(extent(node.Tasks - std::min(node.Finished, node.Tasks)));
+        anyRunning |= running.back() > 0;
+    }
+    // Its own viewport, so that the plot follows the stage box when the script
+    // slims it, as the percent-based overlays do. The two areas share one
+    // translucent colour: the running share is where they overlap.
+    builder
+        << "<svg x='" << Config.TaskLeft << "' y='0' width='" << Config.TaskWidth << "' height='100%' viewBox='0 0 "
+        << Config.TaskWidth << ' ' << height << "' preserveAspectRatio='none'>" << Endl;
+    PrintNodeTasksArea(builder, all, height, Config.Palette.Cpu.Medium);
+    if (anyRunning) {
+        PrintNodeTasksArea(builder, running, height, Config.Palette.Cpu.Medium);
+    }
+    builder << "</svg>" << Endl;
+}
+
+void TPlan::PrintTasks(TStringBuilder& builder, ui32 tasks, ui32 finishedTasks, ui32 height) {
+    PrintNodeTasks(builder, {{.Tasks = tasks, .Finished = finishedTasks}}, height);
 }
 
 void TPlan::PrintWarningBadge(TStringBuilder& builder, ui32 cx, ui32 bottom, const TString& title, TStringBuf label) {
@@ -1044,12 +1098,27 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
     if (s->Tasks) {
         s->Svg << "<g><title>";
         if (s->External) {
-            s->Svg << "External Source, partitions: " << s->Tasks;
+            s->Svg << "External Source partitions: ";
         } else {
-            s->Svg << "Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks;
+            s->Svg << "Stage " << s->PhysicalStageId << " tasks: ";
         }
-        s->Svg << ", finished: " << s->FinishedTasks << "</title>" << Endl;
-        PrintUnfinishedTasks(s->Svg, s->Tasks, s->FinishedTasks);
+        s->Svg << "finished " << s->FinishedTasks << " of " << s->Tasks;
+        if (!s->Nodes.empty()) {
+            ui32 nodeTasks = 0;
+            for (const auto& node : s->Nodes) {
+                s->Svg << "; node " << node.NodeId << ": " << node.Finished << "/" << node.Tasks;
+                nodeTasks += node.Tasks;
+            }
+            if (nodeTasks < s->Tasks) {
+                s->Svg << "; not started: " << s->Tasks - nodeTasks;
+            }
+        }
+        s->Svg << "</title>" << Endl;
+        if (s->Nodes.empty()) {
+            PrintTasks(s->Svg, s->Tasks, s->FinishedTasks, s->Height);
+        } else {
+            PrintNodeTasks(s->Svg, s->Nodes, s->Height);
+        }
         s->Svg
         << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
         << "</g>" << Endl;
@@ -1269,7 +1338,7 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
         }
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
         if (node->Tasks) {
-            PrintUnfinishedTasks(builder, node->Tasks, node->FinishedTasks);
+            PrintTasks(builder, node->Tasks, node->FinishedTasks, node->Height);
             builder
             << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(node->Tasks));
         }

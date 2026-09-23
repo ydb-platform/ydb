@@ -1066,6 +1066,49 @@ selector_config: []
         CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(1001));
     }
 
+    Y_UNIT_TEST(CommittedConfigQuorumArrivesAfterCollection) {
+        auto config = MakeStorageConfig(8, 1, {1, 2, 3, 4, 5, 6, 7, 8},
+                                        TBlobStorageGroupType::Erasure4Plus2Block);
+        config.MutableSelfManagementConfig()->SetEnabled(true);
+        for (auto& node : *config.MutableAllNodes()) {
+            node.MutableLocation()->SetDataCenter("dc-1");
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        auto updated = config;
+        updated.SetGeneration(2);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&updated);
+
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        for (ui32 nodeId = 1; nodeId <= 8; ++nodeId) {
+            auto& record = state.Metadata[std::pair<ui32, TString>{
+                nodeId, "/dev/disk" + std::to_string(nodeId) + "_1"}];
+            record.MutableCommittedStorageConfig()->CopyFrom(nodeId <= 6 ? updated : config);
+        }
+
+        TTestActorSystem runtime(8);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keeperIds;
+        // These six nodes have storage quorum, but only five have generation 2.
+        for (ui32 nodeId : {1, 2, 3, 4, 5, 7}) {
+            keeperIds.push_back(RegisterKeeper(runtime, config, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return FindConvergedRoot(runtime, keeperIds) == 1 && state.SawScatter;
+        }));
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
+
+        for (ui32 nodeId : {6, 8}) {
+            keeperIds.push_back(RegisterKeeper(runtime, config, nodeId, state));
+        }
+        UNIT_ASSERT_C(SimUntil(runtime, [&] {
+            return std::ranges::all_of(state.Metadata, [&](const auto& item) {
+                return item.second.GetCommittedStorageConfig().GetFingerprint() == updated.GetFingerprint();
+            });
+        }), "committed configuration was not collected again after its quorum joined");
+    }
+
     Y_UNIT_TEST(Block42QuorumOverridesNodeMajority) {
         const auto config = MakeStorageConfig(17, 0, {1, 2, 3, 4, 5, 6, 7, 8},
                                               TBlobStorageGroupType::Erasure4Plus2Block);

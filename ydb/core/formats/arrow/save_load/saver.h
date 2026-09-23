@@ -21,8 +21,10 @@ public:
         if (Serializer.IsCompatibleForExchange(serializer)) {
             AFL_VERIFY(SerializerBySizeUpperBorder.emplace(upperBorder, serializer).second);
         } else {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_add_serializer")("reason", "incompatible_serializers")(
-                "border", upperBorder);
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "cannot_add_serializer"},
+                {"reason", "incompatible_serializers"},
+                {"border", upperBorder});
         }
     }
 

@@ -9,6 +9,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
+
 namespace NKikimr::NArrow::NHash {
 
 namespace {
@@ -155,7 +157,10 @@ bool BuildHashUI64Impl(std::shared_ptr<TDataContainer>& batch, const std::vector
     if (fieldNames.size() == 1) {
         auto column = batch->GetColumnByName(fieldNames.front());
         if (!column) {
-            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_build_hash")("reason", "field_not_found")("field_name", fieldNames.front());
+            YDB_LOG_WARN("",
+                {"event", "cannot_build_hash"},
+                {"reason", "field_not_found"},
+                {"fieldName", fieldNames.front()});
             return false;
         }
         Y_ABORT_UNLESS(column);

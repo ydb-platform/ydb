@@ -5,6 +5,8 @@
 
 #include <yql/essentials/minikql/mkql_terminator.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SSA_GRAPH_EXECUTION
+
 namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
 
 class TResourceUsageInfo {
@@ -160,7 +162,8 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             node->SetRemoveResourceIds(i.second.GetLastUsageResources());
         }
     }
-    AFL_TRACE(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", DebugDOT());
+    YDB_LOG_TRACE("",
+        {"graphConstructed", DebugDOT()});
 //    Cerr << DebugDOT() << Endl;
 }
 

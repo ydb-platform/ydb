@@ -24,6 +24,7 @@
 #include <ydb/core/tx/tiering/manager.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -84,8 +85,10 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     }
     ProgressTxController->OnTabletInit();
     {
-        const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
-            "self_id", SelfId())("process", "SwitchToWork");
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"tabletId", TabletID()},
+            {"selfId", SelfId()},
+            {"process", "SwitchToWork"});
         YDB_LOG_INFO("",
             {"event", "initialize_shard"},
             {"step", "SwitchToWork"});
@@ -121,8 +124,9 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS));
     StartInstant = TMonotonic::Now();
     Counters.GetCSCounters().Initialization.OnActivateExecutor(TMonotonic::Now() - CreateInstant);
-    const TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", TabletID()},
+        {"selfId", SelfId()});
     YDB_LOG_INFO("",
         {"event", "initialize_shard"},
         {"step", "OnActivateExecutor"});
@@ -562,7 +566,9 @@ void TColumnShard::FillColumnTableStats(
             }
 
             tableStatsBuilder.FillTableStats(internalPathId, *(periodicTableStats->MutableTableStats()));
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("Add stats for table, tableLocalID", schemeShardLocalPathId);
+            YDB_LOG_DEBUG("",
+                {"event", "Add stats for table"},
+                {"tableLocalID", "schemeShardLocalPathId"});
         }
     }
 }

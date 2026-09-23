@@ -8,6 +8,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 bool TRestoreTransactionOperator::DoParse(TColumnShard& owner, const TString& data) {
@@ -75,7 +77,9 @@ void TRestoreTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, 
     if (!owner.GetBackgroundSessionsManager()->IsSessionComplete(ImportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()))) {
         return;
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "restore_session_complete_finish_async_propose")("tx_id", GetTxId());
+    YDB_LOG_INFO("",
+        {"event", "restore_session_complete_finish_async_propose"},
+        {"txId", GetTxId()});
     owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()), ctx);
 }
 

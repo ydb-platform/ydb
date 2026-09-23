@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/ordered_result_with_limit.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -50,8 +51,8 @@ std::unique_ptr<NCommon::TDataSourceLease> TSyncPointLimitControl::OnAddSource(s
 
 ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& /*reader*/) {
     auto& source = lease.GetSource();
-    const NActors::TLogContextGuard verifyContext =
-        NActors::TLogContextBuilder::Build()("source_schema", source.GetSourceSchema()->DebugString());
+    YDB_LOG_CREATE_CONTEXT(
+        {"sourceSchema", source.GetSourceSchema()->DebugString()});
     LWTRACK(LimitSyncPoint, source.GetDataSourceOrbit(), source.GetRawPathId(), source.GetTabletId(), source.GetTxId(), source.GetSourceId(),
         GetPointName(), source.GetFilteredRowsCount(), source.GetReservedMemory(), source.GetSourcesAheadQueueWaitDuration(),
         source.GetSourcesAhead(), DebugString());

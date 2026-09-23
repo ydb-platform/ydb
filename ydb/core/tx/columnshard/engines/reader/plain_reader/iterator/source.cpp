@@ -13,6 +13,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
@@ -32,7 +33,9 @@ void IDataSource::StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sou
     YDB_LOG_DEBUG("",
         {"initFetchingPlan", self.FetchingPlan->DebugString()},
         {"sourceIdx", self.GetSourceIdx()});
-    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", self.GetSourceIdx())("method", "StartProcessing"));
+    YDB_LOG_CREATE_CONTEXT(
+        {"source", self.GetSourceIdx()},
+        {"method", "StartProcessing"});
     if (self.GetContext()->IsAborted()) {
         YDB_LOG_DEBUG("",
             {"event", "StartProcessingAborted"});

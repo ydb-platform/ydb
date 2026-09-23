@@ -1,4 +1,5 @@
 #include "abstract.h"
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr {
 
@@ -14,7 +15,8 @@ bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TAc
     {
         TMemoryProfileGuard g("ITxReader/" + StageName + "/Precharge");
         NColumnShard::TLoadTimeSignals::TLoadTimer timer = PrechargeCounters.StartGuard();
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("load_stage_name", "PRECHARGE:" + StageName);
+        YDB_LOG_CREATE_CONTEXT(
+            {"loadStageName", "PRECHARGE:" + StageName});
         if (!DoPrecharge(txc, ctx)) {
             timer.AddLoadingFail();
             return false;
@@ -24,7 +26,8 @@ bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TAc
     {
         TMemoryProfileGuard g("ITxReader/" + StageName + "/Read");
         NColumnShard::TLoadTimeSignals::TLoadTimer timer = ReaderCounters.StartGuard();
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("load_stage_name", "EXECUTE:" + StageName);
+        YDB_LOG_CREATE_CONTEXT(
+            {"loadStageName", "EXECUTE:" + StageName});
         if (!DoExecute(txc, ctx)) {
             timer.AddLoadingFail();
             return false;

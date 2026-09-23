@@ -9,6 +9,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NImport {
 
 class TTxProposeFinish: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard> {
@@ -97,7 +99,9 @@ void TImportActor::AbortImport(const TString& errorMessage) {
         return;
     }
     if (Stage == EStage::WaitSaveCursor) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_during_save_cursor")("message", errorMessage);
+        YDB_LOG_WARN("",
+            {"event", "abort_during_save_cursor"},
+            {"message", errorMessage});
         return;
     }
     ImportSession->Abort(errorMessage);
@@ -139,8 +143,11 @@ void TImportActor::OnSessionStateSaved() {
 
 void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::TPtr& ev) {
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "import_batch_after_terminal")("stage", StageToString(Stage))(
-            "is_finished", ImportSession->IsFinished())("is_aborted", ImportSession->IsReadyForRemoveOnFinished());
+        YDB_LOG_WARN("",
+            {"event", "import_batch_after_terminal"},
+            {"stage", StageToString(Stage)},
+            {"isFinished", ImportSession->IsFinished()},
+            {"isAborted", ImportSession->IsReadyForRemoveOnFinished()});
         return;
     }
     Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
@@ -187,8 +194,11 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
 
 void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "import_write_result_after_terminal")("stage", StageToString(Stage))(
-            "is_finished", ImportSession->IsFinished())("is_aborted", ImportSession->IsReadyForRemoveOnFinished());
+        YDB_LOG_WARN("",
+            {"event", "import_write_result_after_terminal"},
+            {"stage", StageToString(Stage)},
+            {"isFinished", ImportSession->IsFinished()},
+            {"isAborted", ImportSession->IsReadyForRemoveOnFinished()});
         return;
     }
     Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);

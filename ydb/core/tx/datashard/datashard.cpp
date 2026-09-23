@@ -430,6 +430,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         SyncSchemeOnFollowerNeeded = true;
         // Do not rely on a sync queued before the reactivation, an extra one is a no-op
         SyncSchemeOnFollowerPending = false;
+        InvalidateHnswIndexes();
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
@@ -439,10 +440,6 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         YDB_LOG_INFO_CTX(ctx, "Follower switched to work state",
             {"tabletId", TabletID()});
     }
-}
-
-void TDataShard::OnFollowerDataUpdated() {
-    InvalidateHnswIndexes();
 }
 
 void TDataShard::SwitchToWork(const TActorContext &ctx) {

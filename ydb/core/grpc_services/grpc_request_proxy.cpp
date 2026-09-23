@@ -15,6 +15,9 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
+#include <util/generic/hash_set.h>
+#include <util/system/mutex.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
 namespace NKikimr {
@@ -448,6 +451,52 @@ void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) 
     }
 }
 
+namespace {
+
+void WarnIgnoredModifyingMethod(const TString& method) {
+    static TAdaptiveLock lock;
+    static THashSet<TString> warned;
+    bool first = false;
+    {
+        TGuard<TAdaptiveLock> guard(lock);
+        first = warned.insert(method).second;
+    }
+    if (first) {
+        YDB_LOG_WARN_CTX(*TlsActivationContext, "UnauthenticatedGrpcMethods entry ignored for modifying method",
+            {"method", method});
+    }
+}
+
+} // namespace
+
+bool IsAnonymousGrpcMethodAllowed(const IRequestProxyCtx& ctx) {
+    const TString method = ctx.GetRpcMethodName();
+    if (!method) {
+        return false;
+    }
+
+    const auto& allowed = AppData()->DomainsConfig.GetSecurityConfig().GetUnauthenticatedGrpcMethods();
+    bool listed = false;
+    for (const auto& name : allowed) {
+        if (name == method) {
+            listed = true;
+            break;
+        }
+    }
+    if (!listed) {
+        return false;
+    }
+
+    if (ctx.GetAuditMode().IsModifying) {
+        WarnIgnoredModifyingMethod(method);
+        return false;
+    }
+
+    YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Allow grpc method without token",
+        {"method", method});
+    return true;
+}
+
 bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     const auto& state = ctx.GetAuthState();
     if (state.State == NYdbGrpc::TAuthState::AS_OK) {
@@ -455,6 +504,10 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     }
 
     const bool authorizationParamsAreSet = ctx.GetYdbToken() || !ctx.FindClientCertPropertyValues().empty();
+    if (!authorizationParamsAreSet && IsAnonymousGrpcMethodAllowed(ctx)) {
+        return true;
+    }
+
     if (!state.NeedAuth && !authorizationParamsAreSet) {
         return true;
     }

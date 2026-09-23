@@ -319,6 +319,11 @@ message TDomainsConfig {
         optional bool DisableBuiltinAccess = 21;
         optional bool HideAuthenticationFailureReasons = 22 [default = true];
         optional bool AlwaysSetSystemOwner = 23 [default = false];
+        // Full gRPC names (Service/Method) that may be called without a user token.
+        // A token or client certificate, when present, is still checked.
+        // Entries for modifying methods are ignored.
+        // Empty by default. Read from the node config at process start.
+        repeated string UnauthenticatedGrpcMethods = 24;
     }
 
     repeated TDomain Domain = 1;

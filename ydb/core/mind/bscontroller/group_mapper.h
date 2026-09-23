@@ -339,7 +339,8 @@ namespace NKikimr {
             // Register PDisk inside mapper to use it in subsequent map operations
             bool RegisterPDisk(const TPDiskRecord& pdisk);
 
-            TReassignmentOutcome PlanGroupReassignment(TReassignmentRequest request);
+            // Allocates replacement slots in mapper without creating persistent VSlots.
+            TReassignmentOutcome AllocateGroupReassignment(TReassignmentRequest request);
 
             // Remove PDisk from the table.
             TPDiskRecord UnregisterPDisk(TPDiskId pdiskId);

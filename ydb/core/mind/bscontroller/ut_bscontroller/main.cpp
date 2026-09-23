@@ -384,6 +384,17 @@ namespace {
             command->AddVDiskId());
     }
 
+    NKikimrBlobStorage::TConfigRequest MakeReassignRequest(const TVSlot& source, ui32 groupGeneration) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *command = request.AddCommand()->MutableReassignGroupDisk();
+        command->SetGroupId(source.GetGroupId());
+        command->SetGroupGeneration(groupGeneration);
+        command->SetFailRealmIdx(source.GetFailRealmIdx());
+        command->SetFailDomainIdx(source.GetFailDomainIdx());
+        command->SetVDiskIdx(source.GetVDiskIdx());
+        return request;
+    }
+
     NKikimrBlobStorage::TConfigRequest MakePopulateRequest(const TVSlot& source,
             const NKikimrBlobStorage::TPDiskId& destination, bool suppressDonorMode = false) {
         NKikimrBlobStorage::TConfigRequest request;
@@ -1126,14 +1137,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 response = env.Invoke(request);
                 UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
 
-                request.Clear();
+                request = MakeReassignRequest(source, group.GetGroupGeneration());
                 request.SetIgnoreGroupFailModelChecks(true);
-                auto *cmd = request.AddCommand()->MutableReassignGroupDisk();
-                cmd->SetGroupId(group.GetGroupId());
-                cmd->SetGroupGeneration(group.GetGroupGeneration());
-                cmd->SetFailRealmIdx(source.GetFailRealmIdx());
-                cmd->SetFailDomainIdx(source.GetFailDomainIdx());
-                cmd->SetVDiskIdx(source.GetVDiskIdx());
                 response = env.Invoke(request);
                 UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
                 const auto rejected = FetchBaseConfig(&env);
@@ -1152,6 +1157,70 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 UNIT_ASSERT_VALUES_EQUAL(moved.GetVSlotId().GetNodeId(), candidate->GetNodeId());
                 UNIT_ASSERT_VALUES_EQUAL(moved.GetVSlotId().GetPDiskId(), candidate->GetPDiskId());
             }
+        });
+    }
+
+    Y_UNIT_TEST(LayoutRepairDoesNotOverrideRequiredNode) {
+        TEnvironmentSetup env(12, 1);
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); },
+                           [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            env.DefineBox(1, "box", {
+                {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
+                {"/dev/disk2", NKikimrBlobStorage::ROT, false, false, 0},
+                {"/dev/disk3", NKikimrBlobStorage::ROT, false, false, 0},
+            }, env.GetNodes(), request);
+            env.DefineStoragePool(1, 1, "storage pool", 1, NKikimrBlobStorage::ROT, {}, request);
+            auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+
+            const auto before = FetchBaseConfig(&env);
+            const auto& group = before.GetGroup(0);
+            const auto source = FindVSlot(before, group.GetVSlotId(0));
+            const auto& neighbor = group.GetVSlotId(1);
+            const auto target = std::ranges::find_if(before.GetPDisk(), [&](const auto& pdisk) {
+                return pdisk.GetNodeId() == neighbor.GetNodeId() && pdisk.GetPDiskId() != neighbor.GetPDiskId();
+            });
+            UNIT_ASSERT(target != before.GetPDisk().end());
+
+            request = MakeReassignRequest(source, group.GetGroupGeneration());
+            request.SetIgnoreGroupFailModelChecks(true);
+            request.SetIgnoreGroupLayoutChecks(true);
+            auto *targetId = request.MutableCommand(0)->MutableReassignGroupDisk()->MutableTargetPDiskId();
+            targetId->SetNodeId(target->GetNodeId());
+            targetId->SetPDiskId(target->GetPDiskId());
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            const auto misplaced = FetchBaseConfig(&env);
+            const auto moved = FindActiveVSlot(misplaced, source);
+            UNIT_ASSERT_VALUES_EQUAL(moved.GetVSlotId().GetNodeId(), neighbor.GetNodeId());
+
+            request.Clear();
+            auto *settings = request.AddCommand()->MutableUpdateSettings();
+            settings->AddEnableGroupLayoutSanitizer(true);
+            settings->AddUseSelfHealLocalPolicy(true);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+
+            request = MakeReassignRequest(source, misplaced.GetGroup(0).GetGroupGeneration());
+            request.SetIgnoreGroupFailModelChecks(true);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
+            const auto rejected = FetchBaseConfig(&env);
+            UNIT_ASSERT_VALUES_EQUAL(rejected.GetGroup(0).GetGroupGeneration(), misplaced.GetGroup(0).GetGroupGeneration());
+            UNIT_ASSERT(SameVSlotId(FindActiveVSlot(rejected, source).GetVSlotId(), moved.GetVSlotId()));
+
+            request.SetIgnoreGroupLayoutChecks(true);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            const auto after = FetchBaseConfig(&env);
+            const auto relocated = FindActiveVSlot(after, source);
+            UNIT_ASSERT_VALUES_EQUAL(relocated.GetVSlotId().GetNodeId(), moved.GetVSlotId().GetNodeId());
+            UNIT_ASSERT_UNEQUAL(relocated.GetVSlotId().GetPDiskId(), moved.GetVSlotId().GetPDiskId());
+            UNIT_ASSERT_UNEQUAL(relocated.GetVSlotId().GetPDiskId(), neighbor.GetPDiskId());
         });
     }
 

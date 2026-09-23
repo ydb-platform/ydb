@@ -57,7 +57,7 @@ Automatically run [COMMIT](commit.md) after every statement.
 | --- | --- |
 | String | — |
 
-Add the specified prefix to table paths. When the `EnableTablePathPrefixRelativePaths` flag is enabled in `TableServiceConfig`, a relative prefix, such as `folder` or `./folder`, is resolved from the root of the database specified in the connection. An absolute prefix (starting with `/`) is resolved from the cluster root.
+Add the specified prefix to table paths. When the `EnableTablePathPrefixRelativePaths` feature flag is enabled, a relative prefix, such as `folder` or `./folder`, is resolved from the root of the database specified in the connection. An absolute prefix (starting with `/`) is resolved from the cluster root.
 
 The flag is enabled by default. If it is disabled, relative prefixes retain the legacy behavior and are resolved from the cluster root.
 

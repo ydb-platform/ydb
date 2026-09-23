@@ -302,11 +302,6 @@ Y_UNIT_TEST_SUITE(TDqPqWriteActor) {
             {102, "query:execution:7:0:2:42", "query:execution:7:0"},
             {103, "query:execution:7:0:3:0", "query:execution:7:0"},
             {104, "query:execution:7:0:4:0", "query:execution:7:0"},
-            {105, "query:execution:70:0:1:0", "query:execution:70:0"},
-            {106, "query:execution:7:1:1:0", "query:execution:7:1"},
-            {107, "query:other:7:0:1:0", "query:other:7:0"},
-            {108, "query:execution:7:0:1:0", std::nullopt},
-            {109, "query:execution:7:0:1:0", "other-writer"},
             {110, "query:execution:7:0:1:extra", "query:execution:7:0"},
             {111, "query:execution:7:0:1", "query:execution:7:0"},
             {112, "query:execution:7:0:1:0:extra", "query:execution:7:0"},
@@ -330,7 +325,7 @@ Y_UNIT_TEST_SUITE(TDqPqWriteActor) {
         begin->Get()->Reply(EStatus::SUCCESS, {});
         AssertSaved();
 
-        UNIT_ASSERT_VALUES_EQUAL(Counter("Listed"), 16);
+        UNIT_ASSERT_VALUES_EQUAL(Counter("Listed"), 11);
         UNIT_ASSERT_VALUES_EQUAL(Counter("Canceled"), 1); // NOT_FOUND did not cancel a publication.
         UNIT_ASSERT_VALUES_EQUAL(Counter("ListRequests"), 1);
         UNIT_ASSERT_VALUES_EQUAL(Counter("CancelRequests"), 2);

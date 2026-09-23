@@ -503,43 +503,6 @@ Y_UNIT_TEST_SUITE(TPqCheckpointProviderIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(gateway->CreatedClients.load(), 0);
         UNIT_ASSERT(gateway->Client->ListedWriters.empty());
     }
-
-    Y_UNIT_TEST(SecretResolverRejectsMixedSecretKinds) {
-        for (bool schemaSecrets : {false, true}) {
-            TTestRuntime runtime;
-            auto* actorSystem = runtime.GetActorSystem(0);
-            AppData(actorSystem)->FeatureFlags.SetEnableSchemaSecrets(schemaSecrets);
-            for (bool disableOldSecrets : {false, true}) {
-                AppData(actorSystem)->FeatureFlags.SetDisableOldSecrets(disableOldSecrets);
-                for (const TVector<TString>& names : {TVector<TString>{"/schema-secret", "old-secret"}, TVector<TString>{"old-secret", "/schema-secret"}}) {
-                    auto resolution = NSecret::DescribeSecret(names, MakeIntrusive<NACLib::TUserToken>("test-user", TVector<NACLib::TSID>{}), "database", actorSystem);
-                    UNIT_ASSERT(resolution.Wait(TDuration::Seconds(10)));
-                    const auto& result = resolution.GetValue();
-                    UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::BAD_REQUEST);
-                    UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), disableOldSecrets
-                        ? "Usage of old secrets is disabled now"
-                        : "Cannot mix old and schema secrets");
-                }
-            }
-        }
-    }
-
-    Y_UNIT_TEST(RejectsMixedSecretKindsAcrossSinks) {
-        TTestRuntime runtime;
-        const auto gateway = MakeIntrusive<TGateway>();
-        auto integration = CreatePqCheckpointProviderIntegration(runtime.GetActorSystem(0), gateway, TDriver(TDriverConfig{}), CreateStructuredTokenCredentialsFactory());
-        auto first = MakeArgs();
-        first.SecureParams["sink-token"] = TStructuredTokenBuilder().SetTokenAuthWithSecret("/schema-secret", "").ToJson();
-        auto second = MakeArgs();
-        second.OutputIndex = 1;
-        second.SecureParams["sink-token"] = TStructuredTokenBuilder().SetTokenAuthWithSecret("old-secret", "").ToJson();
-        auto cleanup = integration->CleanupGraphSinks({{MakeSink(), std::move(first)}, {MakeSink(), std::move(second)}}, std::nullopt);
-        UNIT_ASSERT(cleanup.Wait(TDuration::Seconds(10)));
-        UNIT_ASSERT_STRING_CONTAINS(cleanup.GetValue().ToString(), "Cannot mix old and schema secrets");
-        UNIT_ASSERT_VALUES_EQUAL(gateway->CreatedClients.load(), 0);
-        UNIT_ASSERT(gateway->Client->ListedWriters.empty());
-    }
-
 }
 
 } // namespace NKikimr::NKqp

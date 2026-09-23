@@ -87,7 +87,7 @@ When choosing the minimum number of partitions, it makes sense to consider that 
 * Type: `Uint64`.
 * Default value: `2048` (2 GiB).
 
-The desired partition size threshold. Despite the `_MB` suffix, the size is specified in mebibytes (MiB). Recommended values range from `10 MiB` to `2 GiB`. If this threshold is exceeded, a shard may split.
+The desired partition size threshold. Despite the `_MB` suffix, the size is specified in mebibytes (MiB). Recommended values range from `10 MiB` to `2000 MiB`. If this threshold is exceeded, a shard may split.
 The specified value serves only as a recommendation for splitting. Splitting may not occur even if the configured size is exceeded.
 This setting applies when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
 

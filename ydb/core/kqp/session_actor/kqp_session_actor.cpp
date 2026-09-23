@@ -2553,6 +2553,7 @@ public:
         if (!QueryState->CurrentQueryStats.Update(QueryState->CurrentExecutionStats, report)) {
             return;
         }
+        QueryState->CurrentQueryStatsWindow.MarkUpdated();
         if (!QueryState->CurrentQueryStatsPublishScheduled) {
             QueryState->CurrentQueryStatsPublishScheduled = true;
             Schedule(QueryState->CurrentQueryStatsInterval, new TEvents::TEvWakeup(QueryState->QueryId));
@@ -2566,16 +2567,13 @@ public:
         }
         QueryState->CurrentQueryStatsPublishScheduled = false;
         if (auto current = QueryState->CurrentQueryStats.Get()) {
-            const auto now = TMonotonic::Now();
-            const auto elapsed = now - QueryState->LastCurrentQueryStatsPublishAt;
-            if (elapsed != TDuration::Zero()) {
-                current->ReadIngressBytesRate = (current->ReadIngressBytes - QueryState->LastPublishedReadIngressBytes)
-                    * TDuration::Seconds(1).MicroSeconds() / elapsed.MicroSeconds();
-            }
-            QueryState->LastPublishedReadIngressBytes = current->ReadIngressBytes;
-            QueryState->LastCurrentQueryStatsPublishAt = now;
+            auto publish = QueryState->CurrentQueryStatsWindow.Publish(*current, TMonotonic::Now());
             Send(QueryState->Sender, new TEvKqp::TEvCurrentQueryStats(SessionId, QueryState->ProxyRequestId,
-                ++QueryState->CurrentQueryStatsSequenceNo, *current));
+                ++QueryState->CurrentQueryStatsSequenceNo, std::move(publish.Snapshot)));
+            if (publish.ScheduleStaleCheck) {
+                QueryState->CurrentQueryStatsPublishScheduled = true;
+                Schedule(QueryState->CurrentQueryStatsInterval, new TEvents::TEvWakeup(QueryState->QueryId));
+            }
         }
     }
 

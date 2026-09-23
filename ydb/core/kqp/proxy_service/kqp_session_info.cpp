@@ -133,8 +133,8 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
             if (fieldsMap.NeedField(VSessions::ComputeMemoryBytes::ColumnId)) {
                 proto->SetComputeMemoryBytes(current->ComputeMemoryBytes);
             }
-            if (fieldsMap.NeedField(VSessions::ReadIngressBytesRate::ColumnId)) {
-                proto->SetReadIngressBytesRate(current->ReadIngressBytesRate);
+            if (fieldsMap.NeedField(VSessions::ReadIngressBytesRate::ColumnId) && current->ReadIngressBytesRate) {
+                proto->SetReadIngressBytesRate(*current->ReadIngressBytesRate);
             }
         }
     }

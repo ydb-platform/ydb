@@ -89,6 +89,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
     Y_UNIT_TEST_TWIN(ResultChannelFlowControlPauseResume, ClientStats) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableKqpCurrentQueryStats(true);
 
         TKikimrRunner kikimr(settings);
         const ui32 totalRows = 2000;
@@ -160,7 +161,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         }
         NDataShard::NKqpHelpers::SendRequest(runtime, streamSender, std::move(request));
 
-        runtime.SimulateSleep(TDuration::Seconds(11));
+        runtime.SimulateSleep(TDuration::Seconds(35));
         UNIT_ASSERT_GT(queryStatsReports, 0);
         UNIT_ASSERT_LE(queryStatsReports, 2);
         UNIT_ASSERT(!pausedChannels.empty());
@@ -346,6 +347,27 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 Y_UNIT_TEST_SUITE(KqpCurrentExecutionStats) {
 
 using namespace NYql::NDqProto;
+
+    Y_UNIT_TEST(CurrentQueryStatsWindowReportsRateAndStaleness) {
+        TCurrentQueryStatsWindow window(TMonotonic::Seconds(10));
+        TCurrentQueryStats::TSnapshot snapshot;
+        snapshot.ReadIngressBytes = 600;
+
+        window.MarkUpdated();
+        auto first = window.Publish(snapshot, TMonotonic::Seconds(30));
+        UNIT_ASSERT(first.Snapshot.ReadIngressBytesRate);
+        UNIT_ASSERT_VALUES_EQUAL(*first.Snapshot.ReadIngressBytesRate, 30);
+        UNIT_ASSERT(first.ScheduleStaleCheck);
+
+        auto stale = window.Publish(snapshot, TMonotonic::Seconds(60));
+        UNIT_ASSERT(!stale.Snapshot.ReadIngressBytesRate);
+        UNIT_ASSERT(!stale.ScheduleStaleCheck);
+
+        window.MarkUpdated();
+        auto zero = window.Publish(snapshot, TMonotonic::Seconds(90));
+        UNIT_ASSERT(zero.Snapshot.ReadIngressBytesRate);
+        UNIT_ASSERT_VALUES_EQUAL(*zero.Snapshot.ReadIngressBytesRate, 0);
+    }
 
 TDqComputeActorStats MakeReport(ui64 taskId, ui64 cpu, ui64 memory, ui64 tableBytes, ui64 sourceBytes) {
     TDqComputeActorStats report;

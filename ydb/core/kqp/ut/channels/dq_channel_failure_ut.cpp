@@ -409,6 +409,113 @@ struct TUndeliveredTest : public TOutboundTest {
     bool Major = true;
 };
 
+// A bounce naming an actor the session does not address is the echo of a copy sent to an actor already
+// superseded, see HandleUndelivered: taking it for the death of the live peer used to start a major
+// reconciliation, and the receiver then failed every unfinished descriptor bound to the generation left
+// behind.
+//
+// The setup is the moment where that costs the most: the consumer has popped everything, the finish chunk
+// included, and waits for the confirmation of the finish, which is what the held update asks for. A stale
+// bounce must leave all of this alone and the channel must complete; a genuine one must still reconcile,
+// and the consumer bound to the generation left behind is aborted for it.
+struct TFinishingStaleBounceTest : public TOutboundTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 5, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 5, .MinMessageSize = 10, .MaxMessageSize = 20, .ExpectAbort = Genuine };
+
+        // the updates of the receiver are held at the sender, the Finishing one among them
+        Debug0->PauseChannelUpdate();
+        StartOutbound(1);
+
+        std::shared_ptr<TInputDescriptor> descriptor;
+        UNIT_ASSERT_C(WaitFor([&]() {
+            auto descriptors = GetInputDescriptors(Debug1);
+            if (descriptors.empty()) {
+                return false;
+            }
+            descriptor = descriptors.front();
+            return descriptor->FinishPushed.load() && descriptor->PopStats.Bytes.load() == descriptor->PushStats.Bytes.load()
+                && GetQueueSize(Debug0) == 0 && Debug0->Reconciliation.load() == 0;
+        }, TDuration::Seconds(10)), TStringBuilder() << "the consumer did not pop the finish, " << SessionDetails());
+        UNIT_ASSERT_C(!descriptor->Finished.load(), "the finish was confirmed with the updates held");
+        auto genMajor = GetGenMajor(Debug0);
+        ui64 boundGenMajor;
+        {
+            std::lock_guard lock(Debug1->Mutex);
+            boundGenMajor = descriptor->OutputNodeGenMajor;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(boundGenMajor, genMajor, SessionDetails());
+
+        auto peerActorId = GetInputNodeActorId(Debug0);
+        UNIT_ASSERT_C(peerActorId == Debug1->NodeActorId,
+            TStringBuilder() << "InputNodeActorId=" << peerActorId << ", peer session actor " << Debug1->NodeActorId);
+
+        // the receiver session actor is alive all along; only the actor the bounce names differs. The
+        // stale one lives on the peer node, as the superseded session actor did, so a check on the node
+        // alone would not tell the two apart
+        Runtime->Send(Debug0->NodeActorId, Genuine ? peerActorId : Control1,
+            new NActors::TEvents::TEvUndelivered(TEvDqCompute::TEvChannelDataV2::EventType, NActors::TEvents::TEvUndelivered::ReasonActorUnknown),
+            NodeIndex0, true);
+
+        if (Genuine) {
+            UNIT_ASSERT_C(WaitFor([&]() { return GetGenMajor(Debug0) == genMajor + 1 && Debug0->Reconciliation.load() == 0; }, TDuration::Seconds(5)),
+                TStringBuilder() << "no major reconciliation, " << SessionDetails());
+            UNIT_ASSERT_C(GetReconciliationLog(Debug0).Contains("U"), SessionDetails());
+
+            Debug0->ResumeChannelUpdate();
+
+            auto consumer = WaitFinished(Control1, NodeIndex1, "the consumer");
+            UNIT_ASSERT_C(consumer.Aborted && consumer.Reason.Contains("UNAVAILABLE"), consumer.Reason);
+            UNIT_ASSERT_C(consumer.Reason.Contains("advanced its generation"), consumer.Reason);
+            UNIT_ASSERT_C(consumer.Reason.Contains("FP: 1, F: 0, EF: 0"), consumer.Reason);
+
+            // the producer is not told: its descriptor stays at the old generation with nothing queued to
+            // move it, so only the receiver side settles and the sender keeps the buffer of that producer
+            UNIT_ASSERT_C(WaitFor([&]() {
+                for (auto name : Gauges) {
+                    if (GetCounter(Service1, name) != 0) {
+                        return false;
+                    }
+                }
+                return true;
+            }, TDuration::Seconds(5)), TStringBuilder() << "sensors of node 1 not back to 0: " << SensorDetails(Service1));
+            UNIT_ASSERT_VALUES_EQUAL_C(GetCounter(Service0, "OutputBuffer/Count"), 1, SensorDetails(Service0));
+        } else {
+            // nothing is expected to happen, so the wait has to time out to mean anything
+            UNIT_ASSERT_C(!WaitFor([&]() { return GetGenMajor(Debug0) != genMajor || GetReconciliationLog(Debug0).Contains("U"); },
+                TDuration::Seconds(2)), TStringBuilder() << "the stale bounce started a major reconciliation, " << SessionDetails());
+            UNIT_ASSERT_VALUES_EQUAL_C(Debug0->Reconciliation.load(), 0, SessionDetails());
+            {
+                std::lock_guard lock(Debug1->Mutex);
+                boundGenMajor = descriptor->OutputNodeGenMajor;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(boundGenMajor, genMajor, SessionDetails());
+            UNIT_ASSERT_C(!descriptor->Finished.load(), "the finish was confirmed with the updates still held");
+
+            // the held update, let go, is answered under the generation it was sent for
+            Debug0->ResumeChannelUpdate();
+            auto consumer = WaitFinished(Control1, NodeIndex1, "the consumer");
+            UNIT_ASSERT_C(!consumer.Aborted && !consumer.Error, consumer.Reason);
+            auto producer = WaitFinished(Control0, NodeIndex0, "the producer");
+            UNIT_ASSERT_C(!producer.Aborted && !producer.Error, producer.Reason);
+            UNIT_ASSERT_C(descriptor->Finished.load(), "the consumer finished without the confirmation of the finish");
+            UNIT_ASSERT_VALUES_EQUAL_C(ErrorCount, 0, ErrorDetails());
+            CheckSensors();
+        }
+
+        descriptor.reset();
+        Destroy();
+        CheckQuota();
+    }
+
+    // the bounce names the session actor of the peer, as one from a peer which really died
+    bool Genuine = false;
+};
+
 // A peer which never answers costs the session ReconciliationCount discoveries, then the session gives
 // up: it fails its output descriptors - the producer is aborted - and frees itself
 struct TGiveUpTest : public TSessionTest {
@@ -611,6 +718,19 @@ Y_UNIT_TEST_SUITE(Channels20Failure) {
         TUndeliveredTest test;
         test.Local = false;
         test.Major = false;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(StaleBounceUnderFinishingChannel2n) {
+        TFinishingStaleBounceTest test;
+        test.Local = false;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(GenuineBounceStillReconciles2n) {
+        TFinishingStaleBounceTest test;
+        test.Local = false;
+        test.Genuine = true;
         test.Run();
     }
 

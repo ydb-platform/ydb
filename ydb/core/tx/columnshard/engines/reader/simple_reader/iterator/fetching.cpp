@@ -404,31 +404,6 @@ void TDuplicateFilter::TFilterSubscriber::ReportTracing(NCommon::IDataSource& so
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& filter) {
-<<<<<<< HEAD
-    if (auto source = Source.lock()) {
-        YDB_LOG_TRACE("",
-            {"event", "fetch_filter"},
-            {"source", source->GetSourceIdx()},
-            {"filter", filter.DebugString()},
-            {"aborted", source->GetContext()->IsAborted()});
-        if (source->GetContext()->IsAborted()) {
-            return;
-        }
-        AFL_VERIFY(filter.GetRecordsCountVerified() == source->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
-                                                         "source", source->GetRecordsCount());
-
-        ReportTracing(source);
-
-        if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
-            filter = filter.ApplyFilterFrom(*appliedFilter);
-        }
-        source->MutableStageData().AddFilter(std::move(filter));
-        Step.Next();
-        const auto convActorId = source->GetContext()->GetCommonContext()->GetConveyorProcessId();
-        const auto scanActorId = source->GetContext()->GetCommonContext()->GetScanActorId();
-        auto task = std::make_shared<TStepAction>(std::move(source), std::move(Step), scanActorId, false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convActorId);
-=======
     auto& source = SourceLease->GetSource();
     YDB_LOG_TRACE("",
         {"event", "fetch_filter"},
@@ -437,7 +412,6 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
         {"aborted", source.GetContext()->IsAborted()});
     if (source.GetContext()->IsAborted()) {
         return;
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
     }
     AFL_VERIFY(filter.GetRecordsCountVerified() == source.GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
                                                      "source", source.GetRecordsCount());
@@ -452,7 +426,7 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
     const auto& commonContext = *source.GetContext()->GetCommonContext();
     const auto scanActorId = commonContext.GetScanActorId();
     auto task = std::make_shared<TStepAction>(std::move(SourceLease), std::move(Step), scanActorId, false);
-    commonContext.SendTaskToExecute(task);
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {

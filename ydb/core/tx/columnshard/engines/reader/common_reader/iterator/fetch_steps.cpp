@@ -97,17 +97,10 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
     if (NeedNextStep) {
         Step.Next();
     }
-<<<<<<< HEAD
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data->AddEvent("fmalloc"));
-    auto convProcId = data->GetContext()->GetCommonContext()->GetConveyorProcessId();
-    auto task = std::make_shared<TStepAction>(std::move(data), std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId(), false);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convProcId);
-=======
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data.AddEvent("fmalloc"));
     const auto& commonContext = *data.GetContext()->GetCommonContext();
     auto task = std::make_shared<TStepAction>(std::move(SourceLease), std::move(Step), commonContext.GetScanActorId(), false);
-    commonContext.SendTaskToExecute(task);
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     return true;
 }
 

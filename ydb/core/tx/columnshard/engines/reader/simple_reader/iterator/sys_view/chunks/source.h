@@ -25,7 +25,7 @@ private:
     }
 
     virtual TString GetIndexStorageId(const ui32 indexId) const override {
-        return GetPortionAccessor().GetPortionInfo().GetIndexStorageId(indexId, PortionSchema->GetIndexInfo());
+        return GetPortionAccessor().GetPortionInfo().GetIndexStorageId(indexId, Schema->GetIndexInfo());
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnsIds*/) const override {
@@ -40,7 +40,6 @@ private:
         return GetPortionAccessor().RestoreBlobRange(rangeLink);
     }
 
-<<<<<<< HEAD
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
         return Schema;
     }
@@ -49,11 +48,7 @@ private:
         return Schema;
     }
 
-    virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) override;
-=======
     virtual NReader::NCommon::TExecutionResult DoStartFetchingAccessor(const NReader::NCommon::TFetchingScriptCursor& step) override;
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
 
     virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const override;
 

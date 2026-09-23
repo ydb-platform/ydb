@@ -26,16 +26,9 @@ void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResu
     }
 
     AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
-<<<<<<< HEAD
-    Source->SetPortionAccessor(std::move(result.ExtractPortions().begin()->second));
-    auto task = std::make_shared<NReader::NCommon::TStepAction>(std::move(Source), std::move(Step), ScanActorId, false);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, ConveyorProcessId);
-=======
     source.SetPortionAccessor(std::move(result.ExtractPortions().begin()->second));
-    auto context = source.GetContext()->GetCommonContext();
     auto task = std::make_shared<NReader::NCommon::TStepAction>(std::move(SourceLease), std::move(Step), ScanActorId, false);
-    context->SendTaskToExecute(task);
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, ConveyorProcessId);
 }
 
 TPortionAccessorFetchingSubscriber::TPortionAccessorFetchingSubscriber(
@@ -45,12 +38,7 @@ TPortionAccessorFetchingSubscriber::TPortionAccessorFetchingSubscriber(
     , Guard(SourceLease->GetSource().GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard())
     , ScanActorId(SourceLease->GetSource().GetContext()->GetCommonContext()->GetScanActorId())
 {
-<<<<<<< HEAD
-    const auto& commonContext = *Source->GetContext()->GetCommonContext();
-    ConveyorProcessId = commonContext.GetConveyorProcessId();
-    ScanActorId = commonContext.GetScanActorId();
-=======
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
+    ConveyorProcessId = SourceLease->GetSource().GetContext()->GetCommonContext()->GetConveyorProcessId();
 }
 
 const std::shared_ptr<const TAtomicCounter>& TPortionAccessorFetchingSubscriber::DoGetAbortionFlag() const {

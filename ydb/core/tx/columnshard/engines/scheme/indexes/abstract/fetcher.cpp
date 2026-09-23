@@ -16,14 +16,8 @@ TString GetStorageIdForIndexChunk(
 
 void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) {
     TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
-<<<<<<< HEAD
-    auto source = context.GetSource();
-    const auto& portionAccessor = source->GetPortionAccessor();
-    const auto& indexInfo = source->GetSourceSchema()->GetIndexInfo();
-=======
     auto& source = context.GetSource();
     const auto& portionAccessor = source.GetPortionAccessor();
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
     auto indexChunks = portionAccessor.GetIndexChunksPointers(IndexMeta->GetIndexId());
     for (auto&& i : indexChunks) {
         if (i->HasBlobData()) {

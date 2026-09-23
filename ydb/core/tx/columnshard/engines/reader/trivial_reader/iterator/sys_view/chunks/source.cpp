@@ -337,14 +337,8 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
             }
             if (Schema->GetColumnLoaderVerified(i.GetEntityId())->GetAccessorConstructor()->GetType() ==
                 NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
-<<<<<<< HEAD
-                composite->Add(std::make_shared<NCommon::TSubColumnsFetchLogic>(i.GetEntityId(), Schema,
-                    GetContext()->GetCommonContext()->GetStoragesManager(), GetPortionAccessor().GetPortionInfo().GetRecordsCount(),
-                    std::vector<TString>()));
-=======
                 composite->Add(std::make_shared<NCommon::TSubColumnsFetchLogic>(
-                    i.GetEntityId(), *this, PortionSchema, GetPortionAccessor().GetPortionInfo().GetRecordsCount(), std::vector<TString>()));
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
+                    i.GetEntityId(), *this, Schema, GetPortionAccessor().GetPortionInfo().GetRecordsCount(), std::vector<TString>()));
                 break;
             }
         }

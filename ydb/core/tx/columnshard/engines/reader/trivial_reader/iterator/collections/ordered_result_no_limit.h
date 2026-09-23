@@ -27,13 +27,8 @@ private:
         return SourcesConstructor->IsFinished();
     }
 
-<<<<<<< HEAD
-    virtual std::shared_ptr<NArrow::TSimpleRow> DoGetSourceStartPK(const std::shared_ptr<NCommon::IDataSource>& source) const override {
-        return std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch());
-=======
     virtual std::shared_ptr<NArrow::TSimpleRow> DoGetSourceStartPK(const NCommon::IDataSource& source) const override {
-        return std::make_shared<NArrow::TSimpleRow>(source.GetAs<IDataSource>()->GetFirstPK());
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
+        return std::make_shared<NArrow::TSimpleRow>(source.GetAs<IDataSource>()->GetStartPKRecordBatch());
     }
 
     virtual std::unique_ptr<NCommon::TDataSourceLease> DoTryExtractNext() override {

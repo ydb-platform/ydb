@@ -19,13 +19,8 @@ void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSu
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("fbf"));
     source.MutableStageData().AddBlobs(source.DecodeBlobAddresses(ExtractBlobsData()));
     AFL_VERIFY(Step.Next());
-<<<<<<< HEAD
-    auto task = std::make_shared<TStepAction>(std::move(Source), std::move(Step), Context->GetCommonContext()->GetScanActorId(), false);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, Context->GetCommonContext()->GetConveyorProcessId());
-=======
     auto task = std::make_shared<TStepAction>(std::move(SourceLease), std::move(Step), Context->GetCommonContext()->GetScanActorId(), false);
-    Context->GetCommonContext()->SendTaskToExecute(task);
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, Context->GetCommonContext()->GetConveyorProcessId());
 }
 
 bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
@@ -98,16 +93,9 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
         for (auto&& i : DataFetchers) {
             source.MutableStageData().AddFetcher(i.second);
         }
-<<<<<<< HEAD
-        auto convProcessId = Source->GetContext()->GetCommonContext()->GetConveyorProcessId();
-        auto task = std::make_shared<TStepAction>(
-            std::move(Source), std::move(Cursor), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convProcessId);
-=======
         const auto& commonContext = *source.GetContext()->GetCommonContext();
         auto task = std::make_shared<TStepAction>(std::move(SourceLease), std::move(Cursor), commonContext.GetScanActorId(), false);
-        commonContext.SendTaskToExecute(task);
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     } else {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("cf_next"));
         std::shared_ptr<TColumnsFetcherTask> nextReadTask = std::make_shared<TColumnsFetcherTask>(

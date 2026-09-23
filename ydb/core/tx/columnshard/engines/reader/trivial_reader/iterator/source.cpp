@@ -32,23 +32,13 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
     FetchingPlan = fetching;
 }
 
-<<<<<<< HEAD
-void IDataSource::StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
-    AFL_VERIFY(FetchingPlan);
-    TFetchingScriptCursor cursor(FetchingPlan, 0);
-    const auto& commonContext = *GetContext()->GetCommonContext();
-    auto sourceCopy = sourcePtr;
-    auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
-=======
 void IDataSource::StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sourceLease) {
     auto& self = *sourceLease->GetSource().MutableAs<IDataSource>();
     AFL_VERIFY(self.FetchingPlan);
     TFetchingScriptCursor cursor(self.FetchingPlan, 0);
     const auto& commonContext = *self.GetContext()->GetCommonContext();
     auto task = std::make_shared<TStepAction>(std::move(sourceLease), std::move(cursor), commonContext.GetScanActorId(), true);
-    commonContext.SendTaskToExecute(task);
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
 }
 
 void IDataSource::InitializeProcessing() {
@@ -77,20 +67,11 @@ void IDataSource::ContinueCursor(std::unique_ptr<NCommon::TDataSourceLease> sour
         YDB_LOG_DEBUG("",
             {"sourceIdx", self.GetSourceIdx()},
             {"event", "ContinueCursor"});
-<<<<<<< HEAD
-        auto cursor = std::move(*ScriptCursor);
-        ScriptCursor.reset();
-        const auto& commonContext = *GetContext()->GetCommonContext();
-        auto sourceCopy = sourcePtr;
-        auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
-=======
         auto cursor = std::move(*self.ScriptCursor);
         self.ScriptCursor.reset();
         const auto& commonContext = *self.GetContext()->GetCommonContext();
         auto task = std::make_shared<TStepAction>(std::move(sourceLease), std::move(cursor), commonContext.GetScanActorId(), true);
-        commonContext.SendTaskToExecute(task);
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     } else {
         YDB_LOG_WARN("",
             {"sourceIdx", self.GetSourceIdx()},

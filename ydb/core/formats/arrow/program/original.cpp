@@ -79,19 +79,8 @@ TConclusion<TExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
     const auto acc = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
     for (auto&& sc : DataAddress.GetSubColumnNames(true)) {
         if (!acc || !acc->HasSubColumnData(sc)) {
-<<<<<<< HEAD
-            auto source = context.GetDataSource().lock();
-            if (!source) {
-                return TConclusionStatus::Fail("source was destroyed before (original assemble start)");
-            }
-            source->AssembleAccessor(context, GetOutputColumnIdOnce(), sc);
-=======
             auto& source = context.GetDataSource();
-            auto conclusion = source.AssembleAccessor(context, GetOutputColumnIdOnce(), sc);
-            if (conclusion.IsFail()) {
-                return conclusion;
-            }
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
+            source.AssembleAccessor(context, GetOutputColumnIdOnce(), sc);
         }
     }
     return TExecutionResult::Done();

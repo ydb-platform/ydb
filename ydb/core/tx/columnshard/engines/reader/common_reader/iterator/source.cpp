@@ -37,22 +37,11 @@ void TExecutionContext::Stop() {
     ExecutionVisitor.reset();
 }
 
-<<<<<<< HEAD
-void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,
-    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program, const TFetchingScriptCursor& step) {
-    auto readMeta = source->GetContext()->GetCommonContext()->GetReadMetadata();
-    NArrow::NSSA::TProcessorContext context(
-        source, source->MutableStageData().ExtractTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
-=======
 void TExecutionContext::Start(
     IDataSource& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program, const TFetchingScriptCursor& step) {
     auto readMeta = source.GetContext()->GetCommonContext()->GetReadMetadata();
-    // ItemsLimit is a distinct-key cap when DistinctMarker is present (reader sync point). SSA CutFilter
-    // would otherwise keep only that many physical rows and hide later keys in the same source.
-    const std::optional<i64> ssaLimit =
-        readMeta->GetProgram().GetDistinctKeyColumnIdOptional() ? std::nullopt : readMeta->GetLimitRobustOptional();
-    NArrow::NSSA::TProcessorContext context(source, source.MutableStageData().ExtractTable(), ssaLimit, readMeta->IsDescSorted());
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
+    NArrow::NSSA::TProcessorContext context(
+        source, source.MutableStageData().ExtractTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
     auto visitor = std::make_shared<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(std::move(context));
     SetProgramIterator(program->BuildIterator(visitor), visitor);
     SetCursorStep(step);

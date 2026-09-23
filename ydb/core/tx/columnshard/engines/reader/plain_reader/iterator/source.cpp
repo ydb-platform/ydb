@@ -35,28 +35,13 @@ void IDataSource::StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sou
     NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", self.GetSourceIdx())("method", "StartProcessing"));
     if (self.GetContext()->IsAborted()) {
         YDB_LOG_DEBUG("",
-<<<<<<< HEAD
-            {"initFetchingPlan", FetchingPlan->DebugString()},
-            {"sourceIdx", GetSourceIdx()});
-        NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", GetSourceIdx())("method", "InitFetchingPlan"));
-        if (GetContext()->IsAborted()) {
-            YDB_LOG_DEBUG("",
-                {"event", "InitFetchingPlanAborted"});
-            return;
-        }
-        TFetchingScriptCursor cursor(FetchingPlan, 0);
-        const auto& commonContext = *GetContext()->GetCommonContext();
-        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
-=======
             {"event", "StartProcessingAborted"});
         return;
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
     }
     TFetchingScriptCursor cursor(self.FetchingPlan, 0);
     const auto& commonContext = *self.GetContext()->GetCommonContext();
     auto task = std::make_shared<TStepAction>(std::move(sourceLease), std::move(cursor), commonContext.GetScanActorId(), true);
-    commonContext.SendTaskToExecute(task);
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
 }
 
 void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<NCommon::TDataSourceLease> self) {

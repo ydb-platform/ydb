@@ -59,20 +59,12 @@ void TStepAction::OnFinished() {
 }
 
 void TStepAction::CacheSourceStats() {
-<<<<<<< HEAD
-    CachedBlobBytes = Source->ExtractTotalBytesRead();
-    CachedRawBytes = Source->GetUsedRawBytesOptional();
-    CachedFilteredRows = Source->GetFilteredRowsCount();
-    CachedTotalRows = Source->GetRecordsCount();
-    CachedTotalReservedBytes = Source->GetReservedMemory();
-=======
     auto& source = SourceLease->GetSource();
     CachedBlobBytes = source.ExtractTotalBytesRead();
     CachedRawBytes = source.GetUsedRawBytesOptional();
     CachedFilteredRows = source.GetFilteredRowsCount();
-    CachedTotalRows = source.GetRecordsCountOptional().value_or(0);
+    CachedTotalRows = source.GetRecordsCount();
     CachedTotalReservedBytes = source.GetReservedMemory();
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
 }
 
 TStepAction::TStepAction(std::unique_ptr<TDataSourceLease> sourceLease, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
@@ -208,21 +200,11 @@ void TProgramStep::ReportTracing(IDataSource& source, const NArrow::NAccessor::T
                         rawBytes += accessor.GetIndexRawBytes(indexEntityIds, false);
                     }
                 }
-<<<<<<< HEAD
                 bool hasSubColumns = false;
-                if (source->GetSourceSchemaOptional()) {
+                if (source.GetSourceSchemaOptional()) {
                     for (auto&& [colId, addr] : fetchProcessor->GetDataAddresses()) {
-                        if (source->GetSourceSchemaOptional()->GetColumnLoaderVerified(colId)->GetAccessorConstructor()->GetType() ==
+                        if (source.GetSourceSchemaOptional()->GetColumnLoaderVerified(colId)->GetAccessorConstructor()->GetType() ==
                             NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
-=======
-            }
-            bool hasSubColumns = false;
-            // After ADD COLUMN the portion source schema may not contain the column yet.
-            if (fetchProcessor && source.GetSourceSchemaOptional()) {
-                for (auto&& [colId, addr] : fetchProcessor->GetDataAddresses()) {
-                    if (auto loader = source.GetSourceSchemaOptional()->GetColumnLoaderOptional(colId)) {
-                        if (loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
                             hasSubColumns = true;
                             break;
                         }
@@ -303,18 +285,8 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(IDataSource& source
             executionContext.OnFailedProgramStepExecution();
             return conclusion;
         }
-<<<<<<< HEAD
-
-        // A nested continuation may have finished the shared program (extracted resources / stopped visitor)
-        // while Execute() was in progress. Do not keep mutating that shared state from this frame.
-        // Pin visitor once — HasExecutionVisitor + GetExecutionVisitorVerified is a TOCTOU with Stop().
-        const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
-        if (!visitor || !visitor->MutableContext().HasResources()) {
-            return false;
-=======
         if (conclusion->IsPending()) {
             return conclusion;
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
         }
         executionContext.OnFinishProgramStepExecution();
         signals->OnExecuteGraphNode(source.GetRecordsCount());

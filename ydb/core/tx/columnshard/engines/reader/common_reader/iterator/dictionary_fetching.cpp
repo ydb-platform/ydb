@@ -56,12 +56,7 @@ void TDictionaryFetchLogic::DoOnDataCollected(TFetchingResultContext& context) {
     context.GetAccessors().AddVerified(GetEntityId(), compositeBuilder.Finish(), true);
     const NArrow::TColumnFilter& filter = context.GetAccessors().GetFilter();
     AFL_VERIFY(NCommon::IsDictionaryOnlyFetchCompatible(filter))("filter", filter.DebugString());
-<<<<<<< HEAD
-    context.GetSource()->MutableStageData().MarkDictionaryOnlyFetch(GetEntityId());
-=======
     context.GetSource().MutableStageData().MarkDictionaryOnlyFetch(GetEntityId());
-    return TConclusionStatus::Success();
->>>>>>> 64bd6afc4f1 (Fix races in scans in columnshards (#53382))
 }
 
 void TDictionaryFetchLogic::DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {

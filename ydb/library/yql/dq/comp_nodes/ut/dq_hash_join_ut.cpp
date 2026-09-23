@@ -732,12 +732,6 @@ TJoinTestData EmptyRightInnerTestData() {
     return td;
 }
 
-[[maybe_unused]] TJoinTestData LeftOnlyTestDataLeftIsBuild() {
-    auto td = LeftOnlyTestData();
-    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
-    return td;
-}
-
 [[maybe_unused]] TJoinTestData RightOnlyTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;

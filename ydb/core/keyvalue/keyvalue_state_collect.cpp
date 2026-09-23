@@ -1,5 +1,4 @@
 #include "keyvalue_state.h"
-#include <ydb/core/util/stlog.h>
 
 namespace NKikimr {
 namespace NKeyValue {

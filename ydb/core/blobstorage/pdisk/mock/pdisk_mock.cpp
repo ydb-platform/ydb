@@ -1,6 +1,5 @@
 #include "pdisk_mock.h"
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/util/stlog.h>
 #include <ydb/core/util/interval_set.h>
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>

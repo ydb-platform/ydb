@@ -3,7 +3,6 @@
 #include "keyvalue_state.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>

@@ -1,7 +1,6 @@
 #include "ddisk_actor.h"
 #include "direct_io_op.h"
 
-#include <ydb/core/util/stlog.h>
 
 #include <ydb/core/util/pb.h>
 

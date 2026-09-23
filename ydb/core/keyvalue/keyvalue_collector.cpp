@@ -3,7 +3,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/backoff.h>
-#include <ydb/core/util/stlog.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT KEYVALUE_GC
 

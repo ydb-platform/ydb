@@ -1,7 +1,6 @@
 #include "keyvalue_flat_impl.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/core/util/stlog.h>
 
 namespace NKikimr {
 namespace NKeyValue {

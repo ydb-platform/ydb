@@ -23,7 +23,6 @@
 #include <ydb/core/util/light.h>
 #include <ydb/core/util/max_tracker.h>
 #include <ydb/core/util/queue_inplace.h>
-#include <ydb/core/util/stlog.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/library/wilson_ids/wilson.h>

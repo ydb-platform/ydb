@@ -179,7 +179,6 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <ydb/core/util/sig.h>
-#include <ydb/core/util/stlog.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>

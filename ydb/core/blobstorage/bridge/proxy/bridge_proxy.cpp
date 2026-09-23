@@ -1,9 +1,10 @@
 #include "bridge_proxy.h"
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
-#include <ydb/core/util/stlog.h>
 
 #include <ydb/library/actors/async/wait_for_event.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY_BRIDGE
 
 namespace NKikimr {
 
@@ -717,10 +718,13 @@ namespace NKikimr {
             auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this,
                     ev->GetTypeRewrite(), std::move(ev->TraceId));
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
-                (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
-                (BridgeGroupState, request->Info->Group->GetBridgeGroupState()),
-                (Request, originalRequest.ToString()));
+            YDB_LOG_DEBUG("New request",
+                {"marker", "BPB00"},
+                {"requestId", request->RequestId},
+                {"groupId", GroupId},
+                {"groupGeneration", request->Info->GroupGeneration},
+                {"bridgeGroupState", request->Info->Group->GetBridgeGroupState()},
+                {"request", originalRequest});
 
             Y_ABORT_UNLESS(request->Info->Group);
             const auto& state = request->Info->Group->GetBridgeGroupState();
@@ -751,9 +755,13 @@ namespace NKikimr {
             Y_ABORT_UNLESS(common);
             common->ForceGroupGeneration = groupPileInfo.GetGroupGeneration();
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB03, "new subrequest", (RequestId, request->RequestId),
-                (BridgePileId, bridgePileId), (Request, ev->ToString()), (Cookie, LastRequestCookie + 1),
-                (GroupPileInfo, groupPileInfo));
+            YDB_LOG_DEBUG("New subrequest",
+                {"marker", "BPB03"},
+                {"requestId", request->RequestId},
+                {"bridgePileId", bridgePileId},
+                {"request", ev->ToString()},
+                {"cookie", LastRequestCookie + 1},
+                {"groupPileInfo", groupPileInfo});
 
             // allocate cookie for this specific request and bind it to the common one
             const ui64 cookie = ++LastRequestCookie;
@@ -835,12 +843,13 @@ namespace NKikimr {
 
             const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA;
 
-            STLOG(isError ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_BRIDGE, BPB02, "intermediate response",
-                (RequestId, request->RequestId),
-                (GroupId, item.GroupId),
-                (Status, ev->Get()->Status),
-                (PileState, pile.State),
-                (Response, ev->Get()->ToString()));
+            YDB_LOG(isError ? PRI_NOTICE : PRI_DEBUG, "Intermediate response",
+                {"marker", "BPB02"},
+                {"requestId", request->RequestId},
+                {"groupId", item.GroupId},
+                {"status", ev->Get()->Status},
+                {"pileState", pile.State},
+                {"response", ev->Get()->ToString()});
 
             Y_ABORT_UNLESS(request->ResponsesPending);
             --request->ResponsesPending;
@@ -924,12 +933,13 @@ namespace NKikimr {
                             }));
                         };
 
-                        STLOG(success ? PRI_INFO : PRI_NOTICE, BS_PROXY_BRIDGE, BPB01, "request finished",
-                            (RequestId, request->RequestId),
-                            (Status, common->Status),
-                            (Response, response->ToString()),
-                            (Passed, TDuration::Seconds(request->Timer.Passed())),
-                            (SubrequestTimings, makeSubrequestTimings()));
+                        YDB_LOG(success ? PRI_INFO : PRI_NOTICE, "Request finished",
+                            {"marker", "BPB01"},
+                            {"requestId", request->RequestId},
+                            {"status", common->Status},
+                            {"response", response->ToString()},
+                            {"passed", TDuration::Seconds(request->Timer.Passed())},
+                            {"subrequestTimings", makeSubrequestTimings()});
 
                         if (success) {
                             request->Span.EndOk();

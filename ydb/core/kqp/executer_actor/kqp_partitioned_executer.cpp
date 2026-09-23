@@ -12,7 +12,6 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/util/stlog.h>
 
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actorid.h>

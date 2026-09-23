@@ -12,7 +12,6 @@
 #include <ydb/core/blobstorage/base/bufferwithgaps.h>
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
-#include <ydb/core/util/stlog.h>
 #include <ydb/library/pdisk_io/device_io_sample.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/map.h>

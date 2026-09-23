@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <util/generic/overloaded.h>
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
-#include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/core/interconnect.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK

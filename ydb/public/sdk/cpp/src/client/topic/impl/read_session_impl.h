@@ -634,6 +634,13 @@ public:
         Ready.clear();
     }
 
+    // Drop the session ref. An empty queue must not keep
+    // TSingleClusterReadSessionImpl alive through TCallbackContext.
+    void ReleaseContext() noexcept {
+        clear();
+        CbContext.reset();
+    }
+
     void SignalReadyEvents(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
                            TReadSessionEventsQueue<UseMigrationProtocol>& queue,
                            TDeferredActions<UseMigrationProtocol>& deferred);
@@ -808,7 +815,7 @@ public:
     }
 
     TCallbackContextPtr<UseMigrationProtocol> GetCbContext() const {
-        return CbContext;
+        return CopyCallbackContext();
     }
 
     TLog GetLog() const;
@@ -880,7 +887,18 @@ public:
     }
 
     TRawPartitionStreamEventQueue<UseMigrationProtocol> ExtractQueue() noexcept {
-        return std::exchange(EventsQueue, TRawPartitionStreamEventQueue(CbContext));
+        return std::exchange(EventsQueue, TRawPartitionStreamEventQueue(CopyCallbackContext()));
+    }
+
+    // Breaks stream -> callback context -> session -> stream. Called when the
+    // session is closing; later callbacks must not use this stream.
+    void DropCallbackContext() noexcept {
+        EventsQueue.ReleaseContext();
+        std::atomic_store(&CbContext, TCallbackContextPtr<UseMigrationProtocol>{});
+    }
+
+    TCallbackContextPtr<UseMigrationProtocol> CopyCallbackContext() const {
+        return std::atomic_load(&CbContext);
     }
 
     static void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,

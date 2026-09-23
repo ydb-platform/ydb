@@ -64,8 +64,11 @@ static const bool DecompressEverything = !std::string{std::getenv("PQ_DECOMPRESS
 
 template<bool UseMigrationProtocol>
 TLog TPartitionStreamImpl<UseMigrationProtocol>::GetLog() const {
-    if (auto session = CbContext->LockShared()) {
-        return session->GetLog();
+    auto callbackContext = CopyCallbackContext();
+    if (callbackContext) {
+        if (auto session = callbackContext->LockShared()) {
+            return session->GetLog();
+        }
     }
     return {};
 }
@@ -73,7 +76,11 @@ TLog TPartitionStreamImpl<UseMigrationProtocol>::GetLog() const {
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::Commit(uint64_t startOffset, uint64_t endOffset) {
     std::vector<std::pair<ui64, ui64>> toCommit;
-    if (auto sessionShared = CbContext->LockShared()) {
+    auto callbackContext = CopyCallbackContext();
+    if (!callbackContext) {
+        return;
+    }
+    if (auto sessionShared = callbackContext->LockShared()) {
         Y_ABORT_UNLESS(endOffset > startOffset);
         {
             std::lock_guard guard(sessionShared->Lock);
@@ -95,14 +102,22 @@ void TPartitionStreamImpl<UseMigrationProtocol>::Commit(uint64_t startOffset, ui
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
-    if (auto sessionShared = CbContext->LockShared()) {
+    auto callbackContext = CopyCallbackContext();
+    if (!callbackContext) {
+        return;
+    }
+    if (auto sessionShared = callbackContext->LockShared()) {
         sessionShared->RequestPartitionStreamStatus(this);
     }
 }
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) {
-    if (auto sessionShared = CbContext->LockShared()) {
+    auto callbackContext = CopyCallbackContext();
+    if (!callbackContext) {
+        return;
+    }
+    if (auto sessionShared = callbackContext->LockShared()) {
         if (commitOffset.has_value()) {
             SetFirstNotReadOffset(commitOffset.value());
         }
@@ -112,14 +127,22 @@ void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<uin
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmDestroy() {
-    if (auto sessionShared = CbContext->LockShared()) {
+    auto callbackContext = CopyCallbackContext();
+    if (!callbackContext) {
+        return;
+    }
+    if (auto sessionShared = callbackContext->LockShared()) {
         sessionShared->ConfirmPartitionStreamDestroy(this);
     }
 }
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmEnd(std::span<const uint32_t> childIds) {
-    if (auto sessionShared = CbContext->LockShared()) {
+    auto callbackContext = CopyCallbackContext();
+    if (!callbackContext) {
+        return;
+    }
+    if (auto sessionShared = callbackContext->LockShared()) {
         sessionShared->ConfirmPartitionStreamEnd(this, childIds);
     }
 }
@@ -175,6 +198,9 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                                                                             TDeferredActions<UseMigrationProtocol>& deferred)
 {
     if constexpr (!UseMigrationProtocol) {
+        if (!CbContext) {
+            return;
+        }
         if (auto session = CbContext->LockShared()) {
             if (!session->AllParentSessionsHasBeenRead(stream->GetPartitionId(), stream->GetPartitionSessionId())) {
                 return;
@@ -1962,6 +1988,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ClearAllPartitionStrea
         if (stream->HasEvents()) {
             deferredDelete.push_back(stream->ExtractQueue());
         }
+        // ExtractQueue installs a fresh queue that still owns the session.
+        // Drop it too, or the stream keeps the session (and itself) alive.
+        stream->DropCallbackContext();
     }
 
     for (auto& queue : deferredDelete) {

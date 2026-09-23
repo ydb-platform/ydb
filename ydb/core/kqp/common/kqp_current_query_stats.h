@@ -1,11 +1,14 @@
 #pragma once
 
+#include <util/datetime/base.h>
 #include <util/system/types.h>
 
 #include <algorithm>
 #include <optional>
 
 namespace NKikimr::NKqp {
+
+constexpr TDuration CurrentQueryStatsReportInterval = TDuration::Seconds(30);
 
 // CPU includes compute and reported storage CPU; memory is compute quota without channel quota.
 // Table/source bytes may overlap and do not distinguish local storage from S3.
@@ -30,7 +33,7 @@ public:
         ui64 ComputeMemoryBytes = 0;
         ui64 TableReadBytes = 0;
         ui64 ReadIngressBytes = 0;
-        ui64 ReadIngressBytesPerInterval = 0;
+        ui64 ReadIngressBytesRate = 0;
         ui64 ObservedPeakComputeMemoryBytes = 0;
     };
 

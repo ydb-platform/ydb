@@ -605,7 +605,7 @@ struct Schema : NIceDb::Schema {
         struct DurationUs         : Column<23, NScheme::NTypeIds::Uint64> {};
         struct CpuTimeUs          : Column<24, NScheme::NTypeIds::Uint64> {};
         struct ComputeMemoryBytes : Column<25, NScheme::NTypeIds::Uint64> {};
-        struct ReadIngressBytesPerInterval : Column<26, NScheme::NTypeIds::Uint64> {};
+        struct ReadIngressBytesRate : Column<26, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
@@ -632,7 +632,7 @@ struct Schema : NIceDb::Schema {
             DurationUs,
             CpuTimeUs,
             ComputeMemoryBytes,
-            ReadIngressBytesPerInterval>;
+            ReadIngressBytesRate>;
     };
 
     struct PrimaryIndexPortionStats : Table<14> {

@@ -121,8 +121,8 @@ public:
                 return info.HasComputeMemoryBytes() ? TCell::Make<ui64>(info.GetComputeMemoryBytes()) : TCell();
             }});
 
-            insert({TSchema::ReadIngressBytesPerInterval::ColumnId, [] (const TNodeInfo& info, ui32) {
-                return info.HasReadIngressBytesPerInterval() ? TCell::Make<ui64>(info.GetReadIngressBytesPerInterval()) : TCell();
+            insert({TSchema::ReadIngressBytesRate::ColumnId, [] (const TNodeInfo& info, ui32) {
+                return info.HasReadIngressBytesRate() ? TCell::Make<ui64>(info.GetReadIngressBytesRate()) : TCell();
             }});
 
         }

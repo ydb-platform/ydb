@@ -3145,6 +3145,61 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             "action=disable&node=100500&dbg=0");
     }
 
+    Y_UNIT_TEST(BalanceMonitoringPageRequestsManualBalancing)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 tabletId = CreatePartitionTablet(env);
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        const auto query = [&](TStringBuf range)
+        {
+            runtime->SendToPipe(
+                tabletId,
+                edge,
+                new NActors::NMon::TEvRemoteHttpInfo(
+                    "/app?TabletID=" + ToString(tabletId) +
+                        "&page=overview&action=balance&" + range,
+                    HTTP_METHOD_POST),
+                0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+
+            auto response =
+                env.WaitForEdgeActorEvent<NActors::NMon::TEvRemoteHttpInfoRes>(
+                    edge,
+                    false);
+            UNIT_ASSERT(response);
+            return response->Get()->Html;
+        };
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=0&to=1"),
+            "DDisk balancing requested.");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=0&to=32"),
+            "DDisk balancing requested.");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=0&to=1&strategy=configured"),
+            "&page=overview&strategy=configured");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=0&to=9999"),
+            "Invalid DDisk balancing request.");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=invalid&to=1"),
+            "Invalid DDisk balancing request.");
+        UNIT_ASSERT_STRING_CONTAINS(
+            query("from=1&to=1"),
+            "Invalid DDisk balancing request.");
+    }
+
     Y_UNIT_TEST(StandardTabletPageRenders)
     {
         TEnvironmentSetup env{{

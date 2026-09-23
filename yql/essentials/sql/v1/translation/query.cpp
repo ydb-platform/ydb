@@ -52,14 +52,15 @@ class TUniqueTableKey: public ITableKeys {
 public:
     TUniqueTableKey(TPosition pos, TString service, TDeferredAtom cluster,
                     const TDeferredAtom& name, TViewDescription view)
-        : TUniqueTableKey(pos, service, TTablePathPrefix(service, cluster), name, std::move(view))
+        : TUniqueTableKey(pos, service, cluster, name, std::move(view), {})
     {
     }
 
-    TUniqueTableKey(TPosition pos, TString service, TTablePathPrefix prefix,
-                    const TDeferredAtom& name, TViewDescription view)
+    TUniqueTableKey(TPosition pos, TString service, TDeferredAtom cluster,
+                    const TDeferredAtom& name, TViewDescription view, TTablePathPrefix prefix)
         : ITableKeys(pos)
         , Service_(std::move(service))
+        , Cluster_(std::move(cluster))
         , Prefix_(std::move(prefix))
         , Name_(name)
         , View_(std::move(view))
@@ -104,7 +105,7 @@ public:
             ctx.Error(Pos_) << "Table view can not be created with CREATE TABLE clause";
             return nullptr;
         }
-        auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), Name_);
+        auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx, Service_, Cluster_), Name_);
         if (!path) {
             return nullptr;
         }
@@ -125,6 +126,7 @@ public:
 
 private:
     TString Service_;
+    TDeferredAtom Cluster_;
     TTablePathPrefix Prefix_;
     TDeferredAtom Name_;
     TViewDescription View_;
@@ -136,20 +138,21 @@ TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAto
     return new TUniqueTableKey(pos, service, cluster, name, view);
 }
 
-TNodePtr BuildTableKey(TPosition pos, const TString& service, TTablePathPrefix prefix,
-                       const TDeferredAtom& name, const TViewDescription& view) {
-    return new TUniqueTableKey(pos, service, std::move(prefix), name, view);
+TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster,
+                       const TDeferredAtom& name, const TViewDescription& view, TTablePathPrefix prefix) {
+    return new TUniqueTableKey(pos, service, cluster, name, view, std::move(prefix));
 }
 
 class TTopicKey: public ITableKeys {
 public:
     TTopicKey(TPosition pos, TDeferredAtom cluster, const TDeferredAtom& name)
-        : TTopicKey(pos, TTablePathPrefix({}, cluster), name)
+        : TTopicKey(pos, cluster, name, {})
     {
     }
 
-    TTopicKey(TPosition pos, TTablePathPrefix prefix, const TDeferredAtom& name)
+    TTopicKey(TPosition pos, TDeferredAtom cluster, const TDeferredAtom& name, TTablePathPrefix prefix)
         : ITableKeys(pos)
+        , Cluster_(std::move(cluster))
         , Prefix_(std::move(prefix))
         , Name_(name)
         , Full_(name.GetRepr())
@@ -161,7 +164,7 @@ public:
     }
 
     TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode) override {
-        const auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), Name_);
+        const auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx, Service_, Cluster_), Name_);
         if (!path) {
             return nullptr;
         }
@@ -171,6 +174,7 @@ public:
 
 private:
     TString Service_;
+    TDeferredAtom Cluster_;
     TTablePathPrefix Prefix_;
     TDeferredAtom Name_;
     TString View_;
@@ -181,8 +185,8 @@ TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDefer
     return new TTopicKey(pos, cluster, name);
 }
 
-TNodePtr BuildTopicKey(TPosition pos, TTablePathPrefix prefix, const TDeferredAtom& name) {
-    return new TTopicKey(pos, std::move(prefix), name);
+TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name, TTablePathPrefix prefix) {
+    return new TTopicKey(pos, cluster, name, std::move(prefix));
 }
 
 namespace {
@@ -535,14 +539,15 @@ class TPrepTableKeys: public ITableKeys {
 public:
     TPrepTableKeys(TPosition pos, TString service, TDeferredAtom cluster,
                    TString func, const TVector<TTableArg>& args)
-        : TPrepTableKeys(pos, service, TTablePathPrefix(service, cluster), std::move(func), args)
+        : TPrepTableKeys(pos, service, cluster, std::move(func), args, {})
     {
     }
 
-    TPrepTableKeys(TPosition pos, TString service, TTablePathPrefix prefix,
-                   TString func, const TVector<TTableArg>& args)
+    TPrepTableKeys(TPosition pos, TString service, TDeferredAtom cluster,
+                   TString func, const TVector<TTableArg>& args, TTablePathPrefix prefix)
         : ITableKeys(pos)
         , Service_(std::move(service))
+        , Cluster_(std::move(cluster))
         , Prefix_(std::move(prefix))
         , Func_(std::move(func))
         , Args_(args)
@@ -583,7 +588,7 @@ public:
                 if (arg.HasAt) {
                     key = Y("TempTable", arg.Id.Build());
                 } else {
-                    auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), arg.Id);
+                    auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx, Service_, Cluster_), arg.Id);
                     if (!path) {
                         return nullptr;
                     }
@@ -606,7 +611,7 @@ public:
                 if (arg.HasAt) {
                     key = Y("TempTable", arg.Id.Build());
                 } else {
-                    auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), arg.Id);
+                    auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx, Service_, Cluster_), arg.Id);
                     if (!path) {
                         return nullptr;
                     }
@@ -667,7 +672,7 @@ public:
                 }
             }
 
-            auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), Args_[0].Id);
+            auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx, Service_, Cluster_), Args_[0].Id);
             if (!path) {
                 return nullptr;
             }
@@ -767,7 +772,7 @@ public:
                 each = L(each, key);
             }
             if (ctx.PragmaUseTablePrefixForEach) {
-                TStringBuf prefixPath = Prefix_.Get(ctx);
+                TStringBuf prefixPath = Prefix_.Get(ctx, Service_, Cluster_);
                 if (prefixPath) {
                     each = L(each, BuildQuotedAtom(Pos_, TString(prefixPath)));
                 }
@@ -985,7 +990,7 @@ public:
 
             auto partitionList = Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
             if (ctx.PragmaUseTablePrefixForEach) {
-                TStringBuf prefixPath = Prefix_.Get(ctx);
+                TStringBuf prefixPath = Prefix_.Get(ctx, Service_, Cluster_);
                 if (prefixPath) {
                     partitionList = L(partitionList, BuildQuotedAtom(Pos_, TString(prefixPath)));
                 }
@@ -1023,7 +1028,7 @@ public:
                 ExtractTableName(ctx, arg);
             }
 
-            auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx), Args_[0].Id);
+            auto path = AddTablePathPrefix(ctx, Prefix_.Get(ctx, Service_, Cluster_), Args_[0].Id);
             if (!path) {
                 return nullptr;
             }
@@ -1045,6 +1050,7 @@ public:
 
 private:
     TString Service_;
+    TDeferredAtom Cluster_;
     TTablePathPrefix Prefix_;
     TString Func_;
     TVector<TTableArg> Args_;
@@ -1055,9 +1061,9 @@ TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAt
     return new TPrepTableKeys(pos, service, cluster, func, args);
 }
 
-TNodePtr BuildTableKeys(TPosition pos, const TString& service, TTablePathPrefix prefix,
-                        const TString& func, const TVector<TTableArg>& args) {
-    return new TPrepTableKeys(pos, service, std::move(prefix), func, args);
+TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster,
+                        const TString& func, const TVector<TTableArg>& args, TTablePathPrefix prefix) {
+    return new TPrepTableKeys(pos, service, cluster, func, args, std::move(prefix));
 }
 
 class TInputOptions final: public TAstListNode {

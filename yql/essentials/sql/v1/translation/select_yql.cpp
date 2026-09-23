@@ -30,7 +30,6 @@ public:
     TYqlTableRefNode(TPosition position, TYqlTableRefArgs&& args)
         : INode(std::move(position))
         , TYqlTableRefArgs(std::move(args))
-        , Prefix_(Service, Cluster)
     {
     }
 
@@ -83,7 +82,7 @@ private:
 
         auto key = ToDeferredAtom(Key, ctx);
 
-        TNodePtr prefixed = AddTablePathPrefix(ctx, Prefix_.Get(ctx), key);
+        TNodePtr prefixed = AddTablePathPrefix(ctx, Prefix_.Get(ctx, Service, Cluster), key);
         YQL_ENSURE(prefixed);
         return Y("Key", Q(Y(Q("table"), Y("String", std::move(prefixed)))));
     }
@@ -1284,8 +1283,7 @@ TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args) {
     return new TYqlTableRefNode(std::move(position), std::move(args));
 }
 
-TNodePtr BuildYqlTableRef(TPosition position, TContext& ctx, TYqlTableRefArgs&& args) {
-    TTablePathPrefix prefix(ctx, args.Service, args.Cluster);
+TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args, TTablePathPrefix prefix) {
     return new TYqlTableRefNode(std::move(position), std::move(args), std::move(prefix));
 }
 

@@ -64,19 +64,62 @@ Y_UNIT_TEST(LegacyKeyFactoriesKeepDeferredLookupWithOptInContext) {
     settings.ClusterMapping["plato"] = "kikimr";
     NYql::TIssues issues;
     TContext ctx({}, {}, settings, {}, issues);
-    UNIT_ASSERT(ctx.SetPathPrefix("/first"));
     const TDeferredAtom table(ctx.Pos(), "Input");
+    const auto capturedEmpty = BuildTableKey(ctx.Pos(), ctx.Scoped->CurrService, ctx.Scoped->CurrCluster, table, {},
+        TTablePathPrefix(ctx, ctx.Scoped->CurrService, ctx.Scoped->CurrCluster));
+    UNIT_ASSERT(ctx.SetPathPrefix("/first"));
     const auto legacyTable = BuildTableKey(ctx.Pos(), ctx.Scoped->CurrService, ctx.Scoped->CurrCluster, table, {});
     const auto legacyTopic = BuildTopicKey(ctx.Pos(), ctx.Scoped->CurrCluster, table);
-    const auto capturedTable = BuildTableKey(ctx.Pos(), ctx.Scoped->CurrService,
-        TTablePathPrefix(ctx, ctx.Scoped->CurrService, ctx.Scoped->CurrCluster), table, {});
+    const auto capturedTable = BuildTableKey(ctx.Pos(), ctx.Scoped->CurrService, ctx.Scoped->CurrCluster, table, {},
+        TTablePathPrefix(ctx, ctx.Scoped->CurrService, ctx.Scoped->CurrCluster));
     UNIT_ASSERT(ctx.SetPathPrefix("/later"));
-    for (const auto& node : {legacyTable, legacyTopic, capturedTable}) {
+    for (const auto& node : {legacyTable, legacyTopic, capturedTable, capturedEmpty}) {
         const auto keys = node->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::INPUT);
         UNIT_ASSERT_C(keys && keys->Init(ctx, nullptr), issues.ToString());
         const auto* ast = keys->Translate(ctx);
         UNIT_ASSERT_C(ast, issues.ToString());
-        UNIT_ASSERT_STRING_CONTAINS(ast->ToString(), node == capturedTable ? "/first/Input" : "/later/Input");
+        const TString expected = node == capturedEmpty ? "Input" : node == capturedTable ? "/first/Input" : "/later/Input";
+        UNIT_ASSERT_STRING_CONTAINS(ast->ToString(), Quote(expected.c_str()));
+    }
+}
+
+Y_UNIT_TEST(KeyFactorySnapshotsKeepClusterAndProviderSeparate) {
+    for (const bool enabled : {false, true}) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.EnableTablePathPrefixMultiScopes = enabled;
+        settings.DefaultCluster = "plato";
+        for (const auto* cluster : {"plato", "target", "providerOnly"}) {
+            settings.ClusterMapping[cluster] = "kikimr";
+        }
+        NYql::TIssues issues;
+        TContext ctx({}, {}, settings, {}, issues);
+        UNIT_ASSERT(ctx.SetPathPrefix("/global_first"));
+        UNIT_ASSERT(ctx.SetPathPrefix("/current", TString("plato")));
+        UNIT_ASSERT(ctx.SetPathPrefix("/provider_first", TString("kikimr")));
+        UNIT_ASSERT(ctx.SetPathPrefix("/cluster_first", TString("target")));
+        const TDeferredAtom table(ctx.Pos(), "Input");
+        TVector<std::pair<TNodePtr, TString>> cases;
+        for (const auto* clusterName : {"target", "providerOnly"}) {
+            const TDeferredAtom cluster(ctx.Pos(), clusterName);
+            const TTablePathPrefix prefix(ctx, "kikimr", cluster);
+            const TString base = TString(clusterName) == "target" ? "/cluster_" : "/provider_";
+            const TString expected = base + (enabled ? "first/Input" : "later/Input");
+            cases.emplace_back(BuildTableKey(ctx.Pos(), "kikimr", cluster, table, {}, prefix), expected);
+            cases.emplace_back(BuildTableKeys(ctx.Pos(), "kikimr", cluster, "concat",
+                {{.Expr = BuildLiteralRawString(ctx.Pos(), "Input")}}, prefix), expected);
+            cases.emplace_back(BuildTopicKey(ctx.Pos(), cluster, table, prefix),
+                !enabled && TString(clusterName) == "providerOnly" ? TString("/global_later/Input") : expected);
+        }
+        UNIT_ASSERT(ctx.SetPathPrefix("/global_later"));
+        UNIT_ASSERT(ctx.SetPathPrefix("/provider_later", TString("kikimr")));
+        UNIT_ASSERT(ctx.SetPathPrefix("/cluster_later", TString("target")));
+        for (const auto& [node, expected] : cases) {
+            const auto keys = node->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::INPUT);
+            UNIT_ASSERT_C(keys && keys->Init(ctx, nullptr), issues.ToString());
+            const auto* ast = keys->Translate(ctx);
+            UNIT_ASSERT_C(ast, issues.ToString());
+            UNIT_ASSERT_STRING_CONTAINS(ast->ToString(), Quote(expected.c_str()));
+        }
     }
 }
 

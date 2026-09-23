@@ -3562,19 +3562,18 @@ TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr) {
 
 TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
                                        TNodePtr node, const TString& view) {
-    return TryMakeSourceFromExpression(pos, ctx, currService, currCluster, std::move(node),
-                                      TTablePathPrefix(currService, currCluster), view);
+    return TryMakeSourceFromExpression(pos, ctx, currService, currCluster, std::move(node), view, {});
 }
 
 TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
-                                       TNodePtr node, TTablePathPrefix prefix, const TString& view) {
+                                       TNodePtr node, const TString& view, TTablePathPrefix prefix) {
     if (currCluster.Empty()) {
         ctx.Error() << "No cluster name given and no default cluster is selected";
         return nullptr;
     }
 
     if (auto literal = node->GetLiteral("String")) {
-        TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, prefix, TDeferredAtom(node->GetPos(), *literal), {.ViewName = view});
+        TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(node->GetPos(), *literal), {.ViewName = view}, prefix);
         TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
         table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
         return BuildTableSource(node->GetPos(), table);
@@ -3588,7 +3587,7 @@ TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TStri
     auto wrappedNode = new TAstListNodeImpl(pos, {new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
                                                   node});
 
-    TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, prefix, TDeferredAtom(wrappedNode, ctx), {.ViewName = view});
+    TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(wrappedNode, ctx), {.ViewName = view}, prefix);
     TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
     table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
     return BuildTableSource(node->GetPos(), table);

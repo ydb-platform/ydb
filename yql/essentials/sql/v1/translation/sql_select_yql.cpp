@@ -1225,8 +1225,9 @@ private:
             .IsAnonymous = isAnonymous,
         };
 
+        TTablePathPrefix prefix(Ctx_, args.Service, args.Cluster);
         TYqlSource source = {
-            .Node = BuildYqlTableRef(Ctx_.Pos(), Ctx_, std::move(args)),
+            .Node = BuildYqlTableRef(Ctx_.Pos(), std::move(args), std::move(prefix)),
             .Alias = TYqlSourceAlias{
                 .Position = Ctx_.Pos(),
                 .Name = std::move(key)},
@@ -1318,7 +1319,8 @@ private:
             .IsAnonymous = isAnonymous,
         };
 
-        return TNonNull(BuildYqlTableRef(Ctx_.Pos(), Ctx_, std::move(args)));
+        TTablePathPrefix prefix(Ctx_, args.Service, args.Cluster);
+        return TNonNull(BuildYqlTableRef(Ctx_.Pos(), std::move(args), std::move(prefix)));
     }
 
     TSQLResult<TVector<TNodePtr>> Build(const TRule_values_source_row& rule) {

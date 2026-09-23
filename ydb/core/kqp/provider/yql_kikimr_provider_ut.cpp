@@ -855,9 +855,9 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
             UNIT_ASSERT(parserContext.SetPathPrefix("/first"));
 
             TTableRef tableRef("Input", parserContext.Scoped->CurrService, parserContext.Scoped->CurrCluster, {});
-            tableRef.Keys = BuildTableKey(parserContext.Pos(), tableRef.Service,
-                TTablePathPrefix(parserContext, tableRef.Service, tableRef.Cluster),
-                TDeferredAtom(parserContext.Pos(), "Input"), {});
+            tableRef.Keys = BuildTableKey(parserContext.Pos(), tableRef.Service, tableRef.Cluster,
+                TDeferredAtom(parserContext.Pos(), "Input"), {},
+                TTablePathPrefix(parserContext, tableRef.Service, tableRef.Cluster));
 
             TAlterTableParameters params;
             params.RenameTo = TIdentifier(parserContext.Pos(), destination);

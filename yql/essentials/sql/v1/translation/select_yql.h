@@ -4,6 +4,8 @@
 
 namespace NSQLTranslationV1 {
 
+class TTablePathPrefix;
+
 struct TYqlColumnRef {
     TPosition Position;
     TString Name;
@@ -138,7 +140,7 @@ TNodePtr ToTableExpression(TNodePtr source);
 TYqlSelectArgs DestructYqlSelect(TNodePtr node);
 
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
-TNodePtr BuildYqlTableRef(TPosition position, TContext& ctx, TYqlTableRefArgs&& args);
+TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args, TTablePathPrefix prefix);
 
 TNodePtr BuildYqlSelf(TPosition position);
 

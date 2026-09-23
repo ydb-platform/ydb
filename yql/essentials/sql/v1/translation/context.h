@@ -20,7 +20,6 @@
 #include <util/generic/vector.h>
 
 #include <utility>
-#include <variant>
 
 namespace NSQLTranslationV1 {
 inline bool IsAnonymousName(const TString& name) {
@@ -105,16 +104,12 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
 // Keep a value for source-order semantics, or defer lookup for legacy compatibility.
 class TTablePathPrefix {
 public:
-    TTablePathPrefix(const TString& service, const TDeferredAtom& cluster);
+    TTablePathPrefix() = default;
     TTablePathPrefix(TContext& ctx, const TString& service, const TDeferredAtom& cluster);
-    TStringBuf Get(TContext& ctx) const;
+    TStringBuf Get(TContext& ctx, const TString& service, const TDeferredAtom& cluster) const;
 
 private:
-    struct TDeferred {
-        TString Service;
-        TDeferredAtom Cluster;
-    };
-    std::variant<TString, TDeferred> Prefix_;
+    TMaybe<TString> Prefix_;
 };
 
 class TContext {

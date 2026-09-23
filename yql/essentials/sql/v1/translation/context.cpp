@@ -22,26 +22,18 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-TTablePathPrefix::TTablePathPrefix(const TString& service, const TDeferredAtom& cluster)
-    : Prefix_(TDeferred{service, cluster})
-{
-}
-
 TTablePathPrefix::TTablePathPrefix(TContext& ctx, const TString& service, const TDeferredAtom& cluster) {
     const TStringBuf prefix = ctx.GetPrefixPath(service, cluster);
     if (ctx.Settings.EnableTablePathPrefixMultiScopes) {
         Prefix_ = TString(prefix);
-    } else {
-        Prefix_ = TDeferred{service, cluster};
     }
 }
 
-TStringBuf TTablePathPrefix::Get(TContext& ctx) const {
-    if (const auto* prefix = std::get_if<TString>(&Prefix_)) {
-        return *prefix;
+TStringBuf TTablePathPrefix::Get(TContext& ctx, const TString& service, const TDeferredAtom& cluster) const {
+    if (Prefix_.Defined()) {
+        return *Prefix_;
     }
-    const auto& deferred = std::get<TDeferred>(Prefix_);
-    return ctx.GetPrefixPath(deferred.Service, deferred.Cluster);
+    return ctx.GetPrefixPath(service, cluster);
 }
 
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {

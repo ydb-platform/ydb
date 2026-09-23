@@ -1119,11 +1119,11 @@ TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, const TString
 class TInnerSource: public IProxySource {
 public:
     TInnerSource(TPosition pos, TNodePtr node, TString service, TDeferredAtom cluster, const TString& label)
-        : TInnerSource(pos, std::move(node), service, cluster, TTablePathPrefix(service, cluster), label)
+        : TInnerSource(pos, std::move(node), service, cluster, label, {})
     {
     }
 
-    TInnerSource(TPosition pos, TNodePtr node, TString service, TDeferredAtom cluster, TTablePathPrefix prefix, const TString& label)
+    TInnerSource(TPosition pos, TNodePtr node, TString service, TDeferredAtom cluster, const TString& label, TTablePathPrefix prefix)
         : IProxySource(pos, /*src=*/nullptr)
         , Node_(std::move(node))
         , Service_(std::move(service))
@@ -1175,7 +1175,7 @@ public:
         Y_UNUSED(initSrc);
         auto source = Node_->GetSource();
         if (!source) {
-            NewSource_ = TryMakeSourceFromExpression(Pos_, ctx, Service_, Cluster_, Node_, Prefix_);
+            NewSource_ = TryMakeSourceFromExpression(Pos_, ctx, Service_, Cluster_, Node_, {}, Prefix_);
             source = NewSource_.Get();
         }
 
@@ -1238,7 +1238,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TInnerSource(Pos_, SafeClone(Node_), Service_, Cluster_, Prefix_, GetLabel());
+        return new TInnerSource(Pos_, SafeClone(Node_), Service_, Cluster_, GetLabel(), Prefix_);
     }
 
 protected:
@@ -1267,8 +1267,8 @@ TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service
     return new TInnerSource(pos, node, service, cluster, label);
 }
 
-TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, TTablePathPrefix prefix, const TString& label) {
-    return new TInnerSource(pos, node, service, cluster, std::move(prefix), label);
+TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service, const TDeferredAtom& cluster, const TString& label, TTablePathPrefix prefix) {
+    return new TInnerSource(pos, node, service, cluster, label, std::move(prefix));
 }
 
 namespace {

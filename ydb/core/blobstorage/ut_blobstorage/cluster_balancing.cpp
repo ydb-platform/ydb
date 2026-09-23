@@ -287,6 +287,39 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
         UNIT_ASSERT(success);
     }
 
+    Y_UNIT_TEST(ClusterBalancingUsesReportedSlotCount) {
+        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 6, 10, TDuration::MilliSeconds(100));
+        UNIT_ASSERT(env.EachPDiskHasNVDisks(6));
+
+        ui32 rewrittenPDisks = 0;
+        env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType) {
+                auto *response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.MutableResponse();
+                for (auto& status : *response->MutableStatus()) {
+                    if (status.HasBaseConfig()) {
+                        for (auto& pdisk : *status.MutableBaseConfig()->MutablePDisk()) {
+                            // QueryBaseConfig reports the configured count separately from
+                            // the capacity inferred by PDisk for fixed-size slots.
+                            pdisk.SetExpectedSlotCount(0);
+                            pdisk.MutablePDiskMetrics()->SetExpectedSlotCount(16);
+                            ++rewrittenPDisks;
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+
+        env->AlterBox(1, 2);
+        // Reading the configured zero as capacity one would stop balancing after
+        // each new disk receives its first VDisk, leaving a 5:1 distribution.
+        const bool balanced = env.WaitFor([&] {
+            return env.EachPDiskHasNVDisks(3);
+        }, 60);
+        UNIT_ASSERT(rewrittenPDisks);
+        UNIT_ASSERT_C(balanced, "Expected balancing to use the reported slot count");
+    }
+
     Y_UNIT_TEST(ClusterBalancingEvenDistributionNotPossible) {
         TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 3, 10, TDuration::MilliSeconds(100));
 

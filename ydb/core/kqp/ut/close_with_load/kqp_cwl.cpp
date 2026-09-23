@@ -572,8 +572,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
         UNIT_ASSERT_C(nextCreate.IsSuccess(), nextCreate.GetIssues().ToString());
     }
 
-    // A no-op write rolls back read locks; timeout starts a second rollback.
-    Y_UNIT_TEST(TableNoOpWriteTimeoutDuringRollbackReleasesSession) {
+    // A no-op write rolls back read locks; timeout requests cleanup before it finishes.
+    Y_UNIT_TEST_TWIN(TableNoOpWriteTimeoutDuringRollbackReleasesSession, closeDuringCleanup) {
         TStringStream logs;
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
@@ -595,12 +595,18 @@ Y_UNIT_TEST_SUITE(KqpService) {
         TActorId bufferActorId;
         TActorId commitExecuterId;
         TActorId rollbackExecuterId;
+        TActorId sessionActorId;
+        THolder<IEventHandle> heldCleanupRollback;
         TVector<THolder<IEventHandle>> heldShardResults;
         bool holdShardResults = true;
+        bool holdCleanupRollback = closeDuringCleanup;
         runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvKqpBuffer::TEvCommit::EventType) {
                 bufferActorId = ev->GetRecipientRewrite();
                 commitExecuterId = ev->Sender;
+            } else if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType
+                    && commitExecuterId && ev->Sender == commitExecuterId) {
+                sessionActorId = ev->GetRecipientRewrite();
             } else if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType
                     && bufferActorId && ev->GetRecipientRewrite() == bufferActorId && holdShardResults) {
                 heldShardResults.emplace_back(ev.Release());
@@ -608,6 +614,10 @@ Y_UNIT_TEST_SUITE(KqpService) {
             } else if (ev->GetTypeRewrite() == TEvKqpBuffer::TEvRollback::EventType
                     && ev->GetRecipientRewrite() == bufferActorId) {
                 rollbackExecuterId = ev->Sender;
+                if (holdCleanupRollback) {
+                    heldCleanupRollback.Reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -632,12 +642,33 @@ Y_UNIT_TEST_SUITE(KqpService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::TIMEOUT, result.GetIssues().ToString());
         UNIT_ASSERT_C(rollbackExecuterId && rollbackExecuterId != commitExecuterId, logs.Str());
 
-        // The pending rollback result must reach the new cleanup executer.
-        holdShardResults = false;
-        for (auto& ev : heldShardResults) {
-            runtime->Send(ev.Release());
+        if (closeDuringCleanup) {
+            UNIT_ASSERT_C(sessionActorId && heldCleanupRollback, logs.Str());
+            auto close = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+            close->Record.MutableRequest()->SetSessionId(TString(session.GetId()));
+            runtime->Send(new IEventHandle(sessionActorId, TActorId(), close.release()));
+
+            holdCleanupRollback = false;
+            runtime->Send(heldCleanupRollback.Release());
         }
-        kikimr.RunCall([&] { return session.Close().GetValueSync(); });
+
+        // Cleanup must release the buffer even while shard replies are delayed.
+        if (counters.BufferActorsCount->Val() || counters.WriteActorsCount->Val()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return counters.BufferActorsCount->Val() == 0 && counters.WriteActorsCount->Val() == 0;
+            });
+            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)), logs.Str());
+        }
+        if (!closeDuringCleanup) {
+            auto reuseResult = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery("SELECT 1;",
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                    TExecDataQuerySettings().OperationTimeout(TDuration::Seconds(5))).GetValueSync();
+            });
+            UNIT_ASSERT_C(reuseResult.IsSuccess(), reuseResult.GetIssues().ToString());
+            kikimr.RunCall([&] { return session.Close().GetValueSync(); });
+        }
         {
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&](IEventHandle&) {
@@ -646,6 +677,13 @@ Y_UNIT_TEST_SUITE(KqpService) {
             UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)), logs.Str());
         }
         UNIT_ASSERT_VALUES_EQUAL(counters.GetActiveSessionActors()->Val(), 0);
+        holdShardResults = false;
+        for (auto& ev : heldShardResults) {
+            runtime->Send(ev.Release());
+        }
+        runtime->SimulateSleep(TDuration::MilliSeconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(counters.BufferActorsCount->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.WriteActorsCount->Val(), 0);
         auto nextCreate = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
         UNIT_ASSERT_C(nextCreate.IsSuccess(), nextCreate.GetIssues().ToString());
     }

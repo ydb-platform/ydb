@@ -5523,9 +5523,11 @@ public:
         Rollback(std::move(ev->TraceId), /* waitForResult */ true);
     }
 
-    void HandleRollback(TEvKqpBuffer::TEvRollback::TPtr& ev) {
-        // A timeout can replace the executer while rollback is in progress.
-        ExecuterActorId = ev->Get()->ExecuterActorId;
+    void HandleRollback(TEvKqpBuffer::TEvRollback::TPtr&) {
+        // The session forwards this error to the current cleanup executer.
+        ReplyError(NYql::NDqProto::StatusIds::ABORTED,
+            NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+            "Transaction rollback is already in progress");
     }
 
     void OnAllTasksFinised() {

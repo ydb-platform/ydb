@@ -37,6 +37,16 @@ namespace NKikimr {
         const bool UseDreg;
         std::shared_ptr<TRopeArena> Arena;
 
+        // Records admitted against Cur's reserved chunks that have not reached Fresh yet.
+        TFreshOutputEstimate InFlight;
+        // Cur is due to be rotated out, but records are still in flight. Rotation waits for them, so every
+        // admitted record lands in the very segment its chunks were reserved for, and admission holds new
+        // records back until it happens. The compaction flag is recomputed by every NeedsCompaction().
+        mutable bool CompactionRotationPending = false;
+        bool DregRotationPending = false;
+        // Reserved chunks no segment needs any more, for the level index actor to hand back to PDisk.
+        TVector<TChunkIdx> ReleasedChunks;
+
         static constexpr ui64 CalculateBufLowWatermark(ui32 chunkSize, bool useDreg) {
             return ui64(chunkSize) * (2u + !!useDreg);
         }
@@ -69,6 +79,17 @@ namespace NKikimr {
         void CompactionAborted();
         bool CompactionInProgress() const { return Old.Get() || WaitForCommit; }
 
+        // Chunk reservation. A record is admitted only once Cur holds enough reserved chunks to compact
+        // everything already in it, everything in flight, and the record itself.
+        bool IsRotationPending() const { return CompactionRotationPending || DregRotationPending; }
+        ui64 GetCurReservationShortfall(const TFreshOutputEstimate& record) const;
+        void AddCurReservedChunks(const TVector<TChunkIdx>& chunks) { Cur->AddReservedChunks(chunks); }
+        void AdmitInFlight(const TFreshOutputEstimate& record) { InFlight.Merge(record); }
+        // Called right before an admitted record is put into Fresh, or instead of that if it never will be.
+        void LandInFlight(const TFreshOutputEstimate& record);
+        const TFreshOutputEstimate& GetInFlight() const { return InFlight; }
+        TVector<TChunkIdx> TakeReleasedChunks() { return std::exchange(ReleasedChunks, {}); }
+
         // Appendix Compact/ApplyCompactionResult
         TCompactionJob CompactAppendix();
         TCompactionJob ApplyAppendixCompactionResult(TCompactionJob &&job);
@@ -97,6 +118,7 @@ namespace NKikimr {
 
     private:
         void SwapWithDregIfRequired();
+        void RenewCur(TFreshSegment& previous);
     };
 
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -124,21 +146,28 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     bool TFreshData<TKey, TMemRec>::NeedsCompaction(ui64 yardFreeUpToLsn, bool force) const {
+        CompactionRotationPending = false;
         if (RetryOldSegment) {
             // Old is still held by an attempt that gave up; it has to be written out
             // before anything else can be compacted, and until it is the recovery log
-            // can not be cut past it.
+            // can not be cut past it. Nothing rotates, so nothing has to wait.
             return true;
         } else if (CompactionInProgress()) {
             return false;
-        } else if (force) {
-            return true;
-        } else {
+        }
+        bool wanted = force;
+        if (!wanted) {
             const bool compactDregByYard = UseDreg && Dreg && Dreg->NeedsCompactionByYard(yardFreeUpToLsn);
             const bool compactCurByYard = Cur && Cur->NeedsCompactionByYard(yardFreeUpToLsn);
             const bool compactCurBySize = Cur && Cur->NeedsCompactionBySize() && (!UseDreg || Dreg);
-            return compactDregByYard || compactCurByYard || compactCurBySize;
+            wanted = compactDregByYard || compactCurByYard || compactCurBySize;
         }
+        if (wanted && !InFlight.Empty()) {
+            // Starting the compaction rotates Cur out. Wait for the records in flight to land first.
+            CompactionRotationPending = true;
+            return false;
+        }
+        return wanted;
     }
 
     template <class TKey, class TMemRec>
@@ -167,6 +196,37 @@ namespace NKikimr {
     }
 
     template <class TKey, class TMemRec>
+    ui64 TFreshData<TKey, TMemRec>::GetCurReservationShortfall(const TFreshOutputEstimate& record) const {
+        TFreshOutputEstimate total = Cur->GetOutputEstimate();
+        total.Merge(InFlight);
+        total.Merge(record);
+        const ui64 needed = total.GetChunks(Cur->GetOutputGeometry());
+        const ui64 held = Cur->GetReservedChunks().size();
+        return needed > held ? needed - held : 0;
+    }
+
+    template <class TKey, class TMemRec>
+    void TFreshData<TKey, TMemRec>::LandInFlight(const TFreshOutputEstimate& record) {
+        InFlight.Subtract(record);
+        if (InFlight.Empty() && DregRotationPending) {
+            // The swap was waiting for exactly this. Do it now: a record that never lands would
+            // otherwise leave it waiting for a Put() that admission is holding back.
+            SwapWithDregIfRequired();
+        }
+    }
+
+    // A new Cur takes over whatever the previous one held beyond its own needs. Nothing is in flight
+    // when this happens, so the previous segment keeps exactly what compacting it requires, and the
+    // rest serves the new writes instead of going back to PDisk only to be reserved again.
+    template <class TKey, class TMemRec>
+    void TFreshData<TKey, TMemRec>::RenewCur(TFreshSegment& previous) {
+        Y_VERIFY_DEBUG_S(InFlight.Empty(), HullCtx->VCtx->VDiskLogPrefix
+            << "Fresh segment rotates with records in flight");
+        Cur = MakeIntrusive<TFreshSegment>(HullCtx, CompThreshold, TimeProvider->Now(), Arena);
+        Cur->AddReservedChunks(previous.TakeSurplusReservedChunks());
+    }
+
+    template <class TKey, class TMemRec>
     TIntrusivePtr<TFreshSegment<TKey, TMemRec>> TFreshData<TKey, TMemRec>::FindSegmentForCompaction() {
         if (RetryOldSegment) {
             // Retry the segment the previous attempt gave up on. Nothing is swapped:
@@ -177,6 +237,7 @@ namespace NKikimr {
             return Old;
         }
         Y_VERIFY_S(!CompactionInProgress(), HullCtx->VCtx->VDiskLogPrefix);
+        TIntrusivePtr<TFreshSegment> previous = Cur;
         if (Dreg) {
             Old.Swap(Dreg);
             Dreg.Swap(Cur);
@@ -185,7 +246,7 @@ namespace NKikimr {
         }
 
         OldSegLastKeepLsn = Old->GetFirstLsnToKeep();
-        Cur = MakeIntrusive<TFreshSegment>(HullCtx, CompThreshold, TimeProvider->Now(), Arena);
+        RenewCur(*previous);
         return Old;
     }
 
@@ -193,6 +254,9 @@ namespace NKikimr {
     void TFreshData<TKey, TMemRec>::CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) {
         // FIXME ref count = 2?
         Y_VERIFY_S(Old && Old.Get() == freshSegment.Get(), HullCtx->VCtx->VDiskLogPrefix);
+        // The compaction reserved its own output chunks, so what was held for it is no longer needed.
+        TVector<TChunkIdx> released = Old->TakeReservedChunks();
+        ReleasedChunks.insert(ReleasedChunks.end(), released.begin(), released.end());
         freshSegment.Drop();
         Old.Drop();
         WaitForCommit = true;
@@ -276,6 +340,10 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::OutputHtml(IOutputStream &str) const {
+        if (!InFlight.Empty() || IsRotationPending()) {
+            str << "InFlightRecords: " << InFlight.GetRecords()
+                << "    RotationPending: " << (IsRotationPending() ? "yes" : "no") << "\n";
+        }
         if (Cur.Get())
             Cur->OutputHtml("Current", str);
         if (Dreg.Get())
@@ -300,9 +368,11 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::SwapWithDregIfRequired() {
         const bool renewCur = UseDreg && !Dreg && Cur->NeedsCompactionBySize();
-        if (renewCur) {
+        // Rotating Cur out, like starting a compaction, waits for the records in flight to land.
+        DregRotationPending = renewCur && !InFlight.Empty();
+        if (renewCur && !DregRotationPending) {
             Dreg.Swap(Cur);
-            Cur = MakeIntrusive<TFreshSegment>(HullCtx, CompThreshold, TimeProvider->Now(), Arena);
+            RenewCur(*Dreg);
         }
     }
 

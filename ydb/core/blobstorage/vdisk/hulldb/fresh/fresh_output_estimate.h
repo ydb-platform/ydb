@@ -64,6 +64,20 @@ namespace NKikimr {
             MaxInlineBytes = Max(MaxInlineBytes, other.MaxInlineBytes);
         }
 
+        // Take back what Merge() added. The largest record cannot be taken back, since what else was
+        // that size is not recorded; it stays as it was, which only keeps the bound on the safe side,
+        // until nothing is left at all.
+        void Subtract(const TFreshOutputEstimate& other) {
+            Y_ABORT_UNLESS(other.Records <= Records && other.InlineBytes <= InlineBytes && other.HugeRefs <= HugeRefs,
+                "subtracting more than was added");
+            Records -= other.Records;
+            InlineBytes -= other.InlineBytes;
+            HugeRefs -= other.HugeRefs;
+            if (!Records) {
+                *this = {};
+            }
+        }
+
         bool Empty() const {
             return !Records;
         }

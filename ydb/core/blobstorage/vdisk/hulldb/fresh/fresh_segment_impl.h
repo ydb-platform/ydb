@@ -714,7 +714,8 @@ namespace NKikimr {
                     str << "    StartTime: " + ToStringLocalTimeUpToSeconds(StartTime);
                     const TFreshOutputEstimate estimate = GetOutputEstimate();
                     str << "    CompactedBytes: " << estimate.GetCharge(OutputGeometry)
-                        << "    CompactedChunks: " << estimate.GetChunks(OutputGeometry);
+                        << "    CompactedChunks: " << estimate.GetChunks(OutputGeometry)
+                        << "    ReservedChunks: " << ReservedChunks.size();
                 }
                 DIV_CLASS("panel-body") {
                     DIV_CLASS("row") {

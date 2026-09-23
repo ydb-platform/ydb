@@ -250,6 +250,27 @@ namespace NKikimr {
         const TFreshOutputGeometry& GetOutputGeometry() const { return OutputGeometry; }
         ui64 GetOutputChunks() const { return GetOutputEstimate().GetChunks(OutputGeometry); }
 
+        // DATA_RESERVED chunks held for compacting this segment. They stay with the segment when it
+        // rotates out of Cur, so its compaction writes into chunks that were taken before its records
+        // were accepted.
+        const TVector<TChunkIdx>& GetReservedChunks() const { return ReservedChunks; }
+        void AddReservedChunks(const TVector<TChunkIdx>& chunks) {
+            ReservedChunks.insert(ReservedChunks.end(), chunks.begin(), chunks.end());
+        }
+        // The chunks held beyond what this segment's own content needs.
+        TVector<TChunkIdx> TakeSurplusReservedChunks() {
+            const ui64 needed = GetOutputChunks();
+            TVector<TChunkIdx> surplus;
+            while (ReservedChunks.size() > needed) {
+                surplus.push_back(ReservedChunks.back());
+                ReservedChunks.pop_back();
+            }
+            return surplus;
+        }
+        TVector<TChunkIdx> TakeReservedChunks() {
+            return std::exchange(ReservedChunks, {});
+        }
+
         static TFreshOutputGeometry MakeOutputGeometry(const THullCtx& hullCtx) {
             return {
                 .ChunkSize = hullCtx.ChunkSize,
@@ -309,6 +330,7 @@ namespace NKikimr {
         // FIXME: implement TIntrusivePtr with deletion in batch pool
         TFreshAppendixTree<TKey, TMemRec> AppendixTree;
         TFreshOutputEstimate AppendixEstimate;
+        TVector<TChunkIdx> ReservedChunks;
 
         TCompactionJob MkCompactJob(std::shared_ptr<ISTreeCompaction> &&job) {
             if (job) {

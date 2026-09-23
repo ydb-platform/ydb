@@ -14,6 +14,7 @@ PEERDIR(
 
 SRCS(
     fresh_appendix_ut.cpp
+    fresh_data_reservation_ut.cpp
     fresh_data_ut.cpp
     fresh_output_estimate_ut.cpp
     fresh_segment_ut.cpp

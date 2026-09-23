@@ -170,9 +170,11 @@ void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data) {
 
 void TViewerPipeClient::SetupTracing(const TString& handlerName) {
     bool limitTraceVerbosity = true;
-    if (const auto* appData = AppData(); appData && appData->Icb) {
-        if (auto control = appData->Icb->ViewerControls.LimitTraceVerbosity.AtomicLoad()) {
-            limitTraceVerbosity = control->Get();
+    if (HasAppData()) {
+        if (const auto* appData = AppData(); appData->Icb) {
+            if (auto control = appData->Icb->ViewerControls.LimitTraceVerbosity.AtomicLoad()) {
+                limitTraceVerbosity = control->Get();
+            }
         }
     }
 

@@ -234,6 +234,17 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
     };
 
+    Y_UNIT_TEST(TraceVerbositySetupWithoutActorContext) {
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /storage/groups HTTP/1.1\r\n\r\n", endpoint, {});
+        auto ev = IEventHandle::Downcast<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(
+            new IEventHandle(TActorId(), TActorId(), new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+
+        auto handler = std::make_unique<TStorageGroups>(nullptr, ev);
+        UNIT_ASSERT(handler);
+    }
+
     Y_UNIT_TEST(TraceVerbosityLimitControl) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);

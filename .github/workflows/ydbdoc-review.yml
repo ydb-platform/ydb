@@ -16,15 +16,15 @@ permissions:
   checks: read
 
 jobs:
-  diagnose-live-ydb-persistence:
+  diagnose-failed-field:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - name: Check out YDB persistence diagnostic
+      - name: Check out current translator
         uses: actions/checkout@v4
         with:
           repository: ydb-platform/ydbdoc-review-ng
-          ref: diag-pr50858-ydb-test
+          ref: main
           path: ydbdoc-review-ng
 
       - uses: actions/setup-python@v5
@@ -36,13 +36,60 @@ jobs:
       - name: Install diagnostic dependencies
         run: python -m pip install -e './ydbdoc-review-ng[runtime,dev]'
 
-      - name: Exercise production YDB checkpoint persistence
+      - name: Report protected-token mismatch from saved attempts
         working-directory: ydbdoc-review-ng
-        run: >-
-          python -m pytest -q
-          -o 'addopts=--strict-markers --timeout=120'
-          -m live
-          tests/live/test_ydb_continuation.py
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from collections import Counter
+          from datetime import UTC, datetime
+
+          from ydbdoc_review_ng.persistence import YdbPersistence
+          from ydbdoc_review_ng.runtime_ydb import DEFAULT_YDB_DATABASE, DEFAULT_YDB_ENDPOINT, SDKExecutor
+
+          target_path = "ydb/docs/en/core/changelog-enterprise.md"
+          field_id = "f1-000260-074267b067b0dbb67971a198ee4a83c5ab894fb13b0b92e3b3bf008dc84d1fc8"
+          required = [
+              "[[LINK_OPEN_0001]]", "[[LINK_CLOSE_0002]]",
+              "[[LINK_OPEN_0003]]", "[[LINK_CLOSE_0004]]",
+              "[[INLINE_CODE_0005]]", "[[INLINE_CODE_0006]]",
+              "[[LINK_OPEN_0007]]", "[[LINK_CLOSE_0008]]",
+          ]
+          executor = SDKExecutor(
+              os.environ.get("YDB_ENDPOINT", DEFAULT_YDB_ENDPOINT),
+              os.environ.get("YDB_DATABASE", DEFAULT_YDB_DATABASE),
+              "",
+              os.environ["YDB_SA_KEY"],
+          )
+          try:
+              checkpoint = YdbPersistence(executor).load_checkpoint(50858, now=datetime.now(UTC))
+              rows = executor.execute(
+                  "SELECT response, started_at FROM `ydbdoc_review/attempts` "
+                  "WHERE job_id = $job_id AND target_path = $target_path;",
+                  {"job_id": checkpoint.job_id, "target_path": target_path},
+              )
+              rows = sorted(rows, key=lambda row: row["started_at"])[-2:]
+              for number, row in enumerate(rows, 1):
+                  outer = json.loads(bytes(row["response"]).decode())
+                  text = outer["result"]["alternatives"][0]["message"]["text"]
+                  value = json.loads(text).get(field_id)
+                  returned = re.findall(r"\[\[[A-Z_]+_[0-9]+\]\]", value or "")
+                  expected_counts = Counter(required)
+                  returned_counts = Counter(returned)
+                  print(json.dumps({
+                      "attempt": number,
+                      "field_id": field_id,
+                      "value_is_string": isinstance(value, str),
+                      "required": required,
+                      "returned": returned,
+                      "missing": list((expected_counts - returned_counts).elements()),
+                      "unexpected": list((returned_counts - expected_counts).elements()),
+                  }, sort_keys=True))
+          finally:
+              executor.close()
+          PY
         env:
           YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
 

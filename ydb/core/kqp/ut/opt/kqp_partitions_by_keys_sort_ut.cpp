@@ -226,6 +226,51 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             true,
             true);
     }
+
+    Y_UNIT_TEST(WindowFunctionFullFrameAggregateInputDropsUnusedColumn) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
+        TKikimrRunner kikimr(appConfig);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const TString query =
+            "--!syntax_v1\n"
+            "$input = SELECT Key, Text, Data,\n"
+            "    Unwrap(CAST(Key AS String) || Text || CAST(Data AS String)) AS unused_fat_col\n"
+            "FROM `/Root/EightShard`;\n"
+            "SELECT Key, Text, Data, unused_fat_col,\n"
+            "    SUM(Data) OVER (PARTITION BY Text) AS total\n"
+            "FROM $input;\n";
+
+        auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+        const TString ast = *explain.GetStats()->GetAst();
+
+        UNIT_ASSERT_C(ast.Contains("\"unused_fat_col\""), ast);
+        TString sumStage;
+        for (size_t pos = 0; (pos = ast.find("(DqPhyStage", pos)) != TString::npos; ++pos) {
+            int depth = 0;
+            size_t end = pos;
+            for (; end < ast.size(); ++end) {
+                if (ast[end] == '(') {
+                    ++depth;
+                } else if (ast[end] == ')' && --depth == 0) {
+                    ++end;
+                    break;
+                }
+            }
+            const auto stage = ast.substr(pos, end - pos);
+            if (stage.Contains("AggrAdd")) {
+                sumStage = stage;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!sumStage.empty(), ast);
+        UNIT_ASSERT_C(sumStage.Contains("\"Data\""), sumStage);
+        UNIT_ASSERT_C(!sumStage.Contains("unused_fat_col"), sumStage);
+    }
 }
 
 } // namespace NKikimr::NKqp

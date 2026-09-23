@@ -20,6 +20,7 @@ Y_UNIT_TEST_SUITE(KqpTablePathPrefixRelativeLifecycle) {
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         auto client = kikimr.GetTableClient();
         auto oldSession = kikimr.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
+        auto queuedSession = kikimr.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
         auto newSession = kikimr.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
 
         const auto directory = kikimr.RunCall([&] {
@@ -60,19 +61,52 @@ Y_UNIT_TEST_SUITE(KqpTablePathPrefixRelativeLifecycle) {
         }, TDuration::Seconds(30));
         UNIT_ASSERT_C(!oldCompilation.empty(), "Query must reach compilation before the flag update");
         UNIT_ASSERT_VALUES_EQUAL(oldCompilation.front()->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS);
+        const auto oldCompileResult = oldCompilation.front()->Get()->CompileResult;
+
+        // Queue a second old-mode AST when available, or an untranslated request
+        // when the AST cache is disabled. Only the AST preserves the old mode.
+        TActorId queuedSender;
+        auto queuedRequestObserver = runtime.AddObserver<TEvKqp::TEvCompileRequest>([&](auto& ev) {
+            auto& request = *ev->Get();
+            if (request.Query && request.Query->Text == query) {
+                queuedSender = ev->Sender;
+                if (AstCache) {
+                    UNIT_ASSERT(oldCompileResult->QueryAst);
+                    request.QueryAst = oldCompileResult->QueryAst;
+                }
+            }
+        });
+        TKqpCounters counters(runtime.GetAppData().Counters);
+        auto queuedFuture = kikimr.RunInThreadPool([&] { return execute(queuedSession); });
+        runtime.WaitFor("second request queued before the flag update", [&] {
+            return counters.CompileQueueSize->Val() == 1 || queuedFuture.HasValue();
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(counters.CompileQueueSize->Val(), 1);
+        queuedRequestObserver.Remove();
+
+        TString queuedCompilationUid;
+        auto queuedResponseObserver = runtime.AddObserver<TEvKqp::TEvCompileResponse>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == queuedSender) {
+                queuedCompilationUid = ev->Get()->CompileResult->Uid;
+            }
+        });
 
         runtime.GetAppData().FeatureFlags.SetEnableTablePathPrefixRelativePaths(true);
-        TKqpCounters counters(runtime.GetAppData().Counters);
         auto newFuture = kikimr.RunInThreadPool([&] { return execute(newSession); });
         runtime.WaitFor("new request queued behind old compilation", [&] {
-            return counters.CompileQueueSize->Val() != 0 || newFuture.HasValue();
+            return counters.CompileQueueSize->Val() == 2 || newFuture.HasValue();
         }, TDuration::Seconds(30));
-        UNIT_ASSERT_C(counters.CompileQueueSize->Val() != 0, "New request must wait for the active compilation");
+        UNIT_ASSERT_VALUES_EQUAL(counters.CompileQueueSize->Val(), 2);
         oldCompilation.Stop().Unblock();
 
         const auto oldResult = runtime.WaitFuture(oldFuture);
         UNIT_ASSERT_C(oldResult.IsSuccess(), oldResult.GetIssues().ToString());
         CompareYson("[[1u]]", FormatResultSetYson(oldResult.GetResultSet(0)));
+        const auto queuedResult = runtime.WaitFuture(queuedFuture);
+        UNIT_ASSERT_C(queuedResult.IsSuccess(), queuedResult.GetIssues().ToString());
+        CompareYson(AstCache ? "[[1u]]" : "[[2u]]", FormatResultSetYson(queuedResult.GetResultSet(0)));
+        UNIT_ASSERT(!queuedCompilationUid.empty());
+        UNIT_ASSERT_VALUES_EQUAL(queuedCompilationUid == oldCompileResult->Uid, AstCache);
         const auto newResult = runtime.WaitFuture(newFuture);
         UNIT_ASSERT_C(newResult.IsSuccess(), newResult.GetIssues().ToString());
         CompareYson("[[2u]]", FormatResultSetYson(newResult.GetResultSet(0)));

@@ -1,3 +1,5 @@
+#include <ydb/core/kqp/host/kqp_translate.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -7,6 +9,34 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpTablePathPrefixRelativeRollout) {
+    Y_UNIT_TEST_TWIN(PragmaOnlyDiagnosticsAreCountedOnce, Enabled) {
+        ui64 reportedNonAbsolutePath = 0;
+        NYql::TKikimrConfiguration config;
+        config.FeatureFlags.SetEnableTablePathPrefixRelativePaths(Enabled);
+        config.IncrementTranslationCounter = [&](const TString& group, const TString& name) {
+            if (group == "TablePathPrefix" && name == "NonAbsolutePath") {
+                ++reportedNonAbsolutePath;
+            }
+        };
+        const TString query = "PRAGMA TablePathPrefix = './folder';";
+        TKqpTranslationSettingsBuilder builder(NYql::EKikimrQueryType::Query, "cluster", query,
+            config.GetYqlBindingsMode(), nullptr);
+        UNIT_ASSERT(!builder.GetEnableTablePathPrefixRelativePaths());
+        builder.SetFromConfig(config).SetKqpTablePathPrefix("/Root/database");
+        UNIT_ASSERT_VALUES_EQUAL(builder.GetEnableTablePathPrefixRelativePaths(), Enabled);
+
+        for (bool split : {false, true}) {
+            const auto before = reportedNonAbsolutePath;
+            for (ui64 repeat = 0; repeat < 2; ++repeat) {
+                const auto statements = ParseStatements(query, {}, true, builder, split);
+                UNIT_ASSERT_VALUES_EQUAL(statements.size(), 1);
+                UNIT_ASSERT_C(statements.front().Ast->IsOk(), statements.front().Ast->Issues.ToString());
+                UNIT_ASSERT_VALUES_EQUAL(statements.front().EnableTablePathPrefixRelativePaths, Enabled);
+                UNIT_ASSERT_VALUES_EQUAL(reportedNonAbsolutePath, before + repeat + 1);
+            }
+        }
+    }
+
     Y_UNIT_TEST(SameSessionAndCachedQueryFollowFlagUpdates) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto& runtime = *kikimr.GetTestServer().GetRuntime();

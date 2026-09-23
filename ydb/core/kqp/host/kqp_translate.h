@@ -165,7 +165,7 @@ private:
     const NSQLTranslation::EBindingsMode BindingsMode;
 
     TString KqpTablePathPrefix = {};
-    bool EnableTablePathPrefixRelativePaths = true;
+    bool EnableTablePathPrefixRelativePaths = false;
     NSQLTranslation::TIncrementMonCounterFunction IncrementCounter;
     bool IsEnableExternalDataSources = false;
     TMaybe<bool> SqlAutoCommit = {};

@@ -301,6 +301,20 @@ bool QueryRequestsPgSyntax(const TString& queryText) {
     return ParseTranslationSettings(queryText, settings, issues) && settings.PgParser;
 }
 
+NSQLTranslation::TIncrementMonCounterFunction MakeTablePathPrefixCounterWrapper(
+        const NSQLTranslation::TIncrementMonCounterFunction& incrementCounter, bool& reportedNonAbsolutePath) {
+    return [incrementCounter, &reportedNonAbsolutePath](const TString& group, const TString& name) {
+        if (group == "TablePathPrefix" && name == "NonAbsolutePath") {
+            if (std::exchange(reportedNonAbsolutePath, true)) {
+                return;
+            }
+        }
+        if (incrementCounter) {
+            incrementCounter(group, name);
+        }
+    };
+}
+
 } // namespace
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
@@ -315,16 +329,7 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         auto settings = settingsBuilder.Build(ctx);
         bool reportedNonAbsolutePath = false;
         const auto incrementCounter = settings.IncrementCounter;
-        settings.IncrementCounter = [&](const TString& group, const TString& name) {
-            if (group == "TablePathPrefix" && name == "NonAbsolutePath") {
-                if (std::exchange(reportedNonAbsolutePath, true)) {
-                    return;
-                }
-            }
-            if (incrementCounter) {
-                incrementCounter(group, name);
-            }
-        };
+        settings.IncrementCounter = MakeTablePathPrefixCounterWrapper(incrementCounter, reportedNonAbsolutePath);
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         NYql::TStmtParseInfo stmtParseInfo;
@@ -401,17 +406,7 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
 
         auto settings = settingsBuilder.Build(ctx);
         bool reportedNonAbsolutePath = false;
-        const auto incrementCounter = settings.IncrementCounter;
-        settings.IncrementCounter = [&](const TString& group, const TString& name) {
-            if (group == "TablePathPrefix" && name == "NonAbsolutePath") {
-                if (std::exchange(reportedNonAbsolutePath, true)) {
-                    return;
-                }
-            }
-            if (incrementCounter) {
-                incrementCounter(group, name);
-            }
-        };
+        settings.IncrementCounter = MakeTablePathPrefixCounterWrapper(settings.IncrementCounter, reportedNonAbsolutePath);
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
         auto parsedSettings = settings;

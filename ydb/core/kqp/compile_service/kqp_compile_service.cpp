@@ -190,7 +190,8 @@ public:
         return {};
     }
 
-    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpQueryId& query, bool enableTablePathPrefixRelativePaths) {
+    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpQueryId& query, bool enableTablePathPrefixRelativePaths,
+        bool hasCurrentTablePathPrefixSemantics) {
         auto queryIt = QueryIndex.find(query);
         if (queryIt == QueryIndex.end()) {
             return {};
@@ -200,7 +201,9 @@ public:
         for (auto it = queryIt->second.begin(); it != queryIt->second.end();) {
             auto requestIt = *it;
             Y_ENSURE(requestIt != Queue.end());
-            if (requestIt->QueryAst && requestIt->QueryAst->EnableTablePathPrefixRelativePaths != enableTablePathPrefixRelativePaths) {
+            if (requestIt->QueryAst
+                    ? requestIt->QueryAst->EnableTablePathPrefixRelativePaths != enableTablePathPrefixRelativePaths
+                    : !hasCurrentTablePathPrefixSemantics) {
                 ++it;
                 continue;
             }
@@ -701,11 +704,10 @@ private:
                     QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
                 }
 
-                // A compilation may finish after a flag update. Its original request
-                // can complete, but requests translated with other semantics must wait.
-                auto requests = hasCurrentTablePathPrefixSemantics
-                    ? RequestsQueue.ExtractByQuery(*compileResult->Query, compileResult->EnableTablePathPrefixRelativePaths)
-                    : TVector<TKqpCompileRequest>{};
+                // Already translated requests keep their mode; text-only requests
+                // would be translated with the current flag value.
+                auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query,
+                    compileResult->EnableTablePathPrefixRelativePaths, hasCurrentTablePathPrefixSemantics);
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     Reply(request.Sender, compileResult, compileStats, ctx,

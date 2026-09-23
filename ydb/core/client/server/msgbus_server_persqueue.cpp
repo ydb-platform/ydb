@@ -342,12 +342,20 @@ bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
             auto name = converter->GetClientsideName();
             // Clientside is still rt3.<dc>--..., which is no longer a valid
             // request name. Also accept the modern names the caller resolved.
-            const bool requested = TopicsToRequest.empty()
-                || IsIn(TopicsToRequest, name)
-                || IsIn(TopicsToRequest, converter->GetModernName())
-                || IsIn(TopicsToRequest, converter->GetFederationPath())
-                || IsIn(TopicsToRequest, converter->GetFederationPathWithDC())
-                || IsIn(TopicsToRequest, converter->GetPrimaryPath());
+            const TVector<TString> aliases = {
+                name,
+                converter->GetModernName(),
+                converter->GetFederationPath(),
+                converter->GetFederationPathWithDC(),
+                converter->GetPrimaryPath(),
+            };
+            bool requested = TopicsToRequest.empty();
+            for (const auto& alias : aliases) {
+                if (!alias.empty() && IsIn(TopicsToRequest, alias)) {
+                    requested = true;
+                    break;
+                }
+            }
             if (name.empty() || !requested) {
                 continue;
             }
@@ -413,18 +421,37 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
     }
     Y_ABORT_UNLESS(topics.size() == Children.size());
 
-    if (!TopicsToRequest.empty() && TopicsToRequest.size() != topics.size()) {
-        // Write helpful error description
-        Y_ABORT_UNLESS(topics.size() < TopicsToRequest.size());
+    if (!TopicsToRequest.empty()) {
+        auto requestSatisfied = [&](const TString& topic) {
+            for (const auto& [actorId, child] : Children) {
+                Y_UNUSED(actorId);
+                const auto& conv = child->Converter;
+                if (!conv) {
+                    continue;
+                }
+                if (topic == conv->GetClientsideName()
+                    || topic == conv->GetModernName()
+                    || topic == conv->GetFederationPath()
+                    || topic == conv->GetFederationPathWithDC()
+                    || topic == conv->GetPrimaryPath()) {
+                    return true;
+                }
+            }
+            return false;
+        };
         TStringBuilder errorDesc;
-        errorDesc << "the following topics are not created: ";
         for (const TString& topic : TopicsToRequest) {
-            if (!IsIn(topics, topic)) {
+            if (!requestSatisfied(topic)) {
+                if (errorDesc.empty()) {
+                    errorDesc << "the following topics are not created: ";
+                }
                 errorDesc << topic << ", ";
             }
         }
-        SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, errorDesc << "Marker# PQ95");
-        return true;
+        if (!errorDesc.empty()) {
+            SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, errorDesc << "Marker# PQ95");
+            return true;
+        }
     }
     if (ReadyForAnswer(ctx)) {
         AnswerAndDie(ctx);
@@ -968,8 +995,11 @@ public:
                 const TString clientside = full->GetClientsideName();
                 const TString original = requested->GetOriginalTopic();
                 if (original != clientside && TopicInfo.contains(original)) {
-                    TopicInfo[clientside] = std::move(TopicInfo[original]);
+                    // Copy out before insert: operator[] may rehash and
+                    // invalidate the reference to the existing entry.
+                    auto info = std::move(TopicInfo.find(original)->second);
                     TopicInfo.erase(original);
+                    TopicInfo.emplace(clientside, std::move(info));
                 }
                 Y_ABORT_UNLESS(TopicInfo.contains(clientside));
                 auto& topicInfo = TopicInfo[clientside];

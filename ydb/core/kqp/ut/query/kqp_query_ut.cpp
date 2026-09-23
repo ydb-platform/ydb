@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -92,6 +93,54 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         check("PRAGMA TablePathPrefix = ''; SELECT id FROM users;", "[[99u]]");
         check("PRAGMA TablePathPrefix = 'unused'; PRAGMA TablePathPrefix = 'folder'; SELECT id FROM users;", "[[42u]]");
         check("SELECT id FROM users;", "[[99u]]");
+    }
+
+    Y_UNIT_TEST_TWIN(TablePathPrefixRelativeToDatabaseTopicDdl, QueryService) {
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetEnabled(true);
+        pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
+        pqConfig.SetRequireCredentialsInNewProtocol(false);
+        pqConfig.AddClientServiceType()->SetName("data-streams");
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false).SetPQConfig(pqConfig));
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto topicClient = NTopic::TTopicClient(kikimr.GetDriver(), NTopic::TTopicClientSettings().Database("/Root"));
+        auto schemeClient = kikimr.GetSchemeClient();
+        const auto mkdirResult = schemeClient.MakeDirectory("/Root/folder").ExtractValueSync();
+        UNIT_ASSERT_C(mkdirResult.IsSuccess(), mkdirResult.GetIssues().ToString());
+
+        const auto execute = [&](const TString& query) -> TStatus {
+            if constexpr (QueryService) {
+                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+        for (const TString& pragma : {
+            TString("PRAGMA TablePathPrefix = 'folder';"),
+            TString("PRAGMA TablePathPrefix = './folder';"),
+            TString("PRAGMA TablePathPrefix('kikimr', 'folder');"),
+            TString("PRAGMA TablePathPrefix('kikimr', './folder');"),
+        }) {
+            const auto createResult = execute(pragma + "CREATE TOPIC events WITH (retention_period = Interval('PT2H'));");
+            UNIT_ASSERT_C(createResult.IsSuccess(), pragma << ": " << createResult.GetIssues().ToString());
+            const auto created = topicClient.DescribeTopic("/Root/folder/events").ExtractValueSync();
+            UNIT_ASSERT_C(created.IsSuccess(), pragma << ": " << created.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(created.GetTopicDescription().GetRetentionPeriod(), TDuration::Hours(2));
+
+            const auto alterResult = execute(pragma + "ALTER TOPIC events SET (retention_period = Interval('PT3H'));");
+            UNIT_ASSERT_C(alterResult.IsSuccess(), pragma << ": " << alterResult.GetIssues().ToString());
+            const auto altered = topicClient.DescribeTopic("/Root/folder/events").ExtractValueSync();
+            UNIT_ASSERT_C(altered.IsSuccess(), pragma << ": " << altered.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(altered.GetTopicDescription().GetRetentionPeriod(), TDuration::Hours(3));
+
+            const auto dropResult = execute(pragma + "DROP TOPIC events;");
+            UNIT_ASSERT_C(dropResult.IsSuccess(), pragma << ": " << dropResult.GetIssues().ToString());
+            const auto directory = schemeClient.ListDirectory("/Root/folder").ExtractValueSync();
+            UNIT_ASSERT_C(directory.IsSuccess(), pragma << ": " << directory.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(directory.GetChildren().size(), 0);
+        }
     }
 
     Y_UNIT_TEST(PreparedQueryInvalidate) {

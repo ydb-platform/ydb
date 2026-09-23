@@ -18,9 +18,33 @@ NYql::TAstParseResult Translate(const TString& query, const TString& provider = 
         10, provider, EDebugOutput::None, false, settings);
 }
 
-void AssertPath(const NYql::TAstParseResult& result, const TString& path) {
+const NYql::TAstNode* GetKeyPath(const NYql::TAstParseResult& result) {
     UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
-    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(result), TStringBuilder() << "(String '\"" << path << "\")");
+    const auto* key = FindNodeByChildAtomContent(result.Root, 0, "Key");
+    UNIT_ASSERT_C(key && key->GetChildrenCount() >= 2, GetPrettyPrint(result));
+    const auto* quotedEntry = key->GetChild(1);
+    UNIT_ASSERT(quotedEntry->IsListOfSize(2));
+    UNIT_ASSERT(quotedEntry->GetChild(0)->IsAtom());
+    UNIT_ASSERT_VALUES_EQUAL(quotedEntry->GetChild(0)->GetContent(), "quote");
+    const auto* entry = quotedEntry->GetChild(1);
+    UNIT_ASSERT(entry->IsListOfSize(2));
+    const auto* string = entry->GetChild(1);
+    UNIT_ASSERT(string->IsListOfSize(2));
+    UNIT_ASSERT(string->GetChild(0)->IsAtom());
+    UNIT_ASSERT_VALUES_EQUAL(string->GetChild(0)->GetContent(), "String");
+    return string->GetChild(1);
+}
+
+void AssertQuotedAtom(const NYql::TAstNode* node, const TString& value) {
+    UNIT_ASSERT(node->IsListOfSize(2));
+    UNIT_ASSERT(node->GetChild(0)->IsAtom());
+    UNIT_ASSERT_VALUES_EQUAL(node->GetChild(0)->GetContent(), "quote");
+    UNIT_ASSERT(node->GetChild(1)->IsAtom());
+    UNIT_ASSERT_VALUES_EQUAL(node->GetChild(1)->GetContent(), value);
+}
+
+void AssertPath(const NYql::TAstParseResult& result, const TString& path) {
+    AssertQuotedAtom(GetKeyPath(result), path);
 }
 
 Y_UNIT_TEST(ResolveFromDatabase) {
@@ -96,8 +120,13 @@ Y_UNIT_TEST(DeferredTablePathsUseDatabaseRoot) {
         $table = 'us' || 'ers';
         SELECT * FROM $table;
     )");
-    AssertPath(result, "/Root/database/folder");
-    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(result), "BuildTablePath");
+    const auto* buildPath = FindNodeByChildAtomContent(GetKeyPath(result), 0, "BuildTablePath");
+    UNIT_ASSERT_C(buildPath && buildPath->IsListOfSize(3), GetPrettyPrint(result));
+    const auto* prefix = buildPath->GetChild(1);
+    UNIT_ASSERT(prefix->IsListOfSize(2));
+    UNIT_ASSERT(prefix->GetChild(0)->IsAtom());
+    UNIT_ASSERT_VALUES_EQUAL(prefix->GetChild(0)->GetContent(), "String");
+    AssertQuotedAtom(prefix->GetChild(1), "/Root/database/folder");
 }
 
 Y_UNIT_TEST(ObjectPathsUseDatabaseRoot) {

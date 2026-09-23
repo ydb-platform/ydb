@@ -69,6 +69,8 @@ SELECT * FROM `../users`; -- /local/users
 
 Each relative prefix is resolved from the database root, even if another prefix was set earlier. An empty prefix refers to the database root.
 
+`..` can resolve a path above the database root. For the database `/Root/database`, the prefix `../sibling` resolves to `/Root/sibling`. The resulting path is subject to the same access checks and operation-specific database restrictions as an explicitly absolute path.
+
 The prefix is not added if the table name is an absolute path (starts with `/`). For example, the table path `/other/users` is used as is, regardless of the prefix.
 
 ### UseTablePrefixForEach {#use-table-prefix-for-each}

@@ -12,6 +12,7 @@ ADDINCL(
 
 PEERDIR(
     yql/essentials/sql/v1/ide/completion/syntax
+    yql/essentials/sql/v1/ide/pure_ast
 )
 
 END()

@@ -223,7 +223,8 @@ IGraphTransformer::TStatus EstimateDataSize(IYtGateway::TPathStatResult& result,
             }
         }
 
-        if (useColumnarStat) {
+        const bool hasRLS = pathInfo->Table->Meta && pathInfo->Table->Meta->HasRLS;
+        if (useColumnarStat && !hasRLS) {
             TMaybe<TVector<TString>> overrideColumns;
             if (columns && pathInfo->Table->RowSpec && (pathInfo->Table->RowSpec->StrictSchema || nullptr == FindPtr(*columns, YqlOthersColumnName))) {
                 overrideColumns = columns;

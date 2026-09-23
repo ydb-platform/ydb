@@ -531,6 +531,5 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
             UNIT_ASSERT_C(ast.find("(Uint64 '" + std::to_string(portionId) + ")") != std::string::npos, ast);
         }
     }
-}
 
 }   // namespace NKikimr::NKqp

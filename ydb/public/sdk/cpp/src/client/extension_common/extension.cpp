@@ -26,14 +26,16 @@ IStatApi* IStatApi::Create(TDriver driver) {
 class TDiscoveryMutator : public IDiscoveryMutatorApi {
 public:
     TDiscoveryMutator(std::shared_ptr<TGRpcConnectionsImpl> driverImpl)
-        : DriverImpl(driverImpl.get())
+        : DriverImpl(driverImpl)
     { }
 
     void SetMutatorCb(TMutatorCb&& cb) override {
-        DriverImpl->SetDiscoveryMutator(std::move(cb));
+        if (auto driverImpl = DriverImpl.lock()) {
+            driverImpl->SetDiscoveryMutator(std::move(cb));
+        }
     }
 private:
-    TGRpcConnectionsImpl* DriverImpl;
+    std::weak_ptr<TGRpcConnectionsImpl> DriverImpl;
 };
 
 IDiscoveryMutatorApi* IDiscoveryMutatorApi::Create(TDriver driver) {

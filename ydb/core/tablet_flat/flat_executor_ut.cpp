@@ -6872,6 +6872,35 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 10);
     }
 
+    Y_UNIT_TEST(TestStickyMain_BTreeIndexV2) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env, false, true);
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(0) });
+
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        DoFullScan(env, failedAttempts);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 10); // only the non-sticky alternate data pages
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        DoFullScan(env, failedAttempts, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 10);
+    }
+
     Y_UNIT_TEST(TestStickyAlt_FlatIndex) {
         TMyEnvBase env;
         TRowsModel rows;
@@ -7989,6 +8018,24 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         }
     };
 
+    struct TTxSetCacheMode : public ITransaction {
+        explicit TTxSetCacheMode(NSharedCache::ECacheMode cacheMode)
+            : CacheMode(cacheMode)
+        {
+        }
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            txc.DB.Alter().SetFamilyCacheMode(TRowsModel::TableId, 0, CacheMode);
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+
+        const NSharedCache::ECacheMode CacheMode;
+    };
+
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_Default) { // uses b-tree index
         TMyEnvBase env;
         TRowsModel rows;
@@ -8231,6 +8278,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         auto &appData = env->GetAppData();
         appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
         appData.FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+        auto counters = GetSharedPageCounters(env);
         int readRows = 0, failedAttempts = 0;
 
         // The part is written with both roots, so with V2 off the reader must fall back to the V1 shadow
@@ -8253,6 +8301,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         auto policy = MakeIntrusive<TCompactionPolicy>();
         policy->MinBTreeIndexNodeSize = 128;
         env.SendSync(rows.MakeScheme(std::move(policy)));
+        env.SendSync(new NFake::TEvExecute{ new TTxSetCacheMode(NSharedCache::ECacheMode::TryKeepInMemory) });
 
         env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(1000, 950));
         env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(1000, 950));
@@ -8261,14 +8310,22 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         env.WaitFor<NFake::TEvCompacted>();
 
         env.SendSync(new TEvents::TEvPoison, false, true);
+        SetSharedCacheSize(env, 0_MB);
+        SetSharedCacheSize(env, 8_MB);
         appData.FeatureFlags.SetEnableLocalDBBtreeIndexV2(false);
         watchRequests = true;
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
+        for (ui32 i = 0; i < 400 && counters->LoadInFlyPages->Val() != 0; ++i) {
+            WakeupSharedCache(env);
+        }
+
+        const ui64 missesBeforeRead = counters->CacheMissInMemoryPages->Val();
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) }, true);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
         UNIT_ASSERT(v1IndexRequested);
         UNIT_ASSERT(!v2IndexRequested);
+        UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), missesBeforeRead);
     }
 
     Y_UNIT_TEST(EnableLocalDBBtreeIndex_True_Generations) { // uses b-tree index

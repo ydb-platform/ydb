@@ -1401,7 +1401,7 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_AltRoom) {
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
-    SetupSharedCache(env, 10_MB, true);
+    SetupSharedCache(env, 12_MB, true);
 
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, false, {}, EValueRoom::InMemory) });
     // write 100 rows, each ~100KB (~10MB)
@@ -1413,7 +1413,7 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_AltRoom) {
     env.WaitFor<NFake::TEvCompacted>();
 
     // Drop everything the compaction left in the cache: the tree has to be discovered again.
-    RestartAndClearCache(env, 10_MB);
+    RestartAndClearCache(env, 12_MB);
     WaitInFlyDrain(env, counters);
 
     TRetriedCounters retried;
@@ -1425,6 +1425,22 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_AltRoom) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
+
+    // Making the main collection in-memory must restart the already completed alternate-room walk,
+    // because its index pages now have to be reloaded into the in-memory tier.
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0_MB));
+    WaitEvent(env, NMemory::EvConsumerLimit);
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(12_MB));
+    WaitEvent(env, NMemory::EvConsumerLimit);
+    env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, true) });
+    WakeupSharedCache(env);
+    WaitInFlyDrain(env, counters);
+
+    const ui64 missesBeforeRead = counters->CacheMissInMemoryPages->Val();
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), missesBeforeRead);
 }
 
 Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_IndexOnly) {
@@ -1491,6 +1507,7 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_IndexOnlyEnabling) {
 
     // Keep the main family in memory; the value family stays in its own regular room.
     env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, true) });
+    WakeupSharedCache(env);
     WaitInFlyDrain(env, counters);
 
     TRetriedCounters retried;
@@ -1501,11 +1518,76 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_IndexOnlyEnabling) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
 }
 
+Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_IndexOnlyReenabling) {
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 10_MB, true);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, false, {}, EValueRoom::Regular) });
+    for (i64 key = 0; key < 100; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    env.SendSync(new NFake::TEvCompact(TableId));
+    env.WaitFor<NFake::TEvCompacted>();
+    RestartAndClearCache(env, 10_MB);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, true) });
+    WakeupSharedCache(env);
+    WaitInFlyDrain(env, counters);
+    env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, false) });
+
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0_MB));
+    WaitEvent(env, NMemory::EvConsumerLimit);
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(10_MB));
+    WaitEvent(env, NMemory::EvConsumerLimit);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxTryKeepInMemory(TableId, true) });
+    WakeupSharedCache(env);
+    WaitInFlyDrain(env, counters);
+
+    const ui64 missesBeforeRead = counters->CacheMissInMemoryPages->Val();
+    TRetriedCounters retried;
+    for (i64 key = 99; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), missesBeforeRead);
+}
+
 Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_TinyInFlyLimit) {
     // A tight in-memory in-fly budget must only slow the preload down, not stall it: both the walk and
     // the loader send what fits and are re-driven as the fetches complete.
     TMyEnvBase env;
     auto counters = GetSharedPageCounters(env);
+    bool watchFetches = false;
+    bool sawSequentialIndexBatch = false;
+    auto fetchObserver = env->AddObserver<NBlockIO::TEvFetch>([&](const auto& ev) {
+        if (!watchFetches || !ev->Get()->LoadRunId) {
+            return;
+        }
+
+        const auto& pages = ev->Get()->Pages;
+        if (pages.size() < 2 || pages.front().Type != NTable::NPage::EPage::BTreeIndexV2) {
+            return;
+        }
+
+        ui64 bytes = 0;
+        for (size_t i = 0; i < pages.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(pages[i].Type, NTable::NPage::EPage::BTreeIndexV2);
+            UNIT_ASSERT(pages[i].Offset.IsByteOffset());
+            if (i) {
+                UNIT_ASSERT_LT(pages[i - 1].Offset.AsByteOffset(), pages[i].Offset.AsByteOffset());
+            }
+            bytes += pages[i].Size;
+        }
+        UNIT_ASSERT_LE(bytes, NBlockIO::BlockSize);
+        sawSequentialIndexBatch = true;
+    });
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
@@ -1521,8 +1603,10 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_TinyInFlyLimit) {
     env.SendSync(new NFake::TEvCompact(TableId));
     env.WaitFor<NFake::TEvCompacted>();
 
+    watchFetches = true;
     RestartAndClearCache(env, 10_MB);
     WaitInFlyDrain(env, counters);
+    UNIT_ASSERT(sawSequentialIndexBatch);
 
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
 

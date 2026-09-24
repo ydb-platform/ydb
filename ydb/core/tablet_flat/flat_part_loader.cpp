@@ -152,6 +152,7 @@ void TLoader::StageParseMeta()
             }
         };
 
+        PageCollections[0]->PageCollection->SetSkipBTreeIndexV1Shadow(false);
         if (HasAppData()) {
             if (!AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2()) {
                 // V2 read disabled: for dual-root (V2+V1) parts, strip RootV2 to use V1 index

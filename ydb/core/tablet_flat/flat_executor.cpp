@@ -762,7 +762,7 @@ TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartS
     const bool sticky = stickyGroups[groupIndex];
     const bool keepIndexPages = partStore.PageCollections[0]->GetCacheMode() == ECacheMode::TryKeepInMemory;
     const bool keepDataPages = partStore.PageCollections[groupIndex]->GetCacheMode() == ECacheMode::TryKeepInMemory;
-    if (!keepIndexPages && !keepDataPages && !sticky) {
+    if (!keepIndexPages && !keepDataPages && !sticky && !stickyGroups[0]) {
         return {};
     }
 

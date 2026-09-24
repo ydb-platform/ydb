@@ -85,6 +85,7 @@ namespace NKikimr::NSharedCache {
 
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         ECacheMode CacheMode;
+        // Authoritative for the sender: an empty vector withdraws that owner's walks.
         TVector<TBtreeSeed> BtreeSeeds;
 
         TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ECacheMode cacheMode,

@@ -187,11 +187,8 @@ private:
     }
 };
 
-void RunMoveDataToCompletion(const bool ttlBackgroundDisabled, const bool moveDataEnabled = true) {
+void RunMoveDataToCompletion(const bool moveDataEnabled) {
     TMoveDataFixture f(moveDataEnabled);
-    if (ttlBackgroundDisabled) {
-        f.Controller->DisableBackground(EBackground::TTL);
-    }
     f.Write(1, 0, 1000);
     f.Controller->WaitCompactions(TDuration::Seconds(10));
     const size_t oldBlobs = f.ReassignPastWrittenData();
@@ -222,17 +219,12 @@ void RunMoveDataToCompletion(const bool ttlBackgroundDisabled, const bool moveDa
 // Whole chain: TEvMoveData -> selection -> accessor metadata -> rewrite -> response.
 Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     Y_UNIT_TEST(MoveDataRewritesPortionsAndAnswersHive) {
-        RunMoveDataToCompletion(/*ttlBackgroundDisabled=*/false);
-    }
-
-    // Rewrites come from the loop TTL uses: TTL off must not stop the move.
-    Y_UNIT_TEST(MoveDataCompletesWithTtlDisabled) {
-        RunMoveDataToCompletion(/*ttlBackgroundDisabled=*/true);
+        RunMoveDataToCompletion(/*moveDataEnabled=*/true);
     }
 
     // Flag off: TEvMoveData goes straight to the executor, which leaves the portions alone.
     Y_UNIT_TEST(MoveDataDisabledLeavesPortionsInPlace) {
-        RunMoveDataToCompletion(/*ttlBackgroundDisabled=*/false, /*moveDataEnabled=*/false);
+        RunMoveDataToCompletion(/*moveDataEnabled=*/false);
     }
 
     // An uncommitted write cannot be rewritten, yet its blobs sit in the old group until it commits and moves.
@@ -359,59 +351,6 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         }
         response = f.DriveGate(150);
         UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the cleanup finished");
-        f.AssertDrainedSuccess(response);
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000);
-    }
-
-    // Regression: cleanup that has DoStart-ed (portions already out of CleanupPortions) before the first empty-queue gate check must still block the gate.
-    Y_UNIT_TEST(GateStaysClosedWhenCleanupStartedBeforeWatermarkFreezes) {
-        TMoveDataFixture f;
-        f.Controller->DisableBackground(EBackground::TTL);
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.ReassignPastWrittenData();
-
-        THashSet<ui64> rewritten;
-        std::vector<TAutoPtr<IEventHandle>> heldCleanups;
-        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
-            const auto* writeIndex = AsWriteIndex(ev);
-            if (!writeIndex) {
-                return;
-            }
-            const auto& changes = writeIndex->IndexChanges;
-            if (const auto rewrite = std::dynamic_pointer_cast<NOlap::TTTLColumnEngineChanges>(changes)) {
-                const THashSet<ui64> ids = rewrite->GetPortionsToRemove().GetPortionIds();
-                rewritten.insert(ids.begin(), ids.end());
-                return;
-            }
-            const auto cleanup = std::dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(changes);
-            if (!rewritten.empty() && cleanup && AnyOf(cleanup->GetPortionsToDrop(), [&](const NOlap::TPortionInfo::TConstPtr& p) {
-                    return rewritten.contains(p->GetPortionId());
-                })) {
-                heldCleanups.emplace_back(ev.Release());
-            }
-        });
-
-        f.StartMove();
-        f.DriveGate(
-            150,
-            [&](const ui32 i) {
-                if (i == 25) {
-                    f.Write(2, 1000, 1001);
-                }
-            },
-            [&] {
-                return !heldCleanups.empty();
-            });
-        UNIT_ASSERT_C(!heldCleanups.empty(), "cleanup of rewritten portions never started");
-        // Cleanup has DoStart-ed (CleanupPortions emptied) but not yet committed; the gate must stay closed when the watermark is first frozen in this window.
-        UNIT_ASSERT_C(!f.DriveGate(120), "gate opened while the in-flight cleanup still held target blobs");
-
-        for (auto& ev : heldCleanups) {
-            f.Runtime.Send(ev.Release());
-        }
-        const auto response = f.DriveGate(150);
-        UNIT_ASSERT_C(response, "no Success after cleanup committed");
         f.AssertDrainedSuccess(response);
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000);
     }

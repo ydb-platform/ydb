@@ -64,10 +64,6 @@ protected:
         InFlightPortionIds.emplace(portionId);
     }
 
-    bool IsInInitialPortionIds(ui64 portionId) const {
-        return InitialPortionIds.contains(portionId);
-    }
-
     bool IsInPendingPortionIds(ui64 portionId) const {
         return PendingPortionIds.contains(portionId);
     }
@@ -95,10 +91,6 @@ public:
         const TInstant now);
 
     TMoveDataQueueSizes GetMoveDataQueueSizes() const;
-
-    ui64 GetMoveDataPortionsCount() const {
-        return GetMoveDataQueueSizes().GetTotal();
-    }
 
     static constexpr TDuration AdmissionWindow = TDuration::Minutes(10);
     static constexpr TDuration MetadataRequestExpiry = TDuration::Minutes(5);

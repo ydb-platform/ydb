@@ -1875,10 +1875,16 @@ private:
 
 class TEvRequestAuthAndCheckResult : public TEventLocal<TEvRequestAuthAndCheckResult, TRpcServices::EvRequestAuthAndCheckResult> {
 public:
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TAuditLogParts& auditLogParts)
+    TEvRequestAuthAndCheckResult(
+        Ydb::StatusIds::StatusCode status,
+        const NYql::TIssues& issues,
+        const TAuditLogParts& auditLogParts,
+        EHttpDatabaseAccessVerdict databaseAccessVerdict
+    )
         : Status(status)
         , Issues(issues)
         , AuditLogParts(auditLogParts)
+        , DatabaseAccessVerdict(databaseAccessVerdict)
     {}
 
     TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue, const TAuditLogParts& auditLogParts)
@@ -1918,6 +1924,11 @@ public:
     EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
 };
 
+enum class EAuthAndCheckRequestSource {
+    Http,
+    Grpc,
+};
+
 class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
@@ -1928,7 +1939,9 @@ public:
         NActors::TActorId sender,
         TAuditMode auditMode,
         TString peerName,
-        TString requestId)
+        TString requestId,
+        EAuthAndCheckRequestSource source
+    )
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
@@ -1936,7 +1949,12 @@ public:
         , AuditMode(auditMode)
         , PeerName(std::move(peerName))
         , RequestId(std::move(requestId))
+        , Source(source)
     {}
+
+    bool FromHttp() const {
+        return Source == EAuthAndCheckRequestSource::Http;
+    }
 
     // IRequestProxyCtx
     const TMaybe<TString> GetYdbToken() const override {
@@ -1980,7 +1998,8 @@ public:
                 new TEvRequestAuthAndCheckResult(
                     status,
                     IssueManager.GetIssues(),
-                    GetAuditLogParts()
+                    GetAuditLogParts(),
+                    DatabaseAccessVerdict
                 )
             );
         }
@@ -2145,6 +2164,7 @@ public:
     TString PeerName;
     TString RequestId;
     EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
+    const EAuthAndCheckRequestSource Source;
 
     inline static const TString EmptySerializedTokenMessage;
 };

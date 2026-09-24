@@ -119,8 +119,17 @@ class TGrpcRequestCheckActor
     using TSelf = TGrpcRequestCheckActor<TEvent>;
     using TBase = TActorBootstrappedSecureRequest<TGrpcRequestCheckActor>;
 
-    static constexpr bool IsHttpRequest = std::is_same_v<TEvent, TEvRequestAuthAndCheck>;
-    static constexpr bool IsGrpcRequest = !IsHttpRequest;
+    // TEvRequestAuthAndCheck is a standalone auth event, not an RPC method.
+    // HTTP monitoring and UDF UploadModule both use it.
+    static constexpr bool IsAuthAndCheckRequest = std::is_same_v<TEvent, TEvRequestAuthAndCheck>;
+    static constexpr bool IsRpcRequest = !IsAuthAndCheckRequest;
+
+    bool IsHttpRequest() const {
+        if constexpr (IsAuthAndCheckRequest) {
+            return Request_->Get()->FromHttp();
+        }
+        return false;
+    }
 
 public:
     void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
@@ -173,7 +182,7 @@ public:
             entries.emplace_back(GetPermissions(), attributes);
         }
 
-        if constexpr (std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
+        if constexpr (IsAuthAndCheckRequest) {
             TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> authCheckRequestEntries = GetEntriesForAuthAndCheckRequest(Request_, CloudPermissionsSettings);
             entries.insert(entries.end(), authCheckRequestEntries.begin(), authCheckRequestEntries.end());
         }
@@ -239,7 +248,7 @@ public:
         , FacilityProvider_(facilityProvider)
         , CloudPermissionsSettings(cloudPermissionsSettings)
     {
-        if constexpr (IsHttpRequest) {
+        if constexpr (IsAuthAndCheckRequest) {
             RequestSchemeData_ = schemeData;
         }
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
@@ -273,16 +282,34 @@ public:
 
         GrpcRequestBaseCtx_->SetCounters(Counters_);
 
-        if constexpr (IsHttpRequest) {
-            if (IsStrictDatabaseOnlyToken(AppData(), TBase::GetSerializedToken())) {
+        if constexpr (IsAuthAndCheckRequest) {
+            if (IsHttpRequest() && IsStrictDatabaseOnlyToken(AppData(), TBase::GetSerializedToken())) {
                 HttpDatabaseAccessVerdict_ = EvaluateHttpDatabaseAccessVerdict();
                 if (HttpDatabaseAccessVerdict_ != EHttpDatabaseAccessVerdict::Ok) {
+                    const bool enforceDatabaseAccess =
+                        AppData()->FeatureFlags.GetEnableDatabaseAccessCheckForHttpMonitoring();
                     LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "HTTP monitoring database access would deny"
+                        (enforceDatabaseAccess
+                            ? "HTTP monitoring database access denied"
+                            : "HTTP monitoring database access would deny")
                         << ", database: " << CheckedDatabaseName_
                         << ", verdict: " << ToString(HttpDatabaseAccessVerdict_)
                         << ", user: " << TBase::GetUserSID()
                         << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+                    if (enforceDatabaseAccess) {
+                        if (HttpDatabaseAccessVerdict_ == EHttpDatabaseAccessVerdict::NoConnectRight) {
+                            AuditLogConnectDbAccessDenied(
+                                GrpcRequestBaseCtx_,
+                                CheckedDatabaseName_,
+                                TBase::GetUserSID(),
+                                TBase::GetSanitizedToken());
+                        }
+                        // Actual HTTP denials never reach LogAuthorizedHttpRequest – count them here
+                        Counters_->IncDatabaseHttpAccessDenyCounter();
+                        Request_->Get()->DatabaseAccessVerdict = HttpDatabaseAccessVerdict_;
+                        ReplyUnauthorizedAndDie(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, "Access denied"));
+                        return;
+                    }
                 }
             }
         }
@@ -616,7 +643,7 @@ private:
         }
 
         if (auditEnabledReceived || auditEnabledCompleted) {
-            if constexpr (IsGrpcRequest) {
+            if constexpr (IsRpcRequest) {
                 if (TString grpcMethod = requestBaseCtx->GetRpcMethodName()) {
                     requestBaseCtx->AddAuditLogPart("grpc_method", requestBaseCtx->GetRpcMethodName());
                 }

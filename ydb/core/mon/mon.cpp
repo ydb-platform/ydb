@@ -229,7 +229,8 @@ IEventHandle* GetRequestAuthAndCheckHandle(
             owner,
             NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
             std::move(peerName),
-            std::move(requestId)),
+            std::move(requestId),
+            NGRpcService::EAuthAndCheckRequestSource::Http),
         IEventHandle::FlagTrackDelivery
     );
 }

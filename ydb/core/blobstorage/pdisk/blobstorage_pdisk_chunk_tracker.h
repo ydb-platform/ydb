@@ -29,6 +29,8 @@ class TPerOwnerQuotaTracker {
     TStackVec<TOwner, 256> ActiveOwnerIds; // Can be accessed only from the main thread (changes only when owner is
                                         // added or removed).
     std::array<TQuotaRecord, 256> QuotaForOwner; // Always allocated, can be read from anywhere
+    // Preserve supplied weights while nonzero ExpectedOwnerSize makes the effective weights 1.
+    std::array<ui32, 256> OwnerWeights;
     static_assert(sizeof(TOwner) == 1, "Make sure to use large enough QuotaForOwner buffer");
 
     ui32 NormalizeOwnerWeight(ui32 weight) const {
@@ -48,6 +50,7 @@ public:
         ExpectedOwnerSize = 0;
         ActiveOwnerIds.clear();
         QuotaForOwner.fill(TQuotaRecord{});
+        OwnerWeights.fill(1);
     }
 
     // The following code is expected to behave OK only when you reduce expected owner count.
@@ -69,14 +72,16 @@ public:
         RedistributeQuotas();
     }
 
-    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize) {
+    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize,
+            const TMap<TOwner, ui32>& ownerWeights = {}) {
         Y_VERIFY(newOwnerSize >= 0);
         ExpectedOwnerCount = newOwnerCount;
         ExpectedOwnerSize = newOwnerSize;
-        if (ExpectedOwnerSize) {
-            for (TOwner id : ActiveOwnerIds) {
-                QuotaForOwner[id].SetWeight(1);
+        for (TOwner id : ActiveOwnerIds) {
+            if (auto it = ownerWeights.find(id); it != ownerWeights.end()) {
+                OwnerWeights[id] = it->second;
             }
+            QuotaForOwner[id].SetWeight(NormalizeOwnerWeight(OwnerWeights[id]));
         }
         RedistributeQuotas();
     }
@@ -119,6 +124,7 @@ public:
         Y_VERIFY(record.GetFree() == 0);
         record.SetName(TStringBuilder() << "Owner# " << id);
         record.SetVDiskId(vdiskId);
+        OwnerWeights[id] = weight;
         record.SetWeight(NormalizeOwnerWeight(weight));
 
         ActiveOwnerIds.push_back(id);
@@ -130,6 +136,7 @@ public:
         Y_VERIFY(it != ActiveOwnerIds.end());
 
         TQuotaRecord &record = QuotaForOwner[id];
+        OwnerWeights[id] = weight;
         record.SetWeight(NormalizeOwnerWeight(weight));
         RedistributeQuotas();
     }
@@ -851,10 +858,11 @@ public:
         RecomputeStaticReserve();
     }
 
-    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize) {
+    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize,
+            const TMap<TOwner, ui32>& ownerWeights = {}) {
         Params.ExpectedOwnerCount = newOwnerCount;
         Params.ExpectedOwnerSize = newOwnerSize;
-        OwnerQuota->SetExpectedOwnerSettings(newOwnerCount, newOwnerSize);
+        OwnerQuota->SetExpectedOwnerSettings(newOwnerCount, newOwnerSize, ownerWeights);
         RecomputeStaticReserve();
     }
 

@@ -207,8 +207,24 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 2);
 
         chunkTracker.SetExpectedOwnerSize(0);
-        chunkTracker.SetOwnerWeight(102, 2);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 2);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 3);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 25);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 50);
+
+        chunkTracker.SetExpectedOwnerSize(30);
+        chunkTracker.SetOwnerWeight(102, 3);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 1);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 30);
+        chunkTracker.SetExpectedOwnerSize(0);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 3);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 4);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 75);
+
+        chunkTracker.SetExpectedOwnerSize(30);
+        chunkTracker.SetExpectedOwnerSettings(4, 0, {{102, 2}});
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 2);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 3);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 50);
     }
 

@@ -2845,6 +2845,40 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 0.99, 0.0, 99.6, 3, 4, TColor::RED);
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeRestoresOwnerWeightsWhenDisabled) {
+        TActorTestContext testCtx({.DiskSize = 1_GB, .ChunkSize = 1_MB});
+        const ui32 chunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        TVDiskMock disk(&testCtx, true);
+        disk.InitFull(3);
+
+        auto checkWeight = [&](ui32 weight) {
+            const auto result = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(disk.PDiskParams->Owner, disk.PDiskParams->OwnerRound), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->NumActiveSlots, weight);
+            testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+                UNIT_ASSERT_VALUES_EQUAL(pdisk->Keeper.GetOwnerWeight(disk.PDiskParams->Owner), weight);
+            });
+        };
+        auto changeSettings = [&](ui32 slotSizeInUnits, ui64 expectedSlotSize) {
+            testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+                new NPDisk::TEvChangeExpectedSlotCount(8, slotSizeInUnits, expectedSlotSize), NKikimrProto::OK);
+        };
+
+        changeSettings(2, 0);
+        checkWeight(2);
+        changeSettings(2, 100ull * chunkSize);
+        checkWeight(1);
+        testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
+            new NPDisk::TEvYardResize(disk.PDiskParams->Owner, disk.PDiskParams->OwnerRound, 5), NKikimrProto::OK);
+        checkWeight(1);
+        changeSettings(4, 0);
+        checkWeight(2);
+        changeSettings(4, 100ull * chunkSize);
+        checkWeight(1);
+    }
+
     Y_UNIT_TEST(ExpectedSlotSizeHardLimitRoundsDownToChunkSize) {
         TActorTestContext testCtx({
             .DiskSize = 1_GB,

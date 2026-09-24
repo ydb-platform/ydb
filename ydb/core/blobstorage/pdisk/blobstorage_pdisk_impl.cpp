@@ -2508,12 +2508,14 @@ void TPDisk::ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request) {
     ExpectedSlotSize = request.ExpectedSlotSize;
     NormalizeExpectedSlotSettings();
     Cfg->SlotSizeInUnits = request.SlotSizeInUnits;
-    Keeper.SetExpectedOwnerSettings(ExpectedSlotCount, GetExpectedOwnerSizeInChunks());
+    TMap<TOwner, ui32> ownerWeights;
     for (TOwner owner = OwnerBeginUser; owner < OwnerEndUser; ++owner) {
         if (OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
-            Keeper.SetOwnerWeight(owner, GetOwnerWeight(OwnerData[owner].GroupSizeInUnits));
+            ownerWeights.emplace(owner, TPDiskConfig::GetOwnerWeight(
+                OwnerData[owner].GroupSizeInUnits, Cfg->SlotSizeInUnits));
         }
     }
+    Keeper.SetExpectedOwnerSettings(ExpectedSlotCount, GetExpectedOwnerSizeInChunks(), ownerWeights);
 
     auto result = std::make_unique<NPDisk::TEvChangeExpectedSlotCountResult>(NKikimrProto::OK, TString());
     Mon.ChangeExpectedSlotCount.CountResponse();

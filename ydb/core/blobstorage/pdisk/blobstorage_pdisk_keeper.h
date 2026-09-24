@@ -228,8 +228,9 @@ public:
         ChunkTracker.SetExpectedOwnerSize(newOwnerSize);
     }
 
-    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize) {
-        ChunkTracker.SetExpectedOwnerSettings(newOwnerCount, newOwnerSize);
+    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize,
+            const TMap<TOwner, ui32>& ownerWeights = {}) {
+        ChunkTracker.SetExpectedOwnerSettings(newOwnerCount, newOwnerSize, ownerWeights);
     }
 
     void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {

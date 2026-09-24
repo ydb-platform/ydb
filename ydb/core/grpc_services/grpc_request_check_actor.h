@@ -286,13 +286,17 @@ public:
             if (IsHttpRequest() && IsStrictDatabaseOnlyToken(AppData(), TBase::GetSerializedToken())) {
                 HttpDatabaseAccessVerdict_ = EvaluateHttpDatabaseAccessVerdict();
                 if (HttpDatabaseAccessVerdict_ != EHttpDatabaseAccessVerdict::Ok) {
+                    const bool enforceDatabaseAccess =
+                        AppData()->FeatureFlags.GetEnableDatabaseAccessCheckForHttpMonitoring();
                     LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "HTTP monitoring database access would deny"
+                        (enforceDatabaseAccess
+                            ? "HTTP monitoring database access denied"
+                            : "HTTP monitoring database access would deny")
                         << ", database: " << CheckedDatabaseName_
                         << ", verdict: " << ToString(HttpDatabaseAccessVerdict_)
                         << ", user: " << TBase::GetUserSID()
                         << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-                    if (AppData()->FeatureFlags.GetEnableDatabaseAccessCheckForHttpMonitoring()) {
+                    if (enforceDatabaseAccess) {
                         if (HttpDatabaseAccessVerdict_ == EHttpDatabaseAccessVerdict::NoConnectRight) {
                             AuditLogConnectDbAccessDenied(
                                 GrpcRequestBaseCtx_,

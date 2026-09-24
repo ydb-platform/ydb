@@ -1648,8 +1648,7 @@ def build_html_dashboard(
         name: 'CPU limit (provisioned)',
         line: {{ color: '#9333ea', width: 2, dash: 'dash' }},
         legendrank: 1001,
-        customdata: xDisp.map(formatTimeLabel),
-        hovertemplate: 'CPU provisioned max: %{{y:.0f}} cores<br>%{{customdata}}<extra></extra>',
+        hovertemplate: 'CPU provisioned max: %{{y:.0f}} cores<extra></extra>',
       }}]);
     }}
 
@@ -1667,8 +1666,7 @@ def build_html_dashboard(
           name: 'RAM limit (provisioned)',
           line: {{ color: '#9333ea', width: 2, dash: 'dash' }},
           legendrank: 1001,
-          customdata: xDisp.map(formatTimeLabel),
-          hovertemplate: 'RAM provisioned max: %{{y:.1f}} GB<br>%{{customdata}}<extra></extra>',
+          hovertemplate: 'RAM provisioned max: %{{y:.1f}} GB<extra></extra>',
         }});
       }}
       if (lim.ya_make_mem_limit_gb) {{
@@ -1679,8 +1677,7 @@ def build_html_dashboard(
           name: 'RAM ya.make cgroup',
           line: {{ color: '#c026d3', width: 2, dash: 'dot' }},
           legendrank: 1002,
-          customdata: xDisp.map(formatTimeLabel),
-          hovertemplate: 'ya.make MemoryMax (~95%): %{{y:.1f}} GB<br>%{{customdata}}<extra></extra>',
+          hovertemplate: 'ya.make MemoryMax (~95%): %{{y:.1f}} GB<extra></extra>',
         }});
       }}
       if (traces.length) Plotly.addTraces(plotId, traces);
@@ -1750,7 +1747,7 @@ def build_html_dashboard(
           plot.querySelectorAll('.hoverlayer text, .hoverlayer tspan').forEach((node) => {{
             if (node.childElementCount) return;
             const raw = (node.textContent || '').trim();
-            if (/^\\d{{4}}-\\d{{2}}-\\d{{2}}/.test(raw)) node.textContent = label;
+            if (/\\d{{1,2}}:\\d{{2}}:\\d{{2}}/.test(raw) && /\\d{{4}}/.test(raw)) node.textContent = label;
           }});
         }};
         paint();
@@ -1914,14 +1911,13 @@ def build_html_dashboard(
       if (data.resources_overlay) {{
         const ro = data.resources_overlay;
         const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
-        const xLabels = xDisp.map(v => formatTimeLabel(v));
         Plotly.addTraces('cpuLayer', [
           {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, customdata: xLabels, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
+          {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
         ]);
         Plotly.addTraces('ramLayer', [
           {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, customdata: xLabels, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
+          {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
         ]);
         addCpuLimitTrace('cpuLayer', ro);
         addRamLimitTraces('ramLayer', ro);
@@ -1965,14 +1961,13 @@ def build_html_dashboard(
     if (data.resources_overlay) {{
       const ro = data.resources_overlay;
       const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
-      const xLabels = xDisp.map(v => formatTimeLabel(v));
       Plotly.addTraces('cpuLayerSuite', [
         {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, customdata: xLabels, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
+        {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
       ]);
       Plotly.addTraces('ramLayerSuite', [
         {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
-        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, customdata: xLabels, hovertemplate: '%{{customdata}}<br>%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
+        {{ x: xDisp, y: ro.ram_gb || [], mode: 'lines', name: 'RAM total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{fullData.name}}: %{{y:.3f}} GB<extra></extra>' }},
       ]);
       addCpuLimitTrace('cpuLayerSuite', ro);
       addRamLimitTraces('ramLayerSuite', ro);

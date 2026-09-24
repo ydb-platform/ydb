@@ -63,8 +63,8 @@ Y_UNIT_TEST_SUITE(ReadRows) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
 
         // Check normal behavior
-        {
-            Ydb::Table::ReadRowsRequest request = MakeReadRowsRequest("/Root/table-1", {1, 5});
+        for (const TString path : {"/Root/table-1", "table-1"}) {
+            Ydb::Table::ReadRowsRequest request = MakeReadRowsRequest(path, {1, 5});
             auto readRowsFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
                 std::move(request), "/Root", "", runtime.GetActorSystem(0));
             auto res = runtime.WaitFuture(readRowsFuture, TDuration::Seconds(10));

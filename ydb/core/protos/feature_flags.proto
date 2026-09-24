@@ -405,4 +405,8 @@ message TFeatureFlags {
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
     optional bool EnableIamDelegationSecrets = 336 [default = false]; // YDBFEATURES-144
     optional bool EnableStreamingQueryStateRecompute = 337 [default = false];
+    // Only a leading '/' makes a client path absolute. Otherwise prepend the
+    // cluster root for database names, or the database for schema-object paths.
+    // Main: enabled. Backports to 26-4 must use default = false.
+    optional bool EnableRelativePaths = 338 [default = true];
 }

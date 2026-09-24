@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TableCreator) {
         promise.GetFuture().GetValueSync();
 
         NYdb::TDriverConfig cfg;
-        cfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort).SetDatabase(Tests::TestDomainName);
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort).SetDatabase(TString("/") + Tests::TestDomainName);
         NYdb::TDriver driver(cfg);
         NYdb::NTable::TTableClient tableClient(driver);
         auto createSessionResult = tableClient.CreateSession().ExtractValueSync();
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE(TableCreator) {
         UNIT_ASSERT_C(result.Success, result.Issues.ToString());
 
         NYdb::TDriverConfig cfg;
-        cfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort).SetDatabase(Tests::TestDomainName);
+        cfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort).SetDatabase(TString("/") + Tests::TestDomainName);
         NYdb::TDriver driver(cfg);
         NYdb::NTable::TTableClient tableClient(driver);
         auto createSessionResult = tableClient.CreateSession().ExtractValueSync();

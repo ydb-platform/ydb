@@ -215,7 +215,8 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     //2. No database. Try parse and resolve account to database. If possible, try search this path.
     //3. Fallback from 2 - legacy mode.
 
-    DiscoveryConverter = ConverterFactory->MakeDiscoveryConverter(init.GetTopic(), true, LocalDC, Database);
+    DiscoveryConverter = ConverterFactory->MakeDiscoveryConverter(init.GetTopic(), true, LocalDC, Database,
+        AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
     if (!DiscoveryConverter->IsValid()) {
         CloseSession(
                 TStringBuilder() << "incorrect topic \"" << DiscoveryConverter->GetOriginalTopic()

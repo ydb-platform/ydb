@@ -1922,13 +1922,13 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
 
 
 class TestRestoreReplaceOption(BaseTestBackupInFiles):
-    def ydb_cli(self, args):
+    def ydb_cli(self, args, database="/Root"):
         return yatest.common.execute(
             [
                 backup_bin(),
                 "-vvv",
                 "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database", "/Root",
+                "--database", database,
             ]
             + args
         )
@@ -2055,6 +2055,22 @@ class TestRestoreReplaceOption(BaseTestBackupInFiles):
             are_tables_the_same(session, self.driver.scheme_client, "/Root/table", "/Root/restoration/point/table"),
             is_(True),
         )
+
+        # A relative destination is resolved against the database.
+        source_path = "/Root/table"
+        restored_path = "/Root/relative_restoration/point/table"
+        self.ydb_cli([
+            "tools", "restore", "--path", "relative_restoration/point", "--input", backup_files_dir,
+        ], database="/Root")
+        assert_that(are_tables_the_same(session, self.driver.scheme_client, source_path, restored_path), is_(True))
+
+        self.delete_some_rows(session, restored_path)
+        # A slashless cluster-root prefix is another relative path component.
+        restored_path = "/Root/Root/relative_restoration/point/table"
+        self.ydb_cli([
+            "tools", "restore", "--path", "Root/relative_restoration/point", "--input", backup_files_dir, "--replace",
+        ], database="/Root")
+        assert_that(are_tables_the_same(session, self.driver.scheme_client, source_path, restored_path), is_(True))
 
 
 class TestReplaceSysACLOption(BaseTestBackupInFiles):

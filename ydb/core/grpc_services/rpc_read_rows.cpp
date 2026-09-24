@@ -272,7 +272,7 @@ public:
     }
 
     const TString& GetTable() {
-        return GetProto()->path();
+        return TablePath;
     }
 
     bool CheckAccess(NSchemeCache::TSchemeCacheNavigate* resolveNamesResult, TString& errorMessage) {
@@ -331,6 +331,7 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx) {
+        TablePath = Request->GetDatabaseRelativePath(GetProto()->path());
         StartTime = TAppData::TimeProvider->Now();
         if (!ResolveTable()) {
             return;
@@ -857,6 +858,7 @@ public:
 
 private:
     std::unique_ptr<IRequestNoOpCtx> Request;
+    TString TablePath;
     TInstant StartTime;
     TActorId TimeoutTimerActorId;
     TActorId PipeCache;

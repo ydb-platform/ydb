@@ -768,11 +768,18 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadSessionStatus::TPtr&
 
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const TActorContext& ctx) {
+    const auto& init = ev->Get()->Request.init_request();
+    for (const auto& settings : init.topics_read_settings()) {
+        if constexpr (Protocol == EProtocol::PQv1) {
+            Request->CountResourcePath(settings.topic());
+        } else {
+            Request->CountResourcePath(settings.path());
+        }
+    }
+
     if (!Topics.empty()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "got second init request", ctx);
     }
-
-    const auto& init = ev->Get()->Request.init_request();
 
     if (!init.topics_read_settings_size()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "no topics in init request", ctx);
@@ -835,11 +842,13 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
     }
 
 
-    auto getTopicPath = [](const auto& settings) {
+    auto getTopicPath = [&](const auto& settings) {
         if constexpr (Protocol == EProtocol::PQv1) {
             return settings.topic();
         } else {
-            return settings.path();
+            return TopicsHandler.GetConverterFactory()->GetNoDCMode()
+                ? Request->GetDatabaseRelativePath(settings.path())
+                : TString(settings.path());
         }
     };
 
@@ -877,7 +886,8 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
-    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database);
+    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database,
+        AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason, ctx);

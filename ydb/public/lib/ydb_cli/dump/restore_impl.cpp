@@ -8,6 +8,7 @@
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
@@ -446,8 +447,30 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
 TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
     LOG_I("Restore " << fsPath.Quote() << " to " << dbPath.Quote());
 
-    // Find first existing path on the way from the dbPath to the root of the cluster.
-    TPathSplitUnix dbPathSplit(dbPath);
+    if (dbPath.empty()) {
+        return Result<TRestoreResult>(dbPath, EStatus::BAD_REQUEST, "Restore destination must not be empty");
+    }
+
+    // Restore queries and directory listings must use the same absolute paths.
+    TString dbRestorePath = dbPath;
+    if (!dbRestorePath.StartsWith('/')) {
+        if (auto result = FindClusterRootPath(); !result.IsSuccess()) {
+            return result;
+        }
+
+        TString databasePath(DriverConfig.GetDatabase());
+        if (!databasePath.StartsWith('/')) {
+            databasePath = Join('/', ClusterRootPath, databasePath);
+        }
+        dbRestorePath = Join('/', databasePath, dbRestorePath);
+    }
+    dbRestorePath = NConsoleClient::NormalizePath(dbRestorePath);
+    if (dbRestorePath.empty()) {
+        return Result<TRestoreResult>(dbPath, EStatus::BAD_REQUEST, "Restore destination must name a database or directory");
+    }
+
+    // Find first existing path on the way from the dbRestorePath to the root of the cluster.
+    TPathSplitUnix dbPathSplit(dbRestorePath);
 
     while (true) {
         auto result = DescribePath(SchemeClient, dbPathSplit.Reconstruct());
@@ -487,9 +510,9 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     // restore
     auto restoreResult = Result<TRestoreResult>();
     if (settings.Replace_) {
-        restoreResult = DropAndRestore(fsPath, dbPath, settings);
+        restoreResult = DropAndRestore(fsPath, dbRestorePath, settings);
     } else {
-        restoreResult = RestoreFolder(fsPath, dbPath, settings);
+        restoreResult = RestoreFolder(fsPath, dbRestorePath, settings);
     }
     if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
         restoreResult = result;

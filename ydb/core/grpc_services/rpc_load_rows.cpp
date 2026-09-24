@@ -249,6 +249,7 @@ public:
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
+        TablePath = Request->GetDatabaseRelativePath(GetProtoRequest(Request.get())->table());
         Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ActorSystem()]() {
             as->Send(selfId, new TEvents::TEvPoison);
         });
@@ -272,7 +273,7 @@ private:
     }
 
     const TString& GetTable() const override {
-        return GetProtoRequest(Request.get())->table();
+        return TablePath;
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -370,6 +371,7 @@ private:
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     const TString Database;
+    TString TablePath;
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
@@ -389,6 +391,7 @@ public:
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
+        TablePath = Request->GetDatabaseRelativePath(GetProtoRequest(Request.get())->table());
         Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ActorSystem()]() {
             as->Send(selfId, new TEvents::TEvPoison);
         });
@@ -423,7 +426,7 @@ private:
     }
 
     const TString& GetTable() const override {
-        return GetProtoRequest(Request.get())->table();
+        return TablePath;
     }
 
     const TString& GetSourceData() const override {
@@ -641,6 +644,7 @@ private:
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     const TString Database;
+    TString TablePath;
 
     const Ydb::Formats::CsvSettings& GetCsvSettings() const {
         return GetProtoRequest(Request.get())->csv_settings();

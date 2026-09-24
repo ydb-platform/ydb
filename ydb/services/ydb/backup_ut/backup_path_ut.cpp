@@ -262,8 +262,8 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
     {
         auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing");
         exportSettings
-                .AppendItem(typename TExportSettings::TItem{.Src = "Table0", .Dst = "Table0_Prefix"})
-                .AppendItem(typename TExportSettings::TItem{.Src = "dir1/Table1", .Dst = "Table1_Prefix"})
+                .AppendItem(typename TExportSettings::TItem{.Src = "RecursiveFolderProcessing/Table0", .Dst = "Table0_Prefix"})
+                .AppendItem(typename TExportSettings::TItem{.Src = "RecursiveFolderProcessing/dir1/Table1", .Dst = "Table1_Prefix"})
                 .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2/Table2", .Dst = "Table2_Prefix"});
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);
@@ -306,7 +306,7 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
     {
         auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
         importSettings
-                .AppendItem(traits.MakeImportItem("/Root/RestorePrefix/Table123", "dir1/dir2//Table2"))
+                .AppendItem(traits.MakeImportItem("RestorePrefix/Table123", "dir1/dir2//Table2"))
                 .AppendItem(traits.MakeImportItem("/Root/RestorePrefix/Table321", "Table0"));
         auto res = traits.Import(f, importSettings);
         f.WaitOpSuccess(res);
@@ -350,9 +350,9 @@ void ExplicitDuplicatedItemsImpl(TBackupTestFixture& f, bool /*isOlap*/) {
     TBackupTraits<TExportSettings> traits;
     auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing/dir1");
     exportSettings
-        .AppendItem(typename TExportSettings::TItem{.Src = "dir2"})
-        .AppendItem(typename TExportSettings::TItem{.Src = "/dir2"})
-        .AppendItem(typename TExportSettings::TItem{.Src = "dir2/"});
+        .AppendItem(typename TExportSettings::TItem{.Src = "RecursiveFolderProcessing/dir1/dir2"})
+        .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2"})
+        .AppendItem(typename TExportSettings::TItem{.Src = "RecursiveFolderProcessing/dir1/dir2/"});
     auto res = traits.Export(f, exportSettings);
     f.WaitOpStatus(res, EStatus::BAD_REQUEST);
 }
@@ -362,7 +362,7 @@ void ExportUnexistingExplicitPathImpl(TBackupTestFixture& f, bool /*isOlap*/) {
     TBackupTraits<TExportSettings> traits;
     auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing/dir1");
     exportSettings
-        .AppendItem(typename TExportSettings::TItem{.Src = "unexisting"});
+        .AppendItem(typename TExportSettings::TItem{.Src = "RecursiveFolderProcessing/dir1/unexisting"});
     auto res = traits.Export(f, exportSettings);
     f.WaitOpStatus(res, EStatus::SCHEME_ERROR);
 }
@@ -964,7 +964,7 @@ void EmptyDirectoryIsOkImpl(TBackupTestFixture& f, bool isOlap) {
     {
         auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing/dir1/dir2");
         exportSettings
-            .AppendItem(typename TExportSettings::TItem{.Src = "/Table2"})
+            .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2/Table2"})
             .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2/dir3"});
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);
@@ -1098,9 +1098,9 @@ void ImportFilterByPrefixImpl(TBackupTestFixture& f, bool isOlap) {
     {
         auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing");
         exportSettings
-            .AppendItem(typename TExportSettings::TItem{.Src = "Table0", .Dst = "Table0_Prefix"})
-            .AppendItem(typename TExportSettings::TItem{.Src = "dir1/Table1", .Dst = "Table1_Prefix"})
-            .AppendItem(typename TExportSettings::TItem{.Src = "dir1/dir2/Table2", .Dst = "Table2_Prefix"});
+            .AppendItem(typename TExportSettings::TItem{.Src = "RecursiveFolderProcessing/Table0", .Dst = "Table0_Prefix"})
+            .AppendItem(typename TExportSettings::TItem{.Src = "RecursiveFolderProcessing/dir1/Table1", .Dst = "Table1_Prefix"})
+            .AppendItem(typename TExportSettings::TItem{.Src = "RecursiveFolderProcessing/dir1/dir2/Table2", .Dst = "Table2_Prefix"});
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);
 
@@ -1169,7 +1169,7 @@ void FilterByPathFailsWhenNoSchemaMappingImpl(TBackupTestFixture& f, bool /*isOl
     {
         auto exportSettings = traits.MakeExportSettingsNoPrefix(f, "/Root/RecursiveFolderProcessing/dir1");
         exportSettings
-            .AppendItem(typename TExportSettings::TItem{.Src = "/Table1", .Dst = "Prefix/t1"});
+            .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/Table1", .Dst = "Prefix/t1"});
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);
 
@@ -1523,8 +1523,8 @@ void EncryptedExportWithExplicitDestinationPathImpl(TBackupTestFixture& f, bool 
         auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing");
         traits.SetEncryption(exportSettings, NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
         exportSettings
-            .AppendItem(typename TExportSettings::TItem{.Src = "Table0", .Dst = "UnsafeTableNameShownInEncryptedBackup"})
-            .AppendItem(typename TExportSettings::TItem{.Src = "dir1", .Dst = "Dir1Prefix"});
+            .AppendItem(typename TExportSettings::TItem{.Src = "RecursiveFolderProcessing/Table0", .Dst = "UnsafeTableNameShownInEncryptedBackup"})
+            .AppendItem(typename TExportSettings::TItem{.Src = "RecursiveFolderProcessing/dir1", .Dst = "Dir1Prefix"});
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);
 

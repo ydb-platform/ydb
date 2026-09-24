@@ -1300,7 +1300,7 @@ Y_UNIT_TEST(OneShardNonLocalExec) {
         bool done = false;
         for (int i = 0; i < 5; i++) {
             std::unordered_set<ui32> nodeIds;
-            auto res = session.DescribeTable("Root/EightShard", describeTableSettings)
+            auto res = session.DescribeTable("/Root/EightShard", describeTableSettings)
                 .ExtractValueSync();
 
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);

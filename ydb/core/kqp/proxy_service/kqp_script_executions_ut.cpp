@@ -124,7 +124,7 @@ struct TScriptExecutionsYdbSetup {
         NYdb::TDriverConfig driverCfg;
         driverCfg
             .SetEndpoint(TStringBuilder() << "localhost:" << GrpcPort)
-            .SetDatabase(Tests::TestDomainName)
+            .SetDatabase(TString("/") + Tests::TestDomainName)
             .SetAuthToken(BUILTIN_ACL_ROOT);
         YdbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(*YdbDriver);
@@ -248,7 +248,7 @@ struct TScriptExecutionsYdbSetup {
         NYdb::NTable::TTableClient client(*YdbDriver, NYdb::NTable::TClientSettings().AuthToken(""));
         const auto sessionResult = client.CreateSession().ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), NYdb::EStatus::SUCCESS, sessionResult.GetIssues().ToOneLineString());
-        const auto result = sessionResult.GetSession().DescribeTable(JoinPath({"dc-1", JoinPath(pathComponents)})).ExtractValueSync();
+        const auto result = sessionResult.GetSession().DescribeTable("/" + JoinPath({"dc-1", JoinPath(pathComponents)})).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
         const auto& tableDesc = result.GetTableDescription();

@@ -248,12 +248,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         paths.emplace_back(this->GetDatabaseName()); // first entry is database
         paths.emplace_back(CommonSourcePath); // second entry is common source path
         for (const auto& item : TTraits::GetItems(settings)) {
-            TString userSpecifiedPath = CanonizePath(item.source_path());
-            TString fullPath;
-            if (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath) {
-                fullPath = userSpecifiedPath; // Full path
-            } else {
-                fullPath = CommonSourcePath + userSpecifiedPath; // Relative path
+            TString fullPath = CanonizePath(this->Request->GetDatabaseRelativePath(item.source_path()));
+            if (!AppData()->FeatureFlags.GetEnableRelativePaths()
+                && !HasCommonSourcePathPrefix(fullPath) && fullPath != CommonSourcePath) {
+                fullPath = CommonSourcePath + fullPath;
             }
             if (IsExcludedFromExport(fullPath)) {
                 continue;
@@ -531,7 +529,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void InitCommonSourcePath() {
         const auto& settings = this->GetProtoRequest()->settings();
         if constexpr (TTraits::HasSourcePath) {
-            CommonSourcePath = CanonizePath(settings.source_path()); // /Foo/Bar, but empty result for empty source_path
+            CommonSourcePath = CanonizePath(
+                this->Request->GetDatabaseRelativePath(settings.source_path()));
         }
         if (CommonSourcePath.empty()) {
             CommonSourcePath = CanonizePath(this->GetDatabaseName());

@@ -162,6 +162,11 @@ public:
 
         Database_ = ExtractDatabaseName(Context_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER))
             .GetOrElse(TString());
+        if (!Database_.empty() && !Database_.StartsWith('/')) {
+            if (auto* counters = Context_->GetCounterBlock()) {
+                counters->CountRelativeDatabase();
+            }
+        }
         Send(GRpcRequestProxyId_, new TEvRequestAuthAndCheck(
             Database_,
             ExtractYdbToken(Context_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER)),
@@ -191,6 +196,9 @@ private:
             return;
         }
 
+        if (!Database_.empty()) {
+            Database_ = msg->Database;
+        }
         TString error;
         if (!NUdfApi::IsDatabaseServedHere(Database_, error)) {
             Reply(Ydb::StatusIds::BAD_REQUEST, error);

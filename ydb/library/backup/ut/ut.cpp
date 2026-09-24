@@ -730,6 +730,23 @@ Y_UNIT_TEST(PathParseTest) {
     UNIT_CHECK_GENERATED_EXCEPTION(RelPathFromAbsolute("/ru/my_db", ""), yexception);
 }
 
+Y_UNIT_TEST(BackupMetadataPaths) {
+    for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
+        {"", "/Root/mydb"},
+        {"table", "/Root/mydb/table"},
+        {"mydb/table", "/Root/mydb/mydb/table"},
+        {"Root/mydb/table", "/Root/mydb/Root/mydb/table"},
+        {"/Root/mydb/table", "/Root/mydb/table"},
+        {"Root/Root/mydb/table", "/Root/mydb/Root/Root/mydb/table"},
+        {"Root2/table", "/Root/mydb/Root2/table"},
+        {"/Other/table", "/Other/table"},
+    }) {
+        UNIT_ASSERT_VALUES_EQUAL_C(ResolveBackupPath("/Root/mydb", path), expected, path);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(ResolveBackupPath("/Root/Root/mydb", ""), "/Root/Root/mydb");
+    UNIT_CHECK_GENERATED_EXCEPTION(ResolveBackupPath("mydb", "table"), yexception);
+}
+
 Y_UNIT_TEST(UnknownFieldsHidden) {
     Ydb::Table::CreateTableRequest proto;
     proto.set_path("/my_db/my_table");

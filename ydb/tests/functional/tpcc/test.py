@@ -24,7 +24,7 @@ def run_cli(argv):
             "--endpoint",
             "grpc://" + os.getenv("YDB_ENDPOINT"),
             "--database",
-            "/" + os.getenv("YDB_DATABASE"),
+            os.getenv("YDB_DATABASE"),
         ] + argv
     )
 

@@ -331,10 +331,20 @@ std::expected<TResolvedName, TString> ResolveName(
         name = canonName;
     }
 
-    TStringBuf topicName = StripLeadingSlash(name);
     const TStringBuf databaseNorm = StripSlashes(database);
-    const TStringBuf pqPrefix = StripSlashes(pqConfig.GetRoot());
     const TStringBuf lbRoot = StripSlashes(pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot());
+
+    if (!isFederation && AppData()->FeatureFlags.GetEnableRelativePaths()) {
+        // Resolve the original path before stripping any database or federation prefix.
+        // Only paths starting with '/' are absolute.
+        TString path = name.empty()
+            ? JoinWithDatabase(database, databaseNorm, name)
+            : CanonizePath(ResolvePathToDatabase(database, name));
+        return MakeResolved(std::move(path), database, databaseNorm, lbRoot, false);
+    }
+
+    TStringBuf topicName = StripLeadingSlash(name);
+    const TStringBuf pqPrefix = StripSlashes(pqConfig.GetRoot());
 
     // Reject trailing '/' before stripping PQ/database prefixes (exact PQ root is "/").
     if (isFederation && topicName.EndsWith("/")) {
@@ -382,8 +392,6 @@ std::expected<TResolvedName, TString> ResolveName(
     };
 
     if (!isFederation) {
-        // FCC: never interpret rt3. / -- / @ as a legacy name. A leaf like
-        // TestSchemeList--test-topic-1 is a literal topic under the database.
         return wrap(JoinWithDatabase(database, databaseNorm, topicName));
     }
 

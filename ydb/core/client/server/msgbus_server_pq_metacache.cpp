@@ -308,7 +308,8 @@ private:
         TVector<NPersQueue::TDiscoveryConverterPtr> topics;
         topics.reserve(ev->Get()->Topics.size());
         for (auto& t : ev->Get()->Topics) {
-            topics.emplace_back(ConverterFactory->MakeDiscoveryConverter(t, {}));
+            topics.emplace_back(ConverterFactory->MakeDiscoveryConverter(t, {}, {}, {},
+                AppData()->FeatureFlags.GetEnableRelativePaths()));
         }
         SendSchemeCacheRequest(
             std::make_shared<TWaiter>(

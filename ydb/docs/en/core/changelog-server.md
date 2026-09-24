@@ -8,11 +8,11 @@ Release date: 18.09.26
 
 #### Functionality
 
-* [Backup and restore export for columnar tables are available, including S3-compatible storage](./recipes/backup/backup-collections/exporting-to-external-storage.md?version=main).
+* [Backup export and import are available for columnar tables, including support for S3-compatible storage](./recipes/backup/backup-collections/exporting-to-external-storage.md?version=main).
 * Columns of columnar tables support [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.3#encoding). Use `ENCODING(DICT)` for values with low cardinality.
 * Local [min_max-indexes](./dev/min_max-skip-index.md?version=v26.3) are enabled for columnar tables. They skip data fragments outside the query range, reducing the amount of reading. Use `ADD INDEX ... LOCAL USING min_max` to apply to a column.
-* Decommissioning of storage groups using virtual groups has been added [](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data is moved to virtual groups in the background, applications continue to read and write.
-* Authentication via external identity providers OpenID Connect has been added [](./security/authentication.md?version=v26.3#external-idp). {{ ydb-short-name }} validates JWT tokens against the provider's JSON Web Key Set (JWKS) and periodically updates authentication data.
+* [Decommissioning of storage groups using virtual groups](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3) has been added. Data is moved to virtual groups in the background, applications continue to read and write.
+* [Authentication via external OpenID Connect identity providers](./security/authentication.md?version=v26.3#external-idp) has been added. {{ ydb-short-name }} validates JWT tokens against the provider's JSON Web Key Set (JWKS) and periodically updates authentication data.
 * Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). The client certificate is mapped to a security identifier, SASL authentication is not required.
 * Columnar table engine optimization: an updated compaction strategy is used for columnar tables, which organizes data more efficiently, and a new data merging strategy when reading, which speeds up queries on constantly changing data.
 * Authentication/authorization subsystem optimization: batch authorization requests to AccessService are enabled by default, which reduces overhead.
@@ -46,14 +46,14 @@ Release date: September 16, 2026.
 * [Full-text indexes](./dev/fulltext-indexes.md?version=v26.2) are enabled by default.
 * [Streaming queries](./dev/streaming-query/index.md?version=v26.2) support reading from local topics, writing to local topics, reading local tables, and multiple `INSERT` instructions in one query.
 * [Watermarks](./dev/streaming-query/watermarks.md?version=v26.2) are available in streaming queries.
-* [Bloom indexes](./dev/bloom-skip-indexes.md?version=v26.2) have been added: Bloom and Bloom n-gram for columnar tables and prefix Bloom indexes for string tables.
+* [Bloom indexes](./dev/bloom-skip-indexes.md?version=v26.2) have been added: Bloom and Bloom n-gram for columnar tables and prefix Bloom indexes for row-oriented tables.
 * The option to [configure column compression](./yql/reference/syntax/create_table/index.md?version=v26.2) in columnar tables is available by default.
 * You can now configure the [level of parallelism](./yql/reference/syntax/alter_table/indexes.md?version=v26.2) for building indexes.
-* For string tables, [`ALTER TABLE`](./yql/reference/syntax/alter_table/columns.md?version=v26.2) instructions are available by default.
-* A YQL instruction is available by default for string tables [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2).
+* For row-oriented tables, the `ALTER COLUMN SET DEFAULT` and `ALTER COLUMN DROP DEFAULT` clauses of [`ALTER TABLE`](./yql/reference/syntax/alter_table/columns.md?version=v26.2) are available by default.
+* The [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2) YQL statement is available by default for row-oriented tables.
 * The YQL instruction [`DISCARD SELECT`](./yql/reference/syntax/discard.md?version=v26.2) is available by default.
 * QueryService supports returning query results in [Apache Arrow format](./reference/ydb-sdk/data-formats/format-arrow.md?version=v26.2); this feature is enabled by default.
-* For string tables, it is possible to launch forced [compaction](./yql/reference/syntax/alter_table/compact.md?version=v26.2) using `ALTER TABLE ... COMPACT`.
+* For row-oriented tables, it is possible to launch forced [compaction](./yql/reference/syntax/alter_table/compact.md?version=v26.2) using `ALTER TABLE ... COMPACT`.
 * Automatic storage balancing between groups and background checking of disk placement correctness have been added.
 * Operations for splitting and merging tables with a large number of partitions have been accelerated: SchemeShard updates only the affected partitions instead of recalculating the entire list.
 * [Audit logging](./security/audit-log.md?version=v26.2) of topic operations has been added.
@@ -65,8 +65,8 @@ Release date: September 16, 2026.
 The functionality is present in the core for the possibility of rolling back from the future 26-3 release, but is not enabled by default. It will be enabled by default in the next major release. It may also be enabled on some managed YDB services.
 
 * Support for [incremental backups](./concepts/datamodel/backup-collection.md?version=v26.2) has been added, which allow you to save only changes relative to the previous backup in the collection.
-* Export and import of columnar tables [](./recipes/backup/import-export-column-tables.md?version=v26.2) via S3-compatible storage is supported.
-* Export and import of string tables [](./reference/ydb-cli/export-import/export-nfs.md?version=main) via the local file system, including file systems mounted via NFS, have been added.
+* [Export and import of columnar tables](./recipes/backup/import-export-column-tables.md?version=v26.2) via S3-compatible storage is supported.
+* [Export and import of row-oriented tables](./reference/ydb-cli/export-import/export-nfs.md?version=main) via the local file system, including file systems mounted via NFS, have been added.
 * Retention of a snapshot for long analytical queries to columnar tables has been added so that snapshot data is not deleted before the query is completed.
 * QueryService can notify the SDK about the termination of a node or session so that the client stops sending new requests there.
 * Limits on the number and volume of small blobs at the database level have been added for columnar tables. If the hard limit is exceeded, new records are rejected.
@@ -172,7 +172,7 @@ Release date: June 5, 2026.
 * The mechanism for executing write operations has changed significantly — now writes are performed in stream mode without full data materialization on the Query Processor side before sending to datashards, which improves performance for large write operations. The change applies to some scenarios; in certain cases (for example, tables with secondary indexes), the previous approach is still used. For general information about the execution pipeline, see the section [Query execution](./concepts/query_execution/index.md?version=v25.4).
 * Lookup Join execution has been optimized: stream mode is used without materializing one of the join sides, which reduces peak memory consumption, speeds up execution on large datasets, and removes previous limitations on the size of the join sides. See the description of [Index lookup Join](./faq/yql.md?version=v25.4#index-lookup-join) and the syntax of the [operator `JOIN`](./yql/reference/syntax/select/join.md?version=v25.4).
 * It is now possible to set access rights for [system views](./devops/observability/system-views.md?version=v25.4) of the cluster and databases.
-* For string tables, it is possible to configure [caching modes](./concepts/datamodel/table.md?version=v25.4#cache-modes) and a new mode `in_memory`, which allows preloading table data into RAM, provided there is sufficient RAM available.
+* For row-oriented tables, it is possible to configure [caching modes](./concepts/datamodel/table.md?version=v25.4#cache-modes) and a new mode `in_memory`, which allows preloading table data into RAM, provided there is sufficient RAM available.
 * For topic readers, a parameter [`availability-period`](./reference/ydb-cli/topic-consumer-add.md?version=v25.4) has been added, allowing extension of unacknowledged message storage beyond the retention-period.
 * [Partition-level topic metrics and export to user shard quotas](./reference/observability/metrics/index.md?version=v25.4#topics_partitions) are available for accounting and observability.
 * Queries with `LIMIT` in columnar tables are faster due to early sample restriction on storage nodes (for queries without sorting or with sorting by primary key). General syntax [`LIMIT` and `OFFSET`](./yql/reference/syntax/select/limit_offset.md?version=v25.4) in YQL.
@@ -199,8 +199,8 @@ Release date: May 20, 2026.
 
 * Support for configuring 2 DCs with synchronous data writing (mode [`Bridge`](./concepts/bridge.md)) has been added; available in {{ ydb-short-name }} Enterprise.
 * Topic improvements:
-* In the Kafka API, it is now possible to create [compacted](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics; YDB automatically creates and deletes an internal service consumer used for topic compaction;
-* The topic API has been extended: `DescribeConsumer`new parameters[ have been added to the output ](./reference/ydb-sdk/topic.md), and [partition-level topic metrics can be delivered to user quotas](./reference/observability/metrics/index.md#topics).
+  * In the Kafka API, it is now possible to create [compacted](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics; YDB automatically creates and deletes an internal service consumer used for topic compaction;
+  * The topic API has been extended: [new parameters](./reference/ydb-sdk/topic.md) have been added to the `DescribeConsumer` output, and [partition-level topic metrics can be delivered to user quotas](./reference/observability/metrics/index.md#topics).
 * [Backup and restore](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) of the topic configuration to and from S3 has been implemented.
 * [Export of views](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) to and from S3 has been implemented.
 
@@ -232,7 +232,7 @@ Release date: May 12, 2026.
 #### Bug fixes
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/38425) a vulnerability in [LDAP authentication](./security/authentication.md): knowing the login and password of any LDAP user (including those not in the access group for {{ ydb-short-name }}), it was possible to bypass the group membership check and gain access to the cluster (injection into the LDAP user search filter; special characters have been escaped according to RFC 2254).
-* [Fixed](https://github.com/ydb-platform/ydb/pull/25112) a [problem](https://github.com/ydb-platform/ydb/issues/23858) that could cause tablet deletion [to hang](./concepts/glossary.md#tablet).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/25112) a [problem](https://github.com/ydb-platform/ydb/issues/23858) that could cause [tablet](./concepts/glossary.md#tablet) deletion to hang.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/25145) a [bug](https://github.com/ydb-platform/ydb/issues/20866) that caused an error when changing the table follower.
 * Fixed several errors related to [changefeed](./concepts/glossary.md#changefeed):
   * [Fixed](https://github.com/ydb-platform/ydb/pull/25689) a [bug](https://github.com/ydb-platform/ydb/issues/25524) that could cause the import of a table with a Utf8 key and enabled changefeed to fail.
@@ -267,7 +267,7 @@ Release date: September 21, 2025.
 
   * [Vector index](./dev/vector-indexes.md) for approximate vector search;
   * support for [YDB Topics Kafka API](./reference/kafka-api/index.md) [client reader balancing](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html) and [transactions](https://www.confluent.io/blog/transactions-apache-kafka);
-  * support for [auto-partitioning of topics](./concepts/cdc.md#topic-partitions) in CDC for string tables;
+  * support for [auto-partitioning of topics](./concepts/cdc.md#topic-partitions) in CDC for row-oriented tables;
   * support for auto-partitioning of topics for asynchronous replication;
   * support for parameterized [Decimal type](./yql/reference/types/primitive.md#numeric);
   * support for [DateTime64 type](./yql/reference/types/primitive.md#datetime);
@@ -322,14 +322,14 @@ Release date: July 14, 2025.
 #### Functionality
 
 * [Implemented](https://github.com/ydb-platform/ydb/pull/19504) a [vector index](./dev/vector-indexes.md?version=v25.1) for approximate vector search. Recipes for [YDB CLI and YQL](./recipes/vector-search?version=v25.1) have been published for vector search, as well as examples of work [in C++ and Python](./recipes/ydb-sdk/vector-search?version=v25.1).
-* [Support for [consistent asynchronous replication](./concepts/async-replication.md?version=v25.1) has been added](https://github.com/ydb-platform/ydb/issues/11454).
+* [Added](https://github.com/ydb-platform/ydb/issues/11454) support for [consistent asynchronous replication](./concepts/async-replication.md?version=v25.1).
 * [A V2 configuration mechanism](./devops/configuration-management/configuration-v2/config-overview?version=v25.1) has been added, simplifying the deployment of new clusters {{ ydb-short-name }} and further work with them. [Comparison](./devops/configuration-management/compare-configs?version=v25.1) of V1 and V2 configuration mechanisms.
 * Support for the parameterized [Decimal type](./yql/reference/types/primitive.md?version=v25.1#numeric) has been added.
 * [The ability to not use the operator `DECLARE` for declaring parameter types in queries has been added](https://github.com/ydb-platform/ydb/pull/8065). Now parameter types are determined automatically based on the passed values.
 * Client-side partition balancing has been implemented when reading via the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (like Kafka itself). Previously, balancing occurred on the server. It is enabled by setting the flag `enable_kafka_native_balancing` in the cluster configuration.
-* Support for [auto-partitioning of topics](./concepts/cdc.md?version=v25.1#topic-partitions) in CDC for string tables has been added. It is enabled by setting the flag `enable_topic_autopartitioning_for_cdc` in the cluster configuration.
-* [The ability to [change the data retention time](./concepts/cdc.md?version=v25.1#topic-options) in the CDC topic using the expression `ALTER TOPIC` has been added](https://github.com/ydb-platform/ydb/pull/8264).
-* [Support for the [format DEBEZIUM_JSON](./concepts/cdc.md?version=v25.1#debezium-json-record-structure) for change streams (changefeed) has been added](https://github.com/ydb-platform/ydb/pull/7052).
+* Support for [auto-partitioning of topics](./concepts/cdc.md?version=v25.1#topic-partitions) in CDC for row-oriented tables has been added. It is enabled by setting the flag `enable_topic_autopartitioning_for_cdc` in the cluster configuration.
+* [Added](https://github.com/ydb-platform/ydb/pull/8264) the ability to [change the data retention time](./concepts/cdc.md?version=v25.1#topic-options) in a CDC topic using `ALTER TOPIC`.
+* [Added](https://github.com/ydb-platform/ydb/pull/7052) support for the [DEBEZIUM_JSON format](./concepts/cdc.md?version=v25.1#debezium-json-record-structure) in changefeeds.
 * [The ability to create change streams for index tables has been added](https://github.com/ydb-platform/ydb/pull/19507).
 * The ability to [specify the number of replicas](./yql/reference/syntax/alter_table/indexes.md?version=v25.1) for a secondary index has been added. It is enabled by setting the flag `enable_access_to_index_impl_tables` in the cluster configuration.
 * The range of supported objects has been expanded in backup and restore operations. It is enabled by setting the flags specified in parentheses:
@@ -337,14 +337,14 @@ Release date: July 14, 2025.
   * [support for views (`VIEW`)](https://github.com/ydb-platform/ydb/issues/12724) (flag `enable_view_export`).
 * Automatic deletion of temporary directories and tables during export to S3 has been added. It is enabled by setting the flag `enable_export_auto_dropping` in the cluster configuration.
 * [Automatic integrity checking of backups during import has been added](https://github.com/ydb-platform/ydb/pull/12909), preventing recovery from corrupted backups and protecting against data loss.
-* [The ability to create views using [UDF](./yql/reference/builtins/basic.md?version=v25.1#udf) in queries has been added](https://github.com/ydb-platform/ydb/pull/15570).
-* System views with information about [access rights settings](./dev/system-views?version=v25.1#auth), [overloaded partition history](./dev/system-views?version=v25.1#top-overload-partitions) have been added — enabled by setting the flag `enable_followers_stats` in the cluster configuration, [history of string table partitions with broken locks (TLI)](./dev/system-views?version=v25.1#top-tli-partitions).
+* [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that use [UDFs](./yql/reference/builtins/basic.md?version=v25.1#udf) in queries.
+* System views with information about [access rights settings](./dev/system-views?version=v25.1#auth), [overloaded partition history](./dev/system-views?version=v25.1#top-overload-partitions) have been added — enabled by setting the flag `enable_followers_stats` in the cluster configuration, [history of row-oriented table partitions with broken locks (TLI)](./dev/system-views?version=v25.1#top-tli-partitions).
 * New parameters have been added to the [CREATE USER](./yql/reference/syntax/create-user.md?version=v25.1) and [ALTER USER](./yql/reference/syntax/alter-user.md?version=v25.1) statements:
   * `HASH` — the ability to set a password in encrypted form;
   * `LOGIN` and `NOLOGIN` — unlocking and blocking a user.
 * Account security has been enhanced:
-  * [Password complexity check for users has been added](https://github.com/ydb-platform/ydb/pull/11963)[](./reference/configuration/?version=v25.1#password-complexity);
-  * [Automatic user blocking has been implemented](https://github.com/ydb-platform/ydb/pull/12578) when the password attempt limit is exhausted[](./reference/configuration/?version=v25.1#account-lockout);
+  * [Added](https://github.com/ydb-platform/ydb/pull/11963) [password complexity checks](./reference/configuration/?version=v25.1#password-complexity) for users;
+  * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) [automatic user blocking](./reference/configuration/?version=v25.1#account-lockout) when the password attempt limit is exhausted;
   * [The ability for users to change their password independently has been added](https://github.com/ydb-platform/ydb/pull/12983).
 * [The ability to toggle feature flags during server operation has been implemented](https://github.com/ydb-platform/ydb/issues/9748) {{ ydb-short-name }}. Flags that do not have the `(RequireRestart) = true` parameter specified in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) will be applied without restarting the cluster.
 * Now the oldest (not new) locks [are changed to full-shard locks](https://github.com/ydb-platform/ydb/pull/11329) when the number of locks on shards is exceeded.
@@ -352,9 +352,9 @@ Release date: July 14, 2025.
 * [The ability to cancel volatile transactions with the ABORTED status during a smooth restart of data shards has been implemented](https://github.com/ydb-platform/ydb/pull/12689).
 * [The ability to remove `NOT NULL`constraints on a column in a table using a `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL`query has been added](https://github.com/ydb-platform/ydb/pull/6342).
 * [A limit of 100,000 has been added on the number of simultaneous requests to create sessions in the coordination service](https://github.com/ydb-platform/ydb/pull/9168).
-* [The maximum number of columns in the primary key has been increased](https://github.com/ydb-platform/ydb/pull/14219) from 20 to 30[](./concepts/limits-ydb.md?version=v25.1#schema-object).
+* [Increased](https://github.com/ydb-platform/ydb/pull/14219) the [maximum number of columns in the primary key](./concepts/limits-ydb.md?version=v25.1#schema-object) from 20 to 30.
 * Diagnostics and introspection of memory-related errors have been improved ([#10419](https://github.com/ydb-platform/ydb/pull/10419), [#11968](https://github.com/ydb-platform/ydb/pull/11968)).
-* **_(Experimentally)_** An experimental mode of operation with stricter access control checks has been added[](https://github.com/ydb-platform/ydb/pull/14075). It is enabled by setting the following flags:
+* **_(Experimentally)_** An experimental mode of operation with stricter access control checks has been [added](https://github.com/ydb-platform/ydb/pull/14075). It is enabled by setting the following flags:
   * `enable_strict_acl_check` — do not allow granting permissions to non-existent users and deleting users if permissions are granted to them;
   * `enable_strict_user_management` — enables strict rules for administering local users (i.e., only the cluster or database administrator can administer local users);
   * `enable_database_admin` — adds the database administrator role.
@@ -365,9 +365,9 @@ Release date: July 14, 2025.
 
 #### YDB UI
 
-* Support for partial loading of results has been added to the query editor [](https://github.com/ydb-platform/ydb-embedded-ui/pull/1974) — display starts immediately upon receiving the first fragment from the server without waiting for the query to complete. This allows you to get results faster.
-* Security has been improved [: controls that are not available to the user are no longer displayed in the interface. Users will not encounter "Access denied" errors.
-* Search by tablet ID has been added to the "Tablets" tab [](https://github.com/ydb-platform/ydb-embedded-ui/pull/1981).
+* Support for partial loading of results has been [added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1974) to the query editor — display starts immediately upon receiving the first fragment from the server without waiting for the query to complete. This allows you to get results faster.
+* [Improved](https://github.com/ydb-platform/ydb-embedded-ui/pull/1967) security: controls unavailable to the user are no longer displayed in the interface. Users will not encounter "Access denied" errors.
+* Search by tablet ID has been [added](https://github.com/ydb-platform/ydb-embedded-ui/pull/1981) to the "Tablets" tab.
 * A hotkey tip has been added, which opens with the `⌘+K` combination.
 * A "Operations" tab has been added to the database page, which allows you to view a list of operations and cancel them.
 * The cluster monitoring panel has been updated, and the option to collapse it has been added.
@@ -385,7 +385,7 @@ Release date: July 14, 2025.
 * [Improved](https://github.com/ydb-platform/ydb/pull/15607) the stability of Node Broker under high load from cluster nodes.
 * [Enabled](https://github.com/ydb-platform/ydb/pull/19440) by default, unloadable B-Tree indexes instead of non-unloadable SST indexes, which reduces memory consumption when storing «cold» data.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/15264) memory consumption by storage nodes.
-* [Reduced](https://github.com/ydb-platform/ydb/pull/10969) Hive startup time by 30%.
+* [Reduced](https://github.com/ydb-platform/ydb/pull/10969) Hive startup time by up to 30%.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/6561) the replication process in the distributed storage.
 * [Optimized](https://github.com/ydb-platform/ydb/pull/9491) the size of the header of large binary objects in VDisk.
 * [Reduced](https://github.com/ydb-platform/ydb/pull/15517) memory consumption by cleaning up allocator pages.
@@ -414,7 +414,7 @@ Release date: July 14, 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18378) an issue where after updating the cluster version, Hive subscribers were started in data centers without running database nodes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/19057) an error `Failed to set up listener on port 9092 errno# 98 (Address already in use)` that occurred during version update.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18905) an error that led to a segmentation fault when executing a healthcheck query and disabling a cluster node simultaneously.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/18899) a failure in [string table partitioning](./concepts/datamodel/table.md?version=v25.1#partitioning_row_table) when selecting a partitioned key from access samples containing mixed operations with the full key and key prefix (for example, exact reading or range reading).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18899) a failure in [row-oriented table partitioning](./concepts/datamodel/table.md?version=v25.1#partitioning_row_table) when selecting a partitioned key from access samples containing mixed operations with the full key and key prefix (for example, exact reading or range reading).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16797) an error that caused topic autopartitioning to not work when the configuration parameter `max_active_partition` was set using an expression `ALTER TOPIC`.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18938) an error that caused `ydb scheme describe` to return a list of columns in a different order than they were specified when creating the table.
 
@@ -438,7 +438,7 @@ Release date: June 3, 2025.
 * Fixed transaction freezes when working with topics during [reloading](https://github.com/ydb-platform/ydb/issues/17843) or [deleting](https://github.com/ydb-platform/ydb/issues/17915) a tablet.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18114) [issues](https://github.com/ydb-platform/ydb/issues/18071) with reading messages larger than 6Mb via [Kafka API](./reference/kafka-api).
 * [Eliminated](https://github.com/ydb-platform/ydb/pull/18319) memory leak during writing to [a topic](./concepts/glossary#topic).
-* Fixed errors in handling [nullable columns](https://github.com/ydb-platform/ydb/issues/15701) and [UUID columns](https://github.com/ydb-platform/ydb/issues/15697) in string tables.
+* Fixed errors in handling [nullable columns](https://github.com/ydb-platform/ydb/issues/15701) and [UUID columns](https://github.com/ydb-platform/ydb/issues/15697) in row-oriented tables.
 
 ### Version 24.4.4.2 {#24-4-4-2}
 
@@ -450,7 +450,7 @@ Release date: April 15, 2025.
 
   * support for {% if feature_view %}[views (VIEW)](./concepts/datamodel/view.md){% else %}views (VIEW){% endif %};
   * [auto-partitioning](./concepts/datamodel/topic.md#autopartitioning) mode for topics;
-  * [transactions involving topics and string tables](./concepts/transactions.md#topic-table-transactions);
+  * [transactions involving topics and row-oriented tables](./concepts/transactions.md#topic-table-transactions);
   * [volatile distributed transactions](./contributor/datashard-distributed-txs.md#osobennosti-vypolneniya-volatilnyh-tranzakcij).
 
 * Added the ability to [read and write to a topic](./reference/kafka-api/examples.md#primery-raboty-s-kafka-api) using Kafka API without authentication.
@@ -464,7 +464,7 @@ Release date: April 15, 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/14811) an error that significantly reduced the reading speed from [tablet subscribers](./concepts/glossary.md#tablet-follower).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/14516) an error that caused waiting for confirmation of a volatile distributed transaction until the next restart.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15077) a rare error that caused a failure when connecting tablet subscribers to the leader with an inconsistent command log state.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/15074) a rare error that caused a failure when restarting a remote datashard with inconsistent changes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15074) a rare error that caused a failure when restarting a deleted DataShard with inconsistent changes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15194) an error that could disrupt the order of message processing in the topic.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15308) a rare error that could cause reading from the topic to freeze.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15160) an issue that caused a transaction to freeze when a user was simultaneously managing a topic and moving the PQ tablet to another node.
@@ -473,7 +473,7 @@ Release date: April 15, 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15933) a rare error that allowed a user to write to a topic bypassing account quota restrictions.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16288) an issue where, after deleting a topic, the system returned "OK", but its tablets continued to operate. To delete such tablets, use the instructions from [pull request](https://github.com/ydb-platform/ydb/pull/16288).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16418) a rare error that prevented the restoration of a backup copy of a large table with a secondary index.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/15862) an issue that led to an error when inserting data into string tables with default values using `UPSERT`.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15862) an issue that led to an error when inserting data into row-oriented tables with default values using `UPSERT`.
 * [Eliminated](https://github.com/ydb-platform/ydb/pull/15334) an error that caused a failure when executing queries to tables with secondary indexes that return result lists using the `RETURNING *`expression.
 
 ## Version 24.3 {#24-3}
@@ -484,7 +484,7 @@ Release date: February 6, 2025.
 
 #### Functionality
 
-* Added the ability to register a [database node](./concepts/glossary.md#database-node) using a certificate. The [Node Broker](./concepts/glossary.md#node-broker) has been added with the `AuthorizeByCertificate`AuthorizeByCertificate flag for registration using a certificate.
+* Added the ability to register a [database node](./concepts/glossary.md#database-node) using a certificate. The [Node Broker](./concepts/glossary.md#node-broker) has been added with the `AuthorizeByCertificate` flag for registration using a certificate.
 * [Added](https://github.com/ydb-platform/ydb/pull/11775) priorities for verifying authentication tickets [using a third-party IAM provider](./security/authentication.md#iam), with the highest priority given to requests from new users. Tickets in the cache update their information with a lower priority.
 
 #### Performance
@@ -505,11 +505,12 @@ Release date: February 6, 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/12448) [an error](https://github.com/ydb-platform/ydb/issues/12443) where [Health Check](./reference/ydb-sdk/health-check-api) did not report time synchronization issues.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/11658) a rare issue that led to errors when executing a read query.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/13501) a rare issue that led to leaks of uncommitted changes.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/13948) issues with consistency related to caching remote ranges.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/13948) consistency issues related to caching deleted ranges.
 
 ### Version 24.3.11.14 {#24-3-11-14}
 
 Release date: January 9, 2025.
+
 * [Supported](https://github.com/ydb-platform/ydb/pull/11276) restart without loss of cluster availability in [the minimum fault-tolerant configuration](./concepts/topology#reduced) of three nodes.
 * [Added](https://github.com/ydb-platform/ydb/pull/13218) new UDF Roaring bitmap functions: AndNotWithBinary, FromUint32List, RunOptimize
 
@@ -526,13 +527,13 @@ Release date: December 24, 2024.
 * Developed [documentation](./devops/deployment-options/manual/federated-queries/connector-deployment) on deploying YDB with federated query functionality (manually).
 * For the YDB Docker container, a startup parameter has been added `FQ_CONNECTOR_ENDPOINT` that allows you to specify the address of the connector to external data sources. Added the ability to TLS-encrypt the connection with the connector. Added the ability to output the port of the connector service running locally on the same host as the dynamic YDB node.
 * Added [auto-partitioning](./concepts/datamodel/topic#autopartitioning) mode for topics, in which topics can split partitions depending on the load while maintaining guarantees of message read order and exactly once writing. The mode can be enabled by the cluster administrator using the `enable_topic_split_merge` and `enable_pqconfig_transactions_at_scheme_shard` settings in the [dynamic configuration](./devops/configuration-management/configuration-v1/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
-* Added [transactions](./concepts/transactions#topic-table-transactions) involving [topics](https://ydb.tech/docs/ru/concepts/datamodel/topic) and string tables. Thus, it is possible to transactionally move data from tables to topics and vice versa, as well as between topics, so that data is not lost or duplicated. Transactions can be enabled by the cluster administrator using the `enable_topic_service_tx` and `enable_pqconfig_transactions_at_scheme_shard` settings in the [dynamic configuration](./devops/configuration-management/configuration-v1/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
+* Added [transactions](./concepts/transactions#topic-table-transactions) involving [topics](https://ydb.tech/docs/ru/concepts/datamodel/topic) and row-oriented tables. Thus, it is possible to transactionally move data from tables to topics and vice versa, as well as between topics, so that data is not lost or duplicated. Transactions can be enabled by the cluster administrator using the `enable_topic_service_tx` and `enable_pqconfig_transactions_at_scheme_shard` settings in the [dynamic configuration](./devops/configuration-management/configuration-v1/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * [Added](https://github.com/ydb-platform/ydb/pull/7150) support for [CDC](./concepts/cdc) for synchronous secondary indexes.
 * Added the ability to change the storage period for records in [CDC](./concepts/cdc.md) topics.
 * Added support for [auto-increment](./yql/reference/types/serial) for columns included in the primary key of a table.
 * Added writing to the [audit log](./security/audit-log) of user login events in YDB, user session termination events in the user interface, as well as backup and restore requests.
 * Added a system view that allows you to get information about sessions established with the database using a query.
-* Added support for default constant values for columns of string tables.
+* Added support for default constant values for columns of row-oriented tables.
 * Added support for the `RETURNING` expression in queries.
 * Added [built-in function](./yql/reference/builtins/basic.md#version) `version()`.
 * [Added](https://github.com/ydb-platform/ydb/pull/8708) start and end time and author to the metadata of backup and restore operations from an S3-compatible storage.
@@ -633,7 +634,7 @@ Release date: August 20, 2024.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5894) management of TVDiskControls settings via CMS.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5883) error loading data created by newer versions of VDisk.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5862) error executing a query `REPLACE INTO` with a default value.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/7714) error executing queries that performed multiple left joins to the same string table.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/7714) error executing queries that performed multiple left joins to the same row-oriented table.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/7740) loss of precision for `float`, `double` types when using CDC.
 
 ## Version 24.1 {#24-1}
@@ -718,7 +719,7 @@ Release date: October 12, 2023.
 
 ### Performance
 
-* Iterative reads have been implemented. The new functionality allows separating reads and computations. Iterative reads enable date shards to increase the throughput of read queries.
+* Iterative reads have been implemented. The new functionality allows separating reads and computations. Iterative reads enable DataShards to increase the throughput of read queries.
 * The performance of writing to YDB topics has been optimized.
 * Tablet balancing has been improved when nodes are overloaded.
 
@@ -763,7 +764,7 @@ Release date: October 12, 2023.
 * Fixed the race in `ThreadSanitizer: data race KqpService::ToDictCache-UseCache`.
 * Fixed the race in `GetNextReadId`.
 * Fixed the overestimation of the `SELECT COUNT(*)` result immediately after import.
-* Fixed the error where `TEvScan` could return an empty dataset in the case of a date shard split.
+* Fixed the error where `TEvScan` could return an empty dataset in the case of a DataShard split.
 * Added a separate issue/error code in case of exhaustion of available space.
 * Fixed error `GRPC_LIBRARY Assertion failed`.
 * Fixed the error where scanning queries with a secondary index returned an empty result.
@@ -789,7 +790,7 @@ Release date: October 12, 2023.
 * Implemented the `gossip` protocol for exchanging information about cluster resources.
 * Fixed the bug `DeserializeValuePickleV1(): requirement data.GetTransportVersion() == (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed`.
 * Implemented auto-increment columns.
-* Use the status `UNAVAILABLE` instead of `GENERIC_ERROR` when identifying the shard error.
+* Use the status `UNAVAILABLE` instead of `GENERIC_ERROR` when shard identification fails.
 * Added support for `rope payload` in `TEvVGet`.
 * Added ignoring of outdated events.
 * Fixed the crash of write sessions on an invalid topic name.
@@ -803,7 +804,7 @@ Release date: August 14, 2023.
 ### Functionality
 
 * **_(Experimentally)_** Visibility of own changes has been implemented. When this function is enabled, you can read modified values from the current transaction, which has not yet been committed. This functionality also allows you to perform several modifying operations in one transaction on a table with secondary indexes. To enable this functionality, add `enable_kqp_immediate_effects: true` to the `table_service_config` section in the [configuration file](reference/configuration/index.md).
-* **_(Experimentally)_** Iterator reads have been implemented. This functionality allows you to separate reads and computations from each other. Iterator reads allow date shards to increase the throughput of read queries. To enable this functionality, add `enable_kqp_data_query_source_read: true` to the `table_service_config` section in the [configuration file](reference/configuration/index.md).
+* **_(Experimentally)_** Iterator reads have been implemented. This functionality allows you to separate reads and computations from each other. Iterator reads allow DataShards to increase the throughput of read queries. To enable this functionality, add `enable_kqp_data_query_source_read: true` to the `table_service_config` section in the [configuration file](reference/configuration/index.md).
 
 ### Built-in UI
 

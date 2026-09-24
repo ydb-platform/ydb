@@ -17,17 +17,17 @@ Rows(TableList Op Value)
 Bytes(TableList Op Value)
 JoinOrder(JoinTree)
 
-где:
-TableList - перечисление названий таблиц или элиасов из запроса
-Op - операция:
-  - `#` - задать абсолютное значение
-  - `*` - умножить на значение
-  - `/` - разделить на значение
-  - `+` - прибавить значение
-  - `-` - вычесть значение
-  - `Number` - числовое значение
-Value - числовое значение
-JoinTree - представление бинарного дерева с помощью скобок, например: (R S) (T U)
+where:
+TableList - a list of table names or aliases from the query
+Op - an operation:
+  - `#` - set an absolute value
+  - `*` - multiply by a value
+  - `/` - divide by a value
+  - `+` - add a value
+  - `-` - subtract a value
+  - `Number` - a numeric value
+Value - a numeric value
+JoinTree - a binary tree represented using parentheses, for example: (R S) (T U)
 
 ```
 
@@ -75,7 +75,7 @@ If the order of joins is not fixed by a separate hint, the optimizer will build 
 {% endnote %}
 
 - ShuffleJoin — this is a type of join where data is shuffled by the join key so that records with the same key are processed on the same processing node. After this data redistribution, each node performs a local join of the tables. The results are combined into a single data set.
-- LookupJoin — for each row of one input, a query is made to the table or index of the other input; currently supported only for [string tables](../../concepts/datamodel/table.md#row-oriented-table).
+- LookupJoin — for each row of one input, a query is made to the table or index of the other input; currently supported only for [row-oriented tables](../../concepts/datamodel/table.md#row-oriented-table).
 
 #### Syntax
 
@@ -99,13 +99,13 @@ If the query plan includes a [join operator](../../concepts/glossary.md#operator
 #### Examples
 
 ```sql
--- Использовать Broadcast для соединения таблиц nation, region
+-- Use Broadcast to join the nation and region tables
 JoinType(nation region Broadcast)
 
--- Использовать ShuffleJoin для соединения, в поддереве которого будут только таблицы customers, orders, products
+-- Use ShuffleJoin for a join whose subtree contains only customers, orders, and products
 JoinType(customers orders products Shuffle)
 
--- Использовать LookupJoin для соединения таблиц nation, region
+-- Use LookupJoin to join the nation and region tables
 JoinType(nation region Lookup)
 
 ```
@@ -161,7 +161,7 @@ You can view the query execution plan using the [CLI](../../reference/ydb-cli/co
 Since the optimizer may change the order of joins during query optimization, the hint should reflect the exact list of tables that are being joined. 
  For example, in this query, it is assumed that the order of joins will be: R with S, then T, and finally U. Specifying a different join algorithm may change the order of joins in the plan, and some hints may not be applied. In such a case, you can add an additional join order hint.
 
-### 2. Rows — Cardinality Hints
+### 2. Rows: [Cardinality](../../concepts/glossary.md#cardinality) Hints
 
 Allows you to change the expected number of rows (optimizer estimate) for a join or individual tables.
 
@@ -190,16 +190,16 @@ Rows(t1 t2 ... tn (*|/|+|-|#) Number)
 #### Examples
 
 ```sql
--- Умножить ожидаемое количество строк на 2 для соединения, в поддереве которого есть только таблицы users orders yandex
+-- Multiply the expected row count by 2 for a join whose subtree contains only users, orders, and yandex
 Rows(users orders yandex * 2.0)
 
--- Заменить ожидаемое число строк таблицы products на 1.3e6
+-- Set the expected row count for the products table to 1.3e6
 Rows(products # 1.3e6)
 
--- Уменьшить ожидаемое количество строк в 228 раз
+-- Divide the expected row count by 228
 Rows(filtered_table / 228)
 
--- Добавить 5000 строк к ожидаемому результату
+-- Add 5000 rows to the expected result
 Rows(table1 table2 + 5000)
 
 ```
@@ -287,16 +287,16 @@ Bytes(t1 t2 ... tn (*|/|+|-|#) Number)
 #### Examples
 
 ```sql
--- Умножить ожидаемый размер данных на 1.5
+-- Multiply the expected data size by 1.5
 Bytes(large_table * 1.5)
 
--- Заменить размер данных для соединения на 1GB
+-- Set the data size for the join to 1GB
 Bytes(table1 table2 # 1073741824)
 
--- Уменьшить ожидаемый размер в 2 раза
+-- Divide the expected size by 2
 Bytes(compressed_table / 2)
 
--- Добавить 100MB к ожидаемому размеру
+-- Add 100MB to the expected size
 Bytes(temp_table + 104857600)
 
 ```
@@ -325,16 +325,16 @@ The optimizer will only consider plans that include the specified partial or ful
 #### Examples
 
 ```sql
--- Принудительно соединить сначала users с orders, затем с products
+-- Force users to join with orders first, then with products
 JoinOrder((users orders) products)
 
--- Более сложный порядок соединений
+-- A more complex join order
 JoinOrder(((customers orders) products) shipping)
 
--- Группировка соединений
+-- Join grouping
 JoinOrder((table1 table2) (table3 table4))
 
--- Многоуровневая структура
+-- Multi-level structure
 JoinOrder((users (orders products)) (addresses phones))
 
 ```

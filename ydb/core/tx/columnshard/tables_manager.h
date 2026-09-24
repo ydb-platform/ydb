@@ -443,7 +443,7 @@ public:
 class TTablesManager: public NOlap::IPathIdTranslator {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;
-    THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>> AllPathIds;
+    THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>> PathIdsHistory;
     THashMap<TSchemeShardLocalPathId, TInternalPathId> LivePathIds;
 
     THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal;   // Paths that are being renamed
@@ -469,7 +469,7 @@ private:
     void RebuildReadOnlyTablesSnapshots();
 
     void SetLivePathId(TSchemeShardLocalPathId ss, TInternalPathId id, bool isDropped) {
-        AllPathIds[ss].insert(id);
+        PathIdsHistory[ss].insert(id);
         if (isDropped) {
             LivePathIds.emplace(ss, id);
         } else {
@@ -485,26 +485,26 @@ private:
     }
 
     void ForgetGeneration(TSchemeShardLocalPathId ss, TInternalPathId id) {
-        auto it = AllPathIds.find(ss);
-        AFL_VERIFY(it != AllPathIds.end())("ss", ss)("internal", id);
+        auto it = PathIdsHistory.find(ss);
+        AFL_VERIFY(it != PathIdsHistory.end())("ss", ss)("internal", id);
         AFL_VERIFY(it->second.erase(id) == 1)("ss", ss)("internal", id);
         if (it->second.empty()) {
-            AllPathIds.erase(it);
+            PathIdsHistory.erase(it);
         }
     }
 
     void RenamePathId(TSchemeShardLocalPathId fromSs, TSchemeShardLocalPathId toSs) {
         AFL_VERIFY(!LivePathIds.FindPtr(fromSs))("from", fromSs)("to", toSs);
         AFL_VERIFY(!LivePathIds.FindPtr(toSs))("from", fromSs)("to", toSs);
-        AFL_VERIFY(!AllPathIds.FindPtr(toSs))("from", fromSs)("to", toSs);
-        auto itAll = AllPathIds.find(fromSs);
-        AFL_VERIFY(itAll != AllPathIds.end())("from", fromSs)("to", toSs);
-        AllPathIds[toSs] = std::move(itAll->second);
-        AllPathIds.erase(itAll);
+        AFL_VERIFY(!PathIdsHistory.FindPtr(toSs))("from", fromSs)("to", toSs);
+        auto itAll = PathIdsHistory.find(fromSs);
+        AFL_VERIFY(itAll != PathIdsHistory.end())("from", fromSs)("to", toSs);
+        PathIdsHistory[toSs] = std::move(itAll->second);
+        PathIdsHistory.erase(itAll);
     }
 
     void AddToHistory(TSchemeShardLocalPathId ss, TInternalPathId id) {
-        AllPathIds[ss].insert(id);
+        PathIdsHistory[ss].insert(id);
     }
 
     std::optional<TInternalPathId> ResolveLivePathId(TSchemeShardLocalPathId ss) const {
@@ -513,7 +513,7 @@ private:
     }
 
     const THashSet<TInternalPathId>* Generations(TSchemeShardLocalPathId ss) const {
-        return AllPathIds.FindPtr(ss);
+        return PathIdsHistory.FindPtr(ss);
     }
 
     std::optional<TInternalPathId> ResolveInternalPathIdForSnapshot(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId,

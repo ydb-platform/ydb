@@ -80,7 +80,7 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdForSnapshot(
     const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& readSnapshot,
     const bool withTabletPathId) const {
     // Deterministically resolve the generation that was live for `schemeShardLocalPathId`
-    // at `readSnapshot`. AllPathIds is a THashSet, so iteration order is non-deterministic;
+    // at `readSnapshot`. PathIdsHistory is a THashSet, so iteration order is non-deterministic;
     // we must not return the first hash-order match.
     //
     // The usability test is PATH-LOCAL for `schemeShardLocalPathId` (not table-global):
@@ -96,7 +96,7 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdForSnapshot(
     // time-travel semantics: a snapshot sees the data of the newest generation that existed
     // at that point in time.
     //
-    // AllPathIds is populated at RegisterTable / AddToHistory. nullptr is only legitimate
+    // PathIdsHistory is populated at RegisterTable / AddToHistory. nullptr is only legitimate
     // for rolling deploy (tables created before this binary, tablet not yet restarted and
     // never truncated): fall back to the live mapping. If history exists but no generation
     // covers `readSnapshot` (e.g. after GC of a truncated generation), return nullopt —
@@ -723,7 +723,7 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
         // overwrites LivePathIds[ss] with the new generation. When GC later finalizes
         // the old generation, the live mapping no longer points to it — using
         // ForgetLivePathIdVerified here would AFL_VERIFY-crash. ForgetGeneration is
-        // always required to drop the old generation from the AllPathIds history.
+        // always required to drop the old generation from the PathIdsHistory.
         if (const auto itLive = LivePathIds.find(ss); itLive != LivePathIds.end() && itLive->second == pathId) {
             LivePathIds.erase(itLive);
         }
@@ -796,7 +796,7 @@ void TTablesManager::MoveTableProgress(
     AFL_VERIFY(table);
     table->RenameTableSchemeShardLocalPathId(db, oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
     AFL_VERIFY(RenamingLocalToInternal.erase(oldSchemeShardLocalPathId));
-    // RenamePathId moves the entire AllPathIds[src] set to AllPathIds[dst]. After a TRUNCATE,
+    // RenamePathId moves the entire PathIdsHistory[src] set to PathIdsHistory[dst]. After a TRUNCATE,
     // this set contains both the old (dropped) and new (live) generations. The live table's
     // SS path was already renamed above; now rename the SS path on ALL other generations in
     // the set so that time-travel resolution via the new SS path can reach them.
@@ -875,7 +875,7 @@ void TTablesManager::TruncateTableProgress(
         //   - recovery from V1 re-loads the old generation with its drop version.
         // Only the live mapping is forgotten, so new writes/reads resolve to the new
         // generation. ForgetGeneration is intentionally NOT called here: the old
-        // generation stays in AllPathIds until it is finalized by GC (which also
+        // generation stays in PathIdsHistory until it is finalized by GC (which also
         // removes it from Tables and calls ForgetGeneration).
         oldTable->SetDropVersion(schemeShardLocalPathId, version);
         Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, oldInternalPathId, version.GetPlanStep(), version.GetTxId());
@@ -923,7 +923,7 @@ void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId schemeSh
     const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId, false);
     AFL_VERIFY(internalPathId);
 
-    // Lazy-populate AllPathIds for tables created before this change deployed.
+    // Lazy-populate PathIdsHistory for tables created before this change deployed.
     // After restart, InitFromDB → AddTableInfo already populates the index. But during rolling deploy
     // (before restart), existing tables lack entries. Ensure the current live generation is tracked
     // so that ResolveInternalPathIdForSnapshot can correctly handle time-travel reads after truncate.

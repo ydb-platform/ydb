@@ -2020,6 +2020,7 @@ FROM `{table_name}`"""
         data = [
             '{"str1":null,"str2":"DONE","ev":"skipped"}',
             '{"str1":"xop","str2":"DONE","ev":"xep"}',
+            '{"str1":"foobar","str2":"DONE","ev":"xin"}',
             '{"str1":null,"str2":null,"ev":"xap"}',
             '{"str1":"xep","str2":"xip","ev":"xup"}',
         ]

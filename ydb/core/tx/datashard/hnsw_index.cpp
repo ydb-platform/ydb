@@ -121,6 +121,85 @@ bool AreHnswIndexSettingsCompatible(
         && searchCandidates(cached) == searchCandidates(requested);
 }
 
+void THnswIndexChanges::Set(TString key, TRowVersion version,
+        std::optional<TString> vector, std::shared_ptr<void> reservation) {
+    auto& history = Rows[key];
+    for (auto& [base, count] : ChangedRowCounts) {
+        if (version > base && (history.empty() || history.back().Version <= base)) {
+            ++count;
+        }
+    }
+    auto it = std::lower_bound(history.begin(), history.end(), version,
+        [](const TVersion& item, TRowVersion value) { return item.Version < value; });
+    TVersion item{version, std::move(vector), std::move(reservation)};
+    const size_t bytes = EstimateBytes(key, item.Vector ? item.Vector->size() : 0);
+    if (it != history.end() && it->Version == version) {
+        EstimatedBytes -= EstimateBytes(key, it->Vector ? it->Vector->size() : 0);
+        *it = std::move(item);
+    } else {
+        history.insert(it, std::move(item));
+        ++VersionCount;
+    }
+    EstimatedBytes += bytes;
+}
+
+const THnswIndexChanges::TVersion* THnswIndexChanges::Find(
+        const THistory& history, TRowVersion version, TRowVersion base) {
+    const auto it = std::upper_bound(history.begin(), history.end(), version,
+        [](TRowVersion value, const TVersion& item) { return value < item.Version; });
+    if (it == history.begin() || std::prev(it)->Version <= base) {
+        return nullptr;
+    }
+    return &*std::prev(it);
+}
+
+const THnswIndexChanges::TVersion* THnswIndexChanges::Find(
+        TStringBuf key, TRowVersion version, TRowVersion base) const {
+    const auto it = Rows.find(key);
+    return it == Rows.end() ? nullptr : Find(it->second, version, base);
+}
+
+size_t THnswIndexChanges::CountAfter(TRowVersion base) const {
+    if (auto it = ChangedRowCounts.find(base); it != ChangedRowCounts.end()) {
+        return it->second;
+    }
+    size_t count = 0;
+    for (const auto& [_, history] : Rows) {
+        count += !history.empty() && history.back().Version > base;
+    }
+    ChangedRowCounts.emplace(base, count);
+    return count;
+}
+
+void THnswIndexChanges::PruneThrough(TRowVersion base) {
+    ChangedRowCounts.erase(ChangedRowCounts.begin(), ChangedRowCounts.lower_bound(base));
+    for (auto it = Rows.begin(); it != Rows.end();) {
+        auto& history = it->second;
+        auto end = std::upper_bound(history.begin(), history.end(), base,
+            [](TRowVersion value, const TVersion& item) { return value < item.Version; });
+        if (end == history.begin()) {
+            ++it;
+            continue;
+        }
+        VersionCount -= end - history.begin();
+        for (auto removed = history.begin(); removed != end; ++removed) {
+            EstimatedBytes -= EstimateBytes(it->first, removed->Vector ? removed->Vector->size() : 0);
+        }
+        history.erase(history.begin(), end);
+        if (history.empty()) {
+            Rows.erase(it++);
+        } else {
+            // Release capacity as well as payload/reservations after pruning.
+            THistory(history).swap(history);
+            ++it;
+        }
+    }
+}
+
+size_t THnswIndexChanges::EstimateBytes(TStringBuf key, size_t vectorBytes) {
+    return 2 * key.size() + vectorBytes + 2 * sizeof(TVersion) + 128;
+}
+
 class THnswIndex::TImpl {
 public:
     TImpl(std::unique_ptr<similarity::Space<float>> space, size_t dimension)
@@ -146,7 +225,7 @@ public:
 
     bool Build(const VectorIndexSettings& settings) {
         if (Objects.empty()) {
-            return false;
+            return true; // Empty rebuilt generations still have a searchable journal.
         }
 
         Index = std::make_unique<similarity::Hnsw<float>>(/* PrintProgress */ false, *Space, Objects);
@@ -172,9 +251,13 @@ public:
         return true;
     }
 
-    THnswSearchResult Search(TStringBuf targetVector, size_t k) const {
+    THnswSearchResult Search(TStringBuf targetVector, size_t k, TRowVersion readVersion) const {
         THnswSearchResult result;
-        if (!Index || k == 0) {
+        if (!CanRead(readVersion)) {
+            result.Covered = false;
+            return result;
+        }
+        if (k == 0) {
             return result;
         }
 
@@ -186,9 +269,11 @@ public:
         std::unique_ptr<const similarity::Object> queryObj(
             new similarity::Object(-1, -1, Dimension * sizeof(float), view.Data));
 
-        const size_t graphK = Min(k, Keys.size());
-        similarity::KNNQuery<float> query(*Space, queryObj.get(), static_cast<unsigned>(graphK));
-        Index->Search(&query, -1);
+        const size_t graphK = Min(k, Keys.size()) + Min(ChangeCount(), Keys.size() - Min(k, Keys.size()));
+        similarity::KNNQuery<float> query(*Space, queryObj.get(), static_cast<unsigned>(Max<size_t>(graphK, 1)));
+        if (Index) {
+            Index->Search(&query, -1);
+        }
 
         const similarity::KNNQueue<float>* queue = query.Result();
         std::vector<std::pair<TString, float>> reversed;
@@ -207,23 +292,22 @@ public:
 
         THashMap<TString, float> merged;
         for (auto it = reversed.rbegin(); it != reversed.rend(); ++it) {
-            merged.emplace(it->first, it->second);
+            if (!Changes->Find(it->first, readVersion, BaseVersion)) {
+                merged.emplace(it->first, it->second);
+            }
         }
 
-        for (const auto& [key, vector] : DeltaVectors) {
-            auto deltaView = TFloatVectorView::FromSerialized(vector);
+        for (const auto& [key, history] : Changes->Rows) {
+            const auto* visible = THnswIndexChanges::Find(history, readVersion, BaseVersion);
+            if (!visible || !visible->Vector) {
+                continue;
+            }
+            auto deltaView = TFloatVectorView::FromSerialized(*visible->Vector);
             if (!deltaView.IsValid() || deltaView.Dimension != Dimension) {
                 continue;
             }
             similarity::Object deltaObj(-1, -1, Dimension * sizeof(float), deltaView.Data);
-            const float deltaDistance = query.DistanceObjLeft(&deltaObj);
-            auto [it, inserted] = merged.emplace(key, deltaDistance);
-            if (!inserted) {
-                // Preserve the better of the graph and overlay distances. A
-                // concurrent reader may see either MVCC version; materialize
-                // re-ranks the visible row from the table.
-                it->second = Min(it->second, deltaDistance);
-            }
+            merged[key] = query.DistanceObjLeft(&deltaObj);
         }
 
         result.Results.assign(merged.begin(), merged.end());
@@ -252,13 +336,16 @@ public:
         return KeyBytes;
     }
 
-    bool GetVector(TStringBuf key, TString& result) const {
-        if (auto it = DeltaVectors.find(key); it != DeltaVectors.end()) {
-            result = it->second;
-            return true;
-        }
-        if (ErasedKeys.contains(key)) {
+    bool GetVector(TStringBuf key, TString& result, TRowVersion readVersion) const {
+        if (!CanRead(readVersion)) {
             return false;
+        }
+        if (const auto* visible = Changes->Find(key, readVersion, BaseVersion)) {
+            if (!visible->Vector) {
+                return false;
+            }
+            result = *visible->Vector;
+            return true;
         }
         auto it = KeyToIndex.find(key);
         if (it == KeyToIndex.end()) {
@@ -270,32 +357,34 @@ public:
         return true;
     }
 
-    bool Upsert(TString key, TString vector) {
+    bool Upsert(TString key, TString vector, TRowVersion version) {
         auto view = TFloatVectorView::FromSerialized(vector);
         if (!view.IsValid() || view.Dimension != Dimension) {
             return false;
         }
-        ErasedKeys.erase(key);
-        DeltaVectors[std::move(key)] = std::move(vector);
+        Changes->Set(std::move(key), version, std::move(vector));
         return true;
     }
 
-    void Erase(TStringBuf key) {
-        DeltaVectors.erase(key);
-        ErasedKeys.emplace(key);
+    void Erase(TStringBuf key, TRowVersion version) {
+        Changes->Set(TString(key), version, std::nullopt);
     }
 
     bool HasDelta(TStringBuf key) const {
-        return DeltaVectors.contains(key) || ErasedKeys.contains(key);
-    }
-
-    bool HasChanges() const {
-        return !DeltaVectors.empty() || !ErasedKeys.empty();
+        return Changes->Find(key, TRowVersion::Max(), BaseVersion) != nullptr;
     }
 
     size_t ChangeCount() const {
-        return DeltaVectors.size() + ErasedKeys.size();
+        return Changes->CountAfter(BaseVersion);
     }
+
+    bool CanRead(TRowVersion version) const {
+        return Changes->Valid && BaseVersion <= version && version <= UpperVersion;
+    }
+
+    TRowVersion BaseVersion = TRowVersion::Min();
+    TRowVersion UpperVersion = TRowVersion::Max();
+    std::shared_ptr<THnswIndexChanges> Changes = std::make_shared<THnswIndexChanges>();
 
 private:
     std::unique_ptr<similarity::Space<float>> Space;
@@ -306,8 +395,6 @@ private:
     std::vector<std::unique_ptr<similarity::Object>> OwnedObjects;
     std::vector<TString> Keys; // Object::id() -> serialized primary key
     THashMap<TString, size_t> KeyToIndex;
-    THashMap<TString, TString> DeltaVectors;
-    THashSet<TString> ErasedKeys;
     std::unique_ptr<similarity::Hnsw<float>> Index;
 };
 
@@ -339,7 +426,7 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
     const Ydb::Table::VectorIndexSettings& settings,
     const std::vector<std::pair<TString, TString>>& keysAndVectors,
     ui64 maxMemoryBytes,
-    TString& error)
+    TString& error, bool allowEmpty)
 {
     if (settings.vector_type() != VectorIndexSettings::VECTOR_TYPE_FLOAT) {
         error = "HNSW index is only supported for float vectors";
@@ -352,7 +439,7 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
         return nullptr;
     }
 
-    if (keysAndVectors.empty()) {
+    if (keysAndVectors.empty() && !allowEmpty) {
         error = "No vectors to build HNSW index from";
         return nullptr;
     }
@@ -408,7 +495,7 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
         impl->AddVector(key, view.Data);
     }
 
-    if (impl->Size() == 0) {
+    if (impl->Size() == 0 && !allowEmpty) {
         error = "No valid vectors of the expected dimension were found";
         return nullptr;
     }
@@ -421,20 +508,20 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
     return std::unique_ptr<THnswIndex>(new THnswIndex(std::move(impl)));
 }
 
-THnswSearchResult THnswIndex::Search(TStringBuf targetVector, size_t k) const {
-    return Impl->Search(targetVector, k);
+THnswSearchResult THnswIndex::Search(TStringBuf targetVector, size_t k, TRowVersion version) const {
+    return Impl->Search(targetVector, k, version);
 }
 
-bool THnswIndex::GetVector(TStringBuf key, TString& result) const {
-    return Impl->GetVector(key, result);
+bool THnswIndex::GetVector(TStringBuf key, TString& result, TRowVersion version) const {
+    return Impl->GetVector(key, result, version);
 }
 
-bool THnswIndex::Upsert(TString key, TString vector) {
-    return Impl->Upsert(std::move(key), std::move(vector));
+bool THnswIndex::Upsert(TString key, TString vector, TRowVersion version) {
+    return Impl->Upsert(std::move(key), std::move(vector), version);
 }
 
-void THnswIndex::Erase(TStringBuf key) {
-    Impl->Erase(key);
+void THnswIndex::Erase(TStringBuf key, TRowVersion version) {
+    Impl->Erase(key, version);
 }
 
 bool THnswIndex::HasDelta(TStringBuf key) const {
@@ -442,11 +529,36 @@ bool THnswIndex::HasDelta(TStringBuf key) const {
 }
 
 bool THnswIndex::HasChanges() const {
-    return Impl->HasChanges();
+    return Impl->ChangeCount() != 0;
 }
 
 size_t THnswIndex::ChangeCount() const {
     return Impl->ChangeCount();
+}
+
+void THnswIndex::SetSnapshot(TRowVersion base, std::shared_ptr<THnswIndexChanges> changes,
+        TRowVersion upper) {
+    Impl->BaseVersion = base;
+    Impl->UpperVersion = upper;
+    Impl->Changes = std::move(changes);
+}
+
+TRowVersion THnswIndex::GetBaseVersion() const {
+    return Impl->BaseVersion;
+}
+
+bool THnswIndex::CanRead(TRowVersion version) const {
+    return Impl->CanRead(version);
+}
+
+bool THnswIndex::NeedsRebuild(ui32 thresholdPercent) const {
+    return static_cast<long double>(ChangeCount()) * 100
+        > static_cast<long double>(Max<size_t>(Size(), 1)) * thresholdPercent;
+}
+
+bool THnswIndex::IsValidVector(TStringBuf vector, size_t dimension) {
+    const auto view = TFloatVectorView::FromSerialized(vector);
+    return view.IsValid() && view.Dimension == dimension;
 }
 
 size_t THnswIndex::Size() const {

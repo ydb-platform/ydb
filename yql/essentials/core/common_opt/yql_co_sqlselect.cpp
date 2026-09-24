@@ -2585,6 +2585,7 @@ TExprNode::TPtr BuildGroup(
     const TAggs& aggs,
     const TExprNode::TPtr& groupExprs,
     const TExprNode::TPtr& groupSets,
+    bool isCompact,
     const TExprNode::TPtr& finalExtTypes,
     const TExprNode::TPtr& joinedUniqueExt,
     bool isYql,
@@ -2819,6 +2820,14 @@ TExprNode::TPtr BuildGroup(
                 .Add(1, keysNode)
                 .Add(2, payloadsNode)
                 .List(3) // options
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        if (isCompact) {
+                            parent.List(0)
+                                .Atom(0, "compact")
+                                .Seal();
+                        }
+                        return parent;
+                    })
                 .Seal()
             .Seal()
             .Build();
@@ -4572,6 +4581,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
         auto joinOps = GetSetting(setItem->Tail(), "join_ops");
         auto groupExprs = GetSetting(setItem->Tail(), "group_exprs");
         auto groupSets = GetSetting(setItem->Tail(), "group_sets");
+        const bool isCompact = HasSetting(setItem->Tail(), "group_by_compact");
         auto having = GetSetting(setItem->Tail(), "having");
         auto window = GetSetting(setItem->Tail(), "window");
         auto distinctAll = GetSetting(setItem->Tail(), "distinct_all");
@@ -4688,7 +4698,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
             }
 
             if (groupExprs) {
-                list = BuildGroup(node->Pos(), list, aggs, groupExprs, groupSets, finalExtTypes, joinedUniqueExt, /*isYql=*/isYql, ctx, optCtx);
+                list = BuildGroup(node->Pos(), list, aggs, groupExprs, groupSets, isCompact, finalExtTypes, joinedUniqueExt, /*isYql=*/isYql, ctx, optCtx);
             }
 
             if (having) {

@@ -129,6 +129,10 @@ public:
                 }
 
                 buildInfo->IsRebuild = true;
+                buildInfo->RebuildIndexName = TStringBuilder() << "__ydb_rebuild_" << ui64(BuildId);
+                if (Self->Indexes.at(indexPath.Base()->PathId)->State != NKikimrSchemeOp::EIndexStateReady) {
+                    return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "REBUILD INDEX requires a Ready index");
+                }
             } else {
                 const auto checks = indexPath.Check();
                 checks

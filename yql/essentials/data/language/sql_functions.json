@@ -1370,7 +1370,15 @@
     "kind": "Agg"
   },
   {
+    "name": "Spark::abs",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::acos",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::acosh",
     "kind": "Normal"
   },
   {
@@ -1390,7 +1398,23 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::atanh",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::base64",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::bin",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::bit_count",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::bit_get",
     "kind": "Normal"
   },
   {
@@ -1402,11 +1426,23 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::ceil",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::ceiling",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::char_length",
     "kind": "Normal"
   },
   {
     "name": "Spark::character_length",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::chr",
     "kind": "Normal"
   },
   {
@@ -1419,6 +1455,14 @@
   },
   {
     "name": "Spark::cosh",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::cot",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::csc",
     "kind": "Normal"
   },
   {
@@ -1438,6 +1482,26 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::expm1",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::factorial",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::find_in_set",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::floor",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::getbit",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::hex",
     "kind": "Normal"
   },
@@ -1451,6 +1515,10 @@
   },
   {
     "name": "Spark::instr",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::isnan",
     "kind": "Normal"
   },
   {
@@ -1478,7 +1546,15 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::levenshtein",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::ln",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::locate",
     "kind": "Normal"
   },
   {
@@ -1487,6 +1563,10 @@
   },
   {
     "name": "Spark::log10",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::log1p",
     "kind": "Normal"
   },
   {
@@ -1502,7 +1582,23 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::ltrim",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::md5",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::mod",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::nanvl",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::negative",
     "kind": "Normal"
   },
   {
@@ -1526,6 +1622,14 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::pmod",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::positive",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::pow",
     "kind": "Normal"
   },
@@ -1535,6 +1639,10 @@
   },
   {
     "name": "Spark::radians",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::repeat",
     "kind": "Normal"
   },
   {
@@ -1554,7 +1662,19 @@
     "kind": "Normal"
   },
   {
+    "name": "Spark::round",
+    "kind": "Normal"
+  },
+  {
     "name": "Spark::rpad",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::rtrim",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::sec",
     "kind": "Normal"
   },
   {
@@ -1575,6 +1695,14 @@
   },
   {
     "name": "Spark::sinh",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::space",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::split_part",
     "kind": "Normal"
   },
   {
@@ -1599,6 +1727,18 @@
   },
   {
     "name": "Spark::tanh",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::translate",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::trim",
+    "kind": "Normal"
+  },
+  {
+    "name": "Spark::try_mod",
     "kind": "Normal"
   },
   {

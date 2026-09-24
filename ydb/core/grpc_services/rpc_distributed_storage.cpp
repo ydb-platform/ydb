@@ -336,7 +336,7 @@ void ConvertPDisk(const NKikimrBlobStorage::TBaseConfig::TPDisk& from, Ydb::Dist
     to.set_is_static(from.GetBoxId() == 0);
 
     const auto& metrics = from.GetPDiskMetrics();
-    to.set_expected_slot_count(metrics.HasSlotCount() ? metrics.GetSlotCount() : from.GetExpectedSlotCount());
+    to.set_expected_slot_count(metrics.HasExpectedSlotCount() ? metrics.GetExpectedSlotCount() : from.GetExpectedSlotCount());
     to.set_slot_size_in_units(metrics.HasSlotSizeInUnits() ? metrics.GetSlotSizeInUnits() : from.GetPDiskConfig().GetSlotSizeInUnits());
     to.set_num_static_slots(from.GetNumStaticSlots());
     to.set_enforced_dynamic_slot_size(metrics.GetEnforcedDynamicSlotSize());

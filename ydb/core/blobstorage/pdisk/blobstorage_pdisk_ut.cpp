@@ -7,6 +7,7 @@
 #include "blobstorage_pdisk_ut_env.h"
 
 #include <type_traits>
+#include <library/cpp/logger/record.h>
 #include <library/cpp/logger/stream.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
@@ -315,6 +316,24 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(ChunkForgetTransitionalRejectionsPreserveStateAndSeverity) {
+        class TForgetLogBackend : public TStreamLogBackend {
+        public:
+            TForgetLogBackend(IOutputStream* stream, TManualEvent* logged)
+                : TStreamLogBackend(stream)
+                , Logged(logged)
+            {}
+
+            void WriteData(const TLogRecord& record) override {
+                TStreamLogBackend::WriteData(record);
+                if (TStringBuf(record.Data, record.Len).Contains("BPD91")) {
+                    Logged->Signal();
+                }
+            }
+
+        private:
+            TManualEvent* const Logged;
+        };
+
         using TState = NPDisk::TChunkState;
         for (const bool isDDisk : {false, true}) {
             for (const auto state : {TState::DATA_ON_QUARANTINE,
@@ -322,9 +341,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     TState::DATA_RESERVED_DELETE_ON_QUARANTINE, TState::DATA_COMMITTED_DELETE_ON_QUARANTINE,
                     TState::DATA_COMMITTED}) {
                 TStringStream log;
+                TManualEvent logged;
                 {
                     auto settings = FewChunksSettings();
-                    settings.LogBackend = new TStreamLogBackend(&log);
+                    settings.LogBackend = new TForgetLogBackend(&log, &logged);
                     TActorTestContext testCtx(settings);
                     TVDiskMock vdisk(&testCtx);
                     vdisk.InitFull();
@@ -349,6 +369,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     UNIT_ASSERT(reply);
                     UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::ERROR);
                     UNIT_ASSERT_C(reply->Get()->ErrorReason.Contains("BPD91"), reply->Get()->ErrorReason);
+                    // The reply and the log use different actors. Keep the runtime alive
+                    // until the logger writes BPD91; shutdown does not drain its mailbox.
+                    UNIT_ASSERT_C(logged.WaitT(TDuration::Seconds(10)), "BPD91 was not written by the logger");
                 }
                 const TString text = log.Str();
                 const size_t marker = text.find("BPD91");
@@ -2575,7 +2598,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         double expectedNormalizedOccupancy,
         double expectedVDiskSlotUsage,
         double expectedPDiskUsage,
-        ui32 expectedNumSlots,
+        ui32 expectedNumOwners,
         ui32 expectedNumActiveSlots,
         NKikimrBlobStorage::TPDiskSpaceColor::E expectedColor
     ) {
@@ -2591,7 +2614,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             << " VDiskSlotUsage# " << expectedVDiskSlotUsage
             << " VDiskRawUsage# " << expectedVDiskRawUsage
             << " PDiskUsage# " << expectedPDiskUsage
-            << " NumSlots# " << expectedNumSlots
+            << " NumOwners# " << expectedNumOwners
             << " NumActiveSlots# " << expectedNumActiveSlots
             << " Color# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(expectedColor)
             << Endl);
@@ -2607,7 +2630,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->FreeChunks, expectedFreeChunks);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedTotalChunks);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->UsedChunks, expectedUsedChunks);
-        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->NumSlots, expectedNumSlots);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->NumOwners, expectedNumOwners);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->NumActiveSlots, expectedNumActiveSlots);
         UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(evCheckSpaceResult->StatusFlags), expectedColor);
 

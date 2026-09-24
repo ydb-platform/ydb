@@ -10,56 +10,16 @@ You need to have a GitHub account to suggest any changes to the {{ ydb-short-nam
 
 ### SSH key pair {#ssh_key_pair}
 
-* To connect to GitHub, you can use: ssh/token/ssh from yubikey/password, etc. The recommended method is ssh keys.
-* If you don't have already created keys (or yubikey), then just create new keys. Full instructions are on [this GitHub page](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#generating-a-new-ssh-key).
-* If you have your own private keys and use skotty as an ssh-agent:
+* To connect to GitHub, you can use ssh or a token. The recommended method is ssh keys.
+* If you don't have keys yet, create new keys. Full instructions are on [this GitHub page](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#generating-a-new-ssh-key).
 
-  * Add keys to skotty with command [ssh-add](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#adding-your-ssh-key-to-the-ssh-agent)
-  * Edit `~/.skotty/config.yaml` file by adding a section:
-
-
-    ```yaml
-    keys_order:
-        - added
-        - insecure
-        - legacy
-        - secure
-    ```
-
-* If you have a yubikey, you can use the legacy key from the yubikey:
-
-  * Suppose you already have a configured yubikey (or you configured yubikey locally)
-  * On your laptop: `skotty ssh keys`
-  * Upload `legacy@yubikey` ssh key to GitHub ([via UI](https://github.com/settings/keys))
-  * test connection on laptop: `ssh -T git@github.com`
+{% include [ssh-key-pair-internal.md](_includes/suggest_change_overlay/ssh-key-pair-internal.md) %}
 
 #### Remote development
 
-If you are developing on a remote dev host you can use the key from your laptop (generated keys or keys from yubikey). You need to configure key forwarding. (Full instructions are on  [this GitHub page](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/using-ssh-agent-forwarding) ).
+If you are developing on a remote host, you can use the key from your laptop. Configure SSH agent forwarding using [GitHub's guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/using-ssh-agent-forwarding).
 
-Suppose that your remote computer is dev123456.search.yandex.net.
-
-* on your laptop add ssh forwarding (`~/.ssh/config`):
-
-
-```text
-Host dev123456.search.yandex.net
-    ForwardAgent yes
-```
-
-
-* on remote dev host add to `~/.bashrc`:
-
-
-```bash
-if [[ -S "$SSH_AUTH_SOCK" && ! -h "$SSH_AUTH_SOCK" ]]; then
-    ln -sf "$SSH_AUTH_SOCK" ~/.ssh/ssh_auth_sock;
-fi
-export SSH_AUTH_SOCK=~/.ssh/ssh_auth_sock;
-```
-
-
-* test connection: `ssh -T git@github.com`
+{% include [remote-dev-internal.md](_includes/suggest_change_overlay/remote-dev-internal.md) %}
 
 ### Git CLI {#git_cli}
 

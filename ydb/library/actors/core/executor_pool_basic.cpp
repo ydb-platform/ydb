@@ -218,8 +218,6 @@ namespace NActors {
 
         Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);
         if (EnableWaker) {
-            Y_ABORT_UNLESS(!HasOwnSharedThread && !SharedOnly,
-                "EnableWaker is supported only for non-shared Basic executor pools");
             Waker = std::make_unique<TWaker>(this);
         }
         if constexpr (DebugMode) {
@@ -486,6 +484,14 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::RequestWaker(bool persistent) {
+        if (MaxFullThreadCount == 0 || (!persistent && SharedPool && GetFullThreadCount() == 0)) {
+            // With no active dedicated workers, queue demand belongs to the
+            // shared waker. Quota changes still need the Basic waker.
+            if (SharedPool) {
+                SharedPool->RequestWaker();
+            }
+            return;
+        }
         const bool wasPending = WakerPending.exchange(true, std::memory_order_acq_rel);
         if (wasPending) {
             return;
@@ -656,7 +662,11 @@ namespace NActors {
         }
         AtomicSet(ThreadCount, desiredThreadCount);
 
-        const i64 previousActivationCredits = ActivationCredits.load(std::memory_order_acquire);
+        // Pair the published thread count with producers' credit increments:
+        // either this pass sees their credit or they see the new routing count.
+        const i64 previousActivationCredits = SharedPool
+            ? ActivationCredits.fetch_add(0, std::memory_order_acq_rel)
+            : ActivationCredits.load(std::memory_order_acquire);
         i64 budget = previousActivationCredits;
         for (i16 workerId = 0; workerId < MaxFullThreadCount; ++workerId) {
             const bool isWaker = workerId == wakerWorkerId;
@@ -808,6 +818,11 @@ namespace NActors {
 
         SleepingCount.store(previousSleepingCount, std::memory_order_release);
 
+        if (SharedPool) {
+            DesiredSharedThreads.store(Min<i64>(budget, SharedPool->PoolThreads), std::memory_order_release);
+            SharedPool->RequestWaker();
+        }
+
         // A producer publishes its credit before the corresponding queue item.
         // If the credit appeared while SleepingCount was hidden, repeat the pass.
         if (ActivationCredits.load(std::memory_order_acquire) > previousActivationCredits) {
@@ -901,7 +916,8 @@ namespace NActors {
     void TBasicExecutorPool::ScheduleActivationExWaker(TMailbox* mailbox, ui64 revolvingCounter) {
         ActivationCredits.fetch_add(1, std::memory_order_acq_rel);
         Activations.Push(mailbox->Hint, revolvingCounter);
-        if (SleepingCount.load(std::memory_order_acquire) > 0) {
+        if (SleepingCount.load(std::memory_order_acquire) > 0 ||
+                (SharedPool && SharedPool->SharedSleepingCount.load(std::memory_order_acquire) > 0)) {
             RequestWaker(false);
         }
     }
@@ -1217,6 +1233,13 @@ namespace NActors {
     }
 
     TBasicExecutorPool::TSemaphore TBasicExecutorPool::GetSemaphore() const {
+        if (EnableWaker) {
+            TSemaphore semaphore;
+            semaphore.OldSemaphore = ActivationCredits.load(std::memory_order_acquire);
+            semaphore.CurrentSleepThreadCount = SleepingCount.load(std::memory_order_acquire);
+            semaphore.CurrentThreadCount = AtomicLoad(&ThreadCount);
+            return semaphore;
+        }
         return TSemaphore::GetSemaphore(AtomicGet(Semaphore));
     }
 
@@ -1229,22 +1252,45 @@ namespace NActors {
         NHPTimer::STime hpnow = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
 
-        SharedPool->Threads[workerId].UnsetWork();
+        if (!SharedPool->HasWakerPools) {
+            SharedPool->Threads[workerId].UnsetWork();
+        }
         if (Harmonizer) {
             LWPROBE(TryToHarmonize, PoolId, PoolName);
             Harmonizer->Harmonize(hpnow);
         }
+        constexpr ui32 maxAttempts = 8;
+        if (EnableWaker) {
+            TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
+            for (ui32 attempt = 0; attempt < maxAttempts && !StopFlag.load(std::memory_order_acquire); ++attempt) {
+                if (const ui32 activation = Activations.Pop(revolvingCounter++)) {
+                    const i64 credits = ActivationCredits.fetch_sub(1, std::memory_order_acq_rel);
+                    Y_DEBUG_ABORT_UNLESS(credits > 0);
+                    SharedPool->Threads[workerId].SetWorkForWaker();
+                    return MailboxTable->Get(activation);
+                }
+                if (ActivationCredits.load(std::memory_order_acquire) == 0) {
+                    return nullptr;
+                }
+                SpinLockPause();
+            }
+            return nullptr;
+        }
         TAtomic x = AtomicGet(Semaphore);
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "revolvingCounter == ", revolvingCounter, " semaphore == ", semaphore.OldSemaphore);
-        while (!StopFlag.load(std::memory_order_acquire)) {
+        for (ui32 attempt = 0; attempt < maxAttempts && !StopFlag.load(std::memory_order_acquire); ++attempt) {
             if (!semaphore.OldSemaphore) {
                 EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "semaphore == 0");
                 return nullptr;
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
                 if (const ui32 activation = Activations.Pop(revolvingCounter++)) {
-                    SharedPool->Threads[workerId].SetWork();
+                    if (SharedPool->HasWakerPools) {
+                        SharedPool->Threads[workerId].SetWorkForWaker();
+                    } else {
+                        SharedPool->Threads[workerId].SetWork();
+                    }
                     AtomicDecrement(Semaphore);
                     EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphore == ", semaphore.OldSemaphore);
                     return MailboxTable->Get(activation);

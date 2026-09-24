@@ -291,6 +291,12 @@ public:
         (override));
 
     MOCK_METHOD(
+        void,
+        SuppressMissingRequestAnnotationCheck,
+        (),
+        (override));
+
+    MOCK_METHOD(
         NLogging::TLoggingTagList*,
         GetRequestAnnotations,
         (),

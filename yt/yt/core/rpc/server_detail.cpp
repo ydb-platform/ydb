@@ -840,6 +840,11 @@ void TServiceContextWrapper::CommitRequestAnnotations(bool flush)
     UnderlyingContext_->CommitRequestAnnotations(flush);
 }
 
+void TServiceContextWrapper::SuppressMissingRequestAnnotationCheck()
+{
+    UnderlyingContext_->SuppressMissingRequestAnnotationCheck();
+}
+
 NLogging::TLoggingTagList* TServiceContextWrapper::GetRequestAnnotations()
 {
     return UnderlyingContext_->GetRequestAnnotations();

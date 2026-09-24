@@ -203,6 +203,11 @@ struct IServiceContext
     //! after which no further request annotation is allowed.
     virtual void CommitRequestAnnotations(bool flush) = 0;
 
+    //! Waives the obligation to annotate the request, for a context answered without
+    //! ever reaching its handler. Unlike #CommitRequestAnnotations, legal on a context
+    //! whose annotations have already been flushed.
+    virtual void SuppressMissingRequestAnnotationCheck() = 0;
+
     //! Return the lists accumulating annotations, or null when logging is disabled.
     virtual NLogging::TLoggingTagList* GetRequestAnnotations() = 0;
     virtual NLogging::TLoggingTagList* GetResponseAnnotations() = 0;

@@ -220,7 +220,7 @@ public:
         }
 
         if (auto keptAsyncResponseMessage = DoTryBeginRequest(mutationId, context->IsRetry())) {
-            context->AnnotateRequest();
+            context->SuppressMissingRequestAnnotationCheck();
             context->ReplyFrom(std::move(keptAsyncResponseMessage));
             return true;
         }

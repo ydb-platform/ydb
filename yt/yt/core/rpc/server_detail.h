@@ -109,6 +109,7 @@ public:
 
     bool IsLoggingEnabled() const override;
     void CommitRequestAnnotations(bool flush) override;
+    void SuppressMissingRequestAnnotationCheck() override;
     NLogging::TLoggingTagList* GetRequestAnnotations() override;
     NLogging::TLoggingTagList* GetResponseAnnotations() override;
 
@@ -195,9 +196,6 @@ protected:
 
     virtual void LogRequest();
     virtual void LogResponse() = 0;
-
-    //! After this call there is no obligation to annotate the request.
-    void SuppressMissingRequestAnnotationCheck();
 
     //! Tags identifying the request, spliced into the annotation alerts.
     NLogging::TLoggingTagList MakeRequestAnnotationAlertTags() const;
@@ -296,6 +294,7 @@ public:
 
     bool IsLoggingEnabled() const override;
     void CommitRequestAnnotations(bool flush) override;
+    void SuppressMissingRequestAnnotationCheck() override;
     NLogging::TLoggingTagList* GetRequestAnnotations() override;
     NLogging::TLoggingTagList* GetResponseAnnotations() override;
 

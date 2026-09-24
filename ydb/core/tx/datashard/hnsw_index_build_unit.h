@@ -20,14 +20,14 @@ namespace NKikimr::NDataShard {
 // transaction via TEvDataShard::TEvAsyncJobComplete (see TRestoreUnit for the
 // same pattern). Index is nullptr when the build failed; Error says why.
 struct THnswIndexBuildProduct : public IDestructable {
-    std::shared_ptr<THnswIndex> Index;
     std::shared_ptr<void> MemoryReservation;
+    std::shared_ptr<THnswIndex> Index;
     TString Error;
 
     THnswIndexBuildProduct(std::shared_ptr<THnswIndex> index,
             std::shared_ptr<void> memoryReservation, TString error)
-        : Index(std::move(index))
-        , MemoryReservation(std::move(memoryReservation))
+        : MemoryReservation(std::move(memoryReservation))
+        , Index(std::move(index))
         , Error(std::move(error))
     {}
 };

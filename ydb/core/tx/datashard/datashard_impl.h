@@ -429,8 +429,8 @@ class TDataShard
             ui32 VectorColumnTag = 0;
             ui64 RowCountAtBuild = 0;
             Ydb::Table::VectorIndexSettings Settings;
-            std::shared_ptr<NDataShard::THnswIndex> Index;
             std::shared_ptr<void> MemoryReservation;
+            std::shared_ptr<NDataShard::THnswIndex> Index;
             TString Error;
         };
 
@@ -1887,7 +1887,7 @@ public:
         if (!compatible) {
             entry.Index.reset();
             entry.RowCountAtBuild = 0;
-            entry.DeltaReservations.clear();
+            entry.DeltaReservations.reset();
             entry.NextScanAttemptAt = TInstant::Zero();
             entry.VectorColumnTag = vectorColumnTag;
             entry.Settings = settings;
@@ -1921,7 +1921,7 @@ public:
             // to this table or to the visible snapshot invalidates its graph.
             entry.Index.reset();
             entry.RowCountAtBuild = 0;
-            entry.DeltaReservations.clear();
+            entry.DeltaReservations.reset();
             entry.NextScanAttemptAt = TInstant::Zero();
             entry.BuildObsolete = entry.Building;
             entry.FollowerChangeCounter = changeCounter;
@@ -1930,13 +1930,16 @@ public:
     }
 
     void InvalidateHnswIndexes() {
+        if (HnswCacheMemoryTracker) {
+            HnswCacheMemoryTracker->ResetDemand();
+        }
         for (auto& [_, entry] : HnswIndexCache) {
             entry.Index.reset();
             entry.RowCountAtBuild = 0;
             entry.VectorColumnTag = 0;
             entry.Settings.Clear();
             entry.FollowerChangeCounter.reset();
-            entry.DeltaReservations.clear();
+            entry.DeltaReservations.reset();
             entry.NextScanAttemptAt = TInstant::Zero();
             entry.BuildObsolete = entry.Building;
         }
@@ -1952,28 +1955,70 @@ public:
         auto& entry = HnswIndexCache[localTid];
         entry.Building = false;
         entry.NextScanAttemptAt = TInstant::Max();
+        HnswCacheMemoryTracker->ResetDemand();
     }
 
-    ui64 GetHnswCacheMemoryLimit() const {
-        return VectorIndexHnswCacheMemoryTracker.GetLimit();
+    ui64 GetHnswCacheMemoryLimit() {
+        if (!HnswCacheMemoryTracker) {
+            HnswCacheMemoryTracker = std::make_shared<THnswCacheMemoryTracker>();
+            Send(NMemory::MakeMemoryControllerId(),
+                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache));
+        }
+        return HnswCacheMemoryTracker->GetLimit();
     }
 
     std::shared_ptr<void> TryReserveHnswCacheMemory(ui64 bytes) {
-        if (!VectorIndexHnswCacheMemoryTracker.TryAcquire(bytes)) {
-            return nullptr;
-        }
-
         struct TReservation {
+            std::shared_ptr<THnswCacheMemoryTracker> Tracker;
             ui64 Size = 0;
 
             ~TReservation() {
-                TDataShard::VectorIndexHnswCacheMemoryTracker.Release(Size);
+                if (Size) {
+                    Tracker->Release(Size);
+                }
             }
         };
 
+        GetHnswCacheMemoryLimit();
         auto reservation = std::make_shared<TReservation>();
+        reservation->Tracker = HnswCacheMemoryTracker;
+        if (!reservation->Tracker->TryAcquire(bytes)) {
+            return nullptr;
+        }
         reservation->Size = bytes;
         return reservation;
+    }
+
+    void Handle(NMemory::TEvConsumerRegistered::TPtr& ev, const TActorContext&) {
+        Y_ENSURE(HnswCacheMemoryTracker);
+        HnswCacheMemoryTracker->SetConsumer(std::move(ev->Get()->Consumer));
+    }
+
+    void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext&) {
+        Y_ENSURE(HnswCacheMemoryTracker);
+        const ui64 limit = ev->Get()->LimitBytes;
+        const ui64 previousLimit = HnswCacheMemoryTracker->GetLimit();
+        HnswCacheMemoryTracker->SetLimit(limit);
+        if (limit > previousLimit) {
+            for (auto& [_, entry] : HnswIndexCache) {
+                if (entry.NextScanAttemptAt != TInstant::Max()) {
+                    entry.NextScanAttemptAt = TInstant::Zero();
+                }
+            }
+        }
+        if (HnswCacheMemoryTracker->GetUsed() > limit) {
+            HnswCacheMemoryTracker->ResetDemand();
+            for (auto& [_, entry] : HnswIndexCache) {
+                entry.Index.reset();
+                entry.DeltaReservations.reset();
+                entry.RowCountAtBuild = 0;
+                entry.NextScanAttemptAt = TInstant::Zero();
+                entry.BuildObsolete = entry.Building;
+                if (HnswCacheMemoryTracker->GetUsed() <= limit) {
+                    break;
+                }
+            }
+        }
     }
 
     void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index,
@@ -1983,26 +2028,36 @@ public:
         auto& entry = HnswIndexCache[localTid];
         // Active reads may still own the old index and keep its reservation.
         entry.Index.reset();
+        entry.DeltaReservations.reset();
+
+        // A build may finish after the controller has reduced our share.
+        if (index && HnswCacheMemoryTracker->GetUsed() > GetHnswCacheMemoryLimit()) {
+            index.reset();
+            memoryReservation.reset();
+        }
 
         if (index) {
             Y_ENSURE(memoryReservation, "HNSW index installed without a memory reservation");
             struct TOwnedIndex {
-                std::shared_ptr<NDataShard::THnswIndex> Index;
                 std::shared_ptr<void> MemoryReservation;
+                std::shared_ptr<THashMap<TString, std::shared_ptr<void>>> DeltaReservations;
+                std::shared_ptr<NDataShard::THnswIndex> Index;
             };
             auto owned = std::make_shared<TOwnedIndex>();
             owned->Index = std::move(index);
             owned->MemoryReservation = std::move(memoryReservation);
+            entry.DeltaReservations = std::make_shared<THashMap<TString, std::shared_ptr<void>>>();
+            owned->DeltaReservations = entry.DeltaReservations;
             index = std::shared_ptr<NDataShard::THnswIndex>(owned, owned->Index.get());
         }
         entry.Index = std::move(index);
         entry.RowCountAtBuild = rowCountAtBuild;
         entry.VectorColumnTag = vectorColumnTag;
         entry.Settings = settings;
-        entry.DeltaReservations.clear();
         entry.Building = false;
         entry.BuildObsolete = false;
         entry.NextScanAttemptAt = TInstant::Zero();
+        HnswCacheMemoryTracker->ResetDemand();
     }
 
     void UpdateHnswIndex(ui32 localTid, NTable::ERowOp rowOp,
@@ -2034,7 +2089,7 @@ public:
                 HnswIndexCache.erase(it);
                 return;
             }
-            entry.DeltaReservations.emplace(key, std::move(reservation));
+            entry.DeltaReservations->emplace(key, std::move(reservation));
         }
 
         if (rowOp == NTable::ERowOp::Erase) {
@@ -3190,7 +3245,7 @@ private:
         ui64 RowCountAtBuild = 0;
         ui32 VectorColumnTag = 0;
         Ydb::Table::VectorIndexSettings Settings;
-        THashMap<TString, std::shared_ptr<void>> DeltaReservations;
+        std::shared_ptr<THashMap<TString, std::shared_ptr<void>>> DeltaReservations;
         bool Building = false;
         bool BuildObsolete = false;
         std::optional<NTable::TDatabase::TChangeCounter> FollowerChangeCounter;
@@ -3201,7 +3256,7 @@ private:
     };
     THashMap<ui32, THnswIndexCacheEntry> HnswIndexCache;  // LocalTid -> cache entry
     TIntrusivePtr<TEvTabletCounters::TInFlightCookie> HnswCounterEventsInFlight;
-    inline static THnswCacheMemoryTracker VectorIndexHnswCacheMemoryTracker;
+    std::shared_ptr<THnswCacheMemoryTracker> HnswCacheMemoryTracker;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;
@@ -3668,6 +3723,8 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
+            HFunc(NMemory::TEvConsumerRegistered, Handle);
+            HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3740,6 +3797,8 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
+            HFunc(NMemory::TEvConsumerRegistered, Handle);
+            HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvDataShard::TEvUploadRowsRequest, Handle);
             HFunc(TEvDataShard::TEvEraseRowsRequest, Handle);
@@ -3854,6 +3913,8 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
+            HFunc(NMemory::TEvConsumerRegistered, Handle);
+            HFunc(NMemory::TEvConsumerLimit, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_WARN_COMP(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event",

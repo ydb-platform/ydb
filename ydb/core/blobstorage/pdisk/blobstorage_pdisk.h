@@ -1592,7 +1592,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
     ui32 FreeChunks; // contains SharedQuota.Free
     ui32 TotalChunks; // contains OwnerQuota.HardLimit(owner), Total != Free + Used
     ui32 UsedChunks; // equals OwnerQuota.Used(owner) - a number of chunks allocated by requesting owner
-    ui32 NumSlots; // number of VDisks over PDisk, not their weight
+    ui32 NumOwners; // number of registered PDisk owners (including VDisks and DDisks), not their weight
     ui32 NumActiveSlots; // sum of VDisks weights - $ \sum_i{ceil(VSlot[i].GroupSizeInUnits / PDisk.SlotSizeInUnits)} $
     double NormalizedOccupancy = 0;
     double VDiskSlotUsage = 0;  // 100.0 * Owner.Used / Owner.LightYellowLimit
@@ -1609,7 +1609,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
             ui32 freeChunks,
             ui32 totalChunks,
             ui32 usedChunks,
-            ui32 numSlots,
+            ui32 numOwners,
             ui32 numActiveSlots,
             ui32 expectedSlotCount,
             TString errorReason,
@@ -1619,7 +1619,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         , FreeChunks(freeChunks)
         , TotalChunks(totalChunks)
         , UsedChunks(usedChunks)
-        , NumSlots(numSlots)
+        , NumOwners(numOwners)
         , NumActiveSlots(numActiveSlots)
         , ExpectedSlotCount(expectedSlotCount)
         , ErrorReason(std::move(errorReason))
@@ -1633,7 +1633,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         str << " FreeChunks# " << FreeChunks;
         str << " TotalChunks# " << TotalChunks;
         str << " UsedChunks# " << UsedChunks;
-        str << " NumSlots# " << NumSlots;
+        str << " NumOwners# " << NumOwners;
         str << " NumActiveSlots# " << NumActiveSlots;
         str << " ExpectedSlotCount# " << ExpectedSlotCount;
         str << " ErrorReason# \"" << ErrorReason << "\"";

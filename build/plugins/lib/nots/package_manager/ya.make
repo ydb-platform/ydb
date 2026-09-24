@@ -9,16 +9,13 @@ PY_SRCS(
     common_config.py
     constants.py
     lockfile.py
-    node_modules_bundler.py
     package_json.py
     package_manager.py
-    pnpm_workspace.py
     timeit.py
     utils.py
 )
 
 PEERDIR(
-    library/python/archive
     contrib/python/PyYAML
     devtools/frontend_build_platform/libraries/logging
 )

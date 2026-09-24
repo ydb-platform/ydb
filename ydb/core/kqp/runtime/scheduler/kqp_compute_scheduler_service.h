@@ -49,7 +49,6 @@ private:
     THashMap<NHdrf::TFullPoolId, NHdrf::NDynamic::TQueryPtr> ReadQueries; // protected by Mutex
 
     const TDelayParams DelayParams;
-    const NHdrf::NSnapshot::ELeafFairShare FairShareMode;
     TIntrusivePtr<TKqpCounters> KqpCounters;
 
     struct {

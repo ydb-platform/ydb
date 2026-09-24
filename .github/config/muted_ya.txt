@@ -1,11 +1,8 @@
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/blobstorage/pdisk/ut TPDiskTest.ChunkForgetTransitionalRejectionsPreserveStateAndSeverity
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
-ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
-ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestDeleteMessage
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.RowDispatcherMemoryLimitOnParserCreation
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointOffsets-SharedReading+CommittedAhead
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets+SharedReading+FromCheckpoint
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading+FromCheckpoint
@@ -18,13 +15,11 @@ ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsRetry
-ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCounters
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterEnableAutopartitioningAndServiceConsumerGuards
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterIfExistsMissingIsSuccess
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMissingWithoutIfExistsIsSchemeError
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
 ydb/core/tx/conveyor_composite/ut TCompositeConveyorRuntimeUpdate.LatestTopologySupersedesPrepare
-ydb/core/tx/replication/service/ut_worker unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.CreateIndexedTableAndForceDropSimultaneously[PipeResets]
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
@@ -35,6 +30,8 @@ ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedVersionsTableIs
 ydb/tests/compatibility/common test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_in_blob_storage_config[restart_stable-26-3-1_to_prestable-26-4-1]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-strict]
+ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_prestable-26-4-1_to_prestable-26-4-1-codec2-ROW]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-1-False]
 ydb/tests/compatibility/topics test_source_id_mapping.py.TestSourceIdMappingByIdFederation.test_producer_session_after_enabling_mapping_by_id[restart_prestable-26-4-1_to_prestable-26-4-1]
 ydb/tests/compatibility/topics test_source_id_mapping.py.TestSourceIdMappingByIdFederation.test_producer_session_after_enabling_mapping_by_id[restart_stable-26-3-1_to_prestable-26-4-1]
 ydb/tests/compatibility/topics test_source_id_mapping.py.TestSourceIdMappingFederation.test_producer_session_after_restart[restart_prestable-26-4-1_to_prestable-26-4-1]
@@ -46,13 +43,13 @@ ydb/tests/compatibility/topics test_source_id_mapping.py.TestSourceIdMappingFede
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-4-1_and_stable-26-3-1]
 ydb/tests/fq/pq_async_io/ut TPqWriterTest.TestCheckpoints
 ydb/tests/fq/streaming py3test.[*/*] chunk
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_pq_source_actor_count[max_tasks_50]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_stop_after_restart[kikimr0-False]
 ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_dynamic_udf
 ydb/tests/fq/streaming/logbroker py3test.sole chunk
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/config test_pdisk_metadata_cli.py.TestPDiskMetadata.test_apply_committed_config
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
 ydb/tests/functional/federation_test unittest.sole chunk
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_stress

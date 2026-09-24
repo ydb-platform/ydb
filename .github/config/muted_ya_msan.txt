@@ -1,5 +1,4 @@
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
-ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
 ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
@@ -7,6 +6,7 @@ ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCs
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
+ydb/core/kqp/ut/service KqpWarmup.WarmupLoadsOtherUsersQueriesWithRestrictedAdmins-LegacyMetadata
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
@@ -14,6 +14,7 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.Shoul
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldSwitchHostToOfflineAndBack
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
+ydb/core/tx/schemeshard/ut_generated_columns unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
 ydb/library/actors/interconnect/ut Interconnect.RdmaSimultaneousReconnectDoesNotLoop
 ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialPayloadRead
@@ -42,7 +43,10 @@ ydb/public/lib/ydb_cli/commands/sqs_workload/ut SqsWorkloadScenario.InitSqsClien
 ydb/public/lib/ydb_cli/commands/sqs_workload/ut SqsWorkloadScenario.InitSqsClientUsesCreatedConfiguration
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionWasmDwarfMapsToMainCpp
+ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
+ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
+ydb/tests/functional/federation_test unittest.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]

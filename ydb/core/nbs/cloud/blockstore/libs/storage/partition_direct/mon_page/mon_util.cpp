@@ -98,6 +98,61 @@ const char* PageTitle(EMonPage page)
     return "";
 }
 
+const char* DDiskBalanceStrategyParam(EDDiskBalanceStrategy strategy)
+{
+    switch (strategy) {
+        case EDDiskBalanceStrategy::Touched:
+            return "touched";
+        case EDDiskBalanceStrategy::Configured:
+            return "configured";
+    }
+    return "touched";
+}
+
+EDDiskBalanceStrategy ParseDDiskBalanceStrategy(TStringBuf value)
+{
+    return value == "configured" ? EDDiskBalanceStrategy::Configured
+                                 : EDDiskBalanceStrategy::Touched;
+}
+
+TString FormatDDiskImbalance(const TDDiskImbalance& imbalance)
+{
+    return TStringBuilder() << " need move " << imbalance.Moves << " of "
+                            << imbalance.TotalDDiskCount << " DDisks ("
+                            << imbalance.Percent << "%)";
+}
+
+void RenderBalanceDDisksButton(
+    IOutputStream& str,
+    ui64 tabletId,
+    EMonPage page,
+    size_t from,
+    size_t to,
+    EDDiskBalanceStrategy strategy)
+{
+    const TStringBuf pageParam = PageParam(page);
+    str << " <form method='post' action='?TabletID=" << tabletId
+        << "&page=" << pageParam << "&action=balance&from=" << from
+        << "&to=" << to << "&strategy=" << DDiskBalanceStrategyParam(strategy);
+    if (page == EMonPage::Dbg) {
+        str << "&dbg=" << from;
+    }
+    str << "' style='display:inline'>"
+           "<input type='hidden' name='TabletID' value='"
+        << tabletId << "'/><input type='hidden' name='page' value='"
+        << pageParam
+        << "'/><input type='hidden' name='action' value='balance'/>"
+           "<input type='hidden' name='from' value='"
+        << from << "'/><input type='hidden' name='to' value='" << to
+        << "'/><input type='hidden' name='strategy' value='"
+        << DDiskBalanceStrategyParam(strategy) << "'/>";
+    if (page == EMonPage::Dbg) {
+        str << "<input type='hidden' name='dbg' value='" << from << "'/>";
+    }
+    str << "<button type='submit' class='btn btn-default btn-xs'>"
+           "Balance</button></form>";
+}
+
 TString MakeDDiskMonPageUrl(const NKikimr::NBsController::TDDiskId& ddiskId)
 {
     return TStringBuilder()

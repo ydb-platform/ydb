@@ -92,16 +92,23 @@ TExprNode::TPtr ConvertToPhysical(TVector<TIntrusivePtr<TOpRoot>> roots, TRBOCon
             }
 
             if (op->Kind == EOperator::EmptySource) {
-                TVector<TExprBase> listElements;
-                listElements.push_back(Build<TCoAsStruct>(ctx, op->Pos).Done());
+                const auto emptySource = CastOperator<TOpEmptySource>(op);
+                if (emptySource->Input) {
+                    currentStageBody = Build<TCoIterator>(ctx, op->Pos)
+                        .List(emptySource->Input)
+                        .Done().Ptr();
+                } else {
+                    TVector<TExprBase> listElements;
+                    listElements.push_back(Build<TCoAsStruct>(ctx, op->Pos).Done());
 
-                // clang-format off
-                currentStageBody = Build<TCoIterator>(ctx, op->Pos)
-                    .List<TCoAsList>()
-                        .Add(listElements)
-                    .Build()
-                .Done().Ptr();
-                // clang-format on
+                    // clang-format off
+                    currentStageBody = Build<TCoIterator>(ctx, op->Pos)
+                        .List<TCoAsList>()
+                            .Add(listElements)
+                        .Build()
+                    .Done().Ptr();
+                    // clang-format on
+                }
                 stages[opStageId] = currentStageBody;
                 stagePos[opStageId] = op->Pos;
                 YQL_CLOG(TRACE, CoreDq) << "Converted Empty Source " << opStageId;

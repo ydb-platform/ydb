@@ -144,7 +144,7 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
             const NDDisk::TDDiskConfig ddiskConfig =
                 MakeDDiskConfig(!TBase::Cfg.DisableDDiskChecksums,
-                    TBase::Cfg.ForcePDiskFallback);
+                    TBase::Cfg.ForcePDiskFallback, TBase::Cfg.DDiskChecksumsCacheBytes);
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(ServerNodeId, i + 1, DDiskSlotId);

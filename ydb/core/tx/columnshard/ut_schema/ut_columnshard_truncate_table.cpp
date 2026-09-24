@@ -484,6 +484,84 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         UNIT_ASSERT_VALUES_EQUAL(evictedRowCount, 1);
     }
 
+    // When TTL is removed via ALTER and then TRUNCATE is performed, the new generation
+    // must NOT carry over the stale TTL settings. With Reboot=true, exercises the
+    // InitFromDB → AddVersionFromProto path with the nullopt case.
+    Y_UNIT_TEST_DUO(TruncateAfterTtlRemoved, Reboot) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 pathId = 1;
+        TestTableDescription testTable{};
+        Y_UNUSED(PrepareTablet(runtime, pathId, testTable.Schema));
+
+        ui64 txId = 10;
+
+        // Step 1: Set TTL via ALTER.
+        const auto ttlDuration = TDuration::Seconds(3600);
+        auto specials = TTestSchema::TTableSpecials().SetTtl(ttlDuration);
+        specials.SetTtlColumn(TTestSchema::DefaultTtlColumn);
+        {
+            const auto alterBody =
+                TTestSchema::AlterTableTxBody(pathId, /*standalone=*/true, /*version=*/1, testTable.Schema, testTable.Pk, specials);
+            auto planStep = ProposeSchemaTx(runtime, sender, alterBody, ++txId);
+            PlanSchemaTx(runtime, sender, { planStep, txId });
+        }
+
+        auto& csController = *csControllerGuard.operator->();
+        const auto* shard = csController.GetShard();
+
+        // Verify TTL is set.
+        {
+            const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            UNIT_ASSERT(internalPathId);
+            const auto ttl = shard->GetTablesManager().GetTableTtl(*internalPathId);
+            UNIT_ASSERT(ttl.has_value());
+        }
+
+        // Step 2: Remove TTL via ALTER (empty TTableSpecials → Disabled).
+        {
+            const auto alterBody =
+                TTestSchema::AlterTableTxBody(pathId, /*standalone=*/true, /*version=*/2, testTable.Schema, testTable.Pk, TTestSchema::TTableSpecials{});
+            auto planStep = ProposeSchemaTx(runtime, sender, alterBody, ++txId);
+            PlanSchemaTx(runtime, sender, { planStep, txId });
+        }
+
+        // Verify TTL is removed.
+        {
+            const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            UNIT_ASSERT(internalPathId);
+            const auto ttl = shard->GetTablesManager().GetTableTtl(*internalPathId);
+            UNIT_ASSERT(!ttl.has_value());
+        }
+
+        // Step 3: Optionally restart the tablet to force InitFromDB reload.
+        if (Reboot) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+            shard = csController.GetShard();
+            const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            UNIT_ASSERT(internalPathId);
+            const auto ttl = shard->GetTablesManager().GetTableTtl(*internalPathId);
+            UNIT_ASSERT(!ttl.has_value());
+        }
+
+        // Step 4: TRUNCATE.
+        {
+            auto planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 3), ++txId);
+            PlanSchemaTx(runtime, sender, { planStep, txId });
+        }
+
+        // Verify the new generation does NOT have TTL.
+        {
+            const auto newInternalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            UNIT_ASSERT(newInternalPathId);
+            const auto ttl = shard->GetTablesManager().GetTableTtl(*newInternalPathId);
+            UNIT_ASSERT(!ttl.has_value());
+        }
+    }
+
     // ALTER after TRUNCATE must apply to the new generation. Pre-truncate time-travel on the old
     // generation stays intact.
     Y_UNIT_TEST(TruncateThenAlter) {

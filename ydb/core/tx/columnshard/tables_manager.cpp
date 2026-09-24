@@ -385,9 +385,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             AFL_VERIFY(preset);
             AFL_VERIFY(preset->Id == versionInfo.GetSchemaPresetId())("preset", preset->Id)("table", versionInfo.GetSchemaPresetId());
 
-            if (versionInfo.HasTtlSettings()) {
-                Ttl.AddVersionFromProto(pathId, version, versionInfo.GetTtlSettings());
-            }
+            Ttl.AddVersionFromProto(pathId, version, versionInfo);
             table->AddVersion(version);
             if (!rowset.Next()) {
                 timer.AddLoadingFail();
@@ -493,19 +491,6 @@ TInternalPathId TTablesManager::GetOrCreateInternalPathId(const TSchemeShardLoca
     }
 }
 
-NKikimrTxColumnShard::TTableVersionInfo TTablesManager::LoadLastTableVersionInfo(const TInternalPathId pathId, NIceDb::TNiceDb& db) const {
-    const auto* table = Tables.FindPtr(pathId);
-    AFL_VERIFY(table)("path_id", pathId);
-    AFL_VERIFY(!table->GetVersions().empty())("path_id", pathId);
-    const auto& version = *table->GetVersions().rbegin();
-    auto rowset = db.Table<Schema::TableVersionInfo>().Key(pathId.GetRawValue(), version.GetPlanStep(), version.GetTxId()).Select();
-    AFL_VERIFY(rowset.IsReady())("path_id", pathId)("version", version.DebugString());
-    AFL_VERIFY(!rowset.EndOfSet())("path_id", pathId)("version", version.DebugString());
-    NKikimrTxColumnShard::TTableVersionInfo versionInfo;
-    AFL_VERIFY(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()))("path_id", pathId)(
-        "version", version.DebugString());
-    return versionInfo;
-}
 
 bool TTablesManager::IsReadyForStartWrite(const TInternalPathId pathId, const bool withDeleted) const {
     return HasPrimaryIndex() && HasTable(pathId, withDeleted);
@@ -653,11 +638,8 @@ void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::
     AFL_VERIFY(it != Tables.end())("method", "AddTableVersion")("internal_path_id", pathId)("version", version);
     auto& table = it->second;
 
-    bool isTtlModified = false;
-    if (versionInfo.HasTtlSettings()) {
-        isTtlModified = true;
-        Ttl.AddVersionFromProto(pathId, version, versionInfo.GetTtlSettings());
-    }
+    const bool isTtlModified = versionInfo.HasTtlSettings();
+    Ttl.AddVersionFromProto(pathId, version, versionInfo);
 
     if (versionInfo.HasSchemaPresetId()) {
         AFL_VERIFY(!schema);
@@ -918,11 +900,11 @@ void TTablesManager::TruncateTableProgress(
     AFL_VERIFY(TruncatingLocalToInternal.erase(schemeShardLocalPathId));
 
     // Register new table version with carried-over TTL settings.
+    // Use in-memory state instead of DB point-read to avoid IsReady() failures in progress tx.
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     newInternalPathId.ToProto(tableVerProto);
-    const auto& lastVersionInfo = LoadLastTableVersionInfo(oldInternalPathId, db);
-    if (lastVersionInfo.HasTtlSettings()) {
-        *tableVerProto.MutableTtlSettings() = lastVersionInfo.GetTtlSettings();
+    if (auto ttlProto = GetTableTtlSettingsProto(oldInternalPathId)) {
+        *tableVerProto.MutableTtlSettings() = *ttlProto;
     }
     AddTableVersion(newInternalPathId, version, tableVerProto, std::nullopt, db);
 

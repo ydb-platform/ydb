@@ -43,10 +43,10 @@ on:
         type: string
         default: ''
       test_threads:
-        description: 'Test threads count (default: 52; build presets use a fraction of this value)'
+        description: 'Test threads count (default: 60; msan/tsan use a fraction of this value)'
         required: false
         type: string
-        default: '52'
+        default: '60'
 
   workflow_dispatch:
     inputs:
@@ -92,9 +92,9 @@ on:
         default: false
         description: "Collect coredumps via ulimit -c unlimited"
       test_threads:
-        description: 'Test threads count (default: 52; build presets use a fraction of this value)'
+        description: 'Test threads count (default: 60; msan/tsan use a fraction of this value)'
         required: false
-        default: '52'
+        default: '60'
 
 jobs:
   prepare:
@@ -285,7 +285,7 @@ jobs:
             echo "threads_count=$TEST_THREADS" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
-            echo "threads_count=$(awk "BEGIN {x=$TEST_THREADS * 0.38; printf \"%.0f\", (x < 1 ? 1 : x)}")" >> $GITHUB_ENV
+            echo "threads_count=$TEST_THREADS" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
             echo "threads_count=$(awk "BEGIN {x=$TEST_THREADS * 0.35; printf \"%.0f\", (x < 1 ? 1 : x)}")" >> $GITHUB_ENV

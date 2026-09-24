@@ -203,8 +203,25 @@ struct TSharedPageCacheMock {
         return *this;
     }
 
-    TSharedPageCacheMock& Provide(TIntrusiveConstPtr<TPageCollectionMock> collection, TVector<TPageLocation> locations, ui64 eventCookie = NO_QUEUE_COOKIE) { // event cookie -> queue type
-        auto data = new NBlockIO::TEvData(NKikimrProto::OK, collection, locations.size() * 10); // fetch cookie -> requested size
+    ui64 TakeLoadRunId(TIntrusiveConstPtr<TPageCollectionMock> collection, const TVector<TPageLocation>& locations) {
+        ui64 loadRunId = 0;
+        if (auto* collectionLoadRunIds = LoadRunIds.FindPtr(collection->Label())) {
+            for (const auto& location : locations) {
+                if (auto* pageLoadRunId = collectionLoadRunIds->FindPtr(location.Offset)) {
+                    Y_ENSURE(!loadRunId || loadRunId == *pageLoadRunId);
+                    loadRunId = *pageLoadRunId;
+                    collectionLoadRunIds->erase(location.Offset);
+                }
+            }
+        }
+        return loadRunId;
+    }
+
+    TSharedPageCacheMock& Provide(TIntrusiveConstPtr<TPageCollectionMock> collection, TVector<TPageLocation> locations,
+        ui64 eventCookie = NO_QUEUE_COOKIE) { // event cookie -> queue type
+        const ui64 loadRunId = TakeLoadRunId(collection, locations);
+        auto data = new NBlockIO::TEvData(
+            NKikimrProto::OK, collection, locations.size() * 10, loadRunId); // fetch cookie -> requested size
         for (auto& loc : locations) {
             data->Pages.emplace_back(loc.Offset, TSharedData::Copy(TString(10, 'x')));
         }
@@ -213,6 +230,18 @@ struct TSharedPageCacheMock {
         // TODO: why this broke everything?
         // TWaitForFirstEvent<NBlockIO::TEvData> waiter(Runtime);
         // waiter.Wait();
+
+        return *this;
+    }
+
+    TSharedPageCacheMock& Fail(TIntrusiveConstPtr<TPageCollectionMock> collection, TVector<TPageLocation> locations,
+        ui64 eventCookie = NO_QUEUE_COOKIE) {
+        auto data = new NBlockIO::TEvData(
+            NKikimrProto::ERROR, collection, locations.size() * 10, TakeLoadRunId(collection, locations));
+        for (const auto& location : locations) {
+            data->Pages.emplace_back(location.Offset, TSharedData{});
+        }
+        Send(BlockIoSender, data, eventCookie);
 
         return *this;
     }
@@ -260,6 +289,9 @@ struct TSharedPageCacheMock {
         for (auto& f : *Fetches) {
             auto &fetch = *f->Get();
             actual.push_back({fetch.Cookie, fetch.PageCollection, fetch.Pages});
+            for (const auto& page : fetch.Pages) {
+                LoadRunIds[fetch.PageCollection->Label()][page.Offset] = fetch.LoadRunId;
+            }
         }
         Fetches->clear();
         
@@ -341,6 +373,7 @@ struct TSharedPageCacheMock {
 
     THolder<TBlockEvents<NBlockIO::TEvFetch>> Fetches;
     std::deque<NSharedCache::TEvResult::TPtr> Results;
+    THashMap<TLogoBlobID, THashMap<TPageOffset, ui64>> LoadRunIds;
 
     TActorId Sender1;
     TActorId Sender2;
@@ -1604,6 +1637,228 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         });
     }
 
+    Y_UNIT_TEST(InMemory_StickyWalksAreOwnerSpecific) {
+        TSharedPageCacheMock sharedCache;
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 1u);
+        TBlockEvents<TEvStickyCollectionPages> stickyPages(sharedCache.Runtime);
+
+        TEvAttach::TBtreeSeed regularSeed;
+        regularSeed.IndexCollectionId = sharedCache.Collection1->Label();
+        regularSeed.DataCollectionId = sharedCache.Collection1->Label();
+        regularSeed.Root = _P(0, EPage::DataPage);
+        regularSeed.LevelCount = 0;
+        regularSeed.QueueLeaves = false;
+
+        sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1, ECacheMode::Regular, { regularSeed });
+
+        auto stickySeed = regularSeed;
+        stickySeed.QueueLeaves = true;
+        stickySeed.Sticky = true;
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { stickySeed });
+
+        sharedCache.Runtime.WaitFor("sticky pages for their owner", [&] {
+            return !stickyPages.empty();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.front()->GetRecipientRewrite(), sharedCache.Sender1);
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.front()->Get()->Locations, TVector<TPageLocation>{ stickySeed.Root });
+        stickyPages.clear();
+
+        // Reattaching the non-sticky owner must not replace the sticky owner's intent.
+        sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1, ECacheMode::Regular, { regularSeed });
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { stickySeed });
+        sharedCache.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(stickyPages.empty());
+    }
+
+    Y_UNIT_TEST(InMemory_IndexOnlyDropKeepsOtherOwnerWalk) {
+        TSharedPageCacheMock sharedCache;
+        auto indexCollection = MakeIntrusive<TPageCollectionMock>(1ul, 1u);
+        indexCollection->PageTypes = { EPage::Skip };
+        sharedCache.Collection1 = indexCollection;
+        sharedCache.Collection2 = MakeIntrusiveConst<TPageCollectionMock>(2ul, 2u);
+        TBlockEvents<TEvStickyCollectionPages> stickyPages(sharedCache.Runtime);
+
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckFetches({});
+
+        TEvAttach::TBtreeSeed indexOnlySeed;
+        indexOnlySeed.IndexCollectionId = sharedCache.Collection1->Label();
+        indexOnlySeed.DataCollectionId = sharedCache.Collection2->Label();
+        indexOnlySeed.Root = _P(0, EPage::DataPage);
+        indexOnlySeed.LevelCount = 0;
+        indexOnlySeed.QueueLeaves = false;
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection2, ECacheMode::Regular, { indexOnlySeed });
+
+        auto stickySeed = indexOnlySeed;
+        stickySeed.Root = _P(1, EPage::DataPage);
+        stickySeed.QueueLeaves = true;
+        stickySeed.Sticky = true;
+        sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection2, ECacheMode::Regular, { stickySeed });
+        sharedCache.Runtime.WaitFor("first sticky walk", [&] {
+            return !stickyPages.empty();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.front()->GetRecipientRewrite(), sharedCache.Sender2);
+        stickyPages.clear();
+
+        // The main collection leaving the in-memory tier invalidates the mixed run. The following
+        // authoritative group attach withdraws Sender1's obsolete index-only seed and must re-arm
+        // Sender2's still-valid sticky walk.
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular);
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection2, ECacheMode::Regular);
+        sharedCache.Runtime.WaitFor("re-armed sticky walk", [&] {
+            return !stickyPages.empty();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.front()->GetRecipientRewrite(), sharedCache.Sender2);
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.front()->Get()->Locations, TVector<TPageLocation>{ stickySeed.Root });
+    }
+
+    Y_UNIT_TEST(InMemory_ChangedWalkDrainsParallelFetches) {
+        TSharedPageCacheMock sharedCache;
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 6u);
+
+        auto makeSeed = [&](ui32 root) {
+            TEvAttach::TBtreeSeed seed;
+            seed.IndexCollectionId = sharedCache.Collection1->Label();
+            seed.DataCollectionId = sharedCache.Collection1->Label();
+            seed.Root = _P(root, EPage::BTreeIndexV2);
+            seed.LevelCount = 1;
+            seed.QueueLeaves = false;
+            return seed;
+        };
+
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular,
+            { makeSeed(0), makeSeed(1), makeSeed(2), makeSeed(3), makeSeed(4) });
+        sharedCache.CheckFetches({
+            TFetch{ 10, sharedCache.Collection1, { _P(0, EPage::BTreeIndexV2) } },
+            TFetch{ 10, sharedCache.Collection1, { _P(1, EPage::BTreeIndexV2) } },
+        });
+
+        // Root 2 is also needed by a queued reader; root 4 belongs only to the cancelled walk.
+        sharedCache.Request(
+            sharedCache.Sender2, sharedCache.Collection1, { _P(2, EPage::BTreeIndexV2) }, EPriority::Bkgr);
+        sharedCache.CheckFetches({});
+
+        // A direct reader takes ownership of Pending root 3 immediately and bypasses the async limit.
+        sharedCache.Request(
+            sharedCache.Sender2, sharedCache.Collection1, { _P(3, EPage::BTreeIndexV2) }, EPriority::Fast);
+        sharedCache.CheckFetches({
+            TFetch{ 10, sharedCache.Collection1, { _P(3, EPage::BTreeIndexV2) } },
+        });
+
+        // The replacement is held until both physical fetches of the cancelled generation drain.
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { makeSeed(5) });
+        sharedCache.CheckFetches({});
+
+        sharedCache.Provide(sharedCache.Collection1, { _P(3, EPage::BTreeIndexV2) }, NO_QUEUE_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{ 2, sharedCache.Collection1, { _P(3) } },
+        });
+
+        sharedCache.Provide(sharedCache.Collection1, { _P(0, EPage::BTreeIndexV2) }, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckFetches({
+            TFetch{ 10, sharedCache.Collection1, { _P(2, EPage::BTreeIndexV2) } },
+        });
+
+        sharedCache.Provide(sharedCache.Collection1, { _P(2, EPage::BTreeIndexV2) }, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{ 1, sharedCache.Collection1, { _P(2) } },
+        });
+        sharedCache.CheckFetches({});
+
+        sharedCache.Provide(sharedCache.Collection1, { _P(1, EPage::BTreeIndexV2) }, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckFetches({
+            TFetch{ 10, sharedCache.Collection1, { _P(5, EPage::BTreeIndexV2) } },
+        });
+    }
+
+    Y_UNIT_TEST(InMemory_CancelledWalkDropsUnsentPages) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetAsyncQueueInFlyLimit(0);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 1u);
+
+        // Occupy the async queue, so the walk below cannot submit its root.
+        sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, { _P(0) }, EPriority::Bkgr);
+        sharedCache.CheckFetches({
+            TFetch{ 10, sharedCache.Collection2, { _P(0) } },
+        });
+
+        TEvAttach::TBtreeSeed seed;
+        seed.IndexCollectionId = sharedCache.Collection1->Label();
+        seed.DataCollectionId = sharedCache.Collection1->Label();
+        seed.Root = _P(0, EPage::BTreeIndexV2);
+        seed.LevelCount = 1;
+        seed.QueueLeaves = false;
+
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { seed });
+        sharedCache.CheckFetches({});
+
+        // Withdrawing the walk must erase its unsent bodyless page, so the final detach can expire
+        // the collection even while the unrelated fetch remains in flight.
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, {});
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+    }
+
+    Y_UNIT_TEST(InMemory_CancelledPreloadDropsUnsentIndexPage) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetInMemoryInFlyLimit(PAGE_TOTAL_SIZE - 1);
+        TSharedPageCacheMock sharedCache(config);
+        auto collection = MakeIntrusive<TPageCollectionMock>(1ul, 1u);
+        collection->PageTypes = { EPage::Skip };
+        sharedCache.Collection1 = collection;
+
+        TEvAttach::TBtreeSeed seed;
+        seed.IndexCollectionId = sharedCache.Collection1->Label();
+        seed.DataCollectionId = sharedCache.Collection1->Label();
+        seed.Root = _P(0, EPage::BTreeIndexV2);
+        seed.LevelCount = 1;
+        seed.QueueLeaves = false;
+
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory, { seed });
+        sharedCache.CheckFetches({});
+
+        // The root did not fit the in-flight budget and must not survive as a bodyless page.
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory, {});
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+    }
+
+    Y_UNIT_TEST(InMemory_DrainingWalkWaitsForQueuedLeaves) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetInMemoryInFlyLimit(PAGE_TOTAL_SIZE - 1);
+        TSharedPageCacheMock sharedCache(config);
+
+        auto collection = MakeIntrusive<TPageCollectionMock>(1ul, 1u);
+        collection->PageTypes = { EPage::Skip };
+        sharedCache.Collection1 = collection;
+
+        TEvAttach::TBtreeSeed seed;
+        seed.IndexCollectionId = sharedCache.Collection1->Label();
+        seed.DataCollectionId = sharedCache.Collection1->Label();
+        seed.Root = _P(0, EPage::DataPage);
+        seed.LevelCount = 0;
+        seed.QueueLeaves = true;
+
+        // The walk finishes traversal, but its leaf cannot be submitted under the initial limit.
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory, { seed });
+        sharedCache.CheckFetches({});
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableSharedCacheConfig()->CopyFrom(config);
+        appConfig.MutableSharedCacheConfig()->SetInMemoryInFlyLimit(PAGE_TOTAL_SIZE);
+        sharedCache.UpdateConfig(appConfig);
+        sharedCache.CheckFetches({
+            TFetch{ 10, sharedCache.Collection1, { seed.Root } },
+        });
+
+        sharedCache.Provide(sharedCache.Collection1, { seed.Root }, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckFetches({});
+    }
+
     Y_UNIT_TEST(InMemory_FailedBtreeIndexFetch) {
         // The tree page cannot be read, so the walk must give up instead of re-requesting it.
         TSharedPageCacheMock sharedCache;
@@ -1620,12 +1875,37 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
             TFetch{10, sharedCache.Collection1, {_P(0)}}
         });
 
-        auto data = new NBlockIO::TEvData(NKikimrProto::ERROR, sharedCache.Collection1, 10);
-        data->Pages = {TLoadedPageData(_P(0).Offset, TSharedData{})};
-        sharedCache.Send(sharedCache.BlockIoSender, data, ASYNC_QUEUE_COOKIE);
+        sharedCache.Fail(sharedCache.Collection1, { _P(0) }, ASYNC_QUEUE_COOKIE);
 
         sharedCache.Wakeup();
         sharedCache.CheckFetches({});
+    }
+
+    Y_UNIT_TEST(InMemory_FailedPreloadFetch) {
+        TSharedPageCacheMock sharedCache;
+        auto collection = MakeIntrusive<TPageCollectionMock>(1ul, 1u);
+        collection->PageTypes = { EPage::Skip };
+        sharedCache.Collection1 = collection;
+
+        TEvAttach::TBtreeSeed seed;
+        seed.IndexCollectionId = sharedCache.Collection1->Label();
+        seed.DataCollectionId = sharedCache.Collection1->Label();
+        seed.Root = _P(0, EPage::DataPage);
+        seed.LevelCount = 0;
+        seed.QueueLeaves = true;
+
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory, { seed });
+        sharedCache.CheckFetches({
+            TFetch{ 10, sharedCache.Collection1, { seed.Root } },
+        });
+
+        sharedCache.Fail(sharedCache.Collection1, { seed.Root }, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+
+        sharedCache.CheckResults(
+            { TFetch{ 0, sharedCache.Collection1, {} } },
+            NKikimrProto::ERROR);
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
     }
 
     Y_UNIT_TEST(InMemory_SkipV1ShadowPages) {

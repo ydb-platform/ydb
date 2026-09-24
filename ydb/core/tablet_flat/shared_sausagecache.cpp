@@ -49,6 +49,7 @@ struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TR
     TDeque<TPageOffset> QueuePagesToRequest; // FIXME: store first pending page
     TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
     NWilson::TTraceId TraceId;
+    ui64 WalkLoadId = 0;
 };
 
 // pending request, index in ready blocks for page
@@ -95,22 +96,50 @@ public:
     }
 };
 
-// One B-tree being walked by the cache itself: the pages of the current path, one frame per level.
+// One B-tree being walked by the cache itself, one index level at a time in write order.
 struct TInMemoryWalk {
+    TActorId Owner;
     NSharedCache::TEvAttach::TBtreeSeed Seed;
 
-    // A B-tree node's children and the next one to visit.
-    struct TFrame {
-        TVector<TPageLocation> Children;
-        size_t Next = 0;
-        ui32 Level = 0;
-    };
-
-    TVector<TFrame> Path;
+    TVector<TPageLocation> CurrentLevel;
+    TVector<TPageLocation> NextLevel;
+    TVector<TPageLocation> PendingLeaves;
+    TVector<TPageLocation> LeafBatch;
+    ui64 LeafBatchBytes = 0;
+    size_t Next = 0;
+    size_t BatchEnd = 0;
+    ui32 Level = 0;
     TLogoBlobID NotifyCollectionId;
     TVector<TPageLocation> PagesToNotify;
     bool Started = false;
     bool Done = false;
+    bool Invalid = false;
+};
+
+enum class EWalkRunState {
+    Walking,
+    Draining,
+    Cancelled,
+};
+
+enum class EWalkControllerState {
+    Idle,
+    Pending,
+    Blocked,
+};
+
+enum class EWalkBatchResult {
+    Flushed,
+    Queued,
+    Blocked,
+};
+
+struct TWalkRun {
+    ui64 Id = 0;
+    ui32 FetchesInFlight = 0;
+    EWalkRunState State = EWalkRunState::Walking;
+    TVector<TInMemoryWalk> Walks;
+    TSet<TLogoBlobID> PendingCollections;
 };
 
 struct TCollection {
@@ -124,7 +153,10 @@ struct TCollection {
     ui64 TotalPages = 0;
     THashMap<TPageOffset, TPendingRequests> PendingRequests;
     TDeque<TPageOffset> DroppedPages;
-    TVector<TInMemoryWalk> Walks;
+    TMap<TActorId, TVector<NSharedCache::TEvAttach::TBtreeSeed>> WalkSeedsByOwner;
+    TLogoBlobID WalkIndexCollectionId;
+    std::optional<TWalkRun> WalkRun;
+    EWalkControllerState WalkState = EWalkControllerState::Idle;
 
     ECacheMode GetCacheMode() {
         return InMemoryOwners ? ECacheMode::TryKeepInMemory : ECacheMode::Regular;
@@ -219,8 +251,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TSharedPageCacheCounters Counters;
 
     THashMap<TLogoBlobID, TCollection> Collections;
-    THashSet<TLogoBlobID> WalksInFlight; // collections with an unfinished in-memory walk
-    THashMap<TLogoBlobID, TSet<TPageLocation>> PendingInMemoryPages;
+    THashSet<TLogoBlobID> WalkRunsInProgress; // collections with a non-cancelled run owned by the scheduler
+    THashMap<TLogoBlobID, TVector<TLogoBlobID>> WalkCollectionsByIndex;
+    THashMap<ui64, TLogoBlobID> WalkLoads;
+    THashMap<TLogoBlobID, TMap<TPageLocation, ui64>> PendingInMemoryPages;
     THashMap<TActorId, THashMap<TCollection*, TIntrusiveList<TRequest>>> Owners;
     TRequestQueue AsyncRequests{EBlockIOFetchTypeCookie::AsyncQueue};
     TRequestQueue ScanRequests{EBlockIOFetchTypeCookie::ScanQueue};
@@ -237,8 +271,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     ui64 AliveInMemoryBytes = 0; // Sum of AliveBytes of all in-memory collections (Active + Passive + InFly)
     ui64 ActiveInMemoryBytes = 0;
     ui64 InFlyInMemoryBytes = 0;
+    ui64 NextWalkLoadId = 1;
 
     static constexpr size_t MaxBatchLocations = 1024;
+    static constexpr ui64 MaxWalkBatchBytes = NBlockIO::BlockSize;
 
     // True if after a large drop in target cache limit, we couldn't decrease it right away
     // and yielded to process other events.
@@ -408,24 +444,264 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             && lhs.IndexCollectionSticky == rhs.IndexCollectionSticky;
     }
 
-    static bool SameWalks(const TVector<TInMemoryWalk>& walks, const TVector<NSharedCache::TEvAttach::TBtreeSeed>& seeds) {
-        if (walks.size() != seeds.size()) {
+    static bool SameSeeds(const TVector<NSharedCache::TEvAttach::TBtreeSeed>& lhs,
+        const TVector<NSharedCache::TEvAttach::TBtreeSeed>& rhs) {
+        if (lhs.size() != rhs.size()) {
             return false;
         }
 
-        TVector<bool> matched(seeds.size());
-        for (const auto& walk : walks) {
+        TVector<bool> matched(rhs.size());
+        for (const auto& seed : lhs) {
             size_t pos = 0;
-            while (pos < seeds.size() && (matched[pos] || !SameSeed(walk.Seed, seeds[pos]))) {
+            while (pos < rhs.size() && (matched[pos] || !SameSeed(seed, rhs[pos]))) {
                 ++pos;
             }
-            if (pos == seeds.size()) {
+            if (pos == rhs.size()) {
                 return false;
             }
             matched[pos] = true;
         }
-
         return true;
+    }
+
+    void UpdateWalkIndex(TCollection& collection) {
+        TLogoBlobID indexCollectionId;
+        for (const auto& [_, seeds] : collection.WalkSeedsByOwner) {
+            for (const auto& seed : seeds) {
+                Y_ENSURE(seed.DataCollectionId == collection.Id);
+                if (!indexCollectionId) {
+                    indexCollectionId = seed.IndexCollectionId;
+                } else {
+                    Y_ENSURE(indexCollectionId == seed.IndexCollectionId);
+                }
+            }
+        }
+
+        if (indexCollectionId == collection.WalkIndexCollectionId) {
+            return;
+        }
+
+        if (collection.WalkIndexCollectionId) {
+            auto* walkCollections = WalkCollectionsByIndex.FindPtr(collection.WalkIndexCollectionId);
+            Y_ENSURE(walkCollections);
+            auto it = Find(*walkCollections, collection.Id);
+            Y_ENSURE(it != walkCollections->end());
+            walkCollections->erase(it);
+            if (walkCollections->empty()) {
+                WalkCollectionsByIndex.erase(collection.WalkIndexCollectionId);
+            }
+        }
+        if (indexCollectionId) {
+            WalkCollectionsByIndex[indexCollectionId].push_back(collection.Id);
+        }
+
+        collection.WalkIndexCollectionId = indexCollectionId;
+    }
+
+    TVector<TLogoBlobID> GetWalkCollections(const TLogoBlobID& indexCollectionId) const {
+        if (const auto* walkCollections = WalkCollectionsByIndex.FindPtr(indexCollectionId)) {
+            return *walkCollections;
+        }
+        return {};
+    }
+
+    void CancelPendingWalkPages(TCollection& collection) {
+        Y_ENSURE(collection.WalkRun);
+        auto& run = *collection.WalkRun;
+        for (const TLogoBlobID& collectionId : run.PendingCollections) {
+            auto pendingIt = PendingInMemoryPages.find(collectionId);
+            if (pendingIt == PendingInMemoryPages.end()) {
+                continue;
+            }
+
+            auto& pages = pendingIt->second;
+            for (auto it = pages.begin(); it != pages.end();) {
+                if (it->second == run.Id) {
+                    it = pages.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            if (pages.empty()) {
+                PendingInMemoryPages.erase(pendingIt);
+            }
+        }
+        run.PendingCollections.clear();
+    }
+
+    void CancelQueuedWalkRequests(ui64 loadRunId) {
+        for (auto& [_, requests] : AsyncRequests.Requests) {
+            for (auto& request : requests) {
+                if (request->WalkLoadId != loadRunId || request->IsResponded()) {
+                    continue;
+                }
+
+                if (auto* collection = Collections.FindPtr(request->Label)) {
+                    for (TPageOffset offset : request->QueuePagesToRequest) {
+                        if (auto* page = collection->PageSet.FindPage(offset);
+                            page && page->State == PageStatePending) {
+                            // Walk requests register no waiter. A live waiter here belongs to another
+                            // queued request; Fast/None requests promote Pending to Requested immediately.
+                            const auto* pendingRequests = collection->PendingRequests.FindPtr(offset);
+                            const bool hasLiveRequest =
+                                pendingRequests && AnyOf(*pendingRequests, [](const auto& item) {
+                                    return !item.first->IsResponded();
+                                });
+                            if (!hasLiveRequest) {
+                                RemoveAlivePage(page);
+                                Y_ENSURE(collection->PageSet.ErasePage(offset));
+                            }
+                        }
+                    }
+                }
+                request->MarkResponded();
+            }
+        }
+    }
+
+    void StartWalkRun(TCollection& collection) {
+        if (collection.WalkRun || collection.WalkState != EWalkControllerState::Pending) {
+            return;
+        }
+        collection.WalkState = EWalkControllerState::Idle;
+
+        if (!collection.WalkSeedsByOwner) {
+            return;
+        }
+
+        ui64 loadRunId = NextWalkLoadId++;
+        if (!loadRunId) {
+            loadRunId = NextWalkLoadId++;
+        }
+        Y_ENSURE(WalkLoads.emplace(loadRunId, collection.Id).second);
+
+        TWalkRun run;
+        run.Id = loadRunId;
+        for (const auto& [owner, seeds] : collection.WalkSeedsByOwner) {
+            for (const auto& seed : seeds) {
+                run.Walks.push_back(TInMemoryWalk{
+                    .Owner = owner,
+                    .Seed = seed,
+                });
+            }
+        }
+        collection.WalkRun.emplace(std::move(run));
+        WalkRunsInProgress.insert(collection.Id);
+    }
+
+    void FinishWalkRun(TCollection& collection) {
+        Y_ENSURE(collection.WalkRun);
+        const auto& run = *collection.WalkRun;
+        Y_ENSURE(run.FetchesInFlight == 0);
+        Y_ENSURE(WalkLoads.erase(run.Id));
+
+        collection.WalkRun.reset();
+        WalkRunsInProgress.erase(collection.Id);
+
+        StartWalkRun(collection);
+    }
+
+    bool HasPendingWalkPages(const TCollection& collection) const {
+        if (!collection.WalkRun) {
+            return false;
+        }
+        // A draining run may have no sent fetches while these leaves wait for in-memory budget.
+        // It remains owned by the controller until the loader submits them or the run is cancelled.
+        const auto& run = *collection.WalkRun;
+        for (const TLogoBlobID& collectionId : run.PendingCollections) {
+            if (const auto* pages = PendingInMemoryPages.FindPtr(collectionId)) {
+                if (AnyOf(*pages,
+                        [&](const auto& item) {
+                            return item.second == run.Id;
+                        }))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool FinishWalkRunIfDrained(TCollection& collection) {
+        if (!collection.WalkRun || collection.WalkRun->State == EWalkRunState::Walking ||
+            collection.WalkRun->FetchesInFlight != 0 || HasPendingWalkPages(collection))
+        {
+            return false;
+        }
+
+        const TLogoBlobID collectionId = collection.Id;
+        FinishWalkRun(collection);
+        if (auto* current = Collections.FindPtr(collectionId)) {
+            TryDropExpiredCollection(*current);
+        }
+        return true;
+    }
+
+    void CancelWalkRun(TCollection& collection) {
+        if (!collection.WalkRun) {
+            StartWalkRun(collection);
+            return;
+        }
+        auto& run = *collection.WalkRun;
+        if (run.State != EWalkRunState::Cancelled) {
+            run.State = EWalkRunState::Cancelled;
+            run.Walks.clear();
+            // A cancelled run leaves the scheduler immediately; a pending intent starts a fresh
+            // run only after the cancelled one drains.
+            WalkRunsInProgress.erase(collection.Id);
+            CancelPendingWalkPages(collection);
+            CancelQueuedWalkRequests(run.Id);
+            RequestFromQueue(AsyncRequests);
+            RequestFromQueue(ScanRequests);
+        }
+        FinishWalkRunIfDrained(collection);
+    }
+
+    void UpdateWalksForOwner(
+        TCollection& collection, const TActorId& owner, TVector<NSharedCache::TEvAttach::TBtreeSeed> seeds) {
+        auto* current = collection.WalkSeedsByOwner.FindPtr(owner);
+        const bool same = current ? SameSeeds(*current, seeds) : seeds.empty();
+        const bool unblock = collection.WalkState == EWalkControllerState::Blocked;
+        if (same && !unblock) {
+            return;
+        }
+
+        if (seeds) {
+            collection.WalkSeedsByOwner[owner] = std::move(seeds);
+        } else {
+            collection.WalkSeedsByOwner.erase(owner);
+        }
+        collection.WalkState = EWalkControllerState::Pending;
+        UpdateWalkIndex(collection);
+        CancelWalkRun(collection);
+    }
+
+    void RestartWalkRun(TCollection& collection) {
+        collection.WalkState = EWalkControllerState::Pending;
+        CancelWalkRun(collection);
+    }
+
+    void InvalidateWalkRun(TCollection& collection) {
+        collection.WalkState = EWalkControllerState::Blocked;
+        CancelWalkRun(collection);
+    }
+
+    void FinishWalkFetch(ui64 loadRunId) {
+        if (!loadRunId) {
+            return;
+        }
+
+        // A run outlives every fetch it starts; the last arriving fetch may finish the run.
+        auto loadIt = WalkLoads.find(loadRunId);
+        Y_ENSURE(loadIt != WalkLoads.end());
+        const TLogoBlobID collectionId = loadIt->second;
+        auto* collection = Collections.FindPtr(collectionId);
+        Y_ENSURE(collection && collection->WalkRun && collection->WalkRun->Id == loadRunId);
+        auto& run = *collection->WalkRun;
+        Y_ENSURE(run.FetchesInFlight > 0);
+        --run.FetchesInFlight;
+
+        FinishWalkRunIfDrained(*collection);
     }
 
     void Handle(NSharedCache::TEvAttach::TPtr &ev, const TActorContext& ctx) {
@@ -436,9 +712,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Attach page collection " << pageCollectionId
             << " owner " << ev->Sender
             << " cache mode " << msg->CacheMode);
-
-        auto* attached = Collections.FindPtr(pageCollectionId);
-        const bool knownOwner = attached && attached->Owners.find(ev->Sender) != attached->Owners.end();
 
         TCollection& collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
         if (!collection.PageCollection) {
@@ -452,17 +725,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             TryMoveToTryKeepInMemoryCache(collection, std::move(msg->PageCollection), ev->Sender);
             break;
         }
-        // The seeds of this attach are authoritative, the mode transition above must not drop them.
-        if (msg->BtreeSeeds) {
-            // A known owner that sends the same seeds again has nothing to redo and keeps the walks' progress.
-            if (!knownOwner || !SameWalks(collection.Walks, msg->BtreeSeeds)) {
-                collection.Walks.clear();
-                for (auto& seed : msg->BtreeSeeds) {
-                    collection.Walks.push_back(TInMemoryWalk{.Seed = std::move(seed)});
-                }
-                WalksInFlight.insert(pageCollectionId);
-            }
-        }
+        UpdateWalksForOwner(collection, ev->Sender, std::move(msg->BtreeSeeds));
     }
 
     void Handle(NSharedCache::TEvSaveCompactedPages::TPtr &ev, const TActorContext& ctx) {
@@ -841,6 +1104,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             Counters.PageCollectionOwners->Dec();
 
             TryMoveToRegularCache(*collection, ev->Sender);
+            UpdateWalksForOwner(*collection, ev->Sender, {});
 
             TryDropExpiredCollection(*collection);
         }
@@ -878,12 +1142,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Counters.PageCollectionOwners->Dec();
 
         TryMoveToRegularCache(*collection, ev->Sender);
+        UpdateWalksForOwner(*collection, ev->Sender, {});
 
         TryDropExpiredCollection(*collection);
     }
 
     void Handle(NBlockIO::TEvData::TPtr &ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
+        const ui64 walkLoadId = msg->LoadRunId;
 
         LOG_TRACE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Receive page collection " << msg->PageCollection->Label()
             << " status " << msg->Status
@@ -919,10 +1185,18 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             if (queue) {
                 RequestFromQueue(*queue);
             }
+            FinishWalkFetch(walkLoadId);
             return;
         }
 
         if (msg->Status != NKikimrProto::OK) {
+            if (walkLoadId) {
+                auto loadIt = WalkLoads.find(walkLoadId);
+                Y_ENSURE(loadIt != WalkLoads.end());
+                auto* walkCollection = Collections.FindPtr(loadIt->second);
+                Y_ENSURE(walkCollection);
+                InvalidateWalkRun(*walkCollection);
+            }
             DropCollection(*collection, msg->Status, fetchType);
         } else {
             bool needNotifyOwners = fetchType == EBlockIOFetchTypeCookie::TryKeepInMemoryPreload && collection->InMemoryOwners;
@@ -952,6 +1226,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (queue) {
             RequestFromQueue(*queue);
         }
+        FinishWalkFetch(walkLoadId);
     }
 
     TPage* EnsurePage(TCollection& collection,
@@ -1007,9 +1282,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // Drop unnecessary collections from memory
         if (!collection.Owners &&
             !collection.PendingRequests &&
+            !collection.WalkRun &&
             collection.PageSet.empty())
         {
             Y_DEBUG_ABORT_UNLESS(collection.InMemoryOwners.empty());
+            Y_DEBUG_ABORT_UNLESS(!collection.WalkIndexCollectionId);
             auto pageCollectionId = collection.Id;
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop expired page collection " << pageCollectionId);
             Collections.erase(pageCollectionId);
@@ -1073,7 +1350,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 auto offset = page->Offset;
                 Y_DEBUG_ABORT_UNLESS(collection->PageSet.FindPage(page->Offset) == page);
                 if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory) {
-                    PendingInMemoryPages[collection->Id].emplace(page->Offset, page->Size, page->Type, page->Crc32);
+                    PendingInMemoryPages[collection->Id].emplace(
+                        TPageLocation(page->Offset, page->Size, page->Type, page->Crc32), 0);
                 }
                 RemoveAlivePage(page);
                 Y_ENSURE(collection->PageSet.ErasePage(offset));
@@ -1222,11 +1500,20 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void SendRequest(TRequest& request, TVector<TPageLocation>&& pages, ui64 bytes, EBlockIOFetchTypeCookie cookie) {
+        if (request.WalkLoadId) {
+            auto loadIt = WalkLoads.find(request.WalkLoadId);
+            Y_ENSURE(loadIt != WalkLoads.end());
+            auto* collection = Collections.FindPtr(loadIt->second);
+            Y_ENSURE(collection && collection->WalkRun && collection->WalkRun->State != EWalkRunState::Cancelled &&
+                     collection->WalkRun->Id == request.WalkLoadId);
+            ++collection->WalkRun->FetchesInFlight;
+        }
         AddInFlyPages(pages.size(), bytes);
 
         // fetch cookie -> requested size
         // event cookie -> queue type
-        auto *fetch = new NBlockIO::TEvFetch(request.Priority, request.PageCollection, std::move(pages), bytes);
+        auto *fetch = new NBlockIO::TEvFetch(request.Priority, request.PageCollection,
+            std::move(pages), bytes, request.WalkLoadId);
         if (cookie == EBlockIOFetchTypeCookie::AsyncQueue || cookie == EBlockIOFetchTypeCookie::ScanQueue) {
             // Note: queued requests can fetch multiple times, so copy trace id
             fetch->TraceId = NWilson::TTraceId(request.TraceId);
@@ -1323,8 +1610,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ActualizeCacheSizeLimit();
 
         PendingInMemoryPages.erase(collection.Id);
-        collection.Walks.clear();
-        WalksInFlight.erase(collection.Id);
         DropIndexOnlyWalks(collection.Id);
         // TODO: move pages async and batched
         for (const auto& ptr : collection.PageSet) {
@@ -1363,6 +1648,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         Y_ENSURE(collection.InMemoryOwners.emplace(owner, pageCollection).second);
+
+        RestartWalksForIndexCollection(collection.Id);
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change mode of page collection " << collection.Id
             << " to " << ECacheMode::TryKeepInMemory);
@@ -1406,7 +1693,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                         processPage(page);
                     }
                 } else {
-                    pagesToLoad.emplace(location);
+                    pagesToLoad.emplace(location, 0);
                 }
             }
         };
@@ -1438,7 +1725,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     // The in-memory preload path: only the part that fits the remaining in-fly budget is sent.
-    void FetchIndexLevelAsPreload(TCollection& collection, TVector<TPageLocation>&& locations) {
+    void FetchIndexLevelAsPreload(TCollection& collection, TVector<TPageLocation>&& locations, ui64 loadRunId) {
         ui64 remainBytes = Config.GetInMemoryInFlyLimit() > InFlyInMemoryBytes
             ? Config.GetInMemoryInFlyLimit() - InFlyInMemoryBytes
             : 0;
@@ -1446,12 +1733,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TVector<TPageLocation> toRequest;
         ui64 toRequestBytes = 0;
         for (const auto& location : locations) {
-            auto* page = EnsurePage(collection, location, ECacheMode::TryKeepInMemory);
-            if (TPageTraits::GetSize(page) > remainBytes) {
+            const ui64 pageSize = sizeof(TPage) + location.Size;
+            if (pageSize > remainBytes) {
                 break;
             }
 
-            remainBytes -= TPageTraits::GetSize(page);
+            auto* page = EnsurePage(collection, location, ECacheMode::TryKeepInMemory);
+            remainBytes -= pageSize;
             page->State = PageStateRequestedAsync;
             toRequest.push_back(location);
             toRequestBytes += page->Size;
@@ -1464,6 +1752,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TRequest request;
         request.PageCollection = collection.PageCollection;
         request.Priority = NBlockIO::EPriority::Bkgr;
+        request.WalkLoadId = loadRunId;
         if (collection.InMemoryOwners) {
             request.Sender = collection.InMemoryOwners.begin()->first;
         } else if (collection.Owners) {
@@ -1475,11 +1764,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     // Ordinary background pages of a regular collection, sent through the async queue.
-    void FetchIndexLevelInQueue(TCollection& collection, TVector<TPageLocation>&& locations) {
+    void FetchIndexLevelInQueue(TCollection& collection, TVector<TPageLocation>&& locations, ui64 loadRunId) {
         auto request = MakeIntrusive<TRequest>();
         request->Label = collection.Id;
         request->PageCollection = collection.PageCollection;
         request->Priority = NBlockIO::EPriority::Bkgr;
+        request->WalkLoadId = loadRunId;
         if (collection.InMemoryOwners) {
             request->Sender = collection.InMemoryOwners.begin()->first;
         } else if (collection.Owners) {
@@ -1498,16 +1788,19 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     // The cache only enumerates the pages of a sticky collection, the owner fetches and keeps them.
-    void SendStickyCollectionPages(TCollection& collection, const TVector<TPageLocation>& locations) {
+    void SendStickyCollectionPages(
+        TCollection& collection, const TActorId& owner, const TVector<TPageLocation>& locations) {
+        if (!collection.Owners.contains(owner)) {
+            return;
+        }
+
         auto send = [&](auto first, auto last) {
             if (first == last) {
                 return;
             }
 
             TVector<TPageLocation> batch(first, last);
-            for (const TActorId& owner : collection.Owners) {
-                Send(owner, new NSharedCache::TEvStickyCollectionPages(collection.Id, batch));
-            }
+            Send(owner, new NSharedCache::TEvStickyCollectionPages(collection.Id, batch));
         };
 
         for (auto it = locations.begin(); it != locations.end(); ) {
@@ -1517,87 +1810,109 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    // Fetch index levels parents-first, then queue the leaf locations for the budget-gated loader.
-    void AdvanceInMemoryWalk(TInMemoryWalk& walk) {
+    // Fetch index levels breadth-first in bounded, write-ordered batches, then queue each node's
+    // leaves for the budget-gated loader without materializing the whole data level.
+    void AdvanceInMemoryWalk(TInMemoryWalk& walk, ui64 loadRunId) {
         auto* indexCollection = Collections.FindPtr(walk.Seed.IndexCollectionId);
         auto* dataCollection = Collections.FindPtr(walk.Seed.DataCollectionId);
         if (!indexCollection || !indexCollection->PageCollection || !dataCollection) {
             // Only an attach creates a walk, so a missing collection means the part is gone.
+            walk.Invalid = true;
             walk.Done = true;
             return;
         }
 
         if (!walk.Started) {
             walk.Started = true;
-            walk.Path.push_back({.Children = {walk.Seed.Root}, .Level = 0});
-            HandOverIndexLevel(walk);
+            walk.CurrentLevel.push_back(walk.Seed.Root);
+            HandOverIndexLevel(walk, walk.CurrentLevel, walk.Level);
         }
 
         const bool inMemoryIndex = indexCollection->GetCacheMode() == ECacheMode::TryKeepInMemory;
 
-        while (!walk.Path.empty()) {
-            auto& frame = walk.Path.back();
-
-            if (frame.Next >= frame.Children.size()) {
-                walk.Path.pop_back();
-                continue;
-            }
-
-            // Leaves are the payload: hand them over and let the budget-gated loader do the rest.
-            if (frame.Level >= walk.Seed.LevelCount) {
-                if (!QueueLeaves(walk, *dataCollection, frame)) {
-                    return; // the loader is behind, this node waits for it
-                }
-                walk.Path.pop_back();
-                continue;
-            }
-
-            TVector<TPageLocation> toRequest;
-            bool waiting = false;
-            for (size_t i = frame.Next; i < frame.Children.size(); ++i) {
-                auto* page = EnsurePage(*indexCollection, frame.Children[i], indexCollection->GetCacheMode());
-                switch (page->State) {
-                case PageStateNo:
-                    toRequest.push_back(frame.Children[i]);
-                    break;
-                case PageStateLoaded:
-                case PageStateEvicted: // the body is still there, the node can be parsed
-                    break;
-                default:
-                    waiting = true;
-                    break;
+        while (true) {
+            if (walk.PendingLeaves) {
+                if (!AddLeafNodeToBatch(walk, *dataCollection, loadRunId)) {
+                    return;
                 }
             }
 
-            if (toRequest) {
+            if (walk.Next >= walk.CurrentLevel.size()) {
+                if (!walk.NextLevel) {
+                    if (FlushLeafBatch(walk, *dataCollection, loadRunId) != EWalkBatchResult::Flushed) {
+                        return;
+                    }
+                    break;
+                }
+                walk.CurrentLevel = std::move(walk.NextLevel);
+                walk.NextLevel.clear();
+                walk.Next = 0;
+                walk.BatchEnd = 0;
+                ++walk.Level;
+                continue;
+            }
+
+            // A zero-level tree has its data page as the root.
+            if (walk.Level >= walk.Seed.LevelCount) {
+                walk.PendingLeaves = std::move(walk.CurrentLevel);
+                walk.CurrentLevel.clear();
+                walk.Next = 0;
+                walk.BatchEnd = 0;
+                continue;
+            }
+
+            if (walk.Next >= walk.BatchEnd) {
+                ui64 batchBytes = 0;
+                walk.BatchEnd = walk.Next;
+                while (walk.BatchEnd < walk.CurrentLevel.size()) {
+                    const ui64 pageSize = walk.CurrentLevel[walk.BatchEnd].Size;
+                    if (walk.BatchEnd > walk.Next && pageSize > MaxWalkBatchBytes - batchBytes) {
+                        break;
+                    }
+
+                    batchBytes += pageSize;
+                    ++walk.BatchEnd;
+                    if (batchBytes >= MaxWalkBatchBytes) {
+                        break;
+                    }
+                }
+            }
+
+            const TPageLocation location = walk.CurrentLevel[walk.Next];
+            auto* page = indexCollection->PageSet.FindPage(location.Offset);
+            if (!page || page->State == PageStateNo) {
+                TVector<TPageLocation> toRequest;
+                for (size_t i = walk.Next; i < walk.BatchEnd; ++i) {
+                    const auto& batchLocation = walk.CurrentLevel[i];
+                    auto* batchPage = indexCollection->PageSet.FindPage(batchLocation.Offset);
+                    if (!batchPage || batchPage->State == PageStateNo) {
+                        toRequest.push_back(batchLocation);
+                    }
+                }
+
                 // Index pages always live in the main group; its mode decides how they are fetched.
                 if (inMemoryIndex) {
-                    FetchIndexLevelAsPreload(*indexCollection, std::move(toRequest));
+                    FetchIndexLevelAsPreload(*indexCollection, std::move(toRequest), loadRunId);
                 } else {
-                    FetchIndexLevelInQueue(*indexCollection, std::move(toRequest));
+                    FetchIndexLevelInQueue(*indexCollection, std::move(toRequest), loadRunId);
                 }
                 return; // wait for the pages to arrive, the next drive continues the walk
             }
 
-            if (waiting) {
+            if (page->State != PageStateLoaded && page->State != PageStateEvicted) {
                 return;
             }
+            ++walk.Next;
 
-            const ui32 level = frame.Level;
-            const TPageLocation location = frame.Children[frame.Next++];
-            auto* page = indexCollection->PageSet.FindPage(location.Offset);
-            Y_ENSURE(page, "walked B-tree page is missing");
+            const bool childrenAreData = (walk.Level + 1 >= walk.Seed.LevelCount);
+            if (childrenAreData && !walk.Seed.QueueLeaves && !walk.Seed.Sticky) {
+                // This walk only keeps the index level resident, its leaves are of no use.
+                continue;
+            }
 
             auto ref = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList, page->Type);
             Y_ENSURE(ref.IsUsed(), "walked B-tree page cannot be used");
             NTable::NPage::TBtreeIndexNode node(TPinnedPageRef(ref).GetData(), /*v2Format=*/true);
-
-            const bool childrenAreData = (level + 1 >= walk.Seed.LevelCount);
-            if (childrenAreData && !walk.Seed.QueueLeaves && !walk.Seed.Sticky) {
-                // This walk only keeps the index pages resident, its leaves are of no use.
-                walk.Path.pop_back();
-                continue;
-            }
 
             TVector<TPageLocation> children;
             children.reserve(node.GetChildrenCount());
@@ -1605,8 +1920,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 children.push_back(std::get<NTable::NPage::TPageLocation>(node.GetChild(pos, childrenAreData)));
             }
 
-            walk.Path.push_back({.Children = std::move(children), .Level = level + 1});
-            HandOverIndexLevel(walk);
+            if (childrenAreData) {
+                walk.PendingLeaves = std::move(children);
+            } else {
+                HandOverIndexLevel(walk, children, walk.Level + 1);
+                for (auto& child : children) {
+                    walk.NextLevel.push_back(std::move(child));
+                }
+            }
         }
 
         FlushPagesToNotify(walk);
@@ -1614,34 +1935,92 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     // Every index level of a sticky walk, or of a sticky index collection, is handed over, resident or not.
-    void HandOverIndexLevel(TInMemoryWalk& walk) {
-        const auto& frame = walk.Path.back();
-        if ((!walk.Seed.Sticky && !walk.Seed.IndexCollectionSticky) || frame.Level >= walk.Seed.LevelCount) {
+    void HandOverIndexLevel(TInMemoryWalk& walk, TArrayRef<const TPageLocation> locations, ui32 level) {
+        if ((!walk.Seed.Sticky && !walk.Seed.IndexCollectionSticky) || level >= walk.Seed.LevelCount) {
             return; // not sticky, or these are the leaves
         }
 
-        for (const auto& location : frame.Children) {
+        for (const auto& location : locations) {
             AppendPageToNotify(walk, walk.Seed.IndexCollectionId, location);
         }
     }
 
-    // Hands one node's leaves over at once: the reads form node-sized runs in the write order.
-    bool QueueLeaves(TInMemoryWalk& walk, TCollection& dataCollection, TInMemoryWalk::TFrame& frame) {
+    EWalkBatchResult FlushLeafBatch(TInMemoryWalk& walk, TCollection& dataCollection, ui64 loadRunId) {
+        if (!walk.LeafBatch) {
+            return EWalkBatchResult::Flushed;
+        }
+
         const bool queueLeaves = walk.Seed.QueueLeaves && dataCollection.GetCacheMode() == ECacheMode::TryKeepInMemory;
         auto* queue = queueLeaves ? &PendingInMemoryPages[dataCollection.Id] : nullptr;
         if (queue && !queue->empty()) {
-            return false; // the loader has not taken the previous node yet
+            return EWalkBatchResult::Blocked;
         }
 
-        for (const auto& location : frame.Children) {
+        TWalkRun* run = nullptr;
+        if (queue) {
+            auto loadIt = WalkLoads.find(loadRunId);
+            Y_ENSURE(loadIt != WalkLoads.end());
+            auto* walkCollection = Collections.FindPtr(loadIt->second);
+            Y_ENSURE(walkCollection && walkCollection->WalkRun && walkCollection->WalkRun->Id == loadRunId);
+            run = &*walkCollection->WalkRun;
+        }
+
+        bool queued = false;
+        for (const auto& location : walk.LeafBatch) {
             if (queue) {
-                queue->emplace(location);
-            }
-            if (walk.Seed.Sticky) {
-                AppendPageToNotify(walk, dataCollection.Id, location);
+                auto* page = dataCollection.PageSet.FindPage(location.Offset);
+                if (!page || page->State == PageStateNo) {
+                    if (queue->emplace(location, loadRunId).second) {
+                        run->PendingCollections.insert(dataCollection.Id);
+                        queued = true;
+                    }
+                }
             }
         }
 
+        if (walk.Seed.Sticky) {
+            // Index notifications are parents-first; flush them before handing over data pages.
+            FlushPagesToNotify(walk);
+            SendStickyCollectionPages(dataCollection, walk.Owner, walk.LeafBatch);
+        }
+
+        walk.LeafBatch.clear();
+        walk.LeafBatchBytes = 0;
+        return queued ? EWalkBatchResult::Queued : EWalkBatchResult::Flushed;
+    }
+
+    // Accumulate complete leaf groups from final-level B-tree nodes. The 8 MiB target is soft for a
+    // single oversized node; the loader may still split its physical reads to satisfy hard budgets.
+    bool AddLeafNodeToBatch(TInMemoryWalk& walk, TCollection& dataCollection, ui64 loadRunId) {
+        const bool queueLeaves = walk.Seed.QueueLeaves && dataCollection.GetCacheMode() == ECacheMode::TryKeepInMemory;
+        if (!walk.Seed.Sticky && !queueLeaves) {
+            walk.PendingLeaves.clear();
+            return true;
+        }
+
+        ui64 nodeBytes = 0;
+        for (const auto& location : walk.PendingLeaves) {
+            nodeBytes += location.Size;
+        }
+
+        if (walk.LeafBatch &&
+            (walk.LeafBatchBytes >= MaxWalkBatchBytes || nodeBytes > MaxWalkBatchBytes - walk.LeafBatchBytes))
+        {
+            if (FlushLeafBatch(walk, dataCollection, loadRunId) != EWalkBatchResult::Flushed) {
+                return false;
+            }
+        }
+
+        walk.LeafBatch.reserve(walk.LeafBatch.size() + walk.PendingLeaves.size());
+        for (auto& location : walk.PendingLeaves) {
+            walk.LeafBatch.push_back(std::move(location));
+        }
+        walk.LeafBatchBytes += nodeBytes;
+        walk.PendingLeaves.clear();
+
+        if (walk.LeafBatchBytes >= MaxWalkBatchBytes) {
+            return FlushLeafBatch(walk, dataCollection, loadRunId) == EWalkBatchResult::Flushed;
+        }
         return true;
     }
 
@@ -1663,71 +2042,86 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         if (auto* collection = Collections.FindPtr(walk.NotifyCollectionId)) {
-            SendStickyCollectionPages(*collection, walk.PagesToNotify);
+            SendStickyCollectionPages(*collection, walk.Owner, walk.PagesToNotify);
         }
         walk.PagesToNotify.clear();
         walk.NotifyCollectionId = TLogoBlobID();
     }
 
     void AdvanceInMemoryWalks() {
-        for (auto idIt = WalksInFlight.begin(); idIt != WalksInFlight.end(); ) {
-            auto* collection = Collections.FindPtr(*idIt);
-            bool pending = false;
-
-            if (collection) {
-                for (auto& walk : collection->Walks) {
-                    if (!walk.Done) {
-                        AdvanceInMemoryWalk(walk);
-                        pending |= !walk.Done;
-                    }
-                }
+        TVector<TLogoBlobID> invalid;
+        for (const TLogoBlobID& id : WalkRunsInProgress) {
+            auto* collection = Collections.FindPtr(id);
+            Y_ENSURE(collection && collection->WalkRun);
+            auto& run = *collection->WalkRun;
+            if (run.State != EWalkRunState::Walking) {
+                continue;
             }
 
-            if (pending) {
-                ++idIt;
-            } else {
-                WalksInFlight.erase(idIt++);
+            bool pending = false;
+            bool failed = false;
+            for (auto& walk : run.Walks) {
+                if (!walk.Done) {
+                    AdvanceInMemoryWalk(walk, run.Id);
+                }
+                failed |= walk.Invalid;
+                pending |= !walk.Done;
+            }
+
+            if (failed) {
+                invalid.push_back(id);
+            } else if (!pending) {
+                run.State = EWalkRunState::Draining;
+            }
+        }
+
+        for (const TLogoBlobID& id : invalid) {
+            if (auto* collection = Collections.FindPtr(id)) {
+                InvalidateWalkRun(*collection);
+            }
+        }
+    }
+
+    void FinishReadyWalkRuns() {
+        const TVector<TLogoBlobID> runs(WalkRunsInProgress.begin(), WalkRunsInProgress.end());
+        for (const TLogoBlobID& id : runs) {
+            if (auto* collection = Collections.FindPtr(id)) {
+                FinishWalkRunIfDrained(*collection);
             }
         }
     }
 
     // Walks that keep only their index collection resident have nothing to do once it is not in memory.
     void DropIndexOnlyWalks(const TLogoBlobID& indexCollectionId) {
-        DropWalks([&](const TInMemoryWalk& walk) {
-            return !walk.Seed.QueueLeaves && walk.Seed.IndexCollectionId == indexCollectionId;
-        });
+        for (const TLogoBlobID& id : GetWalkCollections(indexCollectionId)) {
+            auto* collection = Collections.FindPtr(id);
+            Y_ENSURE(collection);
+            const bool hasIndexOnlyWalk = AnyOf(collection->WalkSeedsByOwner, [&](const auto& item) {
+                return AnyOf(item.second, [&](const auto& seed) {
+                    return !seed.QueueLeaves && !seed.Sticky && !seed.IndexCollectionSticky &&
+                        seed.IndexCollectionId == indexCollectionId;
+                });
+            });
+            if (hasIndexOnlyWalk) {
+                InvalidateWalkRun(*collection);
+            }
+        }
     }
 
     // A tree that could not be read cannot be walked, and a later attach re-seeds the walk.
     void DropWalksForIndexCollection(const TLogoBlobID& indexCollectionId) {
-        DropWalks([&](const TInMemoryWalk& walk) {
-            return walk.Seed.IndexCollectionId == indexCollectionId;
-        });
+        for (const TLogoBlobID& id : GetWalkCollections(indexCollectionId)) {
+            auto* collection = Collections.FindPtr(id);
+            Y_ENSURE(collection);
+            InvalidateWalkRun(*collection);
+        }
     }
 
-    template <typename TShouldDrop>
-    void DropWalks(TShouldDrop&& shouldDrop) {
-        for (auto idIt = WalksInFlight.begin(); idIt != WalksInFlight.end(); ) {
-            auto* collection = Collections.FindPtr(*idIt);
-            bool pending = false;
-
-            if (collection) {
-                auto& walks = collection->Walks;
-                for (auto walkIt = walks.begin(); walkIt != walks.end(); ) {
-                    if (shouldDrop(*walkIt)) {
-                        walkIt = walks.erase(walkIt);
-                    } else {
-                        pending |= !walkIt->Done;
-                        ++walkIt;
-                    }
-                }
-            }
-
-            if (pending) {
-                ++idIt;
-            } else {
-                WalksInFlight.erase(idIt++);
-            }
+    void RestartWalksForIndexCollection(const TLogoBlobID& indexCollectionId) {
+        for (const TLogoBlobID& id : GetWalkCollections(indexCollectionId)) {
+            auto* collection = Collections.FindPtr(id);
+            Y_ENSURE(collection);
+            RestartWalkRun(*collection);
         }
     }
 
@@ -1759,10 +2153,33 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             TVector<TPageLocation> pagesToRequest;
             ui64 pagesToRequestBytes = 0;
+            ui64 walkLoadId = 0;
             while (pagesToLoad) {
                 auto locationIt = pagesToLoad.begin();
+                const auto& location = locationIt->first;
+                const ui64 locationWalkLoadId = locationIt->second;
 
-                auto* page = EnsurePage(*collection, *locationIt, ECacheMode::TryKeepInMemory);
+                if (pagesToRequest && locationWalkLoadId != walkLoadId) {
+                    break;
+                }
+                if (locationWalkLoadId) {
+                    auto loadIt = WalkLoads.find(locationWalkLoadId);
+                    if (loadIt == WalkLoads.end()) {
+                        pagesToLoad.erase(locationIt);
+                        continue;
+                    }
+                    auto* walkCollection = Collections.FindPtr(loadIt->second);
+                    if (!walkCollection || !walkCollection->WalkRun ||
+                        walkCollection->WalkRun->State == EWalkRunState::Cancelled ||
+                        walkCollection->WalkRun->Id != locationWalkLoadId)
+                    {
+                        pagesToLoad.erase(locationIt);
+                        continue;
+                    }
+                }
+                walkLoadId = locationWalkLoadId;
+
+                auto* page = EnsurePage(*collection, location, ECacheMode::TryKeepInMemory);
                 if (page->State == PageStateNo) {
                     if (TPageTraits::GetSize(page) > remainBytes) {
                         RemoveAlivePage(page);
@@ -1771,7 +2188,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     }
                     remainBytes -= TPageTraits::GetSize(page);
                     page->State = PageStateRequestedAsync;
-                    pagesToRequest.push_back(*locationIt);
+                    pagesToRequest.push_back(location);
                     pagesToRequestBytes += page->Size;
                     InFlyInMemoryBytes += TPageTraits::GetSize(page);
                 }
@@ -1789,6 +2206,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 request.PageCollection = pageCollection;
                 request.Sender = owner;
                 request.Priority = NBlockIO::EPriority::Bulk;
+                request.WalkLoadId = walkLoadId;
 
                 LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Request page collection " << request.PageCollection->Label()
                     << " owner " << owner
@@ -2021,10 +2439,12 @@ public:
             HFunc(NMemory::TEvConsumerLimit, Handle);
         }
 
-        // Walks parse the pages that just arrived, so they run before the GC can evict them.
+        // This ordering is load-bearing: walks parse arrivals before GC and may become Draining
+        // after queueing leaves; the loader must submit those leaves before completion is checked.
         AdvanceInMemoryWalks();
         DoGC();
         TryLoadInMemoryCollections();
+        FinishReadyWalkRuns();
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

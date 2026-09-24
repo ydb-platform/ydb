@@ -41,6 +41,7 @@ namespace NBlockIO {
         TVector<TPageLocation> Pages;
         NWilson::TTraceId TraceId;
         ui64 RequestCookie;
+        ui64 LoadRunId = 0;
 
         /*_ request operational state   */
 

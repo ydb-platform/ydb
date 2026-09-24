@@ -48,6 +48,7 @@ void TBlockIO::Inbox(TEventHandlePtr &eh)
         Priority = ev->Priority;
         TraceId = std::move(ev->TraceId);
         RequestCookie = ev->Cookie;
+        LoadRunId = ev->LoadRunId;
 
         PageCollection = std::move(ev->PageCollection);
         Pages = std::move(ev->Pages);
@@ -201,7 +202,7 @@ void TBlockIO::Terminate(EStatus code)
             << ", " << BlockStates.size() << " pages";
     }
 
-    auto *ev = new TEvData(code, PageCollection, RequestCookie);
+    auto *ev = new TEvData(code, PageCollection, RequestCookie, LoadRunId);
 
     ev->Pages.reserve(Pages.size());
     for (auto index : xrange(Pages.size())) {

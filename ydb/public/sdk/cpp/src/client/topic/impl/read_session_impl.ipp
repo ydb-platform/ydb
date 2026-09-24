@@ -189,8 +189,13 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
         NotReady.pop_front();
     };
 
-    while (!NotReady.empty() && NotReady.front().IsReady()) {
+    while (!NotReady.empty() && (NotReady.front().IsReady() || NotReady.front().IsAbandoned())) {
         auto& front = NotReady.front();
+
+        if (front.IsAbandoned()) {
+            NotReady.pop_front();
+            continue;
+        }
 
         if (front.IsDataEvent()) {
             if (queue.HasDataEventCallback()) {
@@ -239,9 +244,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
     for (auto& event : NotReady) {
         const bool isDataEvent = event.IsDataEvent();
 
-        if (event.IsReady() ||
-            (isDataEvent && !event.GetDataEvent().SetAbandoned()) // Try to cancel inflight decompression tasks if any (returns true if message was decompressed and become ready)
-        ) {
+        if (!isDataEvent || !event.GetDataEvent().SetAbandoned()) {
             if (!hasNonReadyEvents) {
                 // Continue ready events prefix
                 ready.push_back(std::move(event));
@@ -280,7 +283,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::Cleanup(TDeferredActio
         }
 
         auto& dataEvent = event.GetDataEvent();
-        if (event.IsReady() || !dataEvent.SetAbandoned()) {
+        if (!dataEvent.SetAbandoned()) {
             accumulator.Add(dataEvent.GetParent(), dataEvent.GetDataSize(), dataEvent.GetMessageCount());
         } else {
             infos.push_back(dataEvent.GetParent());
@@ -2721,7 +2724,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::GetDataEventImpl(TIntr
 
         auto& front = queue.front();
 
-        return front.IsDataEvent() && front.IsReady();
+        return front.IsDataEvent() && front.IsReady() && !front.IsAbandoned();
     };
 
     Y_ABORT_UNLESS(readyDataInTheHead());

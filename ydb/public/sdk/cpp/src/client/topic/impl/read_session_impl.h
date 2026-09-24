@@ -449,7 +449,13 @@ public:
     }
 
     bool IsReady() const {
-        return State.load() == EDecompressionTaskState::Ready;
+        const auto state = State.load();
+        return state == EDecompressionTaskState::Ready || state == EDecompressionTaskState::Abandoned;
+    }
+
+    bool IsAbandoned() const {
+        const auto state = State.load();
+        return state == EDecompressionTaskState::Cleanup || state == EDecompressionTaskState::Abandoned;
     }
 
     bool SetAbandoned() {
@@ -585,6 +591,10 @@ struct TRawPartitionStreamEvent {
         }
 
         return std::get<TDataDecompressionEvent<UseMigrationProtocol>>(Event).IsReady();
+    }
+
+    bool IsAbandoned() const {
+        return IsDataEvent() && GetDataEvent().IsAbandoned();
     }
 };
 

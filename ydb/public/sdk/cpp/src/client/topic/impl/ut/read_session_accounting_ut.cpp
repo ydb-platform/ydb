@@ -52,12 +52,11 @@ namespace NYdb::inline Dev::NTopic {
                 queue.Cleanup(actions);
             } // The task releases all 30 bytes claimed by cleanup.
 
-            // The other message belongs to the same task and must not become deliverable.
-            UNIT_ASSERT(!second.IsReady());
+            UNIT_ASSERT(second.IsReady());
             queue.emplace_back(std::move(second));
             {
                 TDeferredActions<false> actions;
-                // Cleaning up the other message must not release its 20 bytes again.
+                // Cleanup must not release this message again after the worker released the task.
                 queue.Cleanup(actions);
             }
         }

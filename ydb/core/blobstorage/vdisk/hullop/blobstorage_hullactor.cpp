@@ -135,6 +135,9 @@ namespace NKikimr {
             hullCtx, rtCtx, std::move(hugeBlobCtx), minHugeBlobInBytes, freshSegment, freshSegmentSnap,
             std::move(barriersSnap), std::move(levelSnap), it, firstLsn, lastLsn, TDuration::Max(), {},
             allowGarbageCollection, false));
+        // It writes into the chunks reserved for this segment before its records were admitted. A retry after an
+        // abort finds none left, since the aborted attempt forgot them, and reserves for itself.
+        compaction->AddPreReservedChunks(freshSegment->TakeReservedChunks());
 
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(hullCtx->VCtx->VDiskLogPrefix, "%s: fresh scheduled", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
 

@@ -111,11 +111,12 @@ namespace NKikimr {
             bool freshCompaction, bool gcOnlySynced, bool allowKeepFlags, bool barrierValidation, ui32 hullSstSizeInChunksFresh,
             ui32 hullSstSizeInChunksLevel, double hullCompReadBatchEfficiencyThreshold, TDuration hullCompStorageRatioCalcPeriod,
             TDuration hullCompStorageRatioMaxCalcDuration, ui32 hullCompLevel0MaxSstsAtOnce, ui32 hullCompSortedPartsNum,
-            bool enableFreshSpaceProjection)
+            bool freshChunkReservation, ui32 appendBlockSize)
         : VCtx(std::move(vctx))
         , VCfg(vcfg)
         , IngressCache(TIngressCache::Create(VCtx->Top, VCtx->ShortSelfVDisk))
         , ChunkSize(chunkSize)
+        , AppendBlockSize(appendBlockSize)
         , CompWorthReadSize(compWorthReadSize)
         , FreshCompaction(freshCompaction)
         , GCOnlySynced(gcOnlySynced)
@@ -126,9 +127,7 @@ namespace NKikimr {
         , HullCompReadBatchEfficiencyThreshold(hullCompReadBatchEfficiencyThreshold)
         , HullCompStorageRatioCalcPeriod(hullCompStorageRatioCalcPeriod)
         , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration)
-        , FreshSpaceTracker(std::make_shared<TFreshSpaceTracker>(enableFreshSpaceProjection, chunkSize,
-            hullSstSizeInChunksFresh, ui64(vcfg->MinHugeBlobInBytes) + 8,
-            VCtx->Top->GType.TotalPartCount()))
+        , FreshChunkReservation(freshChunkReservation)
         , HullCompLevel0MaxSstsAtOnce(hullCompLevel0MaxSstsAtOnce)
         , HullCompSortedPartsNum(hullCompSortedPartsNum)
         , CompactionStrategyGroup(VCtx->VDiskCounters, "subsystem", "compstrategy")

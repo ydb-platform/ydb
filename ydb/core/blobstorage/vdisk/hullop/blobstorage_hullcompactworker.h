@@ -169,6 +169,10 @@ namespace NKikimr {
         // number of chunks we have asked to reserve, but not yet confirmed
         ui32 ChunkReservePending = 0;
 
+        // chunks a Fresh segment held for this compaction before its records were admitted
+        ui32 PreReservedChunks = 0;
+        bool OutgrewPreReservedChunks = false;
+
         // automaton state
         EState State = EState::Invalid;
 
@@ -588,6 +592,16 @@ namespace NKikimr {
         const TDeque<TChunkIdx>& GetReservedChunks() const { return ReservedChunks; }
         const TDeque<TChunkIdx>& GetAllocatedChunks() const { return AllocatedChunks; }
 
+        // Chunks a Fresh segment reserved for its compaction before admitting its records (see TFreshData).
+        // From here on they are this compaction's own, exactly as if it had reserved them itself: the ones it
+        // writes are committed, the rest forgotten, and all of them forgotten should it abort.
+        void AddPreReservedChunks(const TVector<TChunkIdx>& chunks) {
+            Y_VERIFY_S(IsFresh && AllocatedChunks.empty() && !ChunkReservePending, HullCtx->VCtx->VDiskLogPrefix);
+            ReservedChunks.insert(ReservedChunks.end(), chunks.begin(), chunks.end());
+            AllocatedChunks.insert(AllocatedChunks.end(), chunks.begin(), chunks.end());
+            PreReservedChunks = chunks.size();
+        }
+
     private:
         void CollectRemovedHugeBlobs(const std::vector<TDiskPart>& hugeBlobs) {
             for (const TDiskPart& p : hugeBlobs) {
@@ -861,6 +875,15 @@ namespace NKikimr {
         std::unique_ptr<NPDisk::TEvChunkReserve> CheckForReservation() {
             if (ReservedChunks.size() + ChunkReservePending >= ChunksToUse) {
                 return nullptr;
+            }
+            if (PreReservedChunks && !OutgrewPreReservedChunks) {
+                // Expected when something wrote to the segment without being admitted to it, e.g. sync data;
+                // the compaction then reserves the rest itself, as it would with no reservation at all.
+                OutgrewPreReservedChunks = true;
+                YDB_LOG_NOTICE_COMP(NKikimrServices::BS_HULLCOMP, "Fresh compaction outgrew the chunks reserved for it",
+                    {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                    {"preReservedChunks", PreReservedChunks},
+                    {"marker", "BSHC50"});
             }
             const ui32 num = ChunksToUse - (ReservedChunks.size() + ChunkReservePending);
             ChunkReservePending += num;

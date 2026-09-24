@@ -1457,6 +1457,15 @@ ui32 TDirectBlockGroup::GetNodeId(THostIndex host) const
     return Connections.GetDDisk(host).HostConnection.DDiskId.NodeId;
 }
 
+NKikimr::NBsController::TDDiskId TDirectBlockGroup::GetDDiskId(
+    THostIndex host) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(host < Connections.GetSlotCount());
+
+    return Connections.GetDDisk(host).HostConnection.DDiskId;
+}
+
 NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
 {
     auto promise = NewPromise<TDBGDumpResponse>();

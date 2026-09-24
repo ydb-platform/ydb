@@ -118,6 +118,7 @@ bool TPartitionActor::PrepareLoadState(
         db.ReadAllVChunkConfigs(args.VChunkConfigs),
         db.ReadAllDirtyMapStates(args.DirtyMapStates),
         db.ReadAllTouchedVChunks(args.TouchedVChunks),
+        db.ReadAllDeletedDDisks(args.DeletedDDiskRecords),
         db.ReadAddHostInProgress(args.AddHostInProgress),
         db.ReadRemoveHostInProgress(args.RemoveHostInProgress),
     };
@@ -185,6 +186,8 @@ void TPartitionActor::CompleteLoadState(
     const TActorContext& ctx,
     TTxPartition::TLoadState& args)
 {
+    DeletedDDiskStorage.Load(std::move(args.DeletedDDiskRecords));
+
     if (args.VolumeConfig.Defined()) {
         VolumeConfig = *args.VolumeConfig;
 
@@ -254,6 +257,10 @@ void TPartitionActor::CompleteLoadState(
             }
         }
     }
+
+    ExecuteTx(
+        ctx,
+        CreateTx<TCleanupDeletedDDisks>());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

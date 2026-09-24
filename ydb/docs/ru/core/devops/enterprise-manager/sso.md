@@ -12,13 +12,16 @@ SSO в веб-интерфейсе поддерживается с помощь�
 flowchart LR
     Browser[Браузер пользователя]
     IdP[Внешний IdP]
-    Cluster[Кластер YDB]
-
-    subgraph YDBEM [YDB EM]
-        Gateway[Gateway]
-        Sessions[(Служебная база данных)]
-        Gateway <-->|"Хранение токенов сессии"| Sessions
+    subgraph YDB [YDB]
+        subgraph YDBEM [YDB EM]
+            Gateway[Gateway]
+            Sessions[(Служебная база данных)]
+            Gateway <-->|"Хранение токенов сессии"| Sessions
+        end
+        Cluster[Кластер YDB]
     end
+
+    style YDB fill:transparent,stroke-dasharray:5 5
 
     Browser <-->|"Вход и cookie сессии"| Gateway
     Browser <-->|"Аутентификация"| IdP

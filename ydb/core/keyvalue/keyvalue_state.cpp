@@ -100,6 +100,8 @@ TKeyValueState::TKeyValueState()
     , RejectNonExistentStorageChannel(RejectNonExistentStorageChannel_Base)
     , UsePerChannelReadQueues_Base(0, 0, 1)
     , UsePerChannelReadQueues(UsePerChannelReadQueues_Base)
+    , RequestsInFlightLimit_Base(10'000, 1, 1'000'000)
+    , RequestsInFlightLimit(RequestsInFlightLimit_Base)
 {
     TabletCounters = nullptr;
     Clear();
@@ -184,6 +186,7 @@ void TKeyValueState::Clear() {
     PostponedIntermediatesCount = 0;
     IntermediatesInFlight = 0;
     RoInlineIntermediatesInFlight = 0;
+    DataRequestsInFlight.clear();
     DeletesPerRequestLimit = 100'000;
 
     PerGenerationCounter = 0;
@@ -644,6 +647,8 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         RejectNonExistentStorageChannel.ResetControl(RejectNonExistentStorageChannel_Base);
         TControlBoard::RegisterSharedControl(UsePerChannelReadQueues_Base, icb->KeyValueVolumeControls.UsePerChannelReadQueues);
         UsePerChannelReadQueues.ResetControl(UsePerChannelReadQueues_Base);
+        TControlBoard::RegisterSharedControl(RequestsInFlightLimit_Base, icb->KeyValueVolumeControls.RequestsInFlightLimit);
+        RequestsInFlightLimit.ResetControl(RequestsInFlightLimit_Base);
 
         YDB_LOG_DEBUG("Init KeyValue with ICB",
             {"keyValue", TabletId},
@@ -651,6 +656,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             {"readRequestsInFlightLimit", ReadRequestsInFlightLimit.Update(ctx.Now())},
             {"rejectNonExistentStorageChannel", RejectNonExistentStorageChannel.Update(ctx.Now())},
             {"usePerChannelReadQueues", UsePerChannelReadQueues.Update(ctx.Now())},
+            {"requestsInFlightLimit", RequestsInFlightLimit.Update(ctx.Now())},
             {"marker", "KV92"});
     }
 
@@ -2111,6 +2117,21 @@ void TKeyValueState::ProcessPostponedChannels(const TVector<ui32> &channels, con
     }
 }
 
+bool TKeyValueState::TryAcquireRequestSlot(TIntermediate& intermediate, const TActorContext& ctx) {
+    const ui64 limit = RequestsInFlightLimit.Update(ctx.Now());
+    if (DataRequestsInFlight.size() >= limit) {
+        return false;
+    }
+
+    const bool inserted = DataRequestsInFlight.insert(intermediate.RequestUid).second;
+    Y_DEBUG_ABORT_UNLESS(inserted);
+    return true;
+}
+
+void TKeyValueState::ReleaseRequestSlot(TIntermediate& intermediate) {
+    DataRequestsInFlight.erase(intermediate.RequestUid);
+}
+
 void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 step, const TActorContext &ctx,
         const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat,
         const TVector<ui32> &acquiredChannels) {
@@ -2125,6 +2146,7 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
     CountLatencyBsOps(stat);
 
     RequestInputTime.erase(requestUid);
+    DataRequestsInFlight.erase(requestUid);
 
     TVector<ui32> releasedChannels;
     if (stat.RequestType != TRequestType::WriteOnly) {
@@ -3230,6 +3252,13 @@ bool TKeyValueState::PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::T
     auto &response = std::get<TIntermediate::TRead>(*intermediate->ReadCommand);
     response.Key = request.key();
 
+    if (!TryAcquireRequestSlot(*intermediate, ctx)) {
+        ReplyError<TEvKeyValue::TEvReadResponse>(ctx,
+            TEvKeyValue::RequestInFlightLimitReached,
+            NKikimrKeyValue::Statuses::RSTATUS_BLOCKED, intermediate);
+        return false;
+    }
+
     if (CheckDeadline(ctx, ev->Get(), intermediate)) {
         return false;
     }
@@ -3285,6 +3314,13 @@ bool TKeyValueState::PrepareReadRangeRequest(const TActorContext &ctx, TEvKeyVal
 
     intermediate->ReadCommand = TIntermediate::TRangeRead();
     auto &response = std::get<TIntermediate::TRangeRead>(*intermediate->ReadCommand);
+
+    if (!TryAcquireRequestSlot(*intermediate, ctx)) {
+        ReplyError<TEvKeyValue::TEvReadRangeResponse>(ctx,
+            TEvKeyValue::RequestInFlightLimitReached,
+            NKikimrKeyValue::Statuses::RSTATUS_BLOCKED, intermediate);
+        return false;
+    }
 
     if (CheckDeadline(ctx, ev->Get(), intermediate)) {
         response.Status = NKikimrProto::ERROR;
@@ -3350,6 +3386,13 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
     intermediate->RequestUid = NextRequestUid;
     ++NextRequestUid;
     RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
+
+    if (!TryAcquireRequestSlot(*intermediate, ctx)) {
+        ReplyError<TEvKeyValue::TEvExecuteTransactionResponse>(ctx,
+            TEvKeyValue::RequestInFlightLimitReached,
+            NKikimrKeyValue::Statuses::RSTATUS_BLOCKED, intermediate);
+        return false;
+    }
 
     if (CheckDeadline(ctx, ev->Get(), intermediate)) {
         return false;
@@ -3570,6 +3613,7 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
         }
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
+        ReleaseRequestSlot(*intermediate);
         intermediate->UpdateStat();
         CountRequestOtherError(requestType);
     }
@@ -3608,6 +3652,7 @@ void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, c
         }
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
+        ReleaseRequestSlot(*intermediate);
         intermediate->UpdateStat();
         CountRequestOtherError(requestType);
     }
@@ -3633,6 +3678,7 @@ void TKeyValueState::OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::
 
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
+        ReleaseRequestSlot(*intermediate);
         intermediate->UpdateStat();
         CountRequestOtherError(requestType);
         CancelInFlight(intermediate->RequestUid);
@@ -3657,6 +3703,7 @@ void TKeyValueState::OnEvGetStorageChannelStatus(TEvKeyValue::TEvGetStorageChann
         RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
+        ReleaseRequestSlot(*intermediate);
         intermediate->UpdateStat();
         CountRequestOtherError(requestType);
     }
@@ -3681,6 +3728,7 @@ void TKeyValueState::OnEvAcquireLock(TEvKeyValue::TEvAcquireLock::TPtr &ev, cons
         ++RoInlineIntermediatesInFlight;
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
+        ReleaseRequestSlot(*intermediate);
         intermediate->UpdateStat();
         CountRequestOtherError(requestType);
     }
@@ -3756,6 +3804,7 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
 
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
+        ReleaseRequestSlot(*intermediate);
         intermediate->UpdateStat();
         CountRequestOtherError(requestType);
         CancelInFlight(intermediate->RequestUid);
@@ -3786,6 +3835,14 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     intermediate->HasIncrementGeneration = request.HasCmdIncrementGeneration();
 
     intermediate->UsePayloadInResponse = request.GetUsePayloadInResponse();
+
+    if (!TryAcquireRequestSlot(*intermediate, ctx)) {
+        ReplyError(ctx, TEvKeyValue::RequestInFlightLimitReached,
+            NMsgBusProxy::MSTATUS_REJECTED,
+            NKikimrKeyValue::Statuses::RSTATUS_BLOCKED,
+            intermediate);
+        return false;
+    }
 
     if (CheckDeadline(ctx, request, intermediate)) {
         return false;

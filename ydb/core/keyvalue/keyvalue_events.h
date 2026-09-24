@@ -14,6 +14,9 @@ namespace NKeyValue {
 };
 
 namespace TEvKeyValue {
+    inline constexpr char RequestInFlightLimitReached[] =
+        "KeyValue request in-flight limit reached";
+
     enum EEv {
         EvRequest = EventSpaceBegin(TKikimrEvents::ES_KEYVALUE),
         EvIntermediate,

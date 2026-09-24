@@ -345,6 +345,8 @@ public:
     TFieldSaveRegistrar(TFieldSaveRegistrar<Member, TThis, TContext, TFieldSerializer_>&& other)
         : This_(other.This_)
         , Context_(other.Context_)
+        , VersionFilter_(other.VersionFilter_)
+        , BeforeVersion_(other.BeforeVersion_)
     { }
 
     auto SinceVersion(auto /*version*/) &&
@@ -397,6 +399,8 @@ template <class TThis, class TContext>
 class PHOENIX_REGISTRAR_NODISCARD TVirtualFieldSaveRegistrar
 {
 public:
+    using TVersion = typename TTraits<TThis>::TVersion;
+
     TVirtualFieldSaveRegistrar(
         const TThis* this_,
         TContext& context,
@@ -410,6 +414,8 @@ public:
         : This_(other.This_)
         , Context_(other.Context_)
         , SaveHandler_(other.SaveHandler_)
+        , VersionFilter_(other.VersionFilter_)
+        , BeforeVersion_(other.BeforeVersion_)
     { }
 
     auto SinceVersion(auto /*version*/) &&
@@ -417,13 +423,15 @@ public:
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
 
-    auto BeforeVersion(auto /*version*/) &&
+    auto BeforeVersion(TVersion version) &&
     {
+        BeforeVersion_ = version;
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
 
-    auto InVersions(auto /*filter*/) &&
+    auto InVersions(TVersionFilter<TThis> filter) &&
     {
+        VersionFilter_ = filter;
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
 
@@ -434,13 +442,18 @@ public:
 
     void operator()() &&
     {
-        SaveHandler_(This_, Context_);
+        if (auto version = Context_.GetVersion(); version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+            SaveHandler_(This_, Context_);
+        }
     }
 
 private:
     const TThis* const This_;
     TContext& Context_;
     const TFieldSaveHandler<TThis, TContext> SaveHandler_;
+
+    TVersionFilter<TThis> VersionFilter_ = nullptr;
+    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
 };
 
 template <class TThis, class TContext>

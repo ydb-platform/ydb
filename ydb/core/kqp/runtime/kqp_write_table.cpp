@@ -2161,6 +2161,10 @@ public:
         if (!shardInfo) {
             return std::nullopt;
         }
+        // Controller cookies are always non-zero (see AllocateMessageCookie), so a
+        // zero cookie (e.g. a distributed-commit completion) must never reach the
+        // acknowledgement path: callers drop or early-return such results.
+        AFL_ENSURE(cookie != 0);
         const auto result = shardInfo->PopBatches(cookie);
         if (result) {
             return TMessageAcknowledgedResult {

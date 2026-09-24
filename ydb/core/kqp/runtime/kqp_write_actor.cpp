@@ -941,6 +941,14 @@ public:
 
         const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
 
+        TxManager->AddParticipantNode(ev->Sender.NodeId());
+
+        if (ev->Sender.NodeId() == SelfId().NodeId()) {
+            Counters->WriteActorLocalShardWrites->Inc();
+        } else {
+            Counters->WriteActorRemoteShardWrites->Inc();
+        }
+
         // Note: ABORTED EvWriteResult can have Cookie=0 if it was lost at datashard.
         if (Mode != EMode::COMMIT && IsSupersededWriteResult(ev->Cookie, metadata)) {
             YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",
@@ -949,14 +957,6 @@ public:
                 {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
                 {"cookie", ev->Cookie});
             return;
-        }
-
-        TxManager->AddParticipantNode(ev->Sender.NodeId());
-
-        if (ev->Sender.NodeId() == SelfId().NodeId()) {
-            Counters->WriteActorLocalShardWrites->Inc();
-        } else {
-            Counters->WriteActorRemoteShardWrites->Inc();
         }
 
         const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE

@@ -121,10 +121,10 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
         UNIT_ASSERT(resendCookie != firstCookie);
         Controller->OnMessageSent(TestShardId, resendCookie);
 
-        // Only the result echoing the last minted cookie acknowledges the round:
-        // a zero-cookie result (e.g. a reply of a pre-26-4 shard) never does, and
-        // the answer of the superseded first attempt does not either.
-        UNIT_ASSERT(!Controller->OnMessageAcknowledged(TestShardId, 0));
+        // Only the result echoing the last minted cookie acknowledges the round.
+        // Note: a zero-cookie result (e.g. a reply of a pre-26-4 shard) can never
+        // acknowledge the round - callers never pass such a cookie here (see the
+        // AFL_ENSURE in OnMessageAcknowledged).
         UNIT_ASSERT(!Controller->OnMessageAcknowledged(TestShardId, firstCookie));
 
         const auto acknowledged = Controller->OnMessageAcknowledged(TestShardId, resendCookie);

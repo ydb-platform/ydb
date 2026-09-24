@@ -1063,8 +1063,7 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            // TODO: support waiting
-            if (!InconsistentTx)  {
+            if (!InconsistentTx) {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
@@ -1073,6 +1072,8 @@ public:
                     TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. Table `"
                         << TablePath << "`.",
                     getIssues());
+            } else {
+                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
             }
             return;
         }
@@ -1083,8 +1084,7 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            // TODO: support waiting
-            if (!InconsistentTx)  {
+            if (!InconsistentTx) {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
@@ -1094,6 +1094,8 @@ public:
                         << " Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded. Table `"
                         << TablePath << "`.",
                     getIssues());
+            } else {
+                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
             }
             return;
         }

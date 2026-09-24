@@ -958,6 +958,7 @@ public:
                 {"shardID", shardId});
             return;
         }
+        AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (metadata && seqNo + 1 == metadata->NextOverloadSeqNo) {
             YDB_LOG_DEBUG("Retry Overloaded",
@@ -1006,14 +1007,28 @@ public:
             {"cookie", ev->Cookie});
 
         if (!ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
-            // The shard was removed by a reroute after a split/merge: any late result
-            // for it is stale (its in-flight batches were extracted and re-sent to the
-            // covering shards), including the error statuses below.
-            YDB_LOG_INFO("Ignoring a late TEvWriteResult for a shard removed by a reroute.",
-                {"logPrefix", this->LogPrefix},
-                {"tabletId", ev->Get()->Record.GetOrigin()},
-                {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())});
-            return;
+            switch (ev->Get()->GetStatus()) {
+            case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
+                // The shard was removed by a reroute after a split/merge: a late
+                // retriable result for it is stale (its in-flight batches were
+                // extracted and re-sent to the covering shards). Any other status
+                // must not be silenced by the reroute and fails below.
+                YDB_LOG_INFO("Ignoring a late retriable TEvWriteResult for a shard removed by a reroute.",
+                    {"logPrefix", this->LogPrefix},
+                    {"tabletId", ev->Get()->Record.GetOrigin()},
+                    {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())});
+                return;
+            default:
+                YDB_LOG_WARN("Non-retriable TEvWriteResult for a shard removed by a reroute; failing the write.",
+                    {"logPrefix", this->LogPrefix},
+                    {"tabletId", ev->Get()->Record.GetOrigin()},
+                    {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())});
+                break;
+            }
         }
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
@@ -1451,8 +1466,9 @@ public:
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         YQL_ENSURE(metadata);
         // A resend is safe when the shard deduplicates by uncommitted write seq num
-        // (AttachWriteSeqNum) or when the write is inconsistent.
-        YQL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
+        // (AttachWriteSeqNum) or when the write is inconsistent: for a consistent tx
+        // without the flag a resend would break the write order, so fail loudly.
+        AFL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
         if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
             // The resend budget for this shard is exhausted: re-resolve through RetryShard
             // so the number of consecutive re-resolves per shard stays bounded before
@@ -1693,6 +1709,7 @@ public:
             // pending: nothing to resend.
             return;
         }
+        AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         // The resend budget is enforced in SendDataToShard: once the attempts are
         // exhausted it routes to the re-resolve path instead of sending again.
         SendDataToShard(msg->ShardId);
@@ -1885,6 +1902,29 @@ public:
                     transferTargets.reserve(deletedShards.size());
                     for (const ui64 shardId : deletedShards) {
                         transferTargets.emplace_back(shardId, FindCoveringShards(oldPartitioning, Partitioning, shardId, KeyColumnTypes));
+                    }
+                    THashMap<ui64, ui32> sourcesPerTarget;
+                    for (const auto& [shardId, targets] : transferTargets) {
+                        for (const ui64 target : targets) {
+                            ++sourcesPerTarget[target];
+                        }
+                    }
+                    for (const auto& [target, sources] : sourcesPerTarget) {
+                        if (sources > 1) {
+                            YDB_LOG_ERROR("Shard merge detected while re-routing consistent tx writes.",
+                                {"logPrefix", this->LogPrefix},
+                                {"targetShardId", target},
+                                {"mergedShards", sources},
+                                {"tablePath", TablePath});
+                            RuntimeError(
+                                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                                TStringBuilder()
+                                    << "Shards of table `" << TablePath
+                                    << "` were merged to shard " << target
+                                    << " during the transaction; cannot preserve the write order.");
+                            return;
+                        }
                     }
                 }
                 ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards));

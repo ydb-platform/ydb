@@ -7,12 +7,6 @@
 
 namespace NKikimr::NConveyorComposite {
 
-bool TSchedulerQueryIdentity::operator==(const TSchedulerQueryIdentity&) const = default;
-
-bool TSchedulerQueryIdentity::IsDefault() const {
-    return DatabaseId.empty() && PoolId.empty() && QueryId == 0;
-}
-
 bool TProcessGuard::SendTaskToExecute(const std::shared_ptr<ITask>& task) const {
     AFL_VERIFY(!Finished);
     if (ServiceActorId && NActors::TlsActivationContext) {
@@ -36,7 +30,7 @@ void TProcessGuard::Finish() {
 
 TProcessGuard::TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
     const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId,
-    const std::optional<TSchedulerQueryIdentity>& schedulerQueryIdentity)
+    const ui64 txId, const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool)
     : Category(category)
     , ScopeId(scopeId)
     , ExternalProcessId(externalProcessId)
@@ -44,7 +38,7 @@ TProcessGuard::TProcessGuard(const ESpecialTaskCategory category, const TString&
     if (ServiceActorId) {
         NActors::TActorContext::AsActorContext().Send(
             *ServiceActorId,
-            new NConveyorComposite::TEvExecution::TEvRegisterProcess(cpuLimits, category, scopeId, InternalProcessId, schedulerQueryIdentity));
+            new NConveyorComposite::TEvExecution::TEvRegisterProcess(cpuLimits, category, scopeId, InternalProcessId, txId, schedulerPool));
     }
 }
 

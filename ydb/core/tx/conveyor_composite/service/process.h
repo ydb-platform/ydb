@@ -63,6 +63,8 @@ private:
     TDuration TotalCPU = TDuration::Zero();
 
 public:
+    void MoveToServiceQuery();
+
     ui32 GetInProgressTasksCount() const {
         return InProgressTasksCount.Val();
     }

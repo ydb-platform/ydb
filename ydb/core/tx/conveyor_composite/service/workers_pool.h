@@ -84,7 +84,8 @@ private:
     void UpdateWorkerCPULimit(const ui64 workerIdx, const double newLimit);
     void IncreaseWorkers(const std::vector<double>& desiredCPULimits);
     void DecreaseWorkers(const std::vector<double>& desiredCPULimits);
-    void RunTask(std::vector<TWorkerTask>&& tasksBatch, TSchedulerLease&& schedulerLease, ui64 workerIdx);
+    void RunTask(std::vector<TWorkerTask>&& tasksBatch, TSchedulerLease&& schedulerLease,
+        const TSchedulerQueryIdentity& identity, ui64 workerIdx);
     TWeightedCategory& FindCategoryLink(const ESpecialTaskCategory category);
     std::optional<TDuration> GetMinProcessUsage(const TSchedulerQueryIdentity& identity, ui64 workerIdx = 0) const;
 

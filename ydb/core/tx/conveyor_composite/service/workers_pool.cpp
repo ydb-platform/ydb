@@ -174,7 +174,8 @@ bool TWorkersPool::HasFreeWorker() const {
     return !ActiveWorkersIdx.empty();
 }
 
-void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TSchedulerLease&& schedulerLease, const ui64 workerIdx) {
+void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TSchedulerLease&& schedulerLease,
+    const TSchedulerQueryIdentity& identity, const ui64 workerIdx) {
     Y_ENSURE(tasksBatch.size(), "cannot run an empty task batch");
     const auto it = std::find(ActiveWorkersIdx.begin(), ActiveWorkersIdx.end(), workerIdx);
     Y_ENSURE(it != ActiveWorkersIdx.end(), "cannot run a task on an inactive worker: " << workerIdx);
@@ -191,7 +192,7 @@ void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TSchedulerLeas
         link.OnTaskStarted();
     }
     TActivationContext::Send(
-        worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch), worker.GetCPULimit()));
+        worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch), worker.GetCPULimit(), identity));
 }
 
 void TWorkersPool::ReleaseWorker(const ui64 workerIdx) {
@@ -233,8 +234,8 @@ std::vector<TWorkersPool::TQueryCandidate> TWorkersPool::BuildQueryCandidates(co
 
     std::vector<TQueryCandidate> result(std::ranges::begin(candidatesView), std::ranges::end(candidatesView));
     std::ranges::sort(result, [](const auto& lhs, const auto& rhs) {
-        return std::tie(lhs.EffectiveDeadline, lhs.MinProcessUsage, lhs.Identity.DatabaseId, lhs.Identity.PoolId, lhs.Identity.QueryId)
-            < std::tie(rhs.EffectiveDeadline, rhs.MinProcessUsage, rhs.Identity.DatabaseId, rhs.Identity.PoolId, rhs.Identity.QueryId);
+        return std::tie(lhs.EffectiveDeadline, lhs.MinProcessUsage, lhs.Identity.QueryId, lhs.Identity.IsServiceQuery)
+            < std::tie(rhs.EffectiveDeadline, rhs.MinProcessUsage, rhs.Identity.QueryId, rhs.Identity.IsServiceQuery);
     });
     return result;
 }
@@ -308,7 +309,7 @@ bool TWorkersPool::DrainOnWorkers(const std::vector<ui64>& workerIdxs, const std
             if (tasks.empty()) {
                 break;
             }
-            RunTask(std::move(tasks), std::move(schedulerLease), workerIdx);
+            RunTask(std::move(tasks), std::move(schedulerLease), identity, workerIdx);
             ++nextWorker;
             newTask = true;
         }
@@ -359,7 +360,7 @@ bool TWorkersPool::DrainTasks(TDrainContext& context) {
 
 bool TWorkersPool::HasProcesses(const TSchedulerQueryIdentity& identity) const {
     return std::any_of(CategoryLinks.begin(), CategoryLinks.end(), [&](const auto& link) {
-        return !link.GetStopPrepare() && link.GetCategory()->HasProcesses(identity);
+        return link.GetCategory()->HasProcesses(identity);
     });
 }
 

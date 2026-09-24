@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/runtime/kqp_vector_index_levels_cache.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_base.h>
+#include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -84,7 +85,8 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId, NYql::N
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
     const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,
-    const TString& database, const TString& pool, const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
+    const TString& databasePath, const std::optional<NScheduler::NHdrf::TFullPoolId>& schedulerPool,
+    const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
     TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits,
     bool useBatchPool = false);

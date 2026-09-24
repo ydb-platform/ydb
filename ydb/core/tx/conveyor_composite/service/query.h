@@ -59,12 +59,14 @@ namespace NKikimr::NConveyorComposite {
 
     class TSchedulableWorkState {
     private:
+        friend class TSchedulerQueryState;
         std::vector<std::unique_ptr<TSchedulableWorkCell>> Cells;
 
         void StopThrottled(TSchedulableWorkCell& cell);
         ui64 GetCount(ESchedulableWorkStatus status) const;
         void IncreaseCapacity(ui64 workersCount, NYql::NDq::IDqSchedulableWorkFactory& factory);
         void DecreaseCapacity(ui64 workersCount);
+        void ForcedUpdateWorkCapacity(ui64 workersCount, NYql::NDq::IDqSchedulableWorkFactory& factory);
 
     public:
         TSchedulableWorkState();
@@ -75,7 +77,6 @@ namespace NKikimr::NConveyorComposite {
         ~TSchedulableWorkState();
 
         TTryStartResult TryStart(TMonotonic now);
-        void ReconcileCapacity(ui64 workersCount, NYql::NDq::IDqSchedulableWorkFactory& factory);
         void PrepareForRemoval();
     };
 
@@ -84,6 +85,7 @@ namespace NKikimr::NConveyorComposite {
         friend class TQueryRegistry;
 
         ui64 ProcessesCount = 0;
+        ui64 CpuCount = 0;
         std::optional<TMonotonic> WakeUpDeadline;
         std::unique_ptr<NYql::NDq::IDqSchedulableWorkFactory> WorkFactory;
         TSchedulableWorkState Works;
@@ -93,12 +95,14 @@ namespace NKikimr::NConveyorComposite {
     public:
         void RegisterProcess();
         void UnregisterProcess();
-        void UpdateWorkCapacity(ui64 workersCount);
+        void PrepareWorkCapacity(ui64 cpuCount);
+        void ApplyWorkCapacity();
         TTryStartResult TryStart(TMonotonic now);
         void PrepareForRemoval();
 
         bool IsReady() const;
-        ui64 GetProcessesCount() const;
+        bool IsWaitRelease() const;
+        bool IsReadyToRelease() const;
         const std::optional<TMonotonic>& GetWakeUpDeadline() const;
     };
 
@@ -110,9 +114,12 @@ namespace NKikimr::NConveyorComposite {
         TQueryRegistry();
 
         bool RegisterProcess(const TSchedulerQueryIdentity& identity);
-        bool UnregisterProcess(const TSchedulerQueryIdentity& identity);
+        void UnregisterProcess(const TSchedulerQueryIdentity& identity);
+        bool TryReleaseQuery(const TSchedulerQueryIdentity& identity);
+        ui64 MovePendingQueryToService(const TSchedulerQueryIdentity& identity);
         bool SetQuery(const TSchedulerQueryIdentity& identity, NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr query);
-        void UpdateWorkCapacity(const TSchedulerQueryIdentity& identity, ui64 workersCount);
+        void PrepareWorkCapacity(const TSchedulerQueryIdentity& identity, ui64 cpuCount);
+        void ApplyWorkCapacity(const TSchedulerQueryIdentity& identity);
 
         auto GetIdentitiesView() const {
             return Queries | std::views::keys;

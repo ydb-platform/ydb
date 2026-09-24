@@ -10,7 +10,7 @@ namespace NKikimr::NConveyorComposite {
 TTasksManager::TTasksManager(
     const TString& /*convName*/, const NConfig::TConfig& config, const NActors::TActorId distributorActorId, TCounters& counters)
     : DistributorId(distributorActorId) {
-    const TSchedulerQueryIdentity defaultIdentity = {};
+    const auto defaultIdentity = kServiceQueryIdentity;
     for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
         Categories.emplace_back(std::make_shared<TProcessCategory>(config.GetCategoryConfig(i), counters));
         QueryRegistry.RegisterProcess(defaultIdentity);
@@ -18,10 +18,16 @@ TTasksManager::TTasksManager(
     for (const auto& poolConfig : config.GetWorkerPools()) {
         AddWorkerPool(poolConfig, distributorActorId, counters);
     }
-    QueryRegistry.UpdateWorkCapacity(defaultIdentity, CalculateParallelUpperBound(defaultIdentity));
+    QueryRegistry.PrepareWorkCapacity(defaultIdentity, CalculateParallelUpperBound(defaultIdentity));
+    ApplyPreparedQueryCapacity(defaultIdentity);
 }
 
 bool TTasksManager::DrainTasks() {
+    for (const auto& identity : QueryRegistry.GetIdentitiesView()) {
+        // Retry apply capacity changes by installed topology.
+        QueryRegistry.PrepareWorkCapacity(identity, CalculateParallelUpperBound(identity));
+        ApplyPreparedQueryCapacity(identity);
+    }
     const TMonotonic now = TMonotonic::Now();
     TDrainContext context{
         .Now = now,
@@ -72,16 +78,17 @@ bool TTasksManager::RegisterProcess(const ESpecialTaskCategory category, const T
     auto& processCategory = MutableCategoryVerified(category);
     auto scope = processCategory.UpsertScope(scopeId, cpuLimits);
     processCategory.RegisterProcess(internalProcessId, std::move(scope), identity);
-    QueryRegistry.UpdateWorkCapacity(identity, CalculateParallelUpperBound(identity));
+    QueryRegistry.PrepareWorkCapacity(identity, CalculateParallelUpperBound(identity));
+    ApplyPreparedQueryCapacity(identity);
     return isNewIdentity;
 }
 
-void TTasksManager::UnregisterProcess(const ESpecialTaskCategory category, const ui64 internalProcessId) {
+TSchedulerQueryIdentity TTasksManager::UnregisterProcess(const ESpecialTaskCategory category, const ui64 internalProcessId) {
     const auto identity = MutableCategoryVerified(category).UnregisterProcess(internalProcessId);
-    const bool removed = QueryRegistry.UnregisterProcess(identity);
-    if (!removed) {
-        QueryRegistry.UpdateWorkCapacity(identity, CalculateParallelUpperBound(identity));
-    }
+    QueryRegistry.UnregisterProcess(identity);
+    QueryRegistry.PrepareWorkCapacity(identity, CalculateParallelUpperBound(identity));
+    ApplyPreparedQueryCapacity(identity);
+    return identity;
 }
 
 bool TTasksManager::SetQuery(
@@ -89,8 +96,28 @@ bool TTasksManager::SetQuery(
     if (!QueryRegistry.SetQuery(identity, std::move(query))) {
         return false;
     }
-    QueryRegistry.UpdateWorkCapacity(identity, CalculateParallelUpperBound(identity));
+    QueryRegistry.PrepareWorkCapacity(identity, CalculateParallelUpperBound(identity));
+    ApplyPreparedQueryCapacity(identity);
     return true;
+}
+
+void TTasksManager::ApplyPreparedQueryCapacity(const TSchedulerQueryIdentity& identity) {
+    QueryRegistry.ApplyWorkCapacity(identity);
+}
+
+void TTasksManager::MovePendingQueryToService(const TSchedulerQueryIdentity& identity) {
+    const ui64 expectedCount = QueryRegistry.MovePendingQueryToService(identity);
+    const ui64 movedCount = std::accumulate(Categories.begin(), Categories.end(), ui64{0},
+        [&](ui64 count, const auto& category) {
+            return count + category->MoveProcessesToService(identity);
+        });
+    Y_ENSURE(movedCount == expectedCount, "query process count does not match migrated processes");
+    QueryRegistry.PrepareWorkCapacity(kServiceQueryIdentity, CalculateParallelUpperBound(kServiceQueryIdentity));
+    ApplyPreparedQueryCapacity(kServiceQueryIdentity);
+}
+
+bool TTasksManager::TryReleaseQuery(const TSchedulerQueryIdentity& identity) {
+    return QueryRegistry.TryReleaseQuery(identity);
 }
 
 void TTasksManager::PrepareConfigUpdate(const NConfig::TConfig& config) {
@@ -165,7 +192,8 @@ void TTasksManager::ApplyConfigUpdate(const NConfig::TConfig& config,
         MutableCategoryVerified(category).ApplyConfig(config.GetCategoryConfig(category));
     }
     for (const auto& identity : QueryRegistry.GetIdentitiesView()) {
-        QueryRegistry.UpdateWorkCapacity(identity, CalculateParallelUpperBound(identity));
+        QueryRegistry.PrepareWorkCapacity(identity, CalculateParallelUpperBound(identity));
+        ApplyPreparedQueryCapacity(identity);
     }
 }
 

@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/runtime
     ydb/core/tx/conveyor_composite/common
     ydb/library/actors/core
     ydb/services/metadata/request

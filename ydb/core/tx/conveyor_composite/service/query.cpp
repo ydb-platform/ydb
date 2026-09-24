@@ -153,7 +153,7 @@ namespace NKikimr::NConveyorComposite {
         Y_ENSURE(toRemove == 0, "not enough non-started schedulable works to shrink capacity");
     }
 
-    void TSchedulableWorkState::ReconcileCapacity(
+    void TSchedulableWorkState::ForcedUpdateWorkCapacity(
         const ui64 workersCount, NYql::NDq::IDqSchedulableWorkFactory& factory) {
         if (Cells.size() > workersCount) {
             DecreaseCapacity(workersCount);
@@ -201,17 +201,25 @@ namespace NKikimr::NConveyorComposite {
         return WorkFactory != nullptr;
     }
 
-    ui64 TSchedulerQueryState::GetProcessesCount() const {
-        return ProcessesCount;
+    bool TSchedulerQueryState::IsWaitRelease() const {
+        return ProcessesCount == 0;
+    }
+
+    bool TSchedulerQueryState::IsReadyToRelease() const {
+        return IsReady() && Works.GetCount(ESchedulableWorkStatus::STARTED) == 0;
     }
 
     const std::optional<TMonotonic>& TSchedulerQueryState::GetWakeUpDeadline() const {
         return WakeUpDeadline;
     }
 
-    void TSchedulerQueryState::UpdateWorkCapacity(const ui64 workersCount) {
-        if (WorkFactory) {
-            Works.ReconcileCapacity(workersCount, *WorkFactory);
+    void TSchedulerQueryState::PrepareWorkCapacity(const ui64 cpuCount) {
+        CpuCount = cpuCount;
+    }
+
+    void TSchedulerQueryState::ApplyWorkCapacity() {
+        if (WorkFactory && Works.GetCount(ESchedulableWorkStatus::STARTED) <= CpuCount) {
+            Works.ForcedUpdateWorkCapacity(CpuCount, *WorkFactory);
         }
     }
 
@@ -221,10 +229,7 @@ namespace NKikimr::NConveyorComposite {
         if (std::holds_alternative<TSchedulerLease>(result)) {
             WakeUpDeadline.reset();
         } else {
-            const auto deadline = std::get<TMonotonic>(result);
-            if (!WakeUpDeadline || deadline < *WakeUpDeadline) {
-                WakeUpDeadline = deadline;
-            }
+            WakeUpDeadline = std::get<TMonotonic>(result);
         }
         return result;
     }
@@ -236,7 +241,7 @@ namespace NKikimr::NConveyorComposite {
     }
 
     TQueryRegistry::TQueryRegistry() {
-        auto [it, inserted] = Queries.try_emplace(TSchedulerQueryIdentity{});
+        auto [it, inserted] = Queries.try_emplace(kServiceQueryIdentity);
         Y_ENSURE(inserted);
         it->second.SetWorkFactory(std::make_unique<TAlwaysReadySchedulableWorkFactory>());
     }
@@ -247,13 +252,13 @@ namespace NKikimr::NConveyorComposite {
         return inserted;
     }
 
-    bool TQueryRegistry::UnregisterProcess(const TSchedulerQueryIdentity& identity) {
+    void TQueryRegistry::UnregisterProcess(const TSchedulerQueryIdentity& identity) {
+        GetStateVerified(identity).UnregisterProcess();
+    }
+
+    bool TQueryRegistry::TryReleaseQuery(const TSchedulerQueryIdentity& identity) {
         auto& state = GetStateVerified(identity);
-        state.UnregisterProcess();
-        if (state.GetProcessesCount()) {
-            return false;
-        }
-        if (identity.IsDefault()) {
+        if (!state.IsWaitRelease() || !state.IsReadyToRelease()) {
             return false;
         }
         state.PrepareForRemoval();
@@ -261,23 +266,35 @@ namespace NKikimr::NConveyorComposite {
         return true;
     }
 
-    bool TQueryRegistry::SetQuery(
-        const TSchedulerQueryIdentity& identity, NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr query) {
-        const auto it = Queries.find(identity);
-        if (it == Queries.end() || it->second.IsReady() || !query) {
-            return false;
-        }
-        const auto& fullPoolId = query->GetFullPoolId();
-        Y_ENSURE(fullPoolId.DatabaseId == identity.DatabaseId, "scheduler query database does not match requested identity");
-        Y_ENSURE(fullPoolId.PoolId == identity.PoolId, "scheduler query pool does not match requested identity");
-        Y_ENSURE(std::get<NKqp::NScheduler::NHdrf::TQueryId>(query->GetId()) == identity.QueryId,
-                 "scheduler query id does not match requested identity");
-        return it->second.SetWorkFactory(
-            std::make_unique<NKqp::NScheduler::TSchedulableWorkFactory>(std::move(query), true));
+    ui64 TQueryRegistry::MovePendingQueryToService(const TSchedulerQueryIdentity& identity) {
+        auto& state = GetStateVerified(identity);
+        Y_ENSURE(!state.IsReady(), "only a pending query can migrate to service");
+        state.PrepareForRemoval(); // Also verifies that no schedulable work is started.
+        const ui64 count = state.ProcessesCount;
+        GetStateVerified(kServiceQueryIdentity).ProcessesCount += count;
+        Y_ENSURE(Queries.erase(identity) == 1, "cannot erase an unregistered query");
+        return count;
     }
 
-    void TQueryRegistry::UpdateWorkCapacity(const TSchedulerQueryIdentity& identity, const ui64 workersCount) {
-        GetStateVerified(identity).UpdateWorkCapacity(workersCount);
+    bool TQueryRegistry::SetQuery(
+        const TSchedulerQueryIdentity& identity, NKqp::NScheduler::NHdrf::NDynamic::TQueryPtr query) {
+        Y_ENSURE(query, "scheduler query pointer is null");
+        const auto it = Queries.find(identity);
+        if (it == Queries.end() || it->second.IsReady()) {
+            return false;
+        }
+        Y_ENSURE(std::get<NKqp::NScheduler::NHdrf::TQueryId>(query->GetId()) == identity.QueryId,
+                 "scheduler query id does not match requested identity");
+        auto factory = std::make_unique<NKqp::NScheduler::TSchedulableWorkFactory>(std::move(query), true);
+        return it->second.SetWorkFactory(std::move(factory));
+    }
+
+    void TQueryRegistry::PrepareWorkCapacity(const TSchedulerQueryIdentity& identity, const ui64 cpuCount) {
+        GetStateVerified(identity).PrepareWorkCapacity(cpuCount);
+    }
+
+    void TQueryRegistry::ApplyWorkCapacity(const TSchedulerQueryIdentity& identity) {
+        GetStateVerified(identity).ApplyWorkCapacity();
     }
 
     // Average algorithm without ui64 overflow

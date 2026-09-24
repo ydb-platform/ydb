@@ -3141,12 +3141,22 @@ public:
         DataCenter, // the disks of the whole data center are merged together
     };
 
+    bool IsMirror3DcGroup(TStringBuf groupId) const {
+        ui32 id;
+        if (!TryFromString(groupId, id)) {
+            return false;
+        }
+        auto itGroup = GroupState.find(id);
+        return itGroup != GroupState.end() && itGroup->second.ErasureSpecies == MIRROR_3_DC;
+    }
+
     // a vdisk id is "<group>-<generation>-<failRealm>-<failDomain>-<vdisk>", see GetVDiskId()
-    static TString GetFailRealmKey(TStringBuf vDiskId) {
+    // fail realms are data centers only in mirror-3-dc groups, so the key is empty for other erasures
+    TString GetFailRealmKey(TStringBuf vDiskId) const {
         TStringBuf groupId = vDiskId.NextTok('-');
         vDiskId.NextTok('-'); // group generation is the same for all the vdisks of a group
         TStringBuf failRealm = vDiskId.NextTok('-');
-        if (groupId.empty() || failRealm.empty()) {
+        if (groupId.empty() || failRealm.empty() || !IsMirror3DcGroup(groupId)) {
             return {};
         }
         return TStringBuilder() << groupId << '-' << failRealm;
@@ -3183,7 +3193,8 @@ public:
         auto hasLostFailRealm = [&](const TSelfCheckContext::TIssueRecord& record) {
             const auto& vDiskIds = record.IssueLog.location().storage().pool().group().vdisk().id();
             return AnyOf(vDiskIds, [&](const TString& vDiskId) {
-                return failedDisksInRealm[GetFailRealmKey(vDiskId)] > 1;
+                TString key = GetFailRealmKey(vDiskId);
+                return key && failedDisksInRealm[key] > 1;
             });
         };
         for (auto it = records.begin(); it != records.end(); ) {

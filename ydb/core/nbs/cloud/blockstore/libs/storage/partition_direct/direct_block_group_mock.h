@@ -335,11 +335,16 @@ public:
 >>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
+<<<<<<< HEAD
     void OnAddHostResult(
         const NProto::TError& error,
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+=======
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot(
+        EDbgMonSnapshotDetail detail) const override;
+>>>>>>> d628b8ca73f ([NBS-7516] Add VChunk state table to DBG monitoring (#53920))
 
 <<<<<<< HEAD
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;

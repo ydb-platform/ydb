@@ -180,7 +180,26 @@ public:
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
 
+<<<<<<< HEAD
     // Gathers per-DBG monitoring snapshots: one if dbgIndex is set, else all.
+=======
+    // Returns the chaos configuration. Must be called on the partition actor
+    // thread and copied before passing it to an asynchronous callback.
+    [[nodiscard]] const TChaosConfig& GetChaosConfig() const
+    {
+        return ChaosConfig;
+    }
+
+    // Updates node state in DBG or all DBGs. Must be called on the partition
+    // actor thread.
+    void SetNodeChaosMode(
+        ui32 nodeId,
+        std::optional<ui32> dbgIndex,
+        TChaosConfig::TChaosNodeConfig::EChaosMode mode);
+
+    // Gathers one detailed per-VChunk DBG snapshot when dbgIndex is set;
+    // otherwise gathers summary snapshots for all DBGs.
+>>>>>>> d628b8ca73f ([NBS-7516] Add VChunk state table to DBG monitoring (#53920))
     [[nodiscard]] NThreading::TFuture<TVector<TDbgSnapshot>> GatherMonSnapshots(
         std::optional<size_t> dbgIndex) const;
 

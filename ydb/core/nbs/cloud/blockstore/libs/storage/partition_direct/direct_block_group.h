@@ -303,6 +303,7 @@ public:
     // Query dump for DirectBlockGroup and VChunks.
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
 
+<<<<<<< HEAD
     // Result of the DBG's AddHost request. On success (empty error) applies the
     // new host; on failure (e.g. rejected at MaxHostCount) logs the reason.
     virtual void OnAddHostResult(
@@ -310,6 +311,11 @@ public:
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
+=======
+    // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
+    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot(
+        EDbgMonSnapshotDetail detail) const = 0;
+>>>>>>> d628b8ca73f ([NBS-7516] Add VChunk state table to DBG monitoring (#53920))
 
 <<<<<<< HEAD
     // Builds this DBG's monitoring snapshot on the executor thread (like Dump).

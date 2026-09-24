@@ -54,6 +54,38 @@ enum class EMonPage
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
 };
 
+<<<<<<< HEAD
+=======
+// How much per-vchunk detail GatherVChunkStats should collect.
+enum class EVChunkStatsDetail
+{
+    // Periodic Solomon publish: only the sum, no allocation per vchunk.
+    TotalOnly,
+    // Mon page: one row per vchunk.
+    PerVChunk,
+};
+
+// Controls whether a DBG monitoring snapshot includes its VChunk state.
+enum class EDbgMonSnapshotDetail
+{
+    // Common DBG state only, used by pages that gather every DBG.
+    Summary,
+    // Includes every VChunk config, used by one DBG's detail page.
+    PerVChunk,
+};
+
+enum class ELatencyPercentile
+{
+    P50,
+    P90,
+    P99,
+    Max,
+};
+
+// Per-vchunk row cap on the counters tab (0 = dump everything).
+constexpr size_t DefaultVChunkStatsLimit = 200;
+
+>>>>>>> d628b8ca73f ([NBS-7516] Add VChunk state table to DBG monitoring (#53920))
 struct TTabletInfo
 {
     ui64 TabletId = 0;
@@ -121,10 +153,20 @@ struct THostSnapshot
     ui64 PBufferUsedSize = 0;
 };
 
+// One VChunk's state collected for a DBG detail page.
+struct TDbgVChunkSnapshot
+{
+    TVChunkConfig Config;
+    bool Touched = false;
+    ui64 FreshBytes = 0;
+    ui64 RottenBytes = 0;
+    ui64 PBufferBytes = 0;
+};
+
 struct TDbgSnapshot
 {
     size_t Index = 0;
-    size_t VChunkCount = 0;
+    TVector<TDbgVChunkSnapshot> VChunks;
     TVector<THostSnapshot> Hosts;
 <<<<<<< HEAD
 =======

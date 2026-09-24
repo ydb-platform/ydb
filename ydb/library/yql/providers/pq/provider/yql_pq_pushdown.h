@@ -27,7 +27,7 @@ struct TCommonPushdownSettings: public NPushdown::TSettings {
             EFlag::ToStringFromStringExpressions |
             EFlag::FlatMapOverOptionals |
             EFlag::PredicateAsExpression |
-            EFlag::UnaryOperators |
+            // EFlag::UnaryOperators | // TODO: no support in connector protocol/Format/Serialize
             EFlag::StructOperators |
 
             // Type features

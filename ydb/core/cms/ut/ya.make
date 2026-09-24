@@ -9,6 +9,7 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
+    ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller
     ydb/core/testlib/default
 )
 
@@ -27,6 +28,7 @@ SRCS(
     http_dump_ut.cpp
     json_proxy_toggle_config_validator_ut.cpp
     nbs2_maintenance_cms_ut.cpp
+    nbs2_maintenance_dbsc_ut.cpp
     nbs2_maintenance_helpers.h
     nbs2_maintenance_ut.cpp
     ut_helpers.cpp

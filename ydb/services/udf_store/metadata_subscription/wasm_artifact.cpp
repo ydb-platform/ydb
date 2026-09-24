@@ -20,6 +20,10 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfWasmArtifact::GetColumnDescript
         makeCol(ObjectCodeSizeColName, "Uint64"),
         makeCol(ObjectCodeChunkCountColName, "Uint64"),
         makeCol(CompiledAtColName, "Timestamp"),
+        makeCol(CompileStatusColName, "Utf8"),
+        makeCol(CompileErrorColName, "Utf8"),
+        makeCol(CompileStartedAtColName, "Timestamp"),
+        makeCol(CompileFinishedAtColName, "Timestamp"),
     };
 }
 

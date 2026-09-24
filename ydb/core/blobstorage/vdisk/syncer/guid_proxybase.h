@@ -65,10 +65,13 @@ namespace NKikimr {
                 auto pri = NActors::NLog::PRI_ERROR;
                 if (record.GetStatus() == NKikimrProto::NOTREADY || record.GetStatus() == NKikimrProto::RACE)
                     pri = NActors::NLog::PRI_INFO;
-                LOG_LOG_THROTTLE(LogThrottler, ctx, pri, NKikimrServices::BS_SYNCER,
-                                 VDISKP(VCtx->VDiskLogPrefix,
-                                    "TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): NOT OK: msg# %s",
-                                    ev->Get()->ToString().data()));
+
+                if (LogThrottler.Kick()) {
+                    YDB_LOG_CTX_COMP(ctx, pri, NKikimrServices::BS_SYNCER,
+                        VDISKP(VCtx->VDiskLogPrefix,
+                            "TVDiskGuidProxyBase::Handle(TEvVSyncGuidResult): NOT OK: msg# %s",
+                            ev->Get()->ToString().data()));
+                }
 
                 // retry in case of error
                 Become(&TThis::StateSleep, ctx, RetryPeriod, new TEvents::TEvWakeup());

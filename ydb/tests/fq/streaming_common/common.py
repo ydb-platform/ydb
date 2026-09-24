@@ -599,6 +599,14 @@ class Kikimr:
         for section in _SECTIONS_FOR_CMS:
             config.yaml_config.pop(section, None)
 
+        # Tenant slots start before the full config reaches CMS. Keep this setting
+        # in the bootstrap config so KQP honors it for the first test queries.
+        table_service_config = full_yaml_config.get("table_service_config", {})
+        if "enable_compile_cache_warmup" in table_service_config:
+            config.yaml_config["table_service_config"] = {
+                "enable_compile_cache_warmup": table_service_config["enable_compile_cache_warmup"]
+            }
+
         self.cluster = KiKiMR(config)
         self.cluster.start(timeout_seconds=timeout_seconds)
 

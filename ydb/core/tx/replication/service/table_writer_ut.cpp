@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         auto schemaChange = env.Send<TEvWorker::TEvSchemaChange>(writer, new TEvWorker::TEvData(0, "TestSource", {
-            TRecord(1, R"({"tableChanges":[{"table":{"schemaVersion":2,"columns":{"key":"Uint32","value":"Utf8"},"primaryKeyColumnNames":["key"]}}],"ts":[1,1]})"),
+            TRecord(1, R"({"tableChanges":[{"table":{"schemaVersion":2,"columns":{"key":{"type":"Uint32"},"value":{"type":"Utf8"}},"primaryKeyColumnNames":["key"]}}],"ts":[1,1]})"),
         }));
 
         auto release = MakeHolder<TEvService::TEvSchemaChangeResult>();

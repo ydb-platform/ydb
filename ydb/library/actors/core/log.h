@@ -125,21 +125,6 @@
 #define LOG_DEBUG_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, sampleBy, stream)
 #define LOG_TRACE_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, sampleBy, stream)
 
-// Log Throttling
-#define LOG_LOG_THROTTLE(throttler, actorCtxOrSystem, priority, component, ...) \
-    do {                                                                        \
-        if ((throttler).Kick()) {                                               \
-            LOG_LOG(actorCtxOrSystem, priority, component, __VA_ARGS__);        \
-        }                                                                       \
-    } while (0) /**/
-
-#define LOG_LOG_S_THROTTLE(throttler, actorCtxOrSystem, priority, component, stream) \
-    do {                                                                             \
-        if ((throttler).Kick()) {                                                    \
-            LOG_LOG_S(actorCtxOrSystem, priority, component, stream);                \
-        }                                                                            \
-    } while (0) /**/
-
 #define TRACE_EVENT(component)                                                                                                         \
     const auto& currentTracer = component;                                                                                             \
     if (ev->HasEvent()) {                                                                                                              \

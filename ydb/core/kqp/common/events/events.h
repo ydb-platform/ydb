@@ -23,9 +23,9 @@ struct TEvKqp {
         TString SessionId;
         ui64 RequestId;
         ui64 SequenceNo;
-        TCurrentQueryStats::TSnapshot Stats;
+        TCurrentQueryStats::TPublishedSnapshot Stats;
 
-        TEvCurrentQueryStats(TString sessionId, ui64 requestId, ui64 sequenceNo, TCurrentQueryStats::TSnapshot stats)
+        TEvCurrentQueryStats(TString sessionId, ui64 requestId, ui64 sequenceNo, TCurrentQueryStats::TPublishedSnapshot stats)
             : SessionId(std::move(sessionId))
             , RequestId(requestId)
             , SequenceNo(sequenceNo)

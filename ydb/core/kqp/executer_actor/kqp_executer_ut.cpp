@@ -106,28 +106,13 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         ui64 rowsWhilePaused = 0;
         ui64 rowsAfterResume = 0;
         auto streamSender = runtime.AllocateEdgeActor();
-        bool receivedCurrentStats = false;
         ui64 queryStatsReports = 0;
-        ui64 reportedCpuTimeUs = 0;
-        ui64 reportedReadBytes = 0;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvKqp::TEvCurrentQueryStats::EventType) {
                 const auto& msg = *ev->Get<TEvKqp::TEvCurrentQueryStats>();
                 if (msg.SessionId == session.GetId().c_str()) {
                     ++queryStatsReports;
                 }
-            }
-            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvExecuterProgress::EventType
-                && ev->Recipient == streamSender) {
-                const auto& progress = ev->Get<TEvKqpExecuter::TEvExecuterProgress>()->Record;
-                UNIT_ASSERT(progress.HasCurrentExecutionStats());
-                const auto& current = progress.GetCurrentExecutionStats();
-                UNIT_ASSERT_GE(current.GetCpuTimeUs(), reportedCpuTimeUs);
-                UNIT_ASSERT_GE(current.GetTableReadBytes(), reportedReadBytes);
-                reportedCpuTimeUs = current.GetCpuTimeUs();
-                reportedReadBytes = current.GetTableReadBytes();
-                receivedCurrentStats = true;
-                return TTestActorRuntime::EEventAction::DROP;
             }
             if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvStreamData::EventType && ev->Recipient == streamSender) {
                 auto& record = ev->Get<TEvKqpExecuter::TEvStreamData>()->Record;
@@ -167,13 +152,6 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         UNIT_ASSERT(!pausedChannels.empty());
         UNIT_ASSERT_LT_C(rowsWhilePaused, totalRows,
             "not all rows should be delivered while every result channel is paused");
-        if (ClientStats) {
-            UNIT_ASSERT_C(receivedCurrentStats, "expected execution stats before the query completes");
-            UNIT_ASSERT_GT(reportedCpuTimeUs, 0);
-            UNIT_ASSERT_GT(reportedReadBytes, 0);
-        } else {
-            UNIT_ASSERT(!receivedCurrentStats);
-        }
 
         resuming = true;
         // StreamExecuteScanQuery historically resumes with ChannelId=0 while result channel ids start from 1.

@@ -84,8 +84,7 @@ public:
         , UserTraceId((ev->Get()->GetUserCtx() != nullptr && ev->Get()->GetUserCtx()->GetUserTraceId()) ? ev->Get()->GetUserCtx()->GetUserTraceId().Clone() : NWilson::TTraceId())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
-        , CurrentQueryStatsWindow(startedAt)
-        , CurrentQueryStatsInterval(ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
+        , RuntimeStats(startedAt, ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
         , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
         , RuntimeParameterSizeLimitSatisfied(runtimeParameterSizeLimit > 0)
@@ -162,7 +161,6 @@ public:
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TString QueryTextForLogging;
-    TString QueryAstForLogging;
     TKqpCompileResult::TConstPtr CompileResult;
     TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
@@ -184,18 +182,13 @@ public:
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
-    TCurrentQueryStats CurrentQueryStats;
-    TCurrentQueryStats::TSourceState CurrentExecutionStats;
-    TCurrentQueryStatsWindow CurrentQueryStatsWindow;
-    ui64 CurrentQueryStatsSequenceNo = 0;
-    bool CurrentQueryStatsPublishScheduled = false;
+    TCurrentQueryStatsPublisher RuntimeStats;
     TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     NWilson::TTraceId UserTraceId;
     TString ClientAddress;
     NActors::TMonotonic StartedAt;
-    TDuration CurrentQueryStatsInterval;
     bool CompilationRunning = false;
 
     THashMap<NKikimr::TTableId, ui64> TableVersions;
@@ -609,7 +602,6 @@ public:
     }
 
     void PrepareCurrentStatement() {
-        QueryAstForLogging.clear();
         QueryData = std::make_shared<TQueryData>(TxCtx->TxAlloc);
         PreparedQuery = {};
         CompileResult = {};

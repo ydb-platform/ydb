@@ -234,7 +234,7 @@ public:
         }
         if (const auto current = CurrentQueryStats.Get()) {
             LastCurrentStatsPublish = now;
-            Send(SessionActorId, new TEvKqpExecuter::TEvCurrentExecutionStats({TCurrentQueryStats::ToExecutionStats(*current), ++CurrentStatsSequenceNo}));
+            Send(SessionActorId, new TEvKqpExecuter::TEvCurrentExecutionStats({*current, ++CurrentStatsSequenceNo}));
         }
     }
 
@@ -255,7 +255,7 @@ public:
     void FillCurrentStats() {
         if (auto current = CurrentQueryStats.Get()) {
             current->ComputeMemoryBytes = 0;
-            ResponseEv->CurrentExecutionStats = TCurrentExecStatsReport{TCurrentQueryStats::ToExecutionStats(*current), ++CurrentStatsSequenceNo};
+            ResponseEv->CurrentExecutionStats = TCurrentExecStatsReport{*current, ++CurrentStatsSequenceNo};
         }
     }
 

@@ -1,6 +1,4 @@
 #include <ydb/core/kqp/compute_actor/kqp_scan_fetcher_actor.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
-#include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -61,16 +59,9 @@ Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
         NKikimr::NKqp::TCPULimits cpuLimits;
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         using namespace NKikimr::NKqp;
-        NScheduler::TComputeScheduler scheduler(MakeIntrusive<TKqpCounters>(counters), {});
-        NScheduler::NHdrf::NDynamic::TQueryPtr query;
-        if (Managed) {
-            scheduler.AddOrUpdateDatabase("actual-database-id", {});
-            scheduler.AddOrUpdatePool("actual-database-id", "actual-pool", {});
-            query = scheduler.AddOrUpdateQuery("actual-database-id", "actual-pool", 0, {});
-        }
         std::optional<NScheduler::NHdrf::TFullPoolId> schedulerPool;
-        if (query) {
-            schedulerPool = query->GetFullPoolId();
+        if (Managed) {
+            schedulerPool = NScheduler::NHdrf::TFullPoolId{"actual-database-id", "actual-pool"};
         }
         const auto checkCredentials = [&](const auto& record) {
             UNIT_ASSERT(record.HasTxId());

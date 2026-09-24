@@ -2,7 +2,30 @@
 
 {{ ydb-short-name }} Enterprise Manager (далее — YDB EM) поддерживает единый вход (Single Sign-On, SSO) через внешний [провайдер идентификации](https://csrc.nist.gov/glossary/term/identity_provider) (Identity Provider, IdP) по протоколу [OpenID Connect](https://openid.net/developers/how-connect-works/) (OIDC). Для работы в веб-интерфейсе YDB EM пользователь может войти с корпоративной учётной записью на странице IdP. Если у пользователя уже есть активная сессия у IdP, повторный ввод учётных данных зависит от политики провайдера.
 
-SSO в веб-интерфейсе поддерживается только в YDB EM. Встроенный веб-интерфейс кластера {{ ydb-short-name }} не поддерживает вход через SSO. При этом сервер {{ ydb-short-name }} поддерживает [аутентификацию через внешний IdP](../../security/authentication.md#external-idp) по [JWT-токенам](https://www.rfc-editor.org/rfc/rfc7519.html), переданным [Gateway](index.md#architecture), CLI или другим клиентом.
+SSO в веб-интерфейсе поддерживается с помощью YDB EM. При этом сервер {{ ydb-short-name }} поддерживает [аутентификацию через внешний IdP](../../security/authentication.md#external-idp) по [JWT-токенам](https://www.rfc-editor.org/rfc/rfc7519.html), переданным [Gateway](index.md#architecture), CLI или другим клиентом.
+
+## Компоненты SSO {#sso-components}
+
+В едином входе участвуют браузер пользователя, IdP, Gateway, служебная база данных YDB EM и кластер {{ ydb-short-name }}, к которому обращается пользователь:
+
+```mermaid
+flowchart LR
+    Browser[Браузер пользователя]
+    IdP[Внешний IdP]
+    Cluster[Кластер YDB]
+
+    subgraph YDBEM [YDB EM]
+        Gateway[Gateway]
+        Sessions[(Служебная база данных)]
+        Gateway <-->|"Хранение токенов сессии"| Sessions
+    end
+
+    Browser <-->|"Вход и cookie сессии"| Gateway
+    Browser <-->|"Аутентификация"| IdP
+    Gateway <-->|"Discovery, обмен кода и обновление токенов"| IdP
+    Gateway -->|"Запросы с Bearer-токеном"| Cluster
+    Cluster -->|"Discovery и JWKS"| IdP
+```
 
 ## Как работает SSO {#how-it-works}
 
@@ -102,7 +125,33 @@ router:
 
 ## Настройка {{ ydb-short-name }} {#configure-ydb}
 
-В конфигурации кластеров, принимающих пользовательский токен доступа от YDB EM, настройте проверку JWT-токенов по инструкции [«Конфигурация аутентификации с использованием внешнего IdP»](../../reference/configuration/auth_config.md#external-idp-auth-config). В ней приведены пример конфигурации, описание параметров и ограничения совместимости с другими способами аутентификации.
+В конфигурации кластеров, принимающих пользовательский токен доступа от YDB EM, настройте проверку JWT-токенов. Например, для кластера `prod`, который доверяет IdP из примера [настройки Gateway](#configure-gateway), добавьте следующие параметры в секцию `auth_config`:
+
+```yaml
+auth_config:
+  external_idp_config:
+    issuer: "https://idp.example.com/realms/company"
+    audience: "prod"
+    subject_claim_name: "preferred_username"
+    groups_claim_name: "groups"
+  external_idp_authentication_domain: "sso"
+  use_access_service: false
+```
+
+Настройте IdP так, чтобы токен доступа, выдаваемый клиенту `ydb-em`, содержал соответствующие поля. Пример фрагмента полезной нагрузки токена:
+
+```json
+{
+  "iss": "https://idp.example.com/realms/company",
+  "aud": ["prod"],
+  "preferred_username": "alice",
+  "groups": ["developers"]
+}
+```
+
+В этом примере `issuer` одинаков в настройках Gateway и кластера и совпадает с `iss` в токене. Значение `audience: "prod"` входит в список `aud`. Параметры `subject_claim_name` и `groups_claim_name` задают поля, из которых {{ ydb-short-name }} получает имя пользователя и его группы. С учётом домена `sso` будут сформированы SID `alice@sso` и `developers@sso`.
+
+Описание всех параметров и ограничений совместимости приведено в разделе [«Конфигурация аутентификации с использованием внешнего IdP»](../../reference/configuration/auth_config.md#external-idp-auth-config).
 
 Предоставьте пользователям или группам [права на нужные объекты](../../security/authorization.md). Успешный вход через IdP сам по себе не выдаёт права в {{ ydb-short-name }}.
 

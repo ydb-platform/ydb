@@ -242,6 +242,7 @@ ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.UnauthorizedPurger
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.EmptyTopic
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.UnauthorizedWriter
+ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteAttributesRoundTrip
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteShouldBeCharged
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteToAutopartitioningTopic
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
@@ -416,6 +417,7 @@ ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgrad
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-1-False]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-1-True]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_prestable-26-4-1_and_stable-26-3-1]
+ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_prestable-26-4-1_and_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_prestable-26-4-1_and_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_stable-26-3-1]

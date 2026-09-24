@@ -59,8 +59,7 @@ void TTxSetDown::Complete(const TActorContext& ctx) {
     YDB_LOG_DEBUG("THive::TTxSetDown::Complete setting node down state",
         {"logPrefix", GetLogPrefix()},
         {"nodeId", NodeId},
-        {"down", Down},
-        {"sideEffects", SideEffects});
+        {"down", Down});
     SideEffects.Complete(ctx);
 }
 

@@ -44,17 +44,6 @@ bool TProtoseqSplitter::Split(TStringBuf chunk, TVector<TStringBuf>* frames) con
 
     while (!buf.empty()) {
         TStringBuf frame;
-        if (TryUnpackFrame(buf, frame)) {
-            frames->push_back(frame);
-            continue;
-        }
-
-        // Recovery like NFraming::TUnpacker: jump past a syncword and retry.
-        const size_t signStart = buf.find(SyncWord_);
-        if (signStart == TStringBuf::npos) {
-            return false;
-        }
-        buf.Skip(signStart + SyncWord_.size());
         if (!TryUnpackFrame(buf, frame)) {
             return false;
         }

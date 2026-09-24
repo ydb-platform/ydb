@@ -161,6 +161,7 @@ public:
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TString QueryTextForLogging;
+    TString QueryAstForLogging;
     TKqpCompileResult::TConstPtr CompileResult;
     TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
@@ -602,6 +603,7 @@ public:
     }
 
     void PrepareCurrentStatement() {
+        QueryAstForLogging.clear();
         QueryData = std::make_shared<TQueryData>(TxCtx->TxAlloc);
         PreparedQuery = {};
         CompileResult = {};

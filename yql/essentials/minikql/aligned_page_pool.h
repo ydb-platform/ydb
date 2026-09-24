@@ -54,6 +54,11 @@ public:
     void* Mmap(size_t size);
     int Munmap(void* addr, size_t size) noexcept;
 
+    // Tells the OS whether the content of the region is still needed. The memory is returned to the OS
+    // for `needed == false` and is prepared for the further usage otherwise. Unlike `Munmap()` the region
+    // stays mapped in both cases, so its address space may be reused without a new `Mmap()` call.
+    int Madvise(void* addr, size_t size, bool needed) noexcept;
+
     static TSystemMmap& GetInstance();
 };
 
@@ -61,9 +66,11 @@ class TFakeMmap {
 public:
     std::function<void*(size_t size)> OnMmap;
     std::function<void(void* addr, size_t size)> OnMunmap;
+    std::function<void(void* addr, size_t size, bool needed)> OnMadvise;
 
     void* Mmap(size_t size);
     int Munmap(void* addr, size_t size) noexcept;
+    int Madvise(void* addr, size_t size, bool needed) noexcept;
 
     static TFakeMmap& GetInstance();
 };

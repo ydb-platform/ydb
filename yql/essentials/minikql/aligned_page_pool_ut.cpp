@@ -3,7 +3,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/info.h>
+#include <yql/essentials/public/udf/sanitizer_utils.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
+
+#include <cstring>
 
 namespace NKikimr::NMiniKQL {
 
@@ -20,13 +23,27 @@ public:
         }
     };
 
+    struct TMadviseEntry {
+        void* Addr;
+        size_t Size;
+        bool Needed;
+        bool operator==(const TMadviseEntry& rhs) const {
+            return std::tie(Addr, Size, Needed) == std::tie(rhs.Addr, rhs.Size, rhs.Needed);
+        }
+    };
+
     explicit TScopedMemoryMapper(bool aligned) {
         Aligned_ = aligned;
         TFakeMmap::GetInstance().OnMunmap = [this](void* addr, size_t s) {
             Munmaps_.push_back({addr, s});
         };
 
+        TFakeMmap::GetInstance().OnMadvise = [this](void* addr, size_t s, bool needed) {
+            Madvises_.push_back({addr, s, needed});
+        };
+
         TFakeMmap::GetInstance().OnMmap = [this](size_t size) -> void* {
+            ++Mmaps_;
             // Allocate more memory to ensure we have enough space for alignment
             Storage_ = THolder<char, TDeleteArray>(new char[AlignUp(size + EXTRA_SPACE_FOR_UNALIGNMENT, TAlignedPagePool::POOL_PAGE_SIZE)]);
             UNIT_ASSERT(Storage_.Get());
@@ -45,12 +62,17 @@ public:
 
     ~TScopedMemoryMapper() {
         TFakeMmap::GetInstance().OnMunmap = {};
+        TFakeMmap::GetInstance().OnMadvise = {};
         TFakeMmap::GetInstance().OnMmap = {};
         Storage_.Reset();
     }
 
     void* PointerToAlignedMemory() {
         return AlignUp(Storage_.Get(), TAlignedPagePool::POOL_PAGE_SIZE);
+    }
+
+    size_t MmapsSize() {
+        return Mmaps_;
     }
 
     size_t MunmapsSize() {
@@ -61,9 +83,19 @@ public:
         return Munmaps_[i];
     }
 
+    size_t MadvisesSize() {
+        return Madvises_.size();
+    }
+
+    TMadviseEntry Madvises(size_t i) {
+        return Madvises_[i];
+    }
+
 private:
     THolder<char, TDeleteArray> Storage_;
+    size_t Mmaps_ = 0;
     std::vector<TUnmapEntry> Munmaps_;
+    std::vector<TMadviseEntry> Madvises_;
     bool Aligned_;
 };
 
@@ -145,6 +177,84 @@ Y_UNIT_TEST(UnalignedMmapUnalignedSize) {
     UNIT_ASSERT_VALUES_EQUAL(alloc.GetFreePageCount(), TAlignedPagePool::ALLOC_AHEAD_PAGES - 2);
 
     UNIT_ASSERT_VALUES_EQUAL(alloc.GetAllocated(), size + (TAlignedPagePool::ALLOC_AHEAD_PAGES - 2) * TAlignedPagePool::POOL_PAGE_SIZE);
+}
+
+Y_UNIT_TEST(FreedPagesAreReservedAndReused) {
+    TAlignedPagePoolImpl<TFakeMmap>::ResetGlobalsUT();
+    TScopedMemoryMapper mmapper(/*aligned=*/true);
+
+    const auto size = TAlignedPagePool::POOL_PAGE_SIZE;
+    const auto pages = TAlignedPagePool::ALLOC_AHEAD_PAGES + 1;
+
+    {
+        TAlignedPagePoolImpl<TFakeMmap> alloc(__LOCATION__);
+        auto* block = alloc.GetBlock(size);
+        alloc.ReturnBlock(block, size);
+    }
+
+    // The whole mapped region is cached in the global pool now.
+    UNIT_ASSERT_VALUES_EQUAL(1, mmapper.MmapsSize());
+    UNIT_ASSERT_VALUES_EQUAL(0, mmapper.MunmapsSize());
+    UNIT_ASSERT_VALUES_EQUAL(0, mmapper.MadvisesSize());
+    UNIT_ASSERT_VALUES_EQUAL(pages * size, TAlignedPagePoolImpl<TFakeMmap>::GetGlobalPagePoolSize());
+
+    const i64 mmappedBefore = GetTotalMmapedBytes<TFakeMmap>();
+
+    // Cleanup gives the memory back to the OS, but keeps the address space reserved.
+    TAlignedPagePoolImpl<TFakeMmap>::DoCleanupGlobalFreeList(0);
+
+    UNIT_ASSERT_VALUES_EQUAL(0, mmapper.MunmapsSize());
+    UNIT_ASSERT_VALUES_EQUAL(pages, mmapper.MadvisesSize());
+    for (size_t i = 0; i < pages; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(size, mmapper.Madvises(i).Size);
+        UNIT_ASSERT(!mmapper.Madvises(i).Needed);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(0, TAlignedPagePoolImpl<TFakeMmap>::GetGlobalPagePoolSize());
+    UNIT_ASSERT_VALUES_EQUAL(mmappedBefore - i64(pages * size), GetTotalMmapedBytes<TFakeMmap>());
+
+    // The reserved address space is reused instead of mapping a new region.
+    {
+        TAlignedPagePoolImpl<TFakeMmap> alloc(__LOCATION__);
+        auto* block = alloc.GetBlock(size);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, mmapper.MmapsSize());
+        UNIT_ASSERT_VALUES_EQUAL(pages + 1, mmapper.MadvisesSize());
+        UNIT_ASSERT_VALUES_EQUAL(block, mmapper.Madvises(pages).Addr);
+        UNIT_ASSERT(mmapper.Madvises(pages).Needed);
+        UNIT_ASSERT_VALUES_EQUAL(mmappedBefore - i64((pages - 1) * size), GetTotalMmapedBytes<TFakeMmap>());
+
+        alloc.ReturnBlock(block, size);
+    }
+}
+
+Y_UNIT_TEST(ReservedPagesAreReusableAfterCleanup) {
+    TAlignedPagePool::ResetGlobalsUT();
+
+    const auto size = 1024 * TAlignedPagePool::POOL_PAGE_SIZE;
+
+    void* first = nullptr;
+    {
+        TAlignedPagePoolImpl alloc(__LOCATION__);
+        first = alloc.GetBlock(size);
+        NYql::NUdf::SanitizerMakeRegionAccessible(first, size);
+        memset(first, 0x42, size);
+        alloc.ReturnBlock(first, size);
+    }
+    UNIT_ASSERT(TAlignedPagePool::GetGlobalPagePoolSize() >= size);
+
+    // The cached pages are given back to the OS, but their address space is kept for the reuse.
+    TAlignedPagePool::DoCleanupGlobalFreeList(0);
+    UNIT_ASSERT_VALUES_EQUAL(0, TAlignedPagePool::GetGlobalPagePoolSize());
+
+    {
+        TAlignedPagePoolImpl alloc(__LOCATION__);
+        auto* block = alloc.GetBlock(size);
+        UNIT_ASSERT_VALUES_EQUAL(first, block);
+
+        NYql::NUdf::SanitizerMakeRegionAccessible(block, size);
+        memset(block, 0x24, size);
+        alloc.ReturnBlock(block, size);
+    }
 }
 
 Y_UNIT_TEST(YellowZoneSwitchesCorrectlyBlock) {

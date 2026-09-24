@@ -397,7 +397,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reservation
     TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason,
-            bool forHousekeeping = false);
+            bool forHousekeeping = false, bool consumesFreshHold = false, bool allowBlackOvercommit = false);
     void ChunkReserve(TChunkReserve &evChunkReserve);
     bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, bool isDDisk, TStringStream& outErrorReason);
     void ChunkForget(TChunkForget &evChunkForget);

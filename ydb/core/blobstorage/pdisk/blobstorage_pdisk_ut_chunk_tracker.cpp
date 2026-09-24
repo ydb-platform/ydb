@@ -871,6 +871,32 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
             chunkTracker.EstimateSpaceColor(owner, hard - cyanQuota - 1, &occupancy), TColor::GREEN);
     }
 
+    Y_UNIT_TEST(FreshDebtIsHeldPerOwner) {
+        using namespace NPDisk;
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 265,
+            .ExpectedOwnerCount = 2,
+        };
+        TString errorReason;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
+        chunkTracker.AddOwner(101, DynamicVDiskId());
+        chunkTracker.AddOwner(102, DynamicVDiskId());
+
+        chunkTracker.SetFreshDebt(101, 4);
+        chunkTracker.SetFreshDebt(102, 1);
+        UNIT_ASSERT_VALUES_EQUAL(chunkTracker.TotalFreshDebt(), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(chunkTracker.GetFreshDebt(101), 4u);
+
+        chunkTracker.ConsumeFreshDebt(101, 3);
+        UNIT_ASSERT_VALUES_EQUAL(chunkTracker.GetFreshDebt(101), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(chunkTracker.TotalFreshDebt(), 2u);
+
+        chunkTracker.SetFreshDebt(101, 0);
+        UNIT_ASSERT_VALUES_EQUAL(chunkTracker.GetFreshDebt(101), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(chunkTracker.TotalFreshDebt(), 1u);
+    }
+
 }
 
 #undef UNIT_ASSERT_EQUAL_X

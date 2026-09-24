@@ -54,7 +54,8 @@ namespace NKikimr {
                     // Every job that writes chunks has to say how many, so the compaction
                     // broker can hand out the shared pool instead of letting each VDisk
                     // guess at it. A strategy that knows better fills this in itself.
-                    Task->Forecast = TUtils::ForecastCompactSsts(Task->CompactSsts, HullCtx->ChunkSize);
+                    Task->Forecast = TUtils::ForecastCompactSsts(Task->CompactSsts, HullCtx->ChunkSize,
+                        Params.AppendBlockSize, Params.StripeSstBytes);
                 }
                 return action;
             }

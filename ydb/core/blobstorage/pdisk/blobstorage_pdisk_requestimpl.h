@@ -198,11 +198,12 @@ public:
 //
 class TCheckSpace : public TRequestBase {
 public:
+    ui32 FreshDebtChunks = 0;
+
     TCheckSpace(const NPDisk::TEvCheckSpace &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::CheckSpace, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
-    {
-        Y_UNUSED(ev);
-    }
+        , FreshDebtChunks(ev.FreshDebtChunks)
+    {}
 
     ERequestType GetType() const override {
         return ERequestType::RequestCheckSpace;
@@ -757,12 +758,16 @@ public:
     ui32 SizeChunks;
     bool ForHousekeeping;
     bool IsDDisk;
+    bool ConsumesFreshHold;
+    bool AllowBlackOvercommit;
 
     TChunkReserve(const NPDisk::TEvChunkReserve &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkReserve, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
         , SizeChunks(ev.SizeChunks)
         , ForHousekeeping(ev.ForHousekeeping)
         , IsDDisk(ev.IsDDisk)
+        , ConsumesFreshHold(ev.ConsumesFreshHold)
+        , AllowBlackOvercommit(ev.AllowBlackOvercommit)
     {}
 
     ERequestType GetType() const override {

@@ -2,6 +2,8 @@
 #include "hulldb_compstrat_emergency.h"
 #include "hulldb_compstrat_explicit.h"
 #include "hulldb_compstrat_ratio.h"
+#include "hulldb_compstrat_space.h"
+#include "hulldb_compstrat_squeeze.h"
 #include <util/stream/null.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/test/testhull_index.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_ut.h>
@@ -22,6 +24,8 @@ namespace NKikimr {
         using TStrategy = ::NKikimr::NHullComp::TStrategy<TKeyLogoBlob, TMemRecLogoBlob>;
         using TStrategyEmergency = ::NKikimr::NHullComp::TStrategyEmergency<TKeyLogoBlob, TMemRecLogoBlob>;
         using TStrategyExplicit = ::NKikimr::NHullComp::TStrategyExplicit<TKeyLogoBlob, TMemRecLogoBlob>;
+        using TStrategyFreeSpace = ::NKikimr::NHullComp::TStrategyFreeSpace<TKeyLogoBlob, TMemRecLogoBlob>;
+        using TStrategySqueeze = ::NKikimr::NHullComp::TStrategySqueeze<TKeyLogoBlob, TMemRecLogoBlob>;
         using TTask = ::NKikimr::NHullComp::TTask<TKeyLogoBlob, TMemRecLogoBlob>;
         using TUtils = ::NKikimr::NHullComp::TUtils<TKeyLogoBlob, TMemRecLogoBlob>;
         using TLeveledSstsIterator = TLeveledSsts<TKeyLogoBlob, TMemRecLogoBlob>::TIterator;
@@ -364,8 +368,93 @@ namespace NKikimr {
             AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::DelSst);
         }
 
-        // Whatever picked the job, it has to say what it will cost: that number is what a
-        // later admission step can hand out, and what the job can reserve from PDisk.
+        // An sst whose huge data is mostly garbage, so TStrategyFreeSpace wants to squeeze
+        // it, and whose surviving index/inplaced data needs `outputChunks` chunks to write.
+        NHullComp::TSstRatioPtr SqueezableRatio(ui64 keepBytes, ui64 hugeGarbage) {
+            auto ratio = MakeIntrusive<NHullComp::TSstRatio>();
+            ratio->IndexItemsTotal = 1;
+            ratio->IndexItemsKeep = 1;
+            ratio->InplacedDataTotal = keepBytes;
+            ratio->InplacedDataKeep = keepBytes;
+            ratio->HugeDataTotal = hugeGarbage;
+            ratio->HugeDataKeep = 0;
+            return ratio;
+        }
+
+        // TStrategyFreeSpace used to be the one ActCompactSsts producer that ignored the
+        // budget entirely: it would start a job whose output the VDisk was never going to be
+        // allowed to allocate, which aborts and gets reselected for ever.
+        Y_UNIT_TEST(FreeSpaceYieldsWhenOutputDoesNotFitTheBudget) {
+            TSynthHull hull(17);
+            const ui64 chunkSize = hull.Ctx.GetHullCtx()->ChunkSize;
+            hull.PutLevel(hull.LastLevelIdx(),
+                hull.MakeSst(1, 1, 1, 10, 100, SqueezableRatio(2 * chunkSize, 3 * chunkSize)));
+
+            auto snap = hull.Ds->GetIndexSnapshot();
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, TInstant::Seconds(0), {}};
+            params.FreeChunksBudget = 1;
+
+            TTask task;
+            TStrategyFreeSpace tight(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
+            AssertAction(tight.Select(), NHullComp::ActNothing);
+        }
+
+        Y_UNIT_TEST(FreeSpaceSqueezesWhenTheBudgetAllowsIt) {
+            TSynthHull hull(17);
+            const ui64 chunkSize = hull.Ctx.GetHullCtx()->ChunkSize;
+            hull.PutLevel(hull.LastLevelIdx(),
+                hull.MakeSst(1, 1, 1, 10, 100, SqueezableRatio(2 * chunkSize, 3 * chunkSize)));
+
+            auto snap = hull.Ds->GetIndexSnapshot();
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, TInstant::Seconds(0), {}};
+            params.FreeChunksBudget = Max<ui32>();
+
+            TTask task;
+            TStrategyFreeSpace roomy(snap.HullCtx, params, snap.LogoBlobsSnap, &task);
+            AssertAction(roomy.Select(), NHullComp::ActCompactSsts);
+            UNIT_ASSERT_VALUES_EQUAL(CountSstsToDelete(task), 1u);
+        }
+
+        // Same gap in the squeeze strategy, except that it may skip an sst that does not fit
+        // and keep looking: a smaller stale one further down the scan may still fit.
+        Y_UNIT_TEST(SqueezeSkipsSstsThatDoNotFitTheBudget) {
+            TSynthHull hull(17);
+            const ui64 chunkSize = hull.Ctx.GetHullCtx()->ChunkSize;
+            hull.PutLevel(hull.LastLevelIdx(), hull.MakeSst(1, 1, 1, 10, 100, hull.KeepRatio(3 * chunkSize)));
+            hull.PutLevel(hull.LastLevelIdx(), hull.MakeSst(1, 2, 2, 11, 100, hull.KeepRatio(chunkSize / 4)));
+
+            auto snap = hull.Ds->GetIndexSnapshot();
+            const TInstant squeezeBefore = TInstant::Seconds(1);
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, squeezeBefore, {}};
+            params.FreeChunksBudget = 1;
+
+            TTask task;
+            TStrategySqueeze squeeze(snap.HullCtx, params, snap.LogoBlobsSnap, &task, squeezeBefore);
+            AssertAction(squeeze.Select(), NHullComp::ActCompactSsts);
+            // The big one was skipped; the small one was taken.
+            UNIT_ASSERT_VALUES_EQUAL(CountSstsToDelete(task), 1u);
+            TLeveledSstsIterator it(&task.GetSstsToDelete());
+            it.SeekToFirst();
+            UNIT_ASSERT_VALUES_EQUAL(it.Get().SstPtr->AllChunks.front(), 11u);
+        }
+
+        Y_UNIT_TEST(SqueezeYieldsWhenNothingFitsTheBudget) {
+            TSynthHull hull(17);
+            const ui64 chunkSize = hull.Ctx.GetHullCtx()->ChunkSize;
+            hull.PutLevel(hull.LastLevelIdx(), hull.MakeSst(1, 1, 1, 10, 100, hull.KeepRatio(3 * chunkSize)));
+
+            auto snap = hull.Ds->GetIndexSnapshot();
+            const TInstant squeezeBefore = TInstant::Seconds(1);
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, squeezeBefore, {}};
+            params.FreeChunksBudget = 1;
+
+            TTask task;
+            TStrategySqueeze squeeze(snap.HullCtx, params, snap.LogoBlobsSnap, &task, squeezeBefore);
+            AssertAction(squeeze.Select(), NHullComp::ActNothing);
+        }
+
+        // Whatever picked the job, it has to say what it will cost: that number is what the
+        // compaction broker hands out and what the job then reserves from PDisk.
         Y_UNIT_TEST(EmergencyPublishesItsMeasuredForecast) {
             TSynthHull hull(17);
             const ui64 keep = hull.Ctx.GetHullCtx()->ChunkSize / 3;
@@ -402,8 +491,8 @@ namespace NKikimr {
             UNIT_ASSERT(task.Forecast.Valid);
             UNIT_ASSERT_VALUES_EQUAL(task.Forecast.InputChunks, CountSstsToDelete(task));
             UNIT_ASSERT(task.Forecast.OutputChunks >= 1);
-            // The selection already trimmed itself to the budget, so the forecast does not
-            // ask for more than that budget.
+            // The selection already trimmed itself to the budget, so what it asks the broker
+            // for is something the broker can actually back.
             UNIT_ASSERT(task.Forecast.OutputChunks <= params.FreeChunksBudget);
         }
 
@@ -424,6 +513,211 @@ namespace NKikimr {
             const ui32 usable = 4096 - sizeof(TIdxDiskPlaceHolder);
             UNIT_ASSERT(TUtils::EstimateOutputChunks(usable, 4096) >= 1);
             UNIT_ASSERT(TUtils::EstimateOutputChunks(usable * 2, 4096) >= 2);
+        }
+
+        // Same packing as EstimateOutputStripeBlocks: 10% slack, one placeholder per stripe,
+        // each stripe aligned up to an append block.
+        ui32 ExpectedStripeBlocks(ui64 keepBytes, ui32 append, ui32 maxStripe) {
+            const ui32 capacity = static_cast<ui32>(
+                (ui64(maxStripe) + append - 1) / append * append);
+            const ui32 suffix = sizeof(TIdxDiskPlaceHolder);
+            const ui32 usable = capacity > suffix ? capacity - suffix : 0;
+            const ui64 withSlack = keepBytes + keepBytes / 10;
+            ui32 blocks = 0;
+            ui64 left = withSlack;
+            while (left) {
+                const ui64 piece = Min<ui64>(left, usable);
+                blocks += static_cast<ui32>((piece + suffix + append - 1) / append);
+                left -= piece;
+            }
+            return blocks;
+        }
+
+        using TBlockUtils = ::NKikimr::NHullComp::TUtils<TKeyBlock, TMemRecBlock>;
+        using TBlockTask = ::NKikimr::NHullComp::TTask<TKeyBlock, TMemRecBlock>;
+
+        TBlocksSstPtr MakeBareSst(TSynthHull &hull, ui32 idxBytes) {
+            auto sst = MakeIntrusive<TBlocksSst>(hull.Ctx.GetVCtx());
+            sst->Info.IdxTotalSize = idxBytes;
+            sst->Info.Chunks = 1;
+            sst->Info.Items = 1;
+            sst->Info.FirstLsn = 1;
+            sst->Info.LastLsn = 1;
+            return sst;
+        }
+
+        // A stripe SST shares its chunk. The forecast must release the extent, in
+        // append blocks, and must not promise the chunk back.
+        Y_UNIT_TEST(StripeInputReleasesBlocksNotTheChunk) {
+            TSynthHull hull(1);
+            const ui32 append = 4096;
+            auto chunkSst = MakeBareSst(hull, 100);
+            chunkSst->AllChunks.push_back(3);
+
+            auto stripeSst = MakeBareSst(hull, 100);
+            stripeSst->AllChunks.push_back(7);
+            stripeSst->HeapStripe = TDiskPart(7, append, append * 2 + 10);
+
+            TBlockTask task;
+            task.CompactSsts.PushOneSst(1, chunkSst);
+            task.CompactSsts.PushOneSst(1, stripeSst);
+
+            const auto forecast = TBlockUtils::ForecastCompactSsts(task.CompactSsts, ChunkSize, append, 0);
+            UNIT_ASSERT(forecast.Valid);
+            UNIT_ASSERT_VALUES_EQUAL(forecast.InputChunks, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(forecast.StripeBlocksReleased, 3u);
+            UNIT_ASSERT(forecast.OutputChunks >= 1);
+            UNIT_ASSERT_VALUES_EQUAL(forecast.StripeBlocksAllocated, 0u);
+
+            // No append block size: the extent still is not an exclusive chunk, and
+            // the block count stays unknown rather than a guessed 1.
+            const auto unknown = TBlockUtils::ForecastCompactSsts(task.CompactSsts, ChunkSize, 0, 0);
+            UNIT_ASSERT_VALUES_EQUAL(unknown.InputChunks, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(unknown.StripeBlocksReleased, 0u);
+        }
+
+        Y_UNIT_TEST(StripeReleaseRoundsUpToAppendBlock) {
+            UNIT_ASSERT_VALUES_EQUAL(TBlockUtils::SstReleasedStripeBlocks(
+                *MakeIntrusive<TBlocksSst>(TTestContexts().GetVCtx()), 4096), 0u);
+
+            TSynthHull hull(1);
+            auto exact = MakeBareSst(hull, 1);
+            exact->HeapStripe = TDiskPart(1, 0, 8192);
+            UNIT_ASSERT_VALUES_EQUAL(TBlockUtils::SstReleasedStripeBlocks(*exact, 4096), 2u);
+
+            auto over = MakeBareSst(hull, 1);
+            over->HeapStripe = TDiskPart(1, 0, 8193);
+            UNIT_ASSERT_VALUES_EQUAL(TBlockUtils::SstReleasedStripeBlocks(*over, 4096), 3u);
+        }
+
+        // Blocks/Barriers output goes into the stripe heap. LogoBlobs do not, even if
+        // a stripe size is passed in.
+        Y_UNIT_TEST(StripeOutputIsBlocksForBlocksAndChunksForLogoBlobs) {
+            TSynthHull hull(1);
+            const ui32 append = 128;
+            const ui32 maxStripe = 1u << 20;
+            const ui32 keep = 100;
+            auto sst = MakeBareSst(hull, keep);
+            sst->AllChunks.push_back(4);
+            sst->HeapStripe = TDiskPart(4, 0, append); // one block in
+
+            TBlockTask task;
+            task.CompactSsts.PushOneSst(1, sst);
+            const auto striped = TBlockUtils::ForecastCompactSsts(task.CompactSsts, ChunkSize, append, maxStripe);
+            UNIT_ASSERT_VALUES_EQUAL(striped.OutputChunks, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(striped.InputChunks, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(striped.StripeBlocksReleased, 1u);
+            // 110 bytes of slack plus the placeholder is more than one 128-byte block
+            // and less than two, so a missing placeholder or a missed round-up shows up.
+            const ui64 written = ui64(keep + keep / 10) + sizeof(TIdxDiskPlaceHolder);
+            UNIT_ASSERT(written > append && written <= append * 2);
+            UNIT_ASSERT_VALUES_EQUAL(striped.StripeBlocksAllocated, (written + append - 1) / append);
+
+            // Larger than one stripe: several extents, still no exclusive chunk.
+            const ui32 tinyStripe = append * 4;
+            const ui32 manyKeep = 4000;
+            const ui32 many = ExpectedStripeBlocks(manyKeep, append, tinyStripe);
+            UNIT_ASSERT(many > tinyStripe / append);
+            auto fat = MakeBareSst(hull, manyKeep);
+            fat->HeapStripe = TDiskPart(4, 0, append);
+            TBlockTask fatTask;
+            fatTask.CompactSsts.PushOneSst(1, fat);
+            const auto splitForecast = TBlockUtils::ForecastCompactSsts(
+                fatTask.CompactSsts, ChunkSize, append, tinyStripe);
+            UNIT_ASSERT_VALUES_EQUAL(splitForecast.OutputChunks, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(splitForecast.StripeBlocksAllocated, many);
+            UNIT_ASSERT_VALUES_EQUAL(splitForecast.StripeBlocksReleased, 1u);
+
+            TTask logoTask;
+            auto logo = hull.MakeSst(1, 1, 1, 9, 100, hull.KeepRatio(keep));
+            logo->HeapStripe = TDiskPart(9, 0, append * 3);
+            logoTask.CompactSsts.PushOneSst(1, logo);
+            const auto logoForecast = TUtils::ForecastCompactSsts(logoTask.CompactSsts, ChunkSize, append, maxStripe);
+            UNIT_ASSERT(logoForecast.OutputChunks >= 1);
+            UNIT_ASSERT_VALUES_EQUAL(logoForecast.StripeBlocksAllocated, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(logoForecast.InputChunks, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(logoForecast.StripeBlocksReleased, 3u);
+        }
+
+        // The selector publishes the stripe numbers, and a job that only writes a
+        // stripe is not refused for lack of exclusive chunks.
+        Y_UNIT_TEST(BlocksJobForecastLivesInTheStripe) {
+            TSynthHull hull(17);
+            for (ui32 i = 0; i < 17; ++i) {
+                hull.Ds->Blocks->CurSlice->SortedLevels.push_back(
+                    TSortedLevel<TKeyBlock, TMemRecBlock>(TKeyBlock()));
+            }
+            const ui32 append = 4096;
+            auto sst = MakeBareSst(hull, 100);
+            TTrackableVector<TBlocksSst::TRec> index(TMemoryConsumer(hull.Ctx.GetVCtx()->SstIndex));
+            index.emplace_back(TKeyBlock(1), TMemRecBlock(1));
+            sst->LoadedIndex = std::move(index);
+            sst->AssignedSstId = 42;
+            sst->AllChunks.push_back(7);
+            sst->HeapStripe = TDiskPart(7, 0, append * 2);
+            auto &level = hull.Ds->Blocks->CurSlice->SortedLevels[hull.Ds->Blocks->CurSlice->SortedLevels.size() - 1];
+            level.Put(sst);
+
+            auto snap = hull.Ds->GetIndexSnapshot();
+            THashSet<ui64> ids{42};
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, TInstant::Seconds(0),
+                NHullComp::TFullCompactionAttrs(1, TInstant::Seconds(0), ids)};
+            params.FreeChunksBudget = 0;
+            params.AppendBlockSize = append;
+            params.StripeSstBytes = 1u << 20;
+
+            using TBlockStrategy = ::NKikimr::NHullComp::TStrategy<TKeyBlock, TMemRecBlock>;
+            TBlockTask task;
+            TBlockStrategy strategy(snap.HullCtx, params, std::move(snap.BlocksSnap), std::move(snap.BarriersSnap),
+                &task, true);
+            AssertAction(strategy.Select(), NHullComp::ActCompactSsts);
+            UNIT_ASSERT(task.Forecast.Valid);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.InputChunks, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.OutputChunks, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.StripeBlocksReleased, 2u);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.StripeBlocksAllocated, ExpectedStripeBlocks(100, append, 1u << 20));
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.StripeBlocksAllocated, 1u);
+
+            // Allocator off: the same SST is rewritten into an exclusive chunk, which
+            // a zero budget cannot pay for, so the job is not started.
+            params.StripeSstBytes = 0;
+            auto snap2 = hull.Ds->GetIndexSnapshot();
+            TBlockTask chunkTask;
+            TBlockStrategy chunkStrategy(snap2.HullCtx, params, std::move(snap2.BlocksSnap),
+                std::move(snap2.BarriersSnap), &chunkTask, true);
+            AssertAction(chunkStrategy.Select(), NHullComp::ActNothing);
+            UNIT_ASSERT(!chunkTask.Forecast.Valid);
+        }
+
+        // Emergency measures the candidate itself. A stripe SST in that set must
+        // show up as released blocks, not as another input chunk.
+        Y_UNIT_TEST(EmergencyForecastSplitsStripeFromChunks) {
+            TSynthHull hull(17);
+            const ui32 append = 4096;
+            const ui64 keep = hull.Ctx.GetHullCtx()->ChunkSize / 3;
+            hull.PutLevel(hull.LastLevelIdx(), hull.MakeSst(1, 1, 1, 10, 100, hull.KeepRatio(keep)));
+            auto stripe = hull.MakeSst(1, 2, 2, 11, 100, hull.KeepRatio(1000));
+            stripe->HeapStripe = TDiskPart(11, 0, append * 3);
+            hull.PutLevel(hull.LastLevelIdx(), stripe);
+            hull.PutLevel(hull.LastLevelIdx(), hull.MakeSst(1, 3, 3, 12, 100, hull.KeepRatio(keep)));
+
+            auto snap = hull.Ds->GetIndexSnapshot();
+            TTask task;
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, TInstant::Seconds(0), {}};
+            params.FreeChunksBudget = 1;
+            params.EmergencyMode = true;
+            params.AppendBlockSize = append;
+
+            TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
+                &task, true);
+            AssertAction(strategy.Select(), NHullComp::ActCompactSsts);
+            AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Emergency);
+            UNIT_ASSERT(task.Forecast.Valid);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.InputChunks, 2u);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.OutputChunks, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.StripeBlocksReleased, 3u);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.StripeBlocksAllocated, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.NetChunks(), 1);
         }
     }
 

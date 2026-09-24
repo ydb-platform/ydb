@@ -875,12 +875,22 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
     bool ForHousekeeping;
     // DDisk waits for a terminal reply even when PDisk stops with this request queued.
     bool IsDDisk = false;
+    // This reserve is the Fresh compaction spending the debt it declared. It is not
+    // blocked by that debt; other housekeeping reserves are.
+    bool ConsumesFreshHold = false;
+    // Blocks and Barriers compaction. A few chunks may be taken after the disk is
+    // already black, so the recovery log can still be cut. Physical free chunks
+    // are still required.
+    bool AllowBlackOvercommit = false;
 
-    TEvChunkReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks, bool forHousekeeping = false)
+    TEvChunkReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks, bool forHousekeeping = false,
+            bool consumesFreshHold = false, bool allowBlackOvercommit = false)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , SizeChunks(sizeChunks)
         , ForHousekeeping(forHousekeeping)
+        , ConsumesFreshHold(consumesFreshHold)
+        , AllowBlackOvercommit(allowBlackOvercommit)
     {}
 
     TString ToString() const {
@@ -893,6 +903,8 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
         str << " ownerRound# " << record.OwnerRound;
         str << " SizeChunks# " << record.SizeChunks;
         str << " ForHousekeeping# " << record.ForHousekeeping;
+        str << " ConsumesFreshHold# " << record.ConsumesFreshHold;
+        str << " AllowBlackOvercommit# " << record.AllowBlackOvercommit;
         str << "}";
         return str.Str();
     }
@@ -1549,16 +1561,21 @@ struct TEvSlayResult : TEventLocal<TEvSlayResult, TEvBlobStorage::EvSlayResult> 
 struct TEvCheckSpace : TEventLocal<TEvCheckSpace, TEvBlobStorage::EvCheckSpace> {
     TOwner Owner;
     TOwnerRound OwnerRound;
+    // Chunks this owner's Fresh data will turn into. PDisk holds them back from
+    // level-compaction reserves until Fresh compaction takes them.
+    ui32 FreshDebtChunks = 0;
 
-    TEvCheckSpace(TOwner owner, TOwnerRound ownerRound)
+    TEvCheckSpace(TOwner owner, TOwnerRound ownerRound, ui32 freshDebtChunks = 0)
         : Owner(owner)
         , OwnerRound(ownerRound)
+        , FreshDebtChunks(freshDebtChunks)
     {}
 
     TString ToString() const {
         TStringStream str;
         str << "{TEvCheckSpace ownerId# " << (ui32)Owner;
         str << " ownerRound# " << OwnerRound;
+        str << " FreshDebtChunks# " << FreshDebtChunks;
         str << "}";
         return str.Str();
     }

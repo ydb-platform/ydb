@@ -100,6 +100,9 @@ namespace NKikimr {
         // Update NodeWarden with current VDisk rank
         ////////////////////////////////////////////////////////////////////////
         void UpdateWhiteboard(const TActorContext &ctx) {
+            // The space poll sends this to PDisk, which holds it back from level compactions.
+            VCtx->GetOutOfSpaceState().PublishFreshDebtChunks(
+                ui32(Min<ui64>(ProjectFreshChunks(0), Max<ui32>())));
             // satisfaction rank
             NKikimrWhiteboard::TVDiskSatisfactionRank satisfactionRank;
             TOverloadHandler::ToWhiteboard(OverloadHandler.get(), satisfactionRank);

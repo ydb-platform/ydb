@@ -1477,7 +1477,7 @@ void TPDisk::ChunkUnlock(TChunkUnlock &evChunkUnlock) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason,
-        bool forHousekeeping) {
+        bool forHousekeeping, bool consumesFreshHold, bool allowBlackOvercommit) {
     // chunkIdx = 0 is deprecated and will not be soon removed
     TGuard<TMutex> guard(StateMutex);
     Y_VERIFY_DEBUG_S(IsOwnerUser(req->Owner), PCtx->PDiskLogPrefix);
@@ -1485,7 +1485,17 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
     i64 ownerFree = Keeper.GetOwnerFree(req->Owner, false);
     double occupancy;
-    auto color = Keeper.EstimateAllocationColor(req->Owner, count, forHousekeeping, &occupancy);
+    // Fresh compaction has declared chunks it still has to take. A level compaction
+    // must not be handed those chunks. The Fresh reserve itself spends the hold.
+    ui64 charged = count;
+    if (forHousekeeping) {
+        ui64 debt = Keeper.TotalFreshDebt();
+        if (consumesFreshHold) {
+            debt -= Min<ui64>(debt, Keeper.GetFreshDebt(req->Owner));
+        }
+        charged += debt;
+    }
+    auto color = Keeper.EstimateAllocationColor(req->Owner, charged, forHousekeeping, &occupancy);
 
     auto makeError = [&](TString info) {
         guard.Release();
@@ -1505,7 +1515,10 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
             {"marker", "BPD01"});
     };
 
-    if (sharedFree <= count || color == NKikimrBlobStorage::TPDiskSpaceColor::BLACK) {
+    // Blocks/Barriers may take a few chunks past black so the recovery log can be cut.
+    // They still need a real free chunk.
+    const bool overcommit = allowBlackOvercommit && count <= 4 && sharedFree > count;
+    if ((sharedFree <= count || color == NKikimrBlobStorage::TPDiskSpaceColor::BLACK) && !overcommit) {
         makeError("");
         return {};
     }
@@ -1540,6 +1553,9 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
         state.CommitState = TChunkState::DATA_RESERVED;
         Mon.UncommitedDataChunks->Inc();
     }
+    if (consumesFreshHold) {
+        Keeper.ConsumeFreshDebt(req->Owner, count);
+    }
     return chunks;
 }
 
@@ -1550,7 +1566,7 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
     THolder<NPDisk::TEvChunkReserveResult> result;
     TString allocateError;
     TVector<TChunkIdx> chunks = AllocateChunkForOwner(&evChunkReserve, evChunkReserve.SizeChunks, allocateError,
-        evChunkReserve.ForHousekeeping);
+        evChunkReserve.ForHousekeeping, evChunkReserve.ConsumesFreshHold, evChunkReserve.AllowBlackOvercommit);
     errorReason << allocateError;
 
     if (chunks.empty()) {
@@ -2550,6 +2566,10 @@ void TPDisk::SchedulerConfigure(const TPDiskSchedulerConfig& cfg, ui32 ownerId) 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
+    {
+        TGuard<TMutex> guard(StateMutex);
+        Keeper.SetFreshDebt(evCheckSpace.Owner, evCheckSpace.FreshDebtChunks);
+    }
     double occupancy;
     auto result = std::make_unique<NPDisk::TEvCheckSpaceResult>(NKikimrProto::OK,
                 GetStatusFlags(evCheckSpace.Owner, evCheckSpace.OwnerGroupType, &occupancy),

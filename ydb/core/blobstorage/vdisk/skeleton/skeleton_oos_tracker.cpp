@@ -69,7 +69,8 @@ namespace NKikimr {
             Become(&TThis::AskFunc);
             SpaceObservationGeneration = VCtx->OutOfSpaceState.StartSpacePoll();
             ctx.Send(PDiskCtx->PDiskId,
-                    new NPDisk::TEvCheckSpace(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound));
+                    new NPDisk::TEvCheckSpace(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
+                        VCtx->OutOfSpaceState.GetPublishedFreshDebtChunks()));
         }
 
         void Bootstrap(const TActorContext &ctx) {

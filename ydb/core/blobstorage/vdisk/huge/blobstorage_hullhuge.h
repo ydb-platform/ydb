@@ -253,9 +253,20 @@ namespace NKikimr {
 
     struct TEvHugeAllocateSlots : TEventLocal<TEvHugeAllocateSlots, TEvBlobStorage::EvHugeAllocateSlots> {
         std::vector<ui32> BlobSizes;
+        // How many new heap chunks this request may cause the keeper to reserve from PDisk.
+        // A brokered compaction carries an allowance out of its own grant, so heap growth
+        // it triggers is accounted for rather than happening behind the broker's back.
+        // Ordinary writes pass Unlimited and keep the old wait-for-a-new-chunk behaviour.
+        //
+        // An allowance of zero would be bounded but not live: on a quiet, full disk nothing
+        // else grows the heap, so a compaction that needs one more slot could never run --
+        // and that compaction is the only thing that would have freed space.
+        static constexpr ui32 Unlimited = Max<ui32>();
+        ui32 MaxNewChunks = Unlimited;
 
-        TEvHugeAllocateSlots(std::vector<ui32> blobSizes)
+        TEvHugeAllocateSlots(std::vector<ui32> blobSizes, ui32 maxNewChunks = Unlimited)
             : BlobSizes(std::move(blobSizes))
+            , MaxNewChunks(maxNewChunks)
         {}
     };
 
@@ -265,10 +276,18 @@ namespace NKikimr {
         // EnableVDiskHeapAllocator is RequireRestart, but tests (and a missed restart) can still
         // disagree with the heap that actually produced the location.
         std::vector<bool> IsStripe;
+        bool Success = true;
+        // Set when the request failed only because growing the heap would have exceeded the
+        // allowance it carried. The caller can retry with a larger one; any other failure
+        // will not be helped by that.
+        bool HeapAllowanceExceeded = false;
 
-        TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations, std::vector<bool> isStripe)
+        TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations, std::vector<bool> isStripe,
+                bool success = true, bool heapAllowanceExceeded = false)
             : Locations(std::move(locations))
             , IsStripe(std::move(isStripe))
+            , Success(success)
+            , HeapAllowanceExceeded(heapAllowanceExceeded)
         {}
     };
 

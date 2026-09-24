@@ -745,7 +745,7 @@ def build_html_dashboard(
             const indices = [];
             const customdatas = [];
             el.data.forEach((tr, i) => {{
-              if (tr && Array.isArray(tr.x) && tr.customdata && String(tr.hovertemplate || '').includes('customdata')) {{
+              if (tr && tr.name === 'hover-time' && Array.isArray(tr.x)) {{
                 indices.push(i);
                 customdatas.push((tr.x || []).map(v => formatTimeLabel(v)));
               }}
@@ -1686,7 +1686,16 @@ def build_html_dashboard(
     function stackedArea(divId, xs, tracks, title, yTitle, stepMode) {{
       const names = Object.keys(tracks);
       const xDisp = (xs || []).map(xToDisplay);
-      const traces = names.map((n) => {{
+      const traces = [{{
+        x: xDisp,
+        y: xDisp.map(() => 0),
+        customdata: xDisp.map(formatTimeLabel),
+        mode: 'markers',
+        marker: {{ size: 0, color: 'rgba(0,0,0,0)' }},
+        name: 'hover-time',
+        showlegend: false,
+        hovertemplate: '%{{customdata}}<extra></extra>',
+      }}].concat(names.map((n) => {{
         const c = colorForTrack(n);
         return {{
           x: xDisp,
@@ -1699,7 +1708,7 @@ def build_html_dashboard(
           stackgroup: 'one',
           hoverinfo: 'none',
         }};
-      }});
+      }}));
       Plotly.newPlot(divId, traces, {{
         title,
         xaxis: axisLayout(xDisp),

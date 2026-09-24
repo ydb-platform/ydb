@@ -1477,18 +1477,20 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     return future;
 }
 
-NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot() const
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot(
+    EDbgMonSnapshotDetail detail) const
 {
     auto promise = NewPromise<TDbgSnapshot>();
     auto future = promise.GetFuture();
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this(),
          index = DirectBlockGroupIndex,
+         detail,
          promise = std::move(promise)]   //
         () mutable
         {
             if (auto self = weakSelf.lock()) {
-                promise.SetValue(self->DoBuildMonSnapshot());
+                promise.SetValue(self->DoBuildMonSnapshot(detail));
             } else {
                 promise.SetValue({.Index = index});
             }
@@ -2326,7 +2328,8 @@ void TDirectBlockGroup::DoBalanceDDisks(EDDiskBalanceStrategy strategy)
     }
 }
 
-TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
+TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot(
+    EDbgMonSnapshotDetail detail) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -2350,24 +2353,45 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
     TDirtyMapStats dirtyMapStats;
     TCountAndSize pBuffersUsage;
     THashMap<ui32, THostMask> freshDDisks;
+    TVector<TDbgVChunkSnapshot> vChunks;
+    const bool collectVChunkStats = detail == EDbgMonSnapshotDetail::PerVChunk;
+    if (collectVChunkStats) {
+        vChunks.reserve(VChunks.size());
+    }
 
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
             THostMask fresh;
+            ui64 freshBytes = 0;
+            ui64 rottenBytes = 0;
+            ui64 pBufferBytes = 0;
             for (THostIndex host = 0; host < GetHostCount(); ++host) {
                 const auto hostStats = vChunk->GetDirtyMapHostStats(host);
                 hostsStat[host].DirtyMapStats.Aggregate(hostStats);
                 pBuffersUsage += hostStats.PBuffersUsage;
+                if (collectVChunkStats) {
+                    freshBytes += hostStats.FreshTotalBytes;
+                    rottenBytes += hostStats.RottenTotalBytes;
+                    pBufferBytes += hostStats.PBuffersUsage.Size;
+                }
                 if (hostStats.FreshTotalBytes != 0 ||
                     hostStats.RottenTotalBytes != 0)
                 {
                     fresh.Set(host);
                 }
             }
+            const auto& config = vChunk->GetConfig();
+            if (collectVChunkStats) {
+                vChunks.push_back(TDbgVChunkSnapshot{
+                    .Config = config,
+                    .Touched = vChunk->IsTouched(),
+                    .FreshBytes = freshBytes,
+                    .RottenBytes = rottenBytes,
+                    .PBufferBytes = pBufferBytes,
+                });
+            }
             if (!fresh.Empty()) {
-                freshDDisks.emplace(
-                    vChunk->GetConfig().GetVChunkIndex(),
-                    fresh);
+                freshDDisks.emplace(config.GetVChunkIndex(), fresh);
             }
             dirtyMapStats.Aggregate(vChunk->GetDirtyMapStats());
         }
@@ -2375,7 +2399,7 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
 
     return {
         .Index = DirectBlockGroupIndex,
-        .VChunkCount = VChunks.size(),
+        .VChunks = std::move(vChunks),
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
         .ConfiguredDDiskImbalance = configuredImbalance,

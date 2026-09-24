@@ -286,7 +286,8 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
-    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot(
+        EDbgMonSnapshotDetail detail) const override;
 
     void BalanceDDisks(EDDiskBalanceStrategy strategy) override;
 

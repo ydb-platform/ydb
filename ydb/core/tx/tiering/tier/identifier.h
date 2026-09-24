@@ -34,7 +34,7 @@ public:
         TStringBuf length;
         Y_ABORT_UNLESS(value.TrySplit(':', length, value));
         const size_t pathSize = ::FromString<size_t>(length);
-        Y_ABORT_UNLESS(pathSize <= value.size());
+        Y_ABORT_UNLESS(pathSize > 0 && pathSize <= value.size());
         return TExternalStorageId(TString(value.SubStr(0, pathSize)), TString(value.SubStr(pathSize)));
     }
 

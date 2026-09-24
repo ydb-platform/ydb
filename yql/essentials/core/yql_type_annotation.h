@@ -549,6 +549,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool FuzzUntypedLambda = false;
     bool FuzzUniversal = false;
     TRuntimeSettings::TConstPtr RuntimeSettings;
+    bool StrictConfigValidation = false;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;

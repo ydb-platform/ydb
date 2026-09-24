@@ -59,7 +59,7 @@ void MediaValidator(const NYT::TNode& value) {
 }
 
 TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext)
-    : NCommon::TSettingDispatcher(YtProviderName, qContext)
+    : NCommon::TSettingDispatcher(YtProviderName, qContext, typeCtx.StrictConfigValidation)
 {
     const auto codecValidator = [] (const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {

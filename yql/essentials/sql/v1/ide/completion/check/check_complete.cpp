@@ -79,10 +79,10 @@ bool CheckComplete(TStringBuf query, TYqlContext ctx) {
             continue;
         }
 
-        TCompletionInput input = {
+        TCompletionInput input = {{
             .Text = query,
             .CursorPosition = pos,
-        };
+        }};
 
         auto output = engine->Complete(input).ExtractValueSync();
         Y_DO_NOT_OPTIMIZE_AWAY(output);

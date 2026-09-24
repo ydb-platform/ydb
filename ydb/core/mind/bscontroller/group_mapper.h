@@ -121,8 +121,8 @@ namespace NKikimr {
                 const TPDiskId PDiskId;
                 const TNodeLocation Location;
                 const bool Usable;
-                ui32 NumSlots;
-                const ui32 MaxSlots;
+                ui32 NumActiveSlots;
+                const ui32 ExpectedSlotCount;
                 const ui32 SlotSizeInUnits;
                 const ui64 SlotSizeInBytes;
                 TStackVec<ui32, 16> Groups;
@@ -144,8 +144,8 @@ namespace NKikimr {
                 TPDiskId PDiskId;
                 TNodeLocation Location;
                 bool Usable = true;
-                ui32 NumSlots = 0;
-                ui32 MaxSlots = 0;
+                ui32 NumActiveSlots = 0;
+                ui32 ExpectedSlotCount = 0;
                 ui32 SlotSizeInUnits = 0;
                 ui64 SlotSizeInBytes = 0;
                 std::optional<TPDiskSpaceState> Space;
@@ -164,7 +164,7 @@ namespace NKikimr {
                 std::optional<ui32> GroupId;
                 ui32 GroupGeneration = 0;
                 TVDiskIdShort VDiskId;
-                bool CountedInNumSlots = true;
+                bool CountedInNumActiveSlots = true;
                 bool OccupiedByGroup = true;
                 bool Ready = false;
                 bool Replicating = false;

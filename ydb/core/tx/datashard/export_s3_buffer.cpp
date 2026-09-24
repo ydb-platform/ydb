@@ -90,6 +90,7 @@ public:
     IEventBase* PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats) override;
     void Clear() override;
     bool IsFilled() const override;
+    ui64 GetMemoryBytes() const override;
     TString GetError() const override;
 
 private:
@@ -111,6 +112,7 @@ private:
 protected:
     ui64 Rows = 0;
     ui64 BytesRead = 0;
+    ui64 UncompressedBytes = 0; // serialized bytes collected into the current part
     TBuffer Buffer;
 
     TChecksumCreator ChecksumCreator;
@@ -191,13 +193,22 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row) {
     if (Buffer.Size() > beforeSize) {
         TStringBuf chunk(Buffer.Data(), Buffer.Size());
         chunk = chunk.Tail(beforeSize);
+        UncompressedBytes += chunk.size();
 
         if (Checksum) {
             Checksum->AddData(chunk);
         }
-        if (Compression && !Compression->AddData(chunk)) {
-            ErrorString = Compression->GetError();
-            return false;
+        if (Compression) {
+            if (!Compression->AddData(chunk)) {
+                ErrorString = Compression->GetError();
+                return false;
+            }
+            // The raw row has been consumed by the compressor, do not keep it in memory.
+            // Otherwise the raw data is accumulated until the compressed output reaches MinBytes,
+            // which is unbounded for highly compressible data.
+            // With compression the buffer holds only the current row, so it is empty on entry.
+            Y_ENSURE(beforeSize == 0);
+            Buffer.Reset();
         }
     }
 
@@ -212,6 +223,7 @@ bool TS3Buffer::Append(const char *data, size_t size) {
     }
 
     TStringBuf chunk(data, size);
+    UncompressedBytes += size;
 
     // Apply checksum
     if (Checksum) {
@@ -251,6 +263,7 @@ IEventBase* TS3Buffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& sta
 void TS3Buffer::Clear() {
     Rows = 0;
     BytesRead = 0;
+    UncompressedBytes = 0;
     Buffer = TBuffer();
     // Reset the data format too: on a retry the scan is restarted from scratch,
     // so any format-internal state (e.g. the Parquet writer and its already
@@ -277,8 +290,12 @@ bool TS3Buffer::IsFilled() const {
     if (readyOutputBytes < MinBytes) {
         return false;
     }
-    const size_t memoryBytes = Buffer.Size() + (Compression ? Compression->GetReadyOutputBytes() : 0) + DataFormat->GetReadyOutputBytes();
-    return Rows >= RowsLimit || memoryBytes >= MaxBytes;
+    // After MinBytes, MaxBytes caps the uncompressed size and the memory held.
+    return Rows >= RowsLimit || UncompressedBytes >= MaxBytes || GetMemoryBytes() >= MaxBytes;
+}
+
+ui64 TS3Buffer::GetMemoryBytes() const {
+    return Buffer.Size() + (Compression ? Compression->GetReadyOutputBytes() : 0) + DataFormat->GetReadyOutputBytes();
 }
 
 TString TS3Buffer::GetError() const {
@@ -298,6 +315,7 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
     if (!Append(dataFormatBuffer->Data(), dataFormatBuffer->Size())) {
         return Nothing();
     }
+    UncompressedBytes = 0;
 
     // Compression finishes compression frame during Flush
     // so that last table row borders equal to compression frame borders.

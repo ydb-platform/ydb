@@ -117,7 +117,7 @@ NTextMate::TMatcher TextMateMultilinePattern(const TUnit& unit, size_t index, co
         .Group = ToTextMateGroup(unit.Kind),
         .Pattern = NTextMate::TRange{
             .Begin = RE2::QuoteMeta(range.BeginPlain),
-            .End = RE2::QuoteMeta(range.EndPlain),
+            .End = range.EndRegex(),
             .Escape = std::move(escape),
             .IsRecursive = (ansi && unit.Kind == EUnitKind::Comment),
         },
@@ -175,6 +175,10 @@ TMaybe<TString> EmbeddedLanguage(const NTextMate::TRange& range) {
     return Nothing();
 }
 
+TString RecursiveName(const NTextMate::TMatcher& matcher) {
+    return matcher.Name + "-recursive";
+}
+
 NJson::TJsonValue ToJson(const NTextMate::TMatcher& matcher) {
     NJson::TJsonMap json = {{"name", matcher.Group}};
     std::visit([&](const auto& pattern) {
@@ -186,7 +190,7 @@ NJson::TJsonValue ToJson(const NTextMate::TMatcher& matcher) {
             json["begin"] = pattern.Begin;
             json["end"] = pattern.End;
             if (pattern.IsRecursive) {
-                json["patterns"].AppendValue(NJson::TJsonMap{{"include", "#" + matcher.Name}});
+                json["patterns"].AppendValue(NJson::TJsonMap{{"include", "#" + RecursiveName(matcher)}});
             }
             if (auto embedded = EmbeddedLanguage(pattern)) {
                 json["patterns"].AppendValue(NJson::TJsonMap{{"include", *embedded}});
@@ -215,7 +219,14 @@ NJson::TJsonValue ToJson(const NTextMate::TLanguage& language) {
 
     THashSet<TString> visited;
     for (const NTextMate::TMatcher& matcher : language.Matchers) {
-        root["repository"][matcher.Name]["patterns"].AppendValue(ToJson(matcher));
+        const auto* range = std::get_if<NTextMate::TRange>(&matcher.Pattern);
+        if (range && range->IsRecursive) {
+            root["repository"][matcher.Name]["patterns"].AppendValue(
+                NJson::TJsonMap{{"include", "#" + RecursiveName(matcher)}});
+            root["repository"][RecursiveName(matcher)]["patterns"].AppendValue(ToJson(matcher));
+        } else {
+            root["repository"][matcher.Name]["patterns"].AppendValue(ToJson(matcher));
+        }
 
         if (!visited.contains(matcher.Name)) {
             root["patterns"].AppendValue(NJson::TJsonMap({{"include", "#" + matcher.Name}}));

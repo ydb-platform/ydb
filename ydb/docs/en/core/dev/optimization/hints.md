@@ -5,7 +5,7 @@ Optimizer hints allow you to influence the behavior of the cost-based optimizer 
 ## Usage
 
 Hints are specified via the `PRAGMA ydb.OptimizerHints` pragma at the beginning of the SQL query.
-If the optimizer cannot apply at least one of the specified hints to the query, the user will be notified via a warning.
+If the optimizer is unable to apply at least one of the specified hints to the query, the user will be notified via a warning.
 
 ## Syntax
 
@@ -151,7 +151,7 @@ You can view the query execution plan using the [CLI](../../reference/ydb-cli/co
 ```
 
 Since the query optimizer can change the order of joins during the optimization process, the hint should reflect the exact list of tables that are being joined.
-For example, in this query, it is assumed that the order of joins will be: R with S, then T, and finally U. Specifying a different join algorithm may change the order of joins in the plan, and some hints may not be applied. In such a case, you can add an additional hint for the order of joins.
+For example, in this query, it is assumed that the order of joins will be: R with S, then T, and finally U. Specifying a different join algorithm may change the order of joins in the plan, and some hints may not be applied. In such a case, you can add an additional hint for the join order.
 
 ### 2. Rows — hints for [cardinality](../../concepts/glossary.md#cardinality)
 
@@ -159,7 +159,7 @@ Allows you to change the expected number of rows (optimizer's estimate) for a jo
 
 #### Operating principle
 
-The optimizer will change its estimate of the number of rows for the join operation, which connects only those tables that are listed in the list.
+The optimizer will change its estimate of the number of rows for a join operation that connects only those tables listed in the list.
 
 #### Syntax
 
@@ -169,14 +169,14 @@ Rows(t1 t2 ... tn (*|/|+|-|#) Number)
 
 #### Parameters
 
-- `t1 t2 ... tn` - tables
+- `t1 t2 ... tn` — tables
 - Operation:
-  - `*` - multiply by value
-  - `/` - divide by value
-  - `+` - add value
-  - `-` - subtract value
-  - `#` - replace value
-- `Number` - numeric value
+  - `*` — multiply by value
+  - `/` — divide by value
+  - `+` — add value
+  - `-` — subtract value
+  - `#` — replace value
+- `Number` — numeric value
 
 #### Examples
 
@@ -217,7 +217,7 @@ Without hints, the optimizer builds the following plan:
 └────────┴────────┴────────┴───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-If we apply the following hints:
+If you apply the following hints:
 ```sql
 PRAGMA ydb.OptimizerHints =
 '
@@ -232,7 +232,7 @@ SELECT * FROM
         INNER JOIN  T   on  R.id = T.id;
 ```
 
-The following plan will be obtained:
+It will result in the following plan:
 
 ```text
 ┌───────────┬────────┬────────┬─────────────────────────────────────────────────────────────────────────────────┐
@@ -255,7 +255,7 @@ Warning: Unapplied hint: Rows(R S # 10e8)
 
 Here you can see that after applying the hints [cardinality](../../concepts/glossary.md#cardinality) of the base tables, the order of joins has changed, and one of the hints could not be applied because there is no such join in the plan.
 
-### 3. Bytes — data size hints
+### 3. Bytes — hints for data size
 
 Allows you to change the expected data size in bytes for a join or individual tables.
 

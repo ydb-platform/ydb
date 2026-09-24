@@ -526,6 +526,7 @@ runs:
             rm -f "$TESTS_METRICS_DIR/dashboard_build.log"
           else
             mv "$TESTS_METRICS_DIR/dashboard_build.log" "$TESTS_METRICS_DIR/dashboard_error.log"
+            rm -f "$TESTS_METRICS_DIR/dashboard.html" "$TESTS_METRICS_DIR/trace.json" "$TESTS_METRICS_DIR/stats.json"
             echo "Dashboard generation failed (see dashboard_error.log in artifacts)"
           fi
           cp -f "$RESOURCES_JSONL" "$TESTS_METRICS_DIR/resources_monitor.jsonl" 2>/dev/null

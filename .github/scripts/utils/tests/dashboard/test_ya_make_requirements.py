@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib.util
 import tempfile
 import sys
+import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -140,6 +141,19 @@ END()
         "split_factor": 30,
         "split_factor_tooltip": "SPLIT_FACTOR(30) from ya.make (no FORK_TEST_FILES).",
     }
+
+
+def load_tests(loader, tests, pattern):
+    suite = unittest.TestSuite()
+    for fn in (
+        test_sanitizer_conditional_requirements,
+        test_fork_test_files_effective_split_counts_active_test_srcs_only,
+        test_multiline_requirements_block,
+        test_elseif_sanitizer_branch,
+        test_get_requirements_normalizes_partitioned_suite_path,
+    ):
+        suite.addTest(unittest.FunctionTestCase(fn))
+    return suite
 
 
 if __name__ == "__main__":

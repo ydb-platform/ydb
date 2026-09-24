@@ -13,6 +13,7 @@ Run: python3 -m unittest discover -s .github/scripts/utils/tests -p 'test_*.py'
 from __future__ import annotations
 
 import sys
+import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -320,6 +321,13 @@ def _all_tests():
         test_memory_drives_cpu_bump_not_ram,
         test_light_suite_no_memory_cpu_bump,
     ]
+
+
+def load_tests(loader, tests, pattern):
+    suite = unittest.TestSuite()
+    for fn in _all_tests():
+        suite.addTest(unittest.FunctionTestCase(fn))
+    return suite
 
 
 if __name__ == "__main__":

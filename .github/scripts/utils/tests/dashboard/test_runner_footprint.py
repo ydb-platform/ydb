@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -59,6 +60,19 @@ def test_enrich_resources_overlay_adds_limits():
     assert out["runner_limits"]["ram_gb_max"] == 288.0
     assert out["measured"]["ram_gb"] == 280.5
     assert out["runner_footprint"]["build_preset"] == "release-asan"
+
+
+def load_tests(loader, tests, pattern):
+    suite = unittest.TestSuite()
+    for fn in (
+        test_footprint_key_for_preset,
+        test_resolve_release_asan_footprint,
+        test_resolve_relwithdebinfo_footprint,
+        test_mem_cpu_tiers_for,
+        test_enrich_resources_overlay_adds_limits,
+    ):
+        suite.addTest(unittest.FunctionTestCase(fn))
+    return suite
 
 
 if __name__ == "__main__":

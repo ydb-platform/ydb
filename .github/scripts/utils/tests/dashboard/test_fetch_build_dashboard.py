@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -39,6 +40,13 @@ def test_dry_run_skips_fetch():
     finally:
         fetch_mod.fetch_text = old_fetch
         sys.argv = old_argv
+
+
+def load_tests(loader, tests, pattern):
+    suite = unittest.TestSuite()
+    for fn in (test_build_preset_from_config_segment, test_dry_run_skips_fetch):
+        suite.addTest(unittest.FunctionTestCase(fn))
+    return suite
 
 
 if __name__ == "__main__":

@@ -17,17 +17,17 @@ Rows(TableList Op Value)
 Bytes(TableList Op Value)
 JoinOrder(JoinTree)
 
-где:
-TableList - перечисление названий таблиц или элиасов из запроса
-Op - операция:
-  - `#` - задать абсолютное значение
-  - `*` - умножить на значение
-  - `/` - разделить на значение
-  - `+` - прибавить значение
-  - `-` - вычесть значение
-  - `Number` - числовое значение
-Value - числовое значение
-JoinTree - представление бинарного дерева с помощью скобок, например: (R S) (T U)
+where:
+TableList - a list of table names or aliases from the query
+Op - operation:
+  - `#` - set an absolute value
+  - `*` - multiply by the value
+  - `/` - divide by the value
+  - `+` - add the value
+  - `-` - subtract the value
+  - `Number` - a numeric value
+Value - a numeric value
+JoinTree - a binary tree represented using parentheses, for example: (R S) (T U)
 ```
 
 For example, the following query uses three hints `Rows` that specify [cardinality](../../concepts/glossary.md#cardinality), as well as a full join order hint `JoinOrder` and a join algorithm selection hint `JoinType`:
@@ -96,13 +96,13 @@ If the query plan includes a [join operator](../../concepts/glossary.md#operator
 #### Examples
 
 ```sql
--- Использовать Broadcast для соединения таблиц nation, region
+-- Use Broadcast to join the nation and region tables
 JoinType(nation region Broadcast)
 
--- Использовать ShuffleJoin для соединения, в поддереве которого будут только таблицы customers, orders, products
+-- Use ShuffleJoin for a join whose subtree contains only the customers, orders, and products tables
 JoinType(customers orders products Shuffle)
 
--- Использовать LookupJoin для соединения таблиц nation, region
+-- Use LookupJoin to join the nation and region tables
 JoinType(nation region Lookup)
 ```
 
@@ -181,16 +181,16 @@ Rows(t1 t2 ... tn (*|/|+|-|#) Number)
 #### Examples
 
 ```sql
--- Умножить ожидаемое количество строк на 2 для соединения, в поддереве которого есть только таблицы users orders yandex
+-- Multiply the expected row count by 2 for a join whose subtree contains only the users, orders, and yandex tables
 Rows(users orders yandex * 2.0)
 
--- Заменить ожидаемое число строк таблицы products на 1.3e6
+-- Replace the expected row count of the products table with 1.3e6
 Rows(products # 1.3e6)
 
--- Уменьшить ожидаемое количество строк в 228 раз
+-- Decrease the expected row count by a factor of 228
 Rows(filtered_table / 228)
 
--- Добавить 5000 строк к ожидаемому результату
+-- Add 5,000 rows to the expected result
 Rows(table1 table2 + 5000)
 ```
 
@@ -270,16 +270,16 @@ Bytes(t1 t2 ... tn (*|/|+|-|#) Number)
 #### Examples
 
 ```sql
--- Умножить ожидаемый размер данных на 1.5
+-- Multiply the expected data size by 1.5
 Bytes(large_table * 1.5)
 
--- Заменить размер данных для соединения на 1GB
+-- Replace the data size for the join with 1 GB
 Bytes(table1 table2 # 1073741824)
 
--- Уменьшить ожидаемый размер в 2 раза
+-- Decrease the expected size by a factor of 2
 Bytes(compressed_table / 2)
 
--- Добавить 100MB к ожидаемому размеру
+-- Add 100 MB to the expected size
 Bytes(temp_table + 104857600)
 ```
 
@@ -306,16 +306,16 @@ The optimizer will only consider those plans that include the specified partial 
 #### Examples
 
 ```sql
--- Принудительно соединить сначала users с orders, затем с products
+-- Force joining users with orders first, then with products
 JoinOrder((users orders) products)
 
--- Более сложный порядок соединений
+-- A more complex join order
 JoinOrder(((customers orders) products) shipping)
 
--- Группировка соединений
+-- Join grouping
 JoinOrder((table1 table2) (table3 table4))
 
--- Многоуровневая структура
+-- Multilevel structure
 JoinOrder((users (orders products)) (addresses phones))
 ```
 

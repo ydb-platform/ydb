@@ -145,14 +145,13 @@ namespace NKikimr {
             const auto next = env.MakeRecord();
             UNIT_ASSERT_VALUES_EQUAL(env.Fresh.GetCurReservationShortfall(next.Charge), 0);
 
-            // Once the compaction has produced its SST, what was held for Old goes back.
+            // The compaction takes Old's chunks to write into, and nothing stays behind with the segment.
+            UNIT_ASSERT_VALUES_EQUAL(old->TakeReservedChunks().size(), kept);
             env.Fresh.CompactionSstCreated(std::move(old));
-            const auto released = env.Fresh.TakeReleasedChunks();
-            UNIT_ASSERT_VALUES_EQUAL(released.size(), kept);
-            UNIT_ASSERT(env.Fresh.TakeReleasedChunks().empty());
         }
 
-        // An aborted compaction retries the same Old, which keeps its chunks.
+        // An aborted compaction retries the same Old, and TFreshData leaves whatever chunks Old holds alone. (In the
+        // VDisk there are none left by then: the compaction took them as it started and forgot them on abort.)
         Y_UNIT_TEST(AbortedCompactionKeepsOldChunks) {
             TEnv env;
             const auto r = env.MakeRecord();
@@ -170,7 +169,6 @@ namespace NKikimr {
             auto retried = env.Fresh.FindSegmentForCompaction();
             UNIT_ASSERT_EQUAL(retried.Get(), old.Get());
             UNIT_ASSERT_EQUAL(retried->GetReservedChunks(), chunks);
-            UNIT_ASSERT(env.Fresh.TakeReleasedChunks().empty());
         }
 
         // With Dreg, a full Cur is swapped out on Put. That rotation waits for records in flight as well,

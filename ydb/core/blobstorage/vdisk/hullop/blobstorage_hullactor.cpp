@@ -806,11 +806,7 @@ namespace NKikimr {
                     }
 
                     // as in ApplyCompactionResult: leftover reservations went into no SST, so
-                    // they go back directly rather than riding the commit record; so do the chunks
-                    // held in advance for the segment that was just compacted
-                    for (TChunkIdx chunkIdx : RTCtx->LevelIndex->TakeFreshReleasedChunks()) {
-                        msg->ReservedChunks.push_back(chunkIdx);
-                    }
+                    // they go back directly rather than riding the commit record
                     ForgetReservedChunks(ctx, msg->ReservedChunks);
 
                     // run fresh committer

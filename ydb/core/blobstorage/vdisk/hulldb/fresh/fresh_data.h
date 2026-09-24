@@ -46,8 +46,6 @@ namespace NKikimr {
         bool DregRotationPending = false;
         // Admission asked for Cur to rotate out as it is, rather than grow past one SST; see RequestSizeRotation().
         bool SizeRotationRequested = false;
-        // Reserved chunks no segment needs any more, for the level index actor to hand back to PDisk.
-        TVector<TChunkIdx> ReleasedChunks;
 
         static constexpr ui64 CalculateBufLowWatermark(ui32 chunkSize, bool useDreg) {
             return ui64(chunkSize) * (2u + !!useDreg);
@@ -81,7 +79,9 @@ namespace NKikimr {
         bool CompactionInProgress() const { return Old.Get() || WaitForCommit; }
 
         // Chunk reservation. A record is admitted only once Cur holds enough reserved chunks to compact
-        // everything already in it, everything in flight, and the record itself.
+        // everything already in it, everything in flight, and the record itself. Writers that do not go
+        // through admission put into Cur all the same: their records are charged like any other and may take
+        // Cur past its reservation, in which case its compaction reserves the rest itself.
         bool IsRotationPending() const { return CompactionRotationPending || DregRotationPending; }
         ui64 GetCurReservationShortfall(const TFreshOutputEstimate& record) const;
         void AddCurReservedChunks(const TVector<TChunkIdx>& chunks) { Cur->AddReservedChunks(chunks); }
@@ -99,7 +99,6 @@ namespace NKikimr {
         // Rotate Cur out as it is, so that it compacts into a single SST instead of growing past it. Into Dreg this
         // happens right here; otherwise NeedsCompaction() asks for it. Records in flight hold it back, as always.
         void RequestSizeRotation();
-        TVector<TChunkIdx> TakeReleasedChunks() { return std::exchange(ReleasedChunks, {}); }
 
         // Appendix Compact/ApplyCompactionResult
         TCompactionJob CompactAppendix();
@@ -275,10 +274,9 @@ namespace NKikimr {
     void TFreshData<TKey, TMemRec>::CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) {
         // FIXME ref count = 2?
         Y_VERIFY_S(Old && Old.Get() == freshSegment.Get(), HullCtx->VCtx->VDiskLogPrefix);
-        // Old's chunks went to its compaction, which commits the ones it wrote and forgets the rest; anything
-        // still held here is surplus.
-        TVector<TChunkIdx> released = Old->TakeReservedChunks();
-        ReleasedChunks.insert(ReleasedChunks.end(), released.begin(), released.end());
+        // Old's chunks went to its compaction as it started, which commits the ones it wrote and forgets the rest.
+        Y_VERIFY_DEBUG_S(Old->GetReservedChunks().empty(), HullCtx->VCtx->VDiskLogPrefix
+            << "compacted Fresh segment still holds reserved chunks");
         freshSegment.Drop();
         Old.Drop();
         WaitForCommit = true;

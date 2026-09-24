@@ -605,10 +605,17 @@ namespace NKikimr {
         }
 
         void Handle(NPDisk::TEvChunkReserveResult::TPtr &ev, const TActorContext &ctx) {
-            if (ev->Get()->Status != NKikimrProto::OUT_OF_SPACE) {
+            const auto *msg = ev->Get();
+            if (msg->Status == NKikimrProto::OUT_OF_SPACE) {
+                // A refusal the reservation asked for, not a failure. What PDisk reports along with it counts all
+                // the same, exactly as CHECK_PDISK_RESPONSE takes it from a result that is OK.
+                auto& oos = VCtx->GetOutOfSpaceState();
+                oos.ObserveLocalChunk(msg->StatusFlags);
+                oos.ObserveSpaceHeadroom(msg->Headroom);
+            } else {
                 CHECK_PDISK_RESPONSE(VCtx, ev, ctx);
             }
-            Y_VERIFY_S(FreshGate, VCtx->VDiskLogPrefix << "unexpected " << ev->Get()->ToString());
+            Y_VERIFY_S(FreshGate, VCtx->VDiskLogPrefix << "unexpected " << msg->ToString());
             FreshGate->Handle(ev, ctx);
         }
 

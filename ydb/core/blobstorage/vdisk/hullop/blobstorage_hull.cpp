@@ -757,29 +757,52 @@ namespace NKikimr {
         ctx.Send(HullDs->LogoBlobs->LIActor, new TEvMinHugeBlobSizeUpdate(minHugeBlobInBytes));
     }
 
+    template <typename TFunc>
+    void THull::ForEachFreshRecord(const TFreshAdmission& admission, TFunc&& func) const {
+        if (!admission.LogoBlobs.Empty()) {
+            func(*HullDs->LogoBlobs, admission.LogoBlobs, EHullDbType::LogoBlobs);
+        }
+        if (!admission.Blocks.Empty()) {
+            func(*HullDs->Blocks, admission.Blocks, EHullDbType::Blocks);
+        }
+        if (!admission.Barriers.Empty()) {
+            func(*HullDs->Barriers, admission.Barriers, EHullDbType::Barriers);
+        }
+    }
+
+    void THull::CompactFreshIfRequired(EHullDbType type, const TActorContext& ctx) {
+        switch (type) {
+            case EHullDbType::LogoBlobs:
+                CompactFreshLogoBlobsIfRequired(ctx);
+                break;
+            case EHullDbType::Blocks:
+                CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0,
+                    Fields->BlocksRunTimeCtx, ctx, false, Fields->AllowGarbageCollection);
+                break;
+            case EHullDbType::Barriers:
+                CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0,
+                    Fields->BarriersRunTimeCtx, ctx, false, Fields->AllowGarbageCollection);
+                break;
+            default:
+                Y_ABORT("unexpected database type");
+        }
+    }
+
     bool THull::IsFreshRotationPending(const TFreshAdmission& admission) const {
-        return (!admission.LogoBlobs.Empty() && HullDs->LogoBlobs->IsFreshRotationPending())
-            || (!admission.Blocks.Empty() && HullDs->Blocks->IsFreshRotationPending())
-            || (!admission.Barriers.Empty() && HullDs->Barriers->IsFreshRotationPending());
+        bool pending = false;
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate&, EHullDbType) {
+            pending |= levelIndex.IsFreshRotationPending();
+        });
+        return pending;
     }
 
     bool THull::PrepareFreshForAdmission(const TFreshAdmission& admission, const TActorContext& ctx) {
-        auto prepare = [&](auto& levelIndex, const TFreshOutputEstimate& record, auto&& compactIfRequired) {
-            if (!record.Empty() && levelIndex->FreshWouldOutgrowSst(record) && levelIndex->CanRotateFreshCur()) {
-                levelIndex->RequestFreshSizeRotation();
-                compactIfRequired(); // starts the compaction that rotates Cur out, unless records are in flight
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType type) {
+            if (levelIndex.FreshWouldOutgrowSst(record) && levelIndex.CanRotateFreshCur()) {
+                levelIndex.RequestFreshSizeRotation();
+                // starts the compaction that rotates Cur out, unless records are in flight
+                CompactFreshIfRequired(type, ctx);
             }
-        };
-        prepare(HullDs->LogoBlobs, admission.LogoBlobs, [&] {
-            CompactFreshLogoBlobsIfRequired(ctx);
-        });
-        prepare(HullDs->Blocks, admission.Blocks, [&] {
-            CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0, Fields->BlocksRunTimeCtx, ctx,
-                false, Fields->AllowGarbageCollection);
-        });
-        prepare(HullDs->Barriers, admission.Barriers, [&] {
-            CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0, Fields->BarriersRunTimeCtx,
-                ctx, false, Fields->AllowGarbageCollection);
         });
         return !IsFreshRotationPending(admission);
     }
@@ -814,15 +837,9 @@ namespace NKikimr {
     }
 
     void THull::AdmitToFresh(const TFreshAdmission& admission) {
-        if (!admission.LogoBlobs.Empty()) {
-            HullDs->LogoBlobs->AdmitToFresh(admission.LogoBlobs);
-        }
-        if (!admission.Blocks.Empty()) {
-            HullDs->Blocks->AdmitToFresh(admission.Blocks);
-        }
-        if (!admission.Barriers.Empty()) {
-            HullDs->Barriers->AdmitToFresh(admission.Barriers);
-        }
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType) {
+            levelIndex.AdmitToFresh(record);
+        });
     }
 
     void THull::LandInFresh(const TFreshAdmission& admission, const TActorContext& ctx) {
@@ -830,29 +847,13 @@ namespace NKikimr {
         // landed, rather than at the next scheduled check, since admission waits for it meanwhile. Nothing
         // else is started here: whether and when a compaction is due stays exactly as without admission (a small
         // blob, for one, never triggers one on insert).
-        if (!admission.LogoBlobs.Empty()) {
-            const bool pending = HullDs->LogoBlobs->IsFreshRotationPending();
-            HullDs->LogoBlobs->LandInFresh(admission.LogoBlobs);
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType type) {
+            const bool pending = levelIndex.IsFreshRotationPending();
+            levelIndex.LandInFresh(record);
             if (pending) {
-                CompactFreshLogoBlobsIfRequired(ctx);
+                CompactFreshIfRequired(type, ctx);
             }
-        }
-        if (!admission.Blocks.Empty()) {
-            const bool pending = HullDs->Blocks->IsFreshRotationPending();
-            HullDs->Blocks->LandInFresh(admission.Blocks);
-            if (pending) {
-                CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0, Fields->BlocksRunTimeCtx,
-                    ctx, false, Fields->AllowGarbageCollection);
-            }
-        }
-        if (!admission.Barriers.Empty()) {
-            const bool pending = HullDs->Barriers->IsFreshRotationPending();
-            HullDs->Barriers->LandInFresh(admission.Barriers);
-            if (pending) {
-                CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0,
-                    Fields->BarriersRunTimeCtx, ctx, false, Fields->AllowGarbageCollection);
-            }
-        }
+        });
     }
 
     void THull::CompactFreshLogoBlobsIfRequired(const TActorContext& ctx) {

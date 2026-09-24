@@ -31,6 +31,15 @@ namespace NKikimr {
     //
     // Waiting writes queue in arrival order, and everything arriving behind them
     // queues too. One reservation is in flight at a time.
+    //
+    // Only client writes come here: TEvVPut and TEvVMultiPut (for a huge blob, its
+    // index record), TEvVBlock and TEvVCollectGarbage. What serves replication and
+    // recovery -- local sync data, Anubis/Osiris, recovered huge blobs, detected
+    // phantoms -- is still put into Fresh ungated. Those records are charged to the
+    // segment like any other, so they use up its reservation, and a segment they
+    // take past it has its compaction reserve the missing chunks as housekeeping
+    // (BSHC50). Fresh compaction needs no chunk beyond the reserved ones only as long
+    // as these writers stay within what rounding up to whole chunks leaves spare.
     ////////////////////////////////////////////////////////////////////////////
     class TFreshAdmissionGate {
     public:
@@ -68,7 +77,8 @@ namespace NKikimr {
         // Tries the waiting events again, e.g. after landing let a pending rotation happen.
         void Kick(const TActorContext& ctx);
 
-        // Status other than OK and OUT_OF_SPACE is the caller's to handle.
+        // Status other than OK and OUT_OF_SPACE is the caller's to handle, and so are the color and headroom
+        // PDisk reports: they already include the chunks just reserved, and later writes are judged by them.
         void Handle(NPDisk::TEvChunkReserveResult::TPtr& ev, const TActorContext& ctx);
 
         void RenderHtml(IOutputStream& str) const;

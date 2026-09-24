@@ -2,6 +2,7 @@
 #include "defs.h"
 #include <ydb/core/base/blobstorage_write_source.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hulllogctx.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_dbtype.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h>
@@ -68,6 +69,12 @@ namespace NKikimr {
                 ui32 collectStep,
                 const TBarrierIngress& ingress,
                 const TActorContext& ctx);
+
+        // Calls `func(levelIndex, record, type)` for every database the admission has records for.
+        template <typename TFunc>
+        void ForEachFreshRecord(const TFreshAdmission& admission, TFunc&& func) const;
+        // Starts a Fresh compaction of the database, should one be due.
+        void CompactFreshIfRequired(EHullDbType type, const TActorContext& ctx);
 
     public:
         THull(

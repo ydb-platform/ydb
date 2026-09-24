@@ -330,9 +330,6 @@ namespace NKikimr {
         void LandInFresh(const TFreshOutputEstimate& record) {
             Fresh.LandInFlight(record);
         }
-        TVector<TChunkIdx> TakeFreshReleasedChunks() {
-            return Fresh.TakeReleasedChunks();
-        }
         bool FreshWouldOutgrowSst(const TFreshOutputEstimate& record) const {
             return Fresh.WouldOutgrowSst(record);
         }

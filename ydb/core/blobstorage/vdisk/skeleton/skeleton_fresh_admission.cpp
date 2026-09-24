@@ -79,12 +79,6 @@ namespace NKikimr {
         Y_VERIFY_S(InFlight, VCtx->VDiskLogPrefix << "unexpected " << msg->ToString());
         const TReservation reservation = *std::exchange(InFlight, std::nullopt);
 
-        // What PDisk reports here already includes these chunks: the color it tells, which later writes are
-        // judged by, and the headroom level compactions are budgeted with.
-        auto& oos = VCtx->GetOutOfSpaceState();
-        oos.ObserveLocalChunk(msg->StatusFlags);
-        oos.ObserveSpaceHeadroom(msg->Headroom);
-
         if (msg->Status == NKikimrProto::OK) {
             Hull->AddFreshReservedChunks(reservation.Split, msg->ChunkIds);
             // A grant tells nothing of the bounds stricter than its own: a batch refused at its strictest bound

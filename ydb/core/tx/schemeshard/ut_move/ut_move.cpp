@@ -369,6 +369,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
     Y_UNIT_TEST(Replace) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+<<<<<<< HEAD
+=======
+        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveWithColumnTableReplace(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+>>>>>>> 4a58429a478 (Fix move replace for CS, part1 (#48150))
         ui64 txId = 100;
 
         auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
@@ -396,6 +402,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         expectedDomainPaths += 5;
 
+<<<<<<< HEAD
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
               Name: "Dst"
@@ -403,6 +410,51 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
               Columns { Name: "value0" Type: "Utf8" }
               Columns { Name: "value1" Type: "Utf8" }
               KeyColumnNames: ["key"]
+=======
+        // src path should be removed
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"), {NLs::PathNotExist});
+
+        // dst should exist and be the Src
+        {
+            const auto& dst = DescribePath(runtime, "/MyRoot/Dst");
+            TestDescribeResult(dst, {
+                NLs::PathExist,
+                NLs::PathIdEqual(movedTablePathId),
+                //FIXME: NLs::PathVersionEqual(5),
+            });
+            TestDescribeResult(dst, srcCreateOp.CreateIdentityChecks("Dst"));
+        }
+
+        // database should contain only new dst, no traces of src
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+            NLs::ChildrenCount(2),  // .sys + Dst
+            NLs::PathsInsideDomain(initialPathCount + srcCreateOp.PathCount),
+            NLs::ShardsInsideDomain(srcCreateOp.ShardCount)
+        });
+    }
+
+    // MoveReplace test. Parametrized test
+
+    //TODO: switch to iteration through all possible pairs when all variants will work
+    static const std::vector<TMoveReplaceTestCase> MoveReplaceTests = {
+        { .Tag = "RowTable-over-RowTable", .SrcType = RowTable, .DstType = RowTable },
+        { .Tag = "ColumnTable-over-ColumnTable", .SrcType = ColumnTable, .DstType = ColumnTable },
+        { .Tag = "ColumnTableWithIndexes-over-ColumnTableWithIndexes", .SrcType = ColumnTableWithIndexes, .DstType = ColumnTableWithIndexes },
+        { .Tag = "RowTable-over-ColumnTable", .SrcType = RowTable, .DstType = ColumnTable },
+        { .Tag = "ColumnTable-over-RowTable", .SrcType = ColumnTable, .DstType = RowTable },
+    };
+    struct TTestRegistration_MoveReplace {
+        TTestRegistration_MoveReplace() {
+            static std::vector<TString> TestNames;
+            TestNames.reserve(MoveReplaceTests.size());
+            for (const auto& param : MoveReplaceTests) {
+                TestNames.emplace_back(TStringBuilder() << "Move-" << param.Tag);
+                TCurrentTest::AddTest(
+                    TestNames.back().c_str(),
+                    std::bind(std::bind(MoveReplaceTest, param), std::placeholders::_1),
+                    /*forceFork*/ false
+                );
+>>>>>>> 4a58429a478 (Fix move replace for CS, part1 (#48150))
             }
             IndexDescription {
               Name: "Sync"

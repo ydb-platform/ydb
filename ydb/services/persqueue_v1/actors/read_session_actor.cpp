@@ -851,11 +851,13 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     }
 
 
-    auto getTopicPath = [](const auto& settings) {
+    auto getTopicPath = [&](const auto& settings) {
         if constexpr (UseMigrationProtocol) {
             return settings.topic();
         } else {
-            return settings.path();
+            return TopicsHandler.GetConverterFactory()->GetNoDCMode()
+                ? Request->NormalizePath(settings.path())
+                : TString(settings.path());
         }
     };
 

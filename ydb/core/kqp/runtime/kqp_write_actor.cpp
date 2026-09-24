@@ -6863,7 +6863,7 @@ private:
 
     // ONLY READ COMMITTED
     // Pre-prepare resolve round: how many actors have not reported
-    // OnResolveCompleted yet, and the trace id saved for the subsequent Prepare().
+    // OnResolveCompleted yet.
     ui64 PendingResolveRoundActors = 0;
     // Set when the resolve round was started from the immediate-commit branch of
     // Commit(): OnResolveCompleted then commits immediately (if the transaction

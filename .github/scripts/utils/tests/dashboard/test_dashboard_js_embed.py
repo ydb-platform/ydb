@@ -28,7 +28,7 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("\\u003c/SCRIPT\\u003e", upper)
 
     def test_cpu_seconds_keeps_seconds(self):
-        from dashboard_report_table import cpu_seconds
+        from tests_resource_dashboard import cpu_seconds
 
         self.assertEqual(cpu_seconds({"ru_utime": 1500.0, "ru_stime": 500.0}), 2000.0)
 

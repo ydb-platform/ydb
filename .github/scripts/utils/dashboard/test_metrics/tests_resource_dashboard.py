@@ -22,13 +22,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 # Same-dir library for ya.make REQUIREMENTS (reserved cpu/ram)
-if __name__ != "__main__":
+try:
     from . import ya_make_requirements
     from .dashboard_cpu_recommendations import build_cpu_recommendations
     from .dashboard_html_main import build_html_dashboard
     from .dashboard_report_table import build_report_table_html
     from ..runner_footprint import enrich_resources_overlay, resolve_runner_footprint
-else:
+except ImportError:
     _script_dir = Path(__file__).resolve().parent
     _dashboard_dir = _script_dir.parent
     sys.path.insert(0, str(_script_dir))
@@ -1661,7 +1661,7 @@ def main() -> None:
         )
         if args.full_table:
             out_table_html = args.out_html.with_name(args.out_html.stem + "_table.html")
-            build_report_table_html(args.report, out_table_html, args.suite_path)
+            build_report_table_html(enriched_runs, out_table_html, args.suite_path)
 
     print(json.dumps(stats, ensure_ascii=False, indent=2))
     print(f"Trace written: {args.out_trace}")

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import html as html_lib
 import json
-import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional
@@ -14,109 +13,48 @@ except ImportError:
     from html_embed import js_script_json
     from ya_make_requirements import normalize_suite_path
 
-CHUNK_FROM_SUBTEST_RE = re.compile(r"\[(?:[^\]]*?\s)?(\d+)/(?:\d+)\]\s+chunk")
-CHUNK_SOLE_RE = re.compile(r"^\s*sole\s+chunk\s*$", re.IGNORECASE)
-CHUNK_BRACKET_ONLY_RE = re.compile(r"^\s*\[[^\]]+\]\s+chunk\s*$", re.IGNORECASE)
-CHUNK_GROUP_FROM_SUBTEST_RE = re.compile(r"\[([^\]\s]+)\s+\d+/\d+\]\s+chunk", re.IGNORECASE)
-CHUNK_GROUP_BRACKET_ONLY_RE = re.compile(r"\[([^\]]+)\]\s+chunk", re.IGNORECASE)
 
-
-def chunk_group_from_subtest(subtest_name: str) -> Optional[str]:
-    s = subtest_name or ""
-    m = CHUNK_GROUP_FROM_SUBTEST_RE.search(s)
-    if m:
-        return m.group(1)
-    m2 = CHUNK_GROUP_BRACKET_ONLY_RE.search(s)
-    if m2:
-        content = m2.group(1).strip()
-        if re.search(r"^\d+/\d+$", content):
-            return None
-        return content or None
-    return None
-
-
-def cpu_seconds(metrics: dict[str, Any]) -> float:
-    vals: list[float] = []
-    for k in ("ru_utime", "ru_stime"):
-        v = metrics.get(k)
-        if v is None:
-            continue
-        try:
-            fv = float(v)
-        except (TypeError, ValueError):
-            continue
-        vals.append(fv)
-    return sum(vals)
-
-
-def ram_kb(metrics: dict[str, Any]) -> float:
-    mx = metrics.get("ru_maxrss")
-    if mx is not None:
-        try:
-            return float(mx)
-        except (TypeError, ValueError):
-            pass
-    rss = metrics.get("ru_rss")
-    if rss is not None:
-        try:
-            return float(rss) / 1024.0
-        except (TypeError, ValueError):
-            pass
-    return 0.0
-
-
-def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Optional[str]) -> None:
+def build_report_table_html(
+    enriched_runs: list[dict[str, Any]],
+    out_html: Path,
+    suite_filter: Optional[str],
+) -> None:
     suite_filter = normalize_suite_path(suite_filter) if suite_filter else None
-    report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
-    results = report.get("results", []) if isinstance(report, dict) else []
     rows: list[dict[str, Any]] = []
-    for item in results:
-        if not isinstance(item, dict):
+    for run in enriched_runs:
+        if not isinstance(run, dict):
             continue
-        if item.get("type") != "test":
+        suite = normalize_suite_path(str(run.get("suite_path", "") or ""))
+        if not suite:
             continue
-        suite_raw = str(item.get("path", "") or "")
-        if not suite_raw:
-            continue
-        suite = normalize_suite_path(suite_raw)
         if suite_filter and suite != suite_filter:
             continue
-
-        metrics = item.get("metrics") if isinstance(item.get("metrics"), dict) else {}
-        sub = str(item.get("subtest_name", "") or "")
-        chunk_idx: Optional[int] = None
-        m_idx = CHUNK_FROM_SUBTEST_RE.search(sub)
-        if m_idx:
-            chunk_idx = int(m_idx.group(1))
-        elif CHUNK_SOLE_RE.search(sub) or CHUNK_BRACKET_ONLY_RE.search(sub):
-            chunk_idx = 0
-        chunk_group = chunk_group_from_subtest(sub)
-
+        chunk_idx = run.get("chunk")
         rows.append(
             {
                 "suite_path": suite,
-                "suite_path_raw": suite_raw,
-                "test_name": str(item.get("name", "") or ""),
-                "subtest_name": sub,
-                "status": str(item.get("status", "") or ""),
-                "error_type": str(item.get("error_type", "") or ""),
-                "is_muted": bool(item.get("is_muted") or item.get("muted")),
-                "chunk": bool(item.get("chunk")),
+                "suite_path_raw": str(run.get("suite_path_raw", "") or suite),
+                "test_name": "",
+                "subtest_name": str(run.get("raw_name", "") or ""),
+                "status": str(run.get("status", "") or ""),
+                "error_type": str(run.get("error_type", "") or ""),
+                "is_muted": bool(run.get("is_muted")),
+                "chunk": True,
                 "chunk_idx": chunk_idx,
-                "chunk_group": chunk_group,
-                "duration_sec": float(item.get("duration") or 0.0),
-                "cpu_sec": cpu_seconds(metrics),
-                "ram_kb": ram_kb(metrics),
-                "ru_utime": metrics.get("ru_utime"),
-                "ru_stime": metrics.get("ru_stime"),
-                "ru_maxrss": metrics.get("ru_maxrss"),
-                "ru_rss": metrics.get("ru_rss"),
-                "wall_time": metrics.get("wall_time"),
-                "id": item.get("id"),
-                "hid": item.get("hid"),
-                "size": item.get("size"),
-                "tags": ", ".join(item.get("tags", [])) if isinstance(item.get("tags"), list) else "",
-                "metrics_json": json.dumps(metrics, ensure_ascii=False, sort_keys=True),
+                "chunk_group": run.get("chunk_group"),
+                "duration_sec": float(run.get("duration_used_sec") or 0.0),
+                "cpu_sec": float(run.get("cpu_sec_report") or 0.0),
+                "ram_kb": float(run.get("ram_kb_report") or 0.0),
+                "ru_utime": None,
+                "ru_stime": None,
+                "ru_maxrss": None,
+                "ru_rss": None,
+                "wall_time": None,
+                "id": run.get("uid"),
+                "hid": None,
+                "size": None,
+                "tags": "",
+                "metrics_json": "",
             }
         )
 
@@ -129,7 +67,7 @@ def build_report_table_html(report_path: Path, out_html: Path, suite_filter: Opt
     suite_summary = "; ".join(f"{s}: {c} tests" for s, c in sorted(tests_per_suite.items()))
     payload = {
         "suite_filter": suite_filter,
-        "report_path": str(report_path),
+        "report_path": "",
         "rows_count": len(rows),
         "suite_summary": suite_summary,
         "rows": rows,

@@ -9,8 +9,8 @@
 namespace NKikimr::NDataShard {
 
 struct THnswIndexBuildResult {
-    std::shared_ptr<THnswIndex> Index;
     std::shared_ptr<void> MemoryReservation;
+    std::shared_ptr<THnswIndex> Index;
     TString Error;
 };
 

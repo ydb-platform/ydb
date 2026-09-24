@@ -2,6 +2,7 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
 #include "datashard_failpoints.h"
+#include "datashard_impl.h"
 #include "read_iterator.h"
 
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -10,6 +11,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/memory_controller/consumer_collection.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
@@ -6206,12 +6208,108 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
 
+
+    Y_UNIT_TEST(HnswSharesPageCacheBudgetAndEvictsOnLimit) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TTestHelper helper(serverSettings);
+        helper.CreateCustomTable("table-vector-memory", {
+            {"parent", "Uint32", true, false},
+            {"key", "Uint32", true, false},
+            {"emb", "String", false, false}});
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-vector-memory` (parent, key, emb) VALUES
+                (1, 1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                (1, 2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        const auto shardActor = ResolveTablet(runtime, helper.Tables.at("table-vector-memory").TabletId);
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(shardActor));
+        UNIT_ASSERT(shard);
+        const auto localTid = shard->GetUserTables().begin()->second->LocalTid;
+        TIntrusivePtr<NMemory::TRegistrantConsumer> consumer;
+        ui32 registrations = 0;
+        std::optional<ui64> limitOverride;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegister::EventType && ev->Sender == shardActor) {
+                UNIT_ASSERT(ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::SharedCache);
+                ++registrations;
+            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegistered::EventType && ev->Recipient == shardActor) {
+                consumer = dynamic_cast<NMemory::TRegistrantConsumer*>(ev->Get<NMemory::TEvConsumerRegistered>()->Consumer.Get());
+            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && ev->Recipient == shardActor && limitOverride) {
+                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = *limitOverride;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+
+        Ydb::Table::VectorIndexSettings settings;
+        settings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.set_vector_dimension(2);
+        settings.set_hnsw_min_rows(1);
+        ui64 readId = 0;
+        auto read = [&] {
+            auto request = helper.GetBaseReadRequest("table-vector-memory", ++readId, NKikimrDataEvents::FORMAT_CELLVEC);
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* topK = request->Record.MutableVectorTopK();
+            topK->SetColumn(2);
+            topK->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            topK->SetLimit(1);
+            topK->AddDistinctColumns(1);
+            *topK->MutableSettings() = settings;
+            return helper.SendRead("table-vector-memory", request.release());
+        };
+        auto cached = [&] { return shard->GetHnswIndex(localTid, 3, settings, false); };
+        auto warmCache = [&] {
+            for (ui32 attempt = 0; attempt < 20 && !cached(); ++attempt) {
+                read();
+                runtime.SimulateSleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_ASSERT(cached());
+        };
+        warmCache();
+        UNIT_ASSERT_VALUES_EQUAL(registrations, 1);
+        UNIT_ASSERT(consumer);
+        UNIT_ASSERT_GT(consumer->GetReport().Used, 0);
+        UNIT_ASSERT_GT(shard->GetHnswCacheMemoryLimit(), 0);
+        UNIT_ASSERT_LT(shard->GetHnswCacheMemoryLimit(), 64_MB);
+        UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 1);
+
+        // Simulate an active reader pinning a graph and its write deltas.
+        auto pinned = cached();
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-vector-memory` (parent, key, emb) VALUES
+                (1, 3, "\x00\x00\x00\x00\x00\x00\x80\xBF\x01");
+        )");
+        const ui64 pinnedBytes = consumer->GetReport().Used;
+        limitOverride = 0;
+        runtime.Send(new IEventHandle(shardActor, helper.Sender, new NMemory::TEvConsumerLimit(0)));
+        runtime.WaitFor("HNSW cache eviction", [&] { return !cached(); });
+        UNIT_ASSERT_VALUES_EQUAL(consumer->GetReport().Used, pinnedBytes);
+        UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 3);
+        pinned.reset();
+        runtime.WaitFor("released HNSW reservations", [&] { return consumer->GetReport().Used == 0; });
+
+        limitOverride.reset();
+        warmCache();
+        UNIT_ASSERT_VALUES_EQUAL(registrations, 1);
+        UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 1);
+    }
+
     Y_UNIT_TEST(WriteInvalidatesConcurrentLazyHnswBuild) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root").SetUseRealThreads(false);
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        serverSettings.AppConfig->MutableDataShardConfig()->SetVectorIndexHnswCacheMaxSize(64_MB);
+        serverSettings.SetNeedStatsCollectors(true);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(serverSettings);
 
         TVector<TShardedTableOptions::TColumn> columns = {
@@ -6258,6 +6356,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
 
         auto result = helper.SendRead("table-vector-race", makeRequest(1).release());
         UNIT_ASSERT(result->Record.GetFinished());
+        // Registration and the first controller grant precede lazy construction.
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        result = helper.SendRead("table-vector-race", makeRequest(10).release());
         runtime.WaitFor("lazy HNSW build result", [&] { return !delayedBuildResults.empty(); });
 
         ExecSQL(helper.Server, helper.Sender, R"(

@@ -391,8 +391,9 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     Y_UNIT_TEST(HnswCacheHonorsPrefixRange) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableDataShardConfig()->SetVectorIndexHnswCacheMaxSize(64_MB);
-        TKikimrRunner kikimr{TKikimrSettings(appConfig)};
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

@@ -9,11 +9,21 @@
 #include <util/generic/algorithm.h>
 #include <util/random/fast.h>
 
+#include <atomic>
 #include <thread>
 
 namespace NKikimr::NDataShard {
 
 namespace {
+
+class TTestMemoryConsumer : public NMemory::IMemoryConsumer {
+public:
+    void SetReport(NMemory::TConsumerReport report) override {
+        Report = report;
+    }
+
+    NMemory::TConsumerReport Report;
+};
 
 TString SerializeFloatVector(std::initializer_list<float> values) {
     TString result;
@@ -128,6 +138,8 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
 
     Y_UNIT_TEST(CacheMemoryTrackerConcurrentAcquireRelease) {
         THnswCacheMemoryTracker tracker;
+        auto consumer = MakeIntrusive<TTestMemoryConsumer>();
+        tracker.SetConsumer(consumer);
         tracker.SetLimit(8);
         std::atomic<ui64> acquired = 0;
         std::vector<std::thread> threads;
@@ -148,6 +160,61 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         UNIT_ASSERT(acquired.load() > 0);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetUsed(), 0);
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetLimit(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 0);
+    }
+
+    Y_UNIT_TEST(CacheMemoryTrackerReportsUsageAndDemand) {
+        THnswCacheMemoryTracker tracker;
+        tracker.SetLimit(100);
+        UNIT_ASSERT(tracker.TryAcquire(60));
+
+        auto consumer = MakeIntrusive<TTestMemoryConsumer>();
+        tracker.SetConsumer(consumer);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 60);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 60);
+
+        UNIT_ASSERT(!tracker.TryAcquire(50));
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 60);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 110);
+
+        // Abandoning a partial scan still requires the full graph on retry.
+        tracker.Release(60);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 0);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 110);
+        tracker.SetLimit(110);
+        UNIT_ASSERT(tracker.TryAcquire(110));
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 110);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 110);
+
+        // Shrinking a share must keep reporting memory pinned by readers or builds.
+        tracker.SetLimit(0);
+        UNIT_ASSERT(!tracker.TryAcquire(1));
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 110);
+        tracker.ResetDemand();
+        tracker.Release(60);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 50);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 50);
+        tracker.Release(50);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 0);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 0);
+    }
+
+    Y_UNIT_TEST(CacheMemoryTrackersHaveIndependentLimits) {
+        THnswCacheMemoryTracker first;
+        THnswCacheMemoryTracker second;
+        auto firstConsumer = MakeIntrusive<TTestMemoryConsumer>();
+        auto secondConsumer = MakeIntrusive<TTestMemoryConsumer>();
+        first.SetConsumer(firstConsumer);
+        second.SetConsumer(secondConsumer);
+        first.SetLimit(100);
+        second.SetLimit(200);
+        UNIT_ASSERT(first.TryAcquire(100));
+        UNIT_ASSERT(second.TryAcquire(200));
+        first.SetLimit(0);
+        first.Release(100);
+        UNIT_ASSERT_VALUES_EQUAL(firstConsumer->Report.Used, 0);
+        UNIT_ASSERT_VALUES_EQUAL(secondConsumer->Report.Used, 200);
+        UNIT_ASSERT_VALUES_EQUAL(second.GetLimit(), 200);
     }
 
 

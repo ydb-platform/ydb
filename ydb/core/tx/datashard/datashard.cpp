@@ -299,6 +299,10 @@ void TDataShard::Cleanup(const TActorContext& ctx) {
 }
 
 void TDataShard::Die(const TActorContext& ctx) {
+    if (HnswCacheMemoryTracker) {
+        Send(NMemory::MakeMemoryControllerId(),
+            new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::SharedCache));
+    }
     if (InMemoryRestoreActor) {
         InMemoryRestoreActor->OnTabletDead();
     }
@@ -401,8 +405,6 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         {"selfId", ctx.SelfID});
 
     InitControls();
-    VectorIndexHnswCacheMemoryTracker.SetLimit(
-        AppData(ctx)->DataShardConfig.GetVectorIndexHnswCacheMaxSize());
 
     // OnActivateExecutor might be called multiple times for a follower
     // but the counters should be initialized only once

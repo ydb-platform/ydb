@@ -773,7 +773,7 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
         m = re.search(r"_(\d+)$", name or "")
         if m:
             return int(m.group(1))
-        return abs(hash(name or "worker")) % 100_000
+        return zlib.crc32((name or "worker").encode())
 
     for ev in events:
         # Old evlog format (jsonl): worker_threads/node-finished with value.time.

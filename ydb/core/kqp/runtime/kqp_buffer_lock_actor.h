@@ -17,7 +17,8 @@ public:
 
     virtual void SetLockSettings(
         ui64 cookie,
-        TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns) = 0;
+        TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
+        const NWilson::TTraceId& traceId) = 0;
 
     virtual void AddLockTask(
         ui64 cookie,
@@ -55,7 +56,6 @@ struct TKqpBufferLockSettings {
     TActorId SessionActorId;
     TIntrusivePtr<TKqpCounters> Counters;
 
-    NWilson::TTraceId ParentTraceId;
 };
 
 std::pair<IKqpBufferTableLock*, NActors::IActor*> CreateKqpBufferTableLock(TKqpBufferLockSettings&& settings);

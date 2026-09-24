@@ -1,4 +1,5 @@
 #include "kqp_buffer_lock_actor.h"
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include "kqp_buffer_lookup_actor.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
@@ -64,8 +65,7 @@ public:
         : Settings(std::move(settings))
         , Partitioning(Settings.TxManager->GetPartitioning(Settings.TableId))
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
-            << "SessionActorId: " << Settings.SessionActorId)
-        , LockActorSpan(TWilsonKqp::LockActor, std::move(Settings.ParentTraceId), "LockActor") {
+            << "SessionActorId: " << Settings.SessionActorId) {
     }
 
     void Bootstrap() {
@@ -79,6 +79,7 @@ public:
     static constexpr char ActorName[] = "KQP_BUFFER_LOCK_ACTOR";
 
     void PassAway() final {
+        EndQueryTraceSpan(LockActorSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Settings.Counters->StreamLookupActorsCount->Dec();
 
         if (!LockSendTime.empty()) {
@@ -110,8 +111,6 @@ public:
         Unlink();
 
         TActorBootstrapped<TKqpBufferLockActor>::PassAway();
-
-        LockActorSpan.End();
     }
 
     void Terminate() override {
@@ -120,6 +119,7 @@ public:
 
     void Unlink() override {
         AFL_ENSURE(LockIdToState.empty());
+        EndQueryTraceSpan(LockActorSpan, Ydb::StatusIds::SUCCESS);
 
         for (auto& [_, state] : ShardToState) {
             state.HasPipe = false;
@@ -154,8 +154,12 @@ public:
 
     void SetLockSettings(
             ui64 cookie,
-            TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns) override
+            TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
+            const NWilson::TTraceId& traceId) override
     {
+        if (!LockActorSpan) {
+            LockActorSpan = NWilson::TSpan(TWilsonKqp::LockActor, NWilson::TTraceId(traceId), "Lock rows");
+        }
         TKqpStreamLockSettings lockSettings(Settings.HolderFactory);
         lockSettings.Table.SetOwnerId(Settings.TableId.PathId.OwnerId);
         lockSettings.Table.SetTableId(Settings.TableId.PathId.LocalPathId);

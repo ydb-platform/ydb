@@ -4,10 +4,26 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 
+#include <library/cpp/threading/future/future.h>
+
+#include <util/stream/str.h>
+#include <util/system/mutex.h>
+
+#include <functional>
+#include <memory>
+#include <optional>
+#include <queue>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 namespace NWilson {
 
-    class TFakeWilsonUploader : public NActors::TActorBootstrapped<TFakeWilsonUploader> {
-        public:
+    class TTraceSnapshot {
+    public:
+        using TOtelSpan = opentelemetry::proto::trace::v1::Span;
+
         class Span {
         public:
             Span(TString name, TString parentSpanId, ui64 startTime) : Name(name), ParentSpanId(parentSpanId), StartTime(startTime) {}
@@ -109,12 +125,8 @@ namespace NWilson {
         };
 
     public:
-        void Bootstrap() {
-            Become(&TThis::StateFunc);
-        }
-
-        void Handle(NWilson::TEvWilson::TPtr ev) {
-            TOtelSpan& span = ev->Get()->Span;
+        void AddSpan(const TOtelSpan& span) {
+            TGuard globalLock(*Mutex);
             TOtelSpan spanCopy;
             spanCopy.CopyFrom(span);
             Spans.push_back(std::move(spanCopy));
@@ -131,6 +143,7 @@ namespace NWilson {
         }
 
         [[nodiscard]] bool BuildTraceTrees() {
+            TGuard globalLock(*Mutex);
             for (auto& tracePair : Traces) {
                 Trace& trace = tracePair.second;
 
@@ -156,20 +169,18 @@ namespace NWilson {
         }
 
         void Clear() {
+            TGuard globalLock(*Mutex);
             Traces.clear();
+            Spans.clear();
         }
 
-        STRICT_STFUNC(StateFunc,
-            hFunc(NWilson::TEvWilson, Handle);
-        );
-
     public:
-        using TOtelSpan = opentelemetry::proto::trace::v1::Span;
-
+        std::shared_ptr<TMutex> Mutex = std::make_shared<TMutex>();
         std::unordered_map<TString, Trace> Traces;
         std::vector<TOtelSpan> Spans;
 
         TString PrintTraces() const {
+            TGuard globalLock(*Mutex);
             TStringStream str;
             for (const auto& [_, trace] : Traces) {
                 str << "{ " << trace.ToString() << " } ";
@@ -178,4 +189,33 @@ namespace NWilson {
         }
     };
 
-} // NWilson
+    class TFakeWilsonUploader : public NActors::TActorBootstrapped<TFakeWilsonUploader>, public TTraceSnapshot {
+    public:
+        struct TEvGetSnapshot : NActors::TEventLocal<TEvGetSnapshot, EventSpaceBegin(NActors::TEvents::ES_PRIVATE) + 1> {
+            explicit TEvGetSnapshot(NThreading::TPromise<std::vector<TOtelSpan>> promise)
+                : Promise(std::move(promise))
+            {}
+
+            NThreading::TPromise<std::vector<TOtelSpan>> Promise;
+        };
+
+        void Bootstrap() {
+            Become(&TThis::StateFunc);
+        }
+
+        void Handle(NWilson::TEvWilson::TPtr ev) {
+            AddSpan(ev->Get()->Span);
+        }
+
+        void Handle(TEvGetSnapshot::TPtr ev) {
+            TGuard lock(*Mutex);
+            ev->Get()->Promise.SetValue(Spans);
+        }
+
+        STRICT_STFUNC(StateFunc,
+            hFunc(NWilson::TEvWilson, Handle);
+            hFunc(TEvGetSnapshot, Handle);
+        );
+    };
+
+} // namespace NWilson

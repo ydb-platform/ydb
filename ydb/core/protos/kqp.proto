@@ -327,6 +327,12 @@ message TQueryResponse {
 }
 
 message TEvQueryResponse {
+    enum ERejectionStage {
+        REJECTION_STAGE_UNSPECIFIED = 0;
+        REJECTION_STAGE_PROXY = 1;
+        REJECTION_STAGE_SESSION = 2;
+    }
+
     reserved 1; // (deprecated) KqpStatus
     reserved 2; // (deprecated) KqpError
     optional TQueryResponse Response = 3;
@@ -334,6 +340,7 @@ message TEvQueryResponse {
     reserved 5; // (deprecated) ForcedNewEngine
     optional uint64 ConsumedRu = 6;
     optional bool WorkerIsClosing = 7 [default = false];
+    optional ERejectionStage RejectionStage = 9;
 }
 
 message TCloseSessionRequest {
@@ -938,6 +945,8 @@ message TKqpTableSinkSettings {
     optional bool NeedLookup = 27;
     optional bool SkipMissingRows = 28;
     optional EInputRowFormat InputRowFormat = 29 [default = INPUT_ROW_FORMAT_FLAT];
+    // Non-zero only for an execution that requested buffer lookup diagnostics.
+    optional uint64 BufferLookupDiagnosticsExecutionId = 32;
 }
 
 message TReadVectorTopK {

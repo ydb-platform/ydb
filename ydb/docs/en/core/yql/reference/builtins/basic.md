@@ -501,8 +501,9 @@ In contrast, `Variant<Tuple<Int32, String>>` has one alternative whose value
 is a tuple, so only index `0` exists.
 
 The index passed to `Variant()` is written as a string. [Way](#way) returns
-the active index as `Uint32`. Use dot notation to access an alternative by
-its compile-time index:
+the active index as `Uint32`. Dot notation accesses an alternative by its
+compile-time index and returns `Optional<T>`: the value for the active
+alternative, or `NULL` otherwise:
 
 ```yql
 $tuple = (7, "seven");

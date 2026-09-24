@@ -249,12 +249,21 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
     TString root;
     if (!databaseBuf.empty()) {
         if (IsPathPrefix(PQPrefix, databaseBuf)) {
-            // PQ root equal to the domain (/Root) still holds modern topics at
-            // /Root/<account>/<topic>. Only a path actually under a dedicated PQ
-            // directory is a legacy root topic.
+            // A dedicated PQ directory (/Root/PQ under database /Root) means the
+            // client name is a federation name (account/topic). PrimaryPath is the
+            // scheme path beside that directory; the LbRoot retry fills SecondaryPath.
+            // An absolute path already inside the database stays modern.
+            // When the PQ root is the database itself, only a path under that root
+            // is a legacy root topic.
             const bool pqRootIsDatabase = (PQPrefix == databaseBuf);
-            const bool nestedBesideFlatRoot = pqRootIsDatabase && topicPath != PQPrefix;
-            if (IsPathPrefix(topicPath, PQPrefix) && !nestedBesideFlatRoot) {
+            TStringBuf dbNoSlash(databaseBuf);
+            dbNoSlash.SkipPrefix("/");
+            const bool pathInsideDatabase = !dbNoSlash.empty() &&
+                (topicPath == dbNoSlash || topicPath.StartsWith(TString(dbNoSlash) + "/"));
+            const bool federationClientName = !pqRootIsDatabase && !pathInsideDatabase;
+            const bool legacyRootTopic = IsPathPrefix(topicPath, PQPrefix) &&
+                !(pqRootIsDatabase && topicPath != PQPrefix);
+            if (federationClientName || legacyRootTopic) {
                 isRootDb = true;
                 root = PQPrefix;
                 SkipPathPrefix(topicPath, PQPrefix);

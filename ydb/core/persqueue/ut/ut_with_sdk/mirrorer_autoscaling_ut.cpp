@@ -117,7 +117,7 @@ namespace NKikimr::NPersQueueTests {
                 Cerr << (TStringBuilder() << "ALTER_SCHEME: " << scheme << "\n") << Flush;
 
                 const auto sender = runtime.AllocateEdgeActor();
-                const auto request = CreateRequest(txId, CreateTransaction("/Root/PQ", scheme));
+                const auto request = CreateRequest(txId, CreateTransaction("/Root", scheme));
                 runtime.Send(new IEventHandle(
                                 MakeTabletResolverID(),
                                 sender,

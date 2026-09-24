@@ -1865,8 +1865,15 @@ public:
                 UNIT_ASSERT(topicInfo.GetConfig().HasPartitionConfig() || topicInfo.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
             }
             ui32 j = 0;
-            for (; j < topics.size() && topics[j] != topicInfo.GetTopic(); ++j);
-            UNIT_ASSERT(j == 0 || j != topics.size());
+            for (; j < topics.size(); ++j) {
+                if (topics[j] == topicInfo.GetTopic()) {
+                    break;
+                }
+                if (LocateTestTopic(topics[j]).ClientsideName() == topicInfo.GetTopic()) {
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(j != topics.size(), topicInfo.GetTopic());
         }
         return res;
     }

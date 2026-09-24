@@ -505,7 +505,6 @@ runs:
           TRY_LINKS=""
           for i in $(seq 1 $RETRY); do TRY_LINKS="${TRY_LINKS}try_$i/tests_metrics/dashboard.html,"; done
           TRY_LINKS="${TRY_LINKS%,}"
-          DASHBOARD_OK=0
           if timeout 120 python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \
             --report "$CURRENT_REPORT" \
             --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
@@ -525,16 +524,12 @@ runs:
             --repo-root . \
             "${DASHBOARD_ARGS[@]}" > "$TESTS_METRICS_DIR/dashboard_build.log" 2>&1; then
             rm -f "$TESTS_METRICS_DIR/dashboard_build.log"
-            DASHBOARD_OK=1
           else
             mv "$TESTS_METRICS_DIR/dashboard_build.log" "$TESTS_METRICS_DIR/dashboard_error.log"
             echo "Dashboard generation failed (see dashboard_error.log in artifacts)"
           fi
           cp -f "$RESOURCES_JSONL" "$TESTS_METRICS_DIR/resources_monitor.jsonl" 2>/dev/null
           cp -f ram_usage.txt "$TESTS_METRICS_DIR/ram_usage_legacy.txt" 2>/dev/null
-          if [ "$DASHBOARD_OK" -eq 1 ]; then
-            echo "21 [Dashboard try $RETRY](${CURRENT_PUBLIC_DIR_URL}/tests_metrics/dashboard.html)" >> $SUMMARY_LINKS
-          fi
           set -e
 
           # generate test_bloat

@@ -26,12 +26,12 @@ def test_footprint_key_for_preset():
 
 def test_resolve_release_asan_footprint():
     fp = resolve_runner_footprint(build_preset="release-asan")
-    assert fp.vcpu == 96
-    assert fp.ram_gb == 288.0
-    assert fp.mem_budget_gb == 288.0 * 0.70
-    assert fp.ya_make_mem_limit_gb == 288.0 * 0.95
+    assert fp.vcpu == 64
+    assert fp.ram_gb == 320.0
+    assert fp.mem_budget_gb == 320.0 * 0.70
+    assert fp.ya_make_mem_limit_gb == 320.0 * 0.95
     assert fp.footprint_key == "build-preset-release-asan"
-    assert 96 in fp.mem_cpu_tiers
+    assert 64 in fp.mem_cpu_tiers
 
 
 def test_resolve_relwithdebinfo_footprint():
@@ -51,13 +51,13 @@ def test_enrich_resources_overlay_adds_limits():
         "xs_evlog_sec": [0.0, 1.0],
         "cpu_total_cores": [10.0, 20.0],
         "ram_gb": [100.0, 120.0],
-        "cpu_cores": 96,
+        "cpu_cores": 64,
     }
     records = [{"ram_total_gb": 280.5}]
     out = enrich_resources_overlay(overlay, fp, records=records)
     assert out is not None
-    assert out["runner_limits"]["cpu_cores_max"] == 96
-    assert out["runner_limits"]["ram_gb_max"] == 288.0
+    assert out["runner_limits"]["cpu_cores_max"] == 64
+    assert out["runner_limits"]["ram_gb_max"] == 320.0
     assert out["measured"]["ram_gb"] == 280.5
     assert out["runner_footprint"]["build_preset"] == "release-asan"
 

@@ -1101,13 +1101,13 @@ namespace {
             TThis::Schedule(delay, new TEvPeriodicTick(generation, false));
         }
 
-        void StartRefresh(const TActorContext& ctx) {
+        void StartRefresh() {
             if (ActiveWorkerId) {
                 return;
             }
 
             ActiveAttemptId = NextAttemptId++;
-            AttemptStarted = ctx.Monotonic();
+            AttemptStarted = TActivationContext::Monotonic();
             auto* worker = new TVDiskSpaceReportActor(
                 HullCtx,
                 HugeBlobCtx,
@@ -1120,22 +1120,23 @@ namespace {
                 ChunkKeeperEnabled,
                 MinHugeBlobInBytes,
                 ActiveAttemptId);
-            ActiveWorkerId = RunInBatchPool(ctx, worker);
+            ActiveWorkerId = RunInBatchPool(TActivationContext::AsActorContext(), worker);
             RefreshInProgress->Set(1);
             TThis::Schedule(WatchdogTimeout, new TEvWatchdog(ActiveAttemptId));
         }
 
-        void Reply(const TActorContext& ctx, TEvGetVDiskSpaceReportRequest::TPtr& ev) {
+        void Reply(TEvGetVDiskSpaceReportRequest::TPtr& ev) {
             if (CachedReport) {
                 auto response = std::make_unique<TEvGetVDiskSpaceReportResponse>(
-                    NKikimrProto::OK, TString(), ctx.Now(), nullptr, nullptr);
+                    NKikimrProto::OK, TString(), TActivationContext::Now(), nullptr, nullptr);
                 response->Record.MutableReport()->CopyFrom(*CachedReport);
-                SendVDiskResponse(ctx, ev->Sender, response.release(), ev->Cookie, HullCtx->VCtx, {});
+                SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, response.release(),
+                    ev->Cookie, HullCtx->VCtx, {});
                 return;
             }
 
             ColdCacheRequests->Inc();
-            StartRefresh(ctx);
+            StartRefresh();
 
             TString errorReason = "VDisk space report cache is not ready";
             if (LastAttemptError) {
@@ -1143,8 +1144,9 @@ namespace {
                 errorReason += LastAttemptError;
             }
             auto response = std::make_unique<TEvGetVDiskSpaceReportResponse>(
-                NKikimrProto::NOTREADY, errorReason, ctx.Now(), nullptr, nullptr);
-            SendVDiskResponse(ctx, ev->Sender, response.release(), ev->Cookie, HullCtx->VCtx, {});
+                NKikimrProto::NOTREADY, errorReason, TActivationContext::Now(), nullptr, nullptr);
+            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, response.release(),
+                ev->Cookie, HullCtx->VCtx, {});
         }
 
         template <typename TCounterMap>
@@ -1232,7 +1234,6 @@ namespace {
         }
 
         void RecordFailure(
-                const TActorContext& ctx,
                 TString errorReason,
                 TDuration duration,
                 ui64 cpuTimeUs,
@@ -1244,10 +1245,11 @@ namespace {
             RefreshFailures->Inc();
             UpdateAttemptMetrics(duration, cpuTimeUs, quanta, visitedKeys, physicalRecords);
 
-            const TMonotonic now = ctx.Monotonic();
+            const TMonotonic now = TActivationContext::Monotonic();
             if (LastFailureLog == TMonotonic::Zero() || now - LastFailureLog >= FailureLogPeriod) {
                 LastFailureLog = now;
-                YDB_LOG_WARN_CTX_COMP(ctx, BS_VDISK_OTHER, "VDisk SpaceReport refresh failed",
+                YDB_LOG_WARN_CTX_COMP(TActivationContext::AsActorContext(), BS_VDISK_OTHER,
+                    "VDisk SpaceReport refresh failed",
                     {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                     {"ErrorReason", LastAttemptError},
                     {"marker", "BSVS47"});
@@ -1261,11 +1263,11 @@ namespace {
             ScheduleNext(false);
         }
 
-        void Handle(TEvGetVDiskSpaceReportRequest::TPtr& ev, const TActorContext& ctx) {
-            Reply(ctx, ev);
+        void Handle(TEvGetVDiskSpaceReportRequest::TPtr& ev) {
+            Reply(ev);
         }
 
-        void Handle(TEvPeriodicTick::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvPeriodicTick::TPtr& ev) {
             if (ev->Get()->Generation != ScheduleGeneration) {
                 return;
             }
@@ -1278,11 +1280,11 @@ namespace {
             } else if (ActiveWorkerId) {
                 PeriodicTicksSkipped->Inc();
             } else {
-                StartRefresh(ctx);
+                StartRefresh();
             }
         }
 
-        void Handle(TEvScanComplete::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvScanComplete::TPtr& ev) {
             auto* result = ev->Get();
             if (ev->Sender != ActiveWorkerId || result->AttemptId != ActiveAttemptId) {
                 return;
@@ -1307,7 +1309,6 @@ namespace {
                     result->PhysicalRecords);
             } else {
                 RecordFailure(
-                    ctx,
                     record.GetErrorReason().empty()
                         ? TString("SpaceReport worker returned no report")
                         : TString(record.GetErrorReason()),
@@ -1320,16 +1321,15 @@ namespace {
             FinishAttempt();
         }
 
-        void Handle(TEvWatchdog::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvWatchdog::TPtr& ev) {
             if (!ActiveWorkerId || ev->Get()->AttemptId != ActiveAttemptId) {
                 return;
             }
 
-            ctx.Send(ActiveWorkerId, new TEvents::TEvPoisonPill);
+            TThis::Send(ActiveWorkerId, new TEvents::TEvPoisonPill);
             RecordFailure(
-                ctx,
                 "SpaceReport refresh exceeded the 30 minute watchdog",
-                ctx.Monotonic() - AttemptStarted,
+                TActivationContext::Monotonic() - AttemptStarted,
                 0,
                 0,
                 0,
@@ -1341,7 +1341,7 @@ namespace {
             ++ScheduleGeneration;
         }
 
-        void Handle(TEvents::TEvGone::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvents::TEvGone::TPtr& ev) {
             if (ev->Sender != ActiveWorkerId) {
                 return;
             }
@@ -1354,9 +1354,8 @@ namespace {
             }
 
             RecordFailure(
-                ctx,
                 "SpaceReport worker terminated without a completion event",
-                ctx.Monotonic() - AttemptStarted,
+                TActivationContext::Monotonic() - AttemptStarted,
                 0,
                 0,
                 0,
@@ -1382,11 +1381,11 @@ namespace {
         }
 
         STRICT_STFUNC(StateFunc, {
-            HFunc(TEvGetVDiskSpaceReportRequest, Handle);
-            HFunc(TEvPeriodicTick, Handle);
-            HFunc(TEvScanComplete, Handle);
-            HFunc(TEvWatchdog, Handle);
-            HFunc(TEvents::TEvGone, Handle);
+            hFunc(TEvGetVDiskSpaceReportRequest, Handle);
+            hFunc(TEvPeriodicTick, Handle);
+            hFunc(TEvScanComplete, Handle);
+            hFunc(TEvWatchdog, Handle);
+            hFunc(TEvents::TEvGone, Handle);
             hFunc(TEvMinHugeBlobSizeUpdate, Handle);
             cFunc(TEvents::TSystem::PoisonPill, HandlePoison);
         })

@@ -1,8 +1,15 @@
 # Ещё не поддерживаемые конструкции из классического SQL
 
-## \[NOT\] \[EXISTS|INTERSECT\|EXCEPT] {#not-exists}
+## Коррелированные EXISTS и NOT EXISTS {#not-exists}
 
-Доступный альтернативный вариант — `EXISTS` синтаксически доступен, но из-за отсутствия поддержки коррелированных подзапросов не очень полезен. Также можно переписать через `JOIN`.
+`EXISTS` и `NOT EXISTS` можно использовать с некоррелированными подзапросами.
+Коррелированные подзапросы не поддерживаются. Для отбора строк по наличию или
+отсутствию совпадающих строк используйте `LEFT SEMI JOIN` или `LEFT ONLY JOIN`.
+Подробнее см. в разделе [Коррелированные подзапросы, EXISTS и NOT EXISTS](correlated-subqueries.md).
+
+## INTERSECT и EXCEPT {#intersect-except}
+
+YQL не поддерживает `INTERSECT` и `EXCEPT`.
 
 ## NATURAL JOIN {#natural-join}
 
@@ -11,4 +18,3 @@
 ## NOW() / CURRENT_TIME() {#now}
 
 Доступный альтернативный вариант — воспользоваться функциями [CurrentUtcDate, CurrentUtcDatetime и CurrentUtcTimestamp](../builtins/basic.md#current-utc).
-

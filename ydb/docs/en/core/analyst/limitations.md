@@ -129,15 +129,16 @@ SELECT * FROM $base WHERE event_ts > CurrentUtcTimestamp()
 
 A correlated subquery is a subquery that references columns from an outer query. Such subqueries are not supported in YQL.
 Most use cases of correlated subqueries can be replaced using `JOIN` and aggregate functions.
+The complete support matrix and rewrite rules are available in [Correlated subqueries, EXISTS, and NOT EXISTS](../yql/reference/syntax/correlated-subqueries.md).
 
 #### EXISTS
 
-Transformation of `EXISTS` → `INNER JOIN` using `DISTINCT`.
+Transformation of correlated `EXISTS` → `LEFT SEMI JOIN`.
 
 Original query:
 
 
-```sql
+```yql
 SELECT a.* FROM A a WHERE EXISTS (
   SELECT 1 FROM B b WHERE b.key = a.key AND b.flag = 1
 );
@@ -147,17 +148,16 @@ SELECT a.* FROM A a WHERE EXISTS (
 ##### Solution
 
 
-```sql
+```yql
 $B_match = (
   SELECT key
   FROM B
   WHERE flag = 1
-  GROUP BY key
 );
 
-SELECT DISTINCT a.*
+SELECT a.*
 FROM A AS a
-JOIN $B_match AS b
+LEFT SEMI JOIN $B_match AS b
 ON b.key = a.key;
 ```
 
@@ -169,7 +169,7 @@ Scalar subquery with aggregate → aggregation + JOIN
 Original query:
 
 
-```sql
+```yql
 SELECT a.*, (SELECT MAX(ts) FROM B b WHERE b.user_id = a.user_id) AS last_ts
 FROM A a;
 ```
@@ -178,7 +178,7 @@ FROM A a;
 ##### Solution
 
 
-```sql
+```yql
 $B_last = (
   SELECT user_id, MAX(ts) AS last_ts
   FROM B
@@ -194,12 +194,12 @@ ON bl.user_id = a.user_id;
 
 #### NOT EXISTS
 
-`NOT EXISTS` → anti-join
+Transformation of correlated `NOT EXISTS` → `LEFT ONLY JOIN`.
 
-Original query
+Original query:
 
 
-```sql
+```yql
 SELECT a.* FROM A a WHERE NOT EXISTS (
   SELECT 1 FROM B b WHERE b.key = a.key AND b.flag = 1
 );
@@ -209,10 +209,17 @@ SELECT a.* FROM A a WHERE NOT EXISTS (
 ##### Solution
 
 
-```sql
-$B_keys = (SELECT DISTINCT key FROM B);
+```yql
+$B_match = (
+  SELECT key
+  FROM B
+  WHERE flag = 1
+);
 
-SELECT a.* FROM A AS a LEFT ONLY JOIN $B_keys AS b ON b.key = a.key;
+SELECT a.*
+FROM A AS a
+LEFT ONLY JOIN $B_match AS b
+ON b.key = a.key;
 ```
 
 

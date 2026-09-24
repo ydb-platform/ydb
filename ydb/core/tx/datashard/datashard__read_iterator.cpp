@@ -439,18 +439,25 @@ std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
     for (const auto& [key, _] : result) {
         keyBytes += key.size();
     }
-    if (keyBytes != 0) {
-        auto keyReservation = dataShard.TryReserveHnswCacheMemory(keyBytes);
-        if (!keyReservation) {
+    // Precharge does not count rows held in memtables. Include the actual
+    // scanned rows as well as their keys before handing the build its budget.
+    const ui64 requiredBytes = THnswIndex::EstimateMemoryBytes(
+        result.size(), settings.vector_dimension(),
+        settings.has_hnsw_connectivity() ? settings.hnsw_connectivity() : 16, keyBytes);
+    if (requiredBytes > reservedBytes) {
+        auto additionalReservation = dataShard.TryReserveHnswCacheMemory(requiredBytes - reservedBytes);
+        if (!additionalReservation) {
+            result.clear();
+            memoryReservation.reset();
             return {};
         }
         struct TCombinedReservation {
-            std::shared_ptr<void> Index;
-            std::shared_ptr<void> Keys;
+            std::shared_ptr<void> Initial;
+            std::shared_ptr<void> Additional;
         };
         memoryReservation = std::make_shared<TCombinedReservation>(
-            TCombinedReservation{std::move(memoryReservation), std::move(keyReservation)});
-        reservedBytes += keyBytes;
+            TCombinedReservation{std::move(memoryReservation), std::move(additionalReservation)});
+        reservedBytes = requiredBytes;
     }
     return result;
 }
@@ -4705,4 +4712,3 @@ inline void Out<NKikimr::NDataShard::TReadIteratorId>(
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

@@ -101,11 +101,11 @@ void TDataShard::Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TAc
         return;
     }
     if (result->Index) {
-        SetHnswIndex(result->LocalTid, result->Index, std::move(result->MemoryReservation),
-            result->RowCountAtBuild, result->VectorColumnTag, result->Settings);
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
             TabletID() << " HNSW: lazy build completed for localTid=" << result->LocalTid
             << " size=" << result->Index->Size());
+        SetHnswIndex(result->LocalTid, std::move(result->Index), std::move(result->MemoryReservation),
+            result->RowCountAtBuild, result->VectorColumnTag, result->Settings);
     } else {
         SetHnswIndexBuilding(result->LocalTid, false);
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,

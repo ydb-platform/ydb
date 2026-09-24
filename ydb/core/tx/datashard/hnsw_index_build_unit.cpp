@@ -84,19 +84,25 @@ bool ScanPostingTableVectors(
     for (const auto& [key, _] : keysAndVectors) {
         keyBytes += key.size();
     }
-    if (keyBytes != 0) {
-        auto keyReservation = dataShard.TryReserveHnswCacheMemory(keyBytes);
-        if (!keyReservation) {
+    // Precharge does not count rows held in memtables. Include the actual
+    // scanned rows as well as their keys before handing the build its budget.
+    const ui64 requiredBytes = THnswIndex::EstimateMemoryBytes(
+        keysAndVectors.size(), settings.vector_dimension(),
+        settings.has_hnsw_connectivity() ? settings.hnsw_connectivity() : 16, keyBytes);
+    if (requiredBytes > reservedBytes) {
+        auto additionalReservation = dataShard.TryReserveHnswCacheMemory(requiredBytes - reservedBytes);
+        if (!additionalReservation) {
             keysAndVectors.clear();
+            memoryReservation.reset();
             return true;
         }
         struct TCombinedReservation {
-            std::shared_ptr<void> Index;
-            std::shared_ptr<void> Keys;
+            std::shared_ptr<void> Initial;
+            std::shared_ptr<void> Additional;
         };
         memoryReservation = std::make_shared<TCombinedReservation>(
-            TCombinedReservation{std::move(memoryReservation), std::move(keyReservation)});
-        reservedBytes += keyBytes;
+            TCombinedReservation{std::move(memoryReservation), std::move(additionalReservation)});
+        reservedBytes = requiredBytes;
     }
 
     return true;
@@ -255,7 +261,7 @@ protected:
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
                 << " HNSW: eager build completed for localTid=" << LocalTid
                 << " size=" << result->Index->Size());
-            DataShard.SetHnswIndex(LocalTid, result->Index,
+            DataShard.SetHnswIndex(LocalTid, std::move(result->Index),
                 std::move(result->MemoryReservation), RowCountAtBuild,
                 VectorColumnTag, Settings);
         } else {

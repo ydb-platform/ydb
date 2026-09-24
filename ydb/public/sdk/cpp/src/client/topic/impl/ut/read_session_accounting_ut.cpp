@@ -1,36 +1,64 @@
-#define INCLUDE_READ_SESSION_IMPL_H
-#include <ydb/public/sdk/cpp/src/client/topic/impl/read_session_impl.h>
-#undef INCLUDE_READ_SESSION_IMPL_H
+#include <ydb/public/sdk/cpp/src/client/topic/impl/read_session_impl.ipp>
+#include <ydb/public/sdk/cpp/src/client/topic/common/executor_impl.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYdb::inline Dev::NTopic {
 
     Y_UNIT_TEST_SUITE(TReadSessionDecompressionAccounting) {
-        Y_UNIT_TEST(ReadyTransitionDuringCleanupReleasesTaskTwice) {
-            // Both messages belong to one decompression task and share its flags.
-            std::atomic<bool> ready = false;
-            std::atomic<bool> abandoned = false;
-            TDataDecompressionEvent<false> first(0, 0, {}, ready, abandoned);
-            TDataDecompressionEvent<false> second(0, 1, {}, ready, abandoned);
+        Y_UNIT_TEST(CleanupAndDecompressionReleaseSameMessage) {
+            TReadSessionSettings settings;
+            auto counters = MakeIntrusive<TReaderCounters>();
+            MakeCountersNotNull(*counters);
+            settings.MaxMemoryUsageBytes(1_MB).Counters(counters);
 
-            // Cleanup sees the first message before the task becomes ready.
-            UNIT_ASSERT(!first.IsReady());
-            UNIT_ASSERT(first.SetAbandoned());
+            auto events = std::make_shared<TReadSessionEventsQueue<false>>(settings);
+            auto context = MakeWithCallbackContext<TSingleClusterReadSessionImpl<false>>(
+                settings, "", "read-session", "", TLog{}, nullptr, events, nullptr, 1, 1);
+            auto session = context->TryGet();
+            auto partition = MakeIntrusive<TPartitionStreamImpl<false>>(
+                ui64{1}, "topic", "read-session", 0, 1, 0, std::nullopt, context);
 
-            // The task finishes before cleanup examines the next message.
-            ready = true;
-            constexpr i64 firstSize = 10;
-            constexpr i64 secondSize = 20;
-            const i64 cleanupReleased = second.IsReady() || !second.SetAbandoned() ? secondSize : 0;
+            TPartitionData<false> data;
+            auto* batch = data.add_batches();
+            batch->set_codec(Ydb::Topic::CODEC_RAW);
+            batch->add_message_data()->set_data(std::string(10, 'a'));
+            batch->add_message_data()->set_data(std::string(20, 'b'));
+            auto info = std::make_shared<TDataDecompressionInfo<false>>(
+                std::move(data), context, true);
 
-            // The task's abandoned path releases all its messages.
-            bool expected = false;
-            const i64 taskReleased = !abandoned.compare_exchange_strong(expected, true)
-                                         ? firstSize + secondSize
-                                         : 0;
+            {
+                TDeferredActions<false> actions;
+                UNIT_ASSERT(info->PlanDecompressionTasks(1.0, partition, actions));
+            }
 
-            UNIT_ASSERT_VALUES_EQUAL(cleanupReleased + taskReleased, firstSize + secondSize);
+            auto queue = partition->ExtractQueue();
+            UNIT_ASSERT_VALUES_EQUAL(queue.size(), 2);
+            TRawPartitionStreamEvent<false> first(std::move(queue.front()));
+            queue.pop_front();
+            TRawPartitionStreamEvent<false> second(std::move(queue.front()));
+            queue.pop_front();
+            queue.emplace_back(std::move(first));
+
+            {
+                TDeferredActions<false> actions;
+                const auto estimatedSize = info->StartDecompressionTasks(
+                    std::make_shared<TSyncExecutor>(), 1_MB, actions);
+                UNIT_ASSERT_VALUES_EQUAL(estimatedSize, 30);
+                // StartDecompressionTasksImpl normally reserves this estimated size.
+                session->OnDataDecompressed(0, 0, estimatedSize, 0);
+
+                // Cleanup marks the first message abandoned while the task is pending.
+                queue.Cleanup(actions);
+            } // Runs the actual decompression task and releases its 30 bytes.
+
+            UNIT_ASSERT(second.IsReady());
+            queue.emplace_back(std::move(second));
+            {
+                TDeferredActions<false> actions;
+                // Cleanup sees the second message as ready and releases its bytes again.
+                queue.Cleanup(actions);
+            } // OnUserRetrievedEvent must abort because the 30-byte budget is already zero.
         }
     } // Y_UNIT_TEST_SUITE(TReadSessionDecompressionAccounting)
 

@@ -29,7 +29,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     i64 freeSpace = DqSolomonDefaultFreeSpace,
-    bool enableStreamingQueriesCounters = false);
+    bool enableStreamingQueriesCounters = false,
+    bool enableCountersPerTask = false);
 
 void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory,
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory,

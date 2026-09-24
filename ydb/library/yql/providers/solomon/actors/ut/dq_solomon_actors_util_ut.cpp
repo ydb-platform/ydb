@@ -12,8 +12,8 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-constexpr ui16 Days = 19000; // 2022-01-08
-const TInstant Expected = TInstant::Days(Days);
+constexpr ui16 DATE_DAYS = 19000; // 2022-01-08
+const TInstant EXPECTED_INSTANT = TInstant::Days(DATE_DAYS);
 
 TString EncodeOnePoint(NUdf::TDataTypeId timestampType, NUdf::TUnboxedValuePod timestamp, bool cloudFormat) {
     TScopedAlloc alloc(__LOCATION__);
@@ -36,7 +36,7 @@ TString EncodeOnePoint(NUdf::TDataTypeId timestampType, NUdf::TUnboxedValuePod t
 }
 
 TString EncodeAsTimestamp(bool cloudFormat) {
-    return EncodeOnePoint(NUdf::TDataType<NUdf::TTimestamp>::Id, NUdf::TUnboxedValuePod(ui64(Expected.MicroSeconds())), cloudFormat);
+    return EncodeOnePoint(NUdf::TDataType<NUdf::TTimestamp>::Id, NUdf::TUnboxedValuePod(ui64(EXPECTED_INSTANT.MicroSeconds())), cloudFormat);
 }
 
 void CheckSameAsTimestamp(NUdf::TDataTypeId timestampType, NUdf::TUnboxedValuePod timestamp) {
@@ -52,25 +52,25 @@ void CheckSameAsTimestamp(NUdf::TDataTypeId timestampType, NUdf::TUnboxedValuePo
 
 Y_UNIT_TEST_SUITE(TMetricsEncoderTimestampTest) {
     Y_UNIT_TEST(TimestampIsEncodedAsUnixSeconds) {
-        UNIT_ASSERT_STRING_CONTAINS(EncodeAsTimestamp(/* cloudFormat */ false), TStringBuilder() << "\"ts\":" << Expected.Seconds());
+        UNIT_ASSERT_STRING_CONTAINS(EncodeAsTimestamp(/* cloudFormat */ false), TStringBuilder() << "\"ts\":" << EXPECTED_INSTANT.Seconds());
     }
 
     Y_UNIT_TEST(Date) {
-        CheckSameAsTimestamp(NUdf::TDataType<NUdf::TDate>::Id, NUdf::TUnboxedValuePod(Days));
+        CheckSameAsTimestamp(NUdf::TDataType<NUdf::TDate>::Id, NUdf::TUnboxedValuePod(DATE_DAYS));
     }
 
     Y_UNIT_TEST(TzDate) {
-        NUdf::TUnboxedValuePod value(Days);
+        NUdf::TUnboxedValuePod value(DATE_DAYS);
         value.SetTimezoneId(1);
         CheckSameAsTimestamp(NUdf::TDataType<NUdf::TTzDate>::Id, value);
     }
 
     Y_UNIT_TEST(Datetime) {
-        CheckSameAsTimestamp(NUdf::TDataType<NUdf::TDatetime>::Id, NUdf::TUnboxedValuePod(ui32(Expected.Seconds())));
+        CheckSameAsTimestamp(NUdf::TDataType<NUdf::TDatetime>::Id, NUdf::TUnboxedValuePod(ui32(EXPECTED_INSTANT.Seconds())));
     }
 
     Y_UNIT_TEST(TzDatetime) {
-        NUdf::TUnboxedValuePod value(ui32(Expected.Seconds()));
+        NUdf::TUnboxedValuePod value(ui32(EXPECTED_INSTANT.Seconds()));
         value.SetTimezoneId(1);
         CheckSameAsTimestamp(NUdf::TDataType<NUdf::TTzDatetime>::Id, value);
     }

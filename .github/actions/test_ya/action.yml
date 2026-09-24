@@ -168,7 +168,7 @@ runs:
       shell: bash
       env:
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
-        PR_NUMBER: ${{ inputs.pull_number }}
+        PR_NUMBER: ${{ github.event.number || inputs.pull_number }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}

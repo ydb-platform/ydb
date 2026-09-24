@@ -10,14 +10,15 @@ namespace NKikimr::NKqp {
 
 constexpr TDuration CurrentQueryStatsReportInterval = TDuration::Seconds(30);
 
-// CPU includes compute and reported storage CPU; memory is compute quota without channel quota.
-// Table/source bytes may overlap and do not distinguish local storage from S3.
 struct TCurrentExecStats {
     ui64 DurationUs = 0;
     ui64 CpuTimeUs = 0;
+    // Current compute-task quota; not RSS or peak memory.
     ui64 ComputeMemoryBytes = 0;
     ui64 TableReadBytes = 0;
+    // Bytes received by DQ compute tasks from all input sources.
     ui64 ReadIngressBytes = 0;
+    // Highest compute-task quota observed during this execution.
     ui64 ObservedPeakComputeMemoryBytes = 0;
 };
 
@@ -30,10 +31,13 @@ class TCurrentQueryStats {
 public:
     struct TSnapshot {
         ui64 CpuTimeUs = 0;
+        // Sum of current compute-task quotas across active executions.
         ui64 ComputeMemoryBytes = 0;
-        ui64 TableReadBytes = 0;
         ui64 ReadIngressBytes = 0;
+        // Average ingress throughput since the previous published snapshot.
+        // Empty when there was no fresh execution report in that interval.
         std::optional<ui64> ReadIngressBytesRate;
+        // Highest sum of compute-task quotas observed for this query.
         ui64 ObservedPeakComputeMemoryBytes = 0;
     };
 
@@ -46,7 +50,6 @@ public:
         return {
             .CpuTimeUs = snapshot.CpuTimeUs,
             .ComputeMemoryBytes = snapshot.ComputeMemoryBytes,
-            .TableReadBytes = snapshot.TableReadBytes,
             .ReadIngressBytes = snapshot.ReadIngressBytes,
             .ObservedPeakComputeMemoryBytes = snapshot.ObservedPeakComputeMemoryBytes,
         };
@@ -81,10 +84,8 @@ public:
 private:
     void UpdateSnapshot(TCurrentExecStats& previous, TCurrentExecStats current) {
         current.CpuTimeUs = std::max(current.CpuTimeUs, previous.CpuTimeUs);
-        current.TableReadBytes = std::max(current.TableReadBytes, previous.TableReadBytes);
         current.ReadIngressBytes = std::max(current.ReadIngressBytes, previous.ReadIngressBytes);
         Total.CpuTimeUs += current.CpuTimeUs - previous.CpuTimeUs;
-        Total.TableReadBytes += current.TableReadBytes - previous.TableReadBytes;
         Total.ReadIngressBytes += current.ReadIngressBytes - previous.ReadIngressBytes;
         Total.ComputeMemoryBytes -= previous.ComputeMemoryBytes;
         Total.ComputeMemoryBytes += current.ComputeMemoryBytes;

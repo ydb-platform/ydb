@@ -396,6 +396,7 @@ message TCompileCacheQueryInfo {
     optional string Syntax = 14;
 }
 
+// Proxy-side session snapshot exported by .sys/query_sessions.
 message TSessionInfo {
     optional string SessionId = 1;
     /// optional ui32 NodeId = 2;
@@ -420,9 +421,9 @@ message TSessionInfo {
     optional string TraceId = 21;
     // Description of how the query was classified into WmPoolId
     optional string WmClassifiedBy = 22;
-    // Elapsed query execution time from QueryStartAt. Resources are
-    // latest reported values; absent until the first execution report.
+    // Elapsed query execution time from QueryStartAt.
     optional uint64 DurationUs = 23;
+    // Latest query-wide resource values; absent until the first report.
     optional uint64 CpuTimeUs = 24;
     optional uint64 ComputeMemoryBytes = 25;
     optional uint64 ReadIngressBytesRate = 26;
@@ -609,6 +610,8 @@ message TEvExecuterStreamProfile {
     optional NYql.NDqProto.TDqExecutionStats Profile = 2;
 };
 
+// Snapshot sent from one executer to session. Session aggregates snapshots from
+// sequential and partitioned executions before publishing TSessionInfo.
 message TCurrentExecutionStats {
     optional uint64 DurationUs = 1;
     optional uint64 CpuTimeUs = 2;

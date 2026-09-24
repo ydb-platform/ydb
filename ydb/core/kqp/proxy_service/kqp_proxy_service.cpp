@@ -845,7 +845,7 @@ public:
                 return;
             }
             LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
-            if (FeatureFlags.GetEnableKqpCurrentQueryStats()) {
+            if (FeatureFlags.GetEnableKqpRuntimeStats()) {
                 ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval = CurrentQueryStatsReportInterval;
             }
 

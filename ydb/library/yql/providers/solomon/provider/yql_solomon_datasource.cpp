@@ -42,7 +42,7 @@ public:
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
         cluster.SetToken(token);
-        cluster.SetUseSsl(TryFromString<bool>(properties.Value("use_tls", "true")).GetOrElse(false));
+        cluster.SetUseSsl(TryFromString<bool>(properties.Value("use_tls", "true")).GetOrElse(true));
 
         const TString& project = properties.Value("project", "");
         const TString& clusterName = properties.Value("cluster", "");

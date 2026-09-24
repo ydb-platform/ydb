@@ -11,7 +11,7 @@
 
 #include <yql/essentials/utils/log/log.h>
 
-#include <util/string/ascii.h>
+#include <util/string/cast.h>
 
 namespace NYql {
 
@@ -42,7 +42,7 @@ public:
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
         cluster.SetToken(token);
-        cluster.SetUseSsl(AsciiEqualsIgnoreCase(properties.Value("use_tls", "true"), "true"sv));
+        cluster.SetUseSsl(TryFromString<bool>(properties.Value("use_tls", "true")).GetOrElse(false));
 
         const TString& project = properties.Value("project", "");
         const TString& clusterName = properties.Value("cluster", "");

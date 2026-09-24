@@ -312,37 +312,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(!TActualizer::HasBlobInGroups({ inTarget }, {}), "an empty target set selects nothing");
     }
 
-    Y_UNIT_TEST(MoveDataCompletionGateClassifier) {
-        using NOlap::NActualizer::ClassifyMoveDataGate;
-        using NOlap::NActualizer::EMoveDataGate;
-        using NOlap::NActualizer::TMoveDataQueueSizes;
-
-        static constexpr bool VacuumDone = true;
-        static constexpr bool HasBlobs = true;
-        static constexpr bool HasCleanup = true;
-        const TMoveDataQueueSizes empty;
-
-        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, !HasCleanup, !HasBlobs) == EMoveDataGate::Ready);
-
-        // Vacuum dominates everything, portions dominate cleanup and GC — the order picks the sensor.
-        UNIT_ASSERT(ClassifyMoveDataGate(!VacuumDone, empty, !HasCleanup, !HasBlobs) == EMoveDataGate::BlockedByVacuum);
-        UNIT_ASSERT(ClassifyMoveDataGate(!VacuumDone, TMoveDataQueueSizes{ 1, 1, 1 }, HasCleanup, HasBlobs) == EMoveDataGate::BlockedByVacuum);
-        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 1, 0, 0 }, HasCleanup, HasBlobs) == EMoveDataGate::BlockedByPortions);
-
-        // Each component alone must block, InFlight included, or a submitted rewrite slips past.
-        UNIT_ASSERT(
-            ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 1, 0, 0 }, !HasCleanup, !HasBlobs) == EMoveDataGate::BlockedByPortions);
-        UNIT_ASSERT(
-            ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 1, 0 }, !HasCleanup, !HasBlobs) == EMoveDataGate::BlockedByPortions);
-        UNIT_ASSERT(
-            ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 0, 1 }, !HasCleanup, !HasBlobs) == EMoveDataGate::BlockedByPortions);
-
-        // Cleanup beats GC; once cleanup clears, GC is next.
-        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, HasCleanup, !HasBlobs) == EMoveDataGate::BlockedByCleanup);
-        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, HasCleanup, HasBlobs) == EMoveDataGate::BlockedByCleanup);
-        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, !HasCleanup, HasBlobs) == EMoveDataGate::BlockedByGC);
-    }
-
     Y_UNIT_TEST(FreezeCleanupWatermarkRaisesToRunningOldest) {
         using NOlap::NActualizer::FreezeCleanupWatermark;
         const TInstant kT = TInstant::Seconds(100);

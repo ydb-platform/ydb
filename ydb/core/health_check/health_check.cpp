@@ -3004,12 +3004,42 @@ public:
         std::unordered_map<ETags, TList<TSelfCheckContext::TIssueRecord>> recordsMap;
         std::unordered_set<TString> removeIssuesIds;
         std::unordered_map<TString, TSelfCheckContext::TIssueRecord*> issueById;
+        // the issues merged into other ones, mapped to the issue they were merged into
+        std::unordered_map<TString, TString> mergedIssueIds;
 
         TMergeIssuesContext(TList<TSelfCheckContext::TIssueRecord>& records) {
             for (auto it = records.begin(); it != records.end(); ) {
                 auto move = it++;
                 issueById.emplace(move->IssueLog.id(), &(*move));
                 recordsMap[move->Tag].splice(recordsMap[move->Tag].end(), records, move);
+            }
+        }
+
+        TString GetMergedIssueId(TString id) const {
+            std::unordered_set<TString> visited; // the same issue may take part in several merges, don't loop
+            for (auto it = mergedIssueIds.find(id); it != mergedIssueIds.end() && visited.insert(id).second; it = mergedIssueIds.find(id)) {
+                id = it->second;
+            }
+            return id;
+        }
+
+        // an issue may be the reason of several upper issues, and only one of them owns it during the merge,
+        // so the others have to follow it to the issue it was merged into
+        void RedirectMergedReasons(TList<TSelfCheckContext::TIssueRecord>& records) {
+            if (mergedIssueIds.empty()) {
+                return;
+            }
+            for (auto& record : records) {
+                auto reasons = record.IssueLog.mutable_reason();
+                std::unordered_set<TString> reasonIds;
+                for (auto reasonIt = reasons->begin(); reasonIt != reasons->end(); ) {
+                    *reasonIt = GetMergedIssueId(*reasonIt);
+                    if (reasonIds.insert(*reasonIt).second) {
+                        reasonIt++;
+                    } else {
+                        reasonIt = reasons->erase(reasonIt);
+                    }
+                }
             }
         }
 
@@ -3127,6 +3157,7 @@ public:
             for(auto it = recordsMap.begin(); it != recordsMap.end(); ++it) {
                 records.splice(records.end(), it->second);
             }
+            RedirectMergedReasons(records);
             RemoveUnlinkIssues(records);
             RenameMergingIssues(records);
         }
@@ -3320,6 +3351,7 @@ public:
             }
 
             context.removeIssuesIds.insert(it->IssueLog.id());
+            context.mergedIssueIds.emplace(it->IssueLog.id(), similar.begin()->IssueLog.id());
             it = similar.erase(it);
         }
 

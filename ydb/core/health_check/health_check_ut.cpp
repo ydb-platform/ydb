@@ -299,25 +299,28 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         entry->mutable_info()->set_name(STORAGE_POOL_NAME);
     }
 
-    void AddPDisksToSysViewResponse(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr* ev, const TVDisks& vslots, double occupancy) {
+    void AddPDisksToSysViewResponse(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr* ev, const TTestActorRuntime& runtime, const TVDisks& vslots, double occupancy) {
         auto& record = (*ev)->Get()->Record;
         auto entrySample = record.entries(0);
         record.clear_entries();
-        auto pdiskId = PDISK_START_ID;
         const size_t totalSize = 3'200'000'000'000ull;
         const auto *descriptorState = NKikimrBlobStorage::TPDiskState::E_descriptor();
         const auto *descriptorStatusV2 = NKikimrBlobStorage::EDriveStatus_descriptor();
-        for (const auto& vslot : vslots) {
-            auto* entry = record.add_entries();
-            entry->CopyFrom(entrySample);
-            entry->mutable_key()->set_pdiskid(pdiskId);
-            entry->mutable_info()->set_totalsize(totalSize);
-            entry->mutable_info()->set_availablesize((1 - occupancy) * totalSize);
-            if (vslot.PDiskState) {
-                entry->mutable_info()->set_state(descriptorState->FindValueByNumber(*vslot.PDiskState)->name());
+        for (ui32 nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
+            auto pdiskId = PDISK_START_ID;
+            for (const auto& vslot : vslots) {
+                auto* entry = record.add_entries();
+                entry->CopyFrom(entrySample);
+                entry->mutable_key()->set_nodeid(runtime.GetNodeId(nodeIdx));
+                entry->mutable_key()->set_pdiskid(pdiskId);
+                entry->mutable_info()->set_totalsize(totalSize);
+                entry->mutable_info()->set_availablesize((1 - occupancy) * totalSize);
+                if (vslot.PDiskState) {
+                    entry->mutable_info()->set_state(descriptorState->FindValueByNumber(*vslot.PDiskState)->name());
+                }
+                entry->mutable_info()->set_statusv2(descriptorStatusV2->FindValueByNumber(vslot.PDiskStatus)->name());
+                ++pdiskId;
             }
-            entry->mutable_info()->set_statusv2(descriptorStatusV2->FindValueByNumber(vslot.PDiskStatus)->name());
-            ++pdiskId;
         }
     }
 
@@ -598,7 +601,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case NSysView::TEvSysView::EvGetPDisksResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
-                    AddPDisksToSysViewResponse(x, vdisks, occupancy);
+                    AddPDisksToSysViewResponse(x, runtime, vdisks, occupancy);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
@@ -785,9 +788,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     };
 
     // a mirror-3-dc group has 9 vdisks in 3 fail realms (data centers) of 3 fail domains (nodes) each
-    const TGroupLayout MIRROR_3_DC_LAYOUT = {NHealthCheck::MIRROR_3_DC, 3, 3};
+    TGroupLayout Mirror3DcLayout() {
+        return {NHealthCheck::MIRROR_3_DC, 3, 3};
+    }
     // a block-4-2 group has 8 vdisks in a single fail realm of 8 fail domains (nodes)
-    const TGroupLayout BLOCK_4_2_LAYOUT = {NHealthCheck::BLOCK_4_2, 1, 8};
+    TGroupLayout Block42Layout() { 
+        return {NHealthCheck::BLOCK_4_2, 1, 8};
+    }
     // the nodes are spread over the data centers in the same way for any layout
     const ui32 NODES_PER_DATA_CENTER = 3;
 
@@ -835,7 +842,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 auto* entry = record.add_entries();
                 entry->CopyFrom(entrySample);
                 entry->mutable_key()->set_nodeid(firstNodeId + vDiskIdx);
-                entry->mutable_key()->clear_pdiskid(); // pdisks are out of scope here
+                entry->mutable_key()->set_pdiskid(failedVDisks.contains(vDiskIdx) ? PDISK_START_ID + 1 : PDISK_START_ID);
                 entry->mutable_key()->set_vslotid(vslotId++);
                 entry->mutable_info()->set_groupid(groupId);
                 entry->mutable_info()->set_groupgeneration(DEFAULT_GROUP_GENERATION);
@@ -884,6 +891,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     AddVSlotsToSysViewResponse(x, layout, failedVDisksPerGroup, firstNodeId);
                     break;
                 }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    AddPDisksToSysViewResponse(x, runtime, TVDisks{{}, {NKikimrBlobStorage::ERROR, NKikimrBlobStorage::TPDiskState::DeviceIoError}}, .5);
+                    break;
+                }
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
                     AddGroupsToSysViewResponse(x, layout.Erasure, failedVDisksPerGroup.size());
@@ -919,7 +931,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Y_UNIT_TEST(Mirror3DcDataCenterOutageMergesVDisksOfAllGroups) {
         // the whole first data center is down, so every group is missing all the disks of its first fail realm
         TVector<THashSet<ui32>> failedVDisksPerGroup(3, THashSet<ui32>{0, 1, 2});
-        auto result = RequestHcWithGroups(MIRROR_3_DC_LAYOUT, failedVDisksPerGroup);
+        auto result = RequestHcWithGroups(Mirror3DcLayout(), failedVDisksPerGroup);
         Ctest << result.ShortDebugString() << Endl;
 
         auto poolFilter = TLocationFilter().Pool(STORAGE_POOL_NAME);
@@ -931,7 +943,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         const auto* vDiskIssue = FindIssue(result, "VDISK", poolFilter);
         UNIT_ASSERT(vDiskIssue);
         UNIT_ASSERT_VALUES_EQUAL(vDiskIssue->message(), "VDisks are not available");
-        const ui32 failedVDiskCount = failedVDisksPerGroup.size() * MIRROR_3_DC_LAYOUT.Domains;
+        const ui32 failedVDiskCount = failedVDisksPerGroup.size() * Mirror3DcLayout().Domains;
         UNIT_ASSERT_VALUES_EQUAL(vDiskIssue->count(), failedVDiskCount);
         UNIT_ASSERT_VALUES_EQUAL(vDiskIssue->location().storage().pool().group().vdisk().id_size(), failedVDiskCount);
         // the merged issue covers several nodes, so it is not about a single one anymore
@@ -941,7 +953,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Y_UNIT_TEST(Mirror3DcSingleDiskFailuresAreMergedByNode) {
         // every group is missing a single disk of its first fail realm, and these disks are on different nodes
         TVector<THashSet<ui32>> failedVDisksPerGroup = {{0}, {1}, {2}};
-        auto result = RequestHcWithGroups(MIRROR_3_DC_LAYOUT, failedVDisksPerGroup);
+        auto result = RequestHcWithGroups(Mirror3DcLayout(), failedVDisksPerGroup);
         Ctest << result.ShortDebugString() << Endl;
 
         auto poolFilter = TLocationFilter().Pool(STORAGE_POOL_NAME);
@@ -958,7 +970,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Y_UNIT_TEST(Block42DisksOfSameDataCenterAreMergedByNode) {
         // every group is missing two disks of its only fail realm, and both are on the nodes of the same data center
         TVector<THashSet<ui32>> failedVDisksPerGroup(3, THashSet<ui32>{0, 1});
-        auto result = RequestHcWithGroups(BLOCK_4_2_LAYOUT, failedVDisksPerGroup);
+        auto result = RequestHcWithGroups(Block42Layout(), failedVDisksPerGroup);
         Ctest << result.ShortDebugString() << Endl;
 
         auto poolFilter = TLocationFilter().Pool(STORAGE_POOL_NAME);
@@ -969,6 +981,34 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT(vDiskIssue);
         UNIT_ASSERT_VALUES_EQUAL(vDiskIssue->count(), failedVDisksPerGroup.size());
         UNIT_ASSERT(vDiskIssue->location().storage().node().id() != 0);
+    }
+
+    Y_UNIT_TEST(Mirror3DcSharedPDiskKeepsAllReasonLinks) {
+        // the first group lost a single disk, the second one lost two disks of the same fail realm, and the lost disks
+        // of the first fail domain share the same broken pdisk: the disks of the second group are merged across the nodes
+        TVector<THashSet<ui32>> failedVDisksPerGroup = {{0}, {0, 1}};
+        auto result = RequestHcWithGroups(Mirror3DcLayout(), failedVDisksPerGroup);
+        Ctest << result.ShortDebugString() << Endl;
+
+        auto poolFilter = TLocationFilter().Pool(STORAGE_POOL_NAME);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 2, poolFilter);
+
+        THashMap<TString, const Ydb::Monitoring::IssueLog*> issueById;
+        for (const auto& issueLog : result.issue_log()) {
+            issueById[issueLog.id()] = &issueLog;
+        }
+        for (const auto& issueLog : result.issue_log()) {
+            for (const auto& reason : issueLog.reason()) {
+                UNIT_ASSERT_C(issueById.contains(reason), "issue " << issueLog.id() << " has a missing reason " << reason);
+            }
+            if (issueLog.type() == "VDISK" && poolFilter(issueLog.location())) {
+                // every failed vdisk is on a broken pdisk, so none of the vdisk issues can lose its cause
+                UNIT_ASSERT_C(issueLog.reason_size() > 0, "vdisk issue " << issueLog.id() << " has no reasons");
+                for (const auto& reason : issueLog.reason()) {
+                    UNIT_ASSERT_VALUES_EQUAL(issueById[reason]->type(), "PDISK");
+                }
+            }
+        }
     }
 
     void StorageTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {

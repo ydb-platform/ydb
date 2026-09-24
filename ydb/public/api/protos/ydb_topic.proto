@@ -158,10 +158,6 @@ message StreamWriteMessage {
         // Client can only use compression codecs from this set to write messages to topic.
         // Otherwise session will be closed with BAD_REQUEST.
         SupportedCodecs supported_codecs = 4;
-
-        // Client can only use batch codecs from this set to write messages to topic.
-        // Otherwise session will be closed with BAD_REQUEST.
-        SupportedMessageBatchCodecs supported_message_batch_codecs = 5;
     }
 
     // Represents portion of client messages.

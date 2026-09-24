@@ -214,6 +214,7 @@ namespace {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
 
+        AFL_ENSURE(txManager->HasShard(shardId));
         const auto& reattachState = txManager->GetReattachState(shardId);
         if (reattachState.Cookie != ev->Cookie) {
             return std::nullopt;
@@ -243,6 +244,10 @@ namespace {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
 
+        // Restarts are only signaled after PREPARE started, so the shard must
+        // still be registered: a reroute (which erases the shard) cannot happen
+        // past that point.
+        AFL_ENSURE(txManager->HasShard(shardId));
         switch (txManager->GetState(shardId)) {
             case NKikimr::NKqp::IKqpTransactionManager::PREPARED:
             case NKikimr::NKqp::IKqpTransactionManager::EXECUTING: {
@@ -1816,6 +1821,8 @@ public:
 
     void Handle(TEvPrivate::TEvReattachToShard::TPtr& ev) {
         const ui64 tabletId = ev->Get()->TabletId;
+
+        AFL_ENSURE(TxManager->HasShard(tabletId));
         auto& state = TxManager->GetReattachState(tabletId);
 
         YDB_LOG_DEBUG("Reattach to shard",
@@ -5028,6 +5035,7 @@ public:
                 // resolve revealed a split, CanUseImmediateCommit() is false and
                 // the distributed prepare path below takes over (TxId is set).
                 TxManager->StartExecute();
+                AFL_ENSURE(PendingResolveRoundTraceId);
                 ImmediateCommit(std::move(*PendingResolveRoundTraceId));
             } else {
                 TxManager->StartPrepare();
@@ -5656,6 +5664,8 @@ public:
 
     void Handle(TEvPrivate::TEvReattachToShard::TPtr& ev) {
         const ui64 tabletId = ev->Get()->TabletId;
+
+        AFL_ENSURE(TxManager->HasShard(tabletId));
         auto& state = TxManager->GetReattachState(tabletId);
 
         YDB_LOG_DEBUG("Reattach to shard",

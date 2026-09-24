@@ -74,6 +74,9 @@ public:
     virtual TReattachState& GetReattachState(ui64 shardId) = 0;
 
     virtual EShardState GetState(ui64 shardId) const = 0;
+
+    virtual bool HasShard(ui64 shardId) const = 0;
+
     virtual void SetError(ui64 shardId) = 0;
     virtual void SetError() = 0;
 

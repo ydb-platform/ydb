@@ -235,6 +235,9 @@ public:
                     // transaction with the recorded locks issue.
                     if (!existing->Lock.MergeWriteSeqNums(lockInfo.Lock.Proto)) {
                         // TODO: What if shards merged back after split???
+                        SetVictimQuerySpanId(existing->VictimQuerySpanId != 0
+                            ? existing->VictimQuerySpanId
+                            : lockInfo.VictimQuerySpanId);
                         existing->Invalidated = true;
                         if (!LocksIssue && State != ETransactionState::ERROR) {
                             MakeLocksIssue(to);
@@ -269,6 +272,10 @@ public:
 
     EShardState GetState(ui64 shardId) const override {
         return ShardsInfo.at(shardId).State;
+    }
+
+    bool HasShard(ui64 shardId) const override {
+        return ShardsInfo.contains(shardId);
     }
 
     void SetError(ui64 shardId) override {

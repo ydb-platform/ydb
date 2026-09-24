@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import ast
+import sys
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _paths import TEST_METRICS, add_product_paths
+
+add_product_paths(TEST_METRICS)
+
 from html_embed import js_script_json
 
-_DIR = Path(__file__).resolve().parent
+_DIR = TEST_METRICS
 
 
 class JsScriptJsonTest(unittest.TestCase):

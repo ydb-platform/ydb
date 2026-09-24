@@ -5,9 +5,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_DASHBOARD_DIR = Path(__file__).resolve().parent.parent
-if str(_DASHBOARD_DIR) not in sys.path:
-    sys.path.insert(0, str(_DASHBOARD_DIR))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _paths import DASHBOARD, add_product_paths
+
+add_product_paths(DASHBOARD)
 
 from runner_footprint import (  # noqa: E402
     enrich_resources_overlay,

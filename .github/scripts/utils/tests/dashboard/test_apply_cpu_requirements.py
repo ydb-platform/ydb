@@ -3,13 +3,18 @@ Tests for apply_cpu_requirements: apply CPU REQUIREMENTS to ya.make content.
 
 Test data and expected results are defined in APPLY_CPU_TEST_CASES.
 
-Run: python3 test_apply_cpu_requirements.py
-     or: pytest test_apply_cpu_requirements.py -v
+Run: python3 -m unittest discover -s .github/scripts/utils/tests -p 'test_*.py'
 """
 
 from __future__ import annotations
 
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _paths import TEST_METRICS, add_product_paths
+
+add_product_paths(TEST_METRICS)
 
 from apply_cpu_requirements import apply_cpu_requirements_to_content
 

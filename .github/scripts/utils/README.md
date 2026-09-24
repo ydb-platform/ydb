@@ -7,6 +7,8 @@
 - **metrics/** — сбор метрик во время `ya make`
   - `monitor_resources.py` — CPU, RAM, disk I/O в JSONL
 
+- **tests/** — unit-тесты (`tests/dashboard`, `tests/metrics`), не в продуктовых пакетах
+
 - **dashboard/** — построение дашбордов
   - `runner_footprint.py` — provisioned лимиты из `.github/config/runners_footprints.yml`
   - `analyze_resources.py` — HTML по данным monitor
@@ -16,3 +18,9 @@
     - `ya_make_requirements.py` — чтение REQUIREMENTS из ya.make
 
 Конфиг раннеров: `.github/config/runners_footprints.yml`. На дашборде красная линия = monitor, фиолетовая пунктирная = лимит из конфига.
+
+Unit-тесты лежат отдельно в `tests/` (не рядом с продуктовым кодом):
+
+```bash
+python3 -m unittest discover -s .github/scripts/utils/tests -p 'test_*.py'
+```

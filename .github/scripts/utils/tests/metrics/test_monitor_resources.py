@@ -3,7 +3,14 @@
 
 from __future__ import annotations
 
+import sys
 import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _paths import METRICS, add_product_paths
+
+add_product_paths(METRICS)
 
 from monitor_resources import cpu_delta_jiffies, io_delta_bytes, process_identity
 

@@ -1,8 +1,7 @@
 """
 Tests for ya_make_requirements: ya.make conditionals and effective split parsing.
 
-Run: python3 test_ya_make_requirements.py
-     or: pytest test_ya_make_requirements.py -v
+Run: python3 -m unittest discover -s .github/scripts/utils/tests -p 'test_*.py'
 """
 
 from __future__ import annotations
@@ -12,7 +11,10 @@ import tempfile
 import sys
 from pathlib import Path
 
-_MODULE_PATH = Path(__file__).resolve().parent / "ya_make_requirements.py"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _paths import TEST_METRICS
+
+_MODULE_PATH = TEST_METRICS / "ya_make_requirements.py"
 _SPEC = importlib.util.spec_from_file_location("ya_make_requirements", _MODULE_PATH)
 assert _SPEC is not None and _SPEC.loader is not None
 _ya_make_requirements = importlib.util.module_from_spec(_SPEC)

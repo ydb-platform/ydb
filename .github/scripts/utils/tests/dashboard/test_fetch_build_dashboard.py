@@ -5,9 +5,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_METRICS_DIR = Path(__file__).resolve().parent
-if str(_METRICS_DIR) not in sys.path:
-    sys.path.insert(0, str(_METRICS_DIR))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _paths import TEST_METRICS, add_product_paths
+
+add_product_paths(TEST_METRICS)
 
 from fetch_and_build_dashboard import build_preset_from_config_segment  # noqa: E402
 import fetch_and_build_dashboard as fetch_mod  # noqa: E402

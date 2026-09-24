@@ -7,13 +7,18 @@ These cover the decoupling of the three recommendation axes:
 - A lower-cpu suggestion is suppressed while a suite is under split/time pressure.
 - Memory pressure raises the CPU slot (REQUIREMENTS(ram) is ignored locally), never ram.
 
-Run: python3 test_cpu_recommendations.py
-     or: pytest test_cpu_recommendations.py -v
+Run: python3 -m unittest discover -s .github/scripts/utils/tests -p 'test_*.py'
 """
 
 from __future__ import annotations
 
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _paths import TEST_METRICS, add_product_paths
+
+add_product_paths(TEST_METRICS)
 
 from dashboard_cpu_recommendations import _marker_suite_start_us, build_cpu_recommendations
 

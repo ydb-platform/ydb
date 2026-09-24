@@ -188,7 +188,7 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr ev) {
     const auto& event = *ev->Get();
     const auto& schedulerPool = event.GetSchedulerPool();
-    const auto& scheduler = AppData()->KqpComputeScheduler;
+    const auto scheduler = HasAppData() ? AppData()->KqpComputeScheduler : nullptr;
     const bool schedulerDisabled = scheduler && !scheduler->IsEnabled();
     const auto identity = schedulerPool && !schedulerDisabled ? TSchedulerQueryIdentity{event.GetTxId()} : kServiceQueryIdentity;
     LWPROBE(RegisterProcess, ConveyorName, ToString(event.GetCategory()), event.GetScopeId(), event.GetInternalProcessId());

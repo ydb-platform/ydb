@@ -742,8 +742,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateDropSequencePropose(
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.CreateBuildSequenceTxId), ss->TabletID());
     AddDropSequencePropose(ss, buildInfo, *propose);
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "CreateDropSequencePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("CreateDropSequencePropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
 
     return propose;
 }
@@ -1763,8 +1766,7 @@ private:
         ToTabletSend.emplace(shardId, std::move(ev));
     }
 
-    void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
-        buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
+    void SendUploadClustersRequest(TIndexBuildInfo& buildInfo) {
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NKMeans::LevelTable);
         Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
 
@@ -1791,10 +1793,15 @@ private:
             } else {
                 NTableIndex::NKMeans::EnsureNoPostingParentFlag(child);
             }
+            auto& sizes = buildInfo.Clusters->GetClusterSizes();
+            ui32 idx = 0;
             for (auto& [_, row] : buildInfo.Sample.Rows) {
-                pk[1] = TCell::Make(child);
-                uploadRows.emplace_back(TSerializedCellVec{pk}, TSerializedCellVec(row));
+                if (!sizes.size() || sizes.at(idx) != 0) {
+                    pk[1] = TCell::Make(child);
+                    uploadRows.emplace_back(TSerializedCellVec{pk}, TSerializedCellVec(row));
+                }
                 child++;
+                idx++;
             }
         }
 
@@ -2318,7 +2325,7 @@ private:
             return done;
         }
         default:
-            Y_ENSURE(false);
+            Y_ENSURE(false, "Unknown index build sub-state");
         }
     }
 
@@ -2619,8 +2626,9 @@ private:
             {"buildInfo", buildInfo.DebugString()},
         );
 
-        // (Sample -> Recompute* -> Reshuffle)* -> MultiLocal -> (Filter)? -> NextLevel
-        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample) {
+        // (Sample -> Recompute* -> Reshuffle -> UploadClusters)* -> MultiLocal -> (Filter)? -> NextLevel
+        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample ||
+            buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::UploadClusters) {
             return FillVectorIndexSamples(txc, buildInfo);
         } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Recompute) {
             if (NoShardsAdded(buildInfo)) {
@@ -2638,13 +2646,14 @@ private:
                 // Recompute again
                 buildInfo.KMeans.Round++;
             } else {
-                // Cluster generation completed, save clusters
-                YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex SendUploadClusters ",
-                    {"buildInfo", buildInfo.DebugString()},
-                );
-                buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
-                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
-                SendUploadSampleKRequest(buildInfo);
+                // Cluster generation completed, go to Reshuffle
+                // We don't need old cluster sizes anymore so we use them to store non-empty cluster info
+                auto n = buildInfo.Clusters->GetClusters().size();
+                for (ui32 i = 0; i < n; i++) {
+                    buildInfo.Clusters->SetClusterSize(i, 0);
+                    Self->PersistBuildIndexClusterSize(db, buildInfo, i);
+                }
+                buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
             }
             YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex NextState ",
                 {"buildInfo", buildInfo.DebugString()},
@@ -2652,18 +2661,28 @@ private:
             PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
             return false;
-        } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Reshuffle) {
+        } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::ReshuffleLegacy ||
+            buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Reshuffle) {
             if (NoShardsAdded(buildInfo)) {
                 AddGlobalShardsForCurrentParent(buildInfo);
             }
             if (!SendKMeansReshuffle(buildInfo)) {
                 return false;
             }
-            ClearDoneShards(txc, buildInfo);
-            buildInfo.Sample.Clear();
-            NIceDb::TNiceDb db{txc.DB};
-            Self->PersistBuildIndexSampleForget(db, buildInfo);
-            return FillVectorIndexNextParent(txc, buildInfo);
+            if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Reshuffle) {
+                // Upload from Collect state to mimic the behaviour after a possible schemeshard restart
+                buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::UploadClusters;
+                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
+                PersistKMeansState(txc, buildInfo);
+                Progress(BuildId);
+                return false;
+            } else {
+                ClearDoneShards(txc, buildInfo);
+                buildInfo.Sample.Clear();
+                NIceDb::TNiceDb db{txc.DB};
+                Self->PersistBuildIndexSampleForget(db, buildInfo);
+                return FillVectorIndexNextParent(txc, buildInfo);
+            }
         } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::MultiLocal) {
             if (!SendKMeansLocal(buildInfo)) {
                 return false;
@@ -2688,11 +2707,12 @@ private:
             }
             return FillVectorIndexNextLevel(txc, buildInfo);
         }
-        Y_ENSURE(false);
+        Y_ENSURE(false, "Unknown vector index build state");
     }
 
     bool FillVectorIndexSamples(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
+        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample &&
+            buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
             if (NoShardsAdded(buildInfo)) {
                 AddGlobalShardsForCurrentParent(buildInfo);
                 if (!buildInfo.DoneShards.size() && !buildInfo.ToUploadShards.size()) {
@@ -2788,26 +2808,42 @@ private:
                 Self->PersistBuildIndexSpecializedDescription(db, buildInfo);
             }
 
+            // Initialize Clusters
+            NIceDb::TNiceDb db(txc.DB);
+            buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
+            Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
+            Self->PersistBuildIndexSampleToClusters(db, buildInfo);
+            buildInfo.Clusters->SetRound(1);
             if (buildInfo.KMeans.Rounds > 1) {
                 YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex Recompute ",
                     {"buildInfo", buildInfo.DebugString()},
                 );
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Recompute;
                 buildInfo.KMeans.Round = 1;
-                // Initialize Clusters
-                NIceDb::TNiceDb db(txc.DB);
-                buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
-                Self->PersistBuildIndexSampleToClusters(db, buildInfo);
-                buildInfo.Clusters->SetRound(1);
-                PersistKMeansState(txc, buildInfo);
-                Progress(BuildId);
             } else {
-                YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex SendUploadSampleKRequest ",
+                // Go directly to Reshuffle without Recompute
+                // We don't need old cluster sizes anymore so we use them to store non-empty cluster info
+                buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
+                auto n = buildInfo.Clusters->GetClusters().size();
+                for (ui32 i = 0; i < n; i++) {
+                    buildInfo.Clusters->SetClusterSize(i, 0);
+                    Self->PersistBuildIndexClusterSize(db, buildInfo, i);
+                }
+                YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex NextState ",
                     {"buildInfo", buildInfo.DebugString()},
                 );
-                SendUploadSampleKRequest(buildInfo);
-                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
             }
+            PersistKMeansState(txc, buildInfo);
+            Progress(BuildId);
+            return false;
+        } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::UploadClusters &&
+            buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
+            YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex SendUploadClusters ",
+                {"buildInfo", buildInfo.DebugString()},
+            );
+            buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+            SendUploadClustersRequest(buildInfo);
+            Progress(BuildId);
             return false;
         } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {
             // Just wait until samples are uploaded (saved)
@@ -2817,15 +2853,24 @@ private:
                 // Done
                 return true;
             }
-            buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
-            YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex NextState ",
-                {"buildInfo", buildInfo.DebugString()},
-            );
-            PersistKMeansState(txc, buildInfo);
-            Progress(BuildId);
-            return false;
+            if (buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::UploadClusters) {
+                // Legacy path - reshuffle after uploading clusters in Sample+Upload state
+                buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
+                YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex NextState ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
+                PersistKMeansState(txc, buildInfo);
+                Progress(BuildId);
+                return false;
+            }
+            // New path - reshuffle is already finished before uploading, continue to the next parent
+            ClearDoneShards(txc, buildInfo);
+            buildInfo.Sample.Clear();
+            NIceDb::TNiceDb db{txc.DB};
+            Self->PersistBuildIndexSampleForget(db, buildInfo);
+            return FillVectorIndexNextParent(txc, buildInfo);
         }
-        Y_ENSURE(false);
+        Y_ENSURE(false, "Unknown vector index sample state");
     }
 
     bool FillVectorIndexNextParent(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
@@ -2906,7 +2951,7 @@ private:
                     {"buildInfo", buildInfo.DebugString()},
                 );
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
-                SendUploadSampleKRequest(buildInfo);
+                SendUploadClustersRequest(buildInfo);
                 return false;
             } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {
                 // Wait
@@ -2914,7 +2959,7 @@ private:
             } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
                 // Pass through
             } else {
-                Y_ENSURE(false);
+                Y_ENSURE(false, "Unknown vector index sample state");
             }
         }
 
@@ -3099,7 +3144,7 @@ private:
             }
             break;
         default:
-            Y_ENSURE(false);
+            Y_ENSURE(false, "Unknown fulltext index build state");
         }
 
         if (done) {
@@ -4094,7 +4139,7 @@ public:
             Y_ENSURE(false, "Unreachable");
         case NKikimrIndexBuilder::EBuildStatus::ACCEPTED: // TODO: do we need ACCEPTED?
         case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS: {
-            HandleProgress(shardStatus, buildInfo);
+            HandleProgress(db, shardStatus, buildInfo);
             Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
             // no progress
             // no pipe close
@@ -4147,7 +4192,7 @@ public:
         }
     }
 
-    virtual void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) {
+    virtual void HandleProgress(NIceDb::TNiceDb&, TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(false, TStringBuilder() << "HandleProgress is unreachable for " << TypeName<TEvResponse>()
             << ", TIndexBuildInfo: " << buildInfo
             << ", shardStatus: " << shardStatus.ToString());
@@ -4308,7 +4353,7 @@ struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TE
     {
     }
 
-    void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+    void HandleProgress(NIceDb::TNiceDb&, TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
         UpdateLastKeyAck(shardStatus, buildInfo, Response->Get()->Record.GetLastKeyAck());
     }
 
@@ -4334,7 +4379,25 @@ struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TTxShardRepl
     {
     }
 
-    void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+    void UpdateEmptyClusters(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
+        const auto& record = Response->Get()->Record;
+        auto& sizes = buildInfo.Clusters->GetClusterSizes();
+        auto n = buildInfo.Clusters->GetClusters().size();
+        auto& empty = record.GetEmptyClusters();
+        int emptyPos = 0;
+        for (ui32 cluster = 0; cluster < n; cluster++) {
+            if (emptyPos < empty.size() && empty[emptyPos] == cluster) {
+                emptyPos++;
+            } else if (!sizes.at(cluster)) {
+                // persist non-empty flag as cluster size
+                buildInfo.Clusters->SetClusterSize(cluster, 1);
+                Self->PersistBuildIndexClusterSize(db, buildInfo, cluster);
+            }
+        }
+    }
+
+    void HandleProgress(NIceDb::TNiceDb& db, TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+        UpdateEmptyClusters(db, buildInfo);
         UpdateLastKeyAck(shardStatus, buildInfo, Response->Get()->Record.GetLastKeyAck());
     }
 
@@ -4343,8 +4406,8 @@ struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TTxShardRepl
         TTabletId shardId = TTabletId(record.GetTabletId());
         TShardIdx shardIdx = Self->GetShardIdx(shardId);
         TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+        UpdateEmptyClusters(db, buildInfo);
         UpdateLastKeyAck(shardStatus, buildInfo, record.GetLastKeyAck());
-        Y_UNUSED(db);
     }
 };
 
@@ -4366,7 +4429,7 @@ struct TSchemeShard::TIndexBuilder::TTxReplyPrefixKMeans: public TTxShardReply<T
         }
     }
 
-    void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+    void HandleProgress(NIceDb::TNiceDb&, TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
         UpdateLastKeyAck(shardStatus, buildInfo, Response->Get()->Record.GetLastKeyAck());
     }
 
@@ -4481,7 +4544,7 @@ struct TSchemeShard::TIndexBuilder::TTxReplyFulltextIndex: public TTxShardReply<
     {
     }
 
-    void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+    void HandleProgress(NIceDb::TNiceDb&, TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
         UpdateLastKeyAck(shardStatus, buildInfo, Response->Get()->Record.GetLastKeyAck());
     }
 
@@ -4537,7 +4600,7 @@ struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TTxShardReply<TEvDa
     {
     }
 
-    void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+    void HandleProgress(NIceDb::TNiceDb&, TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
         UpdateLastKeyAck(shardStatus, buildInfo, Response->Get()->Record.GetLastKeyAck());
     }
 

@@ -97,8 +97,16 @@ class FederationRecipe(object):
             use_legacy_pq=True,
             additional_log_configs={
                 'PQ_MIRRORER': LogLevels.TRACE,
+                'SQS': LogLevels.TRACE,
             },
-            extra_feature_flags=["enable_topic_retention_delete_last_blob", "enable_insecure_mirror_factory"]
+            extra_feature_flags=["enable_topic_retention_delete_last_blob", "enable_insecure_mirror_factory", "enable_topic_message_level_parallelism"],
+            http_proxy_config={
+                'enabled': True,
+                'sqs_topic_enabled': True,
+                'ymq_enabled': False,
+                'yandex_cloud_service_region': ['ru-central1', 'ru-central-1'],
+            },
+            # enable_sqs=True,
         )
         configurator.yaml_config.setdefault('pqconfig', {})
         configurator.yaml_config['pqconfig']['pqdiscovery_config'] = {
@@ -112,8 +120,13 @@ class FederationRecipe(object):
         self.__clusters[name] = cluster
         grpc_port = list(cluster.nodes.values())[0].grpc_port
         self.__cluster_ports[name] = grpc_port
+        node = list(cluster.nodes.values())[0]
         _setenv("{}_port".format(name), str(grpc_port))
+        _setenv("{}_sqs_port".format(name), str(node.sqs_port))
+        _setenv("{}_http_proxy_port".format(name), str(node.http_proxy_port))
         logger.info("YDB cluster {} started on port {}".format(name, grpc_port))
+        logger.info("YDB cluster {} started on grpc port {}, sqs port {}".format(
+            name, grpc_port, node.sqs_port))
         return cluster, grpc_port
 
     def _setup_ydb_cluster(self, name, cluster, grpc_port):
@@ -496,7 +509,7 @@ class FederationRecipe(object):
         with open('lb_config_manager_endpoint.txt', 'w') as f:
             f.write(cm_endpoint)
 
-        cm_binary = yatest.common.build_path('ydb/public/tools/federation_recipe/bin/cm-binary-test')
+        cm_binary = yatest.common.build_path('ydb/public/tools/federation_recipe/bin/cm24092026')
 
         command = [
             cm_binary,

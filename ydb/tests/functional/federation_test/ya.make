@@ -5,6 +5,9 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/driver
     contrib/libs/grpc
+    ydb/public/lib/ydb_cli/commands/sqs_workload/sqs_json
+    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
+    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-sqs
 )
 
 TIMEOUT(350)

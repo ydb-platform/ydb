@@ -3,6 +3,7 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
+#include <ydb/library/yql/providers/solomon/common/util.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -40,7 +41,7 @@ public:
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
         cluster.SetToken(token);
-        cluster.SetUseSsl(properties.Value("use_tls", "true") == "true"sv);
+        cluster.SetUseSsl(NSo::ParseUseTls(properties));
 
         const TString& project = properties.Value("project", "");
         const TString& clusterName = properties.Value("cluster", "");

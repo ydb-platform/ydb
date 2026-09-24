@@ -180,6 +180,17 @@ bool IsMoniumProject(const TSolomonClusterConfig& config) {
     return false;
 }
 
+bool ParseUseTls(const THashMap<TString, TString>& properties) {
+    const auto it = properties.find("use_tls");
+    if (it == properties.end()) {
+        return true;
+    }
+
+    TString value = it->second;
+    value.to_lower();
+    return value == "true"sv;
+}
+
 NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, const TString& project) {
     NSo::NProto::TDqSolomonSource source;
 

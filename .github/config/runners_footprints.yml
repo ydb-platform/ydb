@@ -51,8 +51,8 @@ footprints:
     nrd_ssd_gb: 2417
   build-preset-release-asan:
     vcpu: 64
-    ram_gb: 288
-    nrd_ssd_gb: 2417
+    ram_gb: 320
+    nrd_ssd_gb: 2418
   build-preset-release-msan:
     vcpu: 64
     ram_gb: 320

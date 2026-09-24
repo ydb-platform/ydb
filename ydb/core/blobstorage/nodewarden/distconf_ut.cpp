@@ -2459,6 +2459,65 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         UNIT_ASSERT_VALUES_EQUAL(s.GetGroupDomainNodes()[0], 9u);
     }
 
+    Y_UNIT_TEST(UsesReportedSlotCountForStaticGroupReassignment) {
+        struct TCase {
+            ui32 ConfiguredSlotCount;
+            std::optional<ui32> ReportedSlotCount;
+            bool CanReassign;
+        };
+        const TCase cases[] = {
+            {1, 2, true},
+            {2, 1, false},
+            {2, 0, false},
+            {0, 2, true},
+            {1, std::nullopt, false},
+            {2, std::nullopt, true},
+        };
+
+        for (const ui64 expectedSlotSize : {0ull, 100ull}) {
+            for (const auto& test : cases) {
+                TSetup s = MakeSetup();
+                for (auto& pdisk : *s.BaseConfig.MutablePDisk()) {
+                    if (pdisk.GetNodeId() == 2) {
+                        pdisk.SetExpectedSlotCount(test.ConfiguredSlotCount);
+                        pdisk.MutablePDiskConfig()->SetExpectedSlotCount(test.ConfiguredSlotCount);
+                        pdisk.SetExpectedSlotSize(expectedSlotSize);
+                        auto *metrics = pdisk.MutablePDiskMetrics();
+                        if (test.ReportedSlotCount) {
+                            metrics->SetExpectedSlotCount(*test.ReportedSlotCount);
+                        }
+                        metrics->SetSlotSizeInUnits(2);
+                    }
+                }
+
+                // A two-unit group occupies one inferred slot on the target.
+                auto *group = s.BaseConfig.AddGroup();
+                group->SetGroupId(0x80000001);
+                group->SetGroupGeneration(1);
+                group->SetGroupSizeInUnits(2);
+                auto *vslot = s.BaseConfig.AddVSlot();
+                vslot->MutableVSlotId()->SetNodeId(2);
+                vslot->MutableVSlotId()->SetPDiskId(1);
+                vslot->MutableVSlotId()->SetVSlotId(7);
+                vslot->SetGroupId(group->GetGroupId());
+                vslot->SetGroupGeneration(1);
+                vslot->SetStatus("READY");
+                group->AddVSlotId()->CopyFrom(vslot->GetVSlotId());
+
+                const auto reassign = [&] {
+                    Reallocate(s, NodeIds({2}), true);
+                };
+                if (test.CanReassign) {
+                    UNIT_ASSERT_NO_EXCEPTION(reassign());
+                    UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 2u);
+                } else {
+                    UNIT_ASSERT_EXCEPTION(reassign(), NStorage::TDistributedConfigKeeper::TExConfigError);
+                    UNIT_ASSERT_VALUES_EQUAL(s.GetGroupGeneration(), 1u);
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(UsesGroupsAndVSlotsFromBaseConfigSnapshot) {
         TSetup s = MakeSetup();
 

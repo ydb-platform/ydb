@@ -24,6 +24,7 @@ from ydb.apps.dstool.lib import table
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.common.wait_for import retry_assertions
 from ydb.tests.library.harness.kikimr_cluster import KiKiMR
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.core.protos.whiteboard_disk_states_pb2 import EVDiskState
@@ -117,6 +118,12 @@ def test_vdisk_evict_uses_single_state_snapshot(dry_run, expected_generations, c
         assert 'dry-run for multiple VDisks is approximate' in captured.err
     else:
         assert not captured.err
+
+
+@pytest.fixture(scope='function')
+def ydb_configurator(ydb_cluster_configuration):
+    # cluster.stop() releases the configurator's ports, so each cluster needs a new allocator.
+    return KikimrConfigGenerator(**ydb_cluster_configuration)
 
 
 @pytest.fixture(scope='function')

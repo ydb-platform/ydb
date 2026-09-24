@@ -519,6 +519,7 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
     return DumpHandler();
 }
 
+<<<<<<< HEAD
 void TDirectBlockGroupMock::OnAddHostResult(
     const NProto::TError& error,
     THostIndex newHostIndex,
@@ -530,6 +531,13 @@ void TDirectBlockGroupMock::OnAddHostResult(
         newHostIndex,
         std::move(ddiskId),
         std::move(pbufferId));
+=======
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroupMock::BuildMonSnapshot(
+    EDbgMonSnapshotDetail detail) const
+{
+    Y_UNUSED(detail);
+    return NThreading::MakeFuture(TDbgSnapshot{});
+>>>>>>> d628b8ca73f ([NBS-7516] Add VChunk state table to DBG monitoring (#53920))
 }
 
 <<<<<<< HEAD

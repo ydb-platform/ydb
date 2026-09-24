@@ -49,14 +49,12 @@ From `ydb_main`, no `-j`, no force rebuild:
 ```
 
 `ya.make` today: `PY3TEST()`, `SIZE(MEDIUM)`, `REQUIREMENTS(cpu:4)` +
-`REQUIREMENTS(ram:16)`, `DEPENDS(ydb/apps/dstool)`,
-`PEERDIR(ydb/tests/library)`. No `FORK_SUBTESTS`, no `SPLIT_FACTOR`.
+`REQUIREMENTS(ram:16)`, `FORK_SUBTESTS()`, `SPLIT_FACTOR(3)`,
+`DEPENDS(ydb/apps/dstool)`, `PEERDIR(ydb/tests/library)`.
 
-As the suite grows, add `FORK_SUBTESTS()` and `SPLIT_FACTOR` so cases do not
-share a process after a killed node. F1–F5 use `SIZE(LARGE)` with
-`TIMEOUT(600)` as the chunk budget. Fail-fast is the per-call 60s
-dstool/ydbd/vhost timeout plus `PYTEST_TIMEOUT=60` (test function only);
-a hung case fails in a minute, not the whole chunk.
+F1–F5 use `SIZE(LARGE)` with `TIMEOUT(600)` as the chunk budget. Fail-fast
+is the per-call 60s dstool/ydbd/vhost timeout plus `PYTEST_TIMEOUT=60`
+(test function only); a hung case fails in a minute, not the whole chunk.
 
 A host-loss case must drive IO while waiting for Offline: `TOracle::Think`
 demotes a host from consecutive request failures, and `OnDDiskDisconnected`

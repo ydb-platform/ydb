@@ -4,6 +4,8 @@
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -50,18 +52,20 @@ EExecutionStatus TTruncateUnit::Execute(
     const auto version = truncate.GetTableSchemaVersion();
     Y_ENSURE(version);
 
-    LOG_TRACE_S(actorCtx, NKikimrServices::TX_DATASHARD,
-            "TTruncateUnit::Execute. Changing SchemaVersion. TableId = " << pathId.LocalPathId << "; "
-           << " New SchemaVersion = " << version << "; "
-           << " TxId = " << op->GetTxId() << ".");
+    YDB_LOG_TRACE_CTX(actorCtx, "TTruncateUnit::Execute: changing schema version",
+        {"localPathId", pathId.LocalPathId},
+        {"version", version},
+        {"txId", op->GetTxId()});
 
     auto tableId = pathId.LocalPathId;
     Y_ENSURE(DataShard.GetUserTables().contains(tableId));
     auto localTid = DataShard.GetUserTables().at(tableId)->LocalTid;
 
-    LOG_DEBUG_S(actorCtx, NKikimrServices::TX_DATASHARD,
-               "TTruncateUnit::Execute - About to TRUNCATE TABLE at " << DataShard.TabletID()
-               << " tableId# " << tableId << " localTid# " << localTid << " TxId = " << op->GetTxId());
+    YDB_LOG_DEBUG_CTX(actorCtx, "TTruncateUnit::Execute: about to truncate table",
+        {"tabletId", DataShard.TabletID()},
+        {"tableId", tableId},
+        {"localTid", localTid},
+        {"txId", op->GetTxId()});
 
     // break locks
     TDataShardLocksDb locksDb(DataShard, txc);
@@ -105,9 +109,9 @@ EExecutionStatus TTruncateUnit::Execute(
     DataShard.SysLocksTable().ApplyLocks();
     DataShard.SubscribeNewLocks(actorCtx);
 
-    LOG_DEBUG_S(actorCtx, NKikimrServices::TX_DATASHARD,
-               "TTruncateUnit::Execute - Finished successfully. TableId = " << tableId
-               << " TxId = " << op->GetTxId() << " - Operation COMPLETED");
+    YDB_LOG_DEBUG_CTX(actorCtx, "TTruncateUnit::Execute: finished successfully",
+        {"tableId", tableId},
+        {"txId", op->GetTxId()});
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }

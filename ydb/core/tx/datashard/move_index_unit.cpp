@@ -2,6 +2,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -84,10 +86,10 @@ public:
             return EExecutionStatus::Restart;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "TMoveIndexUnit Execute"
-            << ": schemeTx# " << schemeTx.DebugString()
-            << ": changeRecords size# " << op->ChangeRecords().size()
-            << ", at tablet# " << DataShard.TabletID());
+        YDB_LOG_DEBUG("TMoveIndexUnit Execute changeRecords",
+            {"schemeTx", schemeTx.DebugString()},
+            {"size", op->ChangeRecords().size()},
+            {"tablet", DataShard.TabletID()});
 
         DataShard.SuspendChangeSender(ctx);
 

@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             } else {
                 checkError(session.PrepareDataQuery(sql).GetValueSync());
                 checkError(session.ExecuteDataQuery(sql,
-                    NTable::TTxControl::BeginTx().CommitTx(), params).GetValueSync());
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx(), params).GetValueSync());
             }
         }
     }
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 checkResult(db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(), params).GetValueSync());
             } else {
                 checkResult(session.ExecuteDataQuery(sql,
-                    NTable::TTxControl::BeginTx().CommitTx(), params).GetValueSync());
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx(), params).GetValueSync());
             }
         }
     }

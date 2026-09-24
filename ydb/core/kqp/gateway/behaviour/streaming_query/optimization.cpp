@@ -113,10 +113,10 @@ bool CheckStreamingQueryAst(TExprNode::TPtr ast, TExprContext& ctx) {
     return true;
 }
 
-bool CheckStreamingQueryFeatures(const TCoNameValueTupleList& features, TExprContext& ctx) {
+bool CheckStreamingQueryFeatures(const TCoNameValueTupleList& features, TExprContext& ctx, bool topLevel = true) {
     for (const auto& feature : features) {
-        const auto value = feature.Value();
-        if (!value || feature.Name().Value().StartsWith(TStreamingQueryConfig::TSqlSettings::RESERVED_FEATURE_PREFIX)) {
+        auto value = feature.Value();
+        if (!value || (topLevel && feature.Name().Value().StartsWith(TStreamingQueryConfig::TSqlSettings::RESERVED_FEATURE_PREFIX))) {
             continue;
         }
 
@@ -125,7 +125,11 @@ bool CheckStreamingQueryFeatures(const TCoNameValueTupleList& features, TExprCon
                 << "At streaming query setting " << to_upper(TString(feature.Name().Value())));
         });
 
-        if (feature.Name() == TStreamingQueryConfig::TProperties::ReadFrom) {
+        if (const auto literal = value.Maybe<TCoJust>().Input().Maybe<TCoDataCtor>()) {
+            value = literal.Cast();
+        }
+
+        if (topLevel && feature.Name() == TStreamingQueryConfig::TProperties::ReadFrom) {
             if (value.Maybe<TCoAtom>() || value.Maybe<TCoString>() || value.Maybe<TCoUtf8>()) {
                 const auto literal = value.Maybe<TCoAtom>() ? value.Cast<TCoAtom>() : value.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>();
                 const auto mode = to_lower(TString(literal.Value()));
@@ -135,6 +139,12 @@ bool CheckStreamingQueryFeatures(const TCoNameValueTupleList& features, TExprCon
                 }
             } else if (!EnsureSpecificDataType(value.Cast().Ref(), EDataSlot::Timestamp, ctx)) {
                 ctx.AddError(TIssue(ctx.GetPosition(value.Cast().Pos()), "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp"));
+                return false;
+            }
+        } else if (topLevel && feature.Name() == TStreamingQueryConfig::TProperties::StreamingDisposition
+            && value.Maybe<TCoNameValueTupleList>() && value.Cast().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit)
+        {
+            if (!CheckStreamingQueryFeatures(value.Cast<TCoNameValueTupleList>(), ctx, /* topLevel */ false)) {
                 return false;
             }
         } else if (!value.Maybe<TCoAtom>()) {

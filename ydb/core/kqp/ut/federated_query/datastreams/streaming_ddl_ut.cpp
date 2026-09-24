@@ -4442,13 +4442,48 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         EnsureTopicEndOffset("rewindOutput", expected.size());
     }
 
+    Y_UNIT_TEST_QUAD_F(StreamingQueryReadFromConsumerRewind, SharedReading, FromTimestamp, TConsumerRewindFixture) {
+        // Keep checkpoint commits from advancing the offset again before we observe the rewind.
+        CheckpointPeriod = TDuration::Hours(1);
+        InitConsumerRewind(SharedReading);
+        WriteTopicMessage("rewindInput", "first");
+        WriteTopicMessage("rewindInput", "second");
+
+        const std::string readFrom = FromTimestamp
+            ? "CurrentUtcTimestamp() - Interval(\"PT1H\")"
+            : "EARLIEST";
+        std::vector<std::string> expected;
+        for (const bool alter : {false, true}) {
+            CommitConsumer(2);
+            WaitConsumerOffset(2);
+
+            if (alter) {
+                ExecQuery(fmt::format("ALTER STREAMING QUERY rewindQuery SET (RUN = TRUE, READ_FROM = {});", readFrom));
+            } else {
+                ExecQuery(fmt::format(R"(
+                    CREATE STREAMING QUERY rewindQuery WITH (READ_FROM = {read_from}) AS DO BEGIN
+                        PRAGMA pq.Consumer = "test_consumer";
+                        INSERT INTO rewindSource.rewindOutput SELECT Data FROM rewindSource.rewindInput;
+                    END DO;)", "read_from"_a = readFrom));
+            }
+
+            CheckReadingMode(SharedReading);
+            WaitConsumerOffset(0);
+            expected.insert(expected.end(), {"first", "second"});
+            ReadTopicMessages("rewindOutput", expected);
+            WaitConsumerOffset(0);
+            StopConsumerQuery();
+            EnsureTopicEndOffset("rewindOutput", expected.size());
+        }
+    }
+
     Y_UNIT_TEST_F(StreamingQueryReadFromDisabled, TStreamingWithSchemaSecretsTestFixture) {
         SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQueryReadFrom(false);
         CreateTopic("readFromDisabledInput");
         CreateTopic("readFromDisabledOutput");
         CreatePqSource("sourceName");
 
-        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp()"}) {
+        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")"}) {
             ExecQuery(TStringBuilder() << R"(
                 CREATE STREAMING QUERY my_query WITH (RUN = FALSE, READ_FROM = )" << value << R"() AS DO BEGIN
                     INSERT INTO sourceName.readFromDisabledOutput SELECT * FROM sourceName.readFromDisabledInput
@@ -4459,7 +4494,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE STREAMING QUERY my_query WITH (RUN = FALSE, STREAMING_DISPOSITION = OLDEST) AS DO BEGIN
                 INSERT INTO sourceName.readFromDisabledOutput SELECT * FROM sourceName.readFromDisabledInput
             END DO;)");
-        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp()"}) {
+        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")"}) {
             ExecQuery(TStringBuilder() << "ALTER STREAMING QUERY my_query SET (READ_FROM = " << value << ");",
                 EStatus::GENERIC_ERROR, "Streaming query READ_FROM is disabled");
         }
@@ -4534,7 +4569,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         ExecQuery(fmt::format(R"(
             $timestamp = Timestamp("{timestamp}");
-            ALTER STREAMING QUERY my_query SET (READ_FROM = Unwrap($timestamp + Interval("PT1S")));)",
+            ALTER STREAMING QUERY my_query SET (READ_FROM = $timestamp + Interval("PT1S"));)",
             "timestamp"_a = (readFrom - TDuration::Seconds(1)).ToString()));
         CheckScriptExecutionsCount(3, 1);
         ReadTopicMessage(outputTopic, "data2", writeFrom, LocalTopics);

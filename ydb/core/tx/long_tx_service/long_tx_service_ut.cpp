@@ -1075,7 +1075,7 @@ Y_UNIT_TEST_SUITE(SnapshotsMonPage) {
             // Registry input on the next maintenance: local and remote snapshots below border.
             UNIT_ASSERT_STRING_CONTAINS(page, "[local]");
             UNIT_ASSERT_STRING_CONTAINS(page, "[remote]");
-            UNIT_ASSERT_STRING_CONTAINS(page, "Registry input on the next maintenance");
+            UNIT_ASSERT_STRING_CONTAINS(page, "Registry input on the next maintenance (promoted local + all remote snapshots below border)");
             UNIT_ASSERT_STRING_CONTAINS(page, "Total: 2");
         }
 

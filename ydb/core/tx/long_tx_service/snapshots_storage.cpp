@@ -103,7 +103,7 @@ TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::View(TInstant now) const {
     return View(PromotionCutoffStep(now, promotionTime));
 }
 
-TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::View(ui64 maxSnapshotStep) const {
+TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::ViewPromotedUpToStep(ui64 maxSnapshotStep) const {
     return TLocalSnapshotsStorage::TView{
         LocalSnapshots.begin(),
         LocalSnapshots.end(),
@@ -267,7 +267,7 @@ TString RenderSnapshotsMonPage(
         PRE() {
             str << "Local snapshots (promoted and alive):" << Endl;
             size_t localCount = 0;
-            for (const auto& snapshotInfo : localSnapshots.View(localCutoffStep)) {
+            for (const auto& snapshotInfo : localSnapshots.ViewPromotedUpToStep(localCutoffStep)) {
                 ++localCount;
                 RenderSnapshotLine(str, "", snapshotInfo.Snapshot, snapshotInfo.SessionActorId, snapshotInfo.TableIds, border, nowMs);
             }
@@ -286,9 +286,9 @@ TString RenderSnapshotsMonPage(
             }
         }
         PRE() {
-            str << "Registry input on the next maintenance (snapshots below border):" << Endl;
+            str << "Registry input on the next maintenance (promoted local + all remote snapshots below border):" << Endl;
             size_t registryInputCount = 0;
-            for (const auto& snapshotInfo : localSnapshots.View(localCutoffStep)) {
+            for (const auto& snapshotInfo : localSnapshots.ViewPromotedUpToStep(localCutoffStep)) {
                 if (snapshotInfo.Snapshot < border) {
                     ++registryInputCount;
                     RenderSnapshotLine(str, "[local]", snapshotInfo.Snapshot, snapshotInfo.SessionActorId, snapshotInfo.TableIds, border, nowMs);

@@ -1838,6 +1838,7 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
         LocalSnapshotsStorage->Clear();
         RemoteSnapshotsStorage->Clear();
         AppData()->SnapshotRegistryHolder->Set(nullptr);
+        LastRegistryBuildTime = {};
         if (SnapshotsExchangeActorId) {
             Send(SnapshotsExchangeActorId, new TEvents::TEvPoison());
             SnapshotsExchangeActorId = {};

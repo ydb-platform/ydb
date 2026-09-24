@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_events_private.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/deleted_ddisk_storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/public.h>
 
@@ -112,6 +113,7 @@ private:
 
     // A bit is set after its vchunk is touched and is never cleared.
     TTouchedVChunks TouchedVChunks;
+    TDeletedDDiskStorage DeletedDDiskStorage;
 
 public:
     TPartitionActor(

@@ -3,7 +3,9 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/deleted_ddisk.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
@@ -26,6 +28,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 #define BLOCKSTORE_PARTITION_TRANSACTIONS(xxx, ...)                            \
     xxx(InitSchema, __VA_ARGS__)                                               \
     xxx(LoadState, __VA_ARGS__)                                                \
+    xxx(CleanupDeletedDDisks, __VA_ARGS__)                                     \
     xxx(StoreVolumeConfig, __VA_ARGS__)                                        \
     xxx(StorePartitionIds, __VA_ARGS__)                                        \
     xxx(UpdateVChunkState, __VA_ARGS__)                                        \
@@ -69,6 +72,7 @@ struct TTxPartition
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TVChunkConfigs VChunkConfigs;
         TDirtyMapStateProtos DirtyMapStates;
+        TVector<TDeletedDDiskRecordProto> DeletedDDiskRecords;
         TTouchedVChunks TouchedVChunks;
         TMaybe<TAddHostInProgress> AddHostInProgress;
         TMaybe<TRemoveHostInProgress> RemoveHostInProgress;
@@ -79,9 +83,23 @@ struct TTxPartition
             DirectBlockGroupsConnections.Clear();
             VChunkConfigs.clear();
             DirtyMapStates.clear();
+            DeletedDDiskRecords.clear();
             TouchedVChunks = {};
             AddHostInProgress.Clear();
             RemoveHostInProgress.Clear();
+        }
+    };
+
+    //
+    // CleanupDeletedDDisks
+    //
+    struct TCleanupDeletedDDisks
+    {
+        TVector<ui64> RecordIds;
+
+        void Clear()
+        {
+            RecordIds.clear();
         }
     };
 
@@ -133,6 +151,8 @@ struct TTxPartition
             ui32 VChunkIndex;
             TVChunkConfig VChunkConfig;
             TDirtyMapStateProto DirtyMapState;
+            TVector<NKikimr::NBsController::TDDiskId> DeletedDDiskIds;
+            TVector<TDeletedDDiskRecordProto> DeletedDDiskRecords;
             TPersistResultPromise UpdateCompleted;
         };
 

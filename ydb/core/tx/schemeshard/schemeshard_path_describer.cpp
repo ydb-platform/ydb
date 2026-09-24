@@ -703,19 +703,28 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
             auto entry = preSerializedResult.MutablePathDescription()->MutablePersQueueGroup();
 
             struct TPartitionDesc {
-            TTabletId TabletId;
-            const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
+                TTabletId TabletId;
+                const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
             };
 
-            // it is sorted list of partitions by partition id
-            TVector<TPartitionDesc> descriptions; // index is pqId
-            descriptions.resize(pqGroupInfo->Partitions.size());
+            // Not indexed by PqId: ids may have gaps, so a vector of size NextPartitionId
+            // would be sparse. Reserve for the partitions we actually store and sort later.
+            TVector<TPartitionDesc> descriptions;
+            descriptions.reserve(pqGroupInfo->Partitions.size());
 
             for (const auto& [shardIdx, pqShard] : pqGroupInfo->Shards) {
                 auto it = Self->ShardInfos.find(shardIdx);
                 Y_VERIFY_S(it != Self->ShardInfos.end(), "No shard with shardIdx: " << shardIdx);
 
                 for (const auto& partition : pqShard->Partitions) {
+                    // Ids at or past committed NextPartitionId belong to an in-flight
+                    // alter (or to a topic whose NextPartitionId has not caught up).
+                    // Publishing them aborts SchemeShard; omit them from the committed
+                    // snapshot instead.
+                    if (partition->PqId >= pqGroupInfo->NextPartitionId) {
+                        continue;
+                    }
+
                     // Describe the partition set as of the committed topic AlterVersion.
                     //
                     // ReassignIds bumps parent AlterVersion (and sets Inactive) before FinishAlter
@@ -731,12 +740,14 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                     //   visible via AlterVersion <= committed
                     if (partition->CreateVersion <= pqGroupInfo->AlterVersion
                             || partition->AlterVersion <= pqGroupInfo->AlterVersion) {
-                        Y_VERIFY_S(partition->PqId < pqGroupInfo->NextPartitionId,
-                                   "Wrong pqId: " << partition->PqId << ", nextPqId: " << pqGroupInfo->NextPartitionId);
-                        descriptions[partition->PqId] = {it->second.TabletID, partition.Get()};
+                        descriptions.push_back({it->second.TabletID, partition.Get()});
                     }
                 }
             }
+
+            Sort(descriptions, [](const TPartitionDesc& lhs, const TPartitionDesc& rhs) {
+                return lhs.Info->PqId < rhs.Info->PqId;
+            });
 
             for (const auto& desc : descriptions) {
                 if (desc.Info == nullptr || desc.Info->Status == NKikimrPQ::ETopicPartitionStatus::Deleted) {
@@ -796,6 +807,9 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
             const auto& shardInfo = Self->ShardInfos.at(shardIdx);
             for (const auto& pq : pqShard->Partitions) {
                 if (pq->Status == NKikimrPQ::ETopicPartitionStatus::Deleted) {
+                    continue;
+                }
+                if (pq->PqId >= pqGroupInfo->NextPartitionId) {
                     continue;
                 }
                 if (pq->CreateVersion <= pqGroupInfo->AlterVersion

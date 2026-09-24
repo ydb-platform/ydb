@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/persqueue/writer/partition_chooser_impl.h>
 #include <ydb/services/lib/sharding/sharding.h>
@@ -1982,4 +1983,222 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
         ValidateDescribeUsableByBoundaryChooser(topicDone);
         UNIT_ASSERT_VALUES_EQUAL(4, topicDone.PartitionsSize());
     } // Y_UNIT_TEST(DescribeDuringMergeAlterKeepsOpenEndedActive)
+
+    // A partition can be version-visible (CreateVersion / AlterVersion at or below the
+    // committed topic version) while its id is already >= NextPartitionId. Describe used
+    // to Y_VERIFY and kill SchemeShard. It must omit those ids and keep the committed range.
+    Y_UNIT_TEST(DescribeOmitsPartitionsAtOrPastNextPartitionId) {
+        TTestBasicRuntime runtime;
+        TSchemeShard* schemeshard = nullptr;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        });
+
+        ui64 txId = 100;
+        CreateSubDomain(runtime, env, txId);
+        CreateTopic(runtime, env, txId, 3);
+
+        auto before = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(3, before.PartitionsSize());
+        UNIT_ASSERT_VALUES_EQUAL(3, before.GetNextPartitionId());
+        ValidateDescribeUsableByBoundaryChooser(before);
+
+        UNIT_ASSERT(schemeshard);
+        UNIT_ASSERT_VALUES_EQUAL(1, schemeshard->Topics.size());
+        TTopicInfo::TPtr topicInfo = schemeshard->Topics.begin()->second;
+        // Drop the cached blob filled by the describe above, then lag NextPartitionId
+        // behind partitions that are already committed.
+        topicInfo->PreSerializedPathDescription.clear();
+        topicInfo->PreSerializedPartitionsDescription.clear();
+        topicInfo->NextPartitionId = 1;
+
+        auto described = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(1, described.GetNextPartitionId());
+        UNIT_ASSERT_VALUES_EQUAL(1, described.PartitionsSize());
+        UNIT_ASSERT_VALUES_EQUAL(0, described.GetPartitions(0).GetPartitionId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
+            static_cast<int>(described.GetPartitions(0).GetStatus()));
+        for (const auto& p : described.GetPartitions()) {
+            UNIT_ASSERT_C(p.GetPartitionId() < described.GetNextPartitionId(),
+                "describe published partition " << p.GetPartitionId()
+                << " at or past NextPartitionId " << described.GetNextPartitionId());
+        }
+    } // Y_UNIT_TEST(DescribeOmitsPartitionsAtOrPastNextPartitionId)
+
+    // Split a bounded partition. The open-ended tail must stay Active, and children
+    // allocated at NextPartitionId must stay hidden until FinishAlter.
+    Y_UNIT_TEST(DescribeDuringSplitOfMiddlePartition) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+        CreateSubDomain(runtime, env, txId);
+        CreateTopic(runtime, env, txId, 3);
+
+        auto topicBefore = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(3, topicBefore.GetNextPartitionId());
+        ValidateDescribeUsableByBoundaryChooser(topicBefore);
+
+        ui32 openEndedId = Max<ui32>();
+        ui32 middleId = Max<ui32>();
+        for (const auto& p : topicBefore.GetPartitions()) {
+            const bool hasFrom = p.HasKeyRange() && p.GetKeyRange().HasFromBound();
+            const bool hasTo = p.HasKeyRange() && p.GetKeyRange().HasToBound();
+            if (!hasTo) {
+                openEndedId = p.GetPartitionId();
+            } else if (hasFrom) {
+                middleId = p.GetPartitionId();
+            }
+        }
+        UNIT_ASSERT(openEndedId != Max<ui32>());
+        UNIT_ASSERT(middleId != Max<ui32>());
+        UNIT_ASSERT(middleId != openEndedId);
+
+        // Inside the middle third (between the 1/3 and 2/3 split points).
+        const unsigned char b[] = {0x80};
+        TString boundary((char*)b, sizeof(b));
+
+        ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+        scheme.SetName("Topic1");
+        scheme.MutablePQTabletConfig()->MutablePartitionConfig();
+        auto* split = scheme.AddSplit();
+        split->SetPartition(middleId);
+        split->SetSplitBoundary(boundary);
+
+        TStringBuilder sb;
+        sb << scheme;
+        const TString schemeStr = sb.substr(1, sb.size() - 2);
+
+        AsyncAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", schemeStr);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        auto topicInFlight = DescribeTopic(runtime);
+        ValidateInFlightCommittedDescribeSnapshot(topicBefore, topicInFlight);
+        ValidateDescribeUsableByBoundaryChooser(topicInFlight);
+
+        bool middleStillActive = false;
+        bool openEndedStillActive = false;
+        for (const auto& p : topicInFlight.GetPartitions()) {
+            UNIT_ASSERT_C(p.GetPartitionId() < topicBefore.GetNextPartitionId(),
+                "mid-alter exposed partition " << p.GetPartitionId());
+            if (p.GetPartitionId() == middleId || p.GetPartitionId() == openEndedId) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
+                    static_cast<int>(p.GetStatus()));
+                UNIT_ASSERT_VALUES_EQUAL(0, p.ChildPartitionIdsSize());
+            }
+            middleStillActive = middleStillActive || p.GetPartitionId() == middleId;
+            openEndedStillActive = openEndedStillActive || p.GetPartitionId() == openEndedId;
+        }
+        UNIT_ASSERT(middleStillActive);
+        UNIT_ASSERT(openEndedStillActive);
+
+        // Cached blob from the describe above must stay on the committed snapshot.
+        auto topicCached = DescribeTopic(runtime);
+        ValidateInFlightCommittedDescribeSnapshot(topicBefore, topicCached);
+
+        env.TestWaitNotification(runtime, txId);
+        auto topicDone = DescribeTopic(runtime);
+        ValidateAlterFinishedDescribeProgress(topicBefore, topicDone);
+        ValidateDescribeUsableByBoundaryChooser(topicDone);
+        UNIT_ASSERT_VALUES_EQUAL(5, topicDone.PartitionsSize());
+
+        bool middleInactive = false;
+        ui32 middleChildren = 0;
+        for (const auto& p : topicDone.GetPartitions()) {
+            if (p.GetPartitionId() == middleId) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Inactive),
+                    static_cast<int>(p.GetStatus()));
+                UNIT_ASSERT_VALUES_EQUAL(2, p.ChildPartitionIdsSize());
+                middleInactive = true;
+            }
+            for (const auto parent : p.GetParentPartitionIds()) {
+                if (parent == middleId) {
+                    UNIT_ASSERT_C(p.GetPartitionId() >= topicBefore.GetNextPartitionId(),
+                        "child id " << p.GetPartitionId() << " was already committed");
+                    ++middleChildren;
+                }
+            }
+            if (p.GetPartitionId() == openEndedId) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
+                    static_cast<int>(p.GetStatus()));
+            }
+        }
+        UNIT_ASSERT(middleInactive);
+        UNIT_ASSERT_VALUES_EQUAL(2, middleChildren);
+    } // Y_UNIT_TEST(DescribeDuringSplitOfMiddlePartition)
+
+    // Split a partition that itself was created by an earlier split, so its id sits
+    // just below NextPartitionId. Mid-alter that parent stays visible; its children do not.
+    Y_UNIT_TEST(DescribeDuringSplitOfPreviouslyCreatedChild) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+        CreateSubDomain(runtime, env, txId);
+        CreateTopic(runtime, env, txId, 1);
+
+        const unsigned char b0[] = {0x40};
+        TString boundary0((char*)b0, sizeof(b0));
+        SplitPartition(runtime, env, txId, 0, boundary0);
+
+        auto topicBefore = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(3, topicBefore.PartitionsSize());
+        UNIT_ASSERT_VALUES_EQUAL(3, topicBefore.GetNextPartitionId());
+        ValidateDescribeUsableByBoundaryChooser(topicBefore);
+
+        ui32 childId = Max<ui32>();
+        for (const auto& p : topicBefore.GetPartitions()) {
+            if (p.GetPartitionId() != 0
+                    && p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active
+                    && (!p.HasKeyRange() || !p.GetKeyRange().HasToBound())) {
+                childId = p.GetPartitionId();
+            }
+        }
+        UNIT_ASSERT_C(childId != Max<ui32>() && childId + 1 == topicBefore.GetNextPartitionId(),
+            "expected the open-ended child to be the last committed id, got " << childId);
+
+        const unsigned char b1[] = {0xC0};
+        TString boundary1((char*)b1, sizeof(b1));
+
+        ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+        scheme.SetName("Topic1");
+        scheme.MutablePQTabletConfig()->MutablePartitionConfig();
+        auto* split = scheme.AddSplit();
+        split->SetPartition(childId);
+        split->SetSplitBoundary(boundary1);
+
+        TStringBuilder sb;
+        sb << scheme;
+        const TString schemeStr = sb.substr(1, sb.size() - 2);
+
+        AsyncAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", schemeStr);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        auto topicInFlight = DescribeTopic(runtime);
+        ValidateInFlightCommittedDescribeSnapshot(topicBefore, topicInFlight);
+        ValidateDescribeUsableByBoundaryChooser(topicInFlight);
+        bool childStillActive = false;
+        for (const auto& p : topicInFlight.GetPartitions()) {
+            if (p.GetPartitionId() == childId) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    static_cast<int>(NKikimrPQ::ETopicPartitionStatus::Active),
+                    static_cast<int>(p.GetStatus()));
+                UNIT_ASSERT_VALUES_EQUAL(0, p.ChildPartitionIdsSize());
+                childStillActive = true;
+            }
+        }
+        UNIT_ASSERT(childStillActive);
+
+        env.TestWaitNotification(runtime, txId);
+        auto topicDone = DescribeTopic(runtime);
+        ValidateAlterFinishedDescribeProgress(topicBefore, topicDone);
+        ValidateDescribeUsableByBoundaryChooser(topicDone);
+        UNIT_ASSERT_VALUES_EQUAL(5, topicDone.PartitionsSize());
+    } // Y_UNIT_TEST(DescribeDuringSplitOfPreviouslyCreatedChild)
 }

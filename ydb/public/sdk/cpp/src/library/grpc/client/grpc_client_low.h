@@ -1270,14 +1270,17 @@ private:
             }
         }
 
-        for (auto& item : writesDropped) {
-            if (item.Callback) {
+        while (!writesDropped.empty()) {
+            auto callback = std::move(writesDropped.front().Callback);
+            // Release the queued request before reporting its completion.
+            writesDropped.pop_front();
+            if (callback) {
                 TGrpcStatus writeStatus = status;
                 if (writeStatus.Ok()) {
                     writeStatus = TGrpcStatus(grpc::StatusCode::CANCELLED, "Write request dropped");
                 }
                 RunGuarded([&] {
-                    item.Callback(std::move(writeStatus));
+                    callback(std::move(writeStatus));
                 });
             }
         }

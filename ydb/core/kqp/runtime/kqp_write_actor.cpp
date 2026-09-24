@@ -958,7 +958,6 @@ public:
                 {"shardID", shardId});
             return;
         }
-        AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (metadata && seqNo + 1 == metadata->NextOverloadSeqNo) {
             YDB_LOG_DEBUG("Retry Overloaded",
@@ -1007,28 +1006,12 @@ public:
             {"cookie", ev->Cookie});
 
         if (!ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
-            switch (ev->Get()->GetStatus()) {
-            case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
-            case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
-            case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE:
-            case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED:
-            case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
-                // The shard was removed by a reroute after a split/merge: a late
-                // retriable result for it is stale (its in-flight batches were
-                // extracted and re-sent to the covering shards). Any other status
-                // must not be silenced by the reroute and fails below.
-                YDB_LOG_INFO("Ignoring a late retriable TEvWriteResult for a shard removed by a reroute.",
-                    {"logPrefix", this->LogPrefix},
-                    {"tabletId", ev->Get()->Record.GetOrigin()},
-                    {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())});
-                return;
-            default:
-                YDB_LOG_WARN("Non-retriable TEvWriteResult for a shard removed by a reroute; failing the write.",
-                    {"logPrefix", this->LogPrefix},
-                    {"tabletId", ev->Get()->Record.GetOrigin()},
-                    {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())});
-                break;
-            }
+            // TODO: in future don't ignore non-retryable errors and fail immediately
+            YDB_LOG_INFO("Ignoring a late TEvWriteResult for a shard removed by a reroute.",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", ev->Get()->Record.GetOrigin()},
+                {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())});
+            return;
         }
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());

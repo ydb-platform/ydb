@@ -3,6 +3,8 @@
 #include "kqp_scan_common.h"
 #include "kqp_compute_actor_impl.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_task_rendering.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
@@ -42,6 +44,9 @@ TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableOptions sched
     YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
     YQL_ENSURE(!Meta.GetReads().empty());
     YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
+
+    TTaskTraceDescription::Annotate(ComputeActorSpan, *GetTask().GetTask());
+    ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpScanComputeActor"));
 }
 
 TKqpScanComputeActor::~TKqpScanComputeActor() {
@@ -93,7 +98,10 @@ void TKqpScanComputeActor::AcquireRateQuota() {
 }
 
 void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
-    Y_UNUSED(last);
+    if (last) {
+        AddKqpTaskTraceAttributes(ComputeActorSpan, *dst,
+            RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL);
+    }
 
     if (ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);

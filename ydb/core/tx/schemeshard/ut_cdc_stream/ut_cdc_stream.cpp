@@ -535,7 +535,26 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             DropColumns { Name: "value" }
         )", {NKikimrScheme::StatusPreconditionFailed});
 
-        // drop stream
+        // A schema-aware stream does not make a mixed table safe: the legacy
+        // stream still cannot consume a column-change record.
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "SchemaStream"
+              Mode: ECdcStreamModeUpdate
+              Format: ECdcStreamFormatJson
+              SchemaChanges: true
+              UserAttributes { Key: "__async_replication" Value: "%s" }
+            }
+        )", EscapeC(jsonString).c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "mixed_extra" Type: "Uint64" }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+
+        // After removing the legacy stream, ordinary ADD/DROP is allowed.
         TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
             StreamName: "Stream"
@@ -548,6 +567,11 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             Columns { Name: "extra" Type: "Uint64" }
         )");
         env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "extra" EmptyDefault: NULL_VALUE }
+        )", {NKikimrScheme::StatusPreconditionFailed});
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"

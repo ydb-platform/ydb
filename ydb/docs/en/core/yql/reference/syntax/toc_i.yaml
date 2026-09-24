@@ -1,6 +1,5 @@
 items:
 - { name: Overview,                     href: index.md }
-- { name: YQL command syntax conventions, href: syntax-conventions.md }
 - { name: Lexical structure,            href: lexer.md }
 - { name: Expressions,                  href: expressions.md }
 - { name: ACTION,                       href: action.md }

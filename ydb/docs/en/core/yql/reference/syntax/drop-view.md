@@ -5,13 +5,13 @@
 ## Syntax
 
 ```yql
-DROP VIEW [IF EXISTS] <view_name>
+DROP VIEW [IF EXISTS] <name>
 ```
 
 ### Parameters
 
-* `IF EXISTS` — the statement does not return an error if a view with the given name does not exist.
-* `<view_name>` — the name of the view to drop.
+* `IF EXISTS` - when specified, the statement does not return an error if a view with the given name does not exist.
+* `name` - the name of the view to be deleted.
 
 ## Examples
 

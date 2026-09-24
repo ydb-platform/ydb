@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -21,6 +22,8 @@ using TEvAskPortionAccessors = NGeneralCache::NPublic::TEvents<NOlap::NGeneralCa
 using TEvAskColumnData = NColumnShard::TEvPrivate::TEvAskColumnData;
 // The scan actor reports to the tablet when it finishes, for whatever reason.
 using TEvReadFinished = NColumnShard::TEvPrivate::TEvReadFinished;
+// KQP stops a scan actor with this event and does not wait for anything.
+using TEvAbortExecution = NKqp::TEvKqp::TEvAbortExecution;
 
 void SleepUntil(TTestActorRuntime& runtime, const TInstant deadline) {
     const auto now = runtime.GetCurrentTime();
@@ -504,6 +507,127 @@ Y_UNIT_TEST_SUITE(KqpOlapScanCleanup) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[1u;["one"]];[5u;["five"]];[10u;["ten"]]])", FormatResultSetYson(result.GetResultSet(0)));
         }
+    }
+
+    // KQP may give up a query without its stop ever reaching the scan actor. The registry then forgets the query's snapshot
+    // while the scan still runs on the tablet. The tablet must keep the portions such a scan reads until the scan is over.
+    Y_UNIT_TEST(OrphanedScanKeepsItsPortions) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Cleanup);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        auto& longTxConfig = *settings.AppConfig.MutableLongTxServiceConfig();
+        longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
+        longTxConfig.SetMaxClockSkewMs(1000);
+        longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        longTxConfig.SetSnapshotsExchangeIntervalSeconds(1);
+        TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        // 1. Create the table
+        kikimr.RunCall([&] {
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            const auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                )
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )")
+                                    .GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            return true;
+        });
+
+        using namespace NYdb::NQuery;
+        auto queryClient = kikimr.GetQueryClient();
+        auto writeSession = kikimr.RunCall([&] { return queryClient.GetSession().GetValueSync().GetSession(); });
+        const auto upsert = [&](const TString& values) {
+            const auto result = kikimr.RunCall([&] {
+                return writeSession
+                    .ExecuteQuery(TStringBuilder() << "UPSERT INTO `/Root/ColumnTable` (Key, Value) VALUES " << values << ";",
+                        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        // 2. Write the first portion, the one the scan will see
+        upsert("(1u, \"one\")");
+
+        // 3. Park a scan before it reads anything. The scan actor sends the accessor lookup itself, so the held event tells
+        // its id; only that actor's "finished" counts.
+        const auto accessorsCacheId = TPortionAccessorsCache::MakeServiceId(runtime.GetNodeId(0));
+        NActors::TBlockEvents<TEvAskPortionAccessors> heldScanAccessors(runtime, [accessorsCacheId](const auto& ev) {
+            return ev->Recipient == accessorsCacheId && ev->Get()->GetConsumer() == NOlap::NBlobOperations::EConsumer::SCAN;
+        });
+        TActorId scanActorId;
+        bool scanFinished = false;
+        auto readFinishedObserver = runtime.AddObserver<TEvReadFinished>([&](TEvReadFinished::TPtr& ev) {
+            if (ev->Sender == scanActorId) {
+                scanFinished = true;
+            }
+        });
+
+        auto scanSession = kikimr.RunCall([&] { return queryClient.GetSession().GetValueSync().GetSession(); });
+        auto selectFuture = kikimr.RunInThreadPool([&] {
+            return scanSession
+                .ExecuteQuery(R"(
+                    SELECT Key, Value FROM `/Root/ColumnTable` ORDER BY Key;
+                )",
+                    TTxControl::NoTx())
+                .ExtractValueSync();
+        });
+        runtime.WaitFor(
+            "scan looks portion accessors up", [&] { return !heldScanAccessors.empty() || selectFuture.HasValue(); }, TDuration::Seconds(30));
+        UNIT_ASSERT_C(!heldScanAccessors.empty(), "select finished without looking portion accessors up");
+        scanActorId = heldScanAccessors.front()->Sender;
+
+        // 4. Write the second portion, invisible to the scan: it tells when cleanup gets to the originals at all
+        upsert("(10u, \"ten\")");
+
+        // 5. KQP gives the query up, but its stop never reaches the scan actor
+        NActors::TBlockEvents<TEvAbortExecution> droppedAborts(
+            runtime, [scanActorId](const auto& ev) { return ev->GetRecipientRewrite() == scanActorId; });
+        {
+            const auto deleteResult = kikimr.RunCall([&] { return queryClient.DeleteSession(scanSession.GetId()).GetValueSync(); });
+            UNIT_ASSERT_C(deleteResult.IsSuccess(), deleteResult.GetIssues().ToString());
+            const auto selectResult = runtime.WaitFuture(selectFuture);
+            UNIT_ASSERT_C(!selectResult.IsSuccess(), "select must have failed");
+            UNIT_ASSERT(!scanFinished);
+        }
+
+        // 6. Compact both portions
+        TInstant compactedAt;
+        {
+            const i64 compactionsBefore = csController->GetCompactionFinishedCounter().Val();
+            csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
+            runtime.WaitFor(
+                "compaction", [&] { return csController->GetCompactionFinishedCounter().Val() > compactionsBefore; }, TDuration::Seconds(30));
+            compactedAt = runtime.GetCurrentTime();
+        }
+        SleepUntil(runtime, compactedAt + TDuration::Seconds(10));
+
+        // 7. Cleanup drops the second original, nobody sees it. The first one stays: the orphaned scan reads it.
+        {
+            const i64 cleanupsBefore = csController->GetCleaningFinishedCounter().Val();
+            csController->EnableBackground(NYDBTest::ICSController::EBackground::Cleanup);
+            runtime.WaitFor(
+                "cleanup", [&] { return csController->GetCleaningFinishedCounter().Val() > cleanupsBefore; }, TDuration::Seconds(30));
+            UNIT_ASSERT(!scanFinished);
+            UNIT_ASSERT_VALUES_EQUAL(csController->GetPortionsErasedCounter().Val(), 1);
+        }
+
+        // 8. The scan goes on, its first batch to the dead compute actor bounces, and it finishes
+        heldScanAccessors.Stop().Unblock();
+        runtime.WaitFor("orphaned scan finishes", [&] { return scanFinished; }, TDuration::Seconds(30));
+
+        // 9. Nothing pins the first original any more
+        runtime.WaitFor(
+            "cleanup drops the first original", [&] { return csController->GetPortionsErasedCounter().Val() == 2; }, TDuration::Seconds(30));
     }
 }
 

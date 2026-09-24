@@ -156,7 +156,7 @@ public:
             hFunc(TEvInputChannelData, OnInputChannelData);
             hFunc(TEvSinkDataRequest, OnSinkDataRequest);
             hFunc(TEvSinkData, OnSinkData);
-            IgnoreFunc(TEvStatistics);
+            hFunc(TEvStatistics, OnStatisticsRequest);
             default: {
                 auto message = TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << ")" << " stageId: " << StageId;
                 auto issue = TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
@@ -292,6 +292,16 @@ private:
 
     void OnContinueRun(TEvContinueRun::TPtr& ev) {
         Run(ev);
+    }
+
+    void OnStatisticsRequest(TEvStatistics::TPtr& ev) {
+        // Task runner stats live in the child process and reach the compute actor as sensors
+        // attached to command responses, so the view stays undefined here. The reply itself is
+        // still required: it is the only thing that lets the compute actor answer a state
+        // request from the controller.
+        const auto replyTo = ev->Sender;
+        const auto cookie = ev->Cookie;
+        Send(replyTo, ev->Release().Release(), /*flags=*/0, cookie);
     }
 
     void OnInputChannelData(TEvInputChannelData::TPtr& ev) {

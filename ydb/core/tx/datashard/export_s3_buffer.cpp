@@ -89,6 +89,7 @@ public:
     IEventBase* PrepareEvent(bool last, NExportScan::IBuffer::TStats& stats) override;
     void Clear() override;
     bool IsFilled() const override;
+    ui64 GetMemoryBytes() const override;
     TString GetError() const override;
 
 private:
@@ -113,6 +114,7 @@ private:
 protected:
     ui64 Rows = 0;
     ui64 BytesRead = 0;
+    ui64 UncompressedBytes = 0; // serialized bytes collected into the current part
     TBuffer Buffer;
 
     TChecksumCreator ChecksumCreator;
@@ -190,6 +192,7 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
 
         BytesRead += cell.Size();
 
+<<<<<<< HEAD
         if (needsComma) {
             out << ",";
         } else {
@@ -286,6 +289,27 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
 
         if (!serialized) {
             return false;
+=======
+    if (Buffer.Size() > beforeSize) {
+        TStringBuf chunk(Buffer.Data(), Buffer.Size());
+        chunk = chunk.Tail(beforeSize);
+        UncompressedBytes += chunk.size();
+
+        if (Checksum) {
+            Checksum->AddData(chunk);
+        }
+        if (Compression) {
+            if (!Compression->AddData(chunk)) {
+                ErrorString = Compression->GetError();
+                return false;
+            }
+            // The raw row has been consumed by the compressor, do not keep it in memory.
+            // Otherwise the raw data is accumulated until the compressed output reaches MinBytes,
+            // which is unbounded for highly compressible data.
+            // With compression the buffer holds only the current row, so it is empty on entry.
+            Y_ENSURE(beforeSize == 0);
+            Buffer.Reset();
+>>>>>>> 1f328a7e88d (fix growing uncompressed bytes (#52143))
         }
     }
 
@@ -304,8 +328,13 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row) {
         return false;
     }
 
+<<<<<<< HEAD
     TStringBuf data(Buffer.Data(), Buffer.Size());
     data = data.Tail(beforeSize);
+=======
+    TStringBuf chunk(data, size);
+    UncompressedBytes += size;
+>>>>>>> 1f328a7e88d (fix growing uncompressed bytes (#52143))
 
     // Apply checksum
     if (Checksum) {
@@ -342,6 +371,7 @@ IEventBase* TS3Buffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& sta
 void TS3Buffer::Clear() {
     Rows = 0;
     BytesRead = 0;
+    UncompressedBytes = 0;
     Buffer = TBuffer();
     if (Checksum) {
         Checksum.reset(ChecksumCreator());
@@ -360,8 +390,17 @@ bool TS3Buffer::IsFilled() const {
     if (outputSize < MinBytes) {
         return false;
     }
+<<<<<<< HEAD
 
     return Rows >= GetRowsLimit() || Buffer.Size() >= GetBytesLimit();
+=======
+    // After MinBytes, MaxBytes caps the uncompressed size and the memory held.
+    return Rows >= RowsLimit || UncompressedBytes >= MaxBytes || GetMemoryBytes() >= MaxBytes;
+}
+
+ui64 TS3Buffer::GetMemoryBytes() const {
+    return Buffer.Size() + (Compression ? Compression->GetReadyOutputBytes() : 0) + DataFormat->GetReadyOutputBytes();
+>>>>>>> 1f328a7e88d (fix growing uncompressed bytes (#52143))
 }
 
 TString TS3Buffer::GetError() const {
@@ -372,6 +411,20 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
     Rows = 0;
     BytesRead = 0;
 
+<<<<<<< HEAD
+=======
+    auto dataFormatBuffer = DataFormat->Flush(last);
+    if (!dataFormatBuffer) {
+        ErrorString = DataFormat->GetError();
+        return Nothing();
+    }
+
+    if (!Append(dataFormatBuffer->Data(), dataFormatBuffer->Size())) {
+        return Nothing();
+    }
+    UncompressedBytes = 0;
+
+>>>>>>> 1f328a7e88d (fix growing uncompressed bytes (#52143))
     // Compression finishes compression frame during Flush
     // so that last table row borders equal to compression frame borders.
     // This full finished block must then be encrypted so that encryption frame

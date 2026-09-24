@@ -152,6 +152,16 @@ void TDynamicJournalWriterConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("validate_erasure_coding", &TThis::ValidateErasureCoding)
         .Optional();
+    registrar.Parameter("max_batch_row_count", &TThis::MaxBatchRowCount)
+        .Optional();
+    registrar.Parameter("max_batch_data_size", &TThis::MaxBatchDataSize)
+        .Optional();
+    registrar.Parameter("max_flush_row_count", &TThis::MaxFlushRowCount)
+        .Optional();
+    registrar.Parameter("max_flush_data_size", &TThis::MaxFlushDataSize)
+        .Optional();
+    registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -168,6 +178,11 @@ TJournalWriterConfigPtr TJournalWriterConfig::ApplyDynamic(
 void TJournalWriterConfig::ApplyDynamicInplace(const TDynamicJournalWriterConfigPtr& dynamicConfig)
 {
     UpdateYsonStructField(ValidateErasureCoding, dynamicConfig->ValidateErasureCoding);
+    UpdateYsonStructField(MaxBatchRowCount, dynamicConfig->MaxBatchRowCount);
+    UpdateYsonStructField(MaxBatchDataSize, dynamicConfig->MaxBatchDataSize);
+    UpdateYsonStructField(MaxFlushRowCount, dynamicConfig->MaxFlushRowCount);
+    UpdateYsonStructField(MaxFlushDataSize, dynamicConfig->MaxFlushDataSize);
+    UpdateYsonStructField(PreferLocalHost, dynamicConfig->PreferLocalHost);
 }
 
 void TJournalWriterConfig::Register(TRegistrar registrar)

@@ -417,6 +417,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::TBlocksManager::OnTabletDeleted(ui64 tabletId) {
+        if (!Self->CollectByCompleteDeletionBlock) {
+            return; // the data is collected by the hard barrier Hive sends after the block
+        }
         if (!TabletsToDelete.insert(tabletId).second) {
             return; // already queued
         }

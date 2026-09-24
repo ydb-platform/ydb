@@ -80,7 +80,7 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/tz
     yql/essentials/sql
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translator_iface
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils
     yql/essentials/utils/log

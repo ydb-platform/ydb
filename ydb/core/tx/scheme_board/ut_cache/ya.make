@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/tx/schemeshard
     ydb/core/tx/schemeshard/ut_helpers
+    yql/essentials/sql/v1_dummy
 )
 
 YQL_LAST_ABI_VERSION()

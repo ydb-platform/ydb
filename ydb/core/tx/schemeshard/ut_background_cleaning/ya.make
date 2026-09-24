@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/wrappers/ut_helpers
     ydb/core/base
+    yql/essentials/sql/v1_dummy
 )
 
 SRCS(

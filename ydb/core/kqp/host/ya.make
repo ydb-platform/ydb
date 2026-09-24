@@ -23,7 +23,7 @@ PEERDIR(
     yql/essentials/minikql/invoke_builtins
     yql/essentials/sql
     yql/essentials/sql/v0
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translator_iface
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/core
     yql/essentials/providers/common/codec

@@ -12,9 +12,11 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/persqueue/writer
     yql/essentials/sql/pg_dummy
+    yql/essentials/sql/v1_dummy
 )
 
 SRCS(

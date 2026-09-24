@@ -11,12 +11,14 @@ SRCS(
     channel_scheduler_ut.cpp
     event_holder_pool_ut.cpp
     event_output_channel_ut.cpp
+    interconnect_session_pool_mapping_ut.cpp
     interconnect_ut.cpp
     large.cpp
     outgoing_stream_ut.cpp
     poller_actor_ut.cpp
     dynamic_proxy_ut.cpp
     sticking_ut.cpp
+    xdc_shuffle_ut.cpp
 )
 
 PEERDIR(

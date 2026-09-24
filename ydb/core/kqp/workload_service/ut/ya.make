@@ -11,6 +11,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util
+    yql/essentials/sql/v1
     ydb/core/kqp/workload_service/ut/common
 
     yql/essentials/sql/pg_dummy

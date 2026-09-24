@@ -5,6 +5,7 @@
 #include "node_info.h"
 #include "tablet_info.h"
 
+#include <map>
 #include <set>
 #include <unordered_map>
 #include <iostream>
@@ -87,7 +88,6 @@ struct TObjectDistribution {
         if (diff + value < 0) {
             BLOG_ERROR("UpdateObjectCount: new value " << diff + value << " is negative");
         }
-        Y_DEBUG_ABORT_UNLESS(diff + value >= 0);
         value += diff;
         SortedDistribution.emplace(value, node.Id);
         double newMean = (Mean * (numNodes - 1) + value) / numNodes;
@@ -102,15 +102,14 @@ struct TObjectDistribution {
         }
         RemoveFromSortedDistribution({it->second, node});
     }
-
-    bool operator<(const TObjectDistribution& other) const {
-        return GetImbalance() < other.GetImbalance();
-    }
 };
 
 struct TObjectDistributions {
-    std::multiset<TObjectDistribution> SortedDistributions;
-    std::unordered_map<TFullObjectId, std::multiset<TObjectDistribution>::iterator> Distributions;
+    // Keyed by the object's imbalance as of its last (re)insertion. Every mutation goes through
+    // UpdateDistribution
+    using TSortedDistributions = std::multimap<double, TObjectDistribution>;
+    TSortedDistributions SortedDistributions;
+    std::unordered_map<TFullObjectId, TSortedDistributions::iterator> Distributions;
     ui64 ImbalancedObjects = 0;
     const std::unordered_map<TNodeId, TNodeInfo>& Nodes;
     bool Enabled = true;
@@ -121,7 +120,7 @@ struct TObjectDistributions {
         if (SortedDistributions.empty()) {
             return 0;
         }
-        return SortedDistributions.rbegin()->GetImbalance();
+        return SortedDistributions.rbegin()->first;
     }
 
     struct TObjectToBalance {
@@ -136,7 +135,7 @@ struct TObjectDistributions {
         if (SortedDistributions.empty()) {
             return TObjectToBalance(TFullObjectId());
         }
-        const auto& dist = *SortedDistributions.rbegin();
+        const auto& dist = SortedDistributions.rbegin()->second;
         i64 maxCnt = dist.SortedDistribution.rbegin()->Count;
         TObjectToBalance result(dist.Id);
         for (const auto& [node, cnt] : dist.Distribution) {
@@ -155,7 +154,28 @@ struct TObjectDistributions {
         if (SortedDistributions.empty()) {
             return 0;
         }
-        return SortedDistributions.rbegin()->GetVariance();
+        return SortedDistributions.rbegin()->second.GetVariance();
+    }
+
+    // sortedIt is updated in place
+    template <typename F>
+    void UpdateDistribution(TSortedDistributions::iterator& sortedIt, F updateFunc) {
+        TObjectDistribution& dist = sortedIt->second;
+        double imbalanceBefore = sortedIt->first;
+        Y_DEBUG_ABORT_UNLESS(imbalanceBefore == dist.GetImbalance());
+        updateFunc(dist);
+        double imbalanceAfter = dist.GetImbalance();
+        if (imbalanceAfter == imbalanceBefore) {
+            return;
+        }
+        if (imbalanceBefore <= 1e-7 && imbalanceAfter > 1e-7) {
+            ++ImbalancedObjects;
+        } else if (imbalanceBefore > 1e-7 && imbalanceAfter <= 1e-7) {
+            --ImbalancedObjects;
+        }
+        auto handle = SortedDistributions.extract(sortedIt);
+        handle.key() = imbalanceAfter;
+        sortedIt = SortedDistributions.insert(std::move(handle));
     }
 
     template <typename F>
@@ -164,21 +184,7 @@ struct TObjectDistributions {
         if (distIt == Distributions.end()) {
             return false;
         }
-        auto handle = SortedDistributions.extract(distIt->second);
-        if (!handle) {
-            return false;
-        }
-        auto& dist = handle.value();
-        double imbalanceBefore = dist.GetImbalance();
-        updateFunc(dist);
-        double imbalanceAfter = dist.GetImbalance();
-        if (imbalanceBefore <= 1e-7 && imbalanceAfter > 1e-7) {
-            ++ImbalancedObjects;
-        } else if (imbalanceBefore > 1e-7 && imbalanceAfter <= 1e-7) {
-            --ImbalancedObjects;
-        }
-        auto sortedIt = SortedDistributions.insert(std::move(handle));
-        distIt->second = sortedIt;
+        UpdateDistribution(distIt->second, updateFunc);
         return true;
     }
 
@@ -206,7 +212,7 @@ struct TObjectDistributions {
                 }
             }
             dist.UpdateCount(node, diff);
-            auto sortedDistIt = SortedDistributions.insert(std::move(dist));
+            auto sortedDistIt = SortedDistributions.emplace(dist.GetImbalance(), std::move(dist));
             Distributions.emplace(object, sortedDistIt);
         }
     }
@@ -215,9 +221,12 @@ struct TObjectDistributions {
         if (!Enabled) {
             return;
         }
-        for (const auto& [obj, it] : Distributions) {
-            if (node.MatchesFilter(it->NodeFilter)) {
-                UpdateCount(obj, node, 0);
+        auto updateFunc = [&](TObjectDistribution& dist) {
+            dist.UpdateCount(node, 0);
+        };
+        for (auto& [obj, sortedIt] : Distributions) {
+            if (node.MatchesFilter(sortedIt->second.NodeFilter)) {
+                UpdateDistribution(sortedIt, updateFunc);
             }
         }
     }
@@ -230,8 +239,8 @@ struct TObjectDistributions {
         auto updateFunc = [=](TObjectDistribution& dist) {
             dist.RemoveNode(nodeId);
         };
-        for (auto it = Distributions.begin(); it != Distributions.end();) {
-            UpdateDistribution((it++)->first, updateFunc);
+        for (auto& [obj, sortedIt] : Distributions) {
+            UpdateDistribution(sortedIt, updateFunc);
         }
     }
 

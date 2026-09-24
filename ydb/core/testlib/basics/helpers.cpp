@@ -52,13 +52,19 @@ namespace NKikimr {
                 return true;
             } else {
                 LastLsn = {};
-                return type != TEvBlobStorage::EvConfigureScheduler;
+                // PDisk replies with EvConfigureSchedulerResult, so we must wait for it.
+                return true;
             }
         }
 
         bool IsWaitingForMoreResponses(IEventHandle *response) override {
             if (!LastLsn) {
                 return false;
+            }
+            if (response->Type == TEvBlobStorage::EvConfigureSchedulerResult) {
+                // Scheduler reconfiguration responses may interleave with MultiLog replies.
+                // Keep waiting for EvLogResult that carries requested LSNs.
+                return true;
             }
             Y_VERIFY_S(response->Type == TEvBlobStorage::EvLogResult, "expected EvLogResult "
                     << (ui64)TEvBlobStorage::EvLogResult << ", but given " << response->Type);

@@ -12,6 +12,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/core/grpc_streaming/ut/grpc
     ydb/core/testlib/default
+    yql/essentials/sql/v1_dummy
 )
 
 YQL_LAST_ABI_VERSION()

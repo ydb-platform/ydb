@@ -38,7 +38,7 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/type_ann
     yql/essentials/sql
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translator_iface
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/comp_nodes
@@ -52,4 +52,3 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(interface.h)
-

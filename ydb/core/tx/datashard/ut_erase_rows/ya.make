@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     ydb/core/tx/datashard/ut_common
     library/cpp/getopt
     library/cpp/regex/pcre

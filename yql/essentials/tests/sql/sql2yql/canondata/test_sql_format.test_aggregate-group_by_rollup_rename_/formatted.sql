@@ -10,7 +10,10 @@ SELECT
 FROM
     $s
 GROUP BY
-    ROLLUP (x, y)
+    ROLLUP (
+        x,
+        y
+    )
 ORDER BY
     x2,
     y

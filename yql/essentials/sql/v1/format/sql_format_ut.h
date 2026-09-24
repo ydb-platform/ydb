@@ -1264,6 +1264,63 @@ Y_UNIT_TEST(Select) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(GroupingElementLists) {
+    TCases cases = {
+        {R"sql(select 1 from user group by cube (a, b))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                CUBE (
+                    a,
+                    b
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by rollup (a, b))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                ROLLUP (
+                    a,
+                    b
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by grouping sets (cube (a, b), rollup (c, d), e))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                GROUPING SETS (
+                    CUBE (
+                        a,
+                        b
+                    ),
+                    ROLLUP (
+                        c,
+                        d
+                    ),
+                    e
+                )
+            ;
+
+         )sql")},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(CompositeTypesAndQuestions) {
     TCases cases = {
         {"declare $_x AS list<int32>??;declare $_y AS int32 ? ? ;select 1<>2, 1??2,"

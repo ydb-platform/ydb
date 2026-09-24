@@ -2676,6 +2676,20 @@ private:
         NewLine();
     }
 
+    void VisitOrdinaryGroupingSetList(const TRule_ordinary_grouping_set_list& msg) {
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_ordinary_grouping_set1());
+        for (const auto& block : msg.GetBlock2()) {
+            Visit(block.GetToken1());
+            NewLine();
+            Visit(block.GetRule_ordinary_grouping_set2());
+        }
+
+        PopCurrentIndent();
+        NewLine();
+    }
+
     void VisitGroupingSetsSpecification(const TRule_grouping_sets_specification& msg) {
         Visit(msg.GetToken1());
         Visit(msg.GetToken2());
@@ -3311,6 +3325,7 @@ TStaticData::TStaticData()
           {TRule_without_column_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithoutColumnList)},
           {TRule_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableRef)},
           {TRule_grouping_element_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingElementList)},
+          {TRule_ordinary_grouping_set_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitOrdinaryGroupingSetList)},
           {TRule_grouping_sets_specification::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingSetsSpecification)},
           {TRule_group_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupByClause)},
           {TRule_window_definition_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowDefinitionList)},

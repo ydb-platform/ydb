@@ -19,5 +19,8 @@ FROM (
 )
 GROUP BY
     a,
-    CUBE (a, b)
+    CUBE (
+        a,
+        b
+    )
 ;

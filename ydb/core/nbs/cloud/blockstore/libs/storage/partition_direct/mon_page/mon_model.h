@@ -8,6 +8,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/deleted_ddisk.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
@@ -34,6 +36,7 @@ enum class EMonPage
     VChunkCounters,   // Vchunk operation counters.
     Latency,          // Per-node and per-slot latency.
     Memory,           // Memory usage by direct block group.
+    DeletedDDisks,    // DDisks released by persisted config updates.
 };
 
 // How much per-vchunk detail GatherVChunkStats should collect.
@@ -188,6 +191,9 @@ struct TMonPageData
 
     // Local DB tab.
     std::optional<TLocalDbContents> LocalDb;
+    // Append-only history of DDisks released by touched vchunks.
+    TVector<TDeletedDDiskRecordProto> DeletedDDiskRecords;
+    size_t DeletedDDiskPage = 0;
     // VChunk tab: the requested index (absent => only the input form) and the
     // snapshot (absent => no such vchunk).
     std::optional<ui32> SelectedVChunk;

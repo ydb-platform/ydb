@@ -186,6 +186,76 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "Regions</td><td>2</td>");
     }
 
+    Y_UNIT_TEST(DeletedDDiskPageRendersStatusAndProcessingGeneration)
+    {
+        TMonPageData data = MakeData();
+        data.Page = EMonPage::DeletedDDisks;
+        const TVector<NYdb::NBS::PartitionDirect::NProto::
+                          EDeletedDDiskStatus> statuses = {
+            NYdb::NBS::PartitionDirect::NProto::
+                DELETED_DDISK_STATUS_REGISTERED,
+            NYdb::NBS::PartitionDirect::NProto::
+                DELETED_DDISK_STATUS_IN_PROGRESS,
+            NYdb::NBS::PartitionDirect::NProto::
+                DELETED_DDISK_STATUS_EXECUTED,
+        };
+
+        for (size_t i = 0; i < statuses.size(); ++i) {
+            auto& record = data.DeletedDDiskRecords.emplace_back();
+            record.SetRecordId(static_cast<ui64>(i + 1));
+            record.SetStatus(statuses[i]);
+            record.SetProcessingTabletGeneration(
+                i ? static_cast<ui32>(40 + i) : 0);
+            record.MutableDDiskId()->SetNodeId(static_cast<ui32>(i + 1));
+            record.MutableDDiskId()->SetPDiskId(2);
+            record.MutableDDiskId()->SetDDiskSlotId(3);
+        }
+
+        const TString html =
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Registered");
+        UNIT_ASSERT_STRING_CONTAINS(html, "In progress");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Executed");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Processing tablet generation");
+        UNIT_ASSERT_STRING_CONTAINS(html, "41");
+        UNIT_ASSERT_STRING_CONTAINS(html, "42");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<td>-</td>");
+    }
+
+    Y_UNIT_TEST(DeletedDDiskPagePaginatesAndLinksToVChunk)
+    {
+        TMonPageData data = MakeData();
+        data.Page = EMonPage::DeletedDDisks;
+        data.TabletInfo.TabletId = 42;
+        for (ui32 i = 0; i < 201; ++i) {
+            auto& record = data.DeletedDDiskRecords.emplace_back();
+            record.SetRecordId(i + 1);
+            record.SetVChunkIndex(i);
+            record.MutableDDiskId()->SetNodeId(1);
+            record.MutableDDiskId()->SetPDiskId(2);
+            record.MutableDDiskId()->SetDDiskSlotId(3);
+        }
+
+        const TString firstPage =
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(
+            firstPage,
+            "?TabletID=42&page=vchunk&vchunk=0'>0</a>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            firstPage,
+            "?TabletID=42&page=deletedddisks&ddisk_page=1'>Next</a>");
+        UNIT_ASSERT(!firstPage.Contains("<td>201</td>"));
+
+        data.DeletedDDiskPage = 1;
+        const TString secondPage =
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(
+            secondPage,
+            "?TabletID=42&page=deletedddisks&ddisk_page=0'>Previous</a>");
+        UNIT_ASSERT_STRING_CONTAINS(secondPage, "?page=vchunk&vchunk=200");
+        UNIT_ASSERT(!secondPage.Contains("<td>0</td>"));
+    }
+
     Y_UNIT_TEST(OverviewRendersTouchedDDisks)
     {
         TMonPageData data = MakeData();

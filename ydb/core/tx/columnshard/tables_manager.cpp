@@ -896,6 +896,11 @@ void TTablesManager::TruncateTableProgress(
     TTableInfo newTable({ TUnifiedPathId::BuildValid(newInternalPathId, schemeShardLocalPathId) });
     RegisterTable(std::move(newTable), db);
 
+    if (TabletPathId.has_value() && TabletPathId->InternalPathId == oldInternalPathId) {
+        TabletPathId->InternalPathId = newInternalPathId;
+        Schema::SaveSpecialValue(db, Schema::EValueIds::InternalOwnerPathId, newInternalPathId.GetRawValue());
+    }
+
     // Clear the propose-time fence.
     AFL_VERIFY(TruncatingLocalToInternal.erase(schemeShardLocalPathId));
 

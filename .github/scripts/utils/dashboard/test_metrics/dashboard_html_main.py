@@ -763,6 +763,18 @@ def build_html_dashboard(
       div.textContent = String(s);
       return div.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
     }}
+    function safeColor(c) {{
+      return /^#[0-9a-fA-F]{{3,8}}$/.test(String(c || '')) ? String(c) : '#999';
+    }}
+    function safeHttpBase(raw) {{
+      try {{
+        const u = new URL(String(raw || ''));
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+        return u.href.endsWith('/') ? u.href.slice(0, -1) : u.href;
+      }} catch (e) {{
+        return '';
+      }}
+    }}
     const cfg = data.run_config || {{}};
     const pr = cfg.pr != null && String(cfg.pr).trim() !== '' ? String(cfg.pr) : null;
     const branch = cfg.branch != null && String(cfg.branch).trim() !== '' ? String(cfg.branch).trim() : null;
@@ -794,9 +806,10 @@ def build_html_dashboard(
       el.style.display = '';
     }}
     const linksEl = document.getElementById('headerLinks');
-    if (artifactsUrl) {{
+    const artifactsBase = safeHttpBase(artifactsUrl);
+    if (artifactsBase) {{
       const a = document.createElement('a');
-      a.href = artifactsUrl + '/index.html';
+      a.href = artifactsBase + '/index.html';
       a.target = '_blank';
       a.rel = 'noopener';
       a.textContent = 'Artifacts';
@@ -804,11 +817,11 @@ def build_html_dashboard(
       linksEl.appendChild(a);
       if (tryLinks.length) linksEl.appendChild(document.createTextNode(' · '));
     }}
-    if (artifactsUrl && tryLinks.length) {{
+    if (artifactsBase && tryLinks.length) {{
       tryLinks.forEach((path, i) => {{
         if (i > 0) linksEl.appendChild(document.createTextNode('\u00a0'));
         const a = document.createElement('a');
-        a.href = artifactsUrl + '/' + path;
+        a.href = artifactsBase + '/' + String(path || '').replace(/^\/+/, '');
         a.target = '_blank';
         a.rel = 'noopener';
         a.textContent = 'try ' + (i + 1);
@@ -892,6 +905,8 @@ def build_html_dashboard(
       document.getElementById('chunkTab').style.display = 'block';
       document.getElementById('suiteTab').style.display = 'none';
     }} else {{
+      document.getElementById('chunkTab').classList.remove('active');
+      document.getElementById('chunkTab').style.display = 'none';
       document.getElementById('suiteTab').classList.add('active');
       document.getElementById('suiteTab').style.display = 'block';
     }}
@@ -1418,7 +1433,7 @@ def build_html_dashboard(
         const markers = ((_suiteMarkerData[sp] || {{}}).markers || []);
         const errN = markers.filter(m => m.kind === 'error').length;
         const toN = markers.filter(m => m.kind === 'timeout').length;
-        return '<span style="display:inline-block;margin-right:4px;padding:1px 5px;border-radius:3px;background:' + color + ';color:#fff;font-size:10px;cursor:help;" title="Suite: ' + titleAttr(sp) + '. Chart markers: ' + errN + ' error(s), ' + toN + ' timeout(s).">' + short + '</span>';
+        return '<span style="display:inline-block;margin-right:4px;padding:1px 5px;border-radius:3px;background:' + safeColor(color) + ';color:#fff;font-size:10px;cursor:help;" title="Suite: ' + titleAttr(sp) + '. Chart markers: ' + errN + ' error(s), ' + toN + ' timeout(s).">' + escapeHtml(short) + '</span>';
       }});
       document.getElementById('markersLegendSuites').innerHTML = badges.join('');
       const st = _countEventMarkers();
@@ -1498,7 +1513,7 @@ def build_html_dashboard(
           }});
           allAnnotations.push({{
             x: m.x, y: m.yAnchor, yref: 'paper',
-            text: '<b>' + m.label + '</b><br><span style="font-size:10px">' + m.shortName + '</span>',
+            text: '<b>' + escapeHtml(m.label) + '</b><br><span style="font-size:10px">' + escapeHtml(m.shortName) + '</span>',
             showarrow: true, arrowhead: 3, arrowsize: 0.8, arrowcolor: m.color,
             ax: 0, ay: -28,
             bgcolor: m.color, bordercolor: m.color, borderwidth: 1, borderpad: 3,
@@ -1773,7 +1788,7 @@ def build_html_dashboard(
         return (
         '<tr>' +
           '<td>' + (i + 1) + '</td>' +
-          '<td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle;background:' + colorForTrack(r.name) + ';"></span>' + r.name + syntheticBadge + '</td>' +
+          '<td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle;background:' + safeColor(colorForTrack(r.name)) + ';"></span>' + escapeHtml(r.name) + syntheticBadge + '</td>' +
           testsColHtml +
           '<td>' + formatValue(r.y, unit) + ' ' + unit + '</td>' +
         '</tr>'

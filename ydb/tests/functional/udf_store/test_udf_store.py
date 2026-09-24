@@ -830,11 +830,11 @@ def test_ydb_udf_rpc_validation_and_pagination():
             assert json.loads(describe().manifest_json) == manifest()
             assert _wait_for_condition(lambda: bool(describe().platforms), description="known compile platform")
             upload([header(manifest(), 3), udf.UploadModuleChunk(data=b"bad")], StatusIds.BAD_REQUEST)
-            assert describe().module.uid == first.uid
+            assert describe().module_info.uid == first.uid
 
             upload([header(manifest(), write_mode=udf.CREATE_ONLY), data], StatusIds.ALREADY_EXISTS)
             upload([header(manifest(), expected_uid="stale-uid"), data], StatusIds.ABORTED)
-            assert describe().module.uid == first.uid
+            assert describe().module_info.uid == first.uid
             upload([header(manifest("absent"), write_mode=udf.REPLACE_ONLY), data], StatusIds.NOT_FOUND)
             stale_delete = stub.DeleteModule(udf.DeleteModuleRequest(
                 name=first.name, expected_uid="stale-uid"), metadata=metadata, timeout=30)

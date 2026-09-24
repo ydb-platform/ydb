@@ -298,6 +298,17 @@ constexpr TConsumerTraits ConsumerTraits[] = {
         .StatsSummed = true,
         .StatsWithLimit = false,
     },
+    {
+        .Kind = EMemoryConsumerKind::QueryExecution,
+        .ElasticLimit = false,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetQueryExecutionLimitBytes,
+        .GetMaxBytes = &GetQueryExecutionLimitBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = &WriteQueryExecutionStats,
+        .StatsSummed = true,
+        .StatsWithLimit = false,
+    },
 };
 
 constexpr bool ConsumerTraitsFollowEnumOrder() {
@@ -690,6 +701,12 @@ private:
         }
     }
 
+    // The kqp_rm queue limit with its self-config override, so the consumer limit is the same number
+    ui64 ResolveQueryExecutionLimitBytes(ui64 hardLimitBytes) const {
+        const ui64* selfConfigLimit = ResourceBrokerSelfConfig.QueueLimits.FindPtr(NLocalDb::KqpResourceManagerQueue);
+        return selfConfigLimit ? *selfConfigLimit : GetQueryExecutionLimitBytes(Config, hardLimitBytes);
+    }
+
     void ProcessResourceBrokerConfig(const TActorContext& ctx, NKikimrMemory::TMemoryStats& memoryStats, ui64 hardLimitBytes, ui64 activitiesLimitBytes) {
         TResourceBrokerConfig config{
             .LimitBytes = activitiesLimitBytes,
@@ -709,13 +726,19 @@ private:
         }
 
         // TODO: counters and logs for all column table queues
-        ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
-        YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
-            {"consumption", HumanReadableBytes(queryExecutionConsumption)},
-            {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
-        Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
-        Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
-        memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
+        // A registered QueryExecution consumer reports for itself through the consumers loop
+        if (!Collections.contains(EMemoryConsumerKind::QueryExecution)) {
+            // The free-list size misses the pages queries hold, the mmapped bytes cover both
+            ui64 queryExecutionConsumption = Max<i64>(0, GetTotalMmapedBytes());
+            YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
+                {"consumption", HumanReadableBytes(queryExecutionConsumption)},
+                {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
+            Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
+            Counters->GetCounter("Consumer/QueryExecution/Demand")->Set(queryExecutionConsumption);
+            Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
+            memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
+            memoryStats.SetQueryExecutionDemand(memoryStats.GetQueryExecutionDemand() + queryExecutionConsumption);
+        }
         memoryStats.SetQueryExecutionLimit(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
 
         // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
@@ -786,6 +809,10 @@ private:
         result.MinBytes = traits.GetMinBytes(Config, hardLimitBytes);
         result.MaxBytes = traits.GetMaxBytes(Config, hardLimitBytes);
         result.CanZeroLimit = traits.CanZeroLimit;
+        // Report-only kind: its limit is the kqp_rm queue limit the RM applies, self-config override included
+        if (result.Kind == EMemoryConsumerKind::QueryExecution) {
+            result.MinBytes = result.MaxBytes = ResolveQueryExecutionLimitBytes(hardLimitBytes);
+        }
 
         if (result.MinBytes > result.MaxBytes) {
             result.MinBytes = result.MaxBytes;

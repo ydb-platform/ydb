@@ -296,7 +296,7 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
 
     TIntrusivePtr<IOperator> result;
     if (NYql::NNodes::TKqpOpEmptySource::Match(node.Get())) {
-        result = MakeIntrusive<TOpEmptySource>(node->Pos(), node->ChildrenSize() ? node->HeadPtr() : nullptr);
+        result = ConvertTKqpOpEmptySource(node);
     } else if (NYql::NNodes::TKqpOpRead::Match(node.Get())) {
         result = MakeIntrusive<TOpRead>(node);
     } else if (NYql::NNodes::TKqpOpMap::Match(node.Get())) {
@@ -817,6 +817,15 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceColumns(TExprNode::T
 
     auto result =  MakeIntrusive<TOpMap>(input, node->Pos(), mapElements);
     Projections.insert({result.Get(), outputProjection});
+    return result;
+}
+
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpEmptySource(TExprNode::TPtr node) {
+    auto result = MakeIntrusive<TOpEmptySource>(node->Pos(), node->ChildrenSize() ? node->HeadPtr() : nullptr);
+    if (node->ChildrenSize()) {
+        auto schema = GetStructIUs(node->GetTypeAnn());
+        Projections.insert({result.get(), schema});
+    }
     return result;
 }
 

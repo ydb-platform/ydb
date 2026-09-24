@@ -36,6 +36,7 @@ class PlanConverter {
     TIntrusivePtr<IOperator> ConvertTKqpOpReplaceAlias(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpReplaceColumns(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpTableEffect(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpEmptySource(TExprNode::TPtr node);
 
     TExprNode::TPtr RemoveSubplans(TExprNode::TPtr lambda);
 

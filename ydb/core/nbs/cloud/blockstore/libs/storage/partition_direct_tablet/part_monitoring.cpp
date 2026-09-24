@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render_dbg.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_util.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -98,6 +99,15 @@ std::optional<size_t> ParseSelectedDbg(const TCgiParameters& cgi)
         return dbgIndex;
     }
     return std::nullopt;
+}
+
+size_t ParseVChunkPage(const TCgiParameters& cgi)
+{
+    size_t page = 0;
+    if (cgi.Has("vchunkpage") && TryFromString(cgi.Get("vchunkpage"), page)) {
+        return page;
+    }
+    return 0;
 }
 
 std::optional<TChaosAction> ParseChaosAction(const TCgiParameters& cgi)
@@ -294,6 +304,7 @@ bool TPartitionActor::OnRenderAppHtmlPage(
             ParseDDiskBalanceStrategy(cgi.Get("strategy")),
         .TabletInfo = MakeMonTabletInfo(),
         .SelectedDbg = ParseSelectedDbg(cgi),
+        .VChunkPage = ParseVChunkPage(cgi),
         .SelectedVChunk = ParseSelectedVChunk(cgi),
         .VChunkStatsLimit = ParseVChunkStatsLimit(cgi),
         .ShowVChunks = cgi.Get("showvchunks") == "1",
@@ -498,7 +509,14 @@ bool TPartitionActor::OnRenderAppHtmlPage(
     }
 
     if (page == EMonPage::Dbg) {
-        FastPathService->GatherMonSnapshots(data.SelectedDbg)
+        const auto vChunkRange = data.SelectedDbg
+                                     ? GetVChunkPageRange(data.VChunkPage)
+                                     : TVChunkPageRange{};
+        FastPathService
+            ->GatherMonSnapshots(
+                data.SelectedDbg,
+                vChunkRange.From,
+                vChunkRange.Count)
             .Subscribe(
                 [data = std::move(data),
                  requester = ev->Sender,

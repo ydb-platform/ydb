@@ -177,7 +177,7 @@ private:
     void OnEraseBelatedResponse(
         const TEraseRequestExecutor::TResponse& response);
 
-    void StartPersist();
+    void MaybeStartPersist();
     void DoPersistDirtyMap();
     void OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks);
 

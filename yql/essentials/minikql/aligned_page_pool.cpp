@@ -23,17 +23,16 @@
 
 namespace NKikimr {
 
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
-    #if defined(PROFILE_MEMORY_ALLOCATIONS)
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
 static bool IsDefaultAllocator = true;
-    #else
+#else
 static bool IsDefaultAllocator = false;
-    #endif
+#endif
+
 void UseDefaultAllocator() {
     // TODO: check that we didn't already used the MKQL allocator
     IsDefaultAllocator = true;
 }
-#endif
 
 namespace {
 
@@ -733,13 +732,12 @@ void TAlignedPagePoolImpl<T>::ResetGlobalsUT()
     TGlobalPools<T, false>::Instance().Reset();
 }
 
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
 // static
 template <typename T>
 bool TAlignedPagePoolImpl<T>::IsDefaultAllocatorUsed() {
     return IsDefaultAllocator;
 }
-#endif
+
 // static
 template <typename T>
 bool TAlignedPagePoolImpl<T>::IsDefaultArrowAllocatorUsed() {

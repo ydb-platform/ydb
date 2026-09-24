@@ -24,6 +24,7 @@
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
@@ -50,6 +51,15 @@ using namespace NYql::NNodes;
 using namespace NThreading;
 
 namespace {
+
+// MKQL uses the default (tcmalloc) memory allocator, switch it on once at the process startup.
+void EnableDefaultAllocator() {
+    static const bool enabled = [] {
+        NKikimr::UseDefaultAllocator();
+        return true;
+    }();
+    Y_UNUSED(enabled);
+}
 
 void FillColumnMeta(const NKqpProto::TKqpPhyQuery& phyQuery, IKqpHost::TQueryResult& queryResult) {
     const auto& bindings = phyQuery.GetResultBindings();
@@ -1223,6 +1233,8 @@ public:
         , QueryServiceConfig(queryServiceConfig)
         , UsePessimisticLocks(usePessimisticLocks)
     {
+        EnableDefaultAllocator();
+
         if (funcRegistry) {
             FuncRegistry = funcRegistry;
         } else {

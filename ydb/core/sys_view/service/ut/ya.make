@@ -19,7 +19,6 @@ SRCS(
     query_history_ut.cpp
     sysview_service_ut.cpp
     query_interval_ut.cpp
-    query_metrics_retention_db_ut.cpp
 )
 
 END()

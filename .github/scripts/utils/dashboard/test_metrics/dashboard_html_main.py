@@ -255,10 +255,6 @@ def build_html_dashboard(
       </ul>
     </div>
     <p id="syntheticNote" style="display: none; font-size: 12px; color: #b8860b; margin: 4px 0;"></p>
-    <div style="display:flex;align-items:center;gap:8px;margin:6px 0 8px 0;">
-      <button id="generateCpuScriptBtn" class="btn-primary" type="button">Generate CPU update script</button>
-      <span id="generateCpuScriptHint" style="font-size:12px;color:#586069;"></span>
-    </div>
     <div id="cpuSuggestionsTable" class="clickbox"></div>
     <details id="heavyTestsDetails" style="margin: 8px 0 12px 0;">
       <summary><b>Long/heavy tests near timeout</b></summary>
@@ -913,109 +909,6 @@ def build_html_dashboard(
       let heavySortCol = 1;  // 1=suite_path, 2=ya_size, 3=threshold, 4=test, 5=duration, 6=chunk
       let heavySortAsc = true;
 
-      function getSuggestionsForScript() {{
-        const q = (document.getElementById('suiteSearch')?.value || '').trim().toLowerCase();
-        const visible = data.cpu_suggestions.filter(s => !q || String(s.suite_path || '').toLowerCase().includes(q));
-        const hasCpuReqValue = (v) => {{
-          if (typeof v === 'number') return v > 0;
-          const t = String(v ?? '').trim().toLowerCase();
-          return t !== '' && t !== '0';
-        }};
-        return visible
-          .filter(s => ['set', 'raise', 'lower'].includes(String(s.cpu_action || 'ok')) && hasCpuReqValue(s.recommended_cpu))
-          .map(s => ({{
-            suite_path: String(s.suite_path || ''),
-            recommended_cpu: s.recommended_cpu,
-            current_ya_cpu: s.ya_cpu_cores == null ? null : Number(s.ya_cpu_cores),
-            action: String(s.cpu_action || 'ok'),
-          }}));
-      }}
-
-      function buildCpuUpdateScript(items) {{
-        const payloadJson = JSON.stringify(items, null, 2);
-        const cfg = data.run_config || {{}};
-        const sanitizerForScript = (cfg.sanitizer != null && String(cfg.sanitizer).trim() !== '') ? String(cfg.sanitizer).trim() : null;
-        const sanitizerPy = sanitizerForScript ? JSON.stringify(sanitizerForScript) : 'None';
-        return [
-          '#!/usr/bin/env python3',
-          '# Apply CPU REQUIREMENTS through apply_cpu_requirements.py in this repo.',
-          '# python3 apply_cpu_requirements_<ts>.py --repo-root /path/to/ydb [--dry-run] [--mode all|raise|lower|set]',
-          '',
-          'from __future__ import annotations',
-          '',
-          'import argparse',
-          'import sys',
-          'from pathlib import Path',
-          '',
-          'UPDATES = ' + payloadJson,
-          'SANITIZER = ' + sanitizerPy,
-          '',
-          'def main() -> None:',
-          '    parser = argparse.ArgumentParser()',
-          '    parser.add_argument("--repo-root", required=True)',
-          '    parser.add_argument("--dry-run", action="store_true")',
-          '    parser.add_argument("--mode", default="all", choices=["all", "raise", "lower", "set"])',
-          '    parser.add_argument("--sanitizer", default=None)',
-          '    args = parser.parse_args()',
-          '    root = Path(args.repo_root).resolve()',
-          '    module_dir = root / ".github/scripts/utils/dashboard/test_metrics"',
-          '    sys.path.insert(0, str(module_dir))',
-          '    from apply_cpu_requirements import apply_one, normalize_cpu_req',
-          '    sanitizer = args.sanitizer if args.sanitizer not in (None, "", "None") else SANITIZER',
-          '    seen = set()',
-          '    changed = 0',
-          '    for row in UPDATES:',
-          '        action = str(row.get("action") or "").lower()',
-          '        if args.mode != "all" and action != args.mode:',
-          '            continue',
-          '        suite = str(row.get("suite_path") or "")',
-          '        cpu = normalize_cpu_req(row.get("recommended_cpu", 1))',
-          '        key = (suite, cpu)',
-          '        if not suite or key in seen:',
-          '            continue',
-          '        seen.add(key)',
-          '        suite_out, status = apply_one(root, suite, cpu, args.dry_run, sanitizer)',
-          '        print("- " + suite_out + ": action=" + action + " cpu:" + cpu + " -> " + status)',
-          '        if status in ("updated", "would update"):',
-          '            changed += 1',
-          '    print("Completed. Changed entries: " + str(changed))',
-          '',
-          'if __name__ == "__main__":',
-          '    main()',
-          '',
-        ].join('\\n');
-      }}
-
-      function downloadCpuUpdateScript() {{
-        const items = getSuggestionsForScript();
-        const hintEl = document.getElementById('generateCpuScriptHint');
-        if (!items.length) {{
-          if (hintEl) hintEl.textContent = 'No actionable rows in current filter.';
-          return;
-        }}
-        const content = buildCpuUpdateScript(items);
-        const blob = new Blob([content], {{ type: 'text/x-python' }});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const ts = new Date().toISOString().replace(/[:.]/g, '-');
-        a.href = url;
-        a.download = 'apply_cpu_requirements_' + ts + '.py';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        if (hintEl) hintEl.textContent = 'Script downloaded for ' + items.length + ' suite(s).';
-      }}
-
-      function refreshCpuScriptHint() {{
-        const items = getSuggestionsForScript();
-        const hintEl = document.getElementById('generateCpuScriptHint');
-        if (!hintEl) return;
-        hintEl.textContent = items.length
-          ? ('Will include ' + items.length + ' actionable suite(s) from current filter. Script supports --mode all|raise|lower|set.')
-          : 'No actionable rows in current filter.';
-      }}
-
       function sortableValue(raw) {{
         const s = String(raw ?? '').replace(/<[^>]*>/g, '').replace(/[\\s,]+/g, ' ').trim();
         const n = Number(s.replace(/[^\\d.+-]/g, ''));
@@ -1358,7 +1251,6 @@ def build_html_dashboard(
         document.querySelectorAll('.suite-marker-cb').forEach(cb => {{
           if (_suiteMarkerData[cb.dataset.suite]) cb.checked = true;
         }});
-        refreshCpuScriptHint();
       }}
 
       const helpBtn = document.getElementById('cpuHelpToggle');
@@ -1367,10 +1259,6 @@ def build_html_dashboard(
         helpBtn.addEventListener('click', () => {{
           helpBox.style.display = helpBox.style.display === 'block' ? 'none' : 'block';
         }});
-      }}
-      const genBtn = document.getElementById('generateCpuScriptBtn');
-      if (genBtn) {{
-        genBtn.addEventListener('click', downloadCpuUpdateScript);
       }}
       window.renderSuggestionsTable = renderSuggestionsTable;
       renderSuggestionsTable();

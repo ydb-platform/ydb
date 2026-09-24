@@ -34,13 +34,6 @@ struct TClient {
     ui64 Cookie;
 };
 
-struct TAttempt {
-    ui64 Id;
-    TActorId Checker;
-    TActorId Pipe;
-    TInstant Deadline;
-};
-
 // Exercise the real CMS through its events. Only DBSC is substituted, and its
 // reply can be held while other client requests and transactions are processed.
 class TCmsFixture {
@@ -142,7 +135,7 @@ public:
     TAttempt WaitForCheck(size_t count, const TClient& client) {
         Await([&] { return State.Requests.size() >= count || HasResponse(client); },
             "CMS neither started the NBS2 check nor replied to the client");
-        // Refresh and manual approval remain RED until their handlers call
+        // Manual approval remains RED until its handler calls
         // StartNbs2MaintenanceCheck. Fail explicitly instead of waiting forever.
         UNIT_ASSERT_VALUES_EQUAL_C(State.Requests.size(), count,
             "CMS replied without starting the NBS2 check; wire the public handler to DBSController");
@@ -618,6 +611,178 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
         // have locks; do not send a batch containing only those existing locks.
         UNIT_ASSERT(fixture.State.Requests.empty());
         fixture.Permissions(2);
+    }
+
+    Y_UNIT_TEST(RefreshMaintenanceTaskLifecycle) {
+        TCmsFixture fixture(0);
+        const TString taskId = "nbs2-refresh-task";
+        auto refresh = [&] {
+            auto request = MakeHolder<TEvCms::TEvRefreshMaintenanceTaskRequest>();
+            request->Record.MutableRequest()->set_task_uid(taskId);
+            return fixture.Send(request.Release(), 0);
+        };
+        auto getTask = [&] {
+            auto request = MakeHolder<TEvCms::TEvGetMaintenanceTaskRequest>();
+            request->Record.MutableRequest()->set_task_uid(taskId);
+            auto result = fixture.Response<TEvCms::TEvGetMaintenanceTaskResponse>(
+                fixture.Send(request.Release(), 0), Ydb::StatusIds::SUCCESS).GetResult();
+            UNIT_ASSERT_VALUES_EQUAL(result.task_options().task_uid(), taskId);
+            return result;
+        };
+        auto checkActions = [&](const auto& result, size_t performed, size_t pending, bool denied = false) {
+            UNIT_ASSERT_VALUES_EQUAL(result.action_group_states_size(), performed + pending);
+            TVector<Ydb::Maintenance::ActionUid> actions;
+            size_t waiting = 0;
+            for (const auto& group : result.action_group_states()) {
+                UNIT_ASSERT_VALUES_EQUAL(group.action_states_size(), 1);
+                const auto& action = group.action_states(0);
+                if (action.status() == Ydb::Maintenance::ActionState::ACTION_STATUS_PERFORMED) {
+                    actions.push_back(action.action_uid());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(action.status(), Ydb::Maintenance::ActionState::ACTION_STATUS_PENDING);
+                    ++waiting;
+                    if (denied) {
+                        UNIT_ASSERT_C(TString(action.details()).Contains("101"), action.ShortDebugString());
+                    }
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(actions.size(), performed);
+            UNIT_ASSERT_VALUES_EQUAL(waiting, pending);
+            return actions;
+        };
+        auto completeAction = [&](const Ydb::Maintenance::ActionUid& action) {
+            auto request = MakeHolder<TEvCms::TEvCompleteActionRequest>();
+            *request->Record.MutableRequest()->add_action_uids() = action;
+            const auto response = fixture.Response<TEvCms::TEvManageActionResponse>(
+                fixture.Send(request.Release(), 0), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetResult().action_statuses_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetResult().action_statuses(0).status(), Ydb::StatusIds::SUCCESS);
+        };
+
+        auto request = MakePermissionRequest(TRequestOptions(fixture.User, true, false, true),
+            fixture.Shutdown(12), fixture.Shutdown(10), fixture.Shutdown(11));
+        request->Record.SetMaintenanceTaskId(taskId);
+        request->Record.SetAvailabilityMode(NKikimrCms::MODE_FORCE_RESTART);
+        request->Record.SetMaxPermissionCount(1);
+        auto client = fixture.Send(request.Release());
+        auto attempt = fixture.WaitForCheck(1, client);
+        fixture.CheckNodes(0, {10, 11, 12});
+        fixture.Complete(attempt, EOutcome::Deny);
+        const auto created = fixture.Response<TEvCms::TEvPermissionResponse>(client, TStatus::DISALLOW_TEMP);
+        const auto requestId = created.GetRequestId();
+        UNIT_ASSERT(!requestId.empty());
+        fixture.Permissions(0);
+        checkActions(getTask(), 0, 3, true);
+
+        client = refresh();
+        attempt = fixture.WaitForCheck(2, client);
+        fixture.CheckNodes(1, {10, 11, 12});
+        fixture.Permissions(0);
+        fixture.Complete(attempt, EOutcome::Allow);
+        auto response = fixture.Response<TEvCms::TEvMaintenanceTaskResponse>(client, Ydb::StatusIds::SUCCESS);
+        auto performed = checkActions(response.GetResult(), 1, 2);
+        fixture.Permissions(1);
+
+        // An exhausted quota does not shrink the DBSC batch. Its ALLOW still
+        // cannot grant more actions until an existing permission is completed.
+        client = refresh();
+        attempt = fixture.WaitForCheck(3, client);
+        fixture.CheckNodes(2, {10, 11, 12});
+        fixture.Complete(attempt, EOutcome::Allow);
+        response = fixture.Response<TEvCms::TEvMaintenanceTaskResponse>(client, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(checkActions(response.GetResult(), 1, 2).front().action_id(), performed.front().action_id());
+        fixture.Permissions(1);
+
+        const auto beforeTimeout = getTask();
+        const auto pendingBeforeTimeout = fixture.GetRequest(requestId);
+        client = refresh();
+        attempt = fixture.WaitForCheck(4, client);
+        fixture.CheckNodes(3, {10, 11, 12});
+        fixture.Complete(attempt, EOutcome::Timeout);
+        fixture.Response<TEvCms::TEvMaintenanceTaskResponse>(client, Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(getTask().SerializeAsString(), beforeTimeout.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.GetRequest(requestId).SerializeAsString(), pendingBeforeTimeout.SerializeAsString());
+        fixture.Permissions(1);
+
+        // CompleteAction is processed while refresh waits for DBSC. The
+        // continuation must use the freed slot, not the previously full quota.
+        client = refresh();
+        attempt = fixture.WaitForCheck(5, client);
+        fixture.CheckNodes(4, {10, 11, 12});
+        const auto completedId = performed.front().action_id();
+        completeAction(performed.front());
+        fixture.Permissions(0);
+        UNIT_ASSERT(!fixture.HasResponse(client));
+        fixture.Complete(attempt, EOutcome::Allow);
+        response = fixture.Response<TEvCms::TEvMaintenanceTaskResponse>(client, Ydb::StatusIds::SUCCESS);
+        performed = checkActions(response.GetResult(), 1, 1);
+        UNIT_ASSERT(performed.front().action_id() != completedId);
+        const auto persisted = fixture.Permissions(1);
+        const auto pending = fixture.GetRequest(requestId);
+        UNIT_ASSERT_VALUES_EQUAL(pending.GetRequests(0).ActionsSize(), 1);
+        TVector<ui32> remainingNodes = {
+            FromString<ui32>(persisted.GetPermissions(0).GetAction().GetHost()),
+            FromString<ui32>(pending.GetRequests(0).GetActions(0).GetHost()),
+        };
+        Sort(remainingNodes);
+
+        // Restart in the middle of a refresh must preserve the task, its
+        // pending action and its old permission, but not the unfinished check.
+        client = fixture.Refresh(requestId);
+        attempt = fixture.WaitForCheck(6, client);
+        fixture.Restart();
+        fixture.Await([&] { return !fixture.Env.FindActor(attempt.Checker); }, "Refresh checker survived CMS restart");
+        fixture.Complete(attempt, EOutcome::Allow);
+        fixture.Drain();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Permissions(1).GetPermissions(0).GetId(), performed.front().action_id());
+        checkActions(getTask(), 1, 1);
+
+        client = refresh();
+        attempt = fixture.WaitForCheck(7, client);
+        const auto& nodes = fixture.State.Requests.back()->Get()->Record.GetNodeIds();
+        UNIT_ASSERT_VALUES_EQUAL(TVector<ui32>(nodes.begin(), nodes.end()), remainingNodes);
+        fixture.Complete(attempt, EOutcome::Deny);
+        response = fixture.Response<TEvCms::TEvMaintenanceTaskResponse>(client, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(checkActions(response.GetResult(), 1, 1, true).front().action_id(), performed.front().action_id());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Permissions(1).GetPermissions(0).GetId(), performed.front().action_id());
+
+        completeAction(performed.front());
+        fixture.Permissions(0);
+        const auto beforeDryRun = fixture.GetRequest(requestId);
+        const ui32 lastNode = FromString<ui32>(beforeDryRun.GetRequests(0).GetActions(0).GetHost());
+        client = fixture.Send(MakeCheckRequest(fixture.User, requestId, true, NKikimrCms::MODE_KEEP_AVAILABLE).Release());
+        attempt = fixture.WaitForCheck(8, client);
+        const auto& dryRunNodes = fixture.State.Requests.back()->Get()->Record.GetNodeIds();
+        UNIT_ASSERT_VALUES_EQUAL(dryRunNodes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dryRunNodes.Get(0), lastNode);
+        fixture.Complete(attempt, EOutcome::Allow);
+        const auto dryRun = fixture.Response<TEvCms::TEvPermissionResponse>(client, TStatus::ALLOW);
+        UNIT_ASSERT_VALUES_EQUAL(dryRun.PermissionsSize(), 1);
+        fixture.Permissions(0);
+        // Dry-run must not overwrite the saved availability mode or actions.
+        UNIT_ASSERT_VALUES_EQUAL(fixture.GetRequest(requestId).SerializeAsString(), beforeDryRun.SerializeAsString());
+        checkActions(getTask(), 0, 1, true);
+
+        client = refresh();
+        attempt = fixture.WaitForCheck(9, client);
+        fixture.Complete(attempt, EOutcome::Allow);
+        response = fixture.Response<TEvCms::TEvMaintenanceTaskResponse>(client, Ydb::StatusIds::SUCCESS);
+        performed = checkActions(response.GetResult(), 1, 0);
+        fixture.Permissions(1);
+        fixture.GetRequest(requestId, TStatus::WRONG_REQUEST);
+
+        // No pending actions means no new locks and no DBSC check on refresh.
+        response = fixture.Response<TEvCms::TEvMaintenanceTaskResponse>(refresh(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(checkActions(response.GetResult(), 1, 0).front().action_id(), performed.front().action_id());
+        fixture.Drain();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 9);
+
+        const auto legacyId = fixture.SeedScheduled(3, "legacy-refresh-task");
+        fixture.SetIntegration(false);
+        const auto legacy = fixture.Response<TEvCms::TEvPermissionResponse>(fixture.Refresh(legacyId), TStatus::ALLOW);
+        UNIT_ASSERT_VALUES_EQUAL(legacy.PermissionsSize(), 1);
+        fixture.Permissions(2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 9);
     }
 
     Y_UNIT_TEST(CreateMaintenanceTaskBatchAndDryRun) {

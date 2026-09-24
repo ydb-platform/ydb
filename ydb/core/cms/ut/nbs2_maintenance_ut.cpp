@@ -13,13 +13,6 @@ using namespace NNbs2Test;
 
 namespace {
 
-struct TAttempt {
-    ui64 Id;
-    TActorId Checker;
-    TActorId Pipe;
-    TInstant Deadline;
-};
-
 class TCheckerFixture {
 public:
     TCheckerFixture() {

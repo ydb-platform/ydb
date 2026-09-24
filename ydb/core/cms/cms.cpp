@@ -2968,6 +2968,20 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
     ProcessPermissionRequest(ev, requestStartTime, ctx);
 }
 
+TErrorInfo TCms::GetNbs2MaintenanceError(const TEvPrivate::TEvNbs2MaintenanceResult &result,
+    const TActorContext &ctx) const
+{
+    TErrorInfo error;
+    error.Code = result.Status;
+    TString reason = result.Reason;
+    if (!result.BlockingPartitionIds.empty()) {
+        reason += TStringBuilder() << "; BlockingPartitionIds: " << JoinSeq(", ", result.BlockingPartitionIds);
+    }
+    error.Reason = reason;
+    error.Deadline = ctx.Now() + State->Config.DefaultRetryTime;
+    return error;
+}
+
 void TCms::ProcessPermissionRequest(TEvCms::TEvPermissionRequest::TPtr &ev,
     TInstant requestStartTime, const TActorContext &ctx, const TEvPrivate::TEvNbs2MaintenanceResult *nbs2Result)
 {
@@ -2982,13 +2996,7 @@ void TCms::ProcessPermissionRequest(TEvCms::TEvPermissionRequest::TPtr &ev,
     TErrorInfo error;
     const TErrorInfo *precheckError = nullptr;
     if (nbs2Result && nbs2Result->Status != TStatus::ALLOW) {
-        error.Code = nbs2Result->Status;
-        TString reason = nbs2Result->Reason;
-        if (!nbs2Result->BlockingPartitionIds.empty()) {
-            reason += TStringBuilder() << "; BlockingPartitionIds: " << JoinSeq(", ", nbs2Result->BlockingPartitionIds);
-        }
-        error.Reason = reason;
-        error.Deadline = ctx.Now() + State->Config.DefaultRetryTime;
+        error = GetNbs2MaintenanceError(*nbs2Result, ctx);
         precheckError = &error;
     }
 
@@ -3085,12 +3093,66 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
             ev, TStatus::WRONG_REQUEST, reason, ctx);
     }
 
+    const auto requestStartTime = TInstant::Now();
+    if (IsNbs2MaintenanceChecksEnabled(ctx)) {
+        // Do not modify the stored request before the asynchronous check.
+        // The batch includes every remaining action, regardless of the quota.
+        auto permissionRequest = it->second.Request;
+        permissionRequest.SetPriority(it->second.Priority);
+        TVector<ui32> nodeIds;
+        TErrorInfo error;
+        if (!CollectNbs2MaintenanceNodes(permissionRequest, nodeIds, error, ctx)) {
+            return ReplyWithError<TEvCms::TEvPermissionResponse>(ev, error.Code, error.Reason.GetMessage(), ctx);
+        }
+        if (!nodeIds.empty()) {
+            StartNbs2MaintenanceCheck(ev.Release(), permissionRequest, rec.GetRequestId(),
+                std::move(nodeIds), State->Config.InfoCollectionTimeout,
+                [this, requestStartTime](TAutoPtr<IEventHandle> &request,
+                    const TEvPrivate::TEvNbs2MaintenanceResult &result, const TActorContext &ctx)
+                {
+                    TEvCms::TEvCheckRequest::TPtr ev(
+                        static_cast<TEvCms::TEvCheckRequest::THandle *>(request.Release()));
+                    ProcessCheckRequest(ev, requestStartTime, ctx, &result);
+                });
+            return;
+        }
+    }
+
+    ProcessCheckRequest(ev, requestStartTime, ctx);
+}
+
+void TCms::ProcessCheckRequest(TEvCms::TEvCheckRequest::TPtr &ev,
+    TInstant requestStartTime, const TActorContext &ctx, const TEvPrivate::TEvNbs2MaintenanceResult *nbs2Result)
+{
+    TErrorInfo error;
+    const TErrorInfo *precheckError = nullptr;
+    if (nbs2Result && nbs2Result->Status != TStatus::ALLOW) {
+        error = GetNbs2MaintenanceError(*nbs2Result, ctx);
+        // ERROR_TEMP also covers an outdated request. Do not restore a
+        // removed task or overwrite changes made while waiting for DBSC.
+        if (error.Code == TStatus::ERROR_TEMP) {
+            return ReplyWithError<TEvCms::TEvPermissionResponse>(ev, error.Code, error.Reason.GetMessage(), ctx);
+        }
+        precheckError = &error;
+    }
+
+    auto &rec = ev->Get()->Record;
     TString user = rec.GetUser();
-    auto &request = it->second;
+    // Handle or IsNbs2MaintenanceRequestCurrent checked existence before
+    // this synchronous continuation. Only reacquire the current request here.
+    auto &request = State->ScheduledRequests.at(rec.GetRequestId());
     TAutoPtr<TEvCms::TEvPermissionResponse> resp = new TEvCms::TEvPermissionResponse;
     TRequestInfo scheduled;
 
-    auto requestStartTime = TInstant::Now();
+    // NBS2 dry-run must leave the stored request untouched. Keep the legacy
+    // path unchanged when no asynchronous check was needed.
+    TPermissionRequest effectiveRequest;
+    if (nbs2Result) {
+        effectiveRequest = request.Request;
+        effectiveRequest.SetDryRun(rec.GetDryRun());
+        effectiveRequest.SetPriority(request.Priority);
+    }
+    auto &permissionRequest = nbs2Result ? effectiveRequest : request.Request;
 
     ClusterInfo->LogManager.PushRollbackPoint();
     for (const auto &scheduled_request : State->ScheduledRequests) {
@@ -3101,7 +3163,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     }
 
     ClusterInfo->SetPriorityToCheck(request.Priority);
-    request.Request.SetAvailabilityMode(rec.GetAvailabilityMode());
+    permissionRequest.SetAvailabilityMode(rec.GetAvailabilityMode());
 
     if (auto mit = State->MaintenanceRequests.find(rec.GetRequestId());
         mit != State->MaintenanceRequests.end())
@@ -3112,13 +3174,13 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
             const ui32 quota = task.MaxInflightActions > aliveCount
                 ? task.MaxInflightActions - aliveCount
                 : 0;
-            request.Request.SetMaxPermissionCount(quota);
+            permissionRequest.SetMaxPermissionCount(quota);
         } else {
-            request.Request.ClearMaxPermissionCount();
+            permissionRequest.ClearMaxPermissionCount();
         }
     }
 
-    bool ok = CheckPermissionRequest(request.Request, resp->Record, scheduled.Request, rec.GetRequestId(), ctx);
+    bool ok = CheckPermissionRequest(permissionRequest, resp->Record, scheduled.Request, rec.GetRequestId(), ctx, precheckError);
     ClusterInfo->ResetPriorityToCheck();
     ClusterInfo->LogManager.RollbackOperations();
 
@@ -3131,7 +3193,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         auto priority = request.Priority;
 
         ClusterInfo->UnscheduleActions(request.RequestId);
-        State->ScheduledRequests.erase(it);
+        State->ScheduledRequests.erase(rec.GetRequestId());
         if (scheduled.Request.ActionsSize() || scheduled.Request.GetEvictVDisks()) {
             scheduled.Owner = user;
             scheduled.Order = order;

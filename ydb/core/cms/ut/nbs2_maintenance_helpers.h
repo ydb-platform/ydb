@@ -26,6 +26,13 @@ using TResponseRecord = NDbsc::NProto::TNodeMaintenancePermissionResponse;
 using TResult = NCms::TCms::TEvPrivate::TEvNbs2MaintenanceResult;
 using TStatus = NKikimrCms::TStatus;
 
+struct TAttempt {
+    ui64 Id;
+    TActorId Checker;
+    TActorId Pipe;
+    TInstant Deadline;
+};
+
 enum class EConnectMode {
     Accept,
     Reject,

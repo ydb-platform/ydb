@@ -386,7 +386,12 @@ private:
     bool IsNbs2MaintenanceRequestCurrent(const TPendingNbs2MaintenanceCheck &pending) const;
     // Tablet shutdown: discard the continuation without resuming the queue.
     void CancelNbs2MaintenanceCheck(const TActorContext &ctx);
+    TErrorInfo GetNbs2MaintenanceError(const TEvPrivate::TEvNbs2MaintenanceResult &result,
+        const TActorContext &ctx) const;
     void ProcessPermissionRequest(TEvCms::TEvPermissionRequest::TPtr &ev,
+        TInstant requestStartTime, const TActorContext &ctx,
+        const TEvPrivate::TEvNbs2MaintenanceResult *nbs2Result = nullptr);
+    void ProcessCheckRequest(TEvCms::TEvCheckRequest::TPtr &ev,
         TInstant requestStartTime, const TActorContext &ctx,
         const TEvPrivate::TEvNbs2MaintenanceResult *nbs2Result = nullptr);
     bool CheckPermissionRequest(const NKikimrCms::TPermissionRequest &request,

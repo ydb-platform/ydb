@@ -4,6 +4,7 @@
 IF (OS_EMSCRIPTEN)
     RECURSE(
         bridge_dict
+        log_parsing
         md5
         sdk
         text

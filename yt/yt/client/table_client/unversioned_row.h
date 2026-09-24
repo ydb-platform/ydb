@@ -374,6 +374,9 @@ void ValidateValueType(
     bool ignoreRequired = false,
     bool validateAnyIsValidYson = false);
 
+//! Checks that #yson is a valid YSON node without top-level attributes. Throws on failure.
+void ValidateAnyValue(TStringBuf yson);
+
 //! Checks that #value is allowed to appear in static tables' data. Throws on failure.
 void ValidateStaticValue(const TUnversionedValue& value);
 

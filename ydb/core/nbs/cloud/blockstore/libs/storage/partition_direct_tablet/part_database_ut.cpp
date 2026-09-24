@@ -70,6 +70,24 @@ TDirtyMapStateProto MakeSampleDirtyMapState()
     return state;
 }
 
+TDeletedDDiskRecordProto MakeDeletedDDiskRecord(
+    ui64 recordId,
+    ui32 vChunkIndex,
+    ui32 tabletGeneration,
+    ui64 timestampUs,
+    ui32 nodeId)
+{
+    TDeletedDDiskRecordProto record;
+    record.SetRecordId(recordId);
+    record.SetVChunkIndex(vChunkIndex);
+    record.SetTabletGeneration(tabletGeneration);
+    record.SetTimestampUs(timestampUs);
+    record.MutableDDiskId()->SetNodeId(nodeId);
+    record.MutableDDiskId()->SetPDiskId(2);
+    record.MutableDDiskId()->SetDDiskSlotId(3);
+    return record;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -500,6 +518,100 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                     written.SerializeAsString(),
                     state.SerializeAsString());
                 UNIT_ASSERT_VALUES_EQUAL(2, state.DDiskStatesSize());
+            });
+    }
+
+    Y_UNIT_TEST(ShouldAddUpdateAndReadDeletedDDiskRecords)
+    {
+        TTestExecutor executor;
+        const auto first = MakeDeletedDDiskRecord(4, 10, 7, 123456, 101);
+        auto second = MakeDeletedDDiskRecord(9, 12, 8, 789012, 202);
+        second.SetStatus(
+            NYdb::NBS::PartitionDirect::NProto::
+                DELETED_DDISK_STATUS_EXECUTED);
+        second.SetProcessingTabletGeneration(25);
+        auto updatedFirst = MakeDeletedDDiskRecord(4, 11, 9, 345678, 303);
+        updatedFirst.SetStatus(
+            NYdb::NBS::PartitionDirect::NProto::
+                DELETED_DDISK_STATUS_IN_PROGRESS);
+        updatedFirst.SetProcessingTabletGeneration(21);
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.AddDeletedDDisk(first);
+                partitionDb.AddDeletedDDisk(second);
+            });
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.UpdateDeletedDDisk(updatedFirst);
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TVector<TDeletedDDiskRecordProto> loaded;
+                UNIT_ASSERT(partitionDb.ReadAllDeletedDDisks(loaded));
+                UNIT_ASSERT_VALUES_EQUAL(2u, loaded.size());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    updatedFirst.SerializeAsString(),
+                    loaded[0].SerializeAsString());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    second.SerializeAsString(),
+                    loaded[1].SerializeAsString());
+        });
+    }
+
+    Y_UNIT_TEST(ShouldDeleteDeletedDDiskRecordsByKeys)
+    {
+        TTestExecutor executor;
+        auto expiredOne = MakeDeletedDDiskRecord(1, 10, 7, 100, 101);
+        expiredOne.SetStatus(
+            NYdb::NBS::PartitionDirect::NProto::
+                DELETED_DDISK_STATUS_EXECUTED);
+        auto expiredTwo = MakeDeletedDDiskRecord(2, 11, 7, 100, 102);
+        expiredTwo.SetStatus(
+            NYdb::NBS::PartitionDirect::NProto::
+                DELETED_DDISK_STATUS_EXECUTED);
+        auto fresh = MakeDeletedDDiskRecord(3, 12, 7, 1000, 103);
+        fresh.SetStatus(
+            NYdb::NBS::PartitionDirect::NProto::
+                DELETED_DDISK_STATUS_EXECUTED);
+        auto pending = MakeDeletedDDiskRecord(4, 13, 7, 100, 104);
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.AddDeletedDDisk(expiredOne);
+                partitionDb.AddDeletedDDisk(expiredTwo);
+                partitionDb.AddDeletedDDisk(fresh);
+                partitionDb.AddDeletedDDisk(pending);
+            });
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.DeleteDeletedDDisk({1, 4});
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TVector<TDeletedDDiskRecordProto> loaded;
+                UNIT_ASSERT(partitionDb.ReadAllDeletedDDisks(loaded));
+                UNIT_ASSERT_VALUES_EQUAL(2u, loaded.size());
+                UNIT_ASSERT_VALUES_EQUAL(2u, loaded[0].GetRecordId());
+                UNIT_ASSERT_VALUES_EQUAL(3u, loaded[1].GetRecordId());
             });
     }
 

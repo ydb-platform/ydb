@@ -40,8 +40,9 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         }
     };
 
-    ui64 StartScan(TInFlightReadsTracker & tracker, const NOlap::TSnapshot& snapshot) {
-        const ui64 cookie = tracker.AddInFlightRequest(std::make_shared<TTestReadMetadata>(snapshot), nullptr);
+    ui64 StartScan(
+        TInFlightReadsTracker & tracker, const NOlap::TSnapshot& snapshot, const std::optional<TInternalPathId> pathId = std::nullopt) {
+        const ui64 cookie = tracker.AddInFlightRequest(std::make_shared<TTestReadMetadata>(snapshot), nullptr, pathId);
         tracker.AddScanActorId(cookie, TActorId(1, cookie));
         return cookie;
     }
@@ -194,6 +195,37 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
         Y_UNUSED(tracker.ExtractInFlightRequest(scanCookie, nullptr, TInstant::Now()));
         UNIT_ASSERT(tracker.HasLiveSnapshot(Step(5000)));
         UNIT_ASSERT(!couldUsePortion(tracker));
+    }
+
+    Y_UNIT_TEST(RegistryGuardScopesLocalScansToTheirTable) {
+        const auto longTxConfig = MakeExplicitLongTxConfig();
+        const ui64 schemeShardId = 123;
+        NOlap::NTest::TTestPathIdTranslator translator;
+        const auto scannedPathId = TInternalPathId::FromRawValue(7);
+        const auto otherPathId = TInternalPathId::FromRawValue(8);
+        translator.Add(scannedPathId, { TSchemeShardLocalPathId::FromRawValue(70) });
+        translator.Add(otherPathId, { TSchemeShardLocalPathId::FromRawValue(80) });
+        const ui64 marginMs = FreshnessMarginMs(longTxConfig);
+        auto registry = CreateSnapshotRegistry(std::nullopt, {}, TInstant::MilliSeconds(30000 + marginMs));
+
+        const auto scannedPortion = NOlap::NTest::MakeTestCompactedPortion(scannedPathId, 1, 10, 19, 10, Step(1000), Step(20000));
+        const auto otherPortion = NOlap::NTest::MakeTestCompactedPortion(otherPathId, 2, 10, 19, 10, Step(1000), Step(20000));
+        const auto holders = [&](const TInFlightReadsTracker& tracker) {
+            return CreateRegistryScanSnapshotGuard(
+                /*passedStep*/ 200000, schemeShardId, NOlap::TSnapshot::Zero(), tracker, translator, registry, longTxConfig)
+                ->BuildSnapshotHolders();
+        };
+
+        auto tracker = MakeTracker();
+        StartScan(tracker, Step(5000), scannedPathId);
+        UNIT_ASSERT(holders(tracker)->CouldUsePortion(scannedPortion));
+        UNIT_ASSERT(!holders(tracker)->CouldUsePortion(otherPortion));
+
+        // A scan without a table of its own pins every table.
+        auto tabletWideTracker = MakeTracker();
+        StartScan(tabletWideTracker, Step(5000));
+        UNIT_ASSERT(holders(tabletWideTracker)->CouldUsePortion(scannedPortion));
+        UNIT_ASSERT(holders(tabletWideTracker)->CouldUsePortion(otherPortion));
     }
 
     Y_UNIT_TEST(LastCleanupSnapshotIsRespectedForLocalGuard) {

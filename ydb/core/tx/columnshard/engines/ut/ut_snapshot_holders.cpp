@@ -141,12 +141,23 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
             UNIT_ASSERT(!holders.CouldUsePortion(portion));
         }
         {
-            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator, { Step(5) });
+            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator, { .ForAllTables = { Step(5) } });
             UNIT_ASSERT(holders.CouldUsePortion(portion));
         }
         {
+            const TRegistrySnapshotHolders holders(
+                Step(20), registry, schemeShardId, translator, { .ByPathId = { { internalPathId, { Step(5) } } } });
+            UNIT_ASSERT(holders.CouldUsePortion(portion));
+        }
+        {
+            // A local scan on another table does not keep it.
+            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator,
+                { .ByPathId = { { NColumnShard::TInternalPathId::FromRawValue(3), { Step(5) } } } });
+            UNIT_ASSERT(!holders.CouldUsePortion(portion));
+        }
+        {
             // A local scan that cannot see the portion does not keep it either.
-            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator, { Step(15) });
+            const TRegistrySnapshotHolders holders(Step(20), registry, schemeShardId, translator, { .ForAllTables = { Step(15) } });
             UNIT_ASSERT(!holders.CouldUsePortion(portion));
         }
     }

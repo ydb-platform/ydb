@@ -4,9 +4,16 @@
 
 namespace NKikimr::NOlap {
 
+namespace {
+void VerifyBelow(const std::vector<TSnapshot>& snapshots, const TSnapshot& border) {
+    AFL_VERIFY(std::is_sorted(snapshots.begin(), snapshots.end()));
+    AFL_VERIFY(snapshots.empty() || snapshots.back() < border);
+}
+}   // namespace
+
 TRegistrySnapshotHolders::TRegistrySnapshotHolders(const TSnapshot minSnapshotForNewReads,
     TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry, const ui64 schemeShardId, const IPathIdTranslator& pathIdTranslator,
-    std::vector<TSnapshot> localActiveSnapshots)
+    TLocalActiveSnapshots localActiveSnapshots)
     : MinSnapshotForNewReads(minSnapshotForNewReads)
     , Registry(std::move(registry))
     , SchemeShardId(schemeShardId)
@@ -14,13 +21,18 @@ TRegistrySnapshotHolders::TRegistrySnapshotHolders(const TSnapshot minSnapshotFo
     , LocalActiveSnapshots(std::move(localActiveSnapshots))
 {
     AFL_VERIFY(Registry);
-    AFL_VERIFY(std::is_sorted(LocalActiveSnapshots.begin(), LocalActiveSnapshots.end()));
-    AFL_VERIFY(LocalActiveSnapshots.empty() || LocalActiveSnapshots.back() < MinSnapshotForNewReads);
+    VerifyBelow(LocalActiveSnapshots.ForAllTables, MinSnapshotForNewReads);
+    for (const auto& [_, snapshots] : LocalActiveSnapshots.ByPathId) {
+        VerifyBelow(snapshots, MinSnapshotForNewReads);
+    }
 }
 
 TSnapshotHoldersPerTable TRegistrySnapshotHolders::BuildHoldersForTable(
-    const std::set<NColumnShard::TSchemeShardLocalPathId>& schemeShardLocalPathIds) const {
-    std::set<TSnapshot> snapshots;
+    const TInternalPathId pathId, const std::set<NColumnShard::TSchemeShardLocalPathId>& schemeShardLocalPathIds) const {
+    std::set<TSnapshot> snapshots(LocalActiveSnapshots.ForAllTables.begin(), LocalActiveSnapshots.ForAllTables.end());
+    if (const auto* localSnapshots = LocalActiveSnapshots.ByPathId.FindPtr(pathId)) {
+        snapshots.insert(localSnapshots->begin(), localSnapshots->end());
+    }
     for (const auto& schemeShardLocalPathId : schemeShardLocalPathIds) {
         const NKikimr::TTableId tableId(SchemeShardId, schemeShardLocalPathId.GetRawValue(), 0);
         for (const auto& rowVersion : Registry->GetActiveSnapshots(tableId)) {
@@ -35,7 +47,6 @@ TSnapshotHoldersPerTable TRegistrySnapshotHolders::BuildHoldersForTable(
             }
         }
     }
-    snapshots.insert(LocalActiveSnapshots.begin(), LocalActiveSnapshots.end());
     std::vector<TSnapshot> txInFlight(snapshots.begin(), snapshots.end());
     return TSnapshotHoldersPerTable(MinSnapshotForNewReads, std::move(txInFlight));
 }
@@ -47,7 +58,7 @@ const TSnapshotHoldersPerTable& TRegistrySnapshotHolders::GetHoldersByPathId(con
     }
 
     auto schemeShardLocalPathIds = PathIdTranslator.ResolveSchemeShardLocalPathIdsVerified(pathId);
-    return HoldersByPathId.emplace(pathId, BuildHoldersForTable(schemeShardLocalPathIds)).first->second;
+    return HoldersByPathId.emplace(pathId, BuildHoldersForTable(pathId, schemeShardLocalPathIds)).first->second;
 }
 
 bool TRegistrySnapshotHolders::CouldUsePortion(const TPortionInfo::TConstPtr& portion) const {

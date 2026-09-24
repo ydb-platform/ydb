@@ -22,6 +22,16 @@ class TestMinMaxIndex(RollingUpgradeAndDowngradeFixture):
                 "disabled_on_scheme_shard": False,
                 "alter_object_enabled": True,
             },
+            table_service_config={
+                # DQ Channels 2.0 reconciliation protocol is not version-compatible
+                # across the 26-2-1 <-> 26-3 boundary in a mixed-version (rolling)
+                # cluster: a query whose executer runs the new version talking to a
+                # peer on the old version aborts the channel with
+                # "PeerActorId ... DO NOT MATCH" (KIKIMR_TEMPORARILY_UNAVAILABLE).
+                # Pin the channel transport to 1.0, which reconciles consistently
+                # across these versions, for the duration of the rolling upgrade.
+                "dq_channel_version": 1,
+            },
         )
 
     def _table_path(self, table_name):

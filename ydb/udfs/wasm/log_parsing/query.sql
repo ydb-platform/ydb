@@ -1,8 +1,8 @@
 /* syntax version 1 */
 -- LogParsing smoke queries. Upload sdk + LogParsing WASM modules before running.
 
--- The caller supplies the framing syncword.
-$syncword = String::HexDecode("1ff7f77ebea65e9e37a6f62efeae47a7b76ebfaf169e9f37f657f766a706aff7");
+-- Use an arbitrary syncword to show that the caller supplies it.
+$syncword = "ZZ";
 
 -- Two Protoseq frames: payloads "hello" and "world".
 -- Layout per frame: ui32 LE length | payload | syncword.
@@ -19,7 +19,7 @@ SELECT
     LogParsing::LineBreak(NULL) AS line_break_null,
     LogParsing::Protoseq("", $syncword) AS protoseq_empty,
     LogParsing::Protoseq($protoseq_blob, $syncword) AS protoseq_blob,
-    LogParsing::Protoseq(String::HexDecode("01000000615a5a"), "ZZ") AS protoseq_custom_syncword,
+    LogParsing::Protoseq(String::HexDecode("01000000615959"), "YY") AS protoseq_custom_syncword,
     LogParsing::Protoseq(NULL, $syncword) AS protoseq_null,
     LogParsing::Protoseq($protoseq_blob, NULL) AS protoseq_no_syncword,
     LogParsing::ParseTskv("tskv\tdate=2024-01-01\tkey=value") AS parse_tskv,

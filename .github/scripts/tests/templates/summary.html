@@ -1664,7 +1664,7 @@
 </script>
 </head>
 <body>
-    {% if pr_url or workflow_url %}
+    {% if pr_url or workflow_url or dashboard_url %}
     <div class="report-header">
         <h2>Test Report Information</h2>
         {% if pr_url %}
@@ -1672,6 +1672,9 @@
         {% endif %}
         {% if workflow_url %}
         <p><strong>Workflow Run:</strong> <a href="{{ workflow_url }}" target="_blank">{{ workflow_run_id }}</a></p>
+        {% endif %}
+        {% if dashboard_url %}
+        <p><strong>Dashboard:</strong> <a href="{{ dashboard_url }}" target="_blank">CPU/RAM/disk</a></p>
         {% endif %}
         <p><strong>Build Preset:</strong> {{ build_preset }}</p>
         <p><strong>Branch:</strong> {{ branch }}</p>

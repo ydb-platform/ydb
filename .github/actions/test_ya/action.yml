@@ -490,13 +490,11 @@ runs:
             --chat-id '${{ inputs.telegram_alert_chat }}' \
             --memory-threshold 97 || true
 
-          # convert to chromium trace (optional; dashboard reads evlog directly)
+          # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl) || true
 
-          # build tests resource dashboard with metrics overlay (CPU/RAM/disk)
-          # never fail the job: test results matter more than the dashboard
           set +e
           TESTS_METRICS_DIR="$CURRENT_PUBLIC_DIR/tests_metrics"
           mkdir -p "$TESTS_METRICS_DIR"

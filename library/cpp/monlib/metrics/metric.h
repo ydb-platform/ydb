@@ -108,6 +108,9 @@ namespace NMonitoring {
 
         virtual ui64 Add(ui64 n) noexcept = 0;
         virtual ui64 Get() const noexcept = 0;
+        virtual ui32 StartTimeSeconds() const noexcept {
+            return 0;
+        }
     };
 
     class ILazyRate: public IMetric {
@@ -117,6 +120,9 @@ namespace NMonitoring {
         }
 
         virtual ui64 Get() const noexcept = 0;
+        virtual ui32 StartTimeSeconds() const noexcept {
+            return 0;
+        }
     };
 
     class IHistogram: public IMetric {
@@ -133,6 +139,9 @@ namespace NMonitoring {
         virtual void Record(double value) noexcept = 0;
         virtual void Record(double value, ui32 count) noexcept = 0;
         virtual IHistogramSnapshotPtr TakeSnapshot() const = 0;
+        virtual ui32 StartTimeSeconds() const noexcept {
+            return 0;
+        }
 
     protected:
         const bool IsRate_;
@@ -309,7 +318,9 @@ namespace NMonitoring {
     ///////////////////////////////////////////////////////////////////////////////
     class TRate final: public IRate {
     public:
-        explicit TRate(ui64 value = 0) {
+        explicit TRate(ui64 value = 0, ui32 startTimeSeconds = 0)
+            : StartTimeSeconds_{startTimeSeconds}
+        {
             Value_.store(value, std::memory_order_relaxed);
         }
 
@@ -321,16 +332,22 @@ namespace NMonitoring {
             return Value_.load(std::memory_order_relaxed);
         }
 
+        ui32 StartTimeSeconds() const noexcept override {
+            return StartTimeSeconds_;
+        }
+
         void Reset() noexcept override {
             Value_.store(0, std::memory_order_relaxed);
         }
 
         void Accept(TInstant time, IMetricConsumer* consumer) const override {
+            consumer->OnStartTimeSeconds(StartTimeSeconds_);
             consumer->OnUint64(time, Get());
         }
 
     private:
         std::atomic_uint64_t Value_;
+        ui32 StartTimeSeconds_;
     };
 
     ///////////////////////////////////////////////////////////////////////////////
@@ -338,8 +355,9 @@ namespace NMonitoring {
     ///////////////////////////////////////////////////////////////////////////////
     class TLazyRate final: public ILazyRate {
     public:
-        explicit TLazyRate(std::function<ui64()> supplier)
+        explicit TLazyRate(std::function<ui64()> supplier, ui32 startTimeSeconds = 0)
             : Supplier_(std::move(supplier))
+            , StartTimeSeconds_{startTimeSeconds}
         {
         }
 
@@ -347,7 +365,12 @@ namespace NMonitoring {
             return Supplier_();
         }
 
+        ui32 StartTimeSeconds() const noexcept override {
+            return StartTimeSeconds_;
+        }
+
         void Accept(TInstant time, IMetricConsumer* consumer) const override {
+            consumer->OnStartTimeSeconds(StartTimeSeconds_);
             consumer->OnUint64(time, Get());
         }
 
@@ -355,6 +378,7 @@ namespace NMonitoring {
 
     private:
         std::function<ui64()> Supplier_;
+        ui32 StartTimeSeconds_;
     };
 
     ///////////////////////////////////////////////////////////////////////////////
@@ -365,12 +389,14 @@ namespace NMonitoring {
         THistogram(IHistogramCollectorPtr collector, bool isRate)
             : IHistogram(isRate)
             , Collector_(std::move(collector))
+            , StartTimeSeconds_(isRate ? static_cast<ui32>(TInstant::Now().Seconds()) : 0)
         {
         }
 
         THistogram(std::function<IHistogramCollectorPtr()> makeHistogramCollector, bool isRate)
             : IHistogram(isRate)
             , Collector_(makeHistogramCollector())
+            , StartTimeSeconds_(isRate ? static_cast<ui32>(TInstant::Now().Seconds()) : 0)
         {
         }
 
@@ -383,7 +409,14 @@ namespace NMonitoring {
         }
 
         void Accept(TInstant time, IMetricConsumer* consumer) const override {
+            if (IsRate_) {
+                consumer->OnStartTimeSeconds(StartTimeSeconds_);
+            }
             consumer->OnHistogram(time, TakeSnapshot());
+        }
+
+        ui32 StartTimeSeconds() const noexcept override {
+            return StartTimeSeconds_;
         }
 
         IHistogramSnapshotPtr TakeSnapshot() const override {
@@ -396,5 +429,6 @@ namespace NMonitoring {
 
     private:
         IHistogramCollectorPtr Collector_;
+        ui32 StartTimeSeconds_;
     };
 }

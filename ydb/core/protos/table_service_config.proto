@@ -460,7 +460,7 @@ message TTableServiceConfig {
 
     optional bool EnableDqHashCombineByDefault = 105 [default = true, (InvalidateCompileCache) = true];
 
-    optional bool EnableBuildAggregationResultStages = 106 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableBuildAggregationResultStages = 106 [default = false, (InvalidateCompileCache) = true];
 
     // Deprecated no-op retained for compatibility with existing configurations.
     optional bool EnforceSqlVersionV1 = 107 [default = true, deprecated = true];
@@ -593,7 +593,7 @@ message TTableServiceConfig {
 
     // Cluster default for window functions v2 (partition + sort via WideSort/Chopper instead of SqueezeToDict).
     // Overridable per query via PRAGMA ydb.WindowFunctionsV2.
-    optional bool EnableWindowFunctionsV2 = 148 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableWindowFunctionsV2 = 148 [default = true, (InvalidateCompileCache) = true];
 
     // When true, block hash join keys use IS NOT DISTINCT FROM (NULL matches NULL).
     optional bool EnableBlockHashJoinEqualNulls = 149 [default = false, (InvalidateCompileCache) = true];

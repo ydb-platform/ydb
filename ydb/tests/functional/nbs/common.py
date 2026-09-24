@@ -370,20 +370,27 @@ class NbsTestBase:
         )
 
     def get_load_actor_adapter_actor_id(self, disk_id):
-        get_load_actor_res = json.loads(
-            execute_dstool_grpc(
-                self.cluster,
-                "token",
-                ['nbs', 'partition', 'get-load-actor-adapter-actor-id', '--disk-id', disk_id],
+        """
+        Return the load-actor adapter id once the partition has registered it.
+
+        A zero id means the tablet answered before the adapter existed.
+        """
+        deadline = time.time() + 40
+        last = None
+        while time.time() < deadline:
+            last = json.loads(
+                execute_dstool_grpc(
+                    self.cluster,
+                    "token",
+                    ['nbs', 'partition', 'get-load-actor-adapter-actor-id', '--disk-id', disk_id],
+                )
             )
-        )
-
-        status = get_load_actor_res["status"]
-        actor_id = get_load_actor_res["actorId"]
-        assert status == "success"
-        assert actor_id != ""
-
-        return actor_id
+            status = last.get("status")
+            actor_id = last.get("actorId") or ""
+            if status == "success" and actor_id not in ("", "[0:0:0]"):
+                return actor_id
+            time.sleep(1)
+        assert False, f"Load actor adapter is not ready for disk {disk_id}: {last}"
 
     def write(self, actor_id, index, data):
         execute_dstool_grpc(
@@ -562,7 +569,7 @@ class NbsTestBase:
         """
         # Verify basic success (Result field may not be present, which means success)
         if 'Result' in results:
-            assert results['Result'] == 0, "Load actor run finished with error"
+            assert results['Result'] == 0, f"Load actor run finished with error: {results}"
 
         # Verify IOPS and throughput are non-zero
         assert 'Iops' in results, f"Missing Iops in results: {results}"

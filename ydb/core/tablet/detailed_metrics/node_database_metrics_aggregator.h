@@ -4,6 +4,7 @@
 #include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -72,7 +73,7 @@ struct TDetailedMetricsTableInfo {
  * the very same layout as the node wide "tablets" group.
  *
  */
-class TNodeDatabaseMetricsAggregator : public TThrRefBase {
+class TNodeDatabaseMetricsAggregator : public NSysView::IDbDetailedCounters {
 public:
     /**
      * @param[in] now Used to differentiate the cumulative counters into per second rates
@@ -112,11 +113,6 @@ public:
     virtual void ForgetTablet(ui64 tabletId, ui32 followerId) = 0;
 
     virtual void RecalculateAllCounters() = 0;
-
-    // Append a snapshot: Simple/MAX absolute, Cumulative/HIST deltas since the
-    // previous Pack. Call once per new request; transport retries reuse that request.
-    // Retired buckets emit their final delta once, then disappear from later reports.
-    virtual void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) = 0;
 };
 
 using TNodeDatabaseMetricsAggregatorPtr = TIntrusivePtr<TNodeDatabaseMetricsAggregator>;

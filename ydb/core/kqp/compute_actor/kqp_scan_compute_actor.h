@@ -80,7 +80,8 @@ public:
     TKqpScanComputeActor(NScheduler::TSchedulableOptions schedulableOptions, const TActorId& executerId, ui64 txId,
         NYql::NDqProto::TDqTask* task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
-        TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode);
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database);
 
     ~TKqpScanComputeActor();
 

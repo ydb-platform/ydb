@@ -364,6 +364,60 @@ namespace NKikimr {
             AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::DelSst);
         }
 
+        // Whatever picked the job, it has to say what it will cost: that number is what a
+        // later admission step can hand out, and what the job can reserve from PDisk.
+        Y_UNIT_TEST(EmergencyPublishesItsMeasuredForecast) {
+            TSynthHull hull(17);
+            const ui64 keep = hull.Ctx.GetHullCtx()->ChunkSize / 3;
+            hull.PutLevel(hull.LastLevelIdx(), hull.MakeSst(1, 1, 1, 10, 100, hull.KeepRatio(keep)));
+            hull.PutLevel(hull.LastLevelIdx(), hull.MakeSst(1, 2, 2, 11, 100, hull.KeepRatio(keep)));
+
+            auto snap = hull.Ds->GetIndexSnapshot();
+            TTask task;
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, TInstant::Seconds(0), {}};
+            params.FreeChunksBudget = 1;
+            params.EmergencyMode = true;
+
+            TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
+                    &task, true);
+            AssertAction(strategy.Select(), NHullComp::ActCompactSsts);
+            AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Emergency);
+            UNIT_ASSERT(task.Forecast.Valid);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.InputChunks, 2u);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.OutputChunks, 1u);
+            // Two chunks in, one out: worth admitting even on a disk with little room left.
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.NetChunks(), 1);
+        }
+
+        Y_UNIT_TEST(ExplicitJobCarriesAForecast) {
+            TExplicitFixture f;
+            auto snap = f.Hull.Ds->GetIndexSnapshot();
+            auto params = f.Params(2, f.Requested);
+
+            TTask task;
+            TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
+                    &task, true);
+            AssertAction(strategy.Select(), NHullComp::ActCompactSsts);
+            AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Explicit);
+            UNIT_ASSERT(task.Forecast.Valid);
+            UNIT_ASSERT_VALUES_EQUAL(task.Forecast.InputChunks, CountSstsToDelete(task));
+            UNIT_ASSERT(task.Forecast.OutputChunks >= 1);
+            // The selection already trimmed itself to the budget, so the forecast does not
+            // ask for more than that budget.
+            UNIT_ASSERT(task.Forecast.OutputChunks <= params.FreeChunksBudget);
+        }
+
+        Y_UNIT_TEST(NoForecastWithoutAJobThatWritesChunks) {
+            TSynthHull hull(17);
+            auto snap = hull.Ds->GetIndexSnapshot();
+            TTask task;
+            NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, TInstant::Seconds(0), {}};
+            TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
+                    &task, true);
+            AssertAction(strategy.Select(), NHullComp::ActNothing);
+            UNIT_ASSERT(!task.Forecast.Valid);
+        }
+
         Y_UNIT_TEST(EstimateOutputChunksIsConservative) {
             UNIT_ASSERT_VALUES_EQUAL(TUtils::EstimateOutputChunks(0, 4096), 0u);
             UNIT_ASSERT_VALUES_EQUAL(TUtils::EstimateOutputChunks(1, 4096), 1u);

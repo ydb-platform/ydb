@@ -324,8 +324,6 @@ def _create_pm(unit: ymake.Unit) -> 'PackageManager':
         sources_path=unit.resolve(sources_path),
         build_root="$B",
         build_path=unit.path().replace("$S", "$B", 1),
-        nodejs_bin_path=None,
-        script_path=None,
         module_path=module_path,
         inject_peers=unit.get("_INJECT_PEERS_ARG") is not None,
     )
@@ -411,8 +409,8 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
     for tool in resources:
         dir_name = erm_json.canonize_name(tool)
         if erm_json.use_resource_directly(tool):
-            # raises the configuration error when the version is unsupported
-            _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool), dep_is_required=True)
+            # These tools are installed with the project dependencies, not as build resources.
+            continue
         elif tool == "nodejs":
             dirs.append(os.path.join("build", "platform", dir_name, str(nodejs_version)))
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
@@ -422,7 +420,7 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
                 unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
 
         elif erm_json.is_resource_multiplatform(tool):
-            v = _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool))
+            v = erm_json.select_version_of(tool)
             sb_resources = [
                 sbr for sbr in erm_json.get_sb_resources(tool, v) if sbr.get("nodejs") == nodejs_version.major
             ]
@@ -433,7 +431,7 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
             else:
                 unit.message(["WARN", "Missing {}@{} for {}".format(tool, str(v), nodejs_dir)])
         else:
-            v = _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool))
+            v = erm_json.select_version_of(tool)
             dirs.append(os.path.join("build", "external_resources", dir_name, str(v)))
             _set_resource_vars(unit, erm_json, tool, v, nodejs_version.major)
 
@@ -752,15 +750,7 @@ def _set_resource_vars(
     unit.set(["{}-ROOT-VAR-NAME".format(resource_name), yamake_resource_var])
 
 
-def _select_matching_version(
-    erm_json: 'ErmJsonLite', resource_name: str, range_str: str, dep_is_required=False
-) -> 'Version':
-    if dep_is_required and range_str is None:
-        raise Exception(
-            "Please install the '{tool}' package to the project. Run the command:\n"
-            "   ya tool nots add -D {tool}".format(tool=resource_name)
-        )
-
+def _select_matching_version(erm_json: 'ErmJsonLite', resource_name: str, range_str: str) -> 'Version':
     try:
         version = erm_json.select_version_of(resource_name, range_str)
         if version:
@@ -889,10 +879,16 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
+    from lib.nots.package_manager.common_config import load_common_config
+    from lib.nots.package_manager.utils import s_rooted
+
+    common_config_path, _ = load_common_config(pj, pm.sources_root, pm.inject_peers)
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
+    if common_config_path:
+        ins.append(s_rooted(common_config_path))
     outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
     if use_hermetic_node_modules:
         from lib.nots.package_manager import constants

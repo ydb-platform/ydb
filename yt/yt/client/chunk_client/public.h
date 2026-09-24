@@ -188,6 +188,7 @@ DECLARE_REFCOUNTED_STRUCT(TChunkFragmentReaderConfig)
 
 struct TCodecDuration;
 class TCodecStatistics;
+struct TTimingStatistics;
 
 class TLegacyReadLimit;
 class TLegacyReadRange;

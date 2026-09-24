@@ -4303,6 +4303,11 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                         return IGraphTransformer::TStatus::Error;
                     }
                 }
+                else if (isYql && optionName == "group_by_compact") {
+                    if (!EnsureTupleSize(*option, 1, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                }
                 else if (optionName == "yql_agg_promoted") {
                     if (!EnsureTupleSize(*option, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;

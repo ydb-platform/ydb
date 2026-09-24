@@ -4,33 +4,31 @@ namespace NKikimr::NOlap::NIndexes {
 
 namespace {
 
-TString GetStorageIdForIndexChunk(const TPortionDataAccessor& portionAccessor, const TIndexInfo& indexInfo,
-    const std::shared_ptr<IIndexMeta>& indexMeta, const std::optional<TBlobRange>& blobRange) {
+TString GetStorageIdForIndexChunk(
+    const NReader::NCommon::IDataSource& source, const std::shared_ptr<IIndexMeta>& indexMeta, const std::optional<TBlobRange>& blobRange) {
     if (blobRange && blobRange->BlobId.GetDsGroup() == Max<ui32>()) {
-        return portionAccessor.GetPortionInfo().GetMeta().GetTierName();
+        return source.GetPortionAccessor().GetPortionInfo().GetMeta().GetTierName();
     }
-    return portionAccessor.GetPortionInfo().GetIndexStorageId(indexMeta->GetIndexId(), indexInfo);
+    return source.GetIndexStorageId(indexMeta->GetIndexId());
 }
 
 }   // namespace
 
 void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) {
     TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
-    auto source = context.GetSource();
-    const auto& portionAccessor = source->GetPortionAccessor();
-    // YDBBUGS-770: a sys-view source reports the sys-view schema, which carries no indexes
-    const auto& indexInfo = (SourceSchema ? SourceSchema : source->GetSourceSchema())->GetIndexInfo();
+    auto& source = context.GetSource();
+    const auto& portionAccessor = source.GetPortionAccessor();
     auto indexChunks = portionAccessor.GetIndexChunksPointers(IndexMeta->GetIndexId());
     for (auto&& i : indexChunks) {
         if (i->HasBlobData()) {
             TChunkOriginalData originalData(i->GetBlobDataVerified());
-            const TString storageId = GetStorageIdForIndexChunk(portionAccessor, indexInfo, IndexMeta, std::nullopt);
+            const TString storageId = GetStorageIdForIndexChunk(source, IndexMeta, std::nullopt);
             FetchingStorageIds.emplace_back(storageId);
             Fetching.emplace_back(TIndexChunkFetching(
                 storageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         } else {
             const TBlobRange blobRange = portionAccessor.RestoreBlobRange(i->GetBlobRangeVerified());
-            const TString storageId = GetStorageIdForIndexChunk(portionAccessor, indexInfo, IndexMeta, blobRange);
+            const TString storageId = GetStorageIdForIndexChunk(source, IndexMeta, blobRange);
             FetchingStorageIds.emplace_back(storageId);
             TChunkOriginalData originalData(blobRange);
             Fetching.emplace_back(TIndexChunkFetching(

@@ -55,8 +55,8 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
-void TBlobStorageController::RecomputePDiskNumActiveSlots(TPDiskInfo *pdisk) {
-    pdisk->NumActiveSlots = pdisk->ComputeNumActiveSlots([this](TGroupId groupId) {
+void TBlobStorageController::RecomputePDiskNumActiveDynamicSlots(TPDiskInfo *pdisk) {
+    pdisk->NumActiveDynamicSlots = pdisk->ComputeNumActiveDynamicSlots([this](TGroupId groupId) {
         return FindGroup(groupId);
     });
 }
@@ -155,7 +155,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
                 pdiskIds.push_back(pdiskId);
             }
 
-            // NumActiveSlots is maintained incrementally with owner weights that depend on
+            // NumActiveDynamicSlots is maintained incrementally with owner weights that depend on
             // whether the effective expected slot size is set; when a metrics update flips it
             // (e.g. the PDisk started reporting ExpectedSlotSize inferred from global settings),
             // the counter must be recomputed with the new weights
@@ -170,7 +170,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
                 }
             }
             if ((pdisk->GetEffectiveExpectedSlotSize() != 0) != hadFixedSlotSize) {
-                RecomputePDiskNumActiveSlots(pdisk);
+                RecomputePDiskNumActiveDynamicSlots(pdisk);
             }
             pdisk->UpdateOperational(true);
 

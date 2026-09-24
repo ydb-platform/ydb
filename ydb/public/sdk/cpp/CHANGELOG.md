@@ -1,4 +1,7 @@
 * Added a draft UDF client (`client/draft/ydb_udf.h`) with manifest-based uploads, separate module type/code kind, per-platform compile state, and incremental `UploadModuleFromFile`.
+
+* Added OIDC/OAuth authentication via `NOidc::CreateOidcProviderFactory`, supporting static access tokens, Client Credentials Grant, and Device Authorization Grant, with token refresh and interfaces for token caching and interactive sign-in.
+
 * Added `Float16` and `BFloat16` vector index types.
 
 ## v3.23.0

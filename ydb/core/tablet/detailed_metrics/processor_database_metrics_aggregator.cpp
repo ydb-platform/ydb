@@ -10,11 +10,14 @@
 #include <ydb/core/tablet/private/aggregated_tablet_counters.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_app.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 namespace NKikimr {
     namespace {
@@ -33,7 +36,8 @@ namespace NKikimr {
 
         // A TABLE partial and a PARTITION leaf have the same publication pipeline.
         // Cumulative and derivative histogram history survives removal of a node while
-        // the bucket remains live. Live histogram balances are removed with their node.
+        // the bucket remains live. Live histogram totals are recomputed from the live
+        // per-node snapshots on each publish
         // Simple/MAX are recomputed from live snapshots; overlapping owners of a leaf
         // use MAX for Simple, retaining the existing partition-move behavior.
         class TPublishedBucket {
@@ -66,19 +70,13 @@ namespace NKikimr {
                 auto& snapshot = PerNode[nodeId];
                 snapshot.Counters = diff;
                 ApplyLiveHistogramDeltas(snapshot.ExecutorHistogramBucketCounts, ExecutorLiveHistogramIndices,
-                                         diff.GetExecutorCounters());
+                                         diff.GetExecutorCounters(), nodeId);
                 ApplyLiveHistogramDeltas(snapshot.AppHistogramBucketCounts, AppLiveHistogramIndices,
-                                         diff.GetAppCounters());
+                                         diff.GetAppCounters(), nodeId);
             }
 
             bool DropNode(ui32 nodeId) {
-                if (auto it = PerNode.find(nodeId); it != PerNode.end()) {
-                    SubtractLiveHistogramBucketCounts(*Total.MutableExecutorCounters(), ExecutorLiveHistogramIndices,
-                                                      it->second.ExecutorHistogramBucketCounts);
-                    SubtractLiveHistogramBucketCounts(*Total.MutableAppCounters(), AppLiveHistogramIndices,
-                                                      it->second.AppHistogramBucketCounts);
-                    PerNode.erase(it);
-                }
+                PerNode.erase(nodeId);
                 return PerNode.empty();
             }
 
@@ -87,12 +85,18 @@ namespace NKikimr {
                 NSysView::ResetSimpleCounters(Total.MutableAppCounters());
                 NSysView::ResetMaxCounters(Total.MutableMaxExecutorCounters());
                 NSysView::ResetMaxCounters(Total.MutableMaxAppCounters());
+                NSysView::ResetHistogramBuckets(Total.MutableExecutorCounters(), ExecutorLiveHistogramIndices);
+                NSysView::ResetHistogramBuckets(Total.MutableAppCounters(), AppLiveHistogramIndices);
                 for (const auto& [_, node] : PerNode) {
                     const auto& snapshot = node.Counters;
                     AggregateSimple(Total.MutableExecutorCounters(), snapshot.GetExecutorCounters());
                     AggregateSimple(Total.MutableAppCounters(), snapshot.GetAppCounters());
                     AggregateMax(Total.MutableMaxExecutorCounters(), snapshot.GetMaxExecutorCounters());
                     AggregateMax(Total.MutableMaxAppCounters(), snapshot.GetMaxAppCounters());
+                    AddLiveHistogramBucketCounts(*Total.MutableExecutorCounters(), ExecutorLiveHistogramIndices,
+                                                 node.ExecutorHistogramBucketCounts);
+                    AddLiveHistogramBucketCounts(*Total.MutableAppCounters(), AppLiveHistogramIndices,
+                                                 node.AppHistogramBucketCounts);
                 }
                 ExecutorCounters.FromProto(*Total.MutableExecutorCounters(), *Total.MutableMaxExecutorCounters());
                 AppCounters.FromProto(*Total.MutableAppCounters(), *Total.MutableMaxAppCounters());
@@ -126,7 +130,8 @@ namespace NKikimr {
             }
 
             static void ApplyLiveHistogramDeltas(
-                TLiveHistogramBucketCounts& bucketCounts, const TVector<ui32>& indices, const NKikimrSysView::TDbCounters& diff)
+                TLiveHistogramBucketCounts& bucketCounts, const TVector<ui32>& indices, const NKikimrSysView::TDbCounters& diff,
+                ui32 nodeId)
             {
                 bucketCounts.resize(indices.size());
                 for (size_t i = 0; i < indices.size(); ++i) {
@@ -141,25 +146,45 @@ namespace NKikimr {
                     const auto& encoded = histogram.GetBuckets();
                     for (int b = 0; b + 1 < encoded.size(); b += 2) {
                         if (encoded[b] < histogram.GetBucketsCount()) {
-                            // Histogram decreases are encoded modulo 2^64, just like Total.
-                            values[encoded[b]] += encoded[b + 1];
+                            const ui64 delta = encoded[b + 1];
+                            // Histogram decreases are encoded modulo 2^64; treat large values
+                            // as decrements
+                            const bool isDecrement = delta > (Max<ui64>() >> 1);
+                            if (isDecrement) {
+                                const ui64 magnitude = 0 - delta;
+                                if (magnitude > values[encoded[b]]) {
+                                    YDB_LOG_WARN("Clamped live histogram bucket to 0 to avoid underflow",
+                                        {"nodeId", nodeId},
+                                        {"histogramIndex", indices[i]},
+                                        {"bucketIndex", encoded[b]},
+                                        {"magnitude", magnitude});
+                                    values[encoded[b]] = 0;
+                                } else {
+                                    values[encoded[b]] -= magnitude;
+                                }
+                            } else {
+                                values[encoded[b]] += delta;
+                            }
                         }
                     }
                 }
             }
 
-            static void SubtractLiveHistogramBucketCounts(
+            static void AddLiveHistogramBucketCounts(
                 NKikimrSysView::TDbCounters& total, const TVector<ui32>& indices, const TLiveHistogramBucketCounts& bucketCounts)
             {
                 for (size_t i = 0; i < bucketCounts.size(); ++i) {
                     if (bucketCounts[i].empty()) {
                         continue;
                     }
+                    if (indices[i] >= total.HistogramSize()) {
+                        continue;
+                    }
                     auto* values = total.MutableHistogram(indices[i])->MutableBuckets();
                     // FromProto trims histograms to the receiver's template. Ignore any
                     // extra sender buckets that are no longer present in the total.
                     for (size_t b = 0; b < bucketCounts[i].size() && b < static_cast<size_t>(values->size()); ++b) {
-                        (*values)[b] -= bucketCounts[i][b];
+                        (*values)[b] += bucketCounts[i][b];
                     }
                 }
             }

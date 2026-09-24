@@ -57,6 +57,7 @@ public:
     bool EnableWatermarksAdvanced = false;
     bool EnableStreamingPartitionBalancing = false;
     bool EnableExactlyOnceDeliveryGuaranty = false;
+    bool EnableConsumerRewindForDisposition = false;
     bool EnableSettingsValidation = false;
     TString DeferredPublicationExtIdPrefix;
     const TString SessionId;

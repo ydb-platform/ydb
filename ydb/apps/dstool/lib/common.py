@@ -282,8 +282,8 @@ def get_vslot_extended_id(vslot):
 
 
 def get_pdisk_inferred_settings(pdisk):
-    if (pdisk.PDiskMetrics.HasField('SlotCount')):
-        return pdisk.PDiskMetrics.SlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
+    if (pdisk.PDiskMetrics.HasField('ExpectedSlotCount')):
+        return pdisk.PDiskMetrics.ExpectedSlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
     else:
         return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
 

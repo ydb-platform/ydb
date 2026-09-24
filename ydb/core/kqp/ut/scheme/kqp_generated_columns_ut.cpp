@@ -21,7 +21,6 @@ static NKikimrConfig::TAppConfig GeneratedColumnsAppConfig(bool enableIndexStrea
     appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(true);
     appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(true);
     appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
-    appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(true);
     return appConfig;
 }
 
@@ -426,6 +425,10 @@ public:
         return GetShowCreateTable(Session, tablePath);
     }
 
+    NYdb::NQuery::TSession& QuerySession() {
+        return Session;
+    }
+
 private:
     TKikimrRunner Kikimr;
     NYdb::NQuery::TQueryClient Db;
@@ -484,7 +487,236 @@ bool HasPlanOperator(const NJson::TJsonValue& plan, TStringBuf name) {
         || CountPlanNodesByKv(plan, "Name", TString(name)) > 0;
 }
 
-void CheckVirtualGeneratedReturning() {
+struct TVirtualReturningProjection {
+    TString Sql;
+    TVector<TStringBuf> Columns;
+};
+
+const TVector<TVirtualReturningProjection>& VirtualReturningProjections() {
+    static const TVector<TVirtualReturningProjection> projections = {
+        {"*", {"a", "k", "v"}},
+        {"k", {"k"}},
+        {"a", {"a"}},
+        {"v", {"v"}},
+        {"k, a", {"k", "a"}},
+        {"k, v", {"k", "v"}},
+        {"a, k", {"a", "k"}},
+        {"a, v", {"a", "v"}},
+        {"v, k", {"v", "k"}},
+        {"v, a", {"v", "a"}},
+        {"k, a, v", {"k", "a", "v"}},
+        {"k, v, a", {"k", "v", "a"}},
+        {"a, k, v", {"a", "k", "v"}},
+        {"a, v, k", {"a", "v", "k"}},
+        {"v, k, a", {"v", "k", "a"}},
+        {"v, a, k", {"v", "a", "k"}},
+    };
+    return projections;
+}
+
+TString ExpectedVirtualReturningRow(const TVirtualReturningProjection& projection, i32 k, i32 a) {
+    TStringBuilder expected;
+    expected << "[[";
+    for (size_t i = 0; i < projection.Columns.size(); ++i) {
+        if (i) {
+            expected << ";";
+        }
+
+        if (projection.Columns[i] == "k") {
+            expected << k;
+        } else if (projection.Columns[i] == "a") {
+            expected << "[" << a << "]";
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(projection.Columns[i], "v");
+            expected << a * 10;
+        }
+    }
+    expected << "]]";
+    return expected;
+}
+
+enum class EVirtualReturningDml {
+    Insert,
+    InsertOrRevert,
+    Upsert,
+    Replace,
+    UpdateWhere,
+    UpdateOn,
+    DeleteWhere,
+    DeleteOn,
+};
+
+TStringBuf VirtualReturningDmlName(EVirtualReturningDml dml) {
+    switch (dml) {
+        case EVirtualReturningDml::Insert:
+            return "INSERT";
+        case EVirtualReturningDml::InsertOrRevert:
+            return "INSERT OR REVERT";
+        case EVirtualReturningDml::Upsert:
+            return "UPSERT";
+        case EVirtualReturningDml::Replace:
+            return "REPLACE";
+        case EVirtualReturningDml::UpdateWhere:
+            return "UPDATE WHERE";
+        case EVirtualReturningDml::UpdateOn:
+            return "UPDATE ON";
+        case EVirtualReturningDml::DeleteWhere:
+            return "DELETE WHERE";
+        case EVirtualReturningDml::DeleteOn:
+            return "DELETE ON";
+    }
+    Y_UNREACHABLE();
+}
+
+bool VirtualReturningDmlNeedsSeed(EVirtualReturningDml dml) {
+    return dml != EVirtualReturningDml::Insert
+        && dml != EVirtualReturningDml::InsertOrRevert;
+}
+
+i32 VirtualReturningFinalA(EVirtualReturningDml dml, i32 initialA) {
+    switch (dml) {
+        case EVirtualReturningDml::Replace:
+        case EVirtualReturningDml::UpdateWhere:
+        case EVirtualReturningDml::UpdateOn:
+            return initialA + 100;
+        default:
+            return initialA;
+    }
+}
+
+TString BuildVirtualReturningDml(EVirtualReturningDml dml, i32 k, i32 initialA,
+    const TVirtualReturningProjection& projection)
+{
+    const i32 finalA = VirtualReturningFinalA(dml, initialA);
+    TStringBuilder query;
+    switch (dml) {
+        case EVirtualReturningDml::Insert:
+            query << "INSERT INTO VReturningMatrix (k, a) VALUES (" << k << ", " << initialA << ")";
+            break;
+        case EVirtualReturningDml::InsertOrRevert:
+            query << "INSERT OR REVERT INTO VReturningMatrix (k, a) VALUES (" << k << ", " << initialA << ")";
+            break;
+        case EVirtualReturningDml::Upsert:
+            // Omitting a for an existing row checks that RETURNING uses its preserved value.
+            query << "UPSERT INTO VReturningMatrix (k) VALUES (" << k << ")";
+            break;
+        case EVirtualReturningDml::Replace:
+            query << "REPLACE INTO VReturningMatrix (k, a) VALUES (" << k << ", " << finalA << ")";
+            break;
+        case EVirtualReturningDml::UpdateWhere:
+            query << "UPDATE VReturningMatrix SET a = " << finalA
+                  << " WHERE k = " << k << " AND v = " << initialA * 10;
+            break;
+        case EVirtualReturningDml::UpdateOn:
+            query << "UPDATE VReturningMatrix ON (k, a) VALUES (" << k << ", " << finalA << ")";
+            break;
+        case EVirtualReturningDml::DeleteWhere:
+            query << "DELETE FROM VReturningMatrix WHERE k = " << k << " AND v = " << initialA * 10;
+            break;
+        case EVirtualReturningDml::DeleteOn:
+            query << "DELETE FROM VReturningMatrix ON (k) VALUES (" << k << ")";
+            break;
+    }
+    query << " RETURNING " << projection.Sql << ";";
+    return query;
+}
+
+void SeedVirtualReturningDml(TTestFixture& fixture, i32 firstKey) {
+    TStringBuilder query;
+    query << "UPSERT INTO VReturningMatrix (k, a) VALUES ";
+    for (size_t i = 0; i < VirtualReturningProjections().size(); ++i) {
+        if (i) {
+            query << ", ";
+        }
+        const i32 k = firstKey + i;
+        query << "(" << k << ", " << k + 10 << ")";
+    }
+    query << ";";
+    fixture.Exec(query);
+}
+
+TString ExpectedVirtualReturningRange(EVirtualReturningDml dml, i32 firstKey) {
+    if (dml == EVirtualReturningDml::DeleteWhere || dml == EVirtualReturningDml::DeleteOn) {
+        return "[]";
+    }
+
+    TStringBuilder expected;
+    expected << "[";
+    for (size_t i = 0; i < VirtualReturningProjections().size(); ++i) {
+        if (i) {
+            expected << ";";
+        }
+        const i32 k = firstKey + i;
+        const i32 a = VirtualReturningFinalA(dml, k + 10);
+        expected << "[" << k << ";[" << a << "];" << a * 10 << "]";
+    }
+    expected << "]";
+    return expected;
+}
+
+void CheckVirtualReturningProjectionMatrix(bool enableStreamWrite) {
+    auto appConfig = GeneratedColumnsAppConfig();
+    appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(enableStreamWrite);
+
+    TTestFixture fixture(R"(
+        CREATE TABLE VReturningMatrix (
+            k Int32 NOT NULL,
+            a Int32,
+            v Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(a, 0) * 10) VIRTUAL,
+            PRIMARY KEY (k)
+        );
+    )", "", appConfig);
+
+    UNIT_ASSERT_VALUES_EQUAL(VirtualReturningProjections().size(), 16u);
+
+    const TVector<EVirtualReturningDml> dmls = {
+        EVirtualReturningDml::Insert,
+        EVirtualReturningDml::InsertOrRevert,
+        EVirtualReturningDml::Upsert,
+        EVirtualReturningDml::Replace,
+        EVirtualReturningDml::UpdateWhere,
+        EVirtualReturningDml::UpdateOn,
+        EVirtualReturningDml::DeleteWhere,
+        EVirtualReturningDml::DeleteOn,
+    };
+
+    for (size_t dmlIndex = 0; dmlIndex < dmls.size(); ++dmlIndex) {
+        const auto dml = dmls[dmlIndex];
+        const i32 firstKey = 1000 * (dmlIndex + 1);
+        if (VirtualReturningDmlNeedsSeed(dml)) {
+            SeedVirtualReturningDml(fixture, firstKey);
+        }
+
+        for (size_t projectionIndex = 0; projectionIndex < VirtualReturningProjections().size(); ++projectionIndex) {
+            const auto& projection = VirtualReturningProjections()[projectionIndex];
+            const i32 k = firstKey + projectionIndex;
+            const i32 initialA = k + 10;
+            const i32 expectedA = VirtualReturningFinalA(dml, initialA);
+            const TString query = BuildVirtualReturningDml(dml, k, initialA, projection);
+            const TString actual = fixture.QueryYson(query);
+            CompareYson(
+                ExpectedVirtualReturningRow(projection, k, expectedA),
+                actual,
+                TStringBuilder() << VirtualReturningDmlName(dml)
+                    << " with RETURNING " << projection.Sql << ": " << query);
+        }
+
+        const TString select = TStringBuilder()
+            << "SELECT k, a, v FROM VReturningMatrix WHERE k >= " << firstKey
+            << " AND k < " << firstKey + VirtualReturningProjections().size() << " ORDER BY k;";
+        fixture.Check(select, ExpectedVirtualReturningRange(dml, firstKey));
+    }
+
+    fixture.CheckReturning(
+        "INSERT OR ABORT INTO VReturningMatrix (k, a) VALUES (9000, 91) RETURNING v, k, a;",
+        "SELECT v, k, a FROM VReturningMatrix WHERE k = 9000;",
+        "[[910;9000;[91]]]");
+}
+
+void CheckVirtualGeneratedReturning(bool enableStreamWrite) {
+    auto appConfig = GeneratedColumnsAppConfig();
+    appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(enableStreamWrite);
+
     TTestFixture fixture(R"(
         CREATE TABLE VReturning (
             a Int32,
@@ -494,7 +726,7 @@ void CheckVirtualGeneratedReturning() {
             PRIMARY KEY (k),
             INDEX idx_b GLOBAL ON (b)
         );
-    )");
+    )", "", appConfig);
 
     fixture.CheckReturning(
         "INSERT INTO VReturning (k, a, b) VALUES (1, 1, 2) RETURNING k, v;",
@@ -2506,7 +2738,279 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
 }
 
     Y_UNIT_TEST_SUITE(GeneratedVirtual) {
+        Y_UNIT_TEST_TWIN(ReturningProjectionMatrix, EnableStreamWrite) {
+            CheckVirtualReturningProjectionMatrix(EnableStreamWrite);
+        }
+
+        Y_UNIT_TEST_TWIN(ReturningSelectSourceForms, EnableStreamWrite) {
+            auto appConfig = GeneratedColumnsAppConfig();
+            appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(EnableStreamWrite);
+
+            TTestFixture fixture(R"(
+                CREATE TABLE VReturningSource (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    PRIMARY KEY (k)
+                );
+                CREATE TABLE VReturningTarget (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    v Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(a, 0) * 10) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )", R"(
+                UPSERT INTO VReturningSource (k, a) VALUES
+                    (1, 11), (2, 22), (3, 33), (4, 44), (5, 55);
+                UPSERT INTO VReturningTarget (k, a) VALUES (4, 4), (5, 5);
+            )", appConfig);
+
+            fixture.CheckReturning(
+                R"(
+                    INSERT INTO VReturningTarget (k, a)
+                    SELECT k, a FROM VReturningSource WHERE k = 1
+                    RETURNING *;
+                )",
+                "SELECT a, k, v FROM VReturningTarget WHERE k = 1;",
+                "[[[11];1;110]]");
+            fixture.CheckReturning(
+                R"(
+                    INSERT OR REVERT INTO VReturningTarget (k, a)
+                    SELECT k, a FROM VReturningSource WHERE k = 2
+                    RETURNING v, a, k;
+                )",
+                "SELECT v, a, k FROM VReturningTarget WHERE k = 2;",
+                "[[220;[22];2]]");
+            fixture.CheckReturning(
+                R"(
+                    UPSERT INTO VReturningTarget (k, a)
+                    SELECT k, a FROM VReturningSource WHERE k = 3
+                    RETURNING k, v;
+                )",
+                "SELECT k, v FROM VReturningTarget WHERE k = 3;",
+                "[[3;330]]");
+            fixture.CheckReturning(
+                R"(
+                    REPLACE INTO VReturningTarget (k, a)
+                    SELECT k, a FROM VReturningSource WHERE k = 4
+                    RETURNING a, v, k;
+                )",
+                "SELECT a, v, k FROM VReturningTarget WHERE k = 4;",
+                "[[[44];440;4]]");
+            fixture.CheckReturning(
+                R"(
+                    UPDATE VReturningTarget ON
+                    SELECT k, a FROM VReturningSource WHERE k = 5
+                    RETURNING v, k, a;
+                )",
+                "SELECT v, k, a FROM VReturningTarget WHERE k = 5;",
+                "[[550;5;[55]]]");
+            CompareYson(
+                "[[220;2]]",
+                fixture.QueryYson(R"(
+                    DELETE FROM VReturningTarget ON
+                    SELECT k FROM VReturningSource WHERE k = 2
+                    RETURNING v, k;
+                )"));
+            fixture.Check("SELECT k FROM VReturningTarget WHERE k = 2;", "[]");
+        }
+
+        Y_UNIT_TEST_TWIN(ReturningMultipleDmlStatements, EnableStreamWrite) {
+            auto appConfig = GeneratedColumnsAppConfig();
+            appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(EnableStreamWrite);
+
+            TTestFixture fixture(R"(
+                CREATE TABLE VReturningStatements (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    v Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(a, 0) * 10) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )", "", appConfig);
+
+            auto result = fixture.QuerySession().ExecuteQuery(R"(
+                INSERT INTO VReturningStatements (k, a) VALUES (1, 10) RETURNING *;
+                UPDATE VReturningStatements SET a = 20 WHERE v = 100 RETURNING v, k, a;
+                DELETE FROM VReturningStatements WHERE v = 200 RETURNING k, v;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3u);
+            CompareYson("[[[10];1;100]]", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson("[[200;1;[20]]]", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson("[[1;200]]", FormatResultSetYson(result.GetResultSet(2)));
+            fixture.Check("SELECT k FROM VReturningStatements;", "[]");
+        }
+
+        Y_UNIT_TEST_TWIN(ReturningAcrossInteractiveTransaction, EnableStreamWrite) {
+            auto appConfig = GeneratedColumnsAppConfig();
+            appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(EnableStreamWrite);
+
+            TTestFixture fixture(R"(
+                CREATE TABLE VReturningTx (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    v Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(a, 0) * 10) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )", "", appConfig);
+            auto& session = fixture.QuerySession();
+
+            auto insert = session.ExecuteQuery(R"(
+                INSERT INTO VReturningTx (k, a) VALUES (1, 10), (2, 20) RETURNING v, k;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+            CompareYsonUnordered("[[100;1];[200;2]]", FormatResultSetYson(insert.GetResultSet(0)));
+            auto insertTx = insert.GetTransaction();
+            UNIT_ASSERT(insertTx && insertTx->IsActive());
+
+            auto update = session.ExecuteQuery(R"(
+                UPDATE VReturningTx SET a = 30 WHERE v = 100 RETURNING *;
+            )", TTxControl::Tx(*insertTx)).ExtractValueSync();
+            UNIT_ASSERT_C(update.IsSuccess(), update.GetIssues().ToString());
+            CompareYson("[[[30];1;300]]", FormatResultSetYson(update.GetResultSet(0)));
+            auto updateTx = update.GetTransaction();
+            UNIT_ASSERT(updateTx && updateTx->IsActive());
+
+            auto erase = session.ExecuteQuery(R"(
+                DELETE FROM VReturningTx WHERE v = 200 RETURNING a, v, k;
+            )", TTxControl::Tx(*updateTx).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(erase.IsSuccess(), erase.GetIssues().ToString());
+            CompareYson("[[[20];200;2]]", FormatResultSetYson(erase.GetResultSet(0)));
+            fixture.Check("SELECT k, a, v FROM VReturningTx ORDER BY k;", "[[1;[30];300]]");
+
+            auto pendingInsert = session.ExecuteQuery(R"(
+                UPSERT INTO VReturningTx (k, a) VALUES (3, 40) RETURNING *;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_C(pendingInsert.IsSuccess(), pendingInsert.GetIssues().ToString());
+            CompareYson("[[[40];3;400]]", FormatResultSetYson(pendingInsert.GetResultSet(0)));
+            auto rollbackTx = pendingInsert.GetTransaction();
+            UNIT_ASSERT(rollbackTx && rollbackTx->IsActive());
+
+            auto pendingUpdate = session.ExecuteQuery(R"(
+                UPDATE VReturningTx SET a = 50 WHERE v = 400 RETURNING v, k;
+            )", TTxControl::Tx(*rollbackTx)).ExtractValueSync();
+            UNIT_ASSERT_C(pendingUpdate.IsSuccess(), pendingUpdate.GetIssues().ToString());
+            CompareYson("[[500;3]]", FormatResultSetYson(pendingUpdate.GetResultSet(0)));
+            auto activeTx = pendingUpdate.GetTransaction();
+            UNIT_ASSERT(activeTx && activeTx->IsActive());
+
+            auto rollback = activeTx->Rollback().ExtractValueSync();
+            UNIT_ASSERT_C(rollback.IsSuccess(), rollback.GetIssues().ToString());
+            fixture.Check("SELECT k FROM VReturningTx WHERE k = 3;", "[]");
+        }
+
+        Y_UNIT_TEST_TWIN(ReturningAfterSchemaChanges, EnableStreamWrite) {
+            auto appConfig = GeneratedColumnsAppConfig();
+            appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(EnableStreamWrite);
+
+            TTestFixture fixture(R"(
+                CREATE TABLE VReturningDdl (
+                    k Int32 NOT NULL,
+                    a Int32,
+                    tag String,
+                    v Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(a, 0) * 10) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )", "", appConfig);
+
+            fixture.CheckReturning(
+                "INSERT INTO VReturningDdl (k, a, tag) VALUES (1, 10, \"one\") RETURNING k, v;",
+                "SELECT k, v FROM VReturningDdl WHERE k = 1;",
+                "[[1;100]]");
+
+            fixture.Exec("ALTER TABLE VReturningDdl ADD INDEX idx_a GLOBAL SYNC ON (a) COVER (tag);");
+            fixture.CheckReturning(
+                "UPDATE VReturningDdl SET a = 20 WHERE v = 100 RETURNING v, k, a;",
+                "SELECT v, k, a FROM VReturningDdl WHERE k = 1;",
+                "[[200;1;[20]]]");
+            fixture.Check(
+                "SELECT k, v FROM VReturningDdl VIEW idx_a WHERE a = 20;",
+                "[[1;200]]");
+
+            fixture.Exec("ALTER TABLE VReturningDdl ADD INDEX idx_tag GLOBAL UNIQUE ON (tag);");
+            fixture.CheckReturning(
+                "UPSERT INTO VReturningDdl (k, a, tag) VALUES (2, 25, \"two\") RETURNING *;",
+                "SELECT a, k, tag, v FROM VReturningDdl WHERE k = 2;",
+                "[[[25];2;[\"two\"];250]]");
+            fixture.Check(
+                "SELECT k, v FROM VReturningDdl VIEW idx_tag WHERE tag = \"two\";",
+                "[[2;250]]");
+
+            fixture.Exec("ALTER TABLE VReturningDdl DROP INDEX idx_a;");
+            fixture.Exec("ALTER TABLE VReturningDdl DROP INDEX idx_tag;");
+            fixture.Exec("ALTER TABLE VReturningDdl ADD INDEX idx_async GLOBAL ASYNC ON (tag) COVER (a);");
+            fixture.CheckReturning(
+                "REPLACE INTO VReturningDdl (k, a, tag) VALUES (2, 30, \"two-new\") RETURNING k, a, v;",
+                "SELECT k, a, v FROM VReturningDdl WHERE k = 2;",
+                "[[2;[30];300]]");
+            fixture.CheckStaleEventually(
+                "SELECT k, a, v FROM VReturningDdl VIEW idx_async WHERE tag = \"two-new\";",
+                "[[2;[30];300]]");
+            fixture.Exec("ALTER TABLE VReturningDdl DROP INDEX idx_async;");
+
+            fixture.Exec("ALTER TABLE VReturningDdl ADD COLUMN extra Int32;");
+            fixture.CheckReturning(
+                "UPSERT INTO VReturningDdl (k, a, tag, extra) VALUES (3, 30, \"three\", 7) RETURNING extra, v, k;",
+                "SELECT extra, v, k FROM VReturningDdl WHERE k = 3;",
+                "[[[7];300;3]]");
+            fixture.Exec("ALTER TABLE VReturningDdl DROP COLUMN extra;");
+
+            fixture.Exec("ALTER TABLE `/Root/VReturningDdl` RENAME TO `/Root/VReturningDdlRenamed`;");
+            fixture.CheckReturning(
+                "UPDATE VReturningDdlRenamed SET a = 40 WHERE v = 300 RETURNING v, k;",
+                "SELECT v, k FROM VReturningDdlRenamed WHERE k IN (2, 3);",
+                "[[400;2];[400;3]]");
+
+            fixture.Exec("TRUNCATE TABLE VReturningDdlRenamed;");
+            fixture.Check("SELECT k FROM VReturningDdlRenamed;", "[]");
+            fixture.CheckReturning(
+                "INSERT INTO VReturningDdlRenamed (k, a, tag) VALUES (5, 5, \"after\") RETURNING *;",
+                "SELECT a, k, tag, v FROM VReturningDdlRenamed WHERE k = 5;",
+                "[[[5];5;[\"after\"];50]]");
+
+            const auto ddl = fixture.ShowCreateTable("/Root/VReturningDdlRenamed");
+            UNIT_ASSERT_STRING_CONTAINS_C(ddl,
+                "GENERATED ALWAYS AS (COALESCE(a, 0) * 10) VIRTUAL", ddl);
+        }
+
+        Y_UNIT_TEST_TWIN(UpdateByVirtualReturningProjections, EnableStreamWrite) {
+            auto appConfig = GeneratedColumnsAppConfig();
+            appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(EnableStreamWrite);
+
+            TTestFixture fixture(R"(
+                CREATE TABLE VUpdateReturning (
+                    k Uint32 NOT NULL,
+                    v1 Uint32,
+                    v2 Uint32 AS (v1 * 10u),
+                    PRIMARY KEY (k)
+                );
+            )", "UPSERT INTO VUpdateReturning (k, v1) VALUES (1, 10);", appConfig);
+
+            fixture.CheckReturning(
+                "UPDATE VUpdateReturning SET v1 = 20 WHERE v2 = 100 RETURNING *;",
+                "SELECT k, v1, v2 FROM VUpdateReturning WHERE k = 1;",
+                "[[1u;[20u];[200u]]]");
+            fixture.CheckReturning(
+                "UPDATE VUpdateReturning SET v1 = 30 WHERE v2 = 200 RETURNING k;",
+                "SELECT k FROM VUpdateReturning WHERE k = 1;",
+                "[[1u]]");
+            fixture.CheckReturning(
+                "UPDATE VUpdateReturning SET v1 = 40 WHERE v2 = 300 RETURNING v1;",
+                "SELECT v1 FROM VUpdateReturning WHERE k = 1;",
+                "[[[40u]]]");
+            fixture.CheckReturning(
+                "UPDATE VUpdateReturning SET v1 = 50 WHERE v2 = 400 RETURNING v2;",
+                "SELECT v2 FROM VUpdateReturning WHERE k = 1;",
+                "[[[500u]]]");
+            fixture.CheckReturning(
+                "UPDATE VUpdateReturning SET v1 = 60 WHERE v2 = 500 RETURNING v2, k, v1;",
+                "SELECT v2, k, v1 FROM VUpdateReturning WHERE k = 1;",
+                "[[[600u];1u;[60u]]]");
+        }
+
         Y_UNIT_TEST(ReturningUsesStreamingSinkWithoutPrecompute) {
+            auto appConfig = GeneratedColumnsAppConfig();
+            appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(true);
+
             TTestFixture fixture(R"(
                 CREATE TABLE VStreamSource (
                     k Int32 NOT NULL,
@@ -2520,7 +3024,7 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
                     v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) * 10 + COALESCE(b, 0)) VIRTUAL,
                     PRIMARY KEY (k)
                 );
-            )", "UPSERT INTO VStreamSource (k, a) VALUES (1, 1), (2, 2);");
+            )", "UPSERT INTO VStreamSource (k, a) VALUES (1, 1), (2, 2);", appConfig);
 
             const auto ast = fixture.ExplainAst(R"(
                 UPSERT INTO VStreamTarget (k, a)
@@ -2532,8 +3036,8 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
             UNIT_ASSERT_C(!ast.Contains("DqPrecompute") && !ast.Contains("DqPhyPrecompute"), ast);
         }
 
-        Y_UNIT_TEST(ReturningWithIndexStreamWrite) {
-            CheckVirtualGeneratedReturning();
+        Y_UNIT_TEST_TWIN(ReturningDmlMatrix, EnableStreamWrite) {
+            CheckVirtualGeneratedReturning(EnableStreamWrite);
         }
 
         Y_UNIT_TEST(IndexStreamWriteDisabled) {
@@ -3362,25 +3866,44 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
                 UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n"
                                                                    << result.GetIssues().ToString());
             };
+            auto returning = [&](const std::string& query, const TString& expected) {
+                auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n"
+                                                                   << result.GetIssues().ToString());
+                CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            };
 
             exec(R"(
                 CREATE TABLE `/Root/TestTable` (
                     k Int32 NOT NULL,
                     payload String,
-                    virtual_value Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL,
+                    value Int32,
+                    virtual_value Int32 NOT NULL
+                        GENERATED ALWAYS AS (COALESCE(value, 0) * 10) VIRTUAL,
                     PRIMARY KEY (k)
                 );
             )");
             exec(R"(
                 ALTER TABLE `/Root/TestTable` ADD CHANGEFEED `feed` WITH (
-                    MODE = 'UPDATES', FORMAT = 'JSON'
+                    MODE = 'NEW_AND_OLD_IMAGES', FORMAT = 'JSON'
                 );
             )");
             exec("ALTER TOPIC `/Root/TestTable/feed` ADD CONSUMER `test_consumer`;");
 
-            exec("UPSERT INTO `/Root/TestTable` (k, payload) VALUES (1, \"one\");");
-            exec("UPDATE `/Root/TestTable` SET payload = \"updated\" WHERE k = 1;");
-            exec("DELETE FROM `/Root/TestTable` WHERE k = 1;");
+            returning(R"(
+                UPSERT INTO `/Root/TestTable` (k, payload, value)
+                VALUES (1, "one", 10)
+                RETURNING virtual_value, k, value;
+            )", "[[100;1;[10]]]");
+            returning(R"(
+                UPDATE `/Root/TestTable`
+                SET payload = "updated", value = 20
+                WHERE virtual_value = 100
+                RETURNING virtual_value, payload, k;
+            )", R"([[200;["updated"];1]])");
+            returning(R"(
+                DELETE FROM `/Root/TestTable` WHERE virtual_value = 200 RETURNING *;
+            )", R"([[1;["updated"];[20];200]])");
 
             NYdb::NTopic::TTopicClient topicClient(kikimr.GetDriver());
             NYdb::NTopic::TReadSessionSettings readSettings;
@@ -3419,18 +3942,58 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
 
             UNIT_ASSERT_C(sawPartitionStart, "topic partition session did not start before the deadline");
             UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), 3u, JoinSeq("\n", messages));
-            bool sawPayload = false;
-            bool sawErase = false;
+            bool sawInsert = false;
+            bool sawUpdate = false;
+            bool sawDelete = false;
             for (const auto& message : messages) {
                 UNIT_ASSERT_C(!message.Contains("virtual_value"), message);
-                sawPayload = sawPayload || message.Contains("payload");
-                sawErase = sawErase || message.Contains("erase");
-            }
-            UNIT_ASSERT(sawPayload);
-            UNIT_ASSERT(sawErase);
 
-            exec("ALTER TABLE `/Root/TestTable` DROP COLUMN virtual_value;");
+                NJson::TJsonValue json;
+                UNIT_ASSERT_C(NJson::ReadJsonTree(message, &json), message);
+                UNIT_ASSERT_C(json.Has("key"), message);
+                UNIT_ASSERT_VALUES_EQUAL_C(json["key"][0].GetInteger(), 1, message);
+
+                const bool hasNewImage = json.Has("newImage") && json["newImage"].IsMap();
+                const bool hasOldImage = json.Has("oldImage") && json["oldImage"].IsMap();
+                if (hasNewImage) {
+                    UNIT_ASSERT_C(!json["newImage"].Has("virtual_value"), message);
+                    UNIT_ASSERT_C(json["newImage"].Has("value"), message);
+                }
+                if (hasOldImage) {
+                    UNIT_ASSERT_C(!json["oldImage"].Has("virtual_value"), message);
+                    UNIT_ASSERT_C(json["oldImage"].Has("value"), message);
+                }
+
+                if (json.Has("erase")) {
+                    UNIT_ASSERT_C(!hasNewImage && hasOldImage, message);
+                    UNIT_ASSERT_VALUES_EQUAL_C(json["oldImage"]["value"].GetInteger(), 20, message);
+                    UNIT_ASSERT_C(!sawDelete, message);
+                    sawDelete = true;
+                } else {
+                    UNIT_ASSERT_C(json.Has("update") && hasNewImage, message);
+                    if (hasOldImage) {
+                        UNIT_ASSERT_VALUES_EQUAL_C(json["oldImage"]["value"].GetInteger(), 10, message);
+                        UNIT_ASSERT_VALUES_EQUAL_C(json["newImage"]["value"].GetInteger(), 20, message);
+                        UNIT_ASSERT_C(!sawUpdate, message);
+                        sawUpdate = true;
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL_C(json["newImage"]["value"].GetInteger(), 10, message);
+                        UNIT_ASSERT_C(!sawInsert, message);
+                        sawInsert = true;
+                    }
+                }
+            }
+            UNIT_ASSERT(sawInsert);
+            UNIT_ASSERT(sawUpdate);
+            UNIT_ASSERT(sawDelete);
+
             exec("ALTER TABLE `/Root/TestTable` DROP CHANGEFEED `feed`;");
+            returning(R"(
+                UPSERT INTO `/Root/TestTable` (k, payload, value)
+                VALUES (2, "after-drop", 30)
+                RETURNING k, virtual_value;
+            )", "[[2;300]]");
+            exec("ALTER TABLE `/Root/TestTable` DROP COLUMN virtual_value;");
         }
 
         Y_UNIT_TEST(NotNullPgVirtualDoesNotBecomeWriteConstraint) {

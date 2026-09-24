@@ -26,7 +26,12 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
 
+#include <optional>
+
 namespace NKikimr::NReplication::NController {
+
+THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(
+    ui64 writeTxId, const TVector<TString>& tables);
 
 class TController
     : public TActor<TController>
@@ -47,6 +52,51 @@ public:
 
 private:
     using Schema = TControllerSchema;
+
+    enum class ESchemaBarrierPhase: ui8 {
+        Collecting = 1,
+        Altering = 2,
+        Applied = 3,
+        Error = 4,
+        FlushingTarget = 5,
+        Verifying = 6,
+    };
+
+    struct TSchemaBarrier {
+        ESchemaBarrierPhase Phase = ESchemaBarrierPhase::Collecting;
+        NKikimrReplication::TSchemaChange Schema;
+        THashSet<TWorkerId> ExpectedWorkers;
+        THashSet<TWorkerId> ReportedWorkers;
+        THashSet<TWorkerId> AppliedWorkers;
+        THashSet<TWorkerId> CompletedWorkers;
+        THashMap<TWorkerId, ui64> WorkerOffsets;
+        ui64 DstAlterTxId = 0;
+
+        // These IDs remain in AssignedTxIds after their target-only commits.
+        // The next ordinary global commit retires them across all targets.
+        TVector<ui64> TargetFlushTxIds;
+        size_t NextTargetFlushTxId = 0;
+
+        bool IsDestinationSchemaReady() const {
+            return Phase == ESchemaBarrierPhase::Verifying || Phase == ESchemaBarrierPhase::Applied;
+        }
+
+        bool AreAllWorkersCompleted() const {
+            return CompletedWorkers.size() == ExpectedWorkers.size();
+        }
+
+        // Applied and Error are terminal phases; earlier phases may still
+        // need a global heartbeat quorum, even before DDL starts.
+        bool IsInProgress() const {
+            return Phase != ESchemaBarrierPhase::Applied && Phase != ESchemaBarrierPhase::Error;
+        }
+
+        // Lifecycle changes also wait for the worker handshake after Applied.
+        bool IsActive() const {
+            return IsInProgress()
+                || (Phase == ESchemaBarrierPhase::Applied && !AreAllWorkersCompleted());
+        }
+    };
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -93,6 +143,9 @@ private:
     void Handle(TEvPrivate::TEvProcessQueues::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvResumeDeferredAlter::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx);
@@ -104,6 +157,7 @@ private:
     void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
@@ -117,6 +171,9 @@ private:
     bool IsValidWorker(const TWorkerId& id) const;
     TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
+    void ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id);
+    void SendSchemaChangeResult(const TWorkerId& id, const NKikimrReplication::TSchemaChange& schema,
+        ui64 offset, bool applied, bool completed, const TActorContext& ctx);
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
@@ -151,6 +208,10 @@ private:
     class TTxRunWorker;
     class TTxRemoveWorker;
     class TTxCompleteWorkerSet;
+    class TTxSchemaChangeReport;
+    class TTxSchemaChangeDstAlterTxId;
+    class TTxSchemaChangeDstAlterResult;
+    class TTxResumeDeferredAlter;
 
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
@@ -177,6 +238,20 @@ private:
     void RunTxRunWorker(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
     void RunTxRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     void RunTxCompleteWorkerSet(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
+    void RunTxSchemaChangeReport(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx);
+    void RunTxSchemaChangeDstAlterTxId(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx);
+    void RunTxSchemaChangeDstAlterResult(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxResumeDeferredAlter(TEvPrivate::TEvResumeDeferredAlter::TPtr& ev, const TActorContext& ctx);
+
+    void StartSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    void StopSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    void StartSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    void StopSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key);
+    bool HasActiveSchemaBarrier(ui64 replicationId) const;
+    bool HasFreshHeartbeatQuorum(const TSchemaBarrier& barrier) const;
+    bool HasPendingTargetFlushTxId(const TSchemaBarrier& barrier) const;
+    bool BlocksGlobalCommit(const TSchemaBarrier& barrier) const;
+    void AdvanceVerifyingSchemaBarriers(NIceDb::TNiceDb& db);
 
     // other
     template <typename T>
@@ -215,6 +290,9 @@ private:
     THashMap<ui32, TSessionInfo> Sessions;
     THashMap<TWorkerId, TWorkerInfo> Workers;
     THashSet<std::pair<ui64, ui64>> CompleteWorkerSets;
+    TMap<std::pair<ui64, ui64>, TSchemaBarrier> SchemaBarriers;
+    THashMap<std::pair<ui64, ui64>, TActorId> SchemaChangeDstAlterers;
+    THashSet<ui64> DeferredAlters;
     THashSet<TWorkerId> BootQueue;
     THashSet<std::pair<TWorkerId, ui32>> StopQueue;
     THashSet<TWorkerId> RemoveQueue;
@@ -241,6 +319,8 @@ private:
     THashMap<TWorkerId, TRowVersion> PendingHeartbeats;
     bool ProcessHeartbeatsInFlight = false;
     ui64 CommittingTxId = 0;
+    THashMap<ui64, std::pair<ui64, ui64>> SchemaTargetFlushes;
+    std::optional<std::pair<ui64, ui64>> ActiveSchemaTargetFlush;
 
 }; // TController
 

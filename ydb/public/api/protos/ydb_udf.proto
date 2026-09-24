@@ -36,6 +36,9 @@ enum WriteMode {
 }
 
 message ModuleInfo {
+    reserved 7, 8, 10;
+    reserved "compile_status", "compile_error", "compile_finished_at";
+
     string name = 1;
     ModuleType module_type = 2;
     ModuleKind module_kind = 11;
@@ -43,18 +46,15 @@ message ModuleInfo {
     string md5 = 4;
     uint64 size = 5;
     uint64 version = 6;
-    // Legacy / best-effort global column from modules (list).
-    // Authoritative AOT readiness is per-cpu_spec in DescribeModule.platforms.
-    CompileStatus compile_status = 7;
-    string compile_error = 8;
     google.protobuf.Timestamp created_at = 9;
-    google.protobuf.Timestamp compile_finished_at = 10;
 }
 
 message PlatformCompileStatus {
     string cpu_spec = 1;
     CompileStatus status = 2;
     string compile_error = 3;
+    google.protobuf.Timestamp compile_started_at = 4;
+    google.protobuf.Timestamp compile_finished_at = 5;
 }
 
 // Params for upload (no body — bytes go in subsequent stream chunks).
@@ -93,11 +93,13 @@ message UploadModuleResponse {
 }
 
 message UploadModuleResult {
+    reserved 5;
+    reserved "compile_status";
+
     string name = 1;
     string uid = 2;
     string md5 = 3;
     uint64 size = 4;
-    CompileStatus compile_status = 5;  // always PENDING after upload (legacy column)
     bool replaced_existing = 6;
 }
 
@@ -117,10 +119,12 @@ message DeleteModuleResult {
 }
 
 message ListModulesRequest {
+    reserved 3;
+    reserved "status_filter";
+
     Ydb.Operations.OperationParams operation_params = 1;
     ModuleType type_filter = 2;
     ModuleKind kind_filter = 6;
-    CompileStatus status_filter = 3;
     uint32 page_size = 4;
     string page_token = 5;
 }

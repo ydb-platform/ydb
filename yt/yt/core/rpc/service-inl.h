@@ -53,6 +53,20 @@ void ThrowUnsupportedClientFeature(int featureId, TStringBuf featureName);
 
 } // namespace NDetail
 
+inline auto IServiceContext::AnnotateRequest(bool flush)
+{
+    return NLogging::TLoggingTagListBuilderGuard(
+        GetRequestAnnotations(),
+        [this, flush] {
+            SetRawRequestInfo(std::string(), /*incremental*/ !flush);
+        });
+}
+
+inline auto IServiceContext::AnnotateResponse()
+{
+    return NLogging::TLoggingTagListBuilderGuard(GetResponseAnnotations());
+}
+
 template <class E>
 bool IServiceContext::IsClientFeatureSupported(E featureId) const
 {

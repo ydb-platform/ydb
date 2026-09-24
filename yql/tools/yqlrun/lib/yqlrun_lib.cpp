@@ -93,11 +93,14 @@ TYqlRunTool::TYqlRunTool()
                 });
             });
         opts.AddLongOption("tmp-dir", "Directory for temporary tables").RequiredArgument("DIR").StoreResult(&TmpDir_);
+        InitSparkSettings(SparkSettings_);
+        AddSparkOptions(opts, SparkSettings_, /*withSyntax=*/true);
     });
 
     GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
         Y_UNUSED(res);
-
+        ValidateSparkSettings(SparkSettings_);
+        ApplySparkSettings(GetRunOptions(), SparkSettings_);
         if (GetRunOptions().GatewaysConfig) {
             auto ytConfig = GetRunOptions().GatewaysConfig->GetYt();
             FillClusterMapping(ytConfig, TString{YtProviderName});
@@ -115,6 +118,13 @@ TYqlRunTool::TYqlRunTool()
     });
 
     SetPeepholePipelineConfigurator(&PEEPHOLE_CONFIG_INSTANCE);
+}
+
+int TYqlRunTool::DoRun(TProgramFactory& factory) {
+    NSQLTranslation::TTranslatorsRegistry translatorsRegistry;
+    AddSparkTranslator(translatorsRegistry, SparkSettings_);
+    factory.SetTranslatorsRegistry(std::move(translatorsRegistry));
+    return TFacadeRunner::DoRun(factory);
 }
 
 IYtGateway::TPtr TYqlRunTool::CreateYtGateway() {

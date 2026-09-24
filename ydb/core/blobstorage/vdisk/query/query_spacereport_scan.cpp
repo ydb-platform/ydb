@@ -28,6 +28,7 @@ namespace {
         FreeChunkReserveBytes += other.FreeChunkReserveBytes;
         LockedOrQuarantinedBytes += other.LockedOrQuarantinedBytes;
         UnclassifiedBytes += other.UnclassifiedBytes;
+        FreeStripeBytes += other.FreeStripeBytes;
         return *this;
     }
 
@@ -45,7 +46,8 @@ namespace {
             + ChunkTailBytes
             + FreeChunkReserveBytes
             + LockedOrQuarantinedBytes
-            + UnclassifiedBytes;
+            + UnclassifiedBytes
+            + FreeStripeBytes;
     }
 
     void AddClassifiedHugeBlob(TSpaceBreakdown& breakdown, const TClassifiedHugeBlob& blob) {
@@ -89,6 +91,7 @@ namespace {
             bool allowKeepFlags,
             bool allowGarbageCollection,
             size_t maxHugeRefsPerKey,
+            ui32 appendBlockSize,
             const THugeBlobCtx* hugeBlobCtx,
             ui32 minHugeBlobInBytes)
         : GType(gtype)
@@ -96,6 +99,7 @@ namespace {
         , AllowKeepFlags(allowKeepFlags)
         , AllowGarbageCollection(allowGarbageCollection)
         , MaxHugeRefsPerKey(maxHugeRefsPerKey)
+        , AppendBlockSize(appendBlockSize)
         , HugeBlobCtx(hugeBlobCtx)
         , MinHugeBlobInBytes(minHugeBlobInBytes)
         , IndexMerger(gtype)
@@ -305,7 +309,7 @@ namespace {
         MergeIndexFromSegment(memRec, outbound, key, circaLsn, sst);
         BaseMetadataBytes += sizeof(TKeyLogoBlob) + sizeof(TMemRecLogoBlob);
         ++Conclusion.PhysicalSstRecords;
-        Conclusion.PhysicalSsts.AddIfLastKey<TKeyLogoBlob, TMemRecLogoBlob>(key, sst);
+        Conclusion.PhysicalSsts.AddIfLastKey<TKeyLogoBlob, TMemRecLogoBlob>(key, sst, AppendBlockSize);
 
         const TBlobType::EType type = memRec.GetType();
         if (type == TBlobType::MemBlob || !memRec.HasData()) {

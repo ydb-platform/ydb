@@ -8,6 +8,7 @@ PY_SRCS(
     cluster_templates_ui.py
     cluster_config.py
     cluster_config_ui.py
+    cluster_deployment.py
     common.py
     config.py
     distributed_sessions.py

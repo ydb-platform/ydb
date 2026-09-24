@@ -4123,7 +4123,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM(
         "CompactGroupBy",
         CompactGroupBy,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/true),
     PAIRED_TABLE_ELEM(
         "DirectRowDependsOn",
         DirectRowDependsOn,

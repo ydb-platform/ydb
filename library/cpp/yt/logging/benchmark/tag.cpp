@@ -4,9 +4,8 @@
 #include <library/cpp/yt/logging/tagged_payload.h>
 
 #include <library/cpp/yt/string/format.h>
-#include <library/cpp/yt/string/string_builder.h>
-
 #include <library/cpp/yt/string/guid.h>
+#include <library/cpp/yt/string/string_builder.h>
 
 #include <library/cpp/yt/misc/guid.h>
 
@@ -35,13 +34,13 @@ public:
     {
         TStringBuilder builder;
         FormatValue(&builder, value, "v"_sb);
-        auto value_ = builder.GetBuffer();
+        auto formattedValue = builder.GetBuffer();
 
         auto keySize = static_cast<ui32>(key.size());
-        auto valueSize = static_cast<ui32>(value_.size());
+        auto valueSize = static_cast<ui32>(formattedValue.size());
         auto& buffer = Payload_.Underlying();
         auto offset = buffer.size();
-        ResizeUninitialized(buffer, offset + 2 * sizeof(ui32) + key.size() + value_.size());
+        ResizeUninitialized(buffer, offset + 2 * sizeof(ui32) + key.size() + formattedValue.size());
 
         char* ptr = buffer.data() + offset;
         auto write = [&] (const void* data, size_t size) {
@@ -51,7 +50,7 @@ public:
         write(&keySize, sizeof(keySize));
         write(key.data(), key.size());
         write(&valueSize, sizeof(valueSize));
-        write(value_.data(), value_.size());
+        write(formattedValue.data(), formattedValue.size());
         return *this;
     }
 

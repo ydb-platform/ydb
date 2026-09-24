@@ -490,12 +490,14 @@ runs:
             --chat-id '${{ inputs.telegram_alert_chat }}' \
             --memory-threshold 97 || true
 
-          # convert to chromium trace
+          # convert to chromium trace (optional; dashboard reads evlog directly)
           # seems analyze-make don't have simple "output" parameter, so change cwd
           ya_dir=$(pwd)
-          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
+          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl) || true
 
           # build tests resource dashboard with metrics overlay (CPU/RAM/disk)
+          # never fail the job: test results matter more than the dashboard
+          set +e
           TESTS_METRICS_DIR="$CURRENT_PUBLIC_DIR/tests_metrics"
           mkdir -p "$TESTS_METRICS_DIR"
           DASHBOARD_ARGS=()
@@ -506,7 +508,7 @@ runs:
           for i in $(seq 1 $RETRY); do TRY_LINKS="${TRY_LINKS}try_$i/tests_metrics/dashboard.html,"; done
           TRY_LINKS="${TRY_LINKS%,}"
           DASHBOARD_OK=0
-          if ! python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \
+          if python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \
             --report "$CURRENT_REPORT" \
             --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --top-n 500 \
@@ -524,17 +526,18 @@ runs:
             --repo "${GITHUB_REPOSITORY}" \
             --repo-root . \
             "${DASHBOARD_ARGS[@]}" > "$TESTS_METRICS_DIR/dashboard_build.log" 2>&1; then
-            mv "$TESTS_METRICS_DIR/dashboard_build.log" "$TESTS_METRICS_DIR/dashboard_error.log"
-            echo "Dashboard generation failed (see dashboard_error.log in artifacts)"
-          else
             rm -f "$TESTS_METRICS_DIR/dashboard_build.log"
             DASHBOARD_OK=1
+          else
+            mv "$TESTS_METRICS_DIR/dashboard_build.log" "$TESTS_METRICS_DIR/dashboard_error.log"
+            echo "Dashboard generation failed (see dashboard_error.log in artifacts)"
           fi
-          cp -f "$RESOURCES_JSONL" "$TESTS_METRICS_DIR/resources_monitor.jsonl" 2>/dev/null || true
-          cp -f ram_usage.txt "$TESTS_METRICS_DIR/ram_usage_legacy.txt" 2>/dev/null || true
+          cp -f "$RESOURCES_JSONL" "$TESTS_METRICS_DIR/resources_monitor.jsonl" 2>/dev/null
+          cp -f ram_usage.txt "$TESTS_METRICS_DIR/ram_usage_legacy.txt" 2>/dev/null
           if [ "$DASHBOARD_OK" -eq 1 ]; then
             echo "21 [Dashboard try $RETRY](${CURRENT_PUBLIC_DIR_URL}/tests_metrics/dashboard.html)" >> $SUMMARY_LINKS
           fi
+          set -e
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true

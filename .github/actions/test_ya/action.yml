@@ -142,6 +142,10 @@ runs:
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml
 
+    - name: Dashboard unit tests
+      shell: bash
+      run: python3 -m unittest discover -s .github/scripts/utils/tests -p 'test_*.py'
+
     - name: Resolve analytics job name
       shell: bash
       env:

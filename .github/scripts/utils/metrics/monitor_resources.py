@@ -234,11 +234,14 @@ def run_monitor(
     prev_disk = read_diskstats()
     seed_snapshot = read_process_snapshot()
     prev_pid_cpu, prev_pid_io = seed_ya_counters(seed_snapshot, find_ya_process_tree(seed_snapshot))
-    meta_added = False
     prev_ts = time.time()
+    cpu_cores = get_cpu_cores()
+    ram_total_gb = round(get_ram_total_gb(), 2)
+    output_jsonl.parent.mkdir(parents=True, exist_ok=True)
+    output_jsonl.write_text("", encoding="utf-8")
     time.sleep(interval_sec)
 
-    with open(output_jsonl, "w") as jf:
+    with open(output_jsonl, "a") as jf:
         while True:
             if stop_file and stop_file.exists():
                 break
@@ -324,10 +327,8 @@ def run_monitor(
                 "disk_ya_read_mbps": round(disk_ya_read_mbps, 2),
                 "disk_ya_write_mbps": round(disk_ya_write_mbps, 2),
             }
-            if not meta_added:
-                record["cpu_cores"] = get_cpu_cores()
-                record["ram_total_gb"] = round(get_ram_total_gb(), 2)
-                meta_added = True
+            record["cpu_cores"] = cpu_cores
+            record["ram_total_gb"] = ram_total_gb
             jf.write(json.dumps(record) + "\n")
             jf.flush()
 

@@ -55,7 +55,7 @@ def load_report_tests(path: Path) -> list[dict[str, Any]]:
         wall = metrics.get("wall_time", 0)
         if start is None:
             continue
-        path_str = r.get("path", "") + " " + r.get("subtest_name", "")
+        path_str = (r.get("path") or "") + " " + (r.get("subtest_name") or "")
         tests.append({
             "path": path_str.strip(),
             "start": float(start),

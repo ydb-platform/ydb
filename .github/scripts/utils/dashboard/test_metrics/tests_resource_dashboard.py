@@ -16,6 +16,7 @@ import csv
 import json
 import re
 import sys
+import zlib
 from datetime import datetime, timezone
 from collections import defaultdict
 from pathlib import Path
@@ -116,17 +117,11 @@ def _is_dependency_sole_chunk_run(
     if run.get("chunk_group"):
         return False
     raw = str(run.get("raw_name", "") or "").strip().lower()
-    if raw == "sole chunk" or CHUNK_SOLE_RE.search(raw):
-        return True
-    # Report run keyed as (suite, None, 0) without chunk_group.
-    try:
-        return int(run.get("chunk", -1)) == 0
-    except (TypeError, ValueError):
-        return False
+    return raw == "sole chunk" or bool(CHUNK_SOLE_RE.search(raw))
 
 
 def load_json_or_jsonl(path: Path) -> list[dict[str, Any]]:
-    text = path.read_text(encoding="utf-8", errors="replace").strip()
+    text = path.read_text(encoding="utf-8-sig", errors="replace").strip()
     if not text:
         return []
     if text[0] == "[":
@@ -962,7 +957,7 @@ def parse_report_runs_from_chunks(
         if start_sec is None or end_sec is None or end_sec <= start_sec:
             continue
         key = f"{suite_raw}:{chunk_group or ''}:{chunk_idx}"
-        tid = abs(hash(key)) % 100_000
+        tid = zlib.crc32(key.encode())
         raw_name = str(meta.get("subtest_name") or f"{chunk_group or ''} chunk{chunk_idx}")
         runs.append(
             {
@@ -1364,6 +1359,17 @@ def main() -> None:
         raise SystemExit("Invalid args: --out-trace and --out-html must be different files")
     if out_cpu_sugg_r and out_trace_r == out_cpu_sugg_r:
         raise SystemExit("Invalid args: --out-trace and --out-cpu-suggestions must be different files")
+    out_csv_r = args.out_csv.resolve() if args.out_csv else None
+    protected = {report_r, evlog_r}
+    for label, path in (
+        ("--out-trace", out_trace_r),
+        ("--out-stats", out_stats_r),
+        ("--out-html", out_html_r),
+        ("--out-cpu-suggestions", out_cpu_sugg_r),
+        ("--out-csv", out_csv_r),
+    ):
+        if path in protected:
+            raise SystemExit(f"Invalid args: {label} must not overwrite --report or --evlog")
 
     report_obj = json.loads(args.report.read_text(encoding="utf-8", errors="replace"))
     effective_sanitizer = args.sanitizer or _infer_sanitizer_from_report(report_obj, args.report)
@@ -1585,11 +1591,13 @@ def main() -> None:
                 path_match = '.path == $path or (.path | startswith($path + "/"))'
                 # When chunk_group is set, restrict to that group (e.g. only "[test_base.py 0/10] chunk" not all 0/10)
                 group_cond = '(if $group != "" then (.subtest_name | contains($group)) else true end)'
+                report_jq = _shell_escape(args.report.name)
+                evlog_jq = _shell_escape(args.evlog.name)
                 if chunk_idx == 0:
-                    jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | ascii_downcase | test("^\\\\s*sole\\\\s+chunk\\\\s*$")) or ((.subtest_name | test("\\\\b0/")) and {group_cond})))]\' report.json'
+                    jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | ascii_downcase | test("^\\\\s*sole\\\\s+chunk\\\\s*$")) or ((.subtest_name | test("\\\\b0/")) and {group_cond})))]\' {report_jq}'
                 else:
-                    jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | test("\\\\b{chunk_idx}/")) and {group_cond}))]\' report.json'
-                jq_evlog = f'jq -c --arg path "{path_esc}" \'select(.value.name != null and (.value.name | contains($path)))\' evlog.jsonl'
+                    jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | test("\\\\b{chunk_idx}/")) and {group_cond}))]\' {report_jq}'
+                jq_evlog = f'jq -c --arg path "{path_esc}" \'select(.value.name != null and (.value.name | contains($path)))\' {evlog_jq}'
                 tests_in_chunk_val = tests_per_chunk.get((suite_raw, chunk_grp or None, chunk_idx), "")
                 w.writerow([
                     suite_raw,

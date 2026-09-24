@@ -688,7 +688,7 @@ def build_cpu_recommendations(
             if overloaded_chunk_examples:
                 recommended_split_tooltip += f" Examples: {', '.join(overloaded_chunk_examples[:2])}."
             if single_test_blocks_split:
-                if single_test_contention_suspected:
+                if single_test_contention_suspected and ya_cpu is not None and cpu_for_contention is not None:
                     recommended_split_tooltip += (
                         f" WARNING: a single test runs ~{max_single_test_in_overloaded_sec / 60:.0f} min "
                         f"(≥ budget) — SPLIT_FACTOR cannot help. But the runner was CPU-saturated "

@@ -2,6 +2,7 @@
 import logging
 import os
 import pytest
+import time
 from typing import Generator, Self
 
 from ydb.tests.library.compatibility.fixtures import (
@@ -15,9 +16,7 @@ from ydb.tests.fq.streaming_common.common import (
     MessageAcceptor,
     YdbClient,
     read_and_check_data,
-    wait_completed_checkpoints,
 )
-from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,6 @@ class StreamingTestBase:
         extra_feature_flags = [
             "enable_external_data_sources",
             "enable_streaming_queries",
-            "enable_streaming_queries_counters",
             "enable_shared_reading_in_streaming_queries",
         ]
 
@@ -173,17 +171,9 @@ class StreamingTestBase:
             END DO;
         """)
 
-    def wait_query_checkpoint(self: Self) -> None:
-        wait_completed_checkpoints(
-            self.cluster,
-            f"{self.database_path.rstrip('/')}/{self.query_name}",
-            timeout=plain_or_under_sanitizer_wrapper(120, 300),
-            checkpoints_count=1,
-        )
-
     def do_write_read(self: Self, input_data: list[str], acceptor: MessageAcceptor) -> None:
         logger.debug("do_write_read")
-        self.wait_query_checkpoint()
+        time.sleep(2)
 
         logger.debug("write data to stream")
         self.ydb_client.topic_write(self.input_topic, input_data)

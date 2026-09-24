@@ -28,6 +28,55 @@ static NOlap::TUnifiedBlobId MakeDsBlobId(ui32 dsGroup, ui64 tabletId, ui32 gen,
     return NOlap::TUnifiedBlobId(dsGroup, logo);
 }
 
+// Builds a TIndexInfo with a MAX index; inheritPortionStorage controls where the index blob lives.
+static NOlap::TIndexInfo MakeMaxIndexInfo(const bool inheritPortionStorage) {
+    static constexpr ui32 kPkColId = 1;
+    static constexpr ui32 kMaxIndexId = 100;
+    NKikimrSchemeOp::TColumnTableSchema proto;
+    *proto.MutableColumns()->Add() = NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(kPkColId);
+    proto.AddKeyColumnNames("pk");
+    proto.SetVersion(1);
+    *proto.AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(kMaxIndexId, "pk_max",
+                                                                   NOlap::IStoragesManager::DefaultStorageId, inheritPortionStorage, kPkColId))
+                              .SerializeToProto();
+    auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();
+    auto result = NOlap::TIndexInfo::BuildFromProto(1, proto, NOlap::TTestStoragesManager::GetInstance(), cache);
+    AFL_VERIFY(result);
+    return std::move(*result);
+}
+
+// Builds a compacted portion assigned to the given tier.
+static NOlap::TPortionInfo::TPtr MakeTieredPortion(
+    const NOlap::TInternalPathId pathId, const ui64 portionId, const TString& tierName, const NOlap::TIndexInfo& indexInfo) {
+    TString serialized = NArrow::SerializeBatchNoCompression(NOlap::NTest::MakePortionTestPKBatch(10, 19));
+    NKikimrTxColumnShard::TIndexPortionMeta metaProto;
+    metaProto.SetIsCompacted(true);
+    metaProto.SetPrimaryKeyBorders(serialized);
+    metaProto.SetTierName(tierName);
+    metaProto.MutableRecordSnapshotMin()->SetPlanStep(1);
+    metaProto.MutableRecordSnapshotMin()->SetTxId(1);
+    metaProto.MutableRecordSnapshotMax()->SetPlanStep(1);
+    metaProto.MutableRecordSnapshotMax()->SetTxId(1);
+    metaProto.SetDeletionsCount(0);
+    metaProto.SetCompactionLevel(0);
+    metaProto.SetRecordsCount(10);
+    metaProto.SetColumnRawBytes(100);
+    metaProto.SetColumnBlobBytes(100);
+    metaProto.SetIndexRawBytes(0);
+    metaProto.SetIndexBlobBytes(0);
+    metaProto.SetNumSlices(1);
+    metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetPlanStep(1);
+    metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetTxId(1);
+    NOlap::TPortionMetaConstructor metaConstructor;
+    NOlap::TFakeGroupSelector groupSelector;
+    AFL_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
+    NOlap::TCompactedPortionInfoConstructor constructor(pathId, portionId);
+    constructor.SetSchemaVersion(1);
+    constructor.SetAppearanceSnapshot(NOlap::TSnapshot(1, 1));
+    constructor.MutableMeta() = metaConstructor;
+    return constructor.Build();
+}
+
 // Exposes the protected test hooks of the production class to this suite only.
 class TMoveDataActualizerTestable: public NOlap::NActualizer::TMoveDataActualizer {
 public:
@@ -512,68 +561,18 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
     }
     // Tiered portions are admitted iff at least one entity resolves to DefaultStorageId.
     Y_UNIT_TEST(AdmissionAdmitsTieredPortionWithDefaultStorageEntity) {
-        static constexpr ui32 kPkColId = 1;
-        static constexpr ui32 kMaxIndexId = 100;
         const auto pathId = NOlap::TInternalPathId::FromRawValue(1);
         const THashSet<ui32> targetGroups = { 100 };
         const TInstant start = TInstant::Seconds(1000);
 
-        // Builds a TIndexInfo with a MAX index; inheritPortionStorage controls where the index blob lives.
-        auto makeIndexInfo = [&](const bool inheritPortionStorage) {
-            NKikimrSchemeOp::TColumnTableSchema proto;
-            *proto.MutableColumns()->Add() =
-                NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(kPkColId);
-            proto.AddKeyColumnNames("pk");
-            proto.SetVersion(1);
-            *proto.AddIndexes() =
-                NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(kMaxIndexId, "pk_max",
-                                                         NOlap::IStoragesManager::DefaultStorageId, inheritPortionStorage, kPkColId))
-                    .SerializeToProto();
-            auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();
-            auto result = NOlap::TIndexInfo::BuildFromProto(1, proto, NOlap::TTestStoragesManager::GetInstance(), cache);
-            AFL_VERIFY(result);
-            return std::move(*result);
-        };
-
-        // Builds a compacted portion assigned to the given tier.
-        auto makeTieredPortion = [&](const ui64 portionId, const TString& tierName, const NOlap::TIndexInfo& indexInfo) {
-            TString serialized = NArrow::SerializeBatchNoCompression(NOlap::NTest::MakePortionTestPKBatch(10, 19));
-            NKikimrTxColumnShard::TIndexPortionMeta metaProto;
-            metaProto.SetIsCompacted(true);
-            metaProto.SetPrimaryKeyBorders(serialized);
-            metaProto.SetTierName(tierName);
-            metaProto.MutableRecordSnapshotMin()->SetPlanStep(1);
-            metaProto.MutableRecordSnapshotMin()->SetTxId(1);
-            metaProto.MutableRecordSnapshotMax()->SetPlanStep(1);
-            metaProto.MutableRecordSnapshotMax()->SetTxId(1);
-            metaProto.SetDeletionsCount(0);
-            metaProto.SetCompactionLevel(0);
-            metaProto.SetRecordsCount(10);
-            metaProto.SetColumnRawBytes(100);
-            metaProto.SetColumnBlobBytes(100);
-            metaProto.SetIndexRawBytes(0);
-            metaProto.SetIndexBlobBytes(0);
-            metaProto.SetNumSlices(1);
-            metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetPlanStep(1);
-            metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetTxId(1);
-            NOlap::TPortionMetaConstructor metaConstructor;
-            NOlap::TFakeGroupSelector groupSelector;
-            AFL_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
-            NOlap::TCompactedPortionInfoConstructor constructor(pathId, portionId);
-            constructor.SetSchemaVersion(1);
-            constructor.SetAppearanceSnapshot(NOlap::TSnapshot(1, 1));
-            constructor.MutableMeta() = metaConstructor;
-            return constructor.Build();
-        };
-
         // Case 1: tiered portion, InheritPortionStorage=false — index stays in BlobStorage — must be admitted.
         {
-            auto indexInfo = makeIndexInfo(false);
+            auto indexInfo = MakeMaxIndexInfo(false);
             auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();
             NOlap::TVersionedIndex vi;
-            vi.AddIndex(NOlap::TSnapshot(1, 1), cache->UpsertIndexInfo(makeIndexInfo(false)));
+            vi.AddIndex(NOlap::TSnapshot(1, 1), cache->UpsertIndexInfo(MakeMaxIndexInfo(false)));
             TMoveDataActualizerTestable actualizer(targetGroups, vi);
-            const auto portion = makeTieredPortion(1, "tier1", indexInfo);
+            const auto portion = MakeTieredPortion(pathId, 1, "tier1", indexInfo);
             THashMap<ui64, NOlap::TPortionInfo::TPtr> portions = { { 1, portion } };
             actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, portions), {});
             UNIT_ASSERT_C(
@@ -582,12 +581,12 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         // Case 2: tiered portion, InheritPortionStorage=true — all entities in tier storage — must be skipped.
         {
-            auto indexInfo = makeIndexInfo(true);
+            auto indexInfo = MakeMaxIndexInfo(true);
             auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();
             NOlap::TVersionedIndex vi;
-            vi.AddIndex(NOlap::TSnapshot(1, 1), cache->UpsertIndexInfo(makeIndexInfo(true)));
+            vi.AddIndex(NOlap::TSnapshot(1, 1), cache->UpsertIndexInfo(MakeMaxIndexInfo(true)));
             TMoveDataActualizerTestable actualizer(targetGroups, vi);
-            const auto portion = makeTieredPortion(2, "tier1", indexInfo);
+            const auto portion = MakeTieredPortion(pathId, 2, "tier1", indexInfo);
             THashMap<ui64, NOlap::TPortionInfo::TPtr> portions = { { 2, portion } };
             actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, portions), {});
             UNIT_ASSERT_C(
@@ -605,6 +604,31 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, portions), {});
             UNIT_ASSERT_C(actualizer.IsInPendingPortionIds(3), "default-tier portion must be admitted");
         }
+    }
+
+    Y_UNIT_TEST(AbortedMoveReleasesAPortionThatStoppedQualifying) {
+        static constexpr ui64 PortionId = 11;
+        const auto pathId = NOlap::TInternalPathId::FromRawValue(1);
+        const THashSet<ui32> targetGroups = { 100 };
+        const TInstant start = TInstant::Seconds(1000);
+
+        auto indexInfo = MakeMaxIndexInfo(true);
+        auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();
+        NOlap::TVersionedIndex vi;
+        vi.AddIndex(NOlap::TSnapshot(1, 1), cache->UpsertIndexInfo(MakeMaxIndexInfo(true)));
+        TMoveDataActualizerTestable actualizer(targetGroups, vi);
+
+        actualizer.AddToInitialAndPendingForTest(PortionId);
+        actualizer.ConfirmPortionForTest(PortionId);
+        actualizer.SimulateTaskSubmissionForTest(PortionId);
+        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 1, "a submitted portion must hold the response back");
+
+        // The task aborted and the engine returned the portion, but it no longer has an entity in default storage.
+        const auto portion = MakeTieredPortion(pathId, PortionId, "tier1", indexInfo);
+        const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
+        actualizer.AddPortion(portion, NOlap::NActualizer::TAddExternalContext(start, noPortions));
+        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 0,
+            "a returned portion that stopped qualifying must leave the queues, otherwise MoveDataResponse is never sent");
     }
 
 }   // Y_UNIT_TEST_SUITE

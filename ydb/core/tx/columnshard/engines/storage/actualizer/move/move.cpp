@@ -89,6 +89,8 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
     // A seeded uncommitted portion has committed, so from here on it moves like any other.
     UncommittedPortionIds.erase(portionId);
     UncommittedOnTarget.erase(portionId);
+    // An aborted task returns the portion here; leaving it in flight past any check below freezes the gate.
+    InFlightPortionIds.erase(portionId);
     if (!InitialPortionIds.contains(portionId)) {
         if (context.GetNow() >= AdmissionDeadline) {
             return;
@@ -101,7 +103,6 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
     if (!HasEntityInDefaultStorage(info, VersionedIndex)) {
         return;
     }
-    InFlightPortionIds.erase(portionId);
     PendingPortionIds.emplace(portionId);
 }
 

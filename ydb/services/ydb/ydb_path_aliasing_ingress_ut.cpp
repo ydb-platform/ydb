@@ -46,6 +46,7 @@ namespace NKikimr::NGRpcService {
             AddRule(config, "/discovery-boundary", "/Root/k");
             AddRule(config, "/volume-alias", "/Root/kfront/Volume");
             AddRule(config, "/volume-inspect", "/Root/kfront/Volume");
+            AddRule(config, "/virtual/", "/Root");
             AddRule(config, "/Root/kfront/Volume", "/Root/kfront/Wrong");
             AddRule(config, "/Root/kfront", "/Root/missing");
             return config;
@@ -181,6 +182,7 @@ namespace NKikimr::NGRpcService {
 
             const auto expected = EndpointIdentities(list("/alias", "/discovery-alias"));
             UNIT_ASSERT(!expected.empty());
+            UNIT_ASSERT(EndpointIdentities(list("/virtual/kfront", "/virtual/kfront")) == expected);
             UNIT_ASSERT(EndpointIdentities(list("/alias", "/alias")) == expected);
             UNIT_ASSERT(EndpointIdentities(list("/alias/", "/discovery-alias/")) == expected);
 

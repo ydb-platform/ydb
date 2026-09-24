@@ -30,12 +30,15 @@ namespace NKikimr::NPathAliasing {
         size_t index = 0;
         for (const auto& rule : config.GetRules()) {
             ++index;
-            const TStringBuf src(rule.GetSrc());
+            TString src(rule.GetSrc());
             const TStringBuf dst(rule.GetDst());
             Y_ENSURE(src.StartsWith("/"), "resource_path_prefix_mapping rule " << index << ": src must be a nonempty absolute path");
             Y_ENSURE(dst.StartsWith("/"), "resource_path_prefix_mapping rule " << index << ": dst must be a nonempty absolute path");
 
-            impl->Rules.push_back({TString(src), TString(dst)});
+            while (src.size() > 1 && src.back() == '/') {
+                src.pop_back();
+            }
+            impl->Rules.push_back({std::move(src), TString(dst)});
         }
 
         Impl = std::move(impl);
@@ -50,7 +53,21 @@ namespace NKikimr::NPathAliasing {
             if (path.StartsWith(rule.Src)
                 && (rule.Src.EndsWith("/") || path.size() == rule.Src.size() || path[rule.Src.size()] == '/')) {
                 TString result(rule.Dst);
+                if (path.size() > rule.Src.size() && result.back() != '/' && path[rule.Src.size()] != '/') {
+                    result.push_back('/');
+                }
                 result.append(path.data() + rule.Src.size(), path.size() - rule.Src.size());
+                size_t write = 0;
+                for (size_t read = 0; read < result.size(); ++read) {
+                    const char c = result[read];
+                    if (c != '/' || write == 0 || result[write - 1] != '/') {
+                        result[write++] = c;
+                    }
+                }
+                if (write > 1 && result[write - 1] == '/') {
+                    --write;
+                }
+                result.resize(write);
                 return result;
             }
         }

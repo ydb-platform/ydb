@@ -3540,8 +3540,9 @@ message TUdfStoreConfig {
 // Local path-prefix aliases. Rules are ordered and take effect on node restart.
 message TPathRewriteConfig {
     message TRule {
-        // Nonempty absolute prefixes, matched literally at a path-component boundary.
-        // Replace Src with Dst verbatim; no slash trimming or normalization.
+        // Nonempty absolute prefixes; trailing Src slashes are ignored.
+        // First path-component match wins. Rewritten paths collapse repeated '/'
+        // and drop trailing '/' except for the root path.
         optional string Src = 1;
         optional string Dst = 2;
     }

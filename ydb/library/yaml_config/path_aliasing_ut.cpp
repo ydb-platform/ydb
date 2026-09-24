@@ -9,7 +9,7 @@
 namespace NKikimr::NYaml {
 
     Y_UNIT_TEST_SUITE(PathAliasingYamlConfig) {
-        Y_UNIT_TEST(ParsesOrderedPrefixesAndPreservesTrailingSlashes) {
+        Y_UNIT_TEST(ParsesOrderedPrefixesAndNormalizesMatchedPaths) {
             const auto config = Parse(R"(
 resource_path_prefix_mapping:
   rules:
@@ -28,11 +28,12 @@ resource_path_prefix_mapping:
 
             const NPathAliasing::TPathNormalizer normalizer(aliases);
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/table"), "/failover/kfront/table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront"), "/kfront");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/"), "/failover/kfront/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/tables/table/"), "/failover/kfront/tables/table/");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront"), "/failover/kfront");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/"), "/failover/kfront");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/tables/table/"), "/failover/kfront/tables/table");
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfrontend/table/"), "/kfrontend/table/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront//table///"), "/failover/kfront//table///");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfrontend//table///"), "/kfrontend//table///");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront//table///"), "/failover/kfront/table");
         }
 
         Y_UNIT_TEST(OmittedAndEmptyConfigurationDisableAliasing) {
@@ -40,6 +41,7 @@ resource_path_prefix_mapping:
                 const auto config = Parse(yaml, false);
                 const NPathAliasing::TPathNormalizer normalizer(config.GetResourcePathPrefixMapping());
                 UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront/table"), "/kfront/table");
+                UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/kfront//table///"), "/kfront//table///");
             }
         }
 
@@ -64,7 +66,9 @@ resource_path_prefix_mapping:
 )", false);
             const NPathAliasing::TPathNormalizer normalizer(config.GetResourcePathPrefixMapping());
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix"), "/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix/table"), "//table");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix/"), "/");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix/table"), "/table");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix//table///"), "/table");
         }
 
         Y_UNIT_TEST(RejectsMissingEmptyAndRelativePrefixes) {

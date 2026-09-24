@@ -12,7 +12,7 @@ from ydb.tests.olap.lib.tpcc_deviation import (
 )
 from ydb.tests.olap.lib.allure_utils import time_interval_str
 from ydb.tests.olap.lib.utils import get_external_param
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, TxMode
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, TxMode, ErrorArea
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.compaction import force_datashard_compact_legacy
@@ -215,7 +215,7 @@ class TpccSuiteBase(LoadSuiteBase):
         for signal, value in deviation.measurements.items():
             result.add_stat('test', signal, value)
         for error in deviation.errors:
-            result.add_error(error)
+            result.add_error(error, area=ErrorArea.PERFORMANCE)
         ResultsProcessor.upload_tpcc_results(stats.get('tpcc_json', {}), result.get_error_stats(), run_type, result.start_time)
         self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings, node_errors=node_errors, verify_errors=verify_errors)
 

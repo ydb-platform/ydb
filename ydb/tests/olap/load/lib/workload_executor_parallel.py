@@ -11,7 +11,7 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.remote_execution import (
     deploy_binaries_to_hosts,
 )
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, ErrorArea, ErrorPriority
 from ydb.tests.olap.lib.utils import get_external_param
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -700,7 +700,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
             except Exception as e:
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат
-                result.add_warning(f"Error getting nodes state: {e}")
+                result.add_warning(f"Error getting nodes state: {e}", area=ErrorArea.YDB_INFRA)
                 node_errors = []  # Устанавливаем пустой список если диагностика не удалась
 
             # Вычисляем время выполнения
@@ -756,7 +756,6 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
 
                 # Формируем списки ошибок для выгрузки
                 node_error_messages = []
-                workload_error_messages = []
 
                 # Собираем ошибки нод с подробностями
                 for node_error in node_errors:
@@ -771,10 +770,9 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                         node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
 
                 # Собираем workload ошибки (не связанные с нодами)
-                if result.errors:
-                    for err in result.errors:
-                        if "coredump" not in err.lower() and "oom" not in err.lower():
-                            workload_error_messages.append(err)
+                workload_error_messages = [
+                    str(e) for e in result.get_errors(ErrorPriority.ERROR) if e.area != ErrorArea.NODE_FAIL
+                ]
 
                 # Добавляем в статистику
                 result.add_stat(workload_name, "node_error_messages", node_error_messages)
@@ -785,11 +783,9 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                 result.add_stat(workload_name, "workload_errors", len(workload_error_messages) > 0)
 
                 # Собираем workload предупреждения (исключая node-специфичные)
-                workload_warning_messages = []
-                if result.warnings:
-                    for warn in result.warnings:
-                        if "coredump" not in warn.lower() and "oom" not in warn.lower():
-                            workload_warning_messages.append(warn)
+                workload_warning_messages = [
+                    str(e) for e in result.get_errors(ErrorPriority.WARNING) if e.area != ErrorArea.NODE_FAIL
+                ]
 
                 result.add_stat(workload_name, "workload_warning_messages", workload_warning_messages)
                 result.add_stat(workload_name, "workload_warnings", len(workload_warning_messages) > 0)

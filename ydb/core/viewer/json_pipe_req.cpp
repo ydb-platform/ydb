@@ -1,5 +1,6 @@
 #include "json_pipe_req.h"
 #include "log.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -168,22 +169,36 @@ void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data) {
 }
 
 void TViewerPipeClient::SetupTracing(const TString& handlerName) {
-    constexpr ui8 viewerTraceMaxVerbosity = TComponentTracingLevels::DynamicNodesOnly;
+    bool limitTraceVerbosity = true;
+    if (HasAppData()) {
+        if (const auto* appData = AppData(); appData->Icb) {
+            if (auto control = appData->Icb->ViewerControls.LimitTraceVerbosity.AtomicLoad()) {
+                limitTraceVerbosity = control->Get();
+            }
+        }
+    }
+
+    constexpr ui8 viewerTraceDefaultVerbosity = TComponentTracingLevels::DynamicNodesOnly;
+    const ui8 viewerTraceMaxVerbosity = limitTraceVerbosity
+        ? TComponentTracingLevels::DynamicNodesOnly
+        : NWilson::TTraceId::MAX_VERBOSITY;
 
     auto request = GetRequest();
-    NWilson::TTraceId traceId;
-    TString traceparent = request.GetHeader("traceparent");
-    if (traceparent) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, viewerTraceMaxVerbosity);
-    }
     TString wantTrace = request.GetHeader("X-Want-Trace");
     TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
     TString traceTTL = request.GetHeader("X-Trace-TTL");
+
+    ui8 verbosity = viewerTraceDefaultVerbosity;
+    if (traceVerbosity) {
+        verbosity = std::min(viewerTraceMaxVerbosity, FromStringWithDefault<ui8>(traceVerbosity, verbosity));
+    }
+
+    NWilson::TTraceId traceId;
+    TString traceparent = request.GetHeader("traceparent");
+    if (traceparent) {
+        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, verbosity);
+    }
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
-        ui8 verbosity = viewerTraceMaxVerbosity;
-        if (traceVerbosity) {
-            verbosity = std::min(viewerTraceMaxVerbosity, FromStringWithDefault<ui8>(traceVerbosity, verbosity));
-        }
         ui32 ttl = Max<ui32>();
         if (traceTTL) {
             ttl = FromStringWithDefault<ui32>(traceTTL, ttl);

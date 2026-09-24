@@ -20,6 +20,8 @@
 
 namespace NKikimr::NKqp {
 
+class TExecutionTrace;
+
 class TKqpPlanner {
 
     struct TRequestData {
@@ -51,6 +53,7 @@ public:
         const bool WithProgressStats;
         const TMaybe<NKikimrKqp::TRlPath>& RlPath;
         NWilson::TSpan& ExecuterSpan;
+        const TExecutionTrace* Trace = nullptr;
         TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
         const ui64 MkqlMemoryLimit;
@@ -68,6 +71,7 @@ public:
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
         const TActorId& CheckpointCoordinator;
         const bool EnableWatermarks;
+        TActorId StreamingQueryNodesManager;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -102,12 +106,13 @@ private:
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 
+    NYql::NDqProto::TDqTask* SerializeTaskForExecution(const TTask& task);
     std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializeRequest(const TRequestData& requestData);
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
     void LogMemoryStatistics(const TLogFunc& logFunc);
     void PrepareCheckpoints();
-    void SendReadyStateToCheckpointCoordinator();
+    void SendReadyState();
 
 private:
     const ui64 TxId;
@@ -123,6 +128,7 @@ private:
     THashSet<ui32> TrackingNodes;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
     NWilson::TSpan& ExecuterSpan;
+    const TExecutionTrace* Trace;
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
     ui64 LocalRunMemoryEst = 0;
     TVector<TTaskResourceEstimation> ResourceEstimations;
@@ -150,7 +156,8 @@ private:
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     TActorId CheckpointCoordinatorId;
     const bool EnableWatermarks;
-    bool CheckpointsReadyStateSent = false;
+    const TActorId StreamingQueryNodesManagerId;
+    bool ReadyStateSent = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
     THashMap<ui32, TActorId> ResultChannels;

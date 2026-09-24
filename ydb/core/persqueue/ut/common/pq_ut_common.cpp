@@ -184,6 +184,18 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
         ++version;
     }
 
+    // Повторять пару (planStep, txId) нельзя. Тот же TxId для новой конфигурации подхватит тело
+    // предыдущей транзакции, если она ещё не удалена: таблетка считает повторный пропоуз
+    // переотправкой. А тот же шаг таблетка уже запретила своим MinStep в ответе PREPARED
+    static ui64 nextTxId = 12345;
+    static ui64 nextPlanStep = 1;
+    if (txId == 0) {
+        txId = nextTxId++;
+    }
+    if (planStep == 0) {
+        planStep = nextPlanStep++;
+    }
+
     NKikimrPQ::TPQTabletConfig tabletConfig = MakePQTabletConfig(parameters, users, runtime, version);
 
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {

@@ -12,7 +12,7 @@ public:
     virtual void Close() = 0;
 
     virtual void Send(const TInstant& createTimestamp,
-                      std::optional<NYdb::NTable::TTransaction> transaction) = 0;
+                      NYdb::NTable::TTransaction* transaction) = 0;
 
     virtual ui64 GetCurrentMessageId() const = 0;
 

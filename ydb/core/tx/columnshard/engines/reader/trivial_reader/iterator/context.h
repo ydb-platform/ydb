@@ -35,8 +35,7 @@ private:
     TMutex Mutex;
     std::array<std::array<std::array<std::array<std::array<std::array<NCommon::TFetchingScriptOwner, 2>, 2>, 2>, 2>, 2>, 2> CacheFetchingScripts;
 
-    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(
-        const std::shared_ptr<NCommon::IDataSource>& source, const bool isFinalSyncPoint) override;
+    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const NCommon::IDataSource& source, const bool isFinalSyncPoint) override;
     mutable std::optional<std::shared_ptr<TFetchingScript>> SourcesAggregationScript;
     mutable std::optional<std::shared_ptr<TFetchingScript>> RestoreResultScript;
 

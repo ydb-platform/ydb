@@ -29,6 +29,12 @@ public:
     {
     }
 
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override {
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+        return ytState->Gateway->GetYtTokenResolver();
+    }
+
     TMaybe<bool> CanRead(const TExprNode& node, TExprContext& ctx) override {
         auto maybeReadTable = TMaybeNode<TYtReadTable>(&node);
         if (!maybeReadTable) {

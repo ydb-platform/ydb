@@ -20,13 +20,16 @@ namespace {
             + breakdown.GetChunkTailBytes()
             + breakdown.GetFreeChunkReserveBytes()
             + breakdown.GetLockedOrQuarantinedBytes()
-            + breakdown.GetUnclassifiedBytes();
+            + breakdown.GetUnclassifiedBytes()
+            + breakdown.GetFreeStripeBytes();
     }
 
     void AssertComponentAllocation(
             const NKikimrVDisk::TVDiskSpaceComponent& component,
             ui64 chunkSize) {
-        UNIT_ASSERT_VALUES_EQUAL(component.GetAllocatedBytes(), component.GetChunkCount() * chunkSize);
+        UNIT_ASSERT_VALUES_EQUAL(
+            component.GetAllocatedBytes(),
+            component.GetChunkCount() * chunkSize + component.GetStripedBytes());
     }
 
     void AssertReportIsConsistent(const NKikimrVDisk::TVDiskSpaceReport& report) {
@@ -59,6 +62,15 @@ namespace {
         const i64 expectedDelta = static_cast<i64>(report.GetPDiskAllocatedBytes())
             - static_cast<i64>(report.GetAccountedBytes());
         UNIT_ASSERT_VALUES_EQUAL(report.GetReconciliationDeltaBytes(), expectedDelta);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            report.GetStripeHeap().GetAllocatedBytes(),
+            report.GetStripeHeap().GetChunkCount() * report.GetChunkSizeBytes());
+        UNIT_ASSERT_VALUES_EQUAL(
+            report.GetStripeHeap().GetAllocatedBytes(),
+            report.GetStripeHeap().GetUsedBytes()
+                + report.GetStripeHeap().GetFreeBytes()
+                + report.GetStripeHeap().GetLockedFreeBytes());
 
         for (const auto& sizeClass : report.GetHuge().GetSizeClasses()) {
             UNIT_ASSERT_VALUES_EQUAL(
@@ -105,6 +117,78 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
         const auto& response = WaitForSpaceReport(env, edge, handle);
         AssertCompletedReport(response);
         UNIT_ASSERT(response.GetReport().GetLogoBlobs().GetBreakdown().GetUsefulBlobDataBytes() > 0);
+    }
+
+    Y_UNIT_TEST(ReportsSharedStripedChunk) {
+        TTestEnv env(nullptr, true);
+        env.ChangeMinHugeBlobSize(32_KB);
+
+        const TString data(64_KB, 'x');
+        const TLogoBlobID id(1, 1, 1, 0, data.size(), 0, 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.Put(id, data).GetStatus(), NKikimrProto::OK);
+        env.Compact();
+        UNIT_ASSERT_VALUES_EQUAL(env.Block(2, 1).GetStatus(), NKikimrProto::OK);
+        env.Compact(EHullDbType::Blocks, true);
+
+        const TActorId edge = env.GetRuntime()->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, edge);
+
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> handle;
+        const auto& response = WaitForSpaceReport(env, edge, handle);
+        AssertCompletedReport(response);
+
+        const auto& report = response.GetReport();
+        UNIT_ASSERT_VALUES_EQUAL(report.GetStripeHeap().GetChunkCount(), 1);
+        UNIT_ASSERT(report.GetStripeHeap().GetUsedBytes() > 0);
+        UNIT_ASSERT(report.GetHuge().GetTotal().GetStripedBytes() > 0);
+        UNIT_ASSERT(report.GetBlocks().GetStripedBytes() > 0);
+        UNIT_ASSERT(report.GetHuge().GetTotal().GetBreakdown().GetUsefulBlobDataBytes() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report.GetLogoBlobs().GetStripedBytes()
+                + report.GetBlocks().GetStripedBytes()
+                + report.GetBarriers().GetStripedBytes()
+                + report.GetHuge().GetTotal().GetStripedBytes(),
+            report.GetStripeHeap().GetAllocatedBytes());
+        UNIT_ASSERT_VALUES_EQUAL(report.GetReconciliationDeltaBytes(), 0);
+    }
+
+    Y_UNIT_TEST(UsesStripeChunkOwnershipWhenHugeStatsTimeout) {
+        TTestEnv env(nullptr, true);
+        env.ChangeMinHugeBlobSize(32_KB);
+
+        const TString data(64_KB, 'x');
+        const TLogoBlobID id(1, 1, 1, 0, data.size(), 0, 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.Put(id, data).GetStatus(), NKikimrProto::OK);
+        env.Compact();
+        UNIT_ASSERT_VALUES_EQUAL(env.Block(2, 1).GetStatus(), NKikimrProto::OK);
+        env.Compact(EHullDbType::Blocks, true);
+
+        TTestActorSystem* const runtime = env.GetRuntime();
+        runtime->FilterFunction = [](ui32, std::unique_ptr<IEventHandle>& ev) {
+            return ev->GetTypeRewrite() != TEvHugeSpaceStatResult::EventType;
+        };
+
+        const TActorId edge = runtime->AllocateEdgeActor(1);
+        SendSpaceReportRequest(env, edge);
+
+        std::unique_ptr<TEventHandle<TEvGetVDiskSpaceReportResponse>> handle;
+        const auto& response = WaitForSpaceReport(env, edge, handle);
+        runtime->FilterFunction = {};
+
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrProto::EReplyStatus_Name(NKikimrProto::ERROR));
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorReason(), "HugeKeeper space counters timed out");
+        UNIT_ASSERT(response.HasReport());
+
+        const auto& report = response.GetReport();
+        UNIT_ASSERT_VALUES_EQUAL(report.GetStripeHeap().GetChunkCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report.GetStripeHeap().GetAllocatedBytes(),
+            report.GetChunkSizeBytes());
+        UNIT_ASSERT_VALUES_EQUAL(report.GetStripeHeap().GetUsedBytes(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(report.GetStripeHeap().GetFreeBytes(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(report.GetStripeHeap().GetLockedFreeBytes(), 0);
+        UNIT_ASSERT(report.GetHuge().GetTotal().GetBreakdown().GetUnclassifiedBytes() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(report.GetReconciliationDeltaBytes(), 0);
     }
 
     Y_UNIT_TEST(RejectsConcurrentRequest) {

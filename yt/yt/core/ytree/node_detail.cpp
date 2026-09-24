@@ -52,9 +52,9 @@ void TNodeBase::GetSelf(
         ? std::make_optional(request->limit())
         : std::nullopt;
 
-    context->SetRequestInfo("Limit: %v, AttributeFilter: %v",
-        limit,
-        attributeFilter);
+    context->AnnotateRequest()
+        .With("Limit", limit)
+        .With("AttributeFilter", attributeFilter);
 
     ValidatePermission(EPermissionCheckScope::This, EPermission::Read);
 
@@ -82,7 +82,7 @@ void TNodeBase::GetKeySelf(
     TRspGetKey* response,
     const TCtxGetKeyPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     ValidatePermission(EPermissionCheckScope::This, EPermission::Read);
 
@@ -105,7 +105,8 @@ void TNodeBase::GetKeySelf(
             YT_ABORT();
     }
 
-    context->SetResponseInfo("Key: %v", key);
+    context->AnnotateResponse()
+        .With("Key", key);
     response->set_value(ToProto(ConvertToYsonString(key)));
 
     context->Reply();
@@ -119,9 +120,9 @@ void TNodeBase::RemoveSelf(
     bool recursive = request->recursive();
     bool force = request->force();
 
-    context->SetRequestInfo("Recursive: %v, Force: %v",
-        recursive,
-        force);
+    context->AnnotateRequest()
+        .With("Recursive", recursive)
+        .With("Force", force);
 
     ValidatePermission(
         EPermissionCheckScope::Subtree,
@@ -222,7 +223,7 @@ void TCompositeNodeMixin::RemoveRecursive(
     TSupportsRemove::TRspRemove* /*response*/,
     const TSupportsRemove::TCtxRemovePtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     NYPath::TTokenizer tokenizer(path);
     if (tokenizer.Advance() == NYPath::ETokenType::Asterisk) {
@@ -317,9 +318,9 @@ void TMapNodeMixin::ListSelf(
 
     auto limit = YT_OPTIONAL_FROM_PROTO(*request, limit);
 
-    context->SetRequestInfo("Limit: %v, AttributeFilter: %v",
-        limit,
-        attributeFilter);
+    context->AnnotateRequest()
+        .With("Limit", limit)
+        .With("AttributeFilter", attributeFilter);
 
     if (limit && limit < 0) {
         THROW_ERROR_EXCEPTION("Limit is negative")
@@ -613,7 +614,8 @@ void TSupportsSetSelfMixin::SetSelf(
 {
     bool force = request->force();
 
-    context->SetRequestInfo("Force: %v", force);
+    context->AnnotateRequest()
+        .With("Force", force);
 
     ValidateSetSelf(force);
     ValidatePermission(EPermissionCheckScope::This, EPermission::Write);
@@ -681,7 +683,7 @@ void TNonexistingService::ExistsAttribute(
 
 void TNonexistingService::ExistsAny(const TCtxExistsPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
     Reply(context, false);
 }
 

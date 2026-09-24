@@ -2089,9 +2089,11 @@ TMaybe<TStringContent> StringContentOrIdContent(TContext& ctx, TPosition pos, co
                                  (ctx.AnsiQuotedIdentifiers && input.StartsWith('"')) ? EStringContentMode::AnsiIdent : EStringContentMode::Default);
 }
 
-TTtlSettings::TTierSettings::TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName)
+TTtlSettings::TTierSettings::TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName,
+                                           const std::optional<TIdentifier>& objectKeyPrefix)
     : EvictionDelay(std::move(evictionDelay))
     , StorageName(storageName)
+    , ObjectKeyPrefix(objectKeyPrefix)
 {
 }
 

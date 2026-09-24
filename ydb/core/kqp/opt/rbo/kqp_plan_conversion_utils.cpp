@@ -297,7 +297,7 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
 
     TIntrusivePtr<IOperator> result;
     if (NYql::NNodes::TKqpOpEmptySource::Match(node.Get())) {
-        result = MakeIntrusive<TOpEmptySource>(node->Pos());
+        result = MakeIntrusive<TOpEmptySource>(node->Pos(), node->ChildrenSize() ? node->HeadPtr() : nullptr);
     } else if (NYql::NNodes::TKqpOpRead::Match(node.Get())) {
         result = MakeIntrusive<TOpRead>(node);
     } else if (NYql::NNodes::TKqpOpMap::Match(node.Get())) {

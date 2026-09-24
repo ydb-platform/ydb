@@ -47,7 +47,12 @@ public:
     using TResult = Ydb::Table::ExecuteQueryResult;
 
     TExecuteDataQueryRPC(IRequestOpCtx* msg)
-        : TBase(msg) {}
+        : TBase(msg) {
+        if (this->Span_) {
+            this->Span_.Name("Execute data query request");
+            this->Span_.Attribute("ydb.actor.type", TString("TExecuteDataQueryRPC"));
+        }
+    }
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);

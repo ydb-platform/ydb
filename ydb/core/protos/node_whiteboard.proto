@@ -132,7 +132,7 @@ message TPDiskStateInfo {
     optional string Path = 4 [(DefaultField) = true];
     optional uint64 Guid = 5 [(DefaultField) = true];
     optional uint64 Category = 6 [(DefaultField) = true];
-    optional uint64 AvailableSize = 7 [(DefaultField) = true, (InsignificantChangeAmount) = 104857600]; // 100Mb
+    optional uint64 AvailableSize = 7 [(DefaultField) = true, (InsignificantChangeAmount) = 104857600]; // 100 MiB
     optional uint64 TotalSize = 8 [(DefaultField) = true];
     optional NKikimrBlobStorage.TPDiskState.E State = 9 [(DefaultField) = true];
     optional uint32 NodeId = 10; // filled during merge
@@ -158,6 +158,7 @@ message TPDiskStateInfo {
     optional string Status = 29;
     optional string DecommitStatus = 30;
     optional string MaintenanceStatus = 31;
+    optional bool HasWhiteboardData = 32; // filled by viewer
 }
 
 message TEvPDiskStateRequest {
@@ -259,6 +260,7 @@ message TVDiskStateInfo {
     optional double NormalizedOccupancy = 34;
     optional double VDiskRawUsage = 35; // 100.0 * Owner.Used / Owner.HardLimit
     optional NKikimrBlobStorage.TPDiskSpaceColor.E CapacityAlert = 36;
+    optional bool HasWhiteboardData = 38; // filled by viewer
 }
 
 message TEvVDiskStateRequest {

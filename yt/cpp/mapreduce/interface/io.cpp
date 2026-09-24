@@ -44,10 +44,9 @@ namespace NDetail {
 
 void LogTableReaderStatistics(ui64 rowCount, TMaybe<size_t> byteCount)
 {
-    TString byteCountStr = (byteCount ? ::ToString(*byteCount) : "<unknown>");
-    YT_LOG_DEBUG("Table reader has read %v rows, %v bytes",
-        rowCount,
-        byteCountStr);
+    YT_TLOG_DEBUG("Table reader finished")
+        .With("RowCount", rowCount)
+        .WithIf(byteCount.Defined(), "Size", byteCount.GetOrElse(0));
 }
 
 } // namespace NDetail

@@ -24,7 +24,7 @@ namespace NYql::NUdf {
     XX(Abs, Abs)                \
     XX(Acos, acos)              \
     XX(Asin, asin)              \
-    XX(Asinh, asin)             \
+    XX(Asinh, asinh)            \
     XX(Atan, atan)              \
     XX(Cbrt, cbrt)              \
     XX(Ceil, ceil)              \
@@ -32,6 +32,8 @@ namespace NYql::NUdf {
     XX(Cosh, cosh)              \
     XX(Erf, Erf)                \
     XX(Exp, exp)                \
+    XX(Expm1, expm1)            \
+    XX(Log1p, log1p)            \
     XX(Exp2, Exp2)              \
     XX(Fabs, fabs)              \
     XX(Floor, std::floor)       \

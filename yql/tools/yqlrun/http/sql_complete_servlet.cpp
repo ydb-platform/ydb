@@ -227,13 +227,12 @@ void TSqlCompleteServlet::DoPost(const TRequest& req, TResponse& resp) const {
         Ranking_
     );
 
-    const auto completion = engine->Complete(
-        {
-            .Text = program,
-            .CursorPosition = cursorPosition,
-        },
-        ParseEnvironment(parameters)
-    ).GetValueSync();
+    TCompletionInput input = {{
+        .Text = program,
+        .CursorPosition = cursorPosition,
+    }};
+
+    const auto completion = engine->Complete(input, ParseEnvironment(parameters)).GetValueSync();
 
     TBufferOutput output;
     NJson::TJsonWriter writer(&output, false);

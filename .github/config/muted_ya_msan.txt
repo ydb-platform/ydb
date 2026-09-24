@@ -1,14 +1,12 @@
-ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestart4Plus2BlockMemoryLimit10_KB
-ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3dcMemoryLimit10_KB
-ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
-ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
 ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
+ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
+ydb/core/kqp/ut/service KqpWarmup.WarmupLoadsOtherUsersQueriesWithRestrictedAdmins-LegacyMetadata
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
@@ -16,8 +14,7 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.Shoul
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldSwitchHostToOfflineAndBack
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
-ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
-ydb/core/tx/replication/service/ut_worker unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_generated_columns unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
 ydb/library/actors/interconnect/ut Interconnect.RdmaSimultaneousReconnectDoesNotLoop
 ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialPayloadRead
@@ -46,7 +43,10 @@ ydb/public/lib/ydb_cli/commands/sqs_workload/ut SqsWorkloadScenario.InitSqsClien
 ydb/public/lib/ydb_cli/commands/sqs_workload/ut SqsWorkloadScenario.InitSqsClientUsesCreatedConfiguration
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionWasmDwarfMapsToMainCpp
+ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
+ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
+ydb/tests/functional/federation_test unittest.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
@@ -61,6 +61,7 @@ ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
+ydb/tests/stress/simple_queue/tests py3test.sole chunk
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_commit_reread[old_sdk]
@@ -72,18 +73,3 @@ ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPa
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test
-ydb/tools/pdisktool/ut TPDiskToolOracle.DamagedDataSectorReportsGap
-ydb/tools/pdisktool/ut TPDiskToolOracle.DamagedFormatReplicaStillReadsDisk
-ydb/tools/pdisktool/ut TPDiskToolOracle.EncryptionOffFormat
-ydb/tools/pdisktool/ut TPDiskToolOracle.FormatAndSysLogMatchWriter
-ydb/tools/pdisktool/ut TPDiskToolOracle.HostileSstPlaceholderIsAbandoned
-ydb/tools/pdisktool/ut TPDiskToolOracle.HullWithoutOwnerTableIsRefused
-ydb/tools/pdisktool/ut TPDiskToolOracle.ImplausibleLogPageSizesAreReportedAndScanTerminates
-ydb/tools/pdisktool/ut TPDiskToolOracle.ImplausibleSysLogPageSizeIsCapped
-ydb/tools/pdisktool/ut TPDiskToolOracle.LogBlobAndUnknownSignature
-ydb/tools/pdisktool/ut TPDiskToolOracle.MainKeyArgAndKeyConfigProto
-ydb/tools/pdisktool/ut TPDiskToolOracle.OwnersChunksAndCommits
-ydb/tools/pdisktool/ut TPDiskToolOracle.PlainDataChunksAndFileDevice
-ydb/tools/pdisktool/ut TPDiskToolOracle.RepeatedLogSignaturesReportedOnce
-ydb/tools/pdisktool/ut TPDiskToolOracle.SeveralCopiesOfPartAreComparedOnExport
-ydb/tools/pdisktool/ut TPDiskToolOracle.UnwrittenSectorsAreQuietReferencedOnesAreReported

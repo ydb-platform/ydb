@@ -132,7 +132,7 @@ TMaybe<NJson::TJsonMap> EmbeddedLanguage(const TRangePattern& range) {
 NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit, const TRangePattern& pattern, bool ansi) {
     TString group = ToMonarchSelector(unit.Kind);
     TString begin = RE2::QuoteMeta(pattern.BeginPlain);
-    TString end = RE2::QuoteMeta(pattern.EndPlain);
+    TString end = pattern.EndRegex();
 
     TMaybe<TString> escape;
     if (ansi && pattern.EscapeRegexANSI) {
@@ -162,6 +162,7 @@ NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit, const TRangePattern
     json.AppendValue(NJson::TJsonArray{"[^" + begin + "]", group});
     json.AppendValue(NJson::TJsonArray{end, group, "@pop"});
     json.AppendValue(NJson::TJsonArray{begin, group});
+    json.AppendValue(NJson::TJsonArray{".", group});
 
     return json;
 }

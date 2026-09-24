@@ -373,6 +373,12 @@ Y_UNIT_TEST(DropTable) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(TtlTieringObjectKeyPrefix) {
+    TSetup setup;
+    setup.Run({{"alter table t set ttl interval('P1D') to external data source `eds`.`archive/data` on ts",
+                "ALTER TABLE t\n\tSET ttl interval('P1D') TO EXTERNAL DATA SOURCE `eds`.`archive/data` ON ts\n;\n"}});
+}
+
 Y_UNIT_TEST(CreateTable) {
     TCases cases = {
         {"create table user(user int32)", "CREATE TABLE user (\n\tuser int32\n);\n"},
@@ -2314,9 +2320,45 @@ Y_UNIT_TEST(CreateStreamingQuery) {
                     {"creAte sTReaMing qUErY If Not ExIsTs TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
                      "CREATE STREAMING QUERY IF NOT EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
                     {"creAte oR ReplAce sTReaMing qUErY TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "CREATE OR REPLACE STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
-                    {"creAte sTReaMing qUErY TheQuery wiTh (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe)) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "CREATE STREAMING QUERY TheQuery WITH (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+                     "CREATE OR REPLACE STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(CreateStreamingQuerySettingExpressions) {
+    TCases cases = {
+        {TrimIndent(R"sql(
+            use plato;
+            $pool="my_"||"pool";
+            create streaming query MyQuery with (RUN=not true,RESOURCE_POOL=$pool,READ_FROM=CurrentUtcTimestamp( ))
+            as do begin
+                use plato;
+                insert into Output select * from Input;
+            end do;
+        )sql"),
+         TrimIndent(R"sql(
+            USE plato;
+
+            $pool = 'my_' || 'pool';
+
+            CREATE STREAMING QUERY MyQuery WITH (
+                RUN = NOT TRUE,
+                RESOURCE_POOL = $pool,
+                READ_FROM = CurrentUtcTimestamp()
+            ) AS DO BEGIN
+            USE plato;
+
+            INSERT INTO Output
+            SELECT
+                *
+            FROM
+                Input
+            ;
+            END DO;
+
+        )sql")},
+    };
 
     TSetup setup;
     setup.Run(cases);
@@ -2326,11 +2368,59 @@ Y_UNIT_TEST(AlterStreamingQuery) {
     TCases cases = {{"aLTer sTReaMing qUErY TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
                      "ALTER STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
                     {"aLTer sTReaMing qUErY If ExIsTs TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "ALTER STREAMING QUERY IF EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
-                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe))",
-                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n);\n"},
-                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe)) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+                     "ALTER STREAMING QUERY IF EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(AlterStreamingQuerySettingExpressions) {
+    TCases cases = {
+        {TrimIndent(R"sql(
+            alter streaming query MyQuery set (
+                RUN=not true,RESOURCE_POOL="my_"||"pool",
+                READ_FROM=Unwrap(CurrentUtcTimestamp( )+Interval("PT1S"))
+            );
+        )sql"),
+         TrimIndent(R"sql(
+            ALTER STREAMING QUERY MyQuery SET (
+                RUN = NOT TRUE,
+                RESOURCE_POOL = 'my_' || 'pool',
+                READ_FROM = Unwrap(CurrentUtcTimestamp() + Interval('PT1S'))
+            );
+
+        )sql")},
+        {TrimIndent(R"sql(
+            use plato;
+            $pool="my_"||"pool";
+            alter streaming query MyQuery set (RUN=not true,RESOURCE_POOL=$pool,READ_FROM=CurrentUtcTimestamp( ))
+            as do begin
+                use plato;
+                insert into Output select * from Input;
+            end do;
+        )sql"),
+         TrimIndent(R"sql(
+            USE plato;
+
+            $pool = 'my_' || 'pool';
+
+            ALTER STREAMING QUERY MyQuery SET (
+                RUN = NOT TRUE,
+                RESOURCE_POOL = $pool,
+                READ_FROM = CurrentUtcTimestamp()
+            ) AS DO BEGIN
+            USE plato;
+
+            INSERT INTO Output
+            SELECT
+                *
+            FROM
+                Input
+            ;
+            END DO;
+
+        )sql")},
+    };
 
     TSetup setup;
     setup.Run(cases);

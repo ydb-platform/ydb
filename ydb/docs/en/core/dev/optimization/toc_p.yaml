@@ -1,0 +1,7 @@
+items:
+- name: Using query plans for query optimization
+  href: plans.md
+- name: Optimizer hints
+  href: hints.md
+- name: Parameterized queries and recompilation
+  href: parameterized-queries.md

@@ -587,4 +587,5 @@ Examples of processing messages read from a topic are given in the article [{#T}
 
 ## See also {#see-also}
 
+* [Parameterized queries and recompilation](../../dev/optimization/parameterized-queries.md)
 * [Parameterized queries in {{ ydb-short-name }} SDK](../ydb-sdk/parameterized_queries.md)

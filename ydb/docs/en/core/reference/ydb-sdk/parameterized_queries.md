@@ -33,4 +33,5 @@ Parameterized queries provide the following advantages:
 
 ## See also
 
+- [Parameterized queries and recompilation](../../dev/optimization/parameterized-queries.md)
 - [{#T}](../../dev/example-app/index.md#param-queries)

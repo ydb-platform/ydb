@@ -891,7 +891,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
         options.ReturningColumns = processColumns(returningColumns.Cast());
         options.IsBatch = isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
-    } else if (effectType == "TKqlDeleteRows") {
+    } else if (effectType == "KqlDeleteRows") {
         type = EEffectType::DeleteRows;
 
         options.ReturningColumns = processColumns(returningColumns.Cast());

@@ -1,7 +1,7 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
@@ -36,6 +36,8 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+constexpr ui64 DefaultVolumeBlockCount = 32768;
+const TString FrontendTestClientId = "frontend-test";
 constexpr ui64 DefaultStripeSize = 512_KB;
 constexpr ui64 DefaultVChunkSize = MaxVChunkSize;
 const TString DDiskPoolName = "ddp1";
@@ -169,7 +171,7 @@ TActorId WaitForTabletBoot(TEnvironmentSetup& env)
 
 ui64 CreatePartitionTablet(
     TEnvironmentSetup& env,
-    ui64 blockCount = 32768,
+    ui64 blockCount = DefaultVolumeBlockCount,
     ui32 blockSize = DefaultBlockSize,
     TActorId* outBootstrapperId = nullptr)
 {
@@ -987,6 +989,53 @@ void ShouldWriteAndReadMultipleBlocks(
 
 Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 {
+    Y_UNIT_TEST(ShouldRevokeFrontendBackendOnActorSystemCleanup)
+    {
+        auto env =
+            std::make_unique<TEnvironmentSetup>(TEnvironmentSetup::TSettings{
+                .NodeCount = 8,
+                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            });
+        auto scopedService = SetupStorage(*env, EWriteMode::DirectWrite);
+        scopedService.reset();
+        auto config = CreateNbsConfig(EWriteMode::DirectWrite);
+        config.MutableNbsFrontendConfig()->SetEnabled(true);
+        scopedService = std::make_unique<TScopedNbsService>(config);
+        auto blockStore = GetNbsService()->BlockStoreFacade;
+        auto volumeConfig = CreateVolumeConfig(DefaultVolumeBlockCount);
+        volumeConfig.SetStorageMediaKind(NProto::STORAGE_MEDIA_SSD);
+        auto mount = [&]
+        {
+            auto request = std::make_shared<
+                NNbs1CompatApi::NBlockStore::NProto::TMountVolumeRequest>();
+            request->SetDiskId(volumeConfig.GetDiskId());
+            request->MutableHeaders()->SetClientId(FrontendTestClientId);
+            auto future = blockStore->MountVolume(
+                MakeIntrusive<TCallContext>(),
+                std::move(request));
+            if (!future.HasValue()) {
+                env->Runtime->Sim([&] { return !future.HasValue(); });
+            }
+            return future.GetValueSync();
+        };
+
+        WaitForTabletBoot(*env);
+        UNIT_ASSERT(
+            SendUpdateVolumeConfig(*env, volumeConfig, 1).GetStatus() ==
+            NKikimrBlockStore::OK);
+        env->Sim(TDuration::Seconds(10));
+        UNIT_ASSERT(!HasError(mount()));
+
+        // Match ydbd shutdown: close frontend/vhost, then destroy actors
+        // without an explicit tablet detach. A surviving frontend must lose the
+        // backend.
+        StopNbsService();
+        env.reset();
+        blockStore->Start();
+        UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
+        blockStore->Stop();
+    }
+
     Y_UNIT_TEST(ShouldPublishAndRevokeFrontendMetadata)
     {
         TEnvironmentSetup env{{
@@ -998,22 +1047,26 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto config = CreateNbsConfig(EWriteMode::DirectWrite);
         config.MutableNbsFrontendConfig()->SetEnabled(true);
         scopedService = std::make_unique<TScopedNbsService>(config);
-        auto blockStore = GetNbsService()->Frontend->GetBlockStore();
+        auto blockStore = GetNbsService()->BlockStoreFacade;
+        auto volumeConfig = CreateVolumeConfig(DefaultVolumeBlockCount);
+        volumeConfig.SetStorageMediaKind(NProto::STORAGE_MEDIA_SSD);
         auto mount = [&]
         {
             auto request = std::make_shared<
                 NNbs1CompatApi::NBlockStore::NProto::TMountVolumeRequest>();
-            request->SetDiskId("test-volume");
-            request->MutableHeaders()->SetClientId("frontend-test");
-            return blockStore
-                ->MountVolume(MakeIntrusive<TCallContext>(), std::move(request))
-                .GetValueSync();
+            request->SetDiskId(volumeConfig.GetDiskId());
+            request->MutableHeaders()->SetClientId(FrontendTestClientId);
+            auto future = blockStore->MountVolume(
+                MakeIntrusive<TCallContext>(),
+                std::move(request));
+            if (!future.HasValue()) {
+                env.Runtime->Sim([&] { return !future.HasValue(); });
+            }
+            return future.GetValueSync();
         };
         UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
 
         WaitForTabletBoot(env);
-        auto volumeConfig = CreateVolumeConfig(32768);
-        volumeConfig.SetStorageMediaKind(NProto::STORAGE_MEDIA_SSD);
         const auto update = SendUpdateVolumeConfig(env, volumeConfig, 1);
         UNIT_ASSERT(update.GetStatus() == NKikimrBlockStore::OK);
         env.Sim(TDuration::Seconds(10));
@@ -1022,9 +1075,13 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT(!response.GetSessionId().empty());
         UNIT_ASSERT_VALUES_EQUAL(
             response.GetVolume().GetDiskId(),
-            "test-volume");
-        UNIT_ASSERT_VALUES_EQUAL(response.GetVolume().GetBlockSize(), 4096);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetVolume().GetBlocksCount(), 32768);
+            volumeConfig.GetDiskId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            response.GetVolume().GetBlockSize(),
+            volumeConfig.GetBlockSize());
+        UNIT_ASSERT_VALUES_EQUAL(
+            response.GetVolume().GetBlocksCount(),
+            volumeConfig.GetPartitions(0).GetBlockCount());
 
         const auto edge = env.Runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,

@@ -104,8 +104,10 @@ path.bash.inc
 # Editor config
 /.editorconfig
 
-# Cursor ignore
-.cursor/
+# Cursor ignore (track shared rules under .cursor/rules/)
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .cursorignore
 .cursorindexingignore
 

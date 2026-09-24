@@ -26,7 +26,7 @@ bool ScanPostingTableVectors(
     TDataShard& dataShard,
     std::shared_ptr<void>& memoryReservation,
     ui64& reservedBytes,
-    std::vector<std::pair<TString, TString>>& keysAndVectors)
+    std::vector<std::pair<TString, TString>>& keysAndVectors, TRowVersion baseVersion)
 {
     reservedBytes = 0;
     // KeyColumnIds is in key order, which is the order the read path expects
@@ -40,7 +40,7 @@ bool ScanPostingTableVectors(
     }
 
     auto precharge = txc.DB.Precharge(table.LocalTid, {}, {}, columns, 0, 0, 0,
-        NTable::EDirection::Forward, TRowVersion::Max());
+        NTable::EDirection::Forward, baseVersion);
     if (!precharge.Ready) {
         return false;
     }
@@ -57,7 +57,7 @@ bool ScanPostingTableVectors(
     keysAndVectors.clear();
     keysAndVectors.reserve(precharge.ItemsPrecharged);
 
-    auto iter = txc.DB.IterateRange(table.LocalTid, {}, columns, TRowVersion::Max(), nullptr, nullptr);
+    auto iter = txc.DB.IterateRange(table.LocalTid, {}, columns, baseVersion, nullptr, nullptr);
     while (true) {
         auto ready = iter->Next(NTable::ENext::All);
         if (ready == NTable::EReady::Page) {
@@ -204,26 +204,36 @@ protected:
             return false;
         }
 
+        BaseVersion = TRowVersion(op->GetStep(), op->GetTxId());
+        if (!DataShard.TryStartHnswIndexBuild(table.LocalTid, vectorColumnTag, settings, BaseVersion)) {
+            return false;
+        }
+        BuildToken = DataShard.GetHnswBuildToken(table.LocalTid);
+        DataShard.TrackHnswOpenTransactions(table.LocalTid, txc.DB);
         std::vector<std::pair<TString, TString>> keysAndVectors;
         ui64 reservedBytes = 0;
         std::shared_ptr<void> memoryReservation;
         if (!ScanPostingTableVectors(txc, table, vectorColumnTag, settings, DataShard,
-                memoryReservation, reservedBytes, keysAndVectors)) {
+                memoryReservation, reservedBytes, keysAndVectors, BaseVersion)) {
+            DataShard.DeferHnswIndexBuild(table.LocalTid, TDuration::Zero());
             // Page fault: this unit is re-executed after the pages are fetched.
             PageFault = true;
             return false;
         }
 
         if (!memoryReservation) {
+            DataShard.DeferHnswIndexBuild(table.LocalTid, TDuration::Zero());
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
                 << " HNSW: cache memory budget exhausted for localTid=" << table.LocalTid);
             return false;
         }
 
         if (keysAndVectors.empty()) {
+            DataShard.SetHnswIndexBuilding(table.LocalTid, false);
             return false;
         }
         if (keysAndVectors.size() < GetHnswMinRows(settings)) {
+            DataShard.SetHnswIndexBuilding(table.LocalTid, false);
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
                 << " HNSW: partition is below hnsw_min_rows for localTid=" << table.LocalTid
                 << " rows=" << keysAndVectors.size()
@@ -263,8 +273,9 @@ protected:
                 << " size=" << result->Index->Size());
             DataShard.SetHnswIndex(LocalTid, std::move(result->Index),
                 std::move(result->MemoryReservation), RowCountAtBuild,
-                VectorColumnTag, Settings);
+                VectorColumnTag, Settings, BaseVersion, BuildToken);
         } else {
+            DataShard.SetHnswIndexBuilding(LocalTid, false);
             // A failed build only costs acceleration, not correctness: reads
             // fall back to brute force.
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
@@ -272,6 +283,10 @@ protected:
                 << ": " << result->Error);
         }
 
+        if (DataShard.IsHnswIndexBuildObsolete(LocalTid)
+                && DataShard.GetHnswBuildToken(LocalTid) == BuildToken) {
+            DataShard.DeferHnswIndexBuild(LocalTid, TDuration::Zero());
+        }
         op->SetAsyncJobResult(nullptr);
         tx->SetAsyncJobActor(TActorId());
 
@@ -279,6 +294,9 @@ protected:
     }
 
     void Cancel(TActiveTransaction* tx, const TActorContext& ctx) override {
+        if (DataShard.IsHnswBuildCurrent(LocalTid, BuildToken)) {
+            DataShard.DeferHnswIndexBuild(LocalTid, TDuration::Zero());
+        }
         tx->KillAsyncJobActor(ctx);
     }
 
@@ -295,6 +313,8 @@ private:
     ui32 VectorColumnTag = 0;
     Ydb::Table::VectorIndexSettings Settings;
     ui64 RowCountAtBuild = 0;
+    TRowVersion BaseVersion = TRowVersion::Min();
+    ui64 BuildToken = 0;
     mutable bool PageFault = false;
 };
 

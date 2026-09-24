@@ -220,6 +220,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
                 throw TNeedGlobalTxId();
             }
             txc.DB.UpdateTx(writeTableId, NTable::ERowOp::Upsert, key, value, globalTxId);
+            self->UpdateHnswIndex(writeTableId, NTable::ERowOp::Upsert, keyCells.GetCells(), value, txc.DB, mvccVersion, globalTxId);
             self->GetConflictsCache().GetTableCache(writeTableId).AddUncommittedWrite(keyCells.GetCells(), globalTxId, txc.DB);
             if (!commitAdded) {
                 // Make sure we see our own changes on further iterations
@@ -228,6 +229,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
         } else {
             txc.DB.Update(writeTableId, NTable::ERowOp::Upsert, key, value, mvccVersion);
+            self->UpdateHnswIndex(writeTableId, NTable::ERowOp::Upsert, keyCells.GetCells(), value, txc.DB, mvccVersion);
             self->GetConflictsCache().GetTableCache(writeTableId).RemoveUncommittedWrites(keyCells.GetCells(), txc.DB);
         }
     }

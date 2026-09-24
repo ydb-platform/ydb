@@ -300,6 +300,7 @@ void TDataShard::Cleanup(const TActorContext& ctx) {
 }
 
 void TDataShard::Die(const TActorContext& ctx) {
+    InvalidateHnswIndexes();
     if (HnswCacheMemoryTracker) {
         Send(NMemory::MakeMemoryControllerId(),
             new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::SharedCache));
@@ -4228,6 +4229,27 @@ void TDataShard::SendHnswCountersToAggregator(const TActorContext& ctx) {
             CreateProtobufTabletLabeledCounters<EHnswLabeledCounters_descriptor>(group, localTid)));
         counters->GetCounters()[COUNTER_HNSW_CACHE_HITS].Set(entry.CacheHits);
         counters->GetCounters()[COUNTER_HNSW_CACHE_MISSES].Set(entry.CacheMisses);
+        ui64 generations = 0;
+        for (const auto& generation : entry.Generations) {
+            generations += !generation.expired();
+        }
+        ui64 pendingBytes = entry.PendingReservations.size() * THnswIndexCacheEntry::PendingTransactionBytes;
+        for (const auto& [_, rows] : entry.Pending) {
+            for (const auto& [key, change] : rows) {
+                pendingBytes += THnswIndexChanges::EstimateBytes(key, change.Vector ? change.Vector->size() : 0);
+            }
+        }
+        counters->GetCounters()[COUNTER_HNSW_GENERATIONS].Set(generations);
+        counters->GetCounters()[COUNTER_HNSW_CHANGED_ROWS].Set(entry.Index ? entry.Index->ChangeCount() : 0);
+        counters->GetCounters()[COUNTER_HNSW_BASE_ROWS].Set(entry.Index ? entry.Index->Size() : 0);
+        counters->GetCounters()[COUNTER_HNSW_DELTA_VERSIONS].Set(entry.Changes->GetVersionCount());
+        counters->GetCounters()[COUNTER_HNSW_DELTA_BYTES].Set(entry.Changes->GetEstimatedBytes());
+        counters->GetCounters()[COUNTER_HNSW_PENDING_BYTES].Set(pendingBytes);
+        counters->GetCounters()[COUNTER_HNSW_REBUILDS].Set(entry.Rebuilds);
+        counters->GetCounters()[COUNTER_HNSW_BASE_VERSION_STEP].Set(entry.Index ? entry.Index->GetBaseVersion().Step : 0);
+        counters->GetCounters()[COUNTER_HNSW_UNSUPPORTED_READS].Set(entry.UnsupportedReads);
+        counters->GetCounters()[COUNTER_HNSW_RANGE_FALLBACKS].Set(entry.RangeFallbacks);
+        counters->GetCounters()[COUNTER_HNSW_CANDIDATE_FALLBACKS].Set(entry.CandidateFallbacks);
 
         ctx.Send(MakeTabletCountersAggregatorID(ctx.SelfID.NodeId()),
             new TEvTabletCounters::TEvTabletAddLabeledCounters(
@@ -4237,6 +4259,7 @@ void TDataShard::SendHnswCountersToAggregator(const TActorContext& ctx) {
 }
 
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
+    PruneHnswIndexes();
     UpdateLagCounters(ctx);
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);

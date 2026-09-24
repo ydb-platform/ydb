@@ -281,6 +281,7 @@ public:
             if (collector) {
                 userDb.AddCommitTxId(tableId, writeTxId);
             }
+            Self->UpdateHnswIndex(userTable.LocalTid, rop, keyCellVec.GetCells(), update, txc.DB, TRowVersion::Min(), writeTxId);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).AddUncommittedWrite(keyCellVec.GetCells(), writeTxId, txc.DB);
         } else {
             if (!MvccVersion) {
@@ -292,6 +293,7 @@ public:
                 throw TNotReadyTabletException();
             }
             txc.DB.Update(userTable.LocalTid, rop, key, update, *MvccVersion);
+            Self->UpdateHnswIndex(userTable.LocalTid, rop, keyCellVec.GetCells(), update, txc.DB, *MvccVersion);
             Self->GetConflictsCache().GetTableCache(userTable.LocalTid).RemoveUncommittedWrites(keyCellVec.GetCells(), txc.DB);
         }
 

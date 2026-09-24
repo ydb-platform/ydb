@@ -1,5 +1,6 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
+#include "yql_pq_pushdown.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
@@ -20,28 +21,12 @@ using namespace NNodes;
 
 namespace {
 
-struct TWatermarkPushdownSettings: public NPushdown::TSettings {
+
+struct TWatermarkPushdownSettings: public NPq::TCommonPushdownSettings {
     TWatermarkPushdownSettings()
-        : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
     {
         using EFlag = NPushdown::TSettings::EFeatureFlag;
         Enable(
-            // Type features
-            EFlag::DateTimeTypes |
-            EFlag::DecimalType |
-            EFlag::StringTypes |
-            EFlag::TimestampCtor |
-            EFlag::IntervalCtor |
-            EFlag::ImplicitConversionToInt64 |
-            EFlag::DoNotCheckCompareArgumentsTypes |
-
-            // Expr features
-            EFlag::ArithmeticalExpressions |
-            EFlag::CastExpression |
-            EFlag::DivisionExpressions |
-            EFlag::JustPassthroughOperators |
-            EFlag::UnaryOperators |
-            EFlag::MinMax |
             EFlag::NonDeterministic
         );
     }

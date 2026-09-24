@@ -16,7 +16,7 @@ option java_package = "com.yandex.ydb.topic";
 
 option cc_enable_arenas = true;
 
-// Codec enum and MessagesBatchCodec separate single numbers space and must be in sync
+// The Codec and MessagesBatchCodec enums use continuous numbering, and their ranges must be kept in sync.
 enum Codec {
     CODEC_UNSPECIFIED = 0;
     CODEC_RAW = 1;
@@ -28,13 +28,14 @@ enum Codec {
     CODEC_CUSTOM = 10000;
     CODEC_CUSTOM_MAX = 19999;
 
-    // Batched codecs from 20000 to 29999
+    // Batch codecs from 20000 to 29999
     reserved 20000 to 29999;
     
     // For future usage
     reserved 30000 to max;
 }
 
+// The Codec and MessagesBatchCodec enums use continuous numbering, and their ranges must be kept in sync.
 enum MessagesBatchCodec {
     MESSAGE_BATCH_CODEC_UNSPECIFIED = 0;
 
@@ -42,7 +43,7 @@ enum MessagesBatchCodec {
     reserved 1 to 19999;
 
     MESSAGE_BATCH_CODEC_KAFKA_BATCH = 20000;      // Binary kafka message batch. See doc: https://ydb.tech/docs/en/reference/ydb-sdk/kafka-codec/
-    MESSAGE_BATCH_CODEC_TOPIC_COMPRESSED = 20001; // Codec value + compressed usual topic batch protobuf. // Example for extend
+    MESSAGE_BATCH_CODEC_TOPIC_COMPRESSED_EXAMPLE = 20001; // Codec value + compressed usual topic batch protobuf. // Example for extend
 
     // For future usage
     reserved 30000 to max;
@@ -388,7 +389,10 @@ message StreamReadMessage {
             google.protobuf.Timestamp read_from = 4;
         }
 
-        // Indicates messages and batch encoding, supported by client.
+        // Indicates message and batch encodings supported by the client.
+        // The server takes these settings into account and, when possible, re-encodes messages using one of the specified codecs.
+        // However, the client must be prepared to receive messages encoded with a codec not included in this list.
+        // In this case, reading the message should return an error.
         SupportedCodecs supported_codecs = 7;
     }
 

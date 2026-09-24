@@ -1422,6 +1422,48 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(InsertAbortConflictWithUserEnsure, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString createQuery = R"(
+            CREATE TABLE `/Root/table1` (
+                col1 Int64,
+                col2 Utf8,
+                PRIMARY KEY (col1),
+                INDEX idx1 GLOBAL SYNC ON (col2)
+            );
+        )";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(
+                "INSERT INTO `/Root/table1` (col1, col2) VALUES (1, 'a');",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.ExecuteQuery(R"(
+                $exists = SELECT COUNT(*) FROM `/Root/table1` WHERE col1 = 1;
+                SELECT Ensure(0, $exists == 0, "Object exists. Name: 'row1'");
+                INSERT INTO `/Root/table1` (col1, col2) VALUES (1, 'a');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                it.GetIssues().ToString(),
+                StreamIndex ? "Object exists. Name: 'row1'" : "Conflict with existing key.",
+                it.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST_TWIN(UniqIndexPkSubsetEnforced, StreamIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);

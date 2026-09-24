@@ -98,8 +98,11 @@ the persist-before-erase condition.
 
 Explicit erase batches target the PB positions where writes were requested,
 including handoffs. They are separate requests to each PB. Failed erases are
-eligible for retry. Disabled hosts can be accounted as erased locally, with
-barrier cleanup responsible for their residual records. Belated successful
+eligible for retry. A disabled host is not accounted as erased: the record
+waits for the restore barrier instead. The dirty map persists a per-vchunk
+barrier key strictly below every record whose data lives only in PBuffers;
+once it is committed, the waiting records below it are forgotten, their copies
+are skipped on recovery and cleaned by barrier cleanup. Belated successful
 writes have a separate erase queue. For the disk-level meaning of exact
 erases, compact erase records and barriers, use the shared PB page.
 

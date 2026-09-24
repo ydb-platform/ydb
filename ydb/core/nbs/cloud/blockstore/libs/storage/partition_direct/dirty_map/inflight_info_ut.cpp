@@ -923,13 +923,22 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             true,
             readyQueue.ReadyToErase.contains(MakeKey(123)));
 
-        // Erase all still-written hosts (host 3 excluded via Disabled).
+        // Erase all still-written hosts (host 3 excluded via Disabled). The
+        // copy on host 3 is left to the restore barrier.
         inflightInfo.RequestErase(THostIndex{0});
         inflightInfo.RequestErase(THostIndex{1});
         inflightInfo.RequestErase(THostIndex{2});
         inflightInfo.ConfirmErase(THostIndex{0});
         inflightInfo.ConfirmErase(THostIndex{1});
         inflightInfo.ConfirmErase(THostIndex{2});
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferErasing,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.IsWaitingForRestoreBarrier());
+
+        inflightInfo.ForgetByRestoreBarrier();
         UNIT_ASSERT_VALUES_EQUAL(
             TInflightInfo::EState::PBufferErased,
             inflightInfo.GetState());
@@ -1057,7 +1066,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
 
     // In the erasing state, disabling the last non-erased host lets the erase
     // complete because EraseConfirmed\Disabled == WriteRequested\Disabled.
-    Y_UNIT_TEST(ShouldUpdateHostsCompleteEraseWhenDisablingPendingHost)
+    Y_UNIT_TEST(ShouldWaitForRestoreBarrierWhenDisablingPendingHost)
     {
         TTestReadyQueue readyQueue;
         TInflightInfo inflightInfo(
@@ -1077,10 +1086,109 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             TInflightInfo::EState::PBufferErasing,
             inflightInfo.GetState());
 
-        // Disable + remove host 2. Erase completes.
+        // Disable + remove host 2. Its copy is left to the restore barrier:
+        // nothing more to erase, but the record cannot leave on its own.
         auto mask = THostMask::MakeMask({THostIndex{2}});
         inflightInfo.UpdateHosts(THostMask::MakeEmpty(), mask, mask);
 
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferErasing,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL("[]", inflightInfo.GetEraseNeeded().Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.IsWaitingForRestoreBarrier());
+
+        inflightInfo.ForgetByRestoreBarrier();
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferErased,
+            inflightInfo.GetState());
+    }
+
+    Y_UNIT_TEST(ShouldEraseHostEnabledAgain)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+        FlushAll(inflightInfo);
+
+        // Host 2 is disabled before the erase: only hosts 0 and 1 are erased.
+        const auto disabled = THostMask::MakeMask({THostIndex{2}});
+        inflightInfo.UpdateHosts(
+            THostMask::MakeEmpty(),
+            THostMask::MakeEmpty(),
+            disabled);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[H0,H1]",
+            inflightInfo.GetEraseNeeded().Print());
+        inflightInfo.RequestErase(THostIndex{0});
+        inflightInfo.RequestErase(THostIndex{1});
+        inflightInfo.ConfirmErase(THostIndex{0});
+        inflightInfo.ConfirmErase(THostIndex{1});
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.IsWaitingForRestoreBarrier());
+
+        // Host 2 is enabled again before the restore barrier is persisted: its
+        // copy is erased by address after all.
+        inflightInfo.UpdateHosts(
+            THostMask::MakeEmpty(),
+            THostMask::MakeEmpty(),
+            THostMask::MakeEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            inflightInfo.IsWaitingForRestoreBarrier());
+        UNIT_ASSERT_VALUES_EQUAL("[H2]", inflightInfo.GetEraseNeeded().Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToErase.contains(MakeKey(123)));
+
+        inflightInfo.RequestErase(THostIndex{2});
+        inflightInfo.ConfirmErase(THostIndex{2});
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferErased,
+            inflightInfo.GetState());
+    }
+
+    // A locked record is being read from its PBuffers, so disabling every
+    // host it was written to must not hand it to the restore barrier before the
+    // read is over.
+    Y_UNIT_TEST(ShouldNotWaitForRestoreBarrierWhileLocked)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        inflightInfo.LockPBuffer();
+        FlushAll(inflightInfo);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+
+        // Every written host is disabled: nothing is left to erase by
+        // address, but the read still holds the copies.
+        const auto mask = MakePrimaryHosts();
+        inflightInfo.UpdateHosts(THostMask::MakeEmpty(), mask, mask);
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            inflightInfo.IsWaitingForRestoreBarrier());
+
+        // The read is over: the record is handed to the restore barrier.
+        inflightInfo.UnlockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.IsWaitingForRestoreBarrier());
+
+        inflightInfo.ForgetByRestoreBarrier();
         UNIT_ASSERT_VALUES_EQUAL(
             TInflightInfo::EState::PBufferErased,
             inflightInfo.GetState());
@@ -1291,13 +1399,22 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             "[H0,H1,H2]",
             readyQueue.GetFlushCompletedMask(MakeKey(123)));
 
-        // Erase all still-written hosts (host 3 excluded via Disabled).
+        // Erase all still-written hosts (host 3 excluded via Disabled). The
+        // copy on host 3 is left to the restore barrier.
         inflightInfo.RequestErase(THostIndex{0});
         inflightInfo.RequestErase(THostIndex{1});
         inflightInfo.RequestErase(THostIndex{2});
         inflightInfo.ConfirmErase(THostIndex{0});
         inflightInfo.ConfirmErase(THostIndex{1});
         inflightInfo.ConfirmErase(THostIndex{2});
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferErasing,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.IsWaitingForRestoreBarrier());
+
+        inflightInfo.ForgetByRestoreBarrier();
         UNIT_ASSERT_VALUES_EQUAL(
             TInflightInfo::EState::PBufferErased,
             inflightInfo.GetState());

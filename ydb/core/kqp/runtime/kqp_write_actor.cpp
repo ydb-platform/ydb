@@ -939,6 +939,11 @@ public:
         //    produced by shards that do not echo cookies (e.g. 26-3 datashards during
         //    a rolling upgrade), and their rejections must pass to drive the
         //    re-resolve logic.
+        // Superseded results are ignored only when their status is positive or
+        // retryable (see IsIgnorableSupersededStatus): a fatal status (ABORTED,
+        // LOCKS_BROKEN, ...) indicates a shard-side problem the latest attempt
+        // would hit as well, so it fails the transaction immediately instead of
+        // waiting for the answer of the resent message.
 
         const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
 
@@ -951,7 +956,8 @@ public:
         }
 
         // Note: ABORTED EvWriteResult can have Cookie=0 if it was lost at datashard.
-        if (Mode != EMode::COMMIT && IsSupersededWriteResult(ev->Cookie, metadata)) {
+        if (Mode != EMode::COMMIT && IsSupersededWriteResult(ev->Cookie, metadata)
+                && IsIgnorableSupersededStatus(ev->Get()->GetStatus())) {
             YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",
                 {"logPrefix", this->LogPrefix},
                 {"shardID", ev->Get()->Record.GetOrigin()},
@@ -1103,7 +1109,7 @@ public:
                         << TablePath << "`.",
                     getIssues());
             } else {
-                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryShard(ev->Get()->Record.GetOrigin());
             }
             return;
         }
@@ -1125,7 +1131,7 @@ public:
                         << TablePath << "`.",
                     getIssues());
             } else {
-                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryShard(ev->Get()->Record.GetOrigin());
             }
             return;
         }

@@ -283,6 +283,8 @@ struct TShardedWriteControllerSettings {
 // upgrade; distributed/volatile commit completions) and always passes.
 bool IsSupersededWriteResult(ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata);
 
+bool IsIgnorableSupersededStatus(NKikimrDataEvents::TEvWriteResult::EStatus status);
+
 IShardedWriteControllerPtr CreateShardedWriteController(
     const TShardedWriteControllerSettings& settings,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);

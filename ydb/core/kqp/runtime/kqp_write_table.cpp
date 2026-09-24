@@ -2396,5 +2396,18 @@ bool IsSupersededWriteResult(const ui64 cookie, const std::optional<IShardedWrit
     return cookie != 0 && (!metadata || metadata->Cookie != cookie);
 }
 
+bool IsIgnorableSupersededStatus(const NKikimrDataEvents::TEvWriteResult::EStatus status) {
+    switch (status) {
+        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 }
 }

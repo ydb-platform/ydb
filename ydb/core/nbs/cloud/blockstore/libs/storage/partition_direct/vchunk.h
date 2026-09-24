@@ -81,6 +81,12 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
+    // Receives the source and target hosts for a DDisk move.
+    void BalanceDDisks(THostIndex sourceHost, THostIndex targetHost);
+
+    // Reports whether this vchunk has been touched.
+    [[nodiscard]] bool IsTouched() const;
+
     // If the current count of hosts in the config is less than the desired
     // host count, update the config and persist it in the tablet.
     void UpdateHostCount(size_t newHostCount);
@@ -177,7 +183,6 @@ private:
 
     // VDisk touch state.
     void Touch();
-    [[nodiscard]] bool IsTouched() const;
     void DoPersistTouched();
     void OnTouchedPersisted();
 
@@ -205,8 +210,11 @@ private:
         THostIndex hostIndex,
         TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+    void DemoteIfNeeded();
     void DemoteUnavailableHostsIfNeeded();
-    [[nodiscard]] THostMask GetDDisksForDemote() const;
+    void DemoteUnnecessaryHostsIfNeeded();
+    [[nodiscard]] THostMask GetDDisksFromUnavailableHostsForDemote() const;
+    [[nodiscard]] THostMask GetUnnecessaryDDisksForDemote() const;
 
     // Checks DirtyMap's initial readiness and waits it if need.
     void WaitForDirtyMapReady();
@@ -228,6 +236,7 @@ private:
     TLogTitle LogTitle;
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
+    THostIndex BalanceSourceHost = InvalidHostIndex;
     ETouchedState TouchedState = ETouchedState::NotTouched;
     TBlocksDirtyMapPtr BlocksDirtyMap;
     THostMask PersistedFreshDDisks;

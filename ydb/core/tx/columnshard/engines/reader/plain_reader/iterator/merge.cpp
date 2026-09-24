@@ -44,8 +44,7 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
         ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
         AFL_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
         auto accessors = std::make_unique<NArrow::NAccessor::TAccessorsCollection>(ResultBatch, *Context->GetCommonContext()->GetResolver());
-        auto conclusion =
-            Context->GetReadMetadata()->GetProgram().ApplyProgram(std::move(accessors), std::make_shared<NArrow::NSSA::TFakeDataSource>());
+        auto conclusion = Context->GetReadMetadata()->GetProgram().ApplyProgram(std::move(accessors));
         if (conclusion.IsFail()) {
             return conclusion;
         }
@@ -192,7 +191,7 @@ TConclusion<bool> TStartMergeTask::DoExecuteImpl() {
 }
 
 TStartMergeTask::TStartMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext,
-    THashMap<ui32, std::shared_ptr<IDataSource>>&& sources)
+    THashMap<ui32, std::shared_ptr<const IDataSource>>&& sources)
     : TBase(mergingContext, readContext)
     , Sources(std::move(sources))
 {

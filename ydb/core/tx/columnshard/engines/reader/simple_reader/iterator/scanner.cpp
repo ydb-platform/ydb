@@ -77,12 +77,12 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
         {"event", "build_next_interval"});
     bool changed = false;
     while (SourcesCollection->HasData() && SourcesCollection->CheckInFlightLimits()) {
-        auto source = SourcesCollection->TryExtractNext();
-        if (!source) {
+        auto lease = SourcesCollection->TryExtractNext();
+        if (!lease) {
             return changed;
         }
-        source->OnStartProcessing();
-        SyncPoints.front()->AddSource(std::move(source));
+        lease->GetSource().OnStartProcessing();
+        SyncPoints.front()->AddSource(std::move(lease));
         changed = true;
     }
     return changed;

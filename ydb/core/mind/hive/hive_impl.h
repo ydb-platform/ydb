@@ -208,6 +208,7 @@ protected:
     friend class TTxMonEvent_ObjectStats;
     friend class TTxMonEvent_StorageRebalance;
     friend class TTxMonEvent_Subactors;
+    friend class TTxMonEvent_ShrinkPool;
     friend class TTxKillNode;
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;
@@ -730,6 +731,11 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateCounterDeleteTabletQueueSize();
     void UpdateCounterTabletsDeleting();
     void UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff);
+    void UpdateCounterShrinkRemainingHistory();
+    void OnShrinkMoveDataSent(i64 inFlight, i64 queued);
+    void OnShrinkMoveDataAnswered(i64 inFlight, i64 queued);
+    void OnShrinkMoveDataRetried();
+    void OnShrinkMoveDataFinished();
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();

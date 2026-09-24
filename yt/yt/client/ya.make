@@ -39,6 +39,7 @@ SRCS(
     api/options.cpp
     api/shuffle_client.cpp
     api/table_partition_reader.cpp
+    api/table_reader.cpp
     api/private.cpp
 
     api/rpc_proxy/address_helpers.cpp
@@ -54,7 +55,7 @@ SRCS(
     api/rpc_proxy/journal_reader.cpp
     api/rpc_proxy/journal_writer.cpp
     api/rpc_proxy/public.cpp
-    api/rpc_proxy/request_annotations.cpp
+    api/rpc_proxy/request_tags.cpp
     api/rpc_proxy/row_batch_reader.cpp
     api/rpc_proxy/row_batch_writer.cpp
     api/rpc_proxy/row_stream.cpp
@@ -91,6 +92,7 @@ SRCS(
     chunk_client/public.cpp
     chunk_client/read_limit.cpp
     chunk_client/ready_event_reader_base.cpp
+    chunk_client/timing_statistics.cpp
 
     file_client/config.cpp
 

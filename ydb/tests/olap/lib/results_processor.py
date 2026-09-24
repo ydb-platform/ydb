@@ -344,7 +344,7 @@ class ResultsProcessor:
         return endpoint.execute_query(query, parameters)
 
     @classmethod
-    def upload_tpcc_results(cls, results, run_type: str, warmup_start_ts: float):
+    def upload_tpcc_results(cls, results, problems, run_type: str, warmup_start_ts: float):
         if not cls.send_results or not cls.get_tpcc_endpoints():
             return
         with allure.step("Upload TPCC results to YDB"):
@@ -408,7 +408,8 @@ class ResultsProcessor:
                 'throughput': None,
                 'goodput': None,
                 'newOrderLatency90': metrics['newOrderLatency90'],
-                'json': json_string
+                'json': json_string,
+                'problems': problems if problems is not None or len(problems) > 0 else None
             }
             allure.attach(json.dumps(data), 'data', allure.attachment_type.JSON)
             for endpoint in cls.get_tpcc_endpoints():

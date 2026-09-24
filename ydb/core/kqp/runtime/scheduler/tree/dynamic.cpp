@@ -128,9 +128,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account with microsecond precision
 
     Counters = TPoolCounters();
-    Counters->Satisfaction = group->GetCounter("Satisfaction", false); // snapshot
     Counters->Limit        = group->GetCounter("Limit",        false);
-    Counters->Guarantee    = group->GetCounter("Guarantee",    false);
     Counters->Demand       = group->GetCounter("Demand",       false); // snapshot
     Counters->InFlight     = group->GetCounter("InFlight",     false);
     Counters->Waiting      = group->GetCounter("Waiting",      false);
@@ -152,7 +150,6 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
 
     if (Counters) {
         Counters->Limit->Set(GetCpuLimit() * 1'000'000);
-        Counters->Guarantee->Set(GetCpuGuarantee() * 1'000'000);
         Counters->InFlight->Set(CpuUsage * 1'000'000);
         Counters->Waiting->Set(CpuThrottle * 1'000'000);
         Counters->Usage->Set(CpuBurstUsage);

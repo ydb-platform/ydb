@@ -244,7 +244,7 @@ public:
     TCompiledGraph(const NOptimization::TGraph& original, const IColumnResolver& resolver);
 
     TConclusion<std::unique_ptr<TAccessorsCollection>> Apply(
-        const std::shared_ptr<IDataSource>& source, std::unique_ptr<TAccessorsCollection>&& resources) const;
+        IDataSource& source, std::unique_ptr<TAccessorsCollection>&& resources) const;
 
     NJson::TJsonValue DebugJson() const;
 

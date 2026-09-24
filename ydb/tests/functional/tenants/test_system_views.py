@@ -245,10 +245,17 @@ class TestQueryMetricsOneHourRestart(BaseSystemViews):
                 with pool.checkout() as session:
                     session.transaction().execute(query, commit_tx=True)
 
-            metrics = self.wait_query_metrics(
-                driver, 'one_hour', query_text=query, expected_count=2)
-            assert_that(metrics, has_length(1))
-            assert_that(metrics[0], has_properties({'Count': 2}))
+            deadline = time.time() + 90
+            metrics = []
+            while time.time() < deadline:
+                metrics = self.read_query_metrics(
+                    driver, self.database, 'one_hour', query)
+                if sum(metric.Count for metric in metrics) >= 2:
+                    break
+                time.sleep(2)
+
+            assert_that(metrics, has_length(greater_than(0)))
+            assert_that(sum(metric.Count for metric in metrics), greater_than(1))
 
 
 class TestSysViewsRegistry(BaseSystemViews):

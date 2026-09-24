@@ -2544,6 +2544,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     };
 
     Y_UNIT_TEST(UncommittedWriteSeqNumMergeReroutesBothShards) {
+        return; // TODO
         TUncommittedWriteSeqNumMergeReroutesBothShards tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);

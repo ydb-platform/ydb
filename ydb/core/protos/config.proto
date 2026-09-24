@@ -3305,6 +3305,21 @@ message TUdfStoreConfig {
     optional string UnsafeNativeUdfDir = 4;
 }
 
+// Local path-prefix aliases. Rules are ordered and take effect on node restart.
+message TPathRewriteConfig {
+    message TRule {
+        // Nonempty absolute prefixes; trailing Src slashes are ignored.
+        // First path-component match wins. Rewritten paths collapse repeated '/'
+        // and drop trailing '/' except for the root path.
+        optional string Src = 1;
+        optional string Dst = 2;
+    }
+
+    // First matching prefix wins; results are not rematched.
+    // Relative and unmatched inputs remain unchanged.
+    repeated TRule Rules = 1;
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -3428,6 +3443,7 @@ message TAppConfig {
 
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
     optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
+    optional TPathRewriteConfig ResourcePathPrefixMapping = 124;
 }
 
 message TYdbVersion {

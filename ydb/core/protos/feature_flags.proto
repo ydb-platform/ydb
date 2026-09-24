@@ -405,6 +405,6 @@ message TFeatureFlags {
     optional bool EnableStreamingQueryReadFrom = 335 [default = false];
     optional bool EnableIamDelegationSecrets = 336 [default = false]; // YDBFEATURES-144
     optional bool EnableStreamingQueryStateRecompute = 337 [default = false];
-    // Gates the ColumnShard MoveData handler only; EnableCutHistory gates every cutter.
-    optional bool EnableColumnshardGroupDecommission = 338 [default = false];
+    optional bool EnableColumnshardMoveData = 339 [default = false];
+    optional bool EnableColumnshardCutHistory = 340 [default = false];
 }

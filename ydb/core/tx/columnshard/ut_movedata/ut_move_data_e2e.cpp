@@ -182,7 +182,7 @@ private:
         Runtime.SetScheduledLimit(10'000);
         TTester::Setup(Runtime, { new NFake::TProxyDS(TGroupId::FromValue(0)), OldGroupProxy, NewGroupProxy,
                                     new NFake::TProxyDS(TGroupId::FromValue(Max<ui32>())) });
-        Runtime.GetAppData().FeatureFlags.SetEnableColumnshardGroupDecommission(moveDataEnabled);
+        Runtime.GetAppData().FeatureFlags.SetEnableColumnshardMoveData(moveDataEnabled);
         return NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
     }
 };
@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         runtime.SetScheduledLimit(10'000);
         TTester::Setup(
             runtime, { new NFake::TProxyDS(TGroupId::FromValue(0)), oldProxy, newProxy, new NFake::TProxyDS(TGroupId::FromValue(Max<ui32>())) });
-        runtime.GetAppData().FeatureFlags.SetEnableColumnshardGroupDecommission(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnshardMoveData(true);
 
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId tabletActorId = BootTablet(runtime, MakeTabletInfo(TabletId, { { 0, OldGroup } }));

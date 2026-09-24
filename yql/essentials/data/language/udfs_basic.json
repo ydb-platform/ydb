@@ -758,6 +758,13 @@
       "argCount": 1,
       "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint32\"]];[[[\"DataType\";\"String\"];1u]]]",
       "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Crc32"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"Uint32\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
       "name": "Crc32c"
     },
     {
@@ -885,7 +892,21 @@
       "argCount": 1,
       "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
       "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Sha224"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
       "name": "Sha256"
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Sha384"
     },
     {
       "argCount": 1,
@@ -1973,6 +1994,14 @@
       "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"Int64\"];1u]]]",
       "isStrict": true,
       "name": "SHex",
+      "supportsBlocks": true
+    },
+    {
+      "argCount": 1,
+      "callableType": "[\"CallableType\";[];[[\"DataType\";\"String\"]];[[[\"DataType\";\"String\"];1u]]]",
+      "isStrict": true,
+      "minLangVer": "2026.03",
+      "name": "Soundex",
       "supportsBlocks": true
     },
     {

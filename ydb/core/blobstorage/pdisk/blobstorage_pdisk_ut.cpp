@@ -2879,6 +2879,58 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         checkWeight(1);
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeBelowChunkSizeKeepsOwnerWeightsConsistent) {
+        TActorTestContext testCtx({.DiskSize = 1_GB, .ChunkSize = 1_MB});
+        const ui32 chunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->ExpectedSlotCount = 8;
+        cfg->SlotSizeInUnits = 0;
+        cfg->ExpectedSlotSize = chunkSize - 1;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+
+        TVDiskMock disk(&testCtx, true);
+        disk.InitFull(3);
+        auto checkSpace = [&](ui32 weight) {
+            const auto result = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(disk.PDiskParams->Owner, disk.PDiskParams->OwnerRound), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->NumActiveSlots, weight);
+            return result->TotalChunks;
+        };
+        auto changeSettings = [&](ui64 expectedSlotSize) {
+            testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+                new NPDisk::TEvChangeExpectedSlotCount(8, 0, expectedSlotSize), NKikimrProto::OK);
+        };
+
+        // Even when the byte limit rounds down to zero chunks, a nonzero size
+        // must count each owner as one slot on every update path.
+        const ui32 quota = checkSpace(1);
+        UNIT_ASSERT_GT(quota, 1);
+        changeSettings(chunkSize - 1);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace(1), quota);
+        testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
+            new NPDisk::TEvYardResize(disk.PDiskParams->Owner, disk.PDiskParams->OwnerRound, 5), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace(1), quota);
+        disk.InitFull(5);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace(1), quota);
+        changeSettings(1);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace(1), quota);
+
+        testCtx.RestartPDiskSync();
+        disk.InitFull(5);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace(1), quota);
+        changeSettings(chunkSize - 1);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace(1), quota);
+
+        changeSettings(0);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace(5), 5 * quota);
+        changeSettings(chunkSize - 1);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace(1), quota);
+        changeSettings(chunkSize);
+        UNIT_ASSERT_VALUES_EQUAL(checkSpace(1), 1);
+    }
+
     Y_UNIT_TEST(ExpectedSlotSizeHardLimitRoundsDownToChunkSize) {
         TActorTestContext testCtx({
             .DiskSize = 1_GB,

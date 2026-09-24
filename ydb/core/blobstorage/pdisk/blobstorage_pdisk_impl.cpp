@@ -2511,8 +2511,7 @@ void TPDisk::ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request) {
     TMap<TOwner, ui32> ownerWeights;
     for (TOwner owner = OwnerBeginUser; owner < OwnerEndUser; ++owner) {
         if (OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
-            ownerWeights.emplace(owner, TPDiskConfig::GetOwnerWeight(
-                OwnerData[owner].GroupSizeInUnits, Cfg->SlotSizeInUnits));
+            ownerWeights.emplace(owner, GetOwnerWeight(OwnerData[owner].GroupSizeInUnits));
         }
     }
     Keeper.SetExpectedOwnerSettings(ExpectedSlotCount, GetExpectedOwnerSizeInChunks(), ownerWeights);

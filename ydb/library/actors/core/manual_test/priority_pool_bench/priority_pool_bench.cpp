@@ -2,7 +2,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/executor_pool_priority.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 
 #include <util/system/event.h>
@@ -75,11 +75,8 @@ public:
         config.EnableWaker = waker;
         // Explicit executors: fixed dedicated workers, no harmonizer or shared
         // pool. Only the activation queue implementation differs.
-        if (priority) {
-            setup->Executors[0] = new TPriorityExecutorPool(config);
-        } else {
-            setup->Executors[0] = new TBasicExecutorPool(config, nullptr);
-        }
+        config.UsePriority = priority;
+        setup->Executors[0] = new TBasicExecutorPool(config, nullptr);
         setup->Scheduler.Reset(new TBasicSchedulerThread);
         System = std::make_unique<TActorSystem>(setup);
         System->Start();

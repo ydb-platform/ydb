@@ -3,7 +3,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/executor_pool_priority.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/util/affinity.h>
 
@@ -218,7 +218,10 @@ Y_UNIT_TEST(ExecutorPriorityConfiguration) {
             };
             for (auto* pool : actorSystem.GetBasicExecutorPools()) {
                 const bool priority = pool->PoolId == 2;
-                UNIT_ASSERT_VALUES_EQUAL(bool(dynamic_cast<NActors::TPriorityExecutorPool*>(pool)), priority);
+                NActors::TExecutorPoolStats poolStats;
+                TVector<NActors::TExecutorThreadStats> threadStats;
+                pool->GetCurrentStats(poolStats, threadStats);
+                UNIT_ASSERT_VALUES_EQUAL(poolStats.HasPriorityActivationQueues, priority);
 
                 auto& [started, release, done, order, next] = observations[pool->PoolId];
                 actorSystem.Register(new TCallbackActor([&started, &release] {

@@ -5,7 +5,6 @@
 #include "debug.h"
 
 #include "executor_pool_basic.h"
-#include "executor_pool_priority.h"
 #include "executor_pool_io.h"
 #include "executor_pool_shared.h"
 
@@ -212,14 +211,14 @@ namespace NActors {
     IExecutorPool* TCpuManager::CreateExecutorPool(ui32 poolId) {
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
             if (cfg.PoolId == poolId) {
-                TBasicExecutorPool* pool = cfg.UsePriority
-                    ? new TPriorityExecutorPool(cfg, Harmonizer.get(), Jail.get())
-                    : new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
                 if (Shared) {
+                    auto *pool = new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
                     Shared->SetBasicPool(pool);
                     pool->SetSharedPool(Shared.get());
+                    return pool;
+                } else {
+                    return new TBasicExecutorPool(cfg, Harmonizer.get(), Jail.get());
                 }
-                return pool;
             }
         }
         for (TIOExecutorPoolConfig& cfg : Config.IO) {

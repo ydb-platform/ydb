@@ -297,25 +297,10 @@ namespace NActors {
         ui32 EventsPerMailbox() const final;
 
         bool IsSharedOnly() const;
-    protected:
-        // Scheduling policy is independent of worker accounting and wakeups.
-        // The ordinary pool instantiates these with its existing ring queue.
-        template<class TQueue>
-        TMailbox* GetReadyActivationWithQueue(TQueue& queue, ui64 revolvingCounter);
-        template<class TQueue>
-        TMailbox* GetReadyActivationRingQueueImpl(TQueue& queue, ui64 revolvingCounter);
-        template<class TQueue>
-        TMailbox* GetReadyActivationWakerImpl(TQueue& queue, ui64 revolvingCounter);
-        template<class TQueue>
-        TMailbox* GetReadyActivationSharedImpl(TQueue& queue, ui64 revolvingCounter);
-        template<class TQueue>
-        void ScheduleActivationWithQueue(TQueue& queue, TMailbox* mailbox, ui64 revolvingCounter);
-        template<class TQueue>
-        void ScheduleActivationExRingQueueImpl(TQueue& queue, TMailbox* mailbox, ui64 revolvingCounter,
-            std::optional<TAtomic> initSemaphore);
-        template<class TQueue>
-        void ScheduleActivationExWakerImpl(TQueue& queue, TMailbox* mailbox, ui64 revolvingCounter);
     private:
+        void PushActivation(ui32 hint, ui64 revolvingCounter);
+        ui32 PopActivation(ui64 revolvingCounter);
+
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 
         void WakeUpLoop(i16 currentThreadCount);

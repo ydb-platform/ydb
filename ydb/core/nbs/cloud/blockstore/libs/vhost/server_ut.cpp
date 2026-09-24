@@ -1090,9 +1090,10 @@ Y_UNIT_TEST_SUITE(TServerTest)
             sgList);
 
         {
-            // Stop waits for ProcessRequest to return. The handler above
-            // stays there until stopEndpointEvent, so StopEndpoint runs on
-            // another thread and this thread releases it.
+            // Stop waits for ProcessRequest to return, and the handler above
+            // stays there until stopEndpointEvent. future1 can only complete
+            // from Stop's cancel loop, so release the handler after future1
+            // is cancelled.
             NProto::TError stopError;
             bool stopThrew = false;
             TManualEvent stopDone;
@@ -1108,6 +1109,8 @@ Y_UNIT_TEST_SUITE(TServerTest)
                     stopDone.Signal();
                 });
 
+            UNIT_ASSERT(future1.Wait(TDuration::Seconds(5)));
+            UNIT_ASSERT(future1.GetValue() == TVhostRequest::CANCELLED);
             stopEndpointEvent.Signal();
 
             UNIT_ASSERT(stopDone.WaitT(TDuration::Seconds(5)));

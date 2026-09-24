@@ -619,7 +619,8 @@ namespace NKikimr {
                         Config->HullCompSortedPartsNum,
                         AppData(ctx)->FeatureFlags.GetEnableVDiskFreshSpaceProjection()
                             && Config->FreshCompaction && !Config->BaseInfo.ReadOnly,
-                        LocRecCtx->PDiskCtx->Dsk->AppendBlockSize);
+                        LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
+                        AppData(ctx)->FeatureFlags.GetEnableCollectByCompleteDeletionBlock());
 
                 // create THullDbRecovery, which creates THullDs
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);

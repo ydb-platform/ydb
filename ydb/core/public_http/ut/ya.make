@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
     ydb/services/kesus

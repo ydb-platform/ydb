@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 PEERDIR(
     ydb/core/tx/replication/ut_helpers
     library/cpp/testing/unittest
+    yql/essentials/sql/v1_dummy
 )
 
 SRCS(

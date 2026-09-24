@@ -20,6 +20,7 @@ PEERDIR(
     ydb/services/metadata
     ydb/services/ext_index
     ydb/public/lib/yson_value
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

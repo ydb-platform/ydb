@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tablet_flat/test/libs/rows
     ydb/core/testlib/default
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

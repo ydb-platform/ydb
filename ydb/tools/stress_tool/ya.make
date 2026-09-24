@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/node_whiteboard
     ydb/core/tablet
     ydb/library/pdisk_io
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
     yql/essentials/minikql/comp_nodes/llvm16

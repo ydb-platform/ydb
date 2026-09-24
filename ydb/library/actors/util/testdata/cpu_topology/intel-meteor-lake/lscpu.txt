@@ -1,0 +1,25 @@
+Architecture:                            x86_64
+CPU op-mode(s):                          32-bit, 64-bit
+Address sizes:                           46 bits physical, 48 bits virtual
+Byte Order:                              Little Endian
+CPU(s):                                  22
+On-line CPU(s) list:                     0-21
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Core(TM) Ultra 7 165H
+CPU family:                              6
+Model:                                   170
+Thread(s) per core:                      2
+Core(s) per socket:                      16
+Socket(s):                               1
+Stepping:                                4
+CPU(s) scaling MHz:                      25%
+CPU max MHz:                             5000.0000
+CPU min MHz:                             400.0000
+BogoMIPS:                                6144.00
+Virtualization:                          VT-x
+L1d cache:                               544 KiB (14 instances)
+L1i cache:                               896 KiB (14 instances)
+L2 cache:                                18 MiB (9 instances)
+L3 cache:                                24 MiB (1 instance)
+NUMA node(s):                            1
+NUMA node0 CPU(s):                       0-21

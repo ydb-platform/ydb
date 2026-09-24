@@ -60,6 +60,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/monitoring
     ydb/services/ydb
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

@@ -75,7 +75,7 @@ void TPartitionQuoterBase::ApproveQuota(TRequestContext& context) {
 void TPartitionQuoterBase::ProcessPartitionTotalQuotaQueue() {
     if (!PartitionTotalQuotaTracker)
         return;
-    while (!WaitingTotalPartitionQuotaRequests.empty() && PartitionTotalQuotaTracker->CanExaust(ActorContext().Now())) {
+    while (PartitionTotalQuotaTracker->CanExaust(ActorContext().Now()) && !WaitingTotalPartitionQuotaRequests.empty()) {
         auto& request = WaitingTotalPartitionQuotaRequests.front();
         ApproveQuota(request);
         WaitingTotalPartitionQuotaRequests.pop_front();
@@ -252,7 +252,7 @@ void TReadQuoter::HandleWakeUpImpl() {
 
 void TReadQuoter::ProcessPerConsumerQuotaQueue(const TActorContext& ctx) {
     for (auto& [consumerStr, consumer] : ConsumerQuotas) {
-        while (!consumer.ReadRequests.empty() && consumer.PartitionPerConsumerQuotaTracker.CanExaust(ctx.Now())) {
+        while (consumer.PartitionPerConsumerQuotaTracker.CanExaust(ctx.Now()) && !consumer.ReadRequests.empty()) {
             CheckTotalPartitionQuota(std::move(consumer.ReadRequests.front()));
             consumer.ReadRequests.pop_front();
         }

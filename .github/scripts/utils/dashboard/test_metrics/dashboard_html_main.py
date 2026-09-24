@@ -745,7 +745,7 @@ def build_html_dashboard(
             const indices = [];
             const customdatas = [];
             el.data.forEach((tr, i) => {{
-              if (tr && tr.customdata && (tr.name === 'CPU total (monitor)' || tr.name === 'RAM total (monitor)') && Array.isArray(tr.x)) {{
+              if (tr && Array.isArray(tr.x) && tr.customdata && String(tr.hovertemplate || '').includes('customdata')) {{
                 indices.push(i);
                 customdatas.push((tr.x || []).map(v => formatTimeLabel(v)));
               }}
@@ -1648,7 +1648,8 @@ def build_html_dashboard(
         name: 'CPU limit (provisioned)',
         line: {{ color: '#9333ea', width: 2, dash: 'dash' }},
         legendrank: 1001,
-        hovertemplate: 'CPU provisioned max: %{{y:.0f}} cores<extra></extra>',
+        customdata: xDisp.map(formatTimeLabel),
+        hovertemplate: 'CPU provisioned max: %{{y:.0f}} cores<br>%{{customdata}}<extra></extra>',
       }}]);
     }}
 
@@ -1666,7 +1667,8 @@ def build_html_dashboard(
           name: 'RAM limit (provisioned)',
           line: {{ color: '#9333ea', width: 2, dash: 'dash' }},
           legendrank: 1001,
-          hovertemplate: 'RAM provisioned max: %{{y:.1f}} GB<extra></extra>',
+          customdata: xDisp.map(formatTimeLabel),
+          hovertemplate: 'RAM provisioned max: %{{y:.1f}} GB<br>%{{customdata}}<extra></extra>',
         }});
       }}
       if (lim.ya_make_mem_limit_gb) {{
@@ -1677,7 +1679,8 @@ def build_html_dashboard(
           name: 'RAM ya.make cgroup',
           line: {{ color: '#c026d3', width: 2, dash: 'dot' }},
           legendrank: 1002,
-          hovertemplate: 'ya.make MemoryMax (~95%): %{{y:.1f}} GB<extra></extra>',
+          customdata: xDisp.map(formatTimeLabel),
+          hovertemplate: 'ya.make MemoryMax (~95%): %{{y:.1f}} GB<br>%{{customdata}}<extra></extra>',
         }});
       }}
       if (traces.length) Plotly.addTraces(plotId, traces);
@@ -1742,13 +1745,16 @@ def build_html_dashboard(
         const top = rows.slice(0, 40);
         const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
         panel.textContent = `t=${{formatTimeLabel(t)}}\\n` + lines.join('\\n');
-        requestAnimationFrame(() => {{
+        const paint = () => {{
           const label = formatTimeLabel(t);
-          plot.querySelectorAll('.hoverlayer text').forEach((node) => {{
-            const raw = node.textContent || '';
-            if (/^\\d{{4}}-\\d{{2}}-\\d{{2}}[ T]\\d{{2}}:\\d{{2}}:\\d{{2}}/.test(raw)) node.textContent = label;
+          plot.querySelectorAll('.hoverlayer text, .hoverlayer tspan').forEach((node) => {{
+            if (node.childElementCount) return;
+            const raw = (node.textContent || '').trim();
+            if (/^\\d{{4}}-\\d{{2}}-\\d{{2}}/.test(raw)) node.textContent = label;
           }});
-        }});
+        }};
+        paint();
+        setTimeout(paint, 0);
       }});
       plot.on('plotly_unhover', () => {{
         panel.textContent = 'Move cursor over chart to see sorted contributors';
